@@ -1,0 +1,8 @@
+{
+  "plugins": [
+    "prettier-plugin-tailwindcss",
+    "@ianvs/prettier-plugin-sort-imports"
+  ],
+  "importOrder": ["<BUILTIN_MODULES>", "", "<THIRD_PARTY_MODULES>", "", "^@/"],
+  "importOrderTypeScriptVersion": "5.7.3"
+}

@@ -1,0 +1,25 @@
+import path from "path";
+
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react-swc";
+import { defineConfig } from "vite";
+
+// https://vite.dev/config/
+export default defineConfig({
+  server: {
+    proxy: {
+      "/api": "http://localhost:3689",
+    },
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./app"),
+    },
+  },
+  build: {
+    outDir: "./build/app",
+    emptyOutDir: true, // also necessary
+  },
+  clearScreen: false,
+  plugins: [react(), tailwindcss()],
+});
