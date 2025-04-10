@@ -1,6 +1,6 @@
 tsconfig.app.json
 tsconfig.json
 tsconfig.node.json
-app/components/ui
 app/types/generated
 .prettierrc
+.golangci.yml

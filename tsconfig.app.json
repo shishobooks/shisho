@@ -23,6 +23,7 @@
     "noUncheckedSideEffectImports": true,
 
     /* Paths */
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./app/*"]
     }

@@ -1,0 +1,70 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+  - asciicheck
+  - bodyclose
+  - decorder
+  - dogsled
+  - dupword
+  - err113
+  - errcheck
+  - exhaustive
+  - gocheckcompilerdirectives
+  - gocritic
+  - godot
+  - goheader
+  - goimports
+  - gosec
+  - gosimple
+  - govet
+  - grouper
+  - importas
+  - inamedparam
+  - ineffassign
+  - interfacebloat
+  - misspell
+  - noctx
+  - nosprintfhostport
+  - perfsprint
+  - predeclared
+  - revive
+  - staticcheck
+  - stylecheck
+  - testifylint
+  - typecheck
+  - unconvert
+  - unparam
+  - unused
+  - whitespace
+
+linters-settings:
+  gocritic:
+    disabled-checks:
+      - appendAssign
+      - ifElseChain
+      - singleCaseSwitch
+  gosec:
+    excludes:
+      - G108 # Profiling endpoint is automatically exposed
+      - G114 # ListenAndServe is used for internal APIs only
+      - G401 # Use of weak cryptographic primitive
+      - G404 # Use of weak random number generator
+      - G501 # Blocklisted import crypto/md5
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # It's complaining about InsecureSkipVerify being set to true, but we are
+    # setting it to true intentionally if the host is localhost.
+    - path: pkg/database/database.go
+      text: G402 # Checking for InsecureSkipVerify
+    # Ignore a bunch of linters for test files.
+    - path: _test\.go
+      linters:
+        - err113
+        - errcheck
+        - gosec
