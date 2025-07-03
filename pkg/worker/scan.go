@@ -152,7 +152,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 		log.Info("parsing file as m4b", logger.Data{"file_type": fileType})
 		metadata, err = mp4.Parse(path)
 		if err != nil {
-			return errors.WithStack(err)
+			// TODO: save this as a job log so we can surface in the UI
+			log.Error("failed to parse as m4b", logger.Data{"file_type": fileType, "error": err.Error()})
+			return nil
 		}
 	}
 
