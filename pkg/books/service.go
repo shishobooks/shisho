@@ -5,22 +5,22 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
 type RetrieveBookOptions struct {
-	ID        *string
+	ID        *int
 	Filepath  *string
-	LibraryID *string
+	LibraryID *int
 }
 
 type ListBooksOptions struct {
 	Limit     *int
 	Offset    *int
-	LibraryID *string
+	LibraryID *int
 
 	includeTotal bool
 }
@@ -31,15 +31,15 @@ type UpdateBookOptions struct {
 }
 
 type RetrieveFileOptions struct {
-	ID        *string
+	ID        *int
 	Filepath  *string
-	LibraryID *string
+	LibraryID *int
 }
 
 type ListFilesOptions struct {
 	Limit  *int
 	Offset *int
-	BookID *string
+	BookID *int
 
 	includeTotal bool
 }
@@ -56,20 +56,12 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db}
 }
 
-func (svc *Service) CreateBook(ctx context.Context, book *Book) error {
+func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 	now := time.Now()
 	if book.CreatedAt.IsZero() {
 		book.CreatedAt = now
 	}
 	book.UpdatedAt = book.CreatedAt
-
-	if book.ID == "" {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		book.ID = id.String()
-	}
 
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// Insert book.
@@ -84,21 +76,13 @@ func (svc *Service) CreateBook(ctx context.Context, book *Book) error {
 
 		// Insert authors.
 		for i, author := range book.Authors {
-			if author.ID == "" {
-				id, err := uuid.NewRandom()
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				author.ID = id.String()
-			}
 			author.BookID = book.ID
-			if author.Sequence == 0 {
-				author.Sequence = i + 1
+			if author.SortOrder == 0 {
+				author.SortOrder = i + 1
 			}
 			author.CreatedAt = book.CreatedAt
 			author.UpdatedAt = book.UpdatedAt
 		}
-
 		if len(book.Authors) > 0 {
 			_, err := tx.
 				NewInsert().
@@ -112,22 +96,38 @@ func (svc *Service) CreateBook(ctx context.Context, book *Book) error {
 
 		// Insert files.
 		for _, file := range book.Files {
-			if file.ID == "" {
-				id, err := uuid.NewRandom()
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				file.ID = id.String()
-			}
 			file.BookID = book.ID
 			file.CreatedAt = book.CreatedAt
 			file.UpdatedAt = book.UpdatedAt
 		}
-
 		if len(book.Files) > 0 {
 			_, err := tx.
 				NewInsert().
 				Model(&book.Files).
+				Returning("*").
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// Insert narrators.
+		narrators := make([]*models.Narrator, 0)
+		for _, file := range book.Files {
+			for i, narrator := range file.Narrators {
+				narrator.FileID = file.ID
+				if narrator.SortOrder == 0 {
+					narrator.SortOrder = i + 1
+				}
+				narrator.CreatedAt = file.CreatedAt
+				narrator.UpdatedAt = file.UpdatedAt
+				narrators = append(narrators, narrator)
+			}
+		}
+		if len(narrators) > 0 {
+			_, err := tx.
+				NewInsert().
+				Model(&narrators).
 				Returning("*").
 				Exec(ctx)
 			if err != nil {
@@ -144,15 +144,15 @@ func (svc *Service) CreateBook(ctx context.Context, book *Book) error {
 	return nil
 }
 
-func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) (*Book, error) {
-	book := &Book{}
+func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) (*models.Book, error) {
+	book := &models.Book{}
 
 	q := svc.db.
 		NewSelect().
 		Model(book).
 		Relation("Library").
 		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.Order("a.sequence ASC")
+			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
@@ -179,18 +179,18 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 	return book, nil
 }
 
-func (svc *Service) ListBooks(ctx context.Context, opts ListBooksOptions) ([]*Book, error) {
+func (svc *Service) ListBooks(ctx context.Context, opts ListBooksOptions) ([]*models.Book, error) {
 	b, _, err := svc.listBooksWithTotal(ctx, opts)
 	return b, errors.WithStack(err)
 }
 
-func (svc *Service) ListBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*Book, int, error) {
+func (svc *Service) ListBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*models.Book, int, error) {
 	opts.includeTotal = true
 	return svc.listBooksWithTotal(ctx, opts)
 }
 
-func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*Book, int, error) {
-	books := []*Book{}
+func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*models.Book, int, error) {
+	books := []*models.Book{}
 	var total int
 	var err error
 
@@ -199,7 +199,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		Model(&books).
 		Relation("Library").
 		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.Order("a.sequence ASC")
+			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
@@ -228,7 +228,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	return books, total, nil
 }
 
-func (svc *Service) UpdateBook(ctx context.Context, book *Book, opts UpdateBookOptions) error {
+func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts UpdateBookOptions) error {
 	if len(opts.Columns) == 0 && !opts.UpdateAuthors {
 		return nil
 	}
@@ -238,7 +238,7 @@ func (svc *Service) UpdateBook(ctx context.Context, book *Book, opts UpdateBookO
 			// Delete all previous authors and save these new ones.
 			_, err := tx.
 				NewDelete().
-				Model((*Author)(nil)).
+				Model((*models.Author)(nil)).
 				Where("book_id = ?", book.ID).
 				Exec(ctx)
 			if err != nil {
@@ -246,16 +246,9 @@ func (svc *Service) UpdateBook(ctx context.Context, book *Book, opts UpdateBookO
 			}
 
 			for i, author := range book.Authors {
-				if author.ID == "" {
-					id, err := uuid.NewRandom()
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					author.ID = id.String()
-				}
 				author.BookID = book.ID
-				if author.Sequence == 0 {
-					author.Sequence = i + 1
+				if author.SortOrder == 0 {
+					author.SortOrder = i + 1
 				}
 				author.CreatedAt = book.CreatedAt
 				author.UpdatedAt = book.UpdatedAt
@@ -299,26 +292,46 @@ func (svc *Service) UpdateBook(ctx context.Context, book *Book, opts UpdateBookO
 	return nil
 }
 
-func (svc *Service) CreateFile(ctx context.Context, file *File) error {
+func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 	now := time.Now()
 	if file.CreatedAt.IsZero() {
 		file.CreatedAt = now
 	}
 	file.UpdatedAt = file.CreatedAt
 
-	if file.ID == "" {
-		id, err := uuid.NewRandom()
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Insert file.
+		_, err := tx.
+			NewInsert().
+			Model(file).
+			Returning("*").
+			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		file.ID = id.String()
-	}
 
-	_, err := svc.db.
-		NewInsert().
-		Model(file).
-		Returning("*").
-		Exec(ctx)
+		// Insert narrators.
+		for i, narrator := range file.Narrators {
+			narrator.FileID = file.ID
+			if narrator.SortOrder == 0 {
+				narrator.SortOrder = i + 1
+			}
+			narrator.CreatedAt = file.CreatedAt
+			narrator.UpdatedAt = file.UpdatedAt
+		}
+		if len(file.Narrators) > 0 {
+			_, err := tx.
+				NewInsert().
+				Model(&file.Narrators).
+				Returning("*").
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -326,8 +339,8 @@ func (svc *Service) CreateFile(ctx context.Context, file *File) error {
 	return nil
 }
 
-func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) (*File, error) {
-	file := &File{}
+func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) (*models.File, error) {
+	file := &models.File{}
 
 	q := svc.db.
 		NewSelect().
@@ -355,18 +368,18 @@ func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) 
 	return file, nil
 }
 
-func (svc *Service) ListFiles(ctx context.Context, opts ListFilesOptions) ([]*File, error) {
+func (svc *Service) ListFiles(ctx context.Context, opts ListFilesOptions) ([]*models.File, error) {
 	b, _, err := svc.listFilesWithTotal(ctx, opts)
 	return b, errors.WithStack(err)
 }
 
-func (svc *Service) ListFilesWithTotal(ctx context.Context, opts ListFilesOptions) ([]*File, int, error) {
+func (svc *Service) ListFilesWithTotal(ctx context.Context, opts ListFilesOptions) ([]*models.File, int, error) {
 	opts.includeTotal = true
 	return svc.listFilesWithTotal(ctx, opts)
 }
 
-func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOptions) ([]*File, int, error) {
-	files := []*File{}
+func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOptions) ([]*models.File, int, error) {
+	files := []*models.File{}
 	var total int
 	var err error
 
@@ -397,7 +410,7 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 	return files, total, nil
 }
 
-func (svc *Service) UpdateFile(ctx context.Context, file *File, opts UpdateFileOptions) error {
+func (svc *Service) UpdateFile(ctx context.Context, file *models.File, opts UpdateFileOptions) error {
 	if len(opts.Columns) == 0 {
 		return nil
 	}

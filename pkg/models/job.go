@@ -1,4 +1,4 @@
-package jobs
+package models
 
 import (
 	"time"
@@ -24,15 +24,15 @@ const (
 type Job struct {
 	bun.BaseModel `bun:"table:jobs,alias:j" tstype:"-"`
 
-	ID         string      `bun:",pk,nullzero" json:"id"`
+	ID         int         `bun:",pk,nullzero" json:"id"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
 	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
-	CreatedAt  time.Time   `json:"created_at"`
-	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 func (job *Job) UnmarshalData() error {

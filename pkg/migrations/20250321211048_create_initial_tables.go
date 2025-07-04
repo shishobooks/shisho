@@ -11,14 +11,14 @@ func init() {
 	up := func(_ context.Context, db *bun.DB) error {
 		_, err := db.Exec(`
 			CREATE TABLE jobs (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				type TEXT NOT NULL,
 				status TEXT NOT NULL,
 				data TEXT NOT NULL,
 				progress INTEGER NOT NULL,
-				process_id TEXT,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				process_id TEXT
 			)
 `)
 		if err != nil {
@@ -26,11 +26,11 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE libraries (
-				id TEXT PRIMARY KEY,
-				name TEXT NOT NULL,
-				deleted_at TIMESTAMPTZ,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				name TEXT NOT NULL,
+				deleted_at TIMESTAMPTZ
 			)
 `)
 		if err != nil {
@@ -38,10 +38,11 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE library_paths (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				library_id TEXT REFERENCES libraries (id) NOT NULL,
-				filepath TEXT NOT NULL,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				filepath TEXT NOT NULL
 			)
 `)
 		if err != nil {
@@ -53,7 +54,9 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE books (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				library_id TEXT REFERENCES libraries (id) NOT NULL,
 				filepath TEXT NOT NULL,
 				title TEXT NOT NULL,
@@ -62,9 +65,7 @@ func init() {
 				subtitle_source TEXT,
 				author_source TEXT NOT NULL,
 				series TEXT,
-				series_number REAL,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				series_number REAL
 			)
 `)
 		if err != nil {
@@ -80,18 +81,18 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE files (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				library_id TEXT REFERENCES libraries (id) NOT NULL,
 				book_id TEXT REFERENCES books (id) NOT NULL,
 				filepath TEXT NOT NULL,
 				file_type TEXT NOT NULL,
-				filesize_bytes BIGINT NOT NULL,
+				filesize_bytes INTEGER NOT NULL,
 				cover_mime_type TEXT,
 				audiobook_duration DOUBLE,
 				audiobook_bitrate INTEGER,
-				narrator_source TEXT,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				narrator_source TEXT
 			)
 `)
 		if err != nil {
@@ -111,12 +112,12 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE book_identifiers (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				book_id TEXT REFERENCES books (id) NOT NULL,
 				type TEXT NOT NULL,
-				value TEXT NOT NULL,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				value TEXT NOT NULL
 			)
 `)
 		if err != nil {
@@ -128,12 +129,12 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE authors (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				book_id TEXT REFERENCES books (id) NOT NULL,
 				name TEXT NOT NULL,
-				sequence INTEGER NOT NULL,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				sort_order INTEGER NOT NULL
 			)
 `)
 		if err != nil {
@@ -145,12 +146,12 @@ func init() {
 		}
 		_, err = db.Exec(`
 			CREATE TABLE narrators (
-				id TEXT PRIMARY KEY,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				file_id TEXT REFERENCES files (id) NOT NULL,
 				name TEXT NOT NULL,
-				sequence INTEGER NOT NULL,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+				sort_order INTEGER NOT NULL
 			)
 `)
 		if err != nil {

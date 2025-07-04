@@ -2,11 +2,14 @@ package libraries
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/pointerutil"
+	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
@@ -22,12 +25,12 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	library := &Library{
+	library := &models.Library{
 		Name:         params.Name,
-		LibraryPaths: make([]*LibraryPath, 0, len(params.LibraryPaths)),
+		LibraryPaths: make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
 	}
 	for _, path := range params.LibraryPaths {
-		library.LibraryPaths = append(library.LibraryPaths, &LibraryPath{
+		library.LibraryPaths = append(library.LibraryPaths, &models.LibraryPath{
 			Filepath: path,
 		})
 	}
@@ -49,7 +52,10 @@ func (h *handler) create(c echo.Context) error {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id := c.Param("id")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
 
 	library, err := h.libraryService.RetrieveLibrary(ctx, RetrieveLibraryOptions{
 		ID: &id,
@@ -80,8 +86,8 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	resp := struct {
-		Libraries []*Library `json:"libraries"`
-		Total     int        `json:"total"`
+		Libraries []*models.Library `json:"libraries"`
+		Total     int               `json:"total"`
 	}{libraries, total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
@@ -89,7 +95,10 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id := c.Param("id")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
 
 	// Bind params.
 	params := UpdateLibraryPayload{}
@@ -113,9 +122,9 @@ func (h *handler) update(c echo.Context) error {
 		opts.Columns = append(opts.Columns, "name")
 	}
 	if params.LibraryPaths != nil {
-		library.LibraryPaths = make([]*LibraryPath, 0, len(params.LibraryPaths))
+		library.LibraryPaths = make([]*models.LibraryPath, 0, len(params.LibraryPaths))
 		for _, path := range params.LibraryPaths {
-			library.LibraryPaths = append(library.LibraryPaths, &LibraryPath{
+			library.LibraryPaths = append(library.LibraryPaths, &models.LibraryPath{
 				Filepath: path,
 			})
 		}

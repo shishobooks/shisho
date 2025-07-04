@@ -6,8 +6,8 @@ import (
 
 	"github.com/dhowden/tag"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 func Parse(path string) (*mediafile.ParsedMetadata, error) {
@@ -46,6 +46,6 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Authors:       authors,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
-		DataSource:    books.DataSourceM4BMetadata,
+		DataSource:    models.DataSourceM4BMetadata,
 	}, nil
 }

@@ -3,9 +3,12 @@ package books
 import (
 	"net/http"
 	"path"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
@@ -14,7 +17,10 @@ type handler struct {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id := c.Param("id")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
 
 	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
 		ID: &id,
@@ -45,8 +51,8 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	resp := struct {
-		Books []*Book `json:"books"`
-		Total int     `json:"total"`
+		Books []*models.Book `json:"books"`
+		Total int            `json:"total"`
 	}{books, total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
@@ -54,7 +60,10 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id := c.Param("id")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
 
 	// Bind params.
 	params := UpdateBookPayload{}
@@ -97,15 +106,18 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) fileCover(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileID := c.Param("id")
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
 
 	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
-		ID: &fileID,
+		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	filepath := path.Join(file.Book.Filepath, file.ID+file.CoverExtension())
+	filepath := path.Join(file.Book.Filepath, c.Param("id")+file.CoverExtension())
 
 	return errors.WithStack(c.File(filepath))
 }

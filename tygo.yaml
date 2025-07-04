@@ -1,25 +1,18 @@
+type_mappings:
+  time.Time: "string /* RFC3339 */"
+
 packages:
+  - path: "github.com/shishobooks/shisho/pkg/models"
+    output_path: "app/types/generated/models.ts"
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
     include_files:
-      - models.go
       - validators.go
-    frontmatter: |
-      import { Library } from "@/types";
-    type_mappings:
-      libraries.Library: "Library"
-      time.Time: "string /* RFC3339 */"
   - path: "github.com/shishobooks/shisho/pkg/jobs"
     output_path: "app/types/generated/jobs.ts"
     include_files:
-      - models.go
       - validators.go
-    type_mappings:
-      time.Time: "string /* RFC3339 */"
   - path: "github.com/shishobooks/shisho/pkg/libraries"
     output_path: "app/types/generated/libraries.ts"
     include_files:
-      - models.go
       - validators.go
-    type_mappings:
-      time.Time: "string /* RFC3339 */"

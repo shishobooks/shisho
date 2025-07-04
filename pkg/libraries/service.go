@@ -5,14 +5,14 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
 type RetrieveLibraryOptions struct {
-	ID *string
+	ID *int
 }
 
 type ListLibrariesOptions struct {
@@ -36,20 +36,12 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db}
 }
 
-func (svc *Service) CreateLibrary(ctx context.Context, library *Library) error {
+func (svc *Service) CreateLibrary(ctx context.Context, library *models.Library) error {
 	now := time.Now()
 	if library.CreatedAt.IsZero() {
 		library.CreatedAt = now
 	}
 	library.UpdatedAt = library.CreatedAt
-
-	if library.ID == "" {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		library.ID = id.String()
-	}
 
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		_, err := tx.
@@ -62,13 +54,6 @@ func (svc *Service) CreateLibrary(ctx context.Context, library *Library) error {
 		}
 
 		for _, path := range library.LibraryPaths {
-			if path.ID == "" {
-				id, err := uuid.NewRandom()
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				path.ID = id.String()
-			}
 			path.LibraryID = library.ID
 			path.CreatedAt = library.CreatedAt
 		}
@@ -93,8 +78,8 @@ func (svc *Service) CreateLibrary(ctx context.Context, library *Library) error {
 	return nil
 }
 
-func (svc *Service) RetrieveLibrary(ctx context.Context, opts RetrieveLibraryOptions) (*Library, error) {
-	library := &Library{}
+func (svc *Service) RetrieveLibrary(ctx context.Context, opts RetrieveLibraryOptions) (*models.Library, error) {
+	library := &models.Library{}
 
 	q := svc.db.
 		NewSelect().
@@ -120,18 +105,18 @@ func (svc *Service) RetrieveLibrary(ctx context.Context, opts RetrieveLibraryOpt
 	return library, nil
 }
 
-func (svc *Service) ListLibraries(ctx context.Context, opts ListLibrariesOptions) ([]*Library, error) {
+func (svc *Service) ListLibraries(ctx context.Context, opts ListLibrariesOptions) ([]*models.Library, error) {
 	l, _, err := svc.listLibrariesWithTotal(ctx, opts)
 	return l, errors.WithStack(err)
 }
 
-func (svc *Service) ListLibrariesWithTotal(ctx context.Context, opts ListLibrariesOptions) ([]*Library, int, error) {
+func (svc *Service) ListLibrariesWithTotal(ctx context.Context, opts ListLibrariesOptions) ([]*models.Library, int, error) {
 	opts.includeTotal = true
 	return svc.listLibrariesWithTotal(ctx, opts)
 }
 
-func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrariesOptions) ([]*Library, int, error) {
-	libraries := []*Library{}
+func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrariesOptions) ([]*models.Library, int, error) {
+	libraries := []*models.Library{}
 	var total int
 	var err error
 
@@ -167,7 +152,7 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 	return libraries, total, nil
 }
 
-func (svc *Service) UpdateLibrary(ctx context.Context, library *Library, opts UpdateLibraryOptions) error {
+func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, opts UpdateLibraryOptions) error {
 	if len(opts.Columns) == 0 && !opts.UpdateLibraryPaths {
 		return nil
 	}
@@ -195,7 +180,7 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *Library, opts Up
 			// Delete all existing library paths.
 			_, err := tx.
 				NewDelete().
-				Model((*LibraryPath)(nil)).
+				Model((*models.LibraryPath)(nil)).
 				Where("library_id = ?", library.ID).
 				Exec(ctx)
 			if err != nil {
@@ -203,13 +188,6 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *Library, opts Up
 			}
 
 			for _, path := range library.LibraryPaths {
-				if path.ID == "" {
-					id, err := uuid.NewRandom()
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					path.ID = id.String()
-				}
 				path.LibraryID = library.ID
 				path.CreatedAt = now
 			}

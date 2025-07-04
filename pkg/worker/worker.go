@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/models"
 
 	"github.com/google/uuid"
 	"github.com/robinjoseph08/golib/logger"
@@ -22,13 +23,13 @@ type Worker struct {
 	config *config.Config
 	log    logger.Logger
 
-	processFuncs map[string]func(ctx context.Context, job *jobs.Job) error
+	processFuncs map[string]func(ctx context.Context, job *models.Job) error
 
 	bookService    *books.Service
 	jobService     *jobs.Service
 	libraryService *libraries.Service
 
-	queue          chan *jobs.Job
+	queue          chan *models.Job
 	shutdown       chan struct{}
 	doneFetching   chan struct{}
 	doneProcessing chan struct{}
@@ -47,14 +48,14 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		jobService:     jobService,
 		libraryService: libraryService,
 
-		queue:          make(chan *jobs.Job, cfg.WorkerProcesses),
+		queue:          make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:       make(chan struct{}),
 		doneFetching:   make(chan struct{}),
 		doneProcessing: make(chan struct{}, cfg.WorkerProcesses),
 	}
 
-	w.processFuncs = map[string]func(ctx context.Context, job *jobs.Job) error{
-		jobs.JobTypeScan: w.ProcessScanJob,
+	w.processFuncs = map[string]func(ctx context.Context, job *models.Job) error{
+		models.JobTypeScan: w.ProcessScanJob,
 	}
 
 	return w
@@ -80,7 +81,7 @@ func (w *Worker) fetchJobs() {
 		case <-timer.C:
 			j, err := w.jobService.ListJobs(context.Background(), jobs.ListJobsOptions{
 				Limit:              pointerutil.Int(1),
-				Statuses:           []string{jobs.JobStatusPending, jobs.JobStatusInProgress},
+				Statuses:           []string{models.JobStatusPending, models.JobStatusInProgress},
 				ProcessIDToExclude: &processID,
 			})
 			if err != nil {
@@ -113,7 +114,7 @@ func (w *Worker) processJobs() {
 			ctx := log.WithContext(context.Background())
 
 			// Update job to be in progress and claimed by this process.
-			job.Status = jobs.JobStatusInProgress
+			job.Status = models.JobStatusInProgress
 			job.ProcessID = &processID
 
 			err = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
@@ -137,7 +138,7 @@ func (w *Worker) processJobs() {
 			}
 
 			// Update job to be completed so that it's not picked up anymore.
-			job.Status = jobs.JobStatusCompleted
+			job.Status = models.JobStatusCompleted
 
 			err = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
 				Columns: []string{"status"},

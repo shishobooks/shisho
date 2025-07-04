@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type OPF struct {
@@ -155,7 +155,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Authors:       opf.Authors,
 		CoverMimeType: opf.CoverMimeType,
 		CoverData:     opf.CoverData,
-		DataSource:    books.DataSourceEPUBMetadata,
+		DataSource:    models.DataSourceEPUBMetadata,
 	}, nil
 }
 

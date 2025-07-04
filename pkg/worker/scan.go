@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -16,9 +17,9 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 )
 
@@ -33,7 +34,7 @@ var (
 	filepathNarratorRE = regexp.MustCompile(`\{(.*)}`)
 )
 
-func (w *Worker) ProcessScanJob(ctx context.Context, _ *jobs.Job) error {
+func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 	log := logger.FromContext(ctx)
 	log.Info("processing scan job")
 
@@ -106,7 +107,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *jobs.Job) error {
 	return nil
 }
 
-func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) error {
+func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error {
 	log := logger.FromContext(ctx).Data(logger.Data{"path": path})
 	log.Info("processing file")
 
@@ -134,21 +135,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 	filename := filepath.Base(bookPath)
 
 	title := strings.TrimSpace(filepathNarratorRE.ReplaceAllString(filepathAuthorRE.ReplaceAllString(filename, ""), ""))
-	titleSource := books.DataSourceFilepath
-	authors := make([]*books.Author, 0)
-	authorSource := books.DataSourceFilepath
+	titleSource := models.DataSourceFilepath
+	authors := make([]*models.Author, 0)
+	authorSource := models.DataSourceFilepath
 	var coverMimeType *string
 
 	// Extract metadata from each file based on its file type.
 	var metadata *mediafile.ParsedMetadata
 	switch fileType {
-	case books.FileTypeEPUB:
+	case models.FileTypeEPUB:
 		log.Info("parsing file as epub", logger.Data{"file_type": fileType})
 		metadata, err = epub.Parse(path)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-	case books.FileTypeM4B:
+	case models.FileTypeM4B:
 		log.Info("parsing file as m4b", logger.Data{"file_type": fileType})
 		metadata, err = mp4.Parse(path)
 		if err != nil {
@@ -163,7 +164,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 		titleSource = metadata.DataSource
 		authorSource = metadata.DataSource
 		for _, author := range metadata.Authors {
-			authors = append(authors, &books.Author{
+			authors = append(authors, &models.Author{
 				Name: author,
 			})
 		}
@@ -179,7 +180,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 		if len(matches) > 0 {
 			names := strings.Split(matches[0], ",")
 			for _, author := range names {
-				authors = append(authors, &books.Author{
+				authors = append(authors, &models.Author{
 					Name: author,
 				})
 			}
@@ -198,13 +199,13 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 
 		// Check to see if we need to update any of the metadata on the book.
 		updateOptions := books.UpdateBookOptions{Columns: make([]string, 0)}
-		if books.DataSourcePriority[titleSource] < books.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
+		if models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
 			log.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
 		}
-		if books.DataSourcePriority[authorSource] < books.DataSourcePriority[existingBook.AuthorSource] {
+		if models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
 			log.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
 			existingBook.Authors = authors
 			existingBook.AuthorSource = authorSource
@@ -217,7 +218,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
-		existingBook = &books.Book{
+		existingBook = &models.Book{
 			LibraryID:    libraryID,
 			Filepath:     bookPath,
 			Title:        title,
@@ -232,7 +233,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 	}
 
 	log.Info("creating file", logger.Data{"filesize": size})
-	file := &books.File{
+	file := &models.File{
 		LibraryID:     libraryID,
 		BookID:        existingBook.ID,
 		Filepath:      path,
@@ -248,7 +249,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID string) er
 	if metadata != nil && len(metadata.CoverData) > 0 {
 		log.Info("saving cover", logger.Data{"mime": metadata.CoverMimeType})
 		// Save the cover image as a separate file.
-		coverFilepath := filepath.Join(bookPath, file.ID+metadata.CoverExtension())
+		coverFilepath := filepath.Join(bookPath, strconv.Itoa(file.ID)+metadata.CoverExtension())
 		coverFile, err := os.Create(coverFilepath)
 		if err != nil {
 			return errors.WithStack(err)

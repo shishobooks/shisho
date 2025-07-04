@@ -5,15 +5,15 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/segmentio/encoding/json"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
 type RetrieveJobOptions struct {
-	ID *string
+	ID *int
 }
 
 type ListJobsOptions struct {
@@ -37,20 +37,12 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db}
 }
 
-func (svc *Service) CreateJob(ctx context.Context, job *Job) error {
+func (svc *Service) CreateJob(ctx context.Context, job *models.Job) error {
 	now := time.Now()
 	if job.CreatedAt.IsZero() {
 		job.CreatedAt = now
 	}
 	job.UpdatedAt = job.CreatedAt
-
-	if job.ID == "" {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		job.ID = id.String()
-	}
 
 	if job.Data == "" && job.DataParsed != nil {
 		// Marshal the data into a JSON string to save into the database.
@@ -73,8 +65,8 @@ func (svc *Service) CreateJob(ctx context.Context, job *Job) error {
 	return nil
 }
 
-func (svc *Service) RetrieveJob(ctx context.Context, opts RetrieveJobOptions) (*Job, error) {
-	job := &Job{}
+func (svc *Service) RetrieveJob(ctx context.Context, opts RetrieveJobOptions) (*models.Job, error) {
+	job := &models.Job{}
 
 	q := svc.db.
 		NewSelect().
@@ -103,18 +95,18 @@ func (svc *Service) RetrieveJob(ctx context.Context, opts RetrieveJobOptions) (*
 	return job, nil
 }
 
-func (svc *Service) ListJobs(ctx context.Context, opts ListJobsOptions) ([]*Job, error) {
+func (svc *Service) ListJobs(ctx context.Context, opts ListJobsOptions) ([]*models.Job, error) {
 	j, _, err := svc.listJobsWithTotal(ctx, opts)
 	return j, errors.WithStack(err)
 }
 
-func (svc *Service) ListJobsWithTotal(ctx context.Context, opts ListJobsOptions) ([]*Job, int, error) {
+func (svc *Service) ListJobsWithTotal(ctx context.Context, opts ListJobsOptions) ([]*models.Job, int, error) {
 	opts.includeTotal = true
 	return svc.listJobsWithTotal(ctx, opts)
 }
 
-func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions) ([]*Job, int, error) {
-	jobs := []*Job{}
+func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions) ([]*models.Job, int, error) {
+	jobs := []*models.Job{}
 	var total int
 	var err error
 
@@ -164,7 +156,7 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 	return jobs, total, nil
 }
 
-func (svc *Service) UpdateJob(ctx context.Context, job *Job, opts UpdateJobOptions) error {
+func (svc *Service) UpdateJob(ctx context.Context, job *models.Job, opts UpdateJobOptions) error {
 	if len(opts.Columns) == 0 {
 		return nil
 	}
