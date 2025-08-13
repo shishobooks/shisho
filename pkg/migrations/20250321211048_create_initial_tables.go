@@ -65,7 +65,8 @@ func init() {
 				subtitle_source TEXT,
 				author_source TEXT NOT NULL,
 				series TEXT,
-				series_number REAL
+				series_number REAL,
+				cover_image_path TEXT
 			)
 `)
 		if err != nil {

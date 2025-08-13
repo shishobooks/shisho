@@ -25,15 +25,17 @@ const Home = () => {
                 title={`${book.title}${book.authors ? `\nBy ${book.authors.map((a) => a.name).join(", ")}` : ""}`}
               >
                 <div className="group cursor-pointer">
-                  {book.files[0]?.cover_mime_type ? (
-                    <img
-                      alt={`${book.title} Cover`}
-                      className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
-                      src={`/api/files/${book.files[0].id}/cover`}
-                    />
-                  ) : (
-                    <span>no file</span>
-                  )}
+                  <img
+                    alt={`${book.title} Cover`}
+                    className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                      (
+                        e.target as HTMLImageElement
+                      ).nextElementSibling!.textContent = "no cover";
+                    }}
+                    src={`/api/books/${book.id}/cover`}
+                  />
                   <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
                     {book.title}
                   </div>

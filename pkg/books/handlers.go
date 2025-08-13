@@ -121,3 +121,26 @@ func (h *handler) fileCover(c echo.Context) error {
 
 	return errors.WithStack(c.File(filepath))
 }
+
+func (h *handler) bookCover(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	coverImage := book.ResolveCoverImage()
+	if coverImage == "" {
+		return errcodes.NotFound("Cover")
+	}
+
+	filepath := path.Join(book.Filepath, coverImage)
+	return errors.WithStack(c.File(filepath))
+}
