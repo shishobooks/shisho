@@ -1,4 +1,5 @@
 import { uniqBy } from "lodash";
+import { Link } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
@@ -24,7 +25,7 @@ const Home = () => {
                 key={book.id}
                 title={`${book.title}${book.authors ? `\nBy ${book.authors.map((a) => a.name).join(", ")}` : ""}`}
               >
-                <div className="group cursor-pointer">
+                <Link className="group cursor-pointer" to={`/books/${book.id}`}>
                   <img
                     alt={`${book.title} Cover`}
                     className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
@@ -39,7 +40,7 @@ const Home = () => {
                   <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
                     {book.title}
                   </div>
-                </div>
+                </Link>
                 {book.authors && (
                   <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
                     {book.authors.map((a) => a.name).join(", ")}

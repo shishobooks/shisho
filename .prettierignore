@@ -5,3 +5,4 @@ app/types/generated
 .prettierrc
 .golangci.yml
 .claude/settings.local.json
+CLAUDE.md

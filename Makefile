@@ -11,7 +11,7 @@ TEST_FILES ?= ./pkg/...
 TEST_FLAGS ?=
 COVERAGE_PROFILE ?= coverage.out
 
-TYGO_INPUTS = $(shell yq '.packages[] | .path + "/" + .include_files[]' tygo.yaml | sed 's|github.com/shishobooks/shisho/||' | tr '\n' ' ')
+TYGO_INPUTS = $(shell yq '.packages[] | .path + "/" + (.include_files[] // "*.go")' tygo.yaml | sed 's|github.com/shishobooks/shisho/||' | tr '\n' ' ')
 TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 
 .PHONY: build
