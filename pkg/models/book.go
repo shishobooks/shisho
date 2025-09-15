@@ -41,6 +41,7 @@ func (b *Book) ResolveCoverImage() string {
 
 	extensions := []string{".jpg", ".jpeg", ".png", ".webp"}
 
+	// First, try standard canonical covers
 	for _, ext := range extensions {
 		coverPath := filepath.Join(b.Filepath, "cover"+ext)
 		if _, err := os.Stat(coverPath); err == nil {
@@ -56,6 +57,33 @@ func (b *Book) ResolveCoverImage() string {
 			filename := "audiobook_cover" + ext
 			b.CoverImagePath = &filename
 			return filename
+		}
+	}
+
+	// If no standard covers found, look for any file matching *_cover.ext pattern
+	// This handles root-level files where the canonical cover is the individual cover
+	files, err := os.ReadDir(b.Filepath)
+	if err != nil {
+		return ""
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		filename := file.Name()
+		ext := filepath.Ext(filename)
+
+		// Check if it matches the *_cover.ext pattern
+		if strings.HasSuffix(strings.TrimSuffix(filename, ext), "_cover") {
+			// Verify it's a supported image extension
+			for _, supportedExt := range extensions {
+				if strings.ToLower(ext) == supportedExt {
+					b.CoverImagePath = &filename
+					return filename
+				}
+			}
 		}
 	}
 
