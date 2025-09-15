@@ -2,6 +2,7 @@ package books
 
 import (
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 
@@ -143,4 +144,82 @@ func (h *handler) bookCover(c echo.Context) error {
 
 	filepath := path.Join(book.Filepath, coverImage)
 	return errors.WithStack(c.File(filepath))
+}
+
+func (h *handler) listSeries(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Bind params.
+	params := ListSeriesQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	series, total, err := h.bookService.ListSeriesWithTotal(ctx, ListSeriesOptions{
+		Limit:        &params.Limit,
+		Offset:       &params.Offset,
+		includeTotal: true,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	response := map[string]interface{}{
+		"series": series,
+		"total":  total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+func (h *handler) seriesBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	seriesName := c.Param("name")
+
+	// URL decode the series name
+	decodedSeriesName, err := url.QueryUnescape(seriesName)
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	books, err := h.bookService.ListBooks(ctx, ListBooksOptions{
+		Series: &decodedSeriesName,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, books))
+}
+
+func (h *handler) seriesCover(c echo.Context) error {
+	ctx := c.Request().Context()
+	seriesName := c.Param("name")
+
+	// URL decode the series name
+	decodedSeriesName, err := url.QueryUnescape(seriesName)
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	// Get the first book in the series
+	book, err := h.bookService.GetFirstBookInSeries(ctx, decodedSeriesName)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Use the book's cover image
+	coverImageFileName := book.ResolveCoverImage()
+	if coverImageFileName == "" {
+		return errcodes.NotFound("Series cover")
+	}
+
+	// Construct full path to the cover file
+	coverImagePath := path.Join(book.Filepath, coverImageFileName)
+
+	// Set appropriate headers
+	c.Response().Header().Set("Content-Type", "image/jpeg")
+	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+
+	return errors.WithStack(c.File(coverImagePath))
 }

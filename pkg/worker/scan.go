@@ -169,6 +169,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	titleSource := models.DataSourceFilepath
 	authors := make([]*models.Author, 0)
 	authorSource := models.DataSourceFilepath
+	series := ""
+	seriesSource := models.DataSourceFilepath
+	var seriesNumber *float64
 	var coverMimeType *string
 
 	// Extract metadata from each file based on its file type.
@@ -200,6 +203,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		title = metadata.Title
 		titleSource = metadata.DataSource
 		authorSource = metadata.DataSource
+		series = metadata.Series
+		seriesSource = metadata.DataSource
+		seriesNumber = metadata.SeriesNumber
 		for _, author := range metadata.Authors {
 			authors = append(authors, &models.Author{
 				Name: author,
@@ -248,6 +254,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
 		}
+		// Update series if we have a higher priority source
+		if series != "" && (existingBook.SeriesSource == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[*existingBook.SeriesSource]) {
+			log.Info("updating series", logger.Data{"new_series": series, "old_series": existingBook.Series})
+			existingBook.Series = &series
+			existingBook.SeriesSource = &seriesSource
+			updateOptions.Columns = append(updateOptions.Columns, "series", "series_source")
+		}
+		if seriesNumber != nil && (existingBook.SeriesSource == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[*existingBook.SeriesSource]) {
+			log.Info("updating series number", logger.Data{"new_series_number": *seriesNumber, "old_series_number": existingBook.SeriesNumber})
+			existingBook.SeriesNumber = seriesNumber
+			updateOptions.Columns = append(updateOptions.Columns, "series_number")
+		}
 
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)
 		if err != nil {
@@ -255,6 +273,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
+		var seriesPtr *string
+		var seriesSourcePtr *string
+		if series != "" {
+			seriesPtr = &series
+			seriesSourcePtr = &seriesSource
+		}
 		existingBook = &models.Book{
 			LibraryID:    libraryID,
 			Filepath:     bookPath,
@@ -262,6 +286,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			TitleSource:  titleSource,
 			Authors:      authors,
 			AuthorSource: authorSource,
+			Series:       seriesPtr,
+			SeriesSource: seriesSourcePtr,
+			SeriesNumber: seriesNumber,
 		}
 		err := w.bookService.CreateBook(ctx, existingBook)
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -16,6 +17,8 @@ import (
 type OPF struct {
 	Title         string
 	Authors       []string
+	Series        string
+	SeriesNumber  *float64
 	CoverFilepath string
 	CoverMimeType string
 	CoverData     []byte
@@ -153,6 +156,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	return &mediafile.ParsedMetadata{
 		Title:         opf.Title,
 		Authors:       opf.Authors,
+		Series:        opf.Series,
+		SeriesNumber:  opf.SeriesNumber,
 		CoverMimeType: opf.CoverMimeType,
 		CoverData:     opf.CoverData,
 		DataSource:    models.DataSourceEPUBMetadata,
@@ -231,9 +236,20 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
+	// Parse series information from calibre meta tags
+	series := metaContent["calibre:series"]
+	var seriesNumber *float64
+	if seriesIndexStr := metaContent["calibre:series_index"]; seriesIndexStr != "" {
+		if num, err := strconv.ParseFloat(seriesIndexStr, 64); err == nil {
+			seriesNumber = &num
+		}
+	}
+
 	return &OPF{
 		Title:         title,
 		Authors:       authors,
+		Series:        series,
+		SeriesNumber:  seriesNumber,
 		CoverFilepath: coverFilepath,
 		CoverMimeType: coverMimeType,
 	}, nil

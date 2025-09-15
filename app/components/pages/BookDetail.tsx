@@ -179,10 +179,19 @@ const BookDetail = () => {
                   {book.series && (
                     <div>
                       <h3 className="font-semibold mb-2">Series</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {book.series}
-                        {book.series_number && ` #${book.series_number}`}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          className="text-sm font-medium text-primary hover:underline"
+                          to={`/series/${encodeURIComponent(book.series)}`}
+                        >
+                          {book.series}
+                        </Link>
+                        {book.series_number && (
+                          <Badge className="text-xs" variant="outline">
+                            #{book.series_number}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   )}
 

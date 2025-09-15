@@ -113,3 +113,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tests should use `TZ=America/Chicago ENVIRONMENT=test CI=true` environment
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
+- To generate types, run `make tygo`. If it says that "make: Nothing to be done for `tygo'.", that means the types are already up-to-date.

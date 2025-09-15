@@ -1,5 +1,6 @@
 import { BookPlus, RefreshCw } from "lucide-react";
 import { useCallback } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/library/ThemeToggle";
@@ -14,6 +15,7 @@ import { useCreateLibrary } from "@/hooks/queries/libraries";
 import { JobTypeScan } from "@/types";
 
 const TopNav = () => {
+  const location = useLocation();
   const createJobMutation = useCreateJob();
   const createLibraryMutation = useCreateLibrary();
 
@@ -54,12 +56,39 @@ const TopNav = () => {
 
   return (
     <div className="bg-violet-300 px-6 py-4 flex items-center justify-between dark:bg-neutral-700 text-neutral-900 dark:text-neutral-50">
-      <h1 className="font-sans text-2xl font-black uppercase tracking-wider">
-        Shisho
-        <span className="align-super text-xs font-normal dark:text-violet-300">
-          司書
-        </span>
-      </h1>
+      <div className="flex items-center gap-8">
+        <Link
+          className="font-sans text-2xl font-black uppercase tracking-wider"
+          to="/"
+        >
+          Shisho
+          <span className="align-super text-xs font-normal dark:text-violet-300">
+            司書
+          </span>
+        </Link>
+        <nav className="flex gap-6">
+          <Link
+            className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
+              location.pathname === "/"
+                ? "text-violet-600 dark:text-violet-300"
+                : ""
+            }`}
+            to="/"
+          >
+            Books
+          </Link>
+          <Link
+            className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
+              location.pathname.startsWith("/series")
+                ? "text-violet-600 dark:text-violet-300"
+                : ""
+            }`}
+            to="/series"
+          >
+            Series
+          </Link>
+        </nav>
+      </div>
       <div className="flex gap-6">
         <ThemeToggle />
         {/*<TooltipProvider>*/}

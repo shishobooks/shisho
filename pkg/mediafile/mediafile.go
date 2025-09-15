@@ -5,6 +5,8 @@ import "fmt"
 type ParsedMetadata struct {
 	Title         string
 	Authors       []string
+	Series        string
+	SeriesNumber  *float64
 	CoverMimeType string
 	CoverData     []byte
 	// DataSource should be a value of books.DataSource

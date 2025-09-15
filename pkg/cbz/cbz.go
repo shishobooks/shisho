@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -105,9 +106,19 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	// Build metadata from ComicInfo
 	title := ""
 	authors := []string{}
+	series := ""
+	var seriesNumber *float64
 
 	if comicInfo != nil {
 		title = comicInfo.Title
+		series = comicInfo.Series
+
+		// Use series number from ComicInfo if available
+		if comicInfo.Number != "" {
+			if num, err := strconv.ParseFloat(comicInfo.Number, 64); err == nil {
+				seriesNumber = &num
+			}
+		}
 
 		// Collect all creator fields as authors
 		creators := []string{}
@@ -131,9 +142,19 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	// If no series number from ComicInfo, try to extract from filename
+	if seriesNumber == nil {
+		filename := filepath.Base(path)
+		if num := extractSeriesNumberFromFilename(filename); num != nil {
+			seriesNumber = num
+		}
+	}
+
 	return &mediafile.ParsedMetadata{
 		Title:         title,
 		Authors:       authors,
+		Series:        series,
+		SeriesNumber:  seriesNumber,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
 		DataSource:    models.DataSourceCBZMetadata,
@@ -253,4 +274,27 @@ func splitCreators(creators string) []string {
 		}
 	}
 	return result
+}
+
+func extractSeriesNumberFromFilename(filename string) *float64 {
+	// Remove extension for processing
+	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Try patterns: #7, v7, or just 7 at the end
+	patterns := []string{
+		`(?i)#(\d+(?:\.\d+)?)$`,   // matches #7 or #7.5
+		`(?i)v(\d+(?:\.\d+)?)$`,   // matches v7 or v7.5
+		`(?i)\s+(\d+(?:\.\d+)?)$`, // matches " 7" or " 7.5"
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		if matches := re.FindStringSubmatch(nameWithoutExt); len(matches) >= 2 {
+			if num, err := strconv.ParseFloat(matches[1], 64); err == nil {
+				return &num
+			}
+		}
+	}
+
+	return nil
 }
