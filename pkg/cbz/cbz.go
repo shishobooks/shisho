@@ -1,0 +1,256 @@
+package cbz
+
+import (
+	"archive/zip"
+	"encoding/xml"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
+)
+
+type ComicInfo struct {
+	XMLName         xml.Name `xml:"ComicInfo"`
+	Title           string   `xml:"Title"`
+	Series          string   `xml:"Series"`
+	Number          string   `xml:"Number"`
+	Volume          string   `xml:"Volume"`
+	Year            string   `xml:"Year"`
+	Month           string   `xml:"Month"`
+	Day             string   `xml:"Day"`
+	Writer          string   `xml:"Writer"`
+	Penciller       string   `xml:"Penciller"`
+	Inker           string   `xml:"Inker"`
+	Colorist        string   `xml:"Colorist"`
+	Letterer        string   `xml:"Letterer"`
+	CoverArtist     string   `xml:"CoverArtist"`
+	Editor          string   `xml:"Editor"`
+	Translator      string   `xml:"Translator"`
+	Publisher       string   `xml:"Publisher"`
+	Imprint         string   `xml:"Imprint"`
+	Genre           string   `xml:"Genre"`
+	Tags            string   `xml:"Tags"`
+	Characters      string   `xml:"Characters"`
+	Teams           string   `xml:"Teams"`
+	Locations       string   `xml:"Locations"`
+	StoryArc        string   `xml:"StoryArc"`
+	AgeRating       string   `xml:"AgeRating"`
+	CommunityRating string   `xml:"CommunityRating"`
+	PageCount       string   `xml:"PageCount"`
+	LanguageISO     string   `xml:"LanguageISO"`
+	Format          string   `xml:"Format"`
+	BlackAndWhite   string   `xml:"BlackAndWhite"`
+	Manga           string   `xml:"Manga"`
+	GTIN            string   `xml:"GTIN"`
+	Pages           struct {
+		Page []ComicPageInfo `xml:"Page"`
+	} `xml:"Pages"`
+}
+
+type ComicPageInfo struct {
+	Image       string `xml:"Image,attr"`
+	Type        string `xml:"Type,attr"`
+	DoublePage  string `xml:"DoublePage,attr"`
+	ImageSize   string `xml:"ImageSize,attr"`
+	ImageWidth  string `xml:"ImageWidth,attr"`
+	ImageHeight string `xml:"ImageHeight,attr"`
+}
+
+func Parse(path string) (*mediafile.ParsedMetadata, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer f.Close()
+
+	stats, err := f.Stat()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	size := stats.Size()
+
+	zipReader, err := zip.NewReader(f, size)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	// Parse ComicInfo.xml if it exists
+	var comicInfo *ComicInfo
+	for _, file := range zipReader.File {
+		if strings.ToLower(file.Name) == "comicinfo.xml" {
+			r, err := file.Open()
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			comicInfo, err = ParseComicInfo(r)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			break
+		}
+	}
+
+	// Extract cover image
+	coverData, coverMimeType, err := extractCoverImage(zipReader, comicInfo)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	// Build metadata from ComicInfo
+	title := ""
+	authors := []string{}
+
+	if comicInfo != nil {
+		title = comicInfo.Title
+
+		// Collect all creator fields as authors
+		creators := []string{}
+		if comicInfo.Writer != "" {
+			creators = append(creators, splitCreators(comicInfo.Writer)...)
+		}
+		if comicInfo.Penciller != "" {
+			creators = append(creators, splitCreators(comicInfo.Penciller)...)
+		}
+		if comicInfo.CoverArtist != "" {
+			creators = append(creators, splitCreators(comicInfo.CoverArtist)...)
+		}
+
+		// Remove duplicates
+		seen := make(map[string]bool)
+		for _, creator := range creators {
+			if !seen[creator] {
+				authors = append(authors, creator)
+				seen[creator] = true
+			}
+		}
+	}
+
+	return &mediafile.ParsedMetadata{
+		Title:         title,
+		Authors:       authors,
+		CoverMimeType: coverMimeType,
+		CoverData:     coverData,
+		DataSource:    models.DataSourceCBZMetadata,
+	}, nil
+}
+
+func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {
+	defer r.Close()
+
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	comicInfo := &ComicInfo{}
+	err = xml.Unmarshal(b, comicInfo)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return comicInfo, nil
+}
+
+func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, error) {
+	// Create a sorted list of all image files
+	var imageFiles []*zip.File
+	for _, file := range zipReader.File {
+		ext := strings.ToLower(filepath.Ext(file.Name))
+		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
+			imageFiles = append(imageFiles, file)
+		}
+	}
+
+	// Sort image files by name to ensure consistent ordering
+	sort.Slice(imageFiles, func(i, j int) bool {
+		return imageFiles[i].Name < imageFiles[j].Name
+	})
+
+	if len(imageFiles) == 0 {
+		return nil, "", nil
+	}
+
+	var targetFile *zip.File
+
+	// Strategy 1: Look for FrontCover in ComicInfo.xml
+	if comicInfo != nil && len(comicInfo.Pages.Page) > 0 {
+		for _, page := range comicInfo.Pages.Page {
+			if strings.ToLower(page.Type) == "frontcover" {
+				// Find the image file corresponding to this page
+				pageNum, err := strconv.Atoi(page.Image)
+				if err == nil && pageNum >= 0 && pageNum < len(imageFiles) {
+					targetFile = imageFiles[pageNum]
+					break
+				}
+			}
+		}
+
+		// Strategy 2: Look for InnerCover if no FrontCover found
+		if targetFile == nil {
+			for _, page := range comicInfo.Pages.Page {
+				if strings.ToLower(page.Type) == "innercover" {
+					pageNum, err := strconv.Atoi(page.Image)
+					if err == nil && pageNum >= 0 && pageNum < len(imageFiles) {
+						targetFile = imageFiles[pageNum]
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Strategy 3: Use the first image file
+	if targetFile == nil {
+		targetFile = imageFiles[0]
+	}
+
+	// Extract the cover image data
+	r, err := targetFile.Open()
+	if err != nil {
+		return nil, "", errors.WithStack(err)
+	}
+	defer r.Close()
+
+	coverData, err := io.ReadAll(r)
+	if err != nil {
+		return nil, "", errors.WithStack(err)
+	}
+
+	// Determine MIME type from extension
+	ext := strings.ToLower(filepath.Ext(targetFile.Name))
+	mimeType := ""
+	switch ext {
+	case ".jpg", ".jpeg":
+		mimeType = "image/jpeg"
+	case ".png":
+		mimeType = "image/png"
+	case ".gif":
+		mimeType = "image/gif"
+	case ".webp":
+		mimeType = "image/webp"
+	}
+
+	return coverData, mimeType, nil
+}
+
+func splitCreators(creators string) []string {
+	if creators == "" {
+		return nil
+	}
+
+	// Split by comma and clean up whitespace
+	parts := strings.Split(creators, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -151,6 +152,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	case models.FileTypeEPUB:
 		log.Info("parsing file as epub", logger.Data{"file_type": fileType})
 		metadata, err = epub.Parse(path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	case models.FileTypeCBZ:
+		log.Info("parsing file as cbz", logger.Data{"file_type": fileType})
+		metadata, err = cbz.Parse(path)
 		if err != nil {
 			return errors.WithStack(err)
 		}

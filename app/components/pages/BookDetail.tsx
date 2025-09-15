@@ -103,25 +103,22 @@ const BookDetail = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Book Cover and Basic Info */}
             <div className="lg:col-span-1">
-              <Card>
-                <CardContent className="px-6">
-                  <div className={`${coverAspectRatio} w-full`}>
-                    <img
-                      alt={`${book.title} Cover`}
-                      className="w-full h-full object-cover rounded-md border"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                        (
-                          e.target as HTMLImageElement
-                        ).nextElementSibling!.textContent =
-                          "No cover available";
-                      }}
-                      src={`/api/books/${book.id}/cover`}
-                    />
-                    <div className="hidden text-center text-muted-foreground"></div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="px-6">
+                <div className={`${coverAspectRatio} w-full`}>
+                  <img
+                    alt={`${book.title} Cover`}
+                    className="w-full h-full object-cover rounded-md border"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                      (
+                        e.target as HTMLImageElement
+                      ).nextElementSibling!.textContent = "No cover available";
+                    }}
+                    src={`/api/books/${book.id}/cover`}
+                  />
+                  <div className="hidden text-center text-muted-foreground"></div>
+                </div>
+              </div>
             </div>
 
             {/* Book Details */}
@@ -223,76 +220,71 @@ const BookDetail = () => {
 
                   {/* Files */}
                   <div>
-                    <h3 className="font-semibold mb-4">
+                    <h3 className="font-semibold mb-3">
                       Files ({book.files.length})
                     </h3>
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                       {book.files.map((file) => (
                         <Card
-                          className="border-l-4 border-l-blue-500"
+                          className="border-l-4 border-l-violet-300"
                           key={file.id}
                         >
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Badge className="uppercase" variant="subtle">
+                          <CardContent className="px-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <Badge
+                                  className="uppercase text-xs"
+                                  variant="subtle"
+                                >
                                   {file.file_type}
                                 </Badge>
-                                <span className="font-medium">
+                                <span className="font-medium text-sm truncate">
                                   {file.filepath.split("/").pop()}
                                 </span>
                               </div>
-                              <span className="text-sm text-muted-foreground">
-                                {formatFileSize(file.filesize_bytes)}
-                              </span>
+
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
+                                {file.audiobook_duration && (
+                                  <span>
+                                    {formatDuration(file.audiobook_duration)}
+                                  </span>
+                                )}
+                                {file.audiobook_bitrate && (
+                                  <span>
+                                    {Math.round(file.audiobook_bitrate)} kbps
+                                  </span>
+                                )}
+                                <span>
+                                  {formatFileSize(file.filesize_bytes)}
+                                </span>
+                              </div>
                             </div>
 
-                            <div className="text-sm text-muted-foreground space-y-1">
-                              <p className="break-all">{file.filepath}</p>
-
-                              {file.audiobook_duration && (
-                                <p>
-                                  Duration:{" "}
-                                  {formatDuration(file.audiobook_duration)}
-                                </p>
-                              )}
-
-                              {file.audiobook_bitrate && (
-                                <p>
-                                  Bitrate: {Math.round(file.audiobook_bitrate)}{" "}
-                                  kbps
-                                </p>
-                              )}
-
-                              {file.narrators && file.narrators.length > 0 && (
-                                <div>
-                                  <span>Narrators: </span>
+                            {file.narrators && file.narrators.length > 0 && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                  Narrators:
+                                </span>
+                                <div className="flex items-center gap-1 flex-wrap">
                                   {file.narrators.map((narrator, index) => (
-                                    <span key={narrator.id}>
+                                    <span className="text-xs" key={narrator.id}>
                                       {narrator.name}
                                       {index < file.narrators!.length - 1
-                                        ? ", "
+                                        ? ","
                                         : ""}
                                     </span>
                                   ))}
                                   {file.narrator_source && (
-                                    <Badge className="ml-2" variant="outline">
+                                    <Badge
+                                      className="text-xs"
+                                      variant="outline"
+                                    >
                                       {file.narrator_source.replace("_", " ")}
                                     </Badge>
                                   )}
                                 </div>
-                              )}
-
-                              <div className="flex items-center gap-2 text-xs">
-                                <span>
-                                  Created: {formatDate(file.created_at)}
-                                </span>
-                                <span>•</span>
-                                <span>
-                                  Updated: {formatDate(file.updated_at)}
-                                </span>
                               </div>
-                            </div>
+                            )}
                           </CardContent>
                         </Card>
                       ))}
