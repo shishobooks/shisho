@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import Gallery from "@/components/library/Gallery";
 import TopNav from "@/components/library/TopNav";
@@ -8,6 +8,7 @@ import { useSeries, type SeriesInfo } from "@/hooks/queries/series";
 const ITEMS_PER_PAGE = 20;
 
 const SeriesList = () => {
+  const { libraryId } = useParams();
   const [searchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
 
@@ -24,7 +25,7 @@ const SeriesList = () => {
     >
       <Link
         className="group cursor-pointer"
-        to={`/series/${encodeURIComponent(seriesItem.name)}`}
+        to={`/libraries/${libraryId}/series/${encodeURIComponent(seriesItem.name)}`}
       >
         <img
           alt={`${seriesItem.name} Cover`}

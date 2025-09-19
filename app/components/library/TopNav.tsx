@@ -1,6 +1,6 @@
-import { BookPlus, RefreshCw, Settings } from "lucide-react";
+import { BookPlus, RefreshCw, Settings, Wrench } from "lucide-react";
 import { useCallback } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/library/ThemeToggle";
@@ -11,13 +11,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCreateJob } from "@/hooks/queries/jobs";
-import { useCreateLibrary } from "@/hooks/queries/libraries";
+import { useCreateLibrary, useLibrary } from "@/hooks/queries/libraries";
 import { JobTypeScan } from "@/types";
 
 const TopNav = () => {
+  const { libraryId } = useParams();
   const location = useLocation();
   const createJobMutation = useCreateJob();
   const createLibraryMutation = useCreateLibrary();
+
+  // Load current library if we have a libraryId
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId),
+  });
 
   const handleCreateSync = useCallback(async () => {
     try {
@@ -66,69 +72,37 @@ const TopNav = () => {
             司書
           </span>
         </Link>
-        <nav className="flex gap-6">
-          <Link
-            className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
-              location.pathname === "/"
-                ? "text-violet-600 dark:text-violet-300"
-                : ""
-            }`}
-            to="/"
-          >
-            Books
-          </Link>
-          <Link
-            className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
-              location.pathname.startsWith("/series")
-                ? "text-violet-600 dark:text-violet-300"
-                : ""
-            }`}
-            to="/series"
-          >
-            Series
-          </Link>
-        </nav>
+        {libraryQuery.data && (
+          <div className="text-sm text-neutral-600 dark:text-neutral-400">
+            {libraryQuery.data.name}
+          </div>
+        )}
+        {libraryId && (
+          <nav className="flex gap-6">
+            <Link
+              className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
+                location.pathname === `/libraries/${libraryId}`
+                  ? "text-violet-600 dark:text-violet-300"
+                  : ""
+              }`}
+              to={`/libraries/${libraryId}`}
+            >
+              Books
+            </Link>
+            <Link
+              className={`font-medium hover:text-violet-600 dark:hover:text-violet-300 transition-colors ${
+                location.pathname.startsWith(`/libraries/${libraryId}/series`)
+                  ? "text-violet-600 dark:text-violet-300"
+                  : ""
+              }`}
+              to={`/libraries/${libraryId}/series`}
+            >
+              Series
+            </Link>
+          </nav>
+        )}
       </div>
       <div className="flex gap-6">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <Link to="/config">
-                <Settings
-                  className={`cursor-pointer ${
-                    location.pathname === "/config"
-                      ? "text-violet-600 dark:text-violet-300"
-                      : ""
-                  }`}
-                />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Configuration</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <ThemeToggle />
-        {/*<TooltipProvider>*/}
-        {/*  <Tooltip>*/}
-        {/*    <TooltipTrigger>*/}
-        {/*      {mode === "light" ? (*/}
-        {/*        <Sun*/}
-        {/*          className="cursor-pointer"*/}
-        {/*          onClick={handleToggleDarkMode}*/}
-        {/*        />*/}
-        {/*      ) : (*/}
-        {/*        <Moon*/}
-        {/*          className="cursor-pointer"*/}
-        {/*          onClick={handleToggleDarkMode}*/}
-        {/*        />*/}
-        {/*      )}*/}
-        {/*    </TooltipTrigger>*/}
-        {/*    <TooltipContent>*/}
-        {/*      <p>Toggle to {mode === "light" ? "dark" : "light"} mode</p>*/}
-        {/*    </TooltipContent>*/}
-        {/*  </Tooltip>*/}
-        {/*</TooltipProvider>*/}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger>
@@ -152,6 +126,45 @@ const TopNav = () => {
             </TooltipTrigger>
             <TooltipContent>
               <p>Sync libraries</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <ThemeToggle />
+        {libraryId && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Link to={`/libraries/${libraryId}/settings`}>
+                  <Settings
+                    className={`cursor-pointer ${
+                      location.pathname === `/libraries/${libraryId}/settings`
+                        ? "text-violet-600 dark:text-violet-300"
+                        : ""
+                    }`}
+                  />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Library Settings</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Link to="/config">
+                <Wrench
+                  className={`cursor-pointer ${
+                    location.pathname === "/config"
+                      ? "text-violet-600 dark:text-violet-300"
+                      : ""
+                  }`}
+                />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Configuration</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

@@ -115,3 +115,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Database migrations tested via `make db:rollback && make db:migrate`
 - To generate types, run `make tygo`. If it says that ``make: Nothing to be done for `tygo'.``, that means the types are already up-to-date.
 - Add shadcn components using `npx shadcn@latest add`.
+- You never have to run tygo manually. It is run as part of `make start`, so if that's running in the background, then it should already have run `make tygo`. If you see that new types haven't been generated, check the logs of `make start` to see if `make tygo` failed.

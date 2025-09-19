@@ -42,7 +42,7 @@ const formatDate = (dateString: string): string => {
 };
 
 const BookDetail = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
 
   if (bookQuery.isLoading) {
@@ -68,7 +68,7 @@ const BookDetail = () => {
               removed.
             </p>
             <Button asChild>
-              <Link to="/">
+              <Link to={`/libraries/${libraryId}`}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Home
               </Link>
@@ -93,7 +93,7 @@ const BookDetail = () => {
         <div className="max-w-7xl w-full p-8 m-auto">
           <div className="mb-6">
             <Button asChild variant="ghost">
-              <Link to="/">
+              <Link to={`/libraries/${libraryId}`}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Books
               </Link>
@@ -182,7 +182,7 @@ const BookDetail = () => {
                       <div className="flex items-center gap-2">
                         <Link
                           className="text-sm font-medium text-primary hover:underline"
-                          to={`/series/${encodeURIComponent(book.series)}`}
+                          to={`/libraries/${libraryId}/series/${encodeURIComponent(book.series)}`}
                         >
                           {book.series}
                         </Link>

@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSeriesBooks } from "@/hooks/queries/series";
 
 const SeriesDetail = () => {
-  const { name } = useParams<{ name: string }>();
+  const { name, libraryId } = useParams<{ name: string; libraryId: string }>();
   const seriesName = decodeURIComponent(name || "");
   const booksQuery = useSeriesBooks(seriesName);
 
@@ -31,7 +31,7 @@ const SeriesDetail = () => {
         <div className="max-w-7xl w-full p-8 m-auto">
           <div className="mb-6">
             <Button asChild variant="ghost">
-              <Link to="/series">
+              <Link to={`/libraries/${libraryId}/series`}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Series
               </Link>
@@ -67,7 +67,7 @@ const SeriesDetail = () => {
       <div className="max-w-7xl w-full p-8 m-auto">
         <div className="mb-6">
           <Button asChild variant="ghost">
-            <Link to="/series">
+            <Link to={`/libraries/${libraryId}/series`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Series
             </Link>
@@ -91,7 +91,10 @@ const SeriesDetail = () => {
               : "aspect-[2/3]";
 
             return (
-              <Link key={book.id} to={`/books/${book.id}`}>
+              <Link
+                key={book.id}
+                to={`/libraries/${libraryId}/books/${book.id}`}
+              >
                 <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
                   <CardContent className="p-4">
                     <div className="mb-4">

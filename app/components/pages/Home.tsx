@@ -1,5 +1,5 @@
 import { uniqBy } from "lodash";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import Gallery from "@/components/library/Gallery";
 import TopNav from "@/components/library/TopNav";
@@ -10,6 +10,7 @@ import type { Book } from "@/types";
 const ITEMS_PER_PAGE = 20;
 
 const Home = () => {
+  const { libraryId } = useParams();
   const [searchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
 
@@ -17,7 +18,11 @@ const Home = () => {
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
 
-  const booksQuery = useBooks({ limit, offset });
+  const booksQuery = useBooks({
+    limit,
+    offset,
+    library_id: libraryId ? parseInt(libraryId, 10) : undefined,
+  });
 
   const renderBookItem = (book: Book) => (
     <div
@@ -25,7 +30,10 @@ const Home = () => {
       key={book.id}
       title={`${book.title}${book.authors ? `\nBy ${book.authors.map((a) => a.name).join(", ")}` : ""}`}
     >
-      <Link className="group cursor-pointer" to={`/books/${book.id}`}>
+      <Link
+        className="group cursor-pointer"
+        to={`/libraries/${libraryId}/books/${book.id}`}
+      >
         <img
           alt={`${book.title} Cover`}
           className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"

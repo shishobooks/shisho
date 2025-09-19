@@ -25,9 +25,15 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	organizeFileStructure := true
+	if params.OrganizeFileStructure != nil {
+		organizeFileStructure = *params.OrganizeFileStructure
+	}
+
 	library := &models.Library{
-		Name:         params.Name,
-		LibraryPaths: make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
+		Name:                  params.Name,
+		OrganizeFileStructure: organizeFileStructure,
+		LibraryPaths:          make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
 	}
 	for _, path := range params.LibraryPaths {
 		library.LibraryPaths = append(library.LibraryPaths, &models.LibraryPath{
@@ -120,6 +126,10 @@ func (h *handler) update(c echo.Context) error {
 	if params.Name != nil && *params.Name != library.Name {
 		library.Name = *params.Name
 		opts.Columns = append(opts.Columns, "name")
+	}
+	if params.OrganizeFileStructure != nil && *params.OrganizeFileStructure != library.OrganizeFileStructure {
+		library.OrganizeFileStructure = *params.OrganizeFileStructure
+		opts.Columns = append(opts.Columns, "organize_file_structure")
 	}
 	if params.LibraryPaths != nil {
 		library.LibraryPaths = make([]*models.LibraryPath, 0, len(params.LibraryPaths))

@@ -30,6 +30,7 @@ func init() {
 				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				name TEXT NOT NULL,
+				organize_file_structure BOOLEAN NOT NULL DEFAULT TRUE,
 				deleted_at TIMESTAMPTZ
 			)
 `)

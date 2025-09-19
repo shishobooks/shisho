@@ -3,6 +3,9 @@ import { createBrowserRouter } from "react-router-dom";
 import BookDetail from "@/components/pages/BookDetail";
 import Config from "@/components/pages/Config";
 import Home from "@/components/pages/Home";
+import LibraryList from "@/components/pages/LibraryList";
+import LibraryRedirect from "@/components/pages/LibraryRedirect";
+import LibrarySettings from "@/components/pages/LibrarySettings";
 import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
@@ -14,18 +17,30 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "",
+        Component: LibraryRedirect,
+      },
+      {
+        path: "libraries",
+        Component: LibraryList,
+      },
+      {
+        path: "libraries/:libraryId",
         Component: Home,
       },
       {
-        path: "books/:id",
+        path: "libraries/:libraryId/settings",
+        Component: LibrarySettings,
+      },
+      {
+        path: "libraries/:libraryId/books/:id",
         Component: BookDetail,
       },
       {
-        path: "series",
+        path: "libraries/:libraryId/series",
         Component: SeriesList,
       },
       {
-        path: "series/:name",
+        path: "libraries/:libraryId/series/:name",
         Component: SeriesDetail,
       },
       {
