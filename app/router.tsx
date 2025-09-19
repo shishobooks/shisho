@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import BookDetail from "@/components/pages/BookDetail";
+import Config from "@/components/pages/Config";
 import Home from "@/components/pages/Home";
 import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: "series/:name",
         Component: SeriesDetail,
+      },
+      {
+        path: "config",
+        Component: Config,
       },
     ],
   },

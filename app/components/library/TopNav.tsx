@@ -1,4 +1,4 @@
-import { BookPlus, RefreshCw } from "lucide-react";
+import { BookPlus, RefreshCw, Settings } from "lucide-react";
 import { useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -90,6 +90,24 @@ const TopNav = () => {
         </nav>
       </div>
       <div className="flex gap-6">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Link to="/config">
+                <Settings
+                  className={`cursor-pointer ${
+                    location.pathname === "/config"
+                      ? "text-violet-600 dark:text-violet-300"
+                      : ""
+                  }`}
+                />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Configuration</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <ThemeToggle />
         {/*<TooltipProvider>*/}
         {/*  <Tooltip>*/}

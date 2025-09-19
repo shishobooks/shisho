@@ -38,6 +38,7 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 	health.RegisterRoutes(e)
 
 	books.RegisterRoutes(e, db)
+	config.RegisterRoutes(e, cfg)
 	jobs.RegisterRoutes(e, db)
 	libraries.RegisterRoutes(e, db)
 

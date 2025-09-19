@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `TZ=America/Chicago ENVIRONMENT=test CI=true go test -race ./pkg/... -coverprofile coverage.out` - Run all tests
 
 ### Frontend (React/TypeScript)
-- `yarn start` - Start Vite dev server 
+- `yarn start` - Start Vite dev server
 - `yarn build` - Build production frontend
 - `yarn lint` - Run ESLint, TypeScript checks, and Prettier
 - `yarn lint:eslint` - ESLint only
@@ -59,7 +59,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Generates cover images with filename-based storage strategy
 
 **Cover Image System**:
-- Individual file covers: `{filename}_cover.{ext}` 
+- Individual file covers: `{filename}_cover.{ext}`
 - Canonical covers: `cover.{ext}` (book priority) or `audiobook_cover.{ext}` (fallback)
 - Book model has `ResolveCoverImage()` method that finds covers dynamically
 - API endpoints: `/books/{id}/cover` (canonical) and `/files/{id}/cover` (individual)
@@ -102,7 +102,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Development Workflow
 
 - Use `make start` to run both API and frontend in development
-- Database is SQLite file at `tmp/data.sqlite` 
+- Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - Run `make tygo` after changing Go structs to update TypeScript types
 - Always run `make lint` and `yarn lint` before committing
@@ -113,4 +113,5 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tests should use `TZ=America/Chicago ENVIRONMENT=test CI=true` environment
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
-- To generate types, run `make tygo`. If it says that "make: Nothing to be done for `tygo'.", that means the types are already up-to-date.
+- To generate types, run `make tygo`. If it says that ``make: Nothing to be done for `tygo'.``, that means the types are already up-to-date.
+- Add shadcn components using `npx shadcn@latest add`.

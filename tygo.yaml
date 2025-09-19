@@ -8,6 +8,11 @@ packages:
     output_path: "app/types/generated/books.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/config"
+    output_path: "app/types/generated/config.ts"
+    include_files:
+      - validators.go
+      - config.go
   - path: "github.com/shishobooks/shisho/pkg/jobs"
     output_path: "app/types/generated/jobs.ts"
     include_files:
