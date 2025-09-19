@@ -32,8 +32,24 @@ type Book struct {
 }
 
 func (b *Book) ResolveCoverImage() string {
+	// Determine if this is a root-level book by checking if b.Filepath is a file
+	isRootLevelBook := false
+	if info, err := os.Stat(b.Filepath); err == nil && !info.IsDir() {
+		isRootLevelBook = true
+	}
+
+	// Determine the directory where covers should be located
+	var coverDir string
+	if isRootLevelBook {
+		// For root-level books, covers are in the same directory as the file
+		coverDir = filepath.Dir(b.Filepath)
+	} else {
+		// For directory-based books, covers are in the book directory
+		coverDir = b.Filepath
+	}
+
 	if b.CoverImagePath != nil && *b.CoverImagePath != "" {
-		coverPath := filepath.Join(b.Filepath, *b.CoverImagePath)
+		coverPath := filepath.Join(coverDir, *b.CoverImagePath)
 		if _, err := os.Stat(coverPath); err == nil {
 			return *b.CoverImagePath
 		}
@@ -44,7 +60,7 @@ func (b *Book) ResolveCoverImage() string {
 
 	// First, try standard canonical covers
 	for _, ext := range extensions {
-		coverPath := filepath.Join(b.Filepath, "cover"+ext)
+		coverPath := filepath.Join(coverDir, "cover"+ext)
 		if _, err := os.Stat(coverPath); err == nil {
 			filename := "cover" + ext
 			b.CoverImagePath = &filename
@@ -53,7 +69,7 @@ func (b *Book) ResolveCoverImage() string {
 	}
 
 	for _, ext := range extensions {
-		coverPath := filepath.Join(b.Filepath, "audiobook_cover"+ext)
+		coverPath := filepath.Join(coverDir, "audiobook_cover"+ext)
 		if _, err := os.Stat(coverPath); err == nil {
 			filename := "audiobook_cover" + ext
 			b.CoverImagePath = &filename
@@ -61,28 +77,41 @@ func (b *Book) ResolveCoverImage() string {
 		}
 	}
 
-	// If no standard covers found, look for any file matching *_cover.ext pattern
-	// This handles root-level files where the canonical cover is the individual cover
-	files, err := os.ReadDir(b.Filepath)
-	if err != nil {
-		return ""
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
+	// If no standard covers found, look for individual covers
+	if isRootLevelBook {
+		// For root-level books, look for covers specific to this book file
+		bookBaseName := strings.TrimSuffix(filepath.Base(b.Filepath), filepath.Ext(b.Filepath))
+		for _, ext := range extensions {
+			coverFilename := bookBaseName + "_cover" + ext
+			coverPath := filepath.Join(coverDir, coverFilename)
+			if _, err := os.Stat(coverPath); err == nil {
+				b.CoverImagePath = &coverFilename
+				return coverFilename
+			}
+		}
+	} else {
+		// For directory-based books, look for any file matching *_cover.ext pattern
+		files, err := os.ReadDir(coverDir)
+		if err != nil {
+			return ""
 		}
 
-		filename := file.Name()
-		ext := filepath.Ext(filename)
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
 
-		// Check if it matches the *_cover.ext pattern
-		if strings.HasSuffix(strings.TrimSuffix(filename, ext), "_cover") {
-			// Verify it's a supported image extension
-			for _, supportedExt := range extensions {
-				if strings.ToLower(ext) == supportedExt {
-					b.CoverImagePath = &filename
-					return filename
+			filename := file.Name()
+			ext := filepath.Ext(filename)
+
+			// Check if it matches the *_cover.ext pattern
+			if strings.HasSuffix(strings.TrimSuffix(filename, ext), "_cover") {
+				// Verify it's a supported image extension
+				for _, supportedExt := range extensions {
+					if strings.ToLower(ext) == supportedExt {
+						b.CoverImagePath = &filename
+						return filename
+					}
 				}
 			}
 		}

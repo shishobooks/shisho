@@ -139,8 +139,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	fileType := strings.ToLower(strings.ReplaceAll(filepath.Ext(path), ".", ""))
 
 	// Determine if this is a root-level file by checking if the file is directly in a library path
-	bookPath := filepath.Dir(path)
-	filename := filepath.Base(bookPath)
+	tempBookPath := filepath.Dir(path)
+	filename := filepath.Base(tempBookPath)
 	isRootLevelFile := false
 
 	// Get the library to check its paths
@@ -153,16 +153,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 
 	// Check if file is directly in any library path
 	for _, libraryPath := range library.LibraryPaths {
-		if bookPath == libraryPath.Filepath {
+		if tempBookPath == libraryPath.Filepath {
 			isRootLevelFile = true
 			break
 		}
 	}
 
-	// For root-level files, use filename without extension for title
-	// For directory-based files, use directory name
+	// Set book path based on whether this is a root-level file
+	var bookPath string
 	if isRootLevelFile {
+		// For root-level files, each file is its own book - use the full file path
+		bookPath = path
 		filename = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	} else {
+		// For directory-based files, use the directory path (multiple files can belong to same book)
+		bookPath = tempBookPath
 	}
 
 	title := strings.TrimSpace(filepathNarratorRE.ReplaceAllString(filepathAuthorRE.ReplaceAllString(filename, ""), ""))
@@ -173,6 +178,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	seriesSource := models.DataSourceFilepath
 	var seriesNumber *float64
 	var coverMimeType *string
+	var coverSource *string
 
 	// Extract metadata from each file based on its file type.
 	var metadata *mediafile.ParsedMetadata
@@ -296,6 +302,34 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 	}
 
+	// Handle cover extraction before creating the file so we can set the cover source
+	if metadata != nil && len(metadata.CoverData) > 0 {
+		// Save the cover image as a separate file using filename_cover.ext format
+		baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		coverFilepath := filepath.Join(bookPath, baseName+"_cover"+metadata.CoverExtension())
+
+		// Check if cover already exists before extracting a new one
+		if _, err := os.Stat(coverFilepath); os.IsNotExist(err) {
+			log.Info("saving cover", logger.Data{"mime": metadata.CoverMimeType})
+			coverFile, err := os.Create(coverFilepath)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			defer coverFile.Close()
+			_, err = io.Copy(coverFile, bytes.NewReader(metadata.CoverData))
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			// Set cover source to the metadata source since we extracted it
+			coverSource = &metadata.DataSource
+		} else {
+			log.Info("cover already exists, skipping extraction", logger.Data{"cover_path": coverFilepath})
+			// Set cover source to existing cover since we're using the existing one
+			existingCoverSource := models.DataSourceExistingCover
+			coverSource = &existingCoverSource
+		}
+	}
+
 	log.Info("creating file", logger.Data{"filesize": size})
 	file := &models.File{
 		LibraryID:     libraryID,
@@ -304,26 +338,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		FileType:      fileType,
 		FilesizeBytes: size,
 		CoverMimeType: coverMimeType,
+		CoverSource:   coverSource,
 	}
 	err = w.bookService.CreateFile(ctx, file)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	if metadata != nil && len(metadata.CoverData) > 0 {
-		log.Info("saving cover", logger.Data{"mime": metadata.CoverMimeType})
-		// Save the cover image as a separate file using filename_cover.ext format
-		baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		coverFilepath := filepath.Join(bookPath, baseName+"_cover"+metadata.CoverExtension())
-		coverFile, err := os.Create(coverFilepath)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		defer coverFile.Close()
-		_, err = io.Copy(coverFile, bytes.NewReader(metadata.CoverData))
-		if err != nil {
-			return errors.WithStack(err)
-		}
 	}
 
 	return nil
@@ -400,7 +419,14 @@ func (w *Worker) generateBookCanonicalCover(ctx context.Context, book *models.Bo
 		}
 
 		baseName := strings.TrimSuffix(filepath.Base(file.Filepath), filepath.Ext(file.Filepath))
-		individualCoverPath := filepath.Join(book.Filepath, baseName+"_cover"+file.CoverExtension())
+		var individualCoverPath string
+		if isRootLevelBook {
+			// For root-level books, cover is in the same directory as the file
+			individualCoverPath = filepath.Join(filepath.Dir(file.Filepath), baseName+"_cover"+file.CoverExtension())
+		} else {
+			// For directory-based books, cover is in the book directory
+			individualCoverPath = filepath.Join(book.Filepath, baseName+"_cover"+file.CoverExtension())
+		}
 
 		// Check if the individual cover file exists
 		if _, err := os.Stat(individualCoverPath); err != nil {

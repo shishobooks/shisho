@@ -92,6 +92,7 @@ func init() {
 				file_type TEXT NOT NULL,
 				filesize_bytes INTEGER NOT NULL,
 				cover_mime_type TEXT,
+				cover_source TEXT,
 				audiobook_duration DOUBLE,
 				audiobook_bitrate INTEGER,
 				narrator_source TEXT

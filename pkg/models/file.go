@@ -26,6 +26,7 @@ type File struct {
 	FileType          string      `bun:",nullzero" json:"file_type" tstype:"FileType"`
 	FilesizeBytes     int64       `bun:",nullzero" json:"filesize_bytes"`
 	CoverMimeType     *string     `json:"cover_mime_type"`
+	CoverSource       *string     `json:"cover_source" tstype:"DataSource"`
 	AudiobookDuration *float64    `json:"audiobook_duration"`
 	AudiobookBitrate  *float64    `json:"audiobook_bitrate"`
 	Narrators         []*Narrator `bun:"rel:has-many" json:"narrators,omitempty" tstype:"Narrator[]"`

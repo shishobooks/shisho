@@ -24,16 +24,16 @@ build\:air:
 
 .PHONY: db\:migrate
 db\:migrate:
-	go run ./cmd/migrations init
-	go run ./cmd/migrations migrate
+	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations init
+	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations migrate
 
 .PHONY: db\:migrate\:create
 db\:migrate\:create:
-	go run ./cmd/migrations create $(name)
+	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations create $(name)
 
 .PHONY: db\:rollback
 db\:rollback:
-	go run ./cmd/migrations rollback
+	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations rollback
 
 .PHONY: lint
 lint: $(BUILD_DIR)/golangci-lint

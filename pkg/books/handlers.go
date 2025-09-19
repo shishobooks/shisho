@@ -3,7 +3,9 @@ package books
 import (
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -142,8 +144,24 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	filepath := path.Join(book.Filepath, coverImage)
-	return errors.WithStack(c.File(filepath))
+	// Determine if this is a root-level book by checking if book.Filepath is a file
+	isRootLevelBook := false
+	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
+		isRootLevelBook = true
+	}
+
+	// Determine the directory where covers are located
+	var coverDir string
+	if isRootLevelBook {
+		// For root-level books, covers are in the same directory as the file
+		coverDir = filepath.Dir(book.Filepath)
+	} else {
+		// For directory-based books, covers are in the book directory
+		coverDir = book.Filepath
+	}
+
+	coverPath := filepath.Join(coverDir, coverImage)
+	return errors.WithStack(c.File(coverPath))
 }
 
 func (h *handler) listSeries(c echo.Context) error {
@@ -214,8 +232,24 @@ func (h *handler) seriesCover(c echo.Context) error {
 		return errcodes.NotFound("Series cover")
 	}
 
+	// Determine if this is a root-level book by checking if book.Filepath is a file
+	isRootLevelBook := false
+	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
+		isRootLevelBook = true
+	}
+
+	// Determine the directory where covers are located
+	var coverDir string
+	if isRootLevelBook {
+		// For root-level books, covers are in the same directory as the file
+		coverDir = filepath.Dir(book.Filepath)
+	} else {
+		// For directory-based books, covers are in the book directory
+		coverDir = book.Filepath
+	}
+
 	// Construct full path to the cover file
-	coverImagePath := path.Join(book.Filepath, coverImageFileName)
+	coverImagePath := filepath.Join(coverDir, coverImageFileName)
 
 	// Set appropriate headers
 	c.Response().Header().Set("Content-Type", "image/jpeg")
