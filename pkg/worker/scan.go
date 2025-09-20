@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -236,13 +237,82 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 	}
 
-	existingBook, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
-		Filepath:  &bookPath,
-		LibraryID: &libraryID,
-	})
+	// Normalize volume indicators in title for CBZ files (after all metadata extraction)
+	if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, fileType); hasVolume {
+		title = normalizedTitle
+	}
+
+	// First, check if there's already a book for this file path
+	// This covers the case where a file was previously organized but moved back to root level
+	existingBookByFile, err := w.bookService.RetrieveBookByFilePath(ctx, path, libraryID)
 	if err != nil && !errors.Is(err, errcodes.NotFound("Book")) {
 		return errors.WithStack(err)
 	}
+
+	// Check if we should organize this file (only for root-level files when organize_file_structure is enabled)
+	var organizeResult *fileutils.OrganizeFileResult
+	if library.OrganizeFileStructure && isRootLevelFile {
+		// If there's already a book for this exact file path, skip organization to avoid duplicates
+		if existingBookByFile != nil {
+			log.Info("skipping organization - book already exists for this file", logger.Data{
+				"book_id":   existingBookByFile.ID,
+				"file_path": path,
+			})
+		} else {
+			log.Info("organizing root-level file", logger.Data{
+				"organize_file_structure": library.OrganizeFileStructure,
+				"is_root_level":           isRootLevelFile,
+			})
+
+			// Create organized name options
+			organizeOpts := fileutils.OrganizedNameOptions{
+				Authors:      authors,
+				Title:        title,
+				SeriesNumber: seriesNumber,
+				FileType:     fileType,
+			}
+
+			// Organize the file
+			organizeResult, err = fileutils.OrganizeRootLevelFile(path, organizeOpts)
+			if err != nil {
+				log.Error("failed to organize file", logger.Data{"error": err.Error()})
+				// Don't fail the entire scan if organization fails
+			} else if organizeResult.Moved {
+				logData := logger.Data{
+					"original_path":  organizeResult.OriginalPath,
+					"new_path":       organizeResult.NewPath,
+					"folder_created": organizeResult.FolderCreated,
+					"covers_moved":   organizeResult.CoversMoved,
+				}
+				if organizeResult.CoversError != nil {
+					logData["covers_error"] = organizeResult.CoversError.Error()
+				}
+				log.Info("file organized", logData)
+
+				// Update path and book path for further processing
+				path = organizeResult.NewPath
+				bookPath = filepath.Dir(path)
+			}
+		}
+	}
+
+	// Determine which existing book to use
+	var existingBook *models.Book
+	if existingBookByFile != nil {
+		// If we found a book by the original file path, use that
+		existingBook = existingBookByFile
+		log.Info("using existing book found by file path", logger.Data{"book_id": existingBook.ID})
+	} else {
+		// Otherwise, check for existing book by the final book path (after potential organization)
+		existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+			Filepath:  &bookPath,
+			LibraryID: &libraryID,
+		})
+		if err != nil && !errors.Is(err, errcodes.NotFound("Book")) {
+			return errors.WithStack(err)
+		}
+	}
+
 	if existingBook != nil {
 		log.Info("book already exists", logger.Data{"book_id": existingBook.ID})
 
@@ -271,6 +341,38 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			log.Info("updating series number", logger.Data{"new_series_number": *seriesNumber, "old_series_number": existingBook.SeriesNumber})
 			existingBook.SeriesNumber = seriesNumber
 			updateOptions.Columns = append(updateOptions.Columns, "series_number")
+		}
+
+		// If file was organized and we're using an existing book by file path,
+		// update the book and file paths to reflect the new locations
+		if organizeResult != nil && organizeResult.Moved && existingBookByFile != nil {
+			log.Info("updating book and file paths after organization", logger.Data{
+				"old_book_path": existingBook.Filepath,
+				"new_book_path": bookPath,
+				"old_file_path": organizeResult.OriginalPath,
+				"new_file_path": organizeResult.NewPath,
+			})
+
+			// Update book filepath
+			existingBook.Filepath = bookPath
+			updateOptions.Columns = append(updateOptions.Columns, "filepath")
+
+			// Also need to update the file record
+			for _, file := range existingBook.Files {
+				if file.Filepath == organizeResult.OriginalPath {
+					file.Filepath = organizeResult.NewPath
+					err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+						Columns: []string{"filepath"},
+					})
+					if err != nil {
+						log.Error("failed to update file path", logger.Data{
+							"file_id": file.ID,
+							"error":   err.Error(),
+						})
+					}
+					break
+				}
+			}
 		}
 
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)

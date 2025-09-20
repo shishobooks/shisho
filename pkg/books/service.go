@@ -3,10 +3,14 @@ package books
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -29,6 +33,7 @@ type ListBooksOptions struct {
 type UpdateBookOptions struct {
 	Columns       []string
 	UpdateAuthors bool
+	OrganizeFiles bool // Whether to rename files when metadata changes
 }
 
 type RetrieveFileOptions struct {
@@ -187,6 +192,34 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 	return book, nil
 }
 
+// RetrieveBookByFilePath finds a book that contains a file with the specified filepath.
+func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string, libraryID int) (*models.Book, error) {
+	book := &models.Book{}
+
+	q := svc.db.
+		NewSelect().
+		Model(book).
+		Relation("Library").
+		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("a.sort_order ASC")
+		}).
+		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("f.filepath ASC")
+		}).
+		Join("INNER JOIN files f ON f.book_id = b.id").
+		Where("f.filepath = ? AND b.library_id = ?", filepath, libraryID)
+
+	err := q.Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcodes.NotFound("Book")
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	return book, nil
+}
+
 func (svc *Service) ListBooks(ctx context.Context, opts ListBooksOptions) ([]*models.Book, error) {
 	b, _, err := svc.listBooksWithTotal(ctx, opts)
 	return b, errors.WithStack(err)
@@ -298,6 +331,19 @@ func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts Upda
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Handle file organization if requested
+	if opts.OrganizeFiles {
+		err = svc.organizeBookFiles(ctx, book)
+		if err != nil {
+			// Log error but don't fail the update
+			log := logger.FromContext(ctx)
+			log.Error("failed to organize book files after update", logger.Data{
+				"book_id": book.ID,
+				"error":   err.Error(),
+			})
+		}
 	}
 
 	return nil
@@ -532,4 +578,147 @@ func (svc *Service) GetFirstBookInSeries(ctx context.Context, seriesName string)
 	}
 
 	return &book, nil
+}
+
+// organizeBookFiles renames files and folders based on updated book metadata.
+func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) error {
+	log := logger.FromContext(ctx)
+	now := time.Now()
+
+	// Get the library to check if organize_file_structure is enabled
+	var library models.Library
+	err := svc.db.NewSelect().
+		Model(&library).
+		Where("id = ?", book.LibraryID).
+		Scan(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Only proceed if organize_file_structure is enabled
+	if !library.OrganizeFileStructure {
+		return nil
+	}
+
+	// Get all files for this book
+	files, err := svc.ListFiles(ctx, ListFilesOptions{
+		BookID: &book.ID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if len(files) == 0 {
+		return nil
+	}
+
+	// Create organized name options from current book metadata
+	organizeOpts := fileutils.OrganizedNameOptions{
+		Authors:      book.Authors,
+		Title:        book.Title,
+		SeriesNumber: book.SeriesNumber,
+	}
+
+	// Track path updates for database
+	var pathUpdates []struct {
+		fileID  int
+		oldPath string
+		newPath string
+	}
+
+	// Check if this is a directory-based book or root-level files
+	isDirectoryBased := filepath.Dir(files[0].Filepath) == book.Filepath
+
+	if isDirectoryBased {
+		// For directory-based books, rename the folder and update all file paths
+		log.Info("organizing directory-based book", logger.Data{"book_path": book.Filepath})
+
+		newFolderPath, err := fileutils.RenameOrganizedFolder(book.Filepath, organizeOpts)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if newFolderPath != book.Filepath {
+			log.Info("renamed book folder", logger.Data{
+				"old_path": book.Filepath,
+				"new_path": newFolderPath,
+			})
+
+			// Update all file paths
+			for _, file := range files {
+				oldPath := file.Filepath
+				newPath := strings.Replace(file.Filepath, book.Filepath, newFolderPath, 1)
+				pathUpdates = append(pathUpdates, struct {
+					fileID  int
+					oldPath string
+					newPath string
+				}{file.ID, oldPath, newPath})
+			}
+
+			// Update book filepath
+			book.Filepath = newFolderPath
+			book.UpdatedAt = now
+
+			// Update book in database
+			_, err = svc.db.NewUpdate().
+				Model(book).
+				Column("filepath", "updated_at").
+				WherePK().
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+	} else {
+		// For root-level files, rename each file individually
+		log.Info("organizing root-level files", logger.Data{"file_count": len(files)})
+
+		for _, file := range files {
+			// Set file type for proper volume formatting
+			organizeOpts.FileType = file.FileType
+
+			newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+			if err != nil {
+				log.Error("failed to rename file", logger.Data{
+					"file_id": file.ID,
+					"path":    file.Filepath,
+					"error":   err.Error(),
+				})
+				continue
+			}
+
+			if newPath != file.Filepath {
+				log.Info("renamed file", logger.Data{
+					"file_id":  file.ID,
+					"old_path": file.Filepath,
+					"new_path": newPath,
+				})
+
+				pathUpdates = append(pathUpdates, struct {
+					fileID  int
+					oldPath string
+					newPath string
+				}{file.ID, file.Filepath, newPath})
+			}
+		}
+	}
+
+	// Update file paths in database
+	for _, update := range pathUpdates {
+		_, err = svc.db.NewUpdate().
+			Model((*models.File)(nil)).
+			Set("filepath = ?, updated_at = ?", update.newPath, now).
+			Where("id = ?", update.fileID).
+			Exec(ctx)
+		if err != nil {
+			log.Error("failed to update file path in database", logger.Data{
+				"file_id":  update.fileID,
+				"old_path": update.oldPath,
+				"new_path": update.newPath,
+				"error":    err.Error(),
+			})
+		}
+	}
+
+	return nil
 }
