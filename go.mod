@@ -18,7 +18,7 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/labstack/echo/v4 v4.10.2
 	github.com/pkg/errors v0.9.1
-	github.com/robinjoseph08/golib v0.3.0
+	github.com/robinjoseph08/golib v0.4.0
 	github.com/segmentio/encoding v0.3.6
 	github.com/stretchr/testify v1.10.0
 	github.com/uptrace/bun v1.2.11

@@ -1,0 +1,7 @@
+{
+  "setup-worktree": [
+    "yarn",
+    "make ./build/api/golangci-lint",
+    "make tygo"
+  ]
+}

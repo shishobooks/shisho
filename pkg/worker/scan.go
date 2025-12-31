@@ -207,16 +207,25 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	if metadata != nil {
-		title = metadata.Title
-		titleSource = metadata.DataSource
-		authorSource = metadata.DataSource
-		series = metadata.Series
-		seriesSource = metadata.DataSource
-		seriesNumber = metadata.SeriesNumber
-		for _, author := range metadata.Authors {
-			authors = append(authors, &models.Author{
-				Name: author,
-			})
+		// Only use metadata values if they're non-empty, otherwise keep filepath-based values
+		if metadata.Title != "" {
+			title = metadata.Title
+			titleSource = metadata.DataSource
+		}
+		if len(metadata.Authors) > 0 {
+			authorSource = metadata.DataSource
+			for _, author := range metadata.Authors {
+				authors = append(authors, &models.Author{
+					Name: author,
+				})
+			}
+		}
+		if metadata.Series != "" {
+			series = metadata.Series
+			seriesSource = metadata.DataSource
+		}
+		if metadata.SeriesNumber != nil {
+			seriesNumber = metadata.SeriesNumber
 		}
 		if metadata.CoverMimeType != "" {
 			coverMimeType = &metadata.CoverMimeType
@@ -226,12 +235,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	// If we didn't find any authors in the metadata, try getting it from the filename.
 	if len(authors) == 0 && filepathAuthorRE.MatchString(filename) {
 		log.Info("no authors found in metadata; parsing filename", logger.Data{"filename": filename})
-		matches := filepathAuthorRE.FindAllString(filename, -1)
-		if len(matches) > 0 {
-			names := strings.Split(matches[0], ",")
+		// Use FindAllStringSubmatch to get the capture group (content inside brackets)
+		matches := filepathAuthorRE.FindAllStringSubmatch(filename, -1)
+		if len(matches) > 0 && len(matches[0]) > 1 {
+			// matches[0][1] is the first capture group (author name without brackets)
+			names := strings.Split(matches[0][1], ",")
 			for _, author := range names {
 				authors = append(authors, &models.Author{
-					Name: author,
+					Name: strings.TrimSpace(author),
 				})
 			}
 		}
@@ -408,7 +419,13 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	if metadata != nil && len(metadata.CoverData) > 0 {
 		// Save the cover image as a separate file using filename_cover.ext format
 		baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		coverFilepath := filepath.Join(bookPath, baseName+"_cover"+metadata.CoverExtension())
+		// For root-level files, bookPath is the file path itself, so use the directory
+		// For directory-based files, bookPath is already the directory
+		coverDir := bookPath
+		if isRootLevelFile {
+			coverDir = filepath.Dir(path)
+		}
+		coverFilepath := filepath.Join(coverDir, baseName+"_cover"+metadata.CoverExtension())
 
 		// Check if cover already exists before extracting a new one
 		if _, err := os.Stat(coverFilepath); os.IsNotExist(err) {
