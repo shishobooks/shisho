@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Settings, UpdateConfigPayload } from "@/types/generated/config";
+import type { UpdateConfigPayload, UserConfig } from "@/types/generated/config";
 
 export const useConfig = () => {
-  return useQuery<Settings, ShishoAPIError>({
+  return useQuery<UserConfig, ShishoAPIError>({
     queryKey: ["config"],
     queryFn: ({ signal }) => {
       return API.request("GET", "/config", null, null, signal);
@@ -15,7 +15,7 @@ export const useConfig = () => {
 export const useUpdateConfig = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<Settings, ShishoAPIError, UpdateConfigPayload>({
+  return useMutation<UserConfig, ShishoAPIError, UpdateConfigPayload>({
     mutationFn: (payload) => {
       return API.request("POST", "/config", payload, null);
     },
