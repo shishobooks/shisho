@@ -323,3 +323,25 @@ func getBaseNameWithoutExt(path string) string {
 	ext := filepath.Ext(base)
 	return strings.TrimSuffix(base, ext)
 }
+
+// CoverImageExtensions contains all supported image extensions for cover files.
+var CoverImageExtensions = []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+// CoverExistsWithBaseName checks if any cover file exists with the given base name,
+// regardless of image extension. This allows users to provide custom covers (e.g., cover.png)
+// that won't be overwritten even if the book would extract a different format (e.g., cover.jpg).
+//
+// Parameters:
+//   - dir: the directory to check
+//   - baseName: the cover base name without extension (e.g., "cover", "book_cover", "audiobook_cover")
+//
+// Returns the path to the existing cover file if found, or empty string if no cover exists.
+func CoverExistsWithBaseName(dir, baseName string) string {
+	for _, ext := range CoverImageExtensions {
+		coverPath := filepath.Join(dir, baseName+ext)
+		if _, err := os.Stat(coverPath); err == nil {
+			return coverPath
+		}
+	}
+	return ""
+}

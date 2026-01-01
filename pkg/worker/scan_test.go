@@ -362,6 +362,115 @@ func TestProcessScanJob_ExistingCoverNotOverwritten(t *testing.T) {
 	assert.Equal(t, models.DataSourceExistingCover, *files[0].CoverSource)
 }
 
+func TestProcessScanJob_ExistingCoverNotOverwritten_DifferentExtension(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Book With Different Extension Cover")
+
+	// Create a pre-existing PNG cover file
+	existingCoverContent := []byte("existing png cover content")
+	existingCoverPath := testgen.WriteFile(t, bookDir, "book_cover.png", existingCoverContent)
+
+	// Create an EPUB with a JPEG cover - should NOT be extracted since PNG exists
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:         "Book With Different Extension Cover",
+		Authors:       []string{"Author"},
+		HasCover:      true,
+		CoverMimeType: "image/jpeg", // Book has JPEG, but PNG exists
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify the existing PNG cover was not overwritten
+	coverData := testgen.ReadFile(t, existingCoverPath)
+	assert.Equal(t, existingCoverContent, coverData, "existing cover should not be overwritten")
+
+	// Verify that no JPEG cover was created
+	jpegCoverPath := filepath.Join(bookDir, "book_cover.jpg")
+	assert.False(t, testgen.FileExists(jpegCoverPath), "JPEG cover should not be created when PNG exists")
+
+	// Verify the file has existing cover as source
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.NotNil(t, files[0].CoverSource)
+	assert.Equal(t, models.DataSourceExistingCover, *files[0].CoverSource)
+}
+
+func TestProcessScanJob_ExistingCanonicalCoverNotOverwritten(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Book With Canonical Cover")
+
+	// Create a pre-existing canonical cover.png file
+	existingCoverContent := []byte("user-provided canonical cover")
+	existingCoverPath := testgen.WriteFile(t, bookDir, "cover.png", existingCoverContent)
+
+	// Create an EPUB with a JPEG cover
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:         "Book With Canonical Cover",
+		Authors:       []string{"Author"},
+		HasCover:      true,
+		CoverMimeType: "image/jpeg",
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify the existing canonical cover was not overwritten
+	coverData := testgen.ReadFile(t, existingCoverPath)
+	assert.Equal(t, existingCoverContent, coverData, "existing canonical cover should not be overwritten")
+
+	// Verify that no cover.jpg was created
+	jpegCoverPath := filepath.Join(bookDir, "cover.jpg")
+	assert.False(t, testgen.FileExists(jpegCoverPath), "canonical cover.jpg should not be created when cover.png exists")
+
+	// Verify the book uses the existing cover.png
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.NotNil(t, allBooks[0].CoverImagePath)
+	assert.Equal(t, "cover.png", *allBooks[0].CoverImagePath)
+}
+
+func TestProcessScanJob_ExistingAudiobookCoverNotOverwritten(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Audiobook With Existing Cover")
+
+	// Create a pre-existing audiobook_cover.png file
+	existingCoverContent := []byte("user-provided audiobook cover")
+	existingCoverPath := testgen.WriteFile(t, bookDir, "audiobook_cover.png", existingCoverContent)
+
+	// Create an M4B audiobook with a cover
+	testgen.GenerateM4B(t, bookDir, "audiobook.m4b", testgen.M4BOptions{
+		Title:    "Audiobook With Existing Cover",
+		Artist:   "Narrator Name",
+		HasCover: true,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify the existing audiobook cover was not overwritten
+	coverData := testgen.ReadFile(t, existingCoverPath)
+	assert.Equal(t, existingCoverContent, coverData, "existing audiobook cover should not be overwritten")
+
+	// Verify the book uses the existing audiobook_cover.png
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.NotNil(t, allBooks[0].CoverImagePath)
+	assert.Equal(t, "audiobook_cover.png", *allBooks[0].CoverImagePath)
+}
+
 func TestProcessScanJob_VolumeNormalization(t *testing.T) {
 	tc := newTestContext(t)
 
