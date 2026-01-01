@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import BookDetail from "@/components/pages/BookDetail";
 import Config from "@/components/pages/Config";
+import CreateLibrary from "@/components/pages/CreateLibrary";
 import Home from "@/components/pages/Home";
 import LibraryList from "@/components/pages/LibraryList";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries",
         Component: LibraryList,
+      },
+      {
+        path: "libraries/create",
+        Component: CreateLibrary,
       },
       {
         path: "libraries/:libraryId",

@@ -72,14 +72,12 @@ const Gallery = <T,>({
 
   return (
     <>
-      <div className="mb-6 text-sm text-muted-foreground">
+      <div className="mb-4 text-sm text-muted-foreground">
         Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
         {itemLabel}
       </div>
 
-      <div className="flex flex-wrap gap-4 p-4 mb-8">
-        {items.map(renderItem)}
-      </div>
+      <div className="flex flex-wrap gap-4 mb-8">{items.map(renderItem)}</div>
 
       {totalPages > 1 && (
         <Pagination className="mb-8">

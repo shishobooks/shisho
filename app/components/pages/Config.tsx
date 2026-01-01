@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConfig, useUpdateConfig } from "@/hooks/queries/config";
@@ -57,8 +57,8 @@ const Config = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full p-8 m-auto">
-          <div className="text-center">Loading configuration...</div>
+        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+          <LoadingSpinner />
         </div>
       </div>
     );
@@ -68,9 +68,12 @@ const Config = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full p-8 m-auto">
-          <div className="text-center text-red-600">
-            Error loading configuration: {error.message}
+        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold mb-4">
+              Error Loading Configuration
+            </h1>
+            <p className="text-muted-foreground">{error.message}</p>
           </div>
         </div>
       </div>
@@ -80,14 +83,17 @@ const Config = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full p-8 m-auto">
-        <h1 className="mb-8 text-3xl font-bold">Configuration</h1>
+      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold mb-2">Configuration</h1>
+          <p className="text-muted-foreground">
+            Manage system-wide settings and preferences
+          </p>
+        </div>
 
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Sync Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <div className="max-w-md border border-border rounded-md p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Sync Settings</h2>
             <div>
               <Label htmlFor="sync-interval">Sync Interval (minutes)</Label>
               <Input
@@ -103,24 +109,24 @@ const Config = () => {
                 minute)
               </p>
             </div>
+          </div>
 
-            <div className="flex gap-2">
-              <Button
-                disabled={!hasChanges || updateConfigMutation.isPending}
-                onClick={handleSave}
-              >
-                {updateConfigMutation.isPending ? "Saving..." : "Save"}
-              </Button>
-              <Button
-                disabled={!hasChanges}
-                onClick={handleReset}
-                variant="outline"
-              >
-                Reset
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="flex gap-2 pt-2">
+            <Button
+              disabled={!hasChanges || updateConfigMutation.isPending}
+              onClick={handleSave}
+            >
+              {updateConfigMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              disabled={!hasChanges}
+              onClick={handleReset}
+              variant="outline"
+            >
+              Reset
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

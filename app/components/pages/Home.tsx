@@ -1,10 +1,10 @@
-import { uniqBy } from "lodash";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
+import BookItem from "@/components/library/BookItem";
 import Gallery from "@/components/library/Gallery";
 import TopNav from "@/components/library/TopNav";
-import { Badge } from "@/components/ui/badge";
 import { useBooks } from "@/hooks/queries/books";
+import { useSeries } from "@/hooks/queries/series";
 import type { Book } from "@/types";
 
 const ITEMS_PER_PAGE = 20;
@@ -13,62 +13,50 @@ const Home = () => {
   const { libraryId } = useParams();
   const [searchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const seriesIdParam = searchParams.get("series_id");
 
   // Calculate pagination parameters
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
 
+  const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
+
   const booksQuery = useBooks({
     limit,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
+    series_id: seriesId,
+  });
+
+  const seriesQuery = useSeries(seriesId, {
+    enabled: Boolean(seriesId),
   });
 
   const renderBookItem = (book: Book) => (
-    <div
-      className="w-32"
+    <BookItem
+      book={book}
       key={book.id}
-      title={`${book.title}${book.authors ? `\nBy ${book.authors.map((a) => a.name).join(", ")}` : ""}`}
-    >
-      <Link
-        className="group cursor-pointer"
-        to={`/libraries/${libraryId}/books/${book.id}`}
-      >
-        <img
-          alt={`${book.title} Cover`}
-          className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-            (e.target as HTMLImageElement).nextElementSibling!.textContent =
-              "no cover";
-          }}
-          src={`/api/books/${book.id}/cover`}
-        />
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
-          {book.title}
-        </div>
-      </Link>
-      {book.authors && (
-        <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
-          {book.authors.map((a) => a.name).join(", ")}
-        </div>
-      )}
-      {book.files && (
-        <div className="mt-2 flex gap-2 text-sm">
-          {uniqBy(book.files, "file_type").map((f) => (
-            <Badge className="uppercase" key={f.id} variant="subtle">
-              {f.file_type}
-            </Badge>
-          ))}
-        </div>
-      )}
-    </div>
+      libraryId={libraryId!}
+      showSeriesNumber={Boolean(seriesId)}
+    />
   );
 
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full p-8 m-auto">
+      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        {seriesQuery.data && seriesId && (
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold mb-1">
+              {seriesQuery.data.name}
+            </h1>
+            {seriesQuery.data.description && (
+              <p className="text-sm text-muted-foreground mb-2">
+                {seriesQuery.data.description}
+              </p>
+            )}
+          </div>
+        )}
         <Gallery
           isLoading={booksQuery.isLoading}
           isSuccess={booksQuery.isSuccess}

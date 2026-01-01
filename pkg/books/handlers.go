@@ -47,6 +47,7 @@ func (h *handler) list(c echo.Context) error {
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
+		SeriesID:  params.SeriesID,
 	})
 	if err != nil {
 		return errors.WithStack(err)

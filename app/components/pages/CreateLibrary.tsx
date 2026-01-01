@@ -1,36 +1,23 @@
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
+import { useCreateLibrary } from "@/hooks/queries/libraries";
 
-const LibrarySettings = () => {
-  const { libraryId } = useParams<{ libraryId: string }>();
-  const libraryQuery = useLibrary(libraryId);
-  const updateLibraryMutation = useUpdateLibrary();
+const CreateLibrary = () => {
+  const navigate = useNavigate();
+  const createLibraryMutation = useCreateLibrary();
 
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Initialize form when library data loads
-  if (libraryQuery.isSuccess && libraryQuery.data && !isInitialized) {
-    setName(libraryQuery.data.name);
-    setOrganizeFileStructure(libraryQuery.data.organize_file_structure);
-    setLibraryPaths(
-      libraryQuery.data.library_paths?.map((lp) => lp.filepath) || [""],
-    );
-    setIsInitialized(true);
-  }
 
   const handleAddPath = () => {
     setLibraryPaths([...libraryPaths, ""]);
@@ -48,18 +35,20 @@ const LibrarySettings = () => {
     setLibraryPaths(newPaths);
   };
 
-  const handleSave = async () => {
-    if (!libraryId) return;
+  const handleCreate = async () => {
+    const validPaths = libraryPaths.filter((path) => path.trim() !== "");
+    if (validPaths.length === 0) {
+      toast.error("At least one library path is required");
+      return;
+    }
+
+    if (!name.trim()) {
+      toast.error("Library name is required");
+      return;
+    }
 
     try {
-      const validPaths = libraryPaths.filter((path) => path.trim() !== "");
-      if (validPaths.length === 0) {
-        toast.error("At least one library path is required");
-        return;
-      }
-
-      await updateLibraryMutation.mutateAsync({
-        id: libraryId,
+      const library = await createLibraryMutation.mutateAsync({
         payload: {
           name: name.trim(),
           organize_file_structure: organizeFileStructure,
@@ -67,7 +56,8 @@ const LibrarySettings = () => {
         },
       });
 
-      toast.success("Library settings saved!");
+      toast.success("Library created!");
+      navigate(`/libraries/${library.id}`);
     } catch (e) {
       let msg = "Something went wrong.";
       if (e instanceof Error) {
@@ -77,57 +67,23 @@ const LibrarySettings = () => {
     }
   };
 
-  if (libraryQuery.isLoading) {
-    return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <LoadingSpinner />
-        </div>
-      </div>
-    );
-  }
-
-  if (!libraryQuery.isSuccess || !libraryQuery.data) {
-    return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">Library Not Found</h1>
-            <p className="text-muted-foreground mb-6">
-              The library you're looking for doesn't exist or may have been
-              removed.
-            </p>
-            <Button asChild>
-              <Link to="/">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
         <div className="mb-6">
           <Button asChild variant="ghost">
-            <Link to={`/libraries/${libraryId}`}>
+            <Link to="/libraries">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Library
+              Back to Libraries
             </Link>
           </Button>
         </div>
 
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
+          <h1 className="text-2xl font-semibold mb-2">Create Library</h1>
           <p className="text-muted-foreground">
-            Manage library name, paths, and scanning behavior
+            Create a new library to organize your book collection
           </p>
         </div>
 
@@ -147,10 +103,12 @@ const LibrarySettings = () => {
 
           {/* Library Paths */}
           <div className="space-y-4">
-            <Label>Library Paths</Label>
-            <p className="text-sm text-muted-foreground">
-              Directories where Shisho will scan for books and media files
-            </p>
+            <div>
+              <Label>Library Paths</Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Directories where Shisho will scan for books and media files
+              </p>
+            </div>
             {libraryPaths.map((path, index) => (
               <div className="flex items-center gap-2" key={index}>
                 <Input
@@ -171,6 +129,7 @@ const LibrarySettings = () => {
               </div>
             ))}
             <Button onClick={handleAddPath} type="button" variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
               Add Path
             </Button>
           </div>
@@ -205,13 +164,15 @@ const LibrarySettings = () => {
 
           <Separator />
 
-          {/* Save Button */}
+          {/* Create Button */}
           <div className="flex justify-end pt-4">
             <Button
-              disabled={updateLibraryMutation.isPending}
-              onClick={handleSave}
+              disabled={createLibraryMutation.isPending}
+              onClick={handleCreate}
             >
-              {updateLibraryMutation.isPending ? "Saving..." : "Save Settings"}
+              {createLibraryMutation.isPending
+                ? "Creating..."
+                : "Create Library"}
             </Button>
           </div>
         </div>
@@ -220,4 +181,4 @@ const LibrarySettings = () => {
   );
 };
 
-export default LibrarySettings;
+export default CreateLibrary;

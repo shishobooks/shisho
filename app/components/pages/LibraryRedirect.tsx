@@ -35,8 +35,15 @@ const LibraryRedirect = () => {
     return (
       <div>
         <TopNav />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-red-500">Error loading libraries</div>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold mb-4">
+              Error Loading Libraries
+            </h1>
+            <p className="text-muted-foreground">
+              There was an error loading your libraries. Please try again.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -59,10 +66,10 @@ const LibraryRedirect = () => {
   return (
     <div>
       <TopNav />
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">No Libraries Found</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-semibold mb-4">No Libraries Found</h1>
+          <p className="text-muted-foreground">
             Please create a library to get started.
           </p>
         </div>

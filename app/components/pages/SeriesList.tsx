@@ -61,9 +61,9 @@ const SeriesList = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full p-8 m-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Series</h1>
+      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-2">Series</h1>
           <p className="text-muted-foreground">
             Browse book series in your library
           </p>

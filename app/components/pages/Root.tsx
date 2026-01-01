@@ -4,11 +4,11 @@ import { Toaster } from "@/components/ui/sonner";
 
 const Root = () => {
   return (
-    <div className="flex bg-neutral-50 font-sans dark:bg-neutral-800">
-      <div className="h-screen grow overflow-scroll">
+    <div className="flex bg-background font-sans min-h-screen">
+      <div className="w-full">
         <Outlet />
       </div>
-      <Toaster richColors theme="light" />
+      <Toaster richColors />
     </div>
   );
 };
