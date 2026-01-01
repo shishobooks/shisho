@@ -91,7 +91,7 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 		path,
 	)
 
-	cmd := exec.Command("ffmpeg", args...)
+	cmd := exec.CommandContext(t.Context(), "ffmpeg", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ffmpeg failed: %v\nOutput: %s", err, output)

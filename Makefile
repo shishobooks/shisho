@@ -40,7 +40,8 @@ lint: $(BUILD_DIR)/golangci-lint
 	$(BUILD_DIR)/golangci-lint run
 
 $(BUILD_DIR)/golangci-lint:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(BUILD_DIR) v1.64.8
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(BUILD_DIR) v2.7.2
+
 
 $(BUILD_DIR)/hivemind $(BUILD_DIR)/air $(BUILD_DIR)/tygo:
 	go get $(GO_TOOLS) && GOBIN=$$(pwd)/$(BUILD_DIR) go install $(GO_TOOLS)
