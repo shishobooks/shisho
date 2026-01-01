@@ -56,9 +56,9 @@ func TestCoverExistsWithBaseName(t *testing.T) {
 		},
 		{
 			name:           "individual cover with different extension",
-			existingFiles:  []string{"book_cover.png"},
-			baseName:       "book_cover",
-			expectedResult: "book_cover.png",
+			existingFiles:  []string{"book.epub.cover.png"},
+			baseName:       "book.epub.cover",
+			expectedResult: "book.epub.cover.png",
 		},
 		{
 			name:           "audiobook cover exists",
@@ -81,7 +81,7 @@ func TestCoverExistsWithBaseName(t *testing.T) {
 		{
 			name:           "only non-cover files exist",
 			existingFiles:  []string{"book.epub", "notes.txt"},
-			baseName:       "book_cover",
+			baseName:       "book.epub.cover",
 			expectedResult: "",
 		},
 	}

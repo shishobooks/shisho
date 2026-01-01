@@ -243,24 +243,25 @@ func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 	originalDir := filepath.Dir(originalFilePath)
 	newDir := filepath.Dir(newFilePath)
 
-	// Get the base name of the original file (without extension)
-	originalBaseName := getBaseNameWithoutExt(originalFilePath)
-	newBaseName := getBaseNameWithoutExt(newFilePath)
+	// Get the full filename (including extension) for cover naming
+	originalFilename := filepath.Base(originalFilePath)
+	newFilename := filepath.Base(newFilePath)
 
 	// Common image extensions for covers
 	imageExtensions := []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 
 	coversMoved := 0
 
-	// Look for individual covers: {filename}_cover.{ext}
+	// Look for individual covers: {filename}.cover.{ext}
+	// e.g., mybook.epub.cover.jpg for mybook.epub
 	for _, ext := range imageExtensions {
-		originalCoverName := originalBaseName + "_cover" + ext
+		originalCoverName := originalFilename + ".cover" + ext
 		originalCoverPath := filepath.Join(originalDir, originalCoverName)
 
 		// Check if this cover exists
 		if _, err := os.Stat(originalCoverPath); err == nil {
 			// Generate the new cover name
-			newCoverName := newBaseName + "_cover" + ext
+			newCoverName := newFilename + ".cover" + ext
 			newCoverPath := filepath.Join(newDir, newCoverName)
 
 			// Move the cover
@@ -282,6 +283,9 @@ func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 	}
 
 	// Move book sidecar for root-level files: {basename}.metadata.json
+	// Book sidecars use the filename without extension
+	originalBaseName := getBaseNameWithoutExt(originalFilePath)
+	newBaseName := getBaseNameWithoutExt(newFilePath)
 	originalBookSidecar := filepath.Join(originalDir, originalBaseName+".metadata.json")
 	if _, err := os.Stat(originalBookSidecar); err == nil {
 		newBookSidecar := filepath.Join(newDir, newBaseName+".metadata.json")
@@ -303,7 +307,7 @@ func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 		if !file.IsDir() {
 			name := file.Name()
 			// Skip if it's a cover file
-			if strings.Contains(name, "_cover.") ||
+			if strings.Contains(name, ".cover.") ||
 				strings.HasPrefix(name, "cover.") ||
 				strings.HasPrefix(name, "audiobook_cover.") {
 				continue

@@ -80,9 +80,10 @@ func (b *Book) ResolveCoverImage() string {
 	// If no standard covers found, look for individual covers
 	if isRootLevelBook {
 		// For root-level books, look for covers specific to this book file
-		bookBaseName := strings.TrimSuffix(filepath.Base(b.Filepath), filepath.Ext(b.Filepath))
+		// Cover naming: {filename}.cover.{ext} (e.g., mybook.epub.cover.jpg)
+		bookFilename := filepath.Base(b.Filepath)
 		for _, ext := range extensions {
-			coverFilename := bookBaseName + "_cover" + ext
+			coverFilename := bookFilename + ".cover" + ext
 			coverPath := filepath.Join(coverDir, coverFilename)
 			if _, err := os.Stat(coverPath); err == nil {
 				b.CoverImagePath = &coverFilename
@@ -90,7 +91,7 @@ func (b *Book) ResolveCoverImage() string {
 			}
 		}
 	} else {
-		// For directory-based books, look for any file matching *_cover.ext pattern
+		// For directory-based books, look for any file matching *.cover.ext pattern
 		files, err := os.ReadDir(coverDir)
 		if err != nil {
 			return ""
@@ -104,8 +105,8 @@ func (b *Book) ResolveCoverImage() string {
 			filename := file.Name()
 			ext := filepath.Ext(filename)
 
-			// Check if it matches the *_cover.ext pattern
-			if strings.HasSuffix(strings.TrimSuffix(filename, ext), "_cover") {
+			// Check if it matches the *.cover.ext pattern
+			if strings.HasSuffix(strings.TrimSuffix(filename, ext), ".cover") {
 				// Verify it's a supported image extension
 				for _, supportedExt := range extensions {
 					if strings.ToLower(ext) == supportedExt {

@@ -321,7 +321,7 @@ func TestProcessScanJob_CoverExtraction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify cover file was extracted
-	coverPath := filepath.Join(bookDir, "book_cover.png")
+	coverPath := filepath.Join(bookDir, "book.epub.cover.png")
 	assert.True(t, testgen.FileExists(coverPath), "cover should be extracted")
 
 	files := tc.listFiles()
@@ -340,7 +340,7 @@ func TestProcessScanJob_ExistingCoverNotOverwritten(t *testing.T) {
 
 	// Create a pre-existing cover file
 	existingCoverContent := []byte("existing cover content")
-	existingCoverPath := testgen.WriteFile(t, bookDir, "book_cover.png", existingCoverContent)
+	existingCoverPath := testgen.WriteFile(t, bookDir, "book.epub.cover.png", existingCoverContent)
 
 	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
 		Title:         "Book With Existing Cover",
@@ -372,7 +372,7 @@ func TestProcessScanJob_ExistingCoverNotOverwritten_DifferentExtension(t *testin
 
 	// Create a pre-existing PNG cover file
 	existingCoverContent := []byte("existing png cover content")
-	existingCoverPath := testgen.WriteFile(t, bookDir, "book_cover.png", existingCoverContent)
+	existingCoverPath := testgen.WriteFile(t, bookDir, "book.epub.cover.png", existingCoverContent)
 
 	// Create an EPUB with a JPEG cover - should NOT be extracted since PNG exists
 	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
@@ -390,7 +390,7 @@ func TestProcessScanJob_ExistingCoverNotOverwritten_DifferentExtension(t *testin
 	assert.Equal(t, existingCoverContent, coverData, "existing cover should not be overwritten")
 
 	// Verify that no JPEG cover was created
-	jpegCoverPath := filepath.Join(bookDir, "book_cover.jpg")
+	jpegCoverPath := filepath.Join(bookDir, "book.epub.cover.jpg")
 	assert.False(t, testgen.FileExists(jpegCoverPath), "JPEG cover should not be created when PNG exists")
 
 	// Verify the file has existing cover as source
@@ -639,7 +639,7 @@ func TestProcessScanJob_EPUBWithJPEGCover(t *testing.T) {
 	assert.Equal(t, "image/jpeg", *files[0].CoverMimeType)
 
 	// Verify cover file has .jpg extension
-	coverPath := filepath.Join(bookDir, "book_cover.jpg")
+	coverPath := filepath.Join(bookDir, "book.epub.cover.jpg")
 	assert.True(t, testgen.FileExists(coverPath), "JPEG cover should be extracted")
 }
 
@@ -721,7 +721,7 @@ func TestProcessScanJob_RootLevelFileWithCover(t *testing.T) {
 
 	// For root-level files, the cover should be saved in the library directory
 	// (same directory as the file), not inside the epub file path
-	coverPath := filepath.Join(libraryPath, "root-book_cover.png")
+	coverPath := filepath.Join(libraryPath, "root-book.epub.cover.png")
 	assert.True(t, testgen.FileExists(coverPath), "cover should be extracted to library directory, not inside epub path")
 
 	files := tc.listFiles()
@@ -896,11 +896,11 @@ func TestProcessScanJob_OrganizeFileStructure_WithCover(t *testing.T) {
 	assert.True(t, testgen.FileExists(organizedFolder), "organized folder should be created")
 
 	// Cover should also be in the organized folder
-	coverPath := filepath.Join(organizedFolder, "[Cover Author] Book With Cover_cover.png")
+	coverPath := filepath.Join(organizedFolder, "[Cover Author] Book With Cover.epub.cover.png")
 	assert.True(t, testgen.FileExists(coverPath), "cover should be moved to organized folder")
 
 	// No cover should remain at root
-	rootCoverPath := filepath.Join(libraryPath, "book-with-cover_cover.png")
+	rootCoverPath := filepath.Join(libraryPath, "book-with-cover.epub.cover.png")
 	assert.False(t, testgen.FileExists(rootCoverPath), "cover should not remain at root")
 }
 
@@ -1013,4 +1013,65 @@ func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
 	require.Len(t, allBooks, 1)
 	require.NotNil(t, allBooks[0].SeriesID)
 	assert.Equal(t, allSeries[0].ID, *allBooks[0].SeriesID)
+}
+
+func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with both an EPUB and M4B that have the same base name
+	// This tests that each file gets its own cover file (book.epub.cover.jpg vs book.m4b.cover.jpg)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Multi-Format Book")
+
+	// Create book.epub with a cover
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:         "Multi-Format Book",
+		Authors:       []string{"Test Author"},
+		HasCover:      true,
+		CoverMimeType: "image/jpeg",
+	})
+
+	// Create book.m4b with a cover
+	testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Multi-Format Book",
+		Artist:   "Test Author",
+		HasCover: true,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify both files were created and belong to the same book
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Multi-Format Book", allBooks[0].Title)
+
+	files := tc.listFiles()
+	require.Len(t, files, 2, "should have 2 files (epub and m4b)")
+
+	// Verify each file has a cover
+	for _, file := range files {
+		require.NotNil(t, file.CoverMimeType, "file %s should have a cover", file.Filepath)
+	}
+
+	// Verify separate cover files exist for each format
+	// The new naming convention is {filename}.cover.{ext} to avoid conflicts
+	// EPUB has JPEG cover, M4B has PNG cover
+	epubCoverPath := filepath.Join(bookDir, "book.epub.cover.jpg")
+	m4bCoverPath := filepath.Join(bookDir, "book.m4b.cover.png")
+
+	assert.True(t, testgen.FileExists(epubCoverPath), "EPUB cover should exist at %s", epubCoverPath)
+	assert.True(t, testgen.FileExists(m4bCoverPath), "M4B cover should exist at %s", m4bCoverPath)
+
+	// Verify the covers are different files (not overwritten)
+	epubCoverData := testgen.ReadFile(t, epubCoverPath)
+	m4bCoverData := testgen.ReadFile(t, m4bCoverPath)
+
+	// The covers should both exist and have content
+	assert.NotEmpty(t, epubCoverData, "EPUB cover should have content")
+	assert.NotEmpty(t, m4bCoverData, "M4B cover should have content")
 }

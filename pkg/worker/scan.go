@@ -472,15 +472,17 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 
 	// Handle cover extraction before creating the file so we can set the cover source
 	if metadata != nil && len(metadata.CoverData) > 0 {
-		// Save the cover image as a separate file using filename_cover.ext format
-		baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		// Save the cover image as a separate file using filename.cover.ext format
+		// This includes the original file extension to avoid conflicts when files
+		// with the same name but different extensions exist (e.g., mybook.epub and mybook.m4b)
+		filename := filepath.Base(path)
 		// For root-level files, bookPath is the file path itself, so use the directory
 		// For directory-based files, bookPath is already the directory
 		coverDir := bookPath
 		if isRootLevelFile {
 			coverDir = filepath.Dir(path)
 		}
-		coverBaseName := baseName + "_cover"
+		coverBaseName := filename + ".cover"
 
 		// Check if any cover already exists with this base name (regardless of extension)
 		// This allows users to provide custom covers that won't be overwritten
@@ -627,14 +629,14 @@ func (w *Worker) generateBookCanonicalCover(ctx context.Context, book *models.Bo
 			continue
 		}
 
-		baseName := strings.TrimSuffix(filepath.Base(file.Filepath), filepath.Ext(file.Filepath))
+		filename := filepath.Base(file.Filepath)
 		var individualCoverPath string
 		if isRootLevelBook {
 			// For root-level books, cover is in the same directory as the file
-			individualCoverPath = filepath.Join(filepath.Dir(file.Filepath), baseName+"_cover"+file.CoverExtension())
+			individualCoverPath = filepath.Join(filepath.Dir(file.Filepath), filename+".cover"+file.CoverExtension())
 		} else {
 			// For directory-based books, cover is in the book directory
-			individualCoverPath = filepath.Join(book.Filepath, baseName+"_cover"+file.CoverExtension())
+			individualCoverPath = filepath.Join(book.Filepath, filename+".cover"+file.CoverExtension())
 		}
 
 		// Check if the individual cover file exists
