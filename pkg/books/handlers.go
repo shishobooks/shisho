@@ -9,8 +9,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
 type handler struct {
@@ -102,6 +104,18 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Write sidecar files to keep them in sync with the database
+	log := logger.FromContext(ctx)
+	if err := sidecar.WriteBookSidecarFromModel(book); err != nil {
+		log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+	}
+	// Also write file sidecars for all files in the book
+	for _, file := range book.Files {
+		if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
+			log.Warn("failed to write file sidecar", logger.Data{"file_id": file.ID, "error": err.Error()})
+		}
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, book))

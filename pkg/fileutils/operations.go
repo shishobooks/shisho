@@ -238,7 +238,7 @@ func generateUniqueDirpath(path string) string {
 	return path
 }
 
-// moveAssociatedCovers finds and moves cover images associated with a file.
+// moveAssociatedCovers finds and moves cover images and sidecar files associated with a file.
 func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 	originalDir := filepath.Dir(originalFilePath)
 	newDir := filepath.Dir(newFilePath)
@@ -269,6 +269,24 @@ func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 				return coversMoved, errors.WithStack(err)
 			}
 			coversMoved++
+		}
+	}
+
+	// Move file sidecar: {filename}.metadata.json
+	originalFileSidecar := originalFilePath + ".metadata.json"
+	if _, err := os.Stat(originalFileSidecar); err == nil {
+		newFileSidecar := newFilePath + ".metadata.json"
+		if err := moveFile(originalFileSidecar, newFileSidecar); err != nil {
+			return coversMoved, errors.WithStack(err)
+		}
+	}
+
+	// Move book sidecar for root-level files: {basename}.metadata.json
+	originalBookSidecar := filepath.Join(originalDir, originalBaseName+".metadata.json")
+	if _, err := os.Stat(originalBookSidecar); err == nil {
+		newBookSidecar := filepath.Join(newDir, newBaseName+".metadata.json")
+		if err := moveFile(originalBookSidecar, newBookSidecar); err != nil {
+			return coversMoved, errors.WithStack(err)
 		}
 	}
 

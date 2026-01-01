@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
 var extensionsToScan = map[string]map[string]struct{}{
@@ -261,6 +262,41 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		title = normalizedTitle
 	}
 
+	// Read sidecar files if they exist (sidecar has priority 1, higher than file metadata)
+	var fileSidecarData *sidecar.FileSidecar
+	bookSidecarData, err := sidecar.ReadBookSidecar(bookPath)
+	if err != nil {
+		log.Warn("failed to read book sidecar", logger.Data{"error": err.Error()})
+	}
+	fileSidecarData, err = sidecar.ReadFileSidecar(path)
+	if err != nil {
+		log.Warn("failed to read file sidecar", logger.Data{"error": err.Error()})
+	}
+
+	// Apply book sidecar data (higher priority than file metadata)
+	if bookSidecarData != nil {
+		log.Info("applying book sidecar data")
+		if bookSidecarData.Title != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[titleSource] {
+			title = bookSidecarData.Title
+			titleSource = models.DataSourceSidecar
+		}
+		if len(bookSidecarData.Authors) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[authorSource] {
+			authorSource = models.DataSourceSidecar
+			authors = make([]*models.Author, 0)
+			for _, a := range bookSidecarData.Authors {
+				authors = append(authors, &models.Author{
+					Name:      a.Name,
+					SortOrder: a.SortOrder,
+				})
+			}
+		}
+		if bookSidecarData.Series != nil && bookSidecarData.Series.Name != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
+			series = bookSidecarData.Series.Name
+			seriesSource = models.DataSourceSidecar
+			seriesNumber = bookSidecarData.Series.Number
+		}
+	}
+
 	// First, check if there's already a book for this file path
 	// This covers the case where a file was previously organized but moved back to root level
 	existingBookByFile, err := w.bookService.RetrieveBookByFilePath(ctx, path, libraryID)
@@ -481,9 +517,41 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		CoverMimeType: coverMimeType,
 		CoverSource:   coverSource,
 	}
+
+	// Apply file sidecar data (narrators) if available
+	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
+		log.Info("applying file sidecar data", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
+		narratorSource := models.DataSourceSidecar
+		file.NarratorSource = &narratorSource
+		for _, n := range fileSidecarData.Narrators {
+			file.Narrators = append(file.Narrators, &models.Narrator{
+				Name:      n.Name,
+				SortOrder: n.SortOrder,
+			})
+		}
+	}
+
 	err = w.bookService.CreateFile(ctx, file)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Write sidecar files to keep them in sync with the database
+	// Reload the book with all relations to get complete data for the sidecar
+	existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+		ID: &existingBook.ID,
+	})
+	if err != nil {
+		log.Warn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
+	} else {
+		if err := sidecar.WriteBookSidecarFromModel(existingBook); err != nil {
+			log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+		}
+	}
+
+	// Write file sidecar
+	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
+		log.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
 	}
 
 	return nil
