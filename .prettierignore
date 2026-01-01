@@ -6,3 +6,4 @@ app/types/generated
 .golangci.yml
 .claude/settings.local.json
 CLAUDE.md
+.cursor

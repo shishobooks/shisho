@@ -54,19 +54,43 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`
+			CREATE TABLE series (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				deleted_at TIMESTAMPTZ,
+				library_id INTEGER REFERENCES libraries (id) NOT NULL,
+				name TEXT NOT NULL,
+				name_source TEXT NOT NULL,
+				description TEXT,
+				cover_image_path TEXT
+			)
+`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		// Case-insensitive unique constraint (only for non-deleted records)
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_series_name_library_id ON series (name COLLATE NOCASE, library_id) WHERE deleted_at IS NULL`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_series_library_id ON series (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`
 			CREATE TABLE books (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				library_id TEXT REFERENCES libraries (id) NOT NULL,
+				library_id INTEGER REFERENCES libraries (id) NOT NULL,
 				filepath TEXT NOT NULL,
 				title TEXT NOT NULL,
 				title_source TEXT NOT NULL,
 				subtitle TEXT,
 				subtitle_source TEXT,
 				author_source TEXT NOT NULL,
-				series TEXT,
-				series_source TEXT,
+				series_id INTEGER REFERENCES series (id),
 				series_number REAL,
 				cover_image_path TEXT
 			)
@@ -79,6 +103,10 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`CREATE UNIQUE INDEX ux_books_filepath_library_id ON books (filepath, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_books_series_id ON books (series_id)`)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -183,6 +211,10 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec("DROP TABLE IF EXISTS books")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS series")
 		if err != nil {
 			return errors.WithStack(err)
 		}

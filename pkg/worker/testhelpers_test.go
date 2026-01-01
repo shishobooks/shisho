@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -26,6 +27,7 @@ type testContext struct {
 	bookService    *books.Service
 	libraryService *libraries.Service
 	jobService     *jobs.Service
+	seriesService  *series.Service
 }
 
 // newTestContext creates a new test context with an in-memory SQLite database
@@ -51,6 +53,7 @@ func newTestContext(t *testing.T) *testContext {
 	bookService := books.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
+	seriesService := series.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -62,6 +65,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		seriesService:  seriesService,
 	}
 
 	// Create context with logger
@@ -75,6 +79,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		seriesService:  seriesService,
 	}
 
 	t.Cleanup(func() {
@@ -154,4 +159,15 @@ func (tc *testContext) listFiles() []*models.File {
 // runScan executes the scan job for all libraries.
 func (tc *testContext) runScan() error {
 	return tc.worker.ProcessScanJob(tc.ctx, nil)
+}
+
+// listSeries returns all series in the database.
+func (tc *testContext) listSeries() []*models.Series {
+	tc.t.Helper()
+
+	allSeries, err := tc.seriesService.ListSeries(tc.ctx, series.ListSeriesOptions{})
+	if err != nil {
+		tc.t.Fatalf("failed to list series: %v", err)
+	}
+	return allSeries
 }

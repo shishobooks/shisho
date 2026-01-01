@@ -73,10 +73,15 @@ func TestProcessScanJob_EPUBWithSeries(t *testing.T) {
 
 	book := allBooks[0]
 	assert.Equal(t, "The First Book", book.Title)
-	require.NotNil(t, book.Series)
-	assert.Equal(t, "Epic Series", *book.Series)
+	require.NotNil(t, book.SeriesID, "book should have a series ID")
 	require.NotNil(t, book.SeriesNumber)
 	assert.InDelta(t, 1.0, *book.SeriesNumber, 0.001)
+
+	// Verify series was created
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 1)
+	assert.Equal(t, "Epic Series", allSeries[0].Name)
+	assert.Equal(t, *book.SeriesID, allSeries[0].ID)
 }
 
 func TestProcessScanJob_CBZBasic(t *testing.T) {
@@ -642,10 +647,15 @@ func TestProcessScanJob_M4BWithCover(t *testing.T) {
 	assert.Equal(t, "Audiobook With Cover", book.Title)
 
 	// Check series parsing from album
-	require.NotNil(t, book.Series)
-	assert.Equal(t, "Series Name", *book.Series)
+	require.NotNil(t, book.SeriesID, "book should have a series ID")
 	require.NotNil(t, book.SeriesNumber)
 	assert.InDelta(t, 3.0, *book.SeriesNumber, 0.001)
+
+	// Verify series was created
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 1)
+	assert.Equal(t, "Series Name", allSeries[0].Name)
+	assert.Equal(t, *book.SeriesID, allSeries[0].ID)
 }
 
 func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
@@ -841,4 +851,57 @@ func TestProcessScanJob_IsRootLevelFile_MultipleLibraryPaths(t *testing.T) {
 
 	// Directory-based book should have directory as book path
 	assert.Equal(t, bookDir, dirBook.Filepath)
+}
+
+func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a series directly in the database without any books (orphaned)
+	orphanedSeries := &models.Series{
+		LibraryID:  1,
+		Name:       "Orphaned Series",
+		NameSource: models.DataSourceManual,
+	}
+	err := tc.seriesService.CreateSeries(tc.ctx, orphanedSeries)
+	require.NoError(t, err)
+
+	// Create another series that will have a book
+	seriesWithBook := &models.Series{
+		LibraryID:  1,
+		Name:       "Series With Book",
+		NameSource: models.DataSourceManual,
+	}
+	err = tc.seriesService.CreateSeries(tc.ctx, seriesWithBook)
+	require.NoError(t, err)
+
+	// Create an EPUB with the second series
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Book In Series")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:        "Book In Series",
+		Authors:      []string{"Author"},
+		Series:       "Series With Book",
+		SeriesNumber: pointerutil.Float64(1),
+	})
+
+	// Verify both series exist before scan
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 2, "should have 2 series before scan")
+
+	// Run the scan - this should clean up the orphaned series
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify only the series with a book remains
+	allSeries = tc.listSeries()
+	require.Len(t, allSeries, 1, "should have 1 series after scan (orphaned series cleaned up)")
+	assert.Equal(t, "Series With Book", allSeries[0].Name)
+
+	// Verify the book was linked to the correct series
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.NotNil(t, allBooks[0].SeriesID)
+	assert.Equal(t, allSeries[0].ID, *allBooks[0].SeriesID)
 }

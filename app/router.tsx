@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
         Component: SeriesList,
       },
       {
-        path: "libraries/:libraryId/series/:name",
+        path: "libraries/:libraryId/series/:id",
         Component: SeriesDetail,
       },
       {

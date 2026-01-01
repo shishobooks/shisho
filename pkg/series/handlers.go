@@ -1,0 +1,236 @@
+package series
+
+import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+
+	"github.com/labstack/echo/v4"
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
+)
+
+type handler struct {
+	seriesService *Service
+	bookService   *books.Service
+}
+
+func (h *handler) retrieve(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Get book count
+	bookCount, err := h.seriesService.GetSeriesBookCount(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	response := struct {
+		*models.Series
+		BookCount int `json:"book_count"`
+	}{series, bookCount}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+func (h *handler) list(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	params := ListSeriesQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	seriesList, total, err := h.seriesService.ListSeriesWithTotal(ctx, ListSeriesOptions{
+		Limit:     &params.Limit,
+		Offset:    &params.Offset,
+		LibraryID: params.LibraryID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Augment with book counts
+	type SeriesWithCount struct {
+		*models.Series
+		BookCount int `json:"book_count"`
+	}
+	result := make([]SeriesWithCount, len(seriesList))
+	for i, s := range seriesList {
+		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
+		result[i] = SeriesWithCount{s, count}
+	}
+
+	response := map[string]interface{}{
+		"series": result,
+		"total":  total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+func (h *handler) update(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	params := UpdateSeriesPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Fetch the series
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Keep track of what's been changed
+	opts := UpdateSeriesOptions{Columns: []string{}}
+
+	if params.Name != nil && *params.Name != series.Name {
+		series.Name = *params.Name
+		series.NameSource = models.DataSourceManual
+		opts.Columns = append(opts.Columns, "name", "name_source")
+	}
+
+	if params.Description != nil {
+		series.Description = params.Description
+		opts.Columns = append(opts.Columns, "description")
+	}
+
+	// Update the model
+	err = h.seriesService.UpdateSeries(ctx, series, opts)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Reload the model
+	series, err = h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Get book count
+	bookCount, _ := h.seriesService.GetSeriesBookCount(ctx, id)
+
+	response := struct {
+		*models.Series
+		BookCount int `json:"book_count"`
+	}{series, bookCount}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+func (h *handler) seriesBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	booksList, err := h.bookService.ListBooks(ctx, books.ListBooksOptions{
+		SeriesID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, booksList))
+}
+
+func (h *handler) seriesCover(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	// Get the first book in the series for cover
+	book, err := h.bookService.GetFirstBookInSeriesByID(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Use the book's cover image
+	coverImageFileName := book.ResolveCoverImage()
+	if coverImageFileName == "" {
+		return errcodes.NotFound("Series cover")
+	}
+
+	// Determine if this is a root-level book by checking if book.Filepath is a file
+	isRootLevelBook := false
+	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
+		isRootLevelBook = true
+	}
+
+	// Determine the directory where covers are located
+	var coverDir string
+	if isRootLevelBook {
+		coverDir = filepath.Dir(book.Filepath)
+	} else {
+		coverDir = book.Filepath
+	}
+
+	coverImagePath := filepath.Join(coverDir, coverImageFileName)
+
+	// Set appropriate headers
+	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+
+	return errors.WithStack(c.File(coverImagePath))
+}
+
+func (h *handler) merge(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	params := MergeSeriesPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Merge source series into target (this) series
+	err = h.seriesService.MergeSeries(ctx, id, params.SourceID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *handler) deleteSeries(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	err = h.seriesService.DeleteSeries(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}

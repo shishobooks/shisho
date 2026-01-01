@@ -6,14 +6,16 @@ import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useSeriesBooks } from "@/hooks/queries/series";
+import { useSeries, useSeriesBooks } from "@/hooks/queries/series";
 
 const SeriesDetail = () => {
-  const { name, libraryId } = useParams<{ name: string; libraryId: string }>();
-  const seriesName = decodeURIComponent(name || "");
-  const booksQuery = useSeriesBooks(seriesName);
+  const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
+  const seriesId = id ? parseInt(id, 10) : undefined;
 
-  if (booksQuery.isLoading) {
+  const seriesQuery = useSeries(seriesId);
+  const booksQuery = useSeriesBooks(seriesId);
+
+  if (seriesQuery.isLoading || booksQuery.isLoading) {
     return (
       <div>
         <TopNav />
@@ -24,7 +26,7 @@ const SeriesDetail = () => {
     );
   }
 
-  if (!booksQuery.isSuccess || !booksQuery.data) {
+  if (!seriesQuery.isSuccess || !seriesQuery.data) {
     return (
       <div>
         <TopNav />
@@ -49,7 +51,8 @@ const SeriesDetail = () => {
     );
   }
 
-  const books = booksQuery.data;
+  const series = seriesQuery.data;
+  const books = booksQuery.data ?? [];
 
   // Sort books by series number if available, otherwise by title
   const sortedBooks = [...books].sort((a, b) => {
@@ -75,7 +78,10 @@ const SeriesDetail = () => {
         </div>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">{seriesName}</h1>
+          <h1 className="text-3xl font-bold mb-2">{series.name}</h1>
+          {series.description && (
+            <p className="text-muted-foreground mb-2">{series.description}</p>
+          )}
           <p className="text-muted-foreground">
             {books.length} book{books.length !== 1 ? "s" : ""} in this series
           </p>

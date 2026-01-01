@@ -9,6 +9,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/series"
 
 	"github.com/google/uuid"
 	"github.com/robinjoseph08/golib/logger"
@@ -28,6 +29,7 @@ type Worker struct {
 	bookService    *books.Service
 	jobService     *jobs.Service
 	libraryService *libraries.Service
+	seriesService  *series.Service
 
 	queue          chan *models.Job
 	shutdown       chan struct{}
@@ -39,6 +41,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 	bookService := books.NewService(db)
 	jobService := jobs.NewService(db)
 	libraryService := libraries.NewService(db)
+	seriesService := series.NewService(db)
 
 	w := &Worker{
 		config: cfg,
@@ -47,6 +50,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		bookService:    bookService,
 		jobService:     jobService,
 		libraryService: libraryService,
+		seriesService:  seriesService,
 
 		queue:          make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:       make(chan struct{}),

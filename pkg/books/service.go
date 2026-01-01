@@ -25,7 +25,7 @@ type ListBooksOptions struct {
 	Limit     *int
 	Offset    *int
 	LibraryID *int
-	Series    *string
+	SeriesID  *int
 
 	includeTotal bool
 }
@@ -52,13 +52,6 @@ type ListFilesOptions struct {
 
 type UpdateFileOptions struct {
 	Columns []string
-}
-
-type ListSeriesOptions struct {
-	Limit  *int
-	Offset *int
-
-	includeTotal bool
 }
 
 type Service struct {
@@ -256,8 +249,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	if opts.LibraryID != nil {
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
 	}
-	if opts.Series != nil {
-		q = q.Where("b.series = ?", *opts.Series)
+	if opts.SeriesID != nil {
+		q = q.Where("b.series_id = ?", *opts.SeriesID)
 	}
 
 	if opts.includeTotal {
@@ -493,80 +486,14 @@ func (svc *Service) UpdateFile(ctx context.Context, file *models.File, opts Upda
 	return nil
 }
 
-type SeriesInfo struct {
-	Name      string `json:"name"`
-	BookCount int    `json:"book_count"`
-}
-
-func (svc *Service) ListSeries(ctx context.Context) ([]*SeriesInfo, error) {
-	var result []*SeriesInfo
-
-	err := svc.db.
-		NewSelect().
-		Model((*models.Book)(nil)).
-		ColumnExpr("series AS name").
-		ColumnExpr("COUNT(*) AS book_count").
-		Where("series IS NOT NULL").
-		Where("series != ''").
-		Group("series").
-		Order("series ASC").
-		Scan(ctx, &result)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return result, nil
-}
-
-func (svc *Service) ListSeriesWithTotal(ctx context.Context, opts ListSeriesOptions) ([]*SeriesInfo, int, error) {
-	var result []*SeriesInfo
-	var total int
-
-	query := svc.db.
-		NewSelect().
-		Model((*models.Book)(nil)).
-		ColumnExpr("series AS name").
-		ColumnExpr("COUNT(*) AS book_count").
-		Where("series IS NOT NULL").
-		Where("series != ''").
-		Group("series").
-		Order("series ASC")
-
-	if opts.Limit != nil {
-		query = query.Limit(*opts.Limit)
-	}
-	if opts.Offset != nil {
-		query = query.Offset(*opts.Offset)
-	}
-
-	err := query.Scan(ctx, &result)
-	if err != nil {
-		return nil, 0, errors.WithStack(err)
-	}
-
-	if opts.includeTotal {
-		total, err = svc.db.
-			NewSelect().
-			Model((*models.Book)(nil)).
-			ColumnExpr("COUNT(DISTINCT series)").
-			Where("series IS NOT NULL").
-			Where("series != ''").
-			Count(ctx)
-		if err != nil {
-			return nil, 0, errors.WithStack(err)
-		}
-	}
-
-	return result, total, nil
-}
-
-func (svc *Service) GetFirstBookInSeries(ctx context.Context, seriesName string) (*models.Book, error) {
+// GetFirstBookInSeriesByID returns the first book in a series, ordered by series number.
+func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) (*models.Book, error) {
 	var book models.Book
 
 	err := svc.db.
 		NewSelect().
 		Model(&book).
-		Where("series = ?", seriesName).
+		Where("series_id = ?", seriesID).
 		Order("series_number ASC", "title ASC").
 		Limit(1).
 		Scan(ctx)

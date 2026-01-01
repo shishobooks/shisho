@@ -110,6 +110,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 
 	// TODO: go through and delete files/books that have been deleted
 
+	// Cleanup orphaned series (soft delete series with no books)
+	deletedCount, err := w.seriesService.CleanupOrphanedSeries(ctx)
+	if err != nil {
+		log.Err(err).Error("failed to cleanup orphaned series")
+	} else if deletedCount > 0 {
+		log.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
+	}
+
 	log.Info("finished scan job")
 	return nil
 }
@@ -342,13 +350,22 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			updateOptions.UpdateAuthors = true
 		}
 		// Update series if we have a higher priority source
-		if series != "" && (existingBook.SeriesSource == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[*existingBook.SeriesSource]) {
-			log.Info("updating series", logger.Data{"new_series": series, "old_series": existingBook.Series})
-			existingBook.Series = &series
-			existingBook.SeriesSource = &seriesSource
-			updateOptions.Columns = append(updateOptions.Columns, "series", "series_source")
+		// Get existing series source for comparison
+		var existingSeriesSource string
+		if existingBook.Series != nil {
+			existingSeriesSource = existingBook.Series.NameSource
 		}
-		if seriesNumber != nil && (existingBook.SeriesSource == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[*existingBook.SeriesSource]) {
+		if series != "" && (existingBook.SeriesID == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
+			log.Info("updating series", logger.Data{"new_series": series, "old_series_id": existingBook.SeriesID})
+			// Find or create the series
+			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, series, libraryID, seriesSource)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			existingBook.SeriesID = &seriesRecord.ID
+			updateOptions.Columns = append(updateOptions.Columns, "series_id")
+		}
+		if seriesNumber != nil && (existingBook.SeriesID == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
 			log.Info("updating series number", logger.Data{"new_series_number": *seriesNumber, "old_series_number": existingBook.SeriesNumber})
 			existingBook.SeriesNumber = seriesNumber
 			updateOptions.Columns = append(updateOptions.Columns, "series_number")
@@ -392,11 +409,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
-		var seriesPtr *string
-		var seriesSourcePtr *string
+		var seriesID *int
 		if series != "" {
-			seriesPtr = &series
-			seriesSourcePtr = &seriesSource
+			// Find or create the series
+			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, series, libraryID, seriesSource)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			seriesID = &seriesRecord.ID
 		}
 		existingBook = &models.Book{
 			LibraryID:    libraryID,
@@ -405,8 +425,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			TitleSource:  titleSource,
 			Authors:      authors,
 			AuthorSource: authorSource,
-			Series:       seriesPtr,
-			SeriesSource: seriesSourcePtr,
+			SeriesID:     seriesID,
 			SeriesNumber: seriesNumber,
 		}
 		err := w.bookService.CreateBook(ctx, existingBook)

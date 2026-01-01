@@ -1,29 +1,26 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book } from "@/types";
+import type { Book, Series } from "@/types";
 
 export enum QueryKey {
   ListSeries = "ListSeries",
+  RetrieveSeries = "RetrieveSeries",
   SeriesBooks = "SeriesBooks",
-}
-
-export interface SeriesInfo {
-  name: string;
-  book_count: number;
 }
 
 export interface ListSeriesQuery {
   limit?: number;
   offset?: number;
+  library_id?: number;
 }
 
 export interface ListSeriesData {
-  series: SeriesInfo[];
+  series: Series[];
   total: number;
 }
 
-export const useSeries = (
+export const useSeriesList = (
   query: ListSeriesQuery = {},
   options: Omit<
     UseQueryOptions<ListSeriesData, ShishoAPIError>,
@@ -39,8 +36,26 @@ export const useSeries = (
   });
 };
 
+export const useSeries = (
+  seriesId?: number,
+  options: Omit<
+    UseQueryOptions<Series, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<Series, ShishoAPIError>({
+    enabled:
+      options.enabled !== undefined ? options.enabled : Boolean(seriesId),
+    ...options,
+    queryKey: [QueryKey.RetrieveSeries, seriesId],
+    queryFn: ({ signal }) => {
+      return API.request("GET", `/series/${seriesId}`, null, null, signal);
+    },
+  });
+};
+
 export const useSeriesBooks = (
-  seriesName?: string,
+  seriesId?: number,
   options: Omit<
     UseQueryOptions<Book[], ShishoAPIError>,
     "queryKey" | "queryFn"
@@ -48,13 +63,13 @@ export const useSeriesBooks = (
 ) => {
   return useQuery<Book[], ShishoAPIError>({
     enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(seriesName),
+      options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
-    queryKey: [QueryKey.SeriesBooks, seriesName],
+    queryKey: [QueryKey.SeriesBooks, seriesId],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
-        `/series/${encodeURIComponent(seriesName!)}/books`,
+        `/series/${seriesId}/books`,
         null,
         null,
         signal,
