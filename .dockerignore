@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Test and coverage
+*.test
+*.out
+coverage.out
+*.cover
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+.tmp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development configs
+.air.toml
+.env
+.env.*
+!.env.example
+
+# Documentation
+*.md
+!README.md
+
+# Test data
+internal/testgen/
+
+# Tool binaries
+build/air
+build/hivemind
+build/tygo
+build/golangci-lint

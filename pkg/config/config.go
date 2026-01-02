@@ -42,6 +42,7 @@ func defaults() *Config {
 		DatabaseConnectRetryCount: 5,
 		DatabaseConnectRetryDelay: 2 * time.Second,
 		DatabaseDebug:             false,
+		DatabaseFilePath:          "/config/shisho.db",
 		ServerHost:                "0.0.0.0",
 		ServerPort:                3689,
 		SyncIntervalMinutes:       60,

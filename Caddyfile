@@ -1,0 +1,47 @@
+# Shisho Production Configuration
+# Serves frontend on / and proxies /api/* to the Go backend
+
+:8080 {
+    # Logging
+    log {
+        output stdout
+        format {$LOG_FORMAT}
+    }
+
+    # API routes - proxy to Go backend (strip /api prefix)
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy localhost:3689
+    }
+
+    # Health check endpoint (proxy directly to backend)
+    handle /health {
+        reverse_proxy localhost:3689
+    }
+
+    # Serve static frontend files
+    handle {
+        root * /srv
+
+        # Try to serve the file, fall back to index.html for SPA routing
+        try_files {path} /index.html
+        file_server
+    }
+
+    # Security headers
+    header {
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # Enable XSS filter
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+
+    # Compression
+    encode gzip zstd
+}

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make start:air` - Start API with hot reload via Air
 - `make lint` - Run Go linting with golangci-lint
 - `make test` - Run Go tests with race detection and coverage
-- `TZ=America/Chicago ENVIRONMENT=test CI=true go test -race ./pkg/... -coverprofile coverage.out` - Run all tests
+- `TZ=America/Chicago CI=true go test -race ./pkg/... -coverprofile coverage.out` - Run all tests
 
 ### Frontend (React/TypeScript)
 - `yarn start` - Start Vite dev server
@@ -110,7 +110,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Testing Strategy
 
 - Go tests use standard testing package with testify assertions
-- Tests should use `TZ=America/Chicago ENVIRONMENT=test CI=true` environment
+- Tests should use `TZ=America/Chicago CI=true` environment
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
 - To generate types, run `make tygo`. If it says that ``make: Nothing to be done for `tygo'.``, that means the types are already up-to-date.

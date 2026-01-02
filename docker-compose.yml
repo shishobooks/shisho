@@ -1,0 +1,24 @@
+services:
+  shisho:
+    build: .
+    container_name: shisho
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent data (database)
+      - shisho-data:/app/data
+      # Configuration
+      - shisho-config:/app/config
+      # Mount your media library (adjust path as needed)
+      # - /path/to/your/books:/media:ro
+    environment:
+      # Custom UID/GID (optional, defaults to 1000:1000)
+      # - PUID=1000
+      # - PGID=1000
+    # Uncomment to use a pre-built image instead of building locally
+    # image: ghcr.io/shishobooks/shisho:latest
+
+volumes:
+  shisho-data:
+  shisho-config:

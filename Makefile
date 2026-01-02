@@ -56,7 +56,7 @@ start\:air: $(BUILD_DIR)/air
 
 .PHONY: test
 test:
-	TZ=America/Chicago ENVIRONMENT=test CI=true go test -race $(TEST_FILES) -coverprofile $(COVERAGE_PROFILE) $(TEST_FLAGS)
+	TZ=America/Chicago CI=true go test -race $(TEST_FILES) -coverprofile $(COVERAGE_PROFILE) $(TEST_FLAGS)
 
 .PHONY: test\:cover
 test\:cover:
