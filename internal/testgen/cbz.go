@@ -73,6 +73,8 @@ func generateComicInfo(opts CBZOptions, pageCount int) string {
 
 	if opts.Title != "" {
 		buf.WriteString(fmt.Sprintf("  <Title>%s</Title>\n", escapeXML(opts.Title)))
+	} else if opts.ForceEmptyTitle {
+		buf.WriteString("  <Title></Title>\n")
 	}
 	if opts.Series != "" {
 		buf.WriteString(fmt.Sprintf("  <Series>%s</Series>\n", escapeXML(opts.Series)))

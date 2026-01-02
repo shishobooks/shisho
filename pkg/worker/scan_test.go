@@ -1015,6 +1015,134 @@ func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
 	assert.Equal(t, allSeries[0].ID, *allBooks[0].SeriesID)
 }
 
+func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a directory where the name consists ONLY of author brackets
+	// After stripping [Author] from "[Author Name]", title would be empty
+	// The fix should fall back to the raw filename
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author Name]")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		// No title in ComicInfo - relies on filename fallback
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should NOT be empty - it should fall back to the file basename "comic"
+	assert.NotEmpty(t, book.Title, "title should never be empty")
+	assert.Equal(t, "comic", book.Title)
+	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
+
+	// Author should still be extracted from the directory name
+	require.Len(t, book.Authors, 1)
+	assert.Equal(t, "Author Name", book.Authors[0].Name)
+}
+
+func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Directory name with both author and narrator brackets, no title
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author Name] {Narrator Name}")
+	testgen.GenerateEPUB(t, bookDir, "mybook.epub", testgen.EPUBOptions{
+		// No title in metadata - relies on filename fallback
+		HasCover: false,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should NOT be empty - it should fall back to the file basename "mybook"
+	assert.NotEmpty(t, book.Title, "title should never be empty")
+	assert.Equal(t, "mybook", book.Title)
+	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
+
+	// Author should still be extracted from the directory name
+	require.Len(t, book.Authors, 1)
+	assert.Equal(t, "Author Name", book.Authors[0].Name)
+}
+
+func TestProcessScanJob_TitleFallbackWhenCBZHasEmptyTitle(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a CBZ with ComicInfo.xml that has an empty <Title></Title> element
+	// This tests that we correctly fall back to the filename when metadata has empty title
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Akitsuki Itsuki] Test Book")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo:    true,
+		ForceEmptyTitle: true, // Creates <Title></Title>
+		Writer:          "Akitsuki Itsuki",
+		PageCount:       3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should NOT be empty - empty metadata title should not overwrite filepath title
+	assert.NotEmpty(t, book.Title, "title should never be empty")
+	// The title should come from the directory name (after stripping author brackets)
+	assert.Equal(t, "Test Book", book.Title)
+	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
+}
+
+func TestProcessScanJob_TitleFallbackRootLevelWithMultipleBrackets(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// This is the exact filename pattern from the user's report:
+	// With the non-greedy regex, [Author] and [Other Tag] are both removed,
+	// leaving the actual title in the middle
+	testgen.GenerateCBZ(t, libraryPath, "[Author] Title [Other Tag].cbz", testgen.CBZOptions{
+		HasComicInfo:    true,
+		ForceEmptyTitle: true, // ComicInfo has empty title
+		Writer:          "Author",
+		PageCount:       3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should NOT be empty
+	assert.NotEmpty(t, book.Title, "title should never be empty")
+	// With non-greedy regex, both [Author] and [Other Tag] are stripped,
+	// leaving the actual title
+	assert.Equal(t, "Title", book.Title)
+	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
+
+	// Author should be extracted from the first bracket pattern
+	require.Len(t, book.Authors, 1)
+	assert.Equal(t, "Author", book.Authors[0].Name)
+}
+
 func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
 	testgen.SkipIfNoFFmpeg(t)
 

@@ -20,14 +20,15 @@ type EPUBOptions struct {
 
 // CBZOptions configures the generated CBZ file.
 type CBZOptions struct {
-	Title         string
-	Series        string
-	SeriesNumber  *float64
-	Writer        string
-	PageCount     int    // defaults to 3
-	HasComicInfo  bool   // whether to include ComicInfo.xml
-	CoverPageType string // "FrontCover", "InnerCover", or "" (none specified)
-	ImageFormat   string // "png" or "jpeg", defaults to "png"
+	Title           string
+	Series          string
+	SeriesNumber    *float64
+	Writer          string
+	PageCount       int    // defaults to 3
+	HasComicInfo    bool   // whether to include ComicInfo.xml
+	CoverPageType   string // "FrontCover", "InnerCover", or "" (none specified)
+	ImageFormat     string // "png" or "jpeg", defaults to "png"
+	ForceEmptyTitle bool   // if true, writes an empty <Title></Title> element (for testing empty title handling)
 }
 
 // M4BOptions configures the generated M4B file.

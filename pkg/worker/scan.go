@@ -32,8 +32,9 @@ var extensionsToScan = map[string]map[string]struct{}{
 }
 
 var (
-	filepathAuthorRE   = regexp.MustCompile(`\[(.*)]`)
-	filepathNarratorRE = regexp.MustCompile(`\{(.*)}`)
+	// Non-greedy regex to match only the first [Author] pattern, not from first [ to last ].
+	filepathAuthorRE   = regexp.MustCompile(`\[(.*?)]`)
+	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
 )
 
 func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
@@ -181,6 +182,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	title := strings.TrimSpace(filepathNarratorRE.ReplaceAllString(filepathAuthorRE.ReplaceAllString(filename, ""), ""))
+	// If title is empty after stripping author/narrator patterns, fall back to the raw filename
+	// (the file base name without extension, which is guaranteed to be non-empty for valid files)
+	if title == "" {
+		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
 	titleSource := models.DataSourceFilepath
 	authors := make([]*models.Author, 0)
 	authorSource := models.DataSourceFilepath
@@ -216,9 +222,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	if metadata != nil {
-		// Only use metadata values if they're non-empty, otherwise keep filepath-based values
-		if metadata.Title != "" {
-			title = metadata.Title
+		// Only use metadata values if they're non-empty (after trimming whitespace), otherwise keep filepath-based values
+		if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
+			title = trimmedTitle
 			titleSource = metadata.DataSource
 		}
 		if len(metadata.Authors) > 0 {
@@ -295,6 +301,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			seriesSource = models.DataSourceSidecar
 			seriesNumber = bookSidecarData.Series.Number
 		}
+	}
+
+	// Final safety check: ensure title is never empty after all processing.
+	// This catches any edge case where metadata/sidecar provided an empty/whitespace title.
+	if strings.TrimSpace(title) == "" {
+		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		titleSource = models.DataSourceFilepath
+		log.Warn("title was empty after all processing, falling back to filename", logger.Data{"title": title})
 	}
 
 	// First, check if there's already a book for this file path
