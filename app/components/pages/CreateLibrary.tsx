@@ -1,8 +1,9 @@
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +19,10 @@ const CreateLibrary = () => {
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTargetIndex, setPickerTargetIndex] = useState<number | null>(
+    null,
+  );
 
   const handleAddPath = () => {
     setLibraryPaths([...libraryPaths, ""]);
@@ -33,6 +38,31 @@ const CreateLibrary = () => {
     const newPaths = [...libraryPaths];
     newPaths[index] = value;
     setLibraryPaths(newPaths);
+  };
+
+  const handleOpenPicker = (index: number) => {
+    setPickerTargetIndex(index);
+    setPickerOpen(true);
+  };
+
+  const handlePickerSelect = (paths: string[]) => {
+    if (paths.length === 0) return;
+
+    if (pickerTargetIndex !== null) {
+      // Replace the target input with the first selected path.
+      const newPaths = [...libraryPaths];
+      newPaths[pickerTargetIndex] = paths[0];
+
+      // If multiple paths selected, add the rest as new entries.
+      if (paths.length > 1) {
+        const additionalPaths = paths.slice(1);
+        // Insert after the target index.
+        newPaths.splice(pickerTargetIndex + 1, 0, ...additionalPaths);
+      }
+
+      setLibraryPaths(newPaths);
+    }
+    setPickerTargetIndex(null);
   };
 
   const handleCreate = async () => {
@@ -117,6 +147,14 @@ const CreateLibrary = () => {
                   placeholder="Enter directory path"
                   value={path}
                 />
+                <Button
+                  onClick={() => handleOpenPicker(index)}
+                  size="icon"
+                  title="Browse directories"
+                  variant="outline"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
                 {libraryPaths.length > 1 && (
                   <Button
                     onClick={() => handleRemovePath(index)}
@@ -177,6 +215,17 @@ const CreateLibrary = () => {
           </div>
         </div>
       </div>
+
+      <DirectoryPickerDialog
+        initialPath={
+          pickerTargetIndex !== null && libraryPaths[pickerTargetIndex]
+            ? libraryPaths[pickerTargetIndex]
+            : "/"
+        }
+        onOpenChange={setPickerOpen}
+        onSelect={handlePickerSelect}
+        open={pickerOpen}
+      />
     </div>
   );
 };

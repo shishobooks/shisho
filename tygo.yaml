@@ -22,3 +22,7 @@ packages:
     output_path: "app/types/generated/libraries.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/filesystem"
+    output_path: "app/types/generated/filesystem.ts"
+    include_files:
+      - validators.go

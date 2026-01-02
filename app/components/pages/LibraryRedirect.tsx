@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -7,18 +6,6 @@ import { useLibraries } from "@/hooks/queries/libraries";
 
 const LibraryRedirect = () => {
   const librariesQuery = useLibraries({});
-
-  useEffect(() => {
-    if (
-      librariesQuery.isSuccess &&
-      librariesQuery.data.libraries.length === 0
-    ) {
-      // TODO: Show create library interface or redirect to config
-      console.warn(
-        "No libraries found - need to implement library creation flow",
-      );
-    }
-  }, [librariesQuery.isSuccess, librariesQuery.data?.libraries.length]);
 
   if (librariesQuery.isLoading) {
     return (
@@ -56,26 +43,8 @@ const LibraryRedirect = () => {
     return <Navigate replace to={`/libraries/${libraries[0].id}`} />;
   }
 
-  // If multiple libraries, redirect to library list
-  if (libraries.length > 1) {
-    return <Navigate replace to="/libraries" />;
-  }
-
-  // No libraries - for now just show a message
-  // TODO: Implement library creation flow
-  return (
-    <div>
-      <TopNav />
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">No Libraries Found</h1>
-          <p className="text-muted-foreground">
-            Please create a library to get started.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+  // If multiple libraries or no libraries, redirect to library list
+  return <Navigate replace to="/libraries" />;
 };
 
 export default LibraryRedirect;

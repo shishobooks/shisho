@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/filesystem"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -38,6 +39,7 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 
 	books.RegisterRoutes(e, db)
 	config.RegisterRoutes(e, cfg)
+	filesystem.RegisterRoutes(e)
 	jobs.RegisterRoutes(e, db)
 	libraries.RegisterRoutes(e, db)
 	series.RegisterRoutes(e, db)
