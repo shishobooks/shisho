@@ -7,7 +7,7 @@ import { useBooks } from "@/hooks/queries/books";
 import { useSeries } from "@/hooks/queries/series";
 import type { Book } from "@/types";
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 24;
 
 const Home = () => {
   const { libraryId } = useParams();

@@ -48,7 +48,7 @@ $(BUILD_DIR)/hivemind $(BUILD_DIR)/air $(BUILD_DIR)/tygo:
 
 .PHONY: start
 start: $(BUILD_DIR)/hivemind
-	$(BUILD_DIR)/hivemind --port 3689
+	$(BUILD_DIR)/hivemind
 
 .PHONY: start\:air
 start\:air: $(BUILD_DIR)/air

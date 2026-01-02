@@ -32,9 +32,7 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 
 	e.Use(logger.Middleware())
 	e.Use(recovery.Middleware())
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{cfg.FrontendURL},
-	}))
+	e.Use(middleware.CORS())
 
 	health.RegisterRoutes(e)
 

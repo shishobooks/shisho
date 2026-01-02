@@ -9,5 +9,4 @@ func RegisterRoutes(e *echo.Echo, cfg *Config) {
 	h := &handler{configService: configService}
 
 	e.GET("/config", h.retrieve)
-	e.POST("/config", h.update)
 }

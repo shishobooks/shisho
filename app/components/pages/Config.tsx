@@ -1,57 +1,47 @@
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useConfig, useUpdateConfig } from "@/hooks/queries/config";
+import { useConfig } from "@/hooks/queries/config";
+
+const formatDuration = (nanoseconds: number): string => {
+  const seconds = nanoseconds / 1_000_000_000;
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = minutes / 60;
+  return `${hours}h`;
+};
+
+interface ConfigRowProps {
+  description?: string;
+  label: string;
+  value: string | number | boolean;
+}
+
+const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
+  const displayValue =
+    typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
+
+  return (
+    <div className="flex flex-col py-3 border-b border-border last:border-b-0">
+      <div className="flex justify-between items-center">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-sm text-muted-foreground font-mono">
+          {displayValue}
+        </span>
+      </div>
+      {description && (
+        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      )}
+    </div>
+  );
+};
 
 const Config = () => {
   const { data: config, isLoading, error } = useConfig();
-  const updateConfigMutation = useUpdateConfig();
-
-  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState<string>(
-    config?.sync_interval_minutes?.toString() || "60",
-  );
-
-  // Update local state when config loads
-  useEffect(() => {
-    if (config?.sync_interval_minutes) {
-      setSyncIntervalMinutes(config.sync_interval_minutes.toString());
-    }
-  }, [config?.sync_interval_minutes]);
-
-  const handleSave = () => {
-    const intervalValue = parseInt(syncIntervalMinutes, 10);
-    if (isNaN(intervalValue) || intervalValue < 1) {
-      toast.error("Sync interval must be at least 1 minute");
-      return;
-    }
-
-    updateConfigMutation.mutate(
-      { sync_interval_minutes: intervalValue },
-      {
-        onSuccess: () => {
-          toast.success("Configuration saved successfully");
-        },
-        onError: (error) => {
-          toast.error(`Failed to save configuration: ${error.message}`);
-        },
-      },
-    );
-  };
-
-  const handleReset = () => {
-    if (config) {
-      setSyncIntervalMinutes(config.sync_interval_minutes.toString());
-    }
-  };
-
-  const hasChanges =
-    config &&
-    parseInt(syncIntervalMinutes, 10) !== config.sync_interval_minutes;
 
   if (isLoading) {
     return (
@@ -80,6 +70,10 @@ const Config = () => {
     );
   }
 
+  if (!config) {
+    return null;
+  }
+
   return (
     <div>
       <TopNav />
@@ -87,44 +81,71 @@ const Config = () => {
         <div className="mb-8">
           <h1 className="text-2xl font-semibold mb-2">Configuration</h1>
           <p className="text-muted-foreground">
-            Manage system-wide settings and preferences
+            Current system configuration. Settings can be changed via the config
+            file or environment variables.
           </p>
         </div>
 
-        <div className="max-w-md border border-border rounded-md p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Sync Settings</h2>
-            <div>
-              <Label htmlFor="sync-interval">Sync Interval (minutes)</Label>
-              <Input
-                id="sync-interval"
-                min="1"
-                onChange={(e) => setSyncIntervalMinutes(e.target.value)}
-                placeholder="60"
-                type="number"
-                value={syncIntervalMinutes}
+        <div className="grid gap-6 max-w-2xl">
+          {/* Database Settings */}
+          <div className="border border-border rounded-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Database</h2>
+            <div className="space-y-0">
+              <ConfigRow
+                description="Path to the SQLite database file"
+                label="Database Path"
+                value={config.database_file_path}
               />
-              <p className="mt-1 text-xs text-gray-500">
-                How often the system should check for new content (minimum 1
-                minute)
-              </p>
+              <ConfigRow
+                description="Whether SQL query logging is enabled"
+                label="Debug Mode"
+                value={config.database_debug}
+              />
+              <ConfigRow
+                description="Number of connection retry attempts on startup"
+                label="Connection Retry Count"
+                value={config.database_connect_retry_count}
+              />
+              <ConfigRow
+                description="Delay between connection retry attempts"
+                label="Connection Retry Delay"
+                value={formatDuration(config.database_connect_retry_delay)}
+              />
             </div>
           </div>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              disabled={!hasChanges || updateConfigMutation.isPending}
-              onClick={handleSave}
-            >
-              {updateConfigMutation.isPending ? "Saving..." : "Save"}
-            </Button>
-            <Button
-              disabled={!hasChanges}
-              onClick={handleReset}
-              variant="outline"
-            >
-              Reset
-            </Button>
+          {/* Server Settings */}
+          <div className="border border-border rounded-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Server</h2>
+            <div className="space-y-0">
+              <ConfigRow
+                description="Address the server is bound to"
+                label="Host"
+                value={config.server_host}
+              />
+              <ConfigRow
+                description="Port the server is listening on"
+                label="Port"
+                value={config.server_port}
+              />
+            </div>
+          </div>
+
+          {/* Application Settings */}
+          <div className="border border-border rounded-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Application</h2>
+            <div className="space-y-0">
+              <ConfigRow
+                description="How often libraries are scanned for new content"
+                label="Sync Interval"
+                value={`${config.sync_interval_minutes} minutes`}
+              />
+              <ConfigRow
+                description="Number of background worker processes"
+                label="Worker Processes"
+                value={config.worker_processes}
+              />
+            </div>
           </div>
         </div>
       </div>

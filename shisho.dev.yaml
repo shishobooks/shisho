@@ -1,0 +1,2 @@
+database_file_path: ./tmp/data.sqlite
+database_debug: true

@@ -1,0 +1,58 @@
+# Shisho Configuration File
+#
+# Copy this file to /config/shisho.yaml (or set CONFIG_FILE env var to point elsewhere)
+#
+# All settings can also be configured via environment variables.
+# Environment variables use uppercase with underscores (e.g., DATABASE_FILE_PATH).
+# Environment variables take precedence over config file values.
+
+# =============================================================================
+# DATABASE SETTINGS
+# =============================================================================
+
+# REQUIRED: Path to the SQLite database file
+# Env: DATABASE_FILE_PATH
+database_file_path: /data/shisho.db
+
+# Enable SQL query logging (useful for debugging)
+# Env: DATABASE_DEBUG
+# Default: false
+database_debug: false
+
+# Number of connection retry attempts on startup
+# Env: DATABASE_CONNECT_RETRY_COUNT
+# Default: 5
+database_connect_retry_count: 5
+
+# Delay between connection retry attempts
+# Env: DATABASE_CONNECT_RETRY_DELAY
+# Default: 2s
+database_connect_retry_delay: 2s
+
+# =============================================================================
+# SERVER SETTINGS
+# =============================================================================
+
+# Host address to bind the server to
+# Env: SERVER_HOST
+# Default: 0.0.0.0
+server_host: 0.0.0.0
+
+# Port to listen on
+# Env: SERVER_PORT
+# Default: 3689
+server_port: 3689
+
+# =============================================================================
+# APPLICATION SETTINGS
+# =============================================================================
+
+# How often to scan libraries for new content (in minutes)
+# Env: SYNC_INTERVAL_MINUTES
+# Default: 60
+sync_interval_minutes: 60
+
+# Number of background worker processes
+# Env: WORKER_PROCESSES
+# Default: 2
+worker_processes: 2
