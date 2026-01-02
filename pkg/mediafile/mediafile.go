@@ -5,6 +5,7 @@ import "fmt"
 type ParsedMetadata struct {
 	Title         string
 	Authors       []string
+	Narrators     []string
 	Series        string
 	SeriesNumber  *float64
 	CoverMimeType string
@@ -14,7 +15,7 @@ type ParsedMetadata struct {
 }
 
 func (m *ParsedMetadata) String() string {
-	return fmt.Sprintf("Title:           %s\nAuthor(s):       %v\nHas Cover Data:  %v\nCover Mime Type: %s\nData Source:     %s", m.Title, m.Authors, len(m.CoverData) > 0, m.CoverMimeType, m.DataSource)
+	return fmt.Sprintf("Title:           %s\nAuthor(s):       %v\nNarrator(s):     %v\nHas Cover Data:  %v\nCover Mime Type: %s\nData Source:     %s", m.Title, m.Authors, m.Narrators, len(m.CoverData) > 0, m.CoverMimeType, m.DataSource)
 }
 
 func (m *ParsedMetadata) CoverExtension() string {

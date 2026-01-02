@@ -198,6 +198,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	titleSource := models.DataSourceFilepath
 	authorNames := make([]string, 0)
 	authorSource := models.DataSourceFilepath
+	narratorNames := make([]string, 0)
+	narratorSource := models.DataSourceFilepath
 	series := ""
 	seriesSource := models.DataSourceFilepath
 	var seriesNumber *float64
@@ -239,6 +241,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			authorSource = metadata.DataSource
 			authorNames = append(authorNames, metadata.Authors...)
 		}
+		if len(metadata.Narrators) > 0 {
+			narratorSource = metadata.DataSource
+			narratorNames = append(narratorNames, metadata.Narrators...)
+		}
 		if metadata.Series != "" {
 			series = metadata.Series
 			seriesSource = metadata.DataSource
@@ -261,6 +267,20 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			names := strings.Split(matches[0][1], ",")
 			for _, author := range names {
 				authorNames = append(authorNames, strings.TrimSpace(author))
+			}
+		}
+	}
+
+	// If we didn't find any narrators in the metadata, try getting it from the filename.
+	if len(narratorNames) == 0 && filepathNarratorRE.MatchString(filename) {
+		log.Info("no narrators found in metadata; parsing filename", logger.Data{"filename": filename})
+		// Use FindAllStringSubmatch to get the capture group (content inside braces)
+		matches := filepathNarratorRE.FindAllStringSubmatch(filename, -1)
+		if len(matches) > 0 && len(matches[0]) > 1 {
+			// matches[0][1] is the first capture group (narrator name without braces)
+			names := strings.Split(matches[0][1], ",")
+			for _, narrator := range names {
+				narratorNames = append(narratorNames, strings.TrimSpace(narrator))
 			}
 		}
 	}
@@ -550,15 +570,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		CoverSource:   coverSource,
 	}
 
-	// Collect narrator names from sidecar data
-	var narratorNames []string
+	// Apply file sidecar data for narrators (higher priority than file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
-		log.Info("applying file sidecar data", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
-		narratorSource := models.DataSourceSidecar
-		file.NarratorSource = &narratorSource
-		for _, n := range fileSidecarData.Narrators {
-			narratorNames = append(narratorNames, n.Name)
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[narratorSource] {
+			log.Info("applying file sidecar data for narrators", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
+			narratorSource = models.DataSourceSidecar
+			narratorNames = make([]string, 0)
+			for _, n := range fileSidecarData.Narrators {
+				narratorNames = append(narratorNames, n.Name)
+			}
 		}
+	}
+
+	// Set narrator source on file if we have narrators
+	if len(narratorNames) > 0 {
+		file.NarratorSource = &narratorSource
 	}
 
 	err = w.bookService.CreateFile(ctx, file)

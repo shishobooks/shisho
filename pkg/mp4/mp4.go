@@ -32,6 +32,14 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	narrators := make([]string, 0)
+	if m.Composer() != "" {
+		composers := strings.Split(m.Composer(), ",")
+		for _, composer := range composers {
+			narrators = append(narrators, strings.TrimSpace(composer))
+		}
+	}
+
 	coverMimeType := ""
 	var coverData []byte
 
@@ -57,6 +65,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	return &mediafile.ParsedMetadata{
 		Title:         m.Title(),
 		Authors:       authors,
+		Narrators:     narrators,
 		Series:        series,
 		SeriesNumber:  seriesNumber,
 		CoverMimeType: coverMimeType,
