@@ -22,7 +22,7 @@ type Book struct {
 	TitleSource    string    `bun:",nullzero" json:"title_source" tstype:"DataSource"`
 	Subtitle       *string   `json:"subtitle"`
 	SubtitleSource *string   `json:"subtitle_source" tstype:"DataSource"`
-	Authors        []*Author `bun:"rel:has-many" json:"authors,omitempty" tstype:"Author[]"`
+	Authors        []*Author `bun:"rel:has-many,join:id=book_id" json:"authors,omitempty" tstype:"Author[]"`
 	AuthorSource   string    `bun:",nullzero" json:"author_source" tstype:"DataSource"`
 	SeriesID       *int      `json:"series_id,omitempty"`
 	Series         *Series   `bun:"rel:belongs-to" json:"series,omitempty" tstype:"Series"`

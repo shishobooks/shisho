@@ -7,6 +7,8 @@ import Home from "@/components/pages/Home";
 import LibraryList from "@/components/pages/LibraryList";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
+import PersonDetail from "@/components/pages/PersonDetail";
+import PersonList from "@/components/pages/PersonList";
 import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
@@ -47,6 +49,14 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/series/:id",
         Component: SeriesDetail,
+      },
+      {
+        path: "libraries/:libraryId/people",
+        Component: PersonList,
+      },
+      {
+        path: "libraries/:libraryId/people/:id",
+        Component: PersonDetail,
       },
       {
         path: "config",

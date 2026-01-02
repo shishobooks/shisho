@@ -140,12 +140,14 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 		Subtitle: book.Subtitle,
 	}
 
-	// Convert authors
+	// Convert authors from Authors
 	for _, author := range book.Authors {
-		s.Authors = append(s.Authors, AuthorMetadata{
-			Name:      author.Name,
-			SortOrder: author.SortOrder,
-		})
+		if author.Person != nil {
+			s.Authors = append(s.Authors, AuthorMetadata{
+				Name:      author.Person.Name,
+				SortOrder: author.SortOrder,
+			})
+		}
 	}
 
 	// Convert series
@@ -166,12 +168,14 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 		Version: CurrentVersion,
 	}
 
-	// Convert narrators
+	// Convert narrators from Narrators
 	for _, narrator := range file.Narrators {
-		s.Narrators = append(s.Narrators, NarratorMetadata{
-			Name:      narrator.Name,
-			SortOrder: narrator.SortOrder,
-		})
+		if narrator.Person != nil {
+			s.Narrators = append(s.Narrators, NarratorMetadata{
+				Name:      narrator.Person.Name,
+				SortOrder: narrator.SortOrder,
+			})
+		}
 	}
 
 	return s

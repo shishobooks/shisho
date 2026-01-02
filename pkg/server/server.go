@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/opds"
+	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/uptrace/bun"
 )
@@ -44,6 +45,7 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 	jobs.RegisterRoutes(e, db)
 	libraries.RegisterRoutes(e, db)
 	opds.RegisterRoutes(e, db)
+	people.RegisterRoutes(e, db)
 	series.RegisterRoutes(e, db)
 
 	echo.NotFoundHandler = notFoundHandler

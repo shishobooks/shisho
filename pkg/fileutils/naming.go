@@ -12,7 +12,7 @@ import (
 
 // OrganizedNameOptions contains the data needed to generate organized file/folder names.
 type OrganizedNameOptions struct {
-	Authors      []*models.Author
+	AuthorNames  []string // Author names as strings for file naming
 	Title        string
 	SeriesNumber *float64
 	FileType     string // for determining volume number formatting
@@ -23,8 +23,8 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 	var parts []string
 
 	// Add author in brackets if available
-	if len(opts.Authors) > 0 && opts.Authors[0].Name != "" {
-		author := sanitizeForFilename(opts.Authors[0].Name)
+	if len(opts.AuthorNames) > 0 && opts.AuthorNames[0] != "" {
+		author := sanitizeForFilename(opts.AuthorNames[0])
 		parts = append(parts, fmt.Sprintf("[%s]", author))
 	}
 

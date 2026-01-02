@@ -263,15 +263,16 @@ type AuthorInfo struct {
 func (svc *Service) ListAuthorsInLibrary(ctx context.Context, libraryID, limit, offset int) ([]AuthorInfo, int, error) {
 	var authors []AuthorInfo
 
-	// Get distinct authors with book counts
+	// Get distinct authors with book counts using persons and authors tables
 	err := svc.db.NewSelect().
-		TableExpr("authors a").
-		ColumnExpr("a.name").
+		TableExpr("persons p").
+		ColumnExpr("p.name").
 		ColumnExpr("COUNT(DISTINCT a.book_id) as book_count").
+		Join("INNER JOIN authors a ON a.person_id = p.id").
 		Join("INNER JOIN books b ON b.id = a.book_id").
 		Where("b.library_id = ?", libraryID).
-		Group("a.name").
-		Order("a.name ASC").
+		Group("p.id", "p.name").
+		Order("p.sort_name ASC").
 		Limit(limit).
 		Offset(offset).
 		Scan(ctx, &authors)
@@ -282,7 +283,7 @@ func (svc *Service) ListAuthorsInLibrary(ctx context.Context, libraryID, limit, 
 	// Get total count
 	var total int
 	err = svc.db.NewSelect().
-		TableExpr("(SELECT DISTINCT a.name FROM authors a INNER JOIN books b ON b.id = a.book_id WHERE b.library_id = ?) as distinct_authors", libraryID).
+		TableExpr("(SELECT DISTINCT p.id FROM persons p INNER JOIN authors a ON a.person_id = p.id INNER JOIN books b ON b.id = a.book_id WHERE b.library_id = ?) as distinct_authors", libraryID).
 		ColumnExpr("COUNT(*) as count").
 		Scan(ctx, &total)
 	if err != nil {
@@ -339,12 +340,13 @@ func (svc *Service) BuildLibraryAuthorsListFeed(ctx context.Context, baseURL, fi
 func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, authorName string, fileTypes []string, limit, offset int) ([]*models.Book, int, error) {
 	var bookIDs []int
 
-	// Get book IDs for this author
+	// Get book IDs for this author using persons and authors tables
 	q := svc.db.NewSelect().
 		TableExpr("authors a").
 		ColumnExpr("DISTINCT a.book_id").
+		Join("INNER JOIN persons p ON p.id = a.person_id").
 		Join("INNER JOIN books b ON b.id = a.book_id").
-		Where("b.library_id = ? AND a.name = ?", libraryID, authorName)
+		Where("b.library_id = ? AND p.name = ?", libraryID, authorName)
 
 	if len(fileTypes) > 0 {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
@@ -508,7 +510,9 @@ func (svc *Service) bookToEntry(baseURL, _ string, _ int, book *models.Book, typ
 
 	// Authors
 	for _, author := range book.Authors {
-		entry.Authors = append(entry.Authors, Author{Name: author.Name})
+		if author.Person != nil {
+			entry.Authors = append(entry.Authors, Author{Name: author.Person.Name})
+		}
 	}
 
 	// Summary

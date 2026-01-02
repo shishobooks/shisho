@@ -160,12 +160,31 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`
-			CREATE TABLE authors (
+			CREATE TABLE persons (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				book_id TEXT REFERENCES books (id) NOT NULL,
+				library_id INTEGER REFERENCES libraries (id) NOT NULL,
 				name TEXT NOT NULL,
+				sort_name TEXT NOT NULL
+			)
+`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_persons_name_library_id ON persons (name COLLATE NOCASE, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_persons_library_id ON persons (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`
+			CREATE TABLE authors (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				book_id INTEGER REFERENCES books (id) NOT NULL,
+				person_id INTEGER REFERENCES persons (id) NOT NULL,
 				sort_order INTEGER NOT NULL
 			)
 `)
@@ -176,13 +195,19 @@ func init() {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		_, err = db.Exec(`CREATE INDEX ix_authors_person_id ON authors (person_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_authors_book_person ON authors (book_id, person_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		_, err = db.Exec(`
 			CREATE TABLE narrators (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				file_id TEXT REFERENCES files (id) NOT NULL,
-				name TEXT NOT NULL,
+				file_id INTEGER REFERENCES files (id) NOT NULL,
+				person_id INTEGER REFERENCES persons (id) NOT NULL,
 				sort_order INTEGER NOT NULL
 			)
 `)
@@ -190,6 +215,14 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`CREATE INDEX ix_narrators_file_id ON narrators (file_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_narrators_person_id ON narrators (person_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_narrators_file_person ON narrators (file_id, person_id)`)
 		return errors.WithStack(err)
 	}
 
@@ -199,6 +232,10 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec("DROP TABLE IF EXISTS authors")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS persons")
 		if err != nil {
 			return errors.WithStack(err)
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -27,6 +28,7 @@ type testContext struct {
 	bookService    *books.Service
 	libraryService *libraries.Service
 	jobService     *jobs.Service
+	personService  *people.Service
 	seriesService  *series.Service
 }
 
@@ -53,6 +55,7 @@ func newTestContext(t *testing.T) *testContext {
 	bookService := books.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
+	personService := people.NewService(db)
 	seriesService := series.NewService(db)
 
 	// Create worker
@@ -65,6 +68,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		personService:  personService,
 		seriesService:  seriesService,
 	}
 
@@ -79,6 +83,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		personService:  personService,
 		seriesService:  seriesService,
 	}
 

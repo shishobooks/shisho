@@ -36,7 +36,8 @@ type ListBooksOptions struct {
 type UpdateBookOptions struct {
 	Columns       []string
 	UpdateAuthors bool
-	OrganizeFiles bool // Whether to rename files when metadata changes
+	AuthorNames   []string // Author names for updating (requires UpdateAuthors to be true)
+	OrganizeFiles bool     // Whether to rename files when metadata changes
 }
 
 type RetrieveFileOptions struct {
@@ -83,25 +84,7 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 			return errors.WithStack(err)
 		}
 
-		// Insert authors.
-		for i, author := range book.Authors {
-			author.BookID = book.ID
-			if author.SortOrder == 0 {
-				author.SortOrder = i + 1
-			}
-			author.CreatedAt = book.CreatedAt
-			author.UpdatedAt = book.UpdatedAt
-		}
-		if len(book.Authors) > 0 {
-			_, err := tx.
-				NewInsert().
-				Model(&book.Authors).
-				Returning("*").
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		}
+		// Note: Authors are created separately via CreateAuthor after person creation
 
 		// Insert files.
 		for _, file := range book.Files {
@@ -120,29 +103,7 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 			}
 		}
 
-		// Insert narrators.
-		narrators := make([]*models.Narrator, 0)
-		for _, file := range book.Files {
-			for i, narrator := range file.Narrators {
-				narrator.FileID = file.ID
-				if narrator.SortOrder == 0 {
-					narrator.SortOrder = i + 1
-				}
-				narrator.CreatedAt = file.CreatedAt
-				narrator.UpdatedAt = file.UpdatedAt
-				narrators = append(narrators, narrator)
-			}
-		}
-		if len(narrators) > 0 {
-			_, err := tx.
-				NewInsert().
-				Model(&narrators).
-				Returning("*").
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		}
+		// Note: Narrators are created separately via CreateNarrator after person creation
 
 		return nil
 	})
@@ -163,9 +124,14 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("a.sort_order ASC")
 		}).
+		Relation("Authors.Person").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
-		})
+		}).
+		Relation("Files.Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Files.Narrators.Person")
 
 	if opts.ID != nil {
 		q = q.Where("b.id = ?", *opts.ID)
@@ -199,11 +165,16 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("a.sort_order ASC")
 		}).
+		Relation("Authors.Person").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.filepath ASC")
 		}).
-		Join("INNER JOIN files f ON f.book_id = b.id").
-		Where("f.filepath = ? AND b.library_id = ?", filepath, libraryID)
+		Relation("Files.Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Files.Narrators.Person").
+		Join("INNER JOIN files fil ON fil.book_id = b.id").
+		Where("fil.filepath = ? AND b.library_id = ?", filepath, libraryID)
 
 	err := q.Scan(ctx)
 	if err != nil {
@@ -238,9 +209,14 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		Relation("Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("a.sort_order ASC")
 		}).
+		Relation("Authors.Person").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
-		})
+		}).
+		Relation("Files.Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Files.Narrators.Person")
 
 	// Apply ordering
 	if opts.orderByRecent {
@@ -270,7 +246,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Search by title or author
 	if opts.Search != nil && *opts.Search != "" {
 		searchTerm := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("(LOWER(b.title) LIKE ? OR b.id IN (SELECT book_id FROM authors WHERE LOWER(name) LIKE ?))", searchTerm, searchTerm)
+		q = q.Where("(LOWER(b.title) LIKE ? OR b.id IN (SELECT a.book_id FROM authors a JOIN persons p ON a.person_id = p.id WHERE LOWER(p.name) LIKE ?))", searchTerm, searchTerm)
 	}
 
 	if opts.includeTotal {
@@ -292,7 +268,10 @@ func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts Upda
 
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if opts.UpdateAuthors {
-			// Delete all previous authors and save these new ones.
+			// Delete all previous authors associations.
+			// Note: The actual Person records are not deleted - they may be referenced by other books.
+			// AuthorNames in opts should be used by the caller to create new Author entries
+			// after calling personService.FindOrCreatePerson.
 			_, err := tx.
 				NewDelete().
 				Model((*models.Author)(nil)).
@@ -300,25 +279,6 @@ func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts Upda
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
-			}
-
-			for i, author := range book.Authors {
-				author.BookID = book.ID
-				if author.SortOrder == 0 {
-					author.SortOrder = i + 1
-				}
-				author.CreatedAt = book.CreatedAt
-				author.UpdatedAt = book.UpdatedAt
-			}
-
-			if len(book.Authors) > 0 {
-				_, err = tx.
-					NewInsert().
-					Model(&book.Authors).
-					Exec(ctx)
-				if err != nil {
-					return errors.WithStack(err)
-				}
 			}
 		}
 
@@ -369,42 +329,17 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 	}
 	file.UpdatedAt = file.CreatedAt
 
-	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		// Insert file.
-		_, err := tx.
-			NewInsert().
-			Model(file).
-			Returning("*").
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Insert narrators.
-		for i, narrator := range file.Narrators {
-			narrator.FileID = file.ID
-			if narrator.SortOrder == 0 {
-				narrator.SortOrder = i + 1
-			}
-			narrator.CreatedAt = file.CreatedAt
-			narrator.UpdatedAt = file.UpdatedAt
-		}
-		if len(file.Narrators) > 0 {
-			_, err := tx.
-				NewInsert().
-				Model(&file.Narrators).
-				Returning("*").
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		}
-
-		return nil
-	})
+	// Insert file.
+	_, err := svc.db.
+		NewInsert().
+		Model(file).
+		Returning("*").
+		Exec(ctx)
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Note: FileNarrators are created separately via CreateFileNarrator after person creation
 
 	return nil
 }
@@ -559,9 +494,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		return nil
 	}
 
+	// Get author names from Authors
+	authorNames := make([]string, 0, len(book.Authors))
+	for _, a := range book.Authors {
+		if a.Person != nil {
+			authorNames = append(authorNames, a.Person.Name)
+		}
+	}
+
 	// Create organized name options from current book metadata
 	organizeOpts := fileutils.OrganizedNameOptions{
-		Authors:      book.Authors,
+		AuthorNames:  authorNames,
 		Title:        book.Title,
 		SeriesNumber: book.SeriesNumber,
 	}
@@ -668,4 +611,44 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	}
 
 	return nil
+}
+
+// CreateAuthor creates a book-author association.
+func (svc *Service) CreateAuthor(ctx context.Context, author *models.Author) error {
+	_, err := svc.db.
+		NewInsert().
+		Model(author).
+		Returning("*").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// CreateNarrator creates a file-narrator association.
+func (svc *Service) CreateNarrator(ctx context.Context, narrator *models.Narrator) error {
+	_, err := svc.db.
+		NewInsert().
+		Model(narrator).
+		Returning("*").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteAuthors deletes all author associations for a book.
+func (svc *Service) DeleteAuthors(ctx context.Context, bookID int) error {
+	_, err := svc.db.
+		NewDelete().
+		Model((*models.Author)(nil)).
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteNarrators deletes all narrator associations for a file.
+func (svc *Service) DeleteNarrators(ctx context.Context, fileID int) error {
+	_, err := svc.db.
+		NewDelete().
+		Model((*models.Narrator)(nil)).
+		Where("file_id = ?", fileID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }

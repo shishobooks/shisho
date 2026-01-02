@@ -29,7 +29,7 @@ type File struct {
 	CoverSource       *string     `json:"cover_source" tstype:"DataSource"`
 	AudiobookDuration *float64    `json:"audiobook_duration"`
 	AudiobookBitrate  *float64    `json:"audiobook_bitrate"`
-	Narrators         []*Narrator `bun:"rel:has-many" json:"narrators,omitempty" tstype:"Narrator[]"`
+	Narrators         []*Narrator `bun:"rel:has-many,join:id=file_id" json:"narrators,omitempty" tstype:"Narrator[]"`
 	NarratorSource    *string     `json:"narrator_source" tstype:"DataSource"`
 }
 

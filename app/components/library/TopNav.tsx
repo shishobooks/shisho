@@ -66,9 +66,13 @@ const TopNav = () => {
   const isBooksActive =
     location.pathname === `/libraries/${libraryId}` ||
     (location.pathname.startsWith(`/libraries/${libraryId}/books`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/series`));
+      !location.pathname.startsWith(`/libraries/${libraryId}/series`) &&
+      !location.pathname.startsWith(`/libraries/${libraryId}/people`));
   const isSeriesActive = location.pathname.startsWith(
     `/libraries/${libraryId}/series`,
+  );
+  const isPeopleActive = location.pathname.startsWith(
+    `/libraries/${libraryId}/people`,
   );
 
   return (
@@ -116,6 +120,17 @@ const TopNav = () => {
                   variant={isSeriesActive ? "default" : "ghost"}
                 >
                   <Link to={`/libraries/${libraryId}/series`}>Series</Link>
+                </Button>
+                <Button
+                  asChild
+                  className={`h-9 ${
+                    isPeopleActive
+                      ? "bg-violet-300 text-neutral-900 hover:bg-violet-400 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-violet-300 dark:hover:text-violet-300"
+                  }`}
+                  variant={isPeopleActive ? "default" : "ghost"}
+                >
+                  <Link to={`/libraries/${libraryId}/people`}>People</Link>
                 </Button>
               </nav>
             )}

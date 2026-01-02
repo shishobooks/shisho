@@ -120,6 +120,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 		log.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
 	}
 
+	// Cleanup orphaned people (delete people with no authors or narrators)
+	deletedPeopleCount, err := w.personService.CleanupOrphanedPeople(ctx)
+	if err != nil {
+		log.Err(err).Error("failed to cleanup orphaned people")
+	} else if deletedPeopleCount > 0 {
+		log.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
+	}
+
 	log.Info("finished scan job")
 	return nil
 }
@@ -188,7 +196,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 	titleSource := models.DataSourceFilepath
-	authors := make([]*models.Author, 0)
+	authorNames := make([]string, 0)
 	authorSource := models.DataSourceFilepath
 	series := ""
 	seriesSource := models.DataSourceFilepath
@@ -229,11 +237,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 		if len(metadata.Authors) > 0 {
 			authorSource = metadata.DataSource
-			for _, author := range metadata.Authors {
-				authors = append(authors, &models.Author{
-					Name: author,
-				})
-			}
+			authorNames = append(authorNames, metadata.Authors...)
 		}
 		if metadata.Series != "" {
 			series = metadata.Series
@@ -248,7 +252,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	// If we didn't find any authors in the metadata, try getting it from the filename.
-	if len(authors) == 0 && filepathAuthorRE.MatchString(filename) {
+	if len(authorNames) == 0 && filepathAuthorRE.MatchString(filename) {
 		log.Info("no authors found in metadata; parsing filename", logger.Data{"filename": filename})
 		// Use FindAllStringSubmatch to get the capture group (content inside brackets)
 		matches := filepathAuthorRE.FindAllStringSubmatch(filename, -1)
@@ -256,9 +260,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			// matches[0][1] is the first capture group (author name without brackets)
 			names := strings.Split(matches[0][1], ",")
 			for _, author := range names {
-				authors = append(authors, &models.Author{
-					Name: strings.TrimSpace(author),
-				})
+				authorNames = append(authorNames, strings.TrimSpace(author))
 			}
 		}
 	}
@@ -288,12 +290,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 		if len(bookSidecarData.Authors) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[authorSource] {
 			authorSource = models.DataSourceSidecar
-			authors = make([]*models.Author, 0)
+			authorNames = make([]string, 0)
 			for _, a := range bookSidecarData.Authors {
-				authors = append(authors, &models.Author{
-					Name:      a.Name,
-					SortOrder: a.SortOrder,
-				})
+				authorNames = append(authorNames, a.Name)
 			}
 		}
 		if bookSidecarData.Series != nil && bookSidecarData.Series.Name != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
@@ -335,7 +334,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 
 			// Create organized name options
 			organizeOpts := fileutils.OrganizedNameOptions{
-				Authors:      authors,
+				AuthorNames:  authorNames,
 				Title:        title,
 				SeriesNumber: seriesNumber,
 				FileType:     fileType,
@@ -394,10 +393,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
 		}
 		if models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
-			log.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
-			existingBook.Authors = authors
+			log.Info("updating authors", logger.Data{"new_author_count": len(authorNames), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
+			updateOptions.AuthorNames = authorNames
 		}
 		// Update series if we have a higher priority source
 		// Get existing series source for comparison
@@ -473,7 +472,6 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			Filepath:     bookPath,
 			Title:        title,
 			TitleSource:  titleSource,
-			Authors:      authors,
 			AuthorSource: authorSource,
 			SeriesID:     seriesID,
 			SeriesNumber: seriesNumber,
@@ -481,6 +479,24 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		err := w.bookService.CreateBook(ctx, existingBook)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		// Create Author entries for each author
+		for i, authorName := range authorNames {
+			person, err := w.personService.FindOrCreatePerson(ctx, authorName, libraryID)
+			if err != nil {
+				log.Error("failed to find/create person", logger.Data{"author": authorName, "error": err.Error()})
+				continue
+			}
+			author := &models.Author{
+				BookID:    existingBook.ID,
+				PersonID:  person.ID,
+				SortOrder: i + 1,
+			}
+			err = w.bookService.CreateAuthor(ctx, author)
+			if err != nil {
+				log.Error("failed to create author", logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
+			}
 		}
 	}
 
@@ -534,22 +550,38 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		CoverSource:   coverSource,
 	}
 
-	// Apply file sidecar data (narrators) if available
+	// Collect narrator names from sidecar data
+	var narratorNames []string
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
 		log.Info("applying file sidecar data", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
 		narratorSource := models.DataSourceSidecar
 		file.NarratorSource = &narratorSource
 		for _, n := range fileSidecarData.Narrators {
-			file.Narrators = append(file.Narrators, &models.Narrator{
-				Name:      n.Name,
-				SortOrder: n.SortOrder,
-			})
+			narratorNames = append(narratorNames, n.Name)
 		}
 	}
 
 	err = w.bookService.CreateFile(ctx, file)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Create Narrator entries for each narrator
+	for i, narratorName := range narratorNames {
+		person, err := w.personService.FindOrCreatePerson(ctx, narratorName, libraryID)
+		if err != nil {
+			log.Error("failed to find/create person for narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
+			continue
+		}
+		narrator := &models.Narrator{
+			FileID:    file.ID,
+			PersonID:  person.ID,
+			SortOrder: i + 1,
+		}
+		err = w.bookService.CreateNarrator(ctx, narrator)
+		if err != nil {
+			log.Error("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
+		}
 	}
 
 	// Write sidecar files to keep them in sync with the database

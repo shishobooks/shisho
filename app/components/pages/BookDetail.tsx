@@ -155,9 +155,17 @@ const BookDetail = () => {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {book.authors.map((author) => (
-                        <Badge key={author.id} variant="secondary">
-                          {author.name}
-                        </Badge>
+                        <Link
+                          key={author.id}
+                          to={`/libraries/${libraryId}/people/${author.person_id}`}
+                        >
+                          <Badge
+                            className="cursor-pointer hover:bg-secondary/80"
+                            variant="secondary"
+                          >
+                            {author.person?.name ?? "Unknown"}
+                          </Badge>
+                        </Link>
                       ))}
                     </div>
                   </div>
@@ -261,12 +269,16 @@ const BookDetail = () => {
                             </span>
                             <div className="flex items-center gap-1 flex-wrap">
                               {file.narrators.map((narrator, index) => (
-                                <span className="text-xs" key={narrator.id}>
-                                  {narrator.name}
+                                <Link
+                                  className="text-xs hover:underline"
+                                  key={narrator.id}
+                                  to={`/libraries/${libraryId}/people/${narrator.person_id}`}
+                                >
+                                  {narrator.person?.name ?? "Unknown"}
                                   {index < file.narrators!.length - 1
                                     ? ","
                                     : ""}
-                                </span>
+                                </Link>
                               ))}
                               {file.narrator_source && (
                                 <Badge className="text-xs" variant="outline">

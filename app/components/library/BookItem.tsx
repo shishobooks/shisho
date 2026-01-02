@@ -35,9 +35,9 @@ const BookItem = ({
           {book.title}
         </div>
       </Link>
-      {book.authors && (
+      {book.authors && book.authors.length > 0 && (
         <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
-          {book.authors.map((a) => a.name).join(", ")}
+          {book.authors.map((a) => a.person?.name ?? "Unknown").join(", ")}
         </div>
       )}
       {book.files && (

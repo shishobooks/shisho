@@ -41,7 +41,8 @@ func TestProcessScanJob_EPUBBasic(t *testing.T) {
 	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
 	// Author should be extracted WITHOUT brackets
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "John Doe", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "John Doe", book.Authors[0].Person.Name)
 
 	// Verify file was created
 	files := tc.listFiles()
@@ -109,7 +110,8 @@ func TestProcessScanJob_CBZBasic(t *testing.T) {
 	assert.Equal(t, "My Comic", book.Title)
 	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Comic Writer", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Comic Writer", book.Authors[0].Person.Name)
 
 	files := tc.listFiles()
 	require.Len(t, files, 1)
@@ -142,7 +144,8 @@ func TestProcessScanJob_CBZWithMinimalComicInfo(t *testing.T) {
 	assert.Equal(t, models.DataSourceCBZMetadata, book.TitleSource)
 	// No writer in ComicInfo, so author comes from directory name
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Folder Author", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Folder Author", book.Authors[0].Person.Name)
 }
 
 func TestProcessScanJob_M4BBasic(t *testing.T) {
@@ -171,7 +174,8 @@ func TestProcessScanJob_M4BBasic(t *testing.T) {
 	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
 	// Author extracted from directory name
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Narrator Name", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Narrator Name", book.Authors[0].Person.Name)
 
 	files := tc.listFiles()
 	require.Len(t, files, 1)
@@ -524,7 +528,8 @@ func TestProcessScanJob_AuthorFromFilename(t *testing.T) {
 	assert.Equal(t, models.DataSourceEPUBMetadata, book.TitleSource)
 	// Author should be extracted from directory name since no authors in EPUB
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Famous Author", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Famous Author", book.Authors[0].Person.Name)
 }
 
 func TestProcessScanJob_MultipleLibraryPaths(t *testing.T) {
@@ -1045,7 +1050,8 @@ func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName(t *testing.T) {
 
 	// Author should still be extracted from the directory name
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Author Name", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Author Name", book.Authors[0].Person.Name)
 }
 
 func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *testing.T) {
@@ -1075,7 +1081,8 @@ func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *t
 
 	// Author should still be extracted from the directory name
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Author Name", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Author Name", book.Authors[0].Person.Name)
 }
 
 func TestProcessScanJob_TitleFallbackWhenCBZHasEmptyTitle(t *testing.T) {
@@ -1140,7 +1147,8 @@ func TestProcessScanJob_TitleFallbackRootLevelWithMultipleBrackets(t *testing.T)
 
 	// Author should be extracted from the first bracket pattern
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "Author", book.Authors[0].Name)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Author", book.Authors[0].Person.Name)
 }
 
 func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
