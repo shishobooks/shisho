@@ -26,8 +26,11 @@ type ListBooksOptions struct {
 	Offset    *int
 	LibraryID *int
 	SeriesID  *int
+	FileTypes []string // Filter by file types (e.g., ["epub", "cbz"])
+	Search    *string  // Search query for title/author
 
-	includeTotal bool
+	includeTotal  bool
+	orderByRecent bool // Order by updated_at DESC instead of created_at ASC
 }
 
 type UpdateBookOptions struct {
@@ -237,8 +240,14 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		}).
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
-		}).
-		Order("b.created_at ASC")
+		})
+
+	// Apply ordering
+	if opts.orderByRecent {
+		q = q.Order("b.updated_at DESC")
+	} else {
+		q = q.Order("b.created_at ASC")
+	}
 
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
@@ -251,6 +260,17 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 	if opts.SeriesID != nil {
 		q = q.Where("b.series_id = ?", *opts.SeriesID)
+	}
+
+	// Filter by file types
+	if len(opts.FileTypes) > 0 {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(opts.FileTypes))
+	}
+
+	// Search by title or author
+	if opts.Search != nil && *opts.Search != "" {
+		searchTerm := "%" + strings.ToLower(*opts.Search) + "%"
+		q = q.Where("(LOWER(b.title) LIKE ? OR b.id IN (SELECT book_id FROM authors WHERE LOWER(name) LIKE ?))", searchTerm, searchTerm)
 	}
 
 	if opts.includeTotal {

@@ -11,6 +11,9 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3689",
         rewrite: (path) => path.replace(/^\/api/, ""),
+        headers: {
+          "X-Forwarded-Prefix": "/api",
+        },
       },
     },
   },

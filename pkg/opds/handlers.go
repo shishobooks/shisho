@@ -1,0 +1,360 @@
+package opds
+
+import (
+	"encoding/xml"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+
+	"github.com/labstack/echo/v4"
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
+)
+
+const (
+	defaultLimit = 50
+	maxLimit     = 100
+)
+
+type handler struct {
+	opdsService *Service
+	bookService *books.Service
+}
+
+// getBaseURL returns the base URL for OPDS feeds.
+func getBaseURL(c echo.Context) string {
+	scheme := "http"
+	if c.Request().TLS != nil {
+		scheme = "https"
+	}
+	// Check for X-Forwarded-Proto header (for reverse proxies)
+	if proto := c.Request().Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+
+	// Check for X-Forwarded-Prefix header (set by reverse proxies that strip path prefixes)
+	prefix := c.Request().Header.Get("X-Forwarded-Prefix")
+
+	return scheme + "://" + c.Request().Host + prefix + "/opds/v1"
+}
+
+// getPaginationParams extracts limit and offset from query params.
+func getPaginationParams(c echo.Context) (int, int) {
+	limit := defaultLimit
+	offset := 0
+
+	if l := c.QueryParam("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+			if limit > maxLimit {
+				limit = maxLimit
+			}
+		}
+	}
+
+	if o := c.QueryParam("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	return limit, offset
+}
+
+// validateFileTypes validates the file types parameter.
+func validateFileTypes(types string) error {
+	if types == "" {
+		return errcodes.ValidationError("File types parameter is required")
+	}
+
+	validTypes := map[string]bool{
+		models.FileTypeEPUB: true,
+		models.FileTypeCBZ:  true,
+		models.FileTypeM4B:  true,
+	}
+
+	for _, t := range parseFileTypes(types) {
+		if !validTypes[t] {
+			return errcodes.ValidationError("Invalid file type: " + t)
+		}
+	}
+
+	return nil
+}
+
+// catalog handles the root catalog feed (lists libraries).
+func (h *handler) catalog(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	baseURL := getBaseURL(c)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryCatalog handles the library catalog feed.
+func (h *handler) libraryCatalog(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	baseURL := getBaseURL(c)
+	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, fileTypes, libraryID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAllBooks handles the all books feed for a library.
+func (h *handler) libraryAllBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySeriesList handles the series list feed for a library.
+func (h *handler) librarySeriesList(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySeriesBooks handles the books in a series feed for a library.
+func (h *handler) librarySeriesBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	seriesID, err := strconv.Atoi(c.Param("seriesID"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAuthorsList handles the authors list feed for a library.
+func (h *handler) libraryAuthorsList(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAuthorBooks handles the books by author feed for a library.
+func (h *handler) libraryAuthorBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	authorName, err := url.PathUnescape(c.Param("authorName"))
+	if err != nil {
+		return errcodes.NotFound("Author")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySearch handles the search feed for a library.
+func (h *handler) librarySearch(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	query := c.QueryParam("q")
+	if query == "" {
+		return errcodes.ValidationError("Search query is required")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURL(c)
+
+	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, fileTypes, libraryID, query, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryOpenSearch handles the OpenSearch description for a library.
+func (h *handler) libraryOpenSearch(c echo.Context) error {
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	baseURL := getBaseURL(c)
+	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, fileTypes, libraryID)
+
+	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
+	return c.XML(http.StatusOK, desc)
+}
+
+// download handles file downloads.
+func (h *handler) download(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+		ID: &fileID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("File")
+	}
+
+	// Set content disposition for download
+	filename := filepath.Base(file.Filepath)
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
+	return c.File(file.Filepath)
+}
+
+// respondXML sends an XML response with the correct content type.
+func respondXML(c echo.Context, data interface{}) error {
+	c.Response().Header().Set(echo.HeaderContentType, MimeTypeAtom+"; charset=utf-8")
+	c.Response().WriteHeader(http.StatusOK)
+
+	// Write XML declaration
+	if _, err := c.Response().Write([]byte(xml.Header)); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Encode the feed
+	encoder := xml.NewEncoder(c.Response())
+	encoder.Indent("", "  ")
+	if err := encoder.Encode(data); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}

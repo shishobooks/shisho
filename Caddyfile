@@ -11,7 +11,9 @@
     # API routes - proxy to Go backend (strip /api prefix)
     handle /api/* {
         uri strip_prefix /api
-        reverse_proxy localhost:3689
+        reverse_proxy localhost:3689 {
+            header_up X-Forwarded-Prefix /api
+        }
     }
 
     # Health check endpoint (proxy directly to backend)
