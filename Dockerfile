@@ -1,5 +1,29 @@
 # =============================================================================
-# Stage 1: Build Frontend
+# Stage 1: Generate TypeScript Types
+# =============================================================================
+FROM golang:1.25.5-alpine AS typegen
+
+WORKDIR /app
+
+# Install make and yq (needed for Makefile)
+RUN apk add --no-cache make yq
+
+# Copy Go modules, tools definition, and Makefile
+COPY go.mod go.sum tools.go Makefile ./
+RUN go mod download
+
+# Install tygo using version from go.mod/go.sum
+RUN make SHELL=/bin/ash ./build/api/tygo
+
+# Copy source files needed for type generation
+COPY pkg/ ./pkg/
+COPY tygo.yaml ./
+
+# Generate TypeScript types
+RUN make SHELL=/bin/ash tygo
+
+# =============================================================================
+# Stage 2: Build Frontend
 # =============================================================================
 FROM node:22.14.0-alpine AS frontend-builder
 
@@ -9,13 +33,18 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
-# Copy frontend source and build
+# Copy frontend source
 COPY app/ ./app/
 COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts tailwind.config.js components.json ./
+
+# Copy generated TypeScript types from typegen stage
+COPY --from=typegen /app/app/types/generated/ ./app/types/generated/
+
+# Build frontend
 RUN NODE_ENV=production yarn build
 
 # =============================================================================
-# Stage 2: Build Backend
+# Stage 3: Build Backend
 # =============================================================================
 FROM golang:1.25.5-alpine AS backend-builder
 
@@ -37,7 +66,7 @@ COPY internal/ ./internal/
 RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo -ldflags '-w -s' ./cmd/api
 
 # =============================================================================
-# Stage 3: Final Production Image
+# Stage 4: Final Production Image
 # =============================================================================
 FROM caddy:2-alpine
 
