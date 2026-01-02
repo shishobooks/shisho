@@ -19,6 +19,7 @@ type ListLibrariesOptions struct {
 	Limit          *int
 	Offset         *int
 	IncludeDeleted bool
+	LibraryIDs     []int // If set, only return libraries with these IDs
 
 	includeTotal bool
 }
@@ -138,6 +139,9 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 	}
 	if !opts.IncludeDeleted {
 		q = q.Where("deleted_at IS NULL")
+	}
+	if len(opts.LibraryIDs) > 0 {
+		q = q.Where("l.id IN (?)", bun.In(opts.LibraryIDs))
 	}
 
 	if opts.includeTotal {

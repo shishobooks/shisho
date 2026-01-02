@@ -1,2 +1,3 @@
 database_file_path: ./tmp/data.sqlite
 database_debug: true
+jwt_secret: dev-secret-key-do-not-use-in-production

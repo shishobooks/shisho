@@ -2,12 +2,13 @@ package opds
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all OPDS routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB) {
+func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
 	opdsService := NewService(db)
 	bookService := books.NewService(db)
 
@@ -18,7 +19,8 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB) {
 
 	// OPDS 1.2 routes with file type parameter
 	// File types can be: epub, cbz, m4b, or combinations like epub+cbz
-	v1 := e.Group("/opds/v1")
+	// All OPDS routes require Basic Auth
+	v1 := e.Group("/opds/v1", authMiddleware.BasicAuth)
 
 	// Root catalog - lists libraries
 	v1.GET("/:types/catalog", h.catalog)
@@ -36,5 +38,6 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB) {
 	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
 
 	// File downloads (version-agnostic, shared across OPDS versions)
-	e.GET("/opds/download/:id", h.download)
+	// Also requires Basic Auth
+	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth)
 }

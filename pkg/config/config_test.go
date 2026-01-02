@@ -24,6 +24,7 @@ func TestNew_RequiredFieldMissing(t *testing.T) {
 
 func TestNew_WithEnvVar(t *testing.T) {
 	t.Setenv("DATABASE_FILE_PATH", "/tmp/test.db")
+	t.Setenv("JWT_SECRET", "test-secret-key")
 	t.Setenv("CONFIG_FILE", "/nonexistent/config.yaml")
 
 	cfg, err := New()
@@ -39,6 +40,7 @@ func TestNew_WithConfigFile(t *testing.T) {
 database_file_path: /data/shisho.db
 server_port: 8080
 database_debug: true
+jwt_secret: test-secret-from-file
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
@@ -60,6 +62,7 @@ func TestNew_EnvVarOverridesConfigFile(t *testing.T) {
 	configContent := `
 database_file_path: /data/from-file.db
 server_port: 8080
+jwt_secret: test-secret-from-file
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
@@ -77,6 +80,7 @@ server_port: 8080
 
 func TestNew_Defaults(t *testing.T) {
 	t.Setenv("DATABASE_FILE_PATH", "/tmp/test.db")
+	t.Setenv("JWT_SECRET", "test-secret-key")
 	t.Setenv("CONFIG_FILE", "/nonexistent/config.yaml")
 
 	cfg, err := New()
@@ -99,6 +103,7 @@ func TestNew_SyncInterval(t *testing.T) {
 	configContent := `
 database_file_path: /data/shisho.db
 sync_interval_minutes: 30
+jwt_secret: test-secret-key
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
@@ -112,6 +117,7 @@ sync_interval_minutes: 30
 
 func TestNew_SyncIntervalFromEnv(t *testing.T) {
 	t.Setenv("DATABASE_FILE_PATH", "/tmp/test.db")
+	t.Setenv("JWT_SECRET", "test-secret-key")
 	t.Setenv("SYNC_INTERVAL_MINUTES", "15")
 	t.Setenv("CONFIG_FILE", "/nonexistent/config.yaml")
 

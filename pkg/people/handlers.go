@@ -28,6 +28,13 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	// Get counts
 	authoredCount, err := h.personService.GetAuthoredBookCount(ctx, id)
 	if err != nil {
@@ -56,12 +63,22 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	people, total, err := h.personService.ListPeopleWithTotal(ctx, ListPeopleOptions{
+	opts := ListPeopleOptions{
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
 		Search:    params.Search,
-	})
+	}
+
+	// Filter by user's library access if user is in context
+	if user, ok := c.Get("user").(*models.User); ok {
+		libraryIDs := user.GetAccessibleLibraryIDs()
+		if libraryIDs != nil {
+			opts.LibraryIDs = libraryIDs
+		}
+	}
+
+	people, total, err := h.personService.ListPeopleWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -105,6 +122,13 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	// Keep track of what's been changed
@@ -155,6 +179,21 @@ func (h *handler) authoredBooks(c echo.Context) error {
 		return errcodes.NotFound("Person")
 	}
 
+	// Fetch the person to check library access
+	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	books, err := h.personService.GetAuthoredBooks(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
@@ -168,6 +207,21 @@ func (h *handler) narratedFiles(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Person")
+	}
+
+	// Fetch the person to check library access
+	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	files, err := h.personService.GetNarratedFiles(ctx, id)
@@ -190,6 +244,21 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Fetch the target person to check library access
+	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	// Merge source person into target (this) person
 	err = h.personService.MergePeople(ctx, id, params.SourceID)
 	if err != nil {
@@ -204,6 +273,21 @@ func (h *handler) deletePerson(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Person")
+	}
+
+	// Fetch the person to check library access
+	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(person.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	err = h.personService.DeletePerson(ctx, id)

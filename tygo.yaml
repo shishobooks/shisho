@@ -26,3 +26,15 @@ packages:
     output_path: "app/types/generated/filesystem.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/auth"
+    output_path: "app/types/generated/auth.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/users"
+    output_path: "app/types/generated/users.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/roles"
+    output_path: "app/types/generated/roles.ts"
+    include_files:
+      - validators.go

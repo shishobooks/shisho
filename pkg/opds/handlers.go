@@ -86,6 +86,24 @@ func validateFileTypes(types string) error {
 	return nil
 }
 
+// checkLibraryAccess checks if the user has access to the specified library.
+func checkLibraryAccess(c echo.Context, libraryID int) error {
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(libraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+	return nil
+}
+
+// getUserAccessibleLibraryIDs returns the library IDs the user can access, or nil for all.
+func getUserAccessibleLibraryIDs(c echo.Context) []int {
+	if user, ok := c.Get("user").(*models.User); ok {
+		return user.GetAccessibleLibraryIDs()
+	}
+	return nil
+}
+
 // catalog handles the root catalog feed (lists libraries).
 func (h *handler) catalog(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -96,7 +114,8 @@ func (h *handler) catalog(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes)
+	libraryIDs := getUserAccessibleLibraryIDs(c)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -116,6 +135,10 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 	libraryID, err := strconv.Atoi(c.Param("libraryID"))
 	if err != nil {
 		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
 	}
 
 	baseURL := getBaseURL(c)
@@ -139,6 +162,10 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 	libraryID, err := strconv.Atoi(c.Param("libraryID"))
 	if err != nil {
 		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
 	}
 
 	limit, offset := getPaginationParams(c)
@@ -166,6 +193,10 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
@@ -189,6 +220,10 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 	libraryID, err := strconv.Atoi(c.Param("libraryID"))
 	if err != nil {
 		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
 	}
 
 	seriesID, err := strconv.Atoi(c.Param("seriesID"))
@@ -221,6 +256,10 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
@@ -244,6 +283,10 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 	libraryID, err := strconv.Atoi(c.Param("libraryID"))
 	if err != nil {
 		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
 	}
 
 	authorName, err := url.PathUnescape(c.Param("authorName"))
@@ -276,6 +319,10 @@ func (h *handler) librarySearch(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
 	query := c.QueryParam("q")
 	if query == "" {
 		return errcodes.ValidationError("Search query is required")
@@ -305,6 +352,10 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
 	baseURL := getBaseURL(c)
 	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, fileTypes, libraryID)
 
@@ -325,6 +376,11 @@ func (h *handler) download(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if err := checkLibraryAccess(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Check if file exists

@@ -56,3 +56,13 @@ sync_interval_minutes: 60
 # Env: WORKER_PROCESSES
 # Default: 2
 worker_processes: 2
+
+# =============================================================================
+# AUTHENTICATION SETTINGS
+# =============================================================================
+
+# REQUIRED: Secret key for signing JWT tokens
+# Use a long, random string (at least 32 characters recommended)
+# Generate one with: openssl rand -base64 32
+# Env: JWT_SECRET
+jwt_secret: your-secret-key-here-change-me

@@ -82,11 +82,21 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	libraries, total, err := h.libraryService.ListLibrariesWithTotal(ctx, ListLibrariesOptions{
+	opts := ListLibrariesOptions{
 		Limit:          &params.Limit,
 		Offset:         &params.Offset,
 		IncludeDeleted: params.Deleted,
-	})
+	}
+
+	// Filter by user's library access if user is in context
+	if user, ok := c.Get("user").(*models.User); ok {
+		libraryIDs := user.GetAccessibleLibraryIDs()
+		if libraryIDs != nil {
+			opts.LibraryIDs = libraryIDs
+		}
+	}
+
+	libraries, total, err := h.libraryService.ListLibrariesWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}

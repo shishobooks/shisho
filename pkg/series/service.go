@@ -19,9 +19,10 @@ type RetrieveSeriesOptions struct {
 }
 
 type ListSeriesOptions struct {
-	Limit     *int
-	Offset    *int
-	LibraryID *int
+	Limit      *int
+	Offset     *int
+	LibraryID  *int
+	LibraryIDs []int // Filter by multiple library IDs (for access control)
 
 	includeTotal bool
 }
@@ -147,6 +148,9 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 
 	if opts.LibraryID != nil {
 		q = q.Where("s.library_id = ?", *opts.LibraryID)
+	}
+	if len(opts.LibraryIDs) > 0 {
+		q = q.Where("s.library_id IN (?)", bun.In(opts.LibraryIDs))
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)

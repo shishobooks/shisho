@@ -22,12 +22,13 @@ type RetrieveBookOptions struct {
 }
 
 type ListBooksOptions struct {
-	Limit     *int
-	Offset    *int
-	LibraryID *int
-	SeriesID  *int
-	FileTypes []string // Filter by file types (e.g., ["epub", "cbz"])
-	Search    *string  // Search query for title/author
+	Limit      *int
+	Offset     *int
+	LibraryID  *int
+	LibraryIDs []int // Filter by multiple library IDs (for access control)
+	SeriesID   *int
+	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
+	Search     *string  // Search query for title/author
 
 	includeTotal  bool
 	orderByRecent bool // Order by updated_at DESC instead of created_at ASC
@@ -245,6 +246,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 	if opts.LibraryID != nil {
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
+	}
+	if len(opts.LibraryIDs) > 0 {
+		q = q.Where("b.library_id IN (?)", bun.In(opts.LibraryIDs))
 	}
 	if opts.SeriesID != nil {
 		q = q.Where("b.id IN (SELECT book_id FROM book_series WHERE series_id = ?)", *opts.SeriesID)

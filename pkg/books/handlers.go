@@ -33,6 +33,13 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	return errors.WithStack(c.JSON(http.StatusOK, book))
 }
 
@@ -45,12 +52,22 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	books, total, err := h.bookService.ListBooksWithTotal(ctx, ListBooksOptions{
+	opts := ListBooksOptions{
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
 		SeriesID:  params.SeriesID,
-	})
+	}
+
+	// Filter by user's library access if user is in context
+	if user, ok := c.Get("user").(*models.User); ok {
+		libraryIDs := user.GetAccessibleLibraryIDs()
+		if libraryIDs != nil {
+			opts.LibraryIDs = libraryIDs
+		}
+	}
+
+	books, total, err := h.bookService.ListBooksWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -82,6 +99,13 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	// Keep track of what's been changed.
@@ -134,6 +158,14 @@ func (h *handler) fileCover(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	filepath := path.Join(file.Book.Filepath, c.Param("id")+file.CoverExtension())
 
 	return errors.WithStack(c.File(filepath))
@@ -151,6 +183,13 @@ func (h *handler) bookCover(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	coverImage := book.ResolveCoverImage()

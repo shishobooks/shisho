@@ -19,10 +19,11 @@ type RetrievePersonOptions struct {
 }
 
 type ListPeopleOptions struct {
-	Limit     *int
-	Offset    *int
-	LibraryID *int
-	Search    *string
+	Limit      *int
+	Offset     *int
+	LibraryID  *int
+	LibraryIDs []int // Filter by multiple library IDs (for access control)
+	Search     *string
 
 	includeTotal bool
 }
@@ -139,6 +140,9 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 
 	if opts.LibraryID != nil {
 		q = q.Where("p.library_id = ?", *opts.LibraryID)
+	}
+	if len(opts.LibraryIDs) > 0 {
+		q = q.Where("p.library_id IN (?)", bun.In(opts.LibraryIDs))
 	}
 	if opts.Search != nil && *opts.Search != "" {
 		q = q.Where("p.name LIKE ?", "%"+*opts.Search+"%")

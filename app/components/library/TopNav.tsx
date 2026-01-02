@@ -1,10 +1,26 @@
-import { BookPlus, RefreshCw, Settings } from "lucide-react";
+import {
+  BookPlus,
+  LogOut,
+  RefreshCw,
+  Settings,
+  Shield,
+  User,
+} from "lucide-react";
 import { useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import Logo from "@/components/library/Logo";
 import ThemeToggle from "@/components/library/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -13,15 +29,33 @@ import {
 } from "@/components/ui/tooltip";
 import { useCreateJob } from "@/hooks/queries/jobs";
 import { useCreateLibrary, useLibrary } from "@/hooks/queries/libraries";
+import { useAuth } from "@/hooks/useAuth";
 import { JobTypeScan } from "@/types";
 
 const TopNav = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, hasPermission } = useAuth();
   const createJobMutation = useCreateJob();
   const createLibraryMutation = useCreateLibrary();
   const isDevelopment = import.meta.env.DEV;
+
+  // Check if user has any admin permissions
+  const canAccessAdmin =
+    hasPermission("config", "read") ||
+    hasPermission("users", "read") ||
+    hasPermission("jobs", "read");
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+      toast.success("Signed out successfully");
+      navigate("/login");
+    } catch {
+      toast.error("Failed to sign out");
+    }
+  }, [logout, navigate]);
 
   // Load current library if we have a libraryId
   const libraryQuery = useLibrary(libraryId, {
@@ -80,15 +114,7 @@ const TopNav = () => {
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
-            <Link
-              className="text-xl font-bold uppercase tracking-wider text-foreground hover:opacity-80 transition-opacity"
-              to="/"
-            >
-              Shisho
-              <span className="align-super text-xs font-normal text-muted-foreground dark:text-violet-300 ml-0.5">
-                司書
-              </span>
-            </Link>
+            <Logo asLink />
             {libraryQuery.data && (
               <div className="text-sm text-muted-foreground">
                 {libraryQuery.data.name}
@@ -199,7 +225,50 @@ const TopNav = () => {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {canAccessAdmin && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      asChild
+                      className="h-9 w-9"
+                      size="icon"
+                      variant="ghost"
+                    >
+                      <Link to="/admin">
+                        <Shield className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Administration</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="h-9 w-9" size="icon" variant="ghost">
+                  <User className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span>{user?.username}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {user?.role_name}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

@@ -32,6 +32,9 @@ type Config struct {
 	SyncIntervalMinutes int `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
 	WorkerProcesses     int `koanf:"worker_processes" json:"worker_processes"`
 
+	// Authentication settings
+	JWTSecret string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
+
 	// Internal settings (computed, not from config file)
 	Hostname string `koanf:"-" json:"-"`
 }
@@ -47,6 +50,7 @@ func defaults() *Config {
 		ServerPort:                3689,
 		SyncIntervalMinutes:       60,
 		WorkerProcesses:           2,
+		JWTSecret:                 "", // Must be set via config or env var
 	}
 }
 
@@ -108,6 +112,7 @@ func NewForTest() *Config {
 	cfg.ServerPort = 0
 	cfg.Hostname = "test-host"
 	cfg.WorkerProcesses = 1
+	cfg.JWTSecret = "test-secret-key-for-testing-only"
 	return cfg
 }
 

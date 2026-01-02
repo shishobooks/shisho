@@ -2,19 +2,22 @@ package books
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
-func RegisterRoutes(e *echo.Echo, db *bun.DB) {
+// RegisterRoutesWithGroup registers book routes on a pre-configured group.
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	bookService := NewService(db)
 
 	h := &handler{
 		bookService: bookService,
 	}
 
-	e.GET("/books/:id", h.retrieve)
-	e.GET("/books", h.list)
-	e.POST("/books/:id", h.update)
-	e.GET("/books/:id/cover", h.bookCover)
-	e.GET("/files/:id/cover", h.fileCover)
+	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
+	g.GET("", h.list)
+	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.GET("/:id/cover", h.bookCover)
+	g.GET("/files/:id/cover", h.fileCover)
 }

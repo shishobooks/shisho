@@ -32,6 +32,13 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	// Get book count
 	bookCount, err := h.seriesService.GetSeriesBookCount(ctx, id)
 	if err != nil {
@@ -54,11 +61,21 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	seriesList, total, err := h.seriesService.ListSeriesWithTotal(ctx, ListSeriesOptions{
+	opts := ListSeriesOptions{
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
-	})
+	}
+
+	// Filter by user's library access if user is in context
+	if user, ok := c.Get("user").(*models.User); ok {
+		libraryIDs := user.GetAccessibleLibraryIDs()
+		if libraryIDs != nil {
+			opts.LibraryIDs = libraryIDs
+		}
+	}
+
+	seriesList, total, err := h.seriesService.ListSeriesWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -100,6 +117,13 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	// Keep track of what's been changed
@@ -148,6 +172,21 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return errcodes.NotFound("Series")
 	}
 
+	// Fetch the series to check library access
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	booksList, err := h.bookService.ListBooks(ctx, books.ListBooksOptions{
 		SeriesID: &id,
 	})
@@ -163,6 +202,21 @@ func (h *handler) seriesCover(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Series")
+	}
+
+	// Fetch the series to check library access
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	// Get the first book in the series for cover
@@ -211,6 +265,21 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Fetch the target series to check library access
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	// Merge source series into target (this) series
 	err = h.seriesService.MergeSeries(ctx, id, params.SourceID)
 	if err != nil {
@@ -225,6 +294,21 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Series")
+	}
+
+	// Fetch the series to check library access
+	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(series.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	err = h.seriesService.DeleteSeries(ctx, id)

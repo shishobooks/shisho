@@ -241,11 +241,156 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`CREATE UNIQUE INDEX ux_narrators_file_person ON narrators (file_id, person_id)`)
-		return errors.WithStack(err)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Roles and permissions
+		_, err = db.Exec(`
+			CREATE TABLE roles (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				name TEXT NOT NULL UNIQUE,
+				is_system BOOLEAN NOT NULL DEFAULT FALSE
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`
+			CREATE TABLE permissions (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				role_id INTEGER REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
+				resource TEXT NOT NULL,
+				operation TEXT NOT NULL,
+				UNIQUE (role_id, resource, operation)
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_permissions_role_id ON permissions (role_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Users
+		_, err = db.Exec(`
+			CREATE TABLE users (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+				email TEXT COLLATE NOCASE,
+				password_hash TEXT NOT NULL,
+				role_id INTEGER REFERENCES roles (id) NOT NULL,
+				is_active BOOLEAN NOT NULL DEFAULT TRUE
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_users_role_id ON users (role_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_users_email ON users (email) WHERE email IS NOT NULL`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// User library access
+		_, err = db.Exec(`
+			CREATE TABLE user_library_access (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+				library_id INTEGER REFERENCES libraries (id) ON DELETE CASCADE
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_user_library_access_user_id ON user_library_access (user_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_user_library_access_library_id ON user_library_access (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_user_library_access ON user_library_access (user_id, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Insert predefined roles
+		_, err = db.Exec(`INSERT INTO roles (name, is_system) VALUES ('admin', TRUE)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`INSERT INTO roles (name, is_system) VALUES ('viewer', TRUE)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Get role IDs
+		var adminRoleID, viewerRoleID int
+		err = db.QueryRow(`SELECT id FROM roles WHERE name = 'admin'`).Scan(&adminRoleID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		err = db.QueryRow(`SELECT id FROM roles WHERE name = 'viewer'`).Scan(&viewerRoleID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Define all resources and operations
+		resources := []string{"libraries", "books", "people", "series", "users", "jobs", "config"}
+		operations := []string{"read", "write"}
+
+		// Admin gets all permissions
+		for _, resource := range resources {
+			for _, operation := range operations {
+				_, err = db.Exec(`INSERT INTO permissions (role_id, resource, operation) VALUES (?, ?, ?)`,
+					adminRoleID, resource, operation)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+
+		// Viewer gets read-only on libraries, books, series, people
+		viewerResources := []string{"libraries", "books", "series", "people"}
+		for _, resource := range viewerResources {
+			_, err = db.Exec(`INSERT INTO permissions (role_id, resource, operation) VALUES (?, ?, 'read')`,
+				viewerRoleID, resource)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		return nil
 	}
 
 	down := func(_ context.Context, db *bun.DB) error {
-		_, err := db.Exec("DROP TABLE IF EXISTS narrators")
+		_, err := db.Exec("DROP TABLE IF EXISTS user_library_access")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS users")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS permissions")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS roles")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS narrators")
 		if err != nil {
 			return errors.WithStack(err)
 		}

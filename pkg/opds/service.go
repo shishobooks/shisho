@@ -41,8 +41,13 @@ func parseFileTypes(types string) []string {
 }
 
 // BuildCatalogFeed builds the root navigation feed listing all libraries.
-func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL, fileTypes string) (*Feed, error) {
-	libs, err := svc.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{})
+// If libraryIDs is non-nil, only libraries with those IDs are included.
+func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL, fileTypes string, libraryIDs []int) (*Feed, error) {
+	opts := libraries.ListLibrariesOptions{}
+	if libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
+	}
+	libs, err := svc.libraryService.ListLibraries(ctx, opts)
 	if err != nil {
 		return nil, err
 	}

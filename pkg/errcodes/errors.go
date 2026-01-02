@@ -102,3 +102,12 @@ func EmptyRequestBody() error {
 		"empty_request_body",
 	}
 }
+
+// Unauthorized returns a 401 error with the given message.
+func Unauthorized(msg string) error {
+	return &Error{
+		http.StatusUnauthorized,
+		msg,
+		"unauthorized",
+	}
+}
