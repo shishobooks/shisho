@@ -37,7 +37,7 @@ const Home = () => {
       book={book}
       key={book.id}
       libraryId={libraryId!}
-      showSeriesNumber={Boolean(seriesId)}
+      seriesId={seriesId}
     />
   );
 

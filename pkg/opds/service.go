@@ -520,12 +520,20 @@ func (svc *Service) bookToEntry(baseURL, _ string, _ int, book *models.Book, typ
 		entry.Summary = *book.Subtitle
 	}
 
-	// Series info
-	if book.Series != nil {
-		if book.SeriesNumber != nil {
-			entry.Summary = fmt.Sprintf("%s #%.0f", book.Series.Name, *book.SeriesNumber)
-		} else {
-			entry.Summary = book.Series.Name
+	// Series info - show all series the book belongs to
+	if len(book.BookSeries) > 0 {
+		var seriesParts []string
+		for _, bs := range book.BookSeries {
+			if bs.Series != nil {
+				if bs.SeriesNumber != nil {
+					seriesParts = append(seriesParts, fmt.Sprintf("%s #%.0f", bs.Series.Name, *bs.SeriesNumber))
+				} else {
+					seriesParts = append(seriesParts, bs.Series.Name)
+				}
+			}
+		}
+		if len(seriesParts) > 0 {
+			entry.Summary = strings.Join(seriesParts, " • ")
 		}
 	}
 

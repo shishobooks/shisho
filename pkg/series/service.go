@@ -142,7 +142,7 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		Model(&series).
 		Relation("Library").
 		ColumnExpr("s.*").
-		ColumnExpr("(SELECT COUNT(*) FROM books WHERE books.series_id = s.id) AS book_count").
+		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count").
 		Order("s.name ASC")
 
 	if opts.LibraryID != nil {
@@ -222,9 +222,9 @@ func (svc *Service) RestoreSeries(ctx context.Context, seriesID int) error {
 // MergeSeries merges sourceSeries into targetSeries (moves all books, soft-deletes source).
 func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		// Update all books from source series to target series
+		// Update all book_series entries from source series to target series
 		_, err := tx.NewUpdate().
-			Model((*models.Book)(nil)).
+			Model((*models.BookSeries)(nil)).
 			Set("series_id = ?", targetID).
 			Where("series_id = ?", sourceID).
 			Exec(ctx)
@@ -245,7 +245,7 @@ func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) err
 func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
 	result, err := svc.db.NewDelete().
 		Model((*models.Series)(nil)).
-		Where("id NOT IN (SELECT DISTINCT series_id FROM books WHERE series_id IS NOT NULL)").
+		Where("id NOT IN (SELECT DISTINCT series_id FROM book_series)").
 		Exec(ctx)
 	if err != nil {
 		return 0, errors.WithStack(err)
@@ -257,7 +257,7 @@ func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
 // GetSeriesBookCount returns the number of books in a series.
 func (svc *Service) GetSeriesBookCount(ctx context.Context, seriesID int) (int, error) {
 	count, err := svc.db.NewSelect().
-		Model((*models.Book)(nil)).
+		Model((*models.BookSeries)(nil)).
 		Where("series_id = ?", seriesID).
 		Count(ctx)
 	return count, errors.WithStack(err)

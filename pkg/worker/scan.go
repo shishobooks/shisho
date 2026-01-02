@@ -200,9 +200,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	authorSource := models.DataSourceFilepath
 	narratorNames := make([]string, 0)
 	narratorSource := models.DataSourceFilepath
-	series := ""
+	// Series data: supports multiple series per book
+	type seriesData struct {
+		name      string
+		number    *float64
+		sortOrder int
+	}
+	var seriesList []seriesData
 	seriesSource := models.DataSourceFilepath
-	var seriesNumber *float64
 	var coverMimeType *string
 	var coverSource *string
 
@@ -246,11 +251,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			narratorNames = append(narratorNames, metadata.Narrators...)
 		}
 		if metadata.Series != "" {
-			series = metadata.Series
+			seriesList = append(seriesList, seriesData{
+				name:      metadata.Series,
+				number:    metadata.SeriesNumber,
+				sortOrder: 1,
+			})
 			seriesSource = metadata.DataSource
-		}
-		if metadata.SeriesNumber != nil {
-			seriesNumber = metadata.SeriesNumber
 		}
 		if metadata.CoverMimeType != "" {
 			coverMimeType = &metadata.CoverMimeType
@@ -315,10 +321,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 				authorNames = append(authorNames, a.Name)
 			}
 		}
-		if bookSidecarData.Series != nil && bookSidecarData.Series.Name != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
-			series = bookSidecarData.Series.Name
+		if len(bookSidecarData.Series) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
 			seriesSource = models.DataSourceSidecar
-			seriesNumber = bookSidecarData.Series.Number
+			seriesList = make([]seriesData, 0, len(bookSidecarData.Series))
+			for _, s := range bookSidecarData.Series {
+				if s.Name != "" {
+					seriesList = append(seriesList, seriesData{
+						name:      s.Name,
+						number:    s.Number,
+						sortOrder: s.SortOrder,
+					})
+				}
+			}
 		}
 	}
 
@@ -352,11 +366,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 				"is_root_level":           isRootLevelFile,
 			})
 
-			// Create organized name options
+			// Create organized name options (use first series number if available)
+			var firstSeriesNumber *float64
+			if len(seriesList) > 0 {
+				firstSeriesNumber = seriesList[0].number
+			}
 			organizeOpts := fileutils.OrganizedNameOptions{
 				AuthorNames:  authorNames,
 				Title:        title,
-				SeriesNumber: seriesNumber,
+				SeriesNumber: firstSeriesNumber,
 				FileType:     fileType,
 			}
 
@@ -421,23 +439,38 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		// Update series if we have a higher priority source
 		// Get existing series source for comparison
 		var existingSeriesSource string
-		if existingBook.Series != nil {
-			existingSeriesSource = existingBook.Series.NameSource
+		if len(existingBook.BookSeries) > 0 && existingBook.BookSeries[0].Series != nil {
+			existingSeriesSource = existingBook.BookSeries[0].Series.NameSource
 		}
-		if series != "" && (existingBook.SeriesID == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
-			log.Info("updating series", logger.Data{"new_series": series, "old_series_id": existingBook.SeriesID})
-			// Find or create the series
-			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, series, libraryID, seriesSource)
+		if len(seriesList) > 0 && (len(existingBook.BookSeries) == 0 || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
+			log.Info("updating series", logger.Data{"new_series_count": len(seriesList), "old_series_count": len(existingBook.BookSeries)})
+			// Delete existing book series entries
+			err = w.bookService.DeleteBookSeries(ctx, existingBook.ID)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-			existingBook.SeriesID = &seriesRecord.ID
-			updateOptions.Columns = append(updateOptions.Columns, "series_id")
-		}
-		if seriesNumber != nil && (existingBook.SeriesID == nil || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
-			log.Info("updating series number", logger.Data{"new_series_number": *seriesNumber, "old_series_number": existingBook.SeriesNumber})
-			existingBook.SeriesNumber = seriesNumber
-			updateOptions.Columns = append(updateOptions.Columns, "series_number")
+			// Create new book series entries for each series
+			for i, s := range seriesList {
+				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, s.name, libraryID, seriesSource)
+				if err != nil {
+					log.Error("failed to find/create series", logger.Data{"series": s.name, "error": err.Error()})
+					continue
+				}
+				sortOrder := s.sortOrder
+				if sortOrder == 0 {
+					sortOrder = i + 1
+				}
+				bookSeriesEntry := &models.BookSeries{
+					BookID:       existingBook.ID,
+					SeriesID:     seriesRecord.ID,
+					SeriesNumber: s.number,
+					SortOrder:    sortOrder,
+				}
+				err = w.bookService.CreateBookSeries(ctx, bookSeriesEntry)
+				if err != nil {
+					log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
+				}
+			}
 		}
 
 		// If file was organized and we're using an existing book by file path,
@@ -478,23 +511,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
-		var seriesID *int
-		if series != "" {
-			// Find or create the series
-			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, series, libraryID, seriesSource)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			seriesID = &seriesRecord.ID
-		}
 		existingBook = &models.Book{
 			LibraryID:    libraryID,
 			Filepath:     bookPath,
 			Title:        title,
 			TitleSource:  titleSource,
 			AuthorSource: authorSource,
-			SeriesID:     seriesID,
-			SeriesNumber: seriesNumber,
 		}
 		err := w.bookService.CreateBook(ctx, existingBook)
 		if err != nil {
@@ -516,6 +538,29 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			err = w.bookService.CreateAuthor(ctx, author)
 			if err != nil {
 				log.Error("failed to create author", logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
+			}
+		}
+
+		// Create BookSeries entries for each series
+		for i, s := range seriesList {
+			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, s.name, libraryID, seriesSource)
+			if err != nil {
+				log.Error("failed to find/create series", logger.Data{"series": s.name, "error": err.Error()})
+				continue
+			}
+			sortOrder := s.sortOrder
+			if sortOrder == 0 {
+				sortOrder = i + 1
+			}
+			bookSeriesEntry := &models.BookSeries{
+				BookID:       existingBook.ID,
+				SeriesID:     seriesRecord.ID,
+				SeriesNumber: s.number,
+				SortOrder:    sortOrder,
+			}
+			err = w.bookService.CreateBookSeries(ctx, bookSeriesEntry)
+			if err != nil {
+				log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
 			}
 		}
 	}

@@ -74,15 +74,15 @@ func TestProcessScanJob_EPUBWithSeries(t *testing.T) {
 
 	book := allBooks[0]
 	assert.Equal(t, "The First Book", book.Title)
-	require.NotNil(t, book.SeriesID, "book should have a series ID")
-	require.NotNil(t, book.SeriesNumber)
-	assert.InDelta(t, 1.0, *book.SeriesNumber, 0.001)
+	require.Len(t, book.BookSeries, 1, "book should have a series")
+	require.NotNil(t, book.BookSeries[0].SeriesNumber)
+	assert.InDelta(t, 1.0, *book.BookSeries[0].SeriesNumber, 0.001)
 
 	// Verify series was created
 	allSeries := tc.listSeries()
 	require.Len(t, allSeries, 1)
 	assert.Equal(t, "Epic Series", allSeries[0].Name)
-	assert.Equal(t, *book.SeriesID, allSeries[0].ID)
+	assert.Equal(t, book.BookSeries[0].SeriesID, allSeries[0].ID)
 }
 
 func TestProcessScanJob_CBZBasic(t *testing.T) {
@@ -761,15 +761,15 @@ func TestProcessScanJob_M4BWithCover(t *testing.T) {
 	assert.Equal(t, "Audiobook With Cover", book.Title)
 
 	// Check series parsing from album
-	require.NotNil(t, book.SeriesID, "book should have a series ID")
-	require.NotNil(t, book.SeriesNumber)
-	assert.InDelta(t, 3.0, *book.SeriesNumber, 0.001)
+	require.Len(t, book.BookSeries, 1, "book should have a series")
+	require.NotNil(t, book.BookSeries[0].SeriesNumber)
+	assert.InDelta(t, 3.0, *book.BookSeries[0].SeriesNumber, 0.001)
 
 	// Verify series was created
 	allSeries := tc.listSeries()
 	require.Len(t, allSeries, 1)
 	assert.Equal(t, "Series Name", allSeries[0].Name)
-	assert.Equal(t, *book.SeriesID, allSeries[0].ID)
+	assert.Equal(t, book.BookSeries[0].SeriesID, allSeries[0].ID)
 }
 
 func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
@@ -1016,8 +1016,8 @@ func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
 	// Verify the book was linked to the correct series
 	allBooks := tc.listBooks()
 	require.Len(t, allBooks, 1)
-	require.NotNil(t, allBooks[0].SeriesID)
-	assert.Equal(t, allSeries[0].ID, *allBooks[0].SeriesID)
+	require.Len(t, allBooks[0].BookSeries, 1, "book should have a series")
+	assert.Equal(t, allSeries[0].ID, allBooks[0].BookSeries[0].SeriesID)
 }
 
 func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName(t *testing.T) {

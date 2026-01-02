@@ -11,7 +11,7 @@ type BookSidecar struct {
 	Title    string           `json:"title,omitempty"`
 	Subtitle *string          `json:"subtitle,omitempty"`
 	Authors  []AuthorMetadata `json:"authors,omitempty"`
-	Series   *SeriesMetadata  `json:"series,omitempty"`
+	Series   []SeriesMetadata `json:"series,omitempty"`
 }
 
 // FileSidecar represents the metadata sidecar for a media file.
@@ -35,6 +35,7 @@ type NarratorMetadata struct {
 
 // SeriesMetadata represents series information in the sidecar file.
 type SeriesMetadata struct {
-	Name   string   `json:"name"`
-	Number *float64 `json:"number,omitempty"`
+	Name      string   `json:"name"`
+	Number    *float64 `json:"number,omitempty"`
+	SortOrder int      `json:"sort_order,omitempty"`
 }

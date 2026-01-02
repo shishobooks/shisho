@@ -172,21 +172,27 @@ const BookDetail = () => {
                 )}
 
                 {/* Series */}
-                {book.series && book.series_id && (
+                {book.book_series && book.book_series.length > 0 && (
                   <div>
-                    <h3 className="font-semibold mb-2">Series</h3>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        className="text-sm font-medium text-violet-300 hover:text-violet-400 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
-                        to={`/libraries/${libraryId}/series/${book.series_id}`}
-                      >
-                        {book.series.name}
-                      </Link>
-                      {book.series_number && (
-                        <Badge className="text-xs" variant="outline">
-                          #{book.series_number}
-                        </Badge>
-                      )}
+                    <h3 className="font-semibold mb-2">
+                      {book.book_series.length === 1 ? "Series" : "Series"}
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {book.book_series.map((bs) => (
+                        <div className="flex items-center gap-2" key={bs.id}>
+                          <Link
+                            className="text-sm font-medium text-violet-300 hover:text-violet-400 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
+                            to={`/libraries/${libraryId}/series/${bs.series_id}`}
+                          >
+                            {bs.series?.name ?? "Unknown Series"}
+                          </Link>
+                          {bs.series_number && (
+                            <Badge className="text-xs" variant="outline">
+                              #{bs.series_number}
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

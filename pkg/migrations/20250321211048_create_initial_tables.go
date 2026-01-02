@@ -90,8 +90,6 @@ func init() {
 				subtitle TEXT,
 				subtitle_source TEXT,
 				author_source TEXT NOT NULL,
-				series_id INTEGER REFERENCES series (id),
-				series_number REAL,
 				cover_image_path TEXT
 			)
 `)
@@ -106,7 +104,27 @@ func init() {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		_, err = db.Exec(`CREATE INDEX ix_books_series_id ON books (series_id)`)
+		_, err = db.Exec(`
+			CREATE TABLE book_series (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				book_id INTEGER REFERENCES books (id) NOT NULL,
+				series_id INTEGER REFERENCES series (id) NOT NULL,
+				series_number REAL,
+				sort_order INTEGER NOT NULL
+			)
+`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_series_book_id ON book_series (book_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_series_series_id ON book_series (series_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_book_series_book_series ON book_series (book_id, series_id)`)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -244,6 +262,10 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec("DROP TABLE IF EXISTS files")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS book_series")
 		if err != nil {
 			return errors.WithStack(err)
 		}

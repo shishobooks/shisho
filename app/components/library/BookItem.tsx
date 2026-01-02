@@ -7,14 +7,14 @@ import type { Book } from "@/types";
 interface BookItemProps {
   book: Book;
   libraryId: string;
-  showSeriesNumber?: boolean;
+  seriesId?: number;
 }
 
-const BookItem = ({
-  book,
-  libraryId,
-  showSeriesNumber = false,
-}: BookItemProps) => {
+const BookItem = ({ book, libraryId, seriesId }: BookItemProps) => {
+  // Find the series number for the specific series context (if provided)
+  const seriesNumber = seriesId
+    ? book.book_series?.find((bs) => bs.series_id === seriesId)?.series_number
+    : undefined;
   return (
     <div className="w-32" key={book.id}>
       <Link
@@ -49,10 +49,10 @@ const BookItem = ({
           ))}
         </div>
       )}
-      {showSeriesNumber && book.series_number && (
+      {seriesNumber && (
         <div className="mt-1">
           <Badge className="text-xs" variant="outline">
-            #{book.series_number}
+            #{seriesNumber}
           </Badge>
         </div>
       )}

@@ -150,13 +150,15 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 		}
 	}
 
-	// Convert series
-	if book.Series != nil || book.SeriesNumber != nil {
-		s.Series = &SeriesMetadata{}
-		if book.Series != nil {
-			s.Series.Name = book.Series.Name
+	// Convert series from BookSeries
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil {
+			s.Series = append(s.Series, SeriesMetadata{
+				Name:      bs.Series.Name,
+				Number:    bs.SeriesNumber,
+				SortOrder: bs.SortOrder,
+			})
 		}
-		s.Series.Number = book.SeriesNumber
 	}
 
 	return s

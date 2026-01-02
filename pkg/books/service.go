@@ -125,6 +125,10 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Authors.Person").
+		Relation("BookSeries", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("bs.sort_order ASC")
+		}).
+		Relation("BookSeries.Series").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
 		}).
@@ -166,6 +170,10 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Authors.Person").
+		Relation("BookSeries", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("bs.sort_order ASC")
+		}).
+		Relation("BookSeries.Series").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.filepath ASC")
 		}).
@@ -210,6 +218,10 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Authors.Person").
+		Relation("BookSeries", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("bs.sort_order ASC")
+		}).
+		Relation("BookSeries.Series").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
 		}).
@@ -235,7 +247,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
 	}
 	if opts.SeriesID != nil {
-		q = q.Where("b.series_id = ?", *opts.SeriesID)
+		q = q.Where("b.id IN (SELECT book_id FROM book_series WHERE series_id = ?)", *opts.SeriesID)
 	}
 
 	// Filter by file types
@@ -448,8 +460,9 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 	err := svc.db.
 		NewSelect().
 		Model(&book).
-		Where("series_id = ?", seriesID).
-		Order("series_number ASC", "title ASC").
+		Join("INNER JOIN book_series bs ON bs.book_id = b.id").
+		Where("bs.series_id = ?", seriesID).
+		Order("bs.series_number ASC", "b.title ASC").
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -502,11 +515,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		}
 	}
 
+	// Get series number from first BookSeries entry (if any)
+	var seriesNumber *float64
+	if len(book.BookSeries) > 0 {
+		seriesNumber = book.BookSeries[0].SeriesNumber
+	}
+
 	// Create organized name options from current book metadata
 	organizeOpts := fileutils.OrganizedNameOptions{
 		AuthorNames:  authorNames,
 		Title:        book.Title,
-		SeriesNumber: book.SeriesNumber,
+		SeriesNumber: seriesNumber,
 	}
 
 	// Track path updates for database
@@ -651,4 +670,40 @@ func (svc *Service) DeleteNarrators(ctx context.Context, fileID int) error {
 		Where("file_id = ?", fileID).
 		Exec(ctx)
 	return errors.WithStack(err)
+}
+
+// CreateBookSeries creates a book-series association.
+func (svc *Service) CreateBookSeries(ctx context.Context, bookSeries *models.BookSeries) error {
+	_, err := svc.db.
+		NewInsert().
+		Model(bookSeries).
+		Returning("*").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteBookSeries deletes all series associations for a book.
+func (svc *Service) DeleteBookSeries(ctx context.Context, bookID int) error {
+	_, err := svc.db.
+		NewDelete().
+		Model((*models.BookSeries)(nil)).
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// GetBookSeriesForBook returns all series associations for a book.
+func (svc *Service) GetBookSeriesForBook(ctx context.Context, bookID int) ([]*models.BookSeries, error) {
+	var bookSeries []*models.BookSeries
+	err := svc.db.
+		NewSelect().
+		Model(&bookSeries).
+		Relation("Series").
+		Where("bs.book_id = ?", bookID).
+		Order("bs.sort_order ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return bookSeries, nil
 }
