@@ -8,14 +8,17 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 type handler struct {
 	seriesService *Service
 	bookService   *books.Service
+	searchService *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -65,6 +68,7 @@ func (h *handler) list(c echo.Context) error {
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
+		Search:    params.Search,
 	}
 
 	// Filter by user's library access if user is in context
@@ -152,6 +156,12 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Update FTS index for this series
+	log := logger.FromContext(ctx)
+	if err := h.searchService.IndexSeries(ctx, series); err != nil {
+		log.Warn("failed to update search index for series", logger.Data{"series_id": series.ID, "error": err.Error()})
 	}
 
 	// Get book count
@@ -314,6 +324,12 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	err = h.seriesService.DeleteSeries(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Remove from FTS index
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromSeriesIndex(ctx, id); err != nil {
+		log.Warn("failed to remove series from search index", logger.Data{"series_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)

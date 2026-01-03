@@ -69,7 +69,7 @@ const UserSettings = () => {
 
     try {
       await resetPasswordMutation.mutateAsync({
-        id: user!.id,
+        id: String(user!.id),
         payload: {
           current_password: currentPassword,
           new_password: newPassword,

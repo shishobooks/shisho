@@ -13,6 +13,7 @@ import { useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import GlobalSearch from "@/components/library/GlobalSearch";
 import Logo from "@/components/library/Logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -225,7 +226,8 @@ const TopNav = () => {
               </nav>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <GlobalSearch />
             {canAccessAdmin && (
               <TooltipProvider>
                 <Tooltip>

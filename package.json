@@ -12,7 +12,7 @@
     "lint": "yarn lint:eslint && yarn lint:types && yarn lint:prettier",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:prettier": "prettier --check .",
-    "lint:types": "tsc --noEmit",
+    "lint:types": "tsc -b --noEmit",
     "preview": "vite preview",
     "start": "vite"
   },

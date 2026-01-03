@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
 BUILD_DIR ?= ./build/api
+DOCKER_TAG ?= latest
 
 GO_TOOLS = \
 	github.com/DarthSim/hivemind \
@@ -34,6 +35,10 @@ db\:migrate\:create:
 .PHONY: db\:rollback
 db\:rollback:
 	CONFIG_FILE=./shisho.dev.yaml go run ./cmd/migrations rollback
+
+.PHONY: docker
+docker:
+	docker build -t shisho:$(DOCKER_TAG) .
 
 .PHONY: lint
 lint: $(BUILD_DIR)/golangci-lint

@@ -128,6 +128,17 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 		log.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
 	}
 
+	// Rebuild FTS indexes after scan completes
+	if w.searchService != nil {
+		log.Info("rebuilding search indexes")
+		err = w.searchService.RebuildAllIndexes(ctx)
+		if err != nil {
+			log.Err(err).Error("failed to rebuild search indexes")
+		} else {
+			log.Info("search indexes rebuilt successfully")
+		}
+	}
+
 	log.Info("finished scan job")
 	return nil
 }

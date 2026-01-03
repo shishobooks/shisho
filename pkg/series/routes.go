@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -12,10 +13,12 @@ import (
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	seriesService := NewService(db)
 	bookService := books.NewService(db)
+	searchService := search.NewService(db)
 
 	h := &handler{
 		seriesService: seriesService,
 		bookService:   bookService,
+		searchService: searchService,
 	}
 
 	g.GET("", h.list)

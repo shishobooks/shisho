@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ type Worker struct {
 	jobService     *jobs.Service
 	libraryService *libraries.Service
 	personService  *people.Service
+	searchService  *search.Service
 	seriesService  *series.Service
 
 	queue          chan *models.Job
@@ -44,6 +46,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 	jobService := jobs.NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
+	searchService := search.NewService(db)
 	seriesService := series.NewService(db)
 
 	w := &Worker{
@@ -54,6 +57,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		jobService:     jobService,
 		libraryService: libraryService,
 		personService:  personService,
+		searchService:  searchService,
 		seriesService:  seriesService,
 
 		queue:          make(chan *models.Job, cfg.WorkerProcesses),

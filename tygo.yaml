@@ -38,3 +38,15 @@ packages:
     output_path: "app/types/generated/roles.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/search"
+    output_path: "app/types/generated/search.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/series"
+    output_path: "app/types/generated/series.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/people"
+    output_path: "app/types/generated/people.ts"
+    include_files:
+      - validators.go

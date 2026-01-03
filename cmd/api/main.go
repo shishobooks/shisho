@@ -28,6 +28,12 @@ func main() {
 		log.Err(err).Fatal("database error")
 	}
 
+	// Check that FTS5 is available before running migrations
+	err = database.CheckFTS5Support(db)
+	if err != nil {
+		log.Err(err).Fatal("FTS5 check failed")
+	}
+
 	group, err := migrations.BringUpToDate(ctx, db)
 	if err != nil {
 		log.Err(err).Fatal("migrations error")

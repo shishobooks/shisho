@@ -259,10 +259,12 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(opts.FileTypes))
 	}
 
-	// Search by title or author
+	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {
-		searchTerm := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("(LOWER(b.title) LIKE ? OR b.id IN (SELECT a.book_id FROM authors a JOIN persons p ON a.person_id = p.id WHERE LOWER(p.name) LIKE ?))", searchTerm, searchTerm)
+		ftsQuery := buildFTSPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("b.id IN (SELECT book_id FROM books_fts WHERE books_fts MATCH ?)", ftsQuery)
+		}
 	}
 
 	if opts.includeTotal {
@@ -714,4 +716,25 @@ func (svc *Service) GetBookSeriesForBook(ctx context.Context, bookID int) ([]*mo
 		return nil, errors.WithStack(err)
 	}
 	return bookSeries, nil
+}
+
+// buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.
+// It sanitizes the input to prevent FTS5 injection and appends a wildcard.
+func buildFTSPrefixQuery(input string) string {
+	const maxQueryLength = 100
+
+	// Trim and limit length
+	input = strings.TrimSpace(input)
+	if len(input) > maxQueryLength {
+		input = input[:maxQueryLength]
+	}
+	if input == "" {
+		return ""
+	}
+
+	// Escape double quotes (used for phrase matching in FTS5)
+	input = strings.ReplaceAll(input, `"`, `""`)
+
+	// Wrap in double quotes and add prefix wildcard: "query"*
+	return `"` + input + `"*`
 }

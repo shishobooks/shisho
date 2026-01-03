@@ -12,11 +12,13 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
 type handler struct {
-	bookService *Service
+	bookService   *Service
+	searchService *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -57,6 +59,8 @@ func (h *handler) list(c echo.Context) error {
 		Offset:    &params.Offset,
 		LibraryID: params.LibraryID,
 		SeriesID:  params.SeriesID,
+		Search:    params.Search,
+		FileTypes: params.FileTypes,
 	}
 
 	// Filter by user's library access if user is in context
@@ -140,6 +144,11 @@ func (h *handler) update(c echo.Context) error {
 		if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
 			log.Warn("failed to write file sidecar", logger.Data{"file_id": file.ID, "error": err.Error()})
 		}
+	}
+
+	// Update FTS index for this book
+	if err := h.searchService.IndexBook(ctx, book); err != nil {
+		log.Warn("failed to update search index for book", logger.Data{"book_id": book.ID, "error": err.Error()})
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, book))

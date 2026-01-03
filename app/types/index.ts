@@ -6,3 +6,6 @@ export * from "./generated/libraries";
 export * from "./generated/auth";
 export * from "./generated/users";
 export * from "./generated/roles";
+export * from "./generated/search";
+export * from "./generated/series";
+export * from "./generated/people";

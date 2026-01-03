@@ -144,8 +144,12 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("p.library_id IN (?)", bun.In(opts.LibraryIDs))
 	}
+	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {
-		q = q.Where("p.name LIKE ?", "%"+*opts.Search+"%")
+		ftsQuery := buildFTSPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("p.id IN (SELECT person_id FROM persons_fts WHERE persons_fts MATCH ?)", ftsQuery)
+		}
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
@@ -337,4 +341,25 @@ func GenerateSortName(name string) string {
 	firstName := strings.Join(parts[:len(parts)-1], " ")
 
 	return lastName + ", " + firstName
+}
+
+// buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.
+// It sanitizes the input to prevent FTS5 injection and appends a wildcard.
+func buildFTSPrefixQuery(input string) string {
+	const maxQueryLength = 100
+
+	// Trim and limit length
+	input = strings.TrimSpace(input)
+	if len(input) > maxQueryLength {
+		input = input[:maxQueryLength]
+	}
+	if input == "" {
+		return ""
+	}
+
+	// Escape double quotes (used for phrase matching in FTS5)
+	input = strings.ReplaceAll(input, `"`, `""`)
+
+	// Wrap in double quotes and add prefix wildcard: "query"*
+	return `"` + input + `"*`
 }

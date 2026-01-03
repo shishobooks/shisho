@@ -60,8 +60,16 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 
 const AdminUsers = () => {
   const { hasPermission } = useAuth();
-  const { data: usersData, isLoading: usersLoading, error: usersError } = useUsers();
-  const { data: rolesData, isLoading: rolesLoading, error: rolesError } = useRoles();
+  const {
+    data: usersData,
+    isLoading: usersLoading,
+    error: usersError,
+  } = useUsers();
+  const {
+    data: rolesData,
+    isLoading: rolesLoading,
+    error: rolesError,
+  } = useRoles();
 
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);

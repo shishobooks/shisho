@@ -13,11 +13,11 @@ COPY go.mod go.sum tools.go Makefile ./
 RUN go mod download
 
 # Install tygo using version from go.mod/go.sum
+COPY tygo.yaml ./
 RUN make SHELL=/bin/ash ./build/api/tygo
 
 # Copy source files needed for type generation
 COPY pkg/ ./pkg/
-COPY tygo.yaml ./
 
 # Generate TypeScript types
 RUN make SHELL=/bin/ash tygo

@@ -14,8 +14,9 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
+import { useDebounce } from "@/hooks/useDebounce";
 
-const ITEMS_PER_PAGE = 25;
+const ITEMS_PER_PAGE = 24;
 
 const PersonList = () => {
   const { libraryId } = useParams();
@@ -23,28 +24,35 @@ const PersonList = () => {
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const searchQuery = searchParams.get("search") ?? "";
   const [searchInput, setSearchInput] = useState(searchQuery);
+  const debouncedSearch = useDebounce(searchInput, 300);
 
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
+
+  // Handle search input change with debounce
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    // Update URL after debounce
+    setTimeout(() => {
+      if (value !== searchQuery) {
+        const newParams = new URLSearchParams(searchParams);
+        if (value) {
+          newParams.set("search", value);
+        } else {
+          newParams.delete("search");
+        }
+        newParams.set("page", "1");
+        setSearchParams(newParams);
+      }
+    }, 300);
+  };
 
   const peopleQuery = usePeopleList({
     limit,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
-    search: searchQuery || undefined,
+    search: debouncedSearch || undefined,
   });
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newParams = new URLSearchParams(searchParams);
-    if (searchInput) {
-      newParams.set("search", searchInput);
-    } else {
-      newParams.delete("search");
-    }
-    newParams.set("page", "1");
-    setSearchParams(newParams);
-  };
 
   const totalPages = Math.ceil((peopleQuery.data?.total ?? 0) / ITEMS_PER_PAGE);
 
@@ -95,15 +103,15 @@ const PersonList = () => {
           </p>
         </div>
 
-        <form className="mb-6" onSubmit={handleSearch}>
+        <div className="mb-6">
           <Input
             className="max-w-md"
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search by name..."
             type="search"
             value={searchInput}
           />
-        </form>
+        </div>
 
         {peopleQuery.isLoading && <LoadingSpinner />}
 

@@ -1,5 +1,4 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import type { PermissionInput } from "@/types";
 import {
   OperationRead,
   OperationWrite,
@@ -10,6 +9,7 @@ import {
   ResourcePeople,
   ResourceSeries,
   ResourceUsers,
+  type PermissionInput,
 } from "@/types";
 
 // Define available resources with display names

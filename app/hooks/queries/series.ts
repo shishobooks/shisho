@@ -13,6 +13,7 @@ export interface ListSeriesQuery {
   limit?: number;
   offset?: number;
   library_id?: number;
+  search?: string;
 }
 
 export interface ListSeriesData {

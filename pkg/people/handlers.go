@@ -6,12 +6,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 type handler struct {
 	personService *Service
+	searchService *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -159,6 +162,12 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Update FTS index for this person
+	log := logger.FromContext(ctx)
+	if err := h.searchService.IndexPerson(ctx, person); err != nil {
+		log.Warn("failed to update search index for person", logger.Data{"person_id": person.ID, "error": err.Error()})
+	}
+
 	// Get counts
 	authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, id)
 	narratedCount, _ := h.personService.GetNarratedFileCount(ctx, id)
@@ -293,6 +302,12 @@ func (h *handler) deletePerson(c echo.Context) error {
 	err = h.personService.DeletePerson(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Remove from FTS index
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromPersonIndex(ctx, id); err != nil {
+		log.Warn("failed to remove person from search index", logger.Data{"person_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)

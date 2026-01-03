@@ -22,7 +22,8 @@ type ListSeriesOptions struct {
 	Limit      *int
 	Offset     *int
 	LibraryID  *int
-	LibraryIDs []int // Filter by multiple library IDs (for access control)
+	LibraryIDs []int   // Filter by multiple library IDs (for access control)
+	Search     *string // FTS5 search query
 
 	includeTotal bool
 }
@@ -152,6 +153,13 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("s.library_id IN (?)", bun.In(opts.LibraryIDs))
 	}
+	// Search using FTS5
+	if opts.Search != nil && *opts.Search != "" {
+		ftsQuery := buildFTSPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("s.id IN (SELECT series_id FROM series_fts WHERE series_fts MATCH ?)", ftsQuery)
+		}
+	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
 	}
@@ -265,4 +273,25 @@ func (svc *Service) GetSeriesBookCount(ctx context.Context, seriesID int) (int, 
 		Where("series_id = ?", seriesID).
 		Count(ctx)
 	return count, errors.WithStack(err)
+}
+
+// buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.
+// It sanitizes the input to prevent FTS5 injection and appends a wildcard.
+func buildFTSPrefixQuery(input string) string {
+	const maxQueryLength = 100
+
+	// Trim and limit length
+	input = strings.TrimSpace(input)
+	if len(input) > maxQueryLength {
+		input = input[:maxQueryLength]
+	}
+	if input == "" {
+		return ""
+	}
+
+	// Escape double quotes (used for phrase matching in FTS5)
+	input = strings.ReplaceAll(input, `"`, `""`)
+
+	// Wrap in double quotes and add prefix wildcard: "query"*
+	return `"` + input + `"*`
 }

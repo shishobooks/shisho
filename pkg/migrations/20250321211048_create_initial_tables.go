@@ -370,11 +370,78 @@ func init() {
 			}
 		}
 
+		// FTS5 virtual tables for full-text search
+		// Books FTS (denormalized for search performance)
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE books_fts USING fts5(
+				book_id UNINDEXED,
+				library_id UNINDEXED,
+				title,
+				filepath,
+				subtitle,
+				authors,
+				filenames,
+				narrators,
+				series_names,
+				tokenize='unicode61',
+				prefix='2,3'
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Series FTS
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE series_fts USING fts5(
+				series_id UNINDEXED,
+				library_id UNINDEXED,
+				name,
+				description,
+				book_titles,
+				book_authors,
+				tokenize='unicode61',
+				prefix='2,3'
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Persons FTS
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE persons_fts USING fts5(
+				person_id UNINDEXED,
+				library_id UNINDEXED,
+				name,
+				sort_name,
+				tokenize='unicode61',
+				prefix='2,3'
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		return nil
 	}
 
 	down := func(_ context.Context, db *bun.DB) error {
-		_, err := db.Exec("DROP TABLE IF EXISTS user_library_access")
+		// Drop FTS5 tables first
+		_, err := db.Exec("DROP TABLE IF EXISTS persons_fts")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS series_fts")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS books_fts")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = db.Exec("DROP TABLE IF EXISTS user_library_access")
 		if err != nil {
 			return errors.WithStack(err)
 		}

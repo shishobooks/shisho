@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/opds"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/roles"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/users"
 	"github.com/uptrace/bun"
@@ -107,6 +108,11 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Midd
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
 	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware)
+
+	// Search routes (requires read access to books, series, and people)
+	searchGroup := e.Group("/search")
+	searchGroup.Use(authMiddleware.Authenticate)
+	search.RegisterRoutesWithGroup(searchGroup, db)
 }
 
 func notFoundHandler(c echo.Context) error {
