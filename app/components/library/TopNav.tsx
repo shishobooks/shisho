@@ -125,8 +125,8 @@ const TopNav = () => {
                 <Button
                   className={`h-9 ${
                     isBooksActive
-                      ? "bg-violet-300 text-neutral-900 hover:bg-violet-400 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-violet-300 dark:hover:text-violet-300"
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-primary dark:hover:text-violet-300"
                   }`}
                   onClick={() => {
                     // Clear series filter when clicking Books
@@ -140,8 +140,8 @@ const TopNav = () => {
                   asChild
                   className={`h-9 ${
                     isSeriesActive
-                      ? "bg-violet-300 text-neutral-900 hover:bg-violet-400 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-violet-300 dark:hover:text-violet-300"
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-primary dark:hover:text-violet-300"
                   }`}
                   variant={isSeriesActive ? "default" : "ghost"}
                 >
@@ -151,8 +151,8 @@ const TopNav = () => {
                   asChild
                   className={`h-9 ${
                     isPeopleActive
-                      ? "bg-violet-300 text-neutral-900 hover:bg-violet-400 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-violet-300 dark:hover:text-violet-300"
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-primary dark:hover:text-violet-300"
                   }`}
                   variant={isPeopleActive ? "default" : "ghost"}
                 >

@@ -8,7 +8,7 @@ export interface ThemeContextState {
 }
 
 export const ThemeContext = createContext<ThemeContextState>({
-  theme: "system",
+  theme: "dark",
   setTheme: () => {},
 });
 

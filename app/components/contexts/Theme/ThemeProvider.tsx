@@ -10,7 +10,7 @@ interface Props {
 
 const ThemeProvider = ({
   children,
-  defaultTheme = "system",
+  defaultTheme = "dark",
   storageKey = "ui-theme",
 }: Props) => {
   const [theme, setTheme] = useState<Theme>(

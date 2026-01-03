@@ -26,7 +26,7 @@ const Logo = ({ asLink = false, className, size = "md" }: LogoProps) => {
       Shisho
       <span
         className={cn(
-          "align-super font-normal text-muted-foreground dark:text-violet-300 ml-0.5",
+          "align-super font-normal text-primary dark:text-violet-300 ml-0.5",
           superscriptSizeClasses[size],
         )}
       >

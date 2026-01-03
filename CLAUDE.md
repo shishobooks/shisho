@@ -9,8 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make start` - Start development environment with Hivemind (both API and web)
 - `make start:air` - Start API with hot reload via Air
 - `make lint` - Run Go linting with golangci-lint
-- `make test` - Run Go tests with race detection and coverage
-- `TZ=America/Chicago CI=true go test -race ./pkg/... -coverprofile coverage.out` - Run all tests
+- `make test` - Run all Go tests with race detection and coverage
 
 ### Frontend (React/TypeScript)
 - `yarn start` - Start Vite dev server
@@ -59,7 +58,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Generates cover images with filename-based storage strategy
 
 **Cover Image System**:
-- Individual file covers: `{filename}_cover.{ext}`
+- Individual file covers: `{filename}.cover.{ext}`
 - Canonical covers: `cover.{ext}` (book priority) or `audiobook_cover.{ext}` (fallback)
 - Book model has `ResolveCoverImage()` method that finds covers dynamically
 - API endpoints: `/books/{id}/cover` (canonical) and `/files/{id}/cover` (individual)
@@ -68,6 +67,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Metadata sources ranked: Manual > EPUB > M4B > Filepath
 - Lower priority number = higher precedence
 - Used to determine which metadata to keep when conflicts occur
+
+**OPDS**:
+- There is an OPDS v1.2 server hosted in the application
+- As new functionality is added, it's important to keep the OPDS server up-to-date with the new features
+
+**Authentication**:
+- RBAC is used throughout the app
+- Authn and authz needs to be considered for all pieces of functionality
+- Both frontend and backend checks need to be made so that everything is protected on all fronts
 
 ### Frontend Architecture
 
@@ -105,7 +113,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - Run `make tygo` after changing Go structs to update TypeScript types
-- Always run `make lint` and `yarn lint` before committing
+- Always run `make lint`, `make test`, and `yarn lint` before committing
 
 ### Testing Strategy
 
@@ -116,3 +124,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - To generate types, run `make tygo`. If it says that ``make: Nothing to be done for `tygo'.``, that means the types are already up-to-date.
 - Add shadcn components using `npx shadcn@latest add`.
 - You never have to run tygo manually. It is run as part of `make start`, so if that's running in the background, then it should already have run `make tygo`. If you see that new types haven't been generated, check the logs of `make start` to see if `make tygo` failed.
+- Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.

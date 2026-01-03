@@ -181,7 +181,7 @@ const BookDetail = () => {
                       {book.book_series.map((bs) => (
                         <div className="flex items-center gap-2" key={bs.id}>
                           <Link
-                            className="text-sm font-medium text-violet-300 hover:text-violet-400 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
+                            className="text-sm font-medium text-primary hover:text-primary/80 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
                             to={`/libraries/${libraryId}/series/${bs.series_id}`}
                           >
                             {bs.series?.name ?? "Unknown Series"}
@@ -237,7 +237,7 @@ const BookDetail = () => {
                   <div className="space-y-3">
                     {book.files.map((file) => (
                       <div
-                        className="border-l-4 border-l-violet-300 dark:border-l-violet-300 pl-4 py-2 space-y-2"
+                        className="border-l-4 border-l-primary dark:border-l-violet-300 pl-4 py-2 space-y-2"
                         key={file.id}
                       >
                         <div className="flex items-center justify-between gap-4">

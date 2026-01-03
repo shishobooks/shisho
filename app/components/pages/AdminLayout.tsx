@@ -19,7 +19,7 @@ const NavItem = ({ to, icon, label, isActive }: NavItemProps) => (
   <Link
     className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
       isActive
-        ? "bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
+        ? "bg-primary/10 text-primary dark:bg-violet-900/30 dark:text-violet-300"
         : "text-muted-foreground hover:bg-muted hover:text-foreground"
     }`}
     to={to}
