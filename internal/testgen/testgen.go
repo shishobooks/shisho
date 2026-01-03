@@ -34,9 +34,11 @@ type CBZOptions struct {
 // M4BOptions configures the generated M4B file.
 type M4BOptions struct {
 	Title    string
-	Artist   string // Author
-	Album    string // Series/Grouping (e.g., "Series Name #7")
-	Duration float64
+	Artist   string  // Author
+	Album    string  // Series/Grouping (e.g., "Series Name #7")
+	Composer string  // Narrator
+	Genre    string  // Genre text
+	Duration float64 // Duration in seconds
 	HasCover bool
 }
 

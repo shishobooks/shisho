@@ -2,94 +2,57 @@ package mp4
 
 import (
 	"os"
-	"regexp"
-	"strconv"
-	"strings"
 
-	"github.com/dhowden/tag"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// Parse reads metadata from an M4B/MP4 file and returns it in the
+// mediafile.ParsedMetadata format for compatibility with the existing scanner.
 func Parse(path string) (*mediafile.ParsedMetadata, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	defer f.Close()
-
-	m, err := tag.ReadFrom(f)
+	// Read raw metadata using go-mp4
+	raw, err := readMetadata(path)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	authors := make([]string, 0)
-	if m.Artist() != "" {
-		artists := strings.Split(m.Artist(), ",")
-		for _, artist := range artists {
-			authors = append(authors, strings.TrimSpace(artist))
-		}
-	}
+	// Convert to the full Metadata struct (which does series parsing, etc.)
+	meta := convertRawMetadata(raw)
 
-	narrators := make([]string, 0)
-	if m.Composer() != "" {
-		composers := strings.Split(m.Composer(), ",")
-		for _, composer := range composers {
-			narrators = append(narrators, strings.TrimSpace(composer))
-		}
-	}
-
-	coverMimeType := ""
-	var coverData []byte
-
-	raw := m.Raw()
-	if p, ok := raw["covr"]; ok {
-		if picture, ok := p.(*tag.Picture); ok {
-			coverMimeType = picture.MIMEType
-			coverData = picture.Data
-		}
-	}
-
-	// Parse series information from the Grouping tag
-	var series string
-	var seriesNumber *float64
-	if grouping := m.Album(); grouping != "" {
-		// Try to extract from Album tag which often contains grouping info
-		if parsed := parseSeriesFromGrouping(grouping); parsed.series != "" {
-			series = parsed.series
-			seriesNumber = parsed.number
-		}
-	}
-
+	// Convert to the mediafile.ParsedMetadata format
 	return &mediafile.ParsedMetadata{
-		Title:         m.Title(),
-		Authors:       authors,
-		Narrators:     narrators,
-		Series:        series,
-		SeriesNumber:  seriesNumber,
-		CoverMimeType: coverMimeType,
-		CoverData:     coverData,
+		Title:         meta.Title,
+		Authors:       meta.Authors,
+		Narrators:     meta.Narrators,
+		Series:        meta.Series,
+		SeriesNumber:  meta.SeriesNumber,
+		CoverMimeType: meta.CoverMimeType,
+		CoverData:     meta.CoverData,
 		DataSource:    models.DataSourceM4BMetadata,
 	}, nil
 }
 
-type seriesInfo struct {
-	series string
-	number *float64
-}
-
-func parseSeriesFromGrouping(grouping string) seriesInfo {
-	// Handle patterns like "Dungeon Crawler Carl #7"
-	re := regexp.MustCompile(`^(.+?)\s*#(\d+(?:\.\d+)?)$`)
-	if matches := re.FindStringSubmatch(grouping); len(matches) == 3 {
-		seriesName := strings.TrimSpace(matches[1])
-		if num, err := strconv.ParseFloat(matches[2], 64); err == nil {
-			return seriesInfo{series: seriesName, number: &num}
-		}
-		return seriesInfo{series: seriesName, number: nil}
+// ParseFull reads complete metadata from an M4B/MP4 file including
+// duration, chapters, and other extended information.
+func ParseFull(path string) (*Metadata, error) {
+	// Read raw metadata using go-mp4
+	raw, err := readMetadata(path)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
-	// If no pattern matches, return empty
-	return seriesInfo{}
+	// Convert to the full Metadata struct
+	meta := convertRawMetadata(raw)
+
+	// Calculate bitrate if we have duration
+	if meta.Duration > 0 {
+		fi, err := os.Stat(path)
+		if err == nil {
+			// Bitrate in kbps = (file size in bytes * 8) / (duration in seconds * 1000)
+			meta.Bitrate = int(fi.Size() * 8 / int64(meta.Duration.Seconds()) / 1000)
+		}
+	}
+
+	return meta, nil
 }

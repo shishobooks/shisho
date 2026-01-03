@@ -73,6 +73,12 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 	if opts.Album != "" {
 		args = append(args, "-metadata", "album="+opts.Album)
 	}
+	if opts.Composer != "" {
+		args = append(args, "-metadata", "composer="+opts.Composer)
+	}
+	if opts.Genre != "" {
+		args = append(args, "-metadata", "genre="+opts.Genre)
+	}
 
 	// Add mapping if we have cover
 	if hasCover {
