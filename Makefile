@@ -24,16 +24,16 @@ build\:air:
 
 .PHONY: db\:migrate
 db\:migrate:
-	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations init
-	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations migrate
+	CONFIG_FILE=./shisho.dev.yaml go run ./cmd/migrations init
+	CONFIG_FILE=./shisho.dev.yaml go run ./cmd/migrations migrate
 
 .PHONY: db\:migrate\:create
 db\:migrate\:create:
-	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations create $(name)
+	CONFIG_FILE=./shisho.dev.yaml go run ./cmd/migrations create $(name)
 
 .PHONY: db\:rollback
 db\:rollback:
-	CONFIG_DIRECTORY=./tmp/config go run ./cmd/migrations rollback
+	CONFIG_FILE=./shisho.dev.yaml go run ./cmd/migrations rollback
 
 .PHONY: lint
 lint: $(BUILD_DIR)/golangci-lint
