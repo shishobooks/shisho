@@ -1151,6 +1151,58 @@ func TestProcessScanJob_TitleFallbackRootLevelWithMultipleBrackets(t *testing.T)
 	assert.Equal(t, "Author", book.Authors[0].Person.Name)
 }
 
+func TestProcessScanJob_VolumeNormalization_BareNumbers(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create root-level CBZ files with bare numbers (no # or v prefix)
+	// These should be organized with normalized volume numbers
+	testgen.GenerateCBZ(t, libraryPath, "[Author] Title 1.cbz", testgen.CBZOptions{
+		HasComicInfo: false, // No metadata, title comes from filename
+		PageCount:    3,
+	})
+	testgen.GenerateCBZ(t, libraryPath, "[Author] Title 2.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 2)
+
+	// Find the books by volume number
+	var book1, book2 *models.Book
+	for _, book := range allBooks {
+		switch book.Title {
+		case "Title v1":
+			book1 = book
+		case "Title v2":
+			book2 = book
+		}
+	}
+
+	require.NotNil(t, book1, "should have book with title 'Title v1'")
+	require.NotNil(t, book2, "should have book with title 'Title v2'")
+
+	// Verify files were organized into proper folders
+	organizedFolder1 := filepath.Join(libraryPath, "[Author] Title v1")
+	organizedFolder2 := filepath.Join(libraryPath, "[Author] Title v2")
+
+	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder for v1 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder for v2 should exist")
+
+	// Verify files are in the organized folders
+	organizedFile1 := filepath.Join(organizedFolder1, "[Author] Title v1.cbz")
+	organizedFile2 := filepath.Join(organizedFolder2, "[Author] Title v2.cbz")
+
+	assert.True(t, testgen.FileExists(organizedFile1), "organized file v1 should exist")
+	assert.True(t, testgen.FileExists(organizedFile2), "organized file v2 should exist")
+}
+
 func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
 	testgen.SkipIfNoFFmpeg(t)
 

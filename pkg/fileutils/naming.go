@@ -135,11 +135,13 @@ func NormalizeVolumeInTitle(title string, fileType string) (string, bool) {
 	}
 
 	// Patterns to match various volume indicators
+	// Order matters: more specific patterns (with prefixes) should come before bare numbers
 	volumePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`),      // matches "#001", "#7", "#7.5"
-		regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`),      // matches "v12", "v7.5"
-		regexp.MustCompile(`(?i)\s*vol(\d+(?:\.\d+)?)\s*$`),    // matches "vol12", "vol7.5"
-		regexp.MustCompile(`(?i)\s*volume(\d+(?:\.\d+)?)\s*$`), // matches "volume12", "volume7.5"
+		regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`),         // matches "#001", "#7", "#7.5"
+		regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`),         // matches "v12", "v7.5"
+		regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), // matches "vol12", "vol.12", "vol 12"
+		regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), // matches "volume12", "volume 12"
+		regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`),              // matches bare numbers like "Title 1", "Title 2"
 	}
 
 	for _, pattern := range volumePatterns {
