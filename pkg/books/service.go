@@ -407,6 +407,10 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 	q := svc.db.
 		NewSelect().
 		Model(&files).
+		Relation("Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Narrators.Person").
 		Order("f.created_at ASC")
 
 	if opts.Limit != nil {

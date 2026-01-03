@@ -151,7 +151,7 @@ func validateConfig(cfg *Config) error {
 }
 
 // toSnakeCase converts PascalCase to snake_case, handling acronyms properly.
-// e.g., "JWTSecret" -> "jwt_secret", "DatabaseFilePath" -> "database_file_path"
+// e.g., "JWTSecret" -> "jwt_secret", "DatabaseFilePath" -> "database_file_path".
 func toSnakeCase(s string) string {
 	var result strings.Builder
 	runes := []rune(s)

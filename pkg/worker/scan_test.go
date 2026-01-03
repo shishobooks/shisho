@@ -1085,6 +1085,42 @@ func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *t
 	assert.Equal(t, "Author Name", book.Authors[0].Person.Name)
 }
 
+func TestProcessScanJob_NarratorInFilenameNotDirectory(t *testing.T) {
+	// Tests that narrator info in the actual filename is extracted when the directory
+	// name doesn't contain narrator info (e.g., "[Author] Title/{Stephen Fry}.m4b")
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Directory has author but no narrator, filename has narrator
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[JK Rowling] Harry Potter")
+	testgen.GenerateM4B(t, bookDir, "[JK Rowling] Harry Potter {Stephen Fry}.m4b", testgen.M4BOptions{
+		// No metadata - should fall back to filename parsing
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Harry Potter", book.Title)
+
+	// Author should be extracted from directory name
+	require.Len(t, book.Authors, 1)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "JK Rowling", book.Authors[0].Person.Name)
+
+	// Narrator should be extracted from the actual filename (narrators are on File, not Book)
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.Len(t, files[0].Narrators, 1, "narrator should be extracted from filename")
+	require.NotNil(t, files[0].Narrators[0].Person)
+	assert.Equal(t, "Stephen Fry", files[0].Narrators[0].Person.Name)
+}
+
 func TestProcessScanJob_TitleFallbackWhenCBZHasEmptyTitle(t *testing.T) {
 	tc := newTestContext(t)
 

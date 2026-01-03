@@ -278,15 +278,24 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	// If we didn't find any narrators in the metadata, try getting it from the filename.
-	if len(narratorNames) == 0 && filepathNarratorRE.MatchString(filename) {
-		log.Info("no narrators found in metadata; parsing filename", logger.Data{"filename": filename})
-		// Use FindAllStringSubmatch to get the capture group (content inside braces)
-		matches := filepathNarratorRE.FindAllStringSubmatch(filename, -1)
-		if len(matches) > 0 && len(matches[0]) > 1 {
-			// matches[0][1] is the first capture group (narrator name without braces)
-			names := strings.Split(matches[0][1], ",")
-			for _, narrator := range names {
-				narratorNames = append(narratorNames, strings.TrimSpace(narrator))
+	// For directory-based files, `filename` is the directory name, so also check the actual file name.
+	if len(narratorNames) == 0 {
+		actualFilename := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		// Check directory name first, then fall back to actual filename
+		nameToCheck := filename
+		if !filepathNarratorRE.MatchString(filename) && filepathNarratorRE.MatchString(actualFilename) {
+			nameToCheck = actualFilename
+		}
+		if filepathNarratorRE.MatchString(nameToCheck) {
+			log.Info("no narrators found in metadata; parsing filename", logger.Data{"filename": nameToCheck})
+			// Use FindAllStringSubmatch to get the capture group (content inside braces)
+			matches := filepathNarratorRE.FindAllStringSubmatch(nameToCheck, -1)
+			if len(matches) > 0 && len(matches[0]) > 1 {
+				// matches[0][1] is the first capture group (narrator name without braces)
+				names := strings.Split(matches[0][1], ",")
+				for _, narrator := range names {
+					narratorNames = append(narratorNames, strings.TrimSpace(narrator))
+				}
 			}
 		}
 	}
