@@ -52,7 +52,7 @@ func (s *Service) Browse(opts BrowseOptions) (*BrowseResponse, error) {
 	}
 
 	// Filter and collect entries.
-	var entries []Entry
+	entries := []Entry{}
 	for _, de := range dirEntries {
 		name := de.Name()
 
