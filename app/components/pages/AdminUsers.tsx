@@ -15,7 +15,7 @@ interface UserRowProps {
 const UserRow = ({ user }: UserRowProps) => (
   <Link
     className="flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors"
-    to={`/admin/users/${user.id}`}
+    to={`/settings/users/${user.id}`}
   >
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ const AdminUsers = () => {
         </div>
         {canCreateUsers && (
           <Button asChild size="sm">
-            <Link to="/admin/users/create">
+            <Link to="/settings/users/create">
               <Plus className="h-4 w-4 mr-2" />
               Add User
             </Link>

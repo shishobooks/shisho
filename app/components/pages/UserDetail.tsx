@@ -146,7 +146,7 @@ const UserDetail = () => {
     try {
       await deactivateUserMutation.mutateAsync(id);
       toast.success("User deactivated successfully");
-      navigate("/admin/users");
+      navigate("/settings/users");
     } catch (error) {
       let msg = "Failed to deactivate user";
       if (error instanceof Error) {
@@ -187,7 +187,7 @@ const UserDetail = () => {
     <div>
       <div className="mb-6">
         <Button asChild variant="ghost">
-          <Link to="/admin/users">
+          <Link to="/settings/users">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Users
           </Link>

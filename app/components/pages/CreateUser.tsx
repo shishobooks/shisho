@@ -75,7 +75,7 @@ const CreateUser = () => {
       });
 
       toast.success("User created successfully!");
-      navigate(`/admin/users/${user.id}`);
+      navigate(`/settings/users/${user.id}`);
     } catch (error) {
       let msg = "Failed to create user";
       if (error instanceof Error) {
@@ -92,7 +92,7 @@ const CreateUser = () => {
     <div>
       <div className="mb-6">
         <Button asChild variant="ghost">
-          <Link to="/admin/users">
+          <Link to="/settings/users">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Users
           </Link>

@@ -1,17 +1,19 @@
 import {
   BookPlus,
+  Check,
+  ChevronDown,
+  Library,
   LogOut,
-  RefreshCw,
+  Plus,
   Settings,
-  Shield,
   User,
+  UserCog,
 } from "lucide-react";
 import { useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
-import ThemeToggle from "@/components/library/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,17 +29,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCreateJob } from "@/hooks/queries/jobs";
-import { useCreateLibrary, useLibrary } from "@/hooks/queries/libraries";
+import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
-import { JobTypeScan } from "@/types";
 
 const TopNav = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
-  const createJobMutation = useCreateJob();
   const createLibraryMutation = useCreateLibrary();
   const isDevelopment = import.meta.env.DEV;
 
@@ -45,7 +44,15 @@ const TopNav = () => {
   const canAccessAdmin =
     hasPermission("config", "read") ||
     hasPermission("users", "read") ||
-    hasPermission("jobs", "read");
+    hasPermission("jobs", "read") ||
+    hasPermission("libraries", "read");
+
+  const canCreateLibrary = hasPermission("libraries", "write");
+
+  // Load all libraries for the switcher
+  const librariesQuery = useLibraries({});
+  const libraries = librariesQuery.data?.libraries || [];
+  const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const handleLogout = useCallback(async () => {
     try {
@@ -57,29 +64,9 @@ const TopNav = () => {
     }
   }, [logout, navigate]);
 
-  // Load current library if we have a libraryId
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId),
-  });
-
-  const handleCreateSync = useCallback(async () => {
-    try {
-      await createJobMutation.mutateAsync({
-        payload: { type: JobTypeScan, data: {} },
-      });
-      toast.success("Sync started");
-    } catch (e) {
-      let msg = "Something went wrong.";
-      if (e instanceof Error) {
-        msg = e.message;
-      }
-      toast.error(msg);
-    }
-  }, [createJobMutation]);
-
   const handleCreateDefaultLibrary = useCallback(async () => {
     try {
-      await createLibraryMutation.mutateAsync({
+      const library = await createLibraryMutation.mutateAsync({
         payload: {
           name: "Main",
           library_paths: [
@@ -87,7 +74,9 @@ const TopNav = () => {
           ],
         },
       });
-      toast.success("Default library created!");
+      // Backend automatically triggers a scan after library creation
+      toast.success("Default library created! Scanning for media...");
+      navigate(`/libraries/${library.id}`);
     } catch (e) {
       let msg = "Something went wrong.";
       if (e instanceof Error) {
@@ -95,18 +84,29 @@ const TopNav = () => {
       }
       toast.error(msg);
     }
-  }, [createLibraryMutation]);
+  }, [createLibraryMutation, navigate]);
+
+  const handleLibrarySwitch = useCallback(
+    (newLibraryId: number) => {
+      navigate(`/libraries/${newLibraryId}`);
+    },
+    [navigate],
+  );
 
   const isBooksActive =
     location.pathname === `/libraries/${libraryId}` ||
     (location.pathname.startsWith(`/libraries/${libraryId}/books`) &&
       !location.pathname.startsWith(`/libraries/${libraryId}/series`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/people`));
+      !location.pathname.startsWith(`/libraries/${libraryId}/people`) &&
+      !location.pathname.startsWith(`/libraries/${libraryId}/settings`));
   const isSeriesActive = location.pathname.startsWith(
     `/libraries/${libraryId}/series`,
   );
   const isPeopleActive = location.pathname.startsWith(
     `/libraries/${libraryId}/people`,
+  );
+  const isLibrarySettingsActive = location.pathname.startsWith(
+    `/libraries/${libraryId}/settings`,
   );
 
   return (
@@ -115,11 +115,60 @@ const TopNav = () => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Logo asLink />
-            {libraryQuery.data && (
-              <div className="text-sm text-muted-foreground">
-                {libraryQuery.data.name}
-              </div>
-            )}
+            {/* Library Switcher Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  className="h-9 gap-2 text-muted-foreground hover:text-foreground"
+                  variant="ghost"
+                >
+                  <Library className="h-4 w-4" />
+                  {currentLibrary?.name || "Select Library"}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel>Libraries</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {libraries.map((library) => (
+                  <DropdownMenuItem
+                    key={library.id}
+                    onClick={() => handleLibrarySwitch(library.id)}
+                  >
+                    <span className="flex-1">{library.name}</span>
+                    {library.id === Number(libraryId) && (
+                      <Check className="h-4 w-4 text-primary" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                {libraries.length === 0 && (
+                  <DropdownMenuItem disabled>
+                    <span className="text-muted-foreground">
+                      No libraries found
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {canCreateLibrary && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/libraries/create">
+                      <Plus className="h-4 w-4" />
+                      Create new library
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {isDevelopment && (
+                  <DropdownMenuItem
+                    disabled={createLibraryMutation.isPending}
+                    onClick={handleCreateDefaultLibrary}
+                  >
+                    <BookPlus className="h-4 w-4" />
+                    Create default library (dev)
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Navigation buttons for current library */}
             {libraryId && (
               <nav className="flex gap-1">
                 <Button
@@ -158,73 +207,25 @@ const TopNav = () => {
                 >
                   <Link to={`/libraries/${libraryId}/people`}>People</Link>
                 </Button>
+                {hasPermission("libraries", "write") && (
+                  <Button
+                    asChild
+                    className={`h-9 ${
+                      isLibrarySettingsActive
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                        : "hover:text-primary dark:hover:text-violet-300"
+                    }`}
+                    variant={isLibrarySettingsActive ? "default" : "ghost"}
+                  >
+                    <Link to={`/libraries/${libraryId}/settings`}>
+                      Settings
+                    </Link>
+                  </Button>
+                )}
               </nav>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {isDevelopment && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      className="h-9 w-9"
-                      disabled={createLibraryMutation.isPending}
-                      onClick={handleCreateDefaultLibrary}
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <BookPlus className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Create default library</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            {libraryId && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      asChild
-                      className="h-9 w-9"
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <Link to={`/libraries/${libraryId}/settings`}>
-                        <Settings className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Settings</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    className="h-9 w-9"
-                    disabled={createJobMutation.isPending}
-                    onClick={handleCreateSync}
-                    size="icon"
-                    variant="ghost"
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4 ${
-                        createJobMutation.isPending ? "animate-spin" : ""
-                      }`}
-                    />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Sync libraries</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             {canAccessAdmin && (
               <TooltipProvider>
                 <Tooltip>
@@ -235,18 +236,17 @@ const TopNav = () => {
                       size="icon"
                       variant="ghost"
                     >
-                      <Link to="/admin">
-                        <Shield className="h-4 w-4" />
+                      <Link to="/settings">
+                        <Settings className="h-4 w-4" />
                       </Link>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Administration</p>
+                    <p>Global Settings</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}
-            <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="h-9 w-9" size="icon" variant="ghost">
@@ -263,6 +263,12 @@ const TopNav = () => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/user/settings">
+                    <UserCog className="h-4 w-4" />
+                    User Settings
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="h-4 w-4" />
                   Sign out

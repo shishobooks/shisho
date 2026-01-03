@@ -38,13 +38,13 @@ const LibraryRedirect = () => {
 
   const libraries = librariesQuery.data?.libraries || [];
 
-  // If single library, redirect to it
-  if (libraries.length === 1) {
-    return <Navigate replace to={`/libraries/${libraries[0].id}`} />;
+  // If no libraries, redirect to settings/libraries to create one
+  if (libraries.length === 0) {
+    return <Navigate replace to="/settings/libraries" />;
   }
 
-  // If multiple libraries or no libraries, redirect to library list
-  return <Navigate replace to="/libraries" />;
+  // Redirect to the first library (user can switch via dropdown)
+  return <Navigate replace to={`/libraries/${libraries[0].id}`} />;
 };
 
 export default LibraryRedirect;

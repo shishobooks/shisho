@@ -3,6 +3,7 @@ package libraries
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -10,9 +11,11 @@ import (
 // RegisterRoutesWithGroup registers library routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	libraryService := NewService(db)
+	jobService := jobs.NewService(db)
 
 	h := &handler{
 		libraryService: libraryService,
+		jobService:     jobService,
 	}
 
 	g.GET("", h.list)

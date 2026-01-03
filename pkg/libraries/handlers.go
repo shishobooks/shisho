@@ -9,11 +9,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
 	libraryService *Service
+	jobService     *jobs.Service
 }
 
 func (h *handler) create(c echo.Context) error {
@@ -44,6 +46,17 @@ func (h *handler) create(c echo.Context) error {
 	err := h.libraryService.CreateLibrary(ctx, library)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Trigger a scan job after creating the library
+	scanJob := &models.Job{
+		Type:       models.JobTypeScan,
+		Status:     models.JobStatusPending,
+		DataParsed: &models.JobScanData{},
+	}
+	if err := h.jobService.CreateJob(ctx, scanJob); err != nil {
+		// Log the error but don't fail the library creation
+		c.Logger().Errorf("failed to create scan job after library creation: %v", err)
 	}
 
 	library, err = h.libraryService.RetrieveLibrary(ctx, RetrieveLibraryOptions{

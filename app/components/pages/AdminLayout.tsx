@@ -1,9 +1,8 @@
-import { Briefcase, Cog, LogOut, Users } from "lucide-react";
+import { Briefcase, Cog, Library, LogOut, Users } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
-import ThemeToggle from "@/components/library/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -44,6 +43,7 @@ const AdminLayout = () => {
     }
   };
 
+  const canViewLibraries = hasPermission("libraries", "read");
   const canViewUsers = hasPermission("users", "read");
   const canViewJobs = hasPermission("jobs", "read");
   const canViewConfig = hasPermission("config", "read");
@@ -56,15 +56,12 @@ const AdminLayout = () => {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
               <Logo asLink />
-              <span className="text-sm text-muted-foreground">
-                Administration
-              </span>
+              <span className="text-sm text-muted-foreground">Settings</span>
             </div>
             <div className="flex items-center gap-4">
               <Button asChild size="sm" variant="ghost">
-                <Link to="/libraries">← Back to Libraries</Link>
+                <Link to="/">← Back to Library</Link>
               </Button>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -78,25 +75,36 @@ const AdminLayout = () => {
               {canViewConfig && (
                 <NavItem
                   icon={<Cog className="h-4 w-4" />}
-                  isActive={location.pathname === "/admin/settings"}
-                  label="Settings"
-                  to="/admin/settings"
+                  isActive={
+                    location.pathname === "/settings/server" ||
+                    location.pathname === "/settings"
+                  }
+                  label="Server"
+                  to="/settings/server"
+                />
+              )}
+              {canViewLibraries && (
+                <NavItem
+                  icon={<Library className="h-4 w-4" />}
+                  isActive={location.pathname.startsWith("/settings/libraries")}
+                  label="Libraries"
+                  to="/settings/libraries"
                 />
               )}
               {canViewUsers && (
                 <NavItem
                   icon={<Users className="h-4 w-4" />}
-                  isActive={location.pathname.startsWith("/admin/users")}
+                  isActive={location.pathname.startsWith("/settings/users")}
                   label="Users"
-                  to="/admin/users"
+                  to="/settings/users"
                 />
               )}
               {canViewJobs && (
                 <NavItem
                   icon={<Briefcase className="h-4 w-4" />}
-                  isActive={location.pathname === "/admin/jobs"}
+                  isActive={location.pathname === "/settings/jobs"}
                   label="Jobs"
-                  to="/admin/jobs"
+                  to="/settings/jobs"
                 />
               )}
             </nav>

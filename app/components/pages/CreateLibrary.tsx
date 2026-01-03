@@ -86,7 +86,8 @@ const CreateLibrary = () => {
         },
       });
 
-      toast.success("Library created!");
+      // Backend automatically triggers a scan after library creation
+      toast.success("Library created! Scanning for media...");
       navigate(`/libraries/${library.id}`);
     } catch (e) {
       let msg = "Something went wrong.";
@@ -103,9 +104,9 @@ const CreateLibrary = () => {
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
         <div className="mb-6">
           <Button asChild variant="ghost">
-            <Link to="/libraries">
+            <Link to="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Libraries
+              Back
             </Link>
           </Button>
         </div>
