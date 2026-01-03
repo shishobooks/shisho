@@ -6,11 +6,12 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Role, User } from "@/types";
+import type { PermissionInput, Role, User } from "@/types";
 
 export enum QueryKey {
   RetrieveUser = "RetrieveUser",
   ListUsers = "ListUsers",
+  RetrieveRole = "RetrieveRole",
   ListRoles = "ListRoles",
 }
 
@@ -156,6 +157,78 @@ export const useRoles = (
     queryKey: [QueryKey.ListRoles],
     queryFn: ({ signal }) => {
       return API.request("GET", "/roles", null, null, signal);
+    },
+  });
+};
+
+export const useRole = (
+  id?: number,
+  options: Omit<
+    UseQueryOptions<Role, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<Role, ShishoAPIError>({
+    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
+    ...options,
+    queryKey: [QueryKey.RetrieveRole, id],
+    queryFn: ({ signal }) => {
+      return API.request("GET", `/roles/${id}`, null, null, signal);
+    },
+  });
+};
+
+interface CreateRolePayload {
+  name: string;
+  permissions: PermissionInput[];
+}
+
+export const useCreateRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Role, ShishoAPIError, CreateRolePayload>({
+    mutationFn: (payload) => {
+      return API.request("POST", "/roles", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListRoles] });
+    },
+  });
+};
+
+interface UpdateRolePayload {
+  name?: string;
+  permissions?: PermissionInput[];
+}
+
+interface UpdateRoleVariables {
+  id: number;
+  payload: UpdateRolePayload;
+}
+
+export const useUpdateRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Role, ShishoAPIError, UpdateRoleVariables>({
+    mutationFn: ({ id, payload }) => {
+      return API.request("POST", `/roles/${id}`, payload);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListRoles] });
+      queryClient.setQueryData([QueryKey.RetrieveRole, data.id], data);
+    },
+  });
+};
+
+export const useDeleteRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, ShishoAPIError, number>({
+    mutationFn: (id) => {
+      return API.request("DELETE", `/roles/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListRoles] });
     },
   });
 };

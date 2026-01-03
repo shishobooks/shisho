@@ -1,12 +1,14 @@
-import { Plus } from "lucide-react";
+import { Plus, Shield } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import RoleDialog from "@/components/library/RoleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useUsers } from "@/hooks/queries/users";
+import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
-import type { User } from "@/types";
+import type { Role, User } from "@/types";
 
 interface UserRowProps {
   user: User;
@@ -30,57 +32,154 @@ const UserRow = ({ user }: UserRowProps) => (
   </Link>
 );
 
+interface RoleRowProps {
+  role: Role;
+  onClick: () => void;
+}
+
+const RoleRow = ({ role, onClick }: RoleRowProps) => {
+  const permissionCount = role.permissions?.length ?? 0;
+
+  return (
+    <button
+      className="w-full flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors text-left"
+      onClick={onClick}
+      type="button"
+    >
+      <div className="flex items-center gap-3">
+        <Shield className="h-4 w-4 text-muted-foreground" />
+        <span className="font-medium text-foreground">{role.name}</span>
+        {role.is_system && <Badge variant="outline">System</Badge>}
+      </div>
+      <span className="text-sm text-muted-foreground">
+        {permissionCount} permission{permissionCount !== 1 ? "s" : ""}
+      </span>
+    </button>
+  );
+};
+
 const AdminUsers = () => {
   const { hasPermission } = useAuth();
-  const { data, isLoading, error } = useUsers();
+  const { data: usersData, isLoading: usersLoading, error: usersError } = useUsers();
+  const { data: rolesData, isLoading: rolesLoading, error: rolesError } = useRoles();
+
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
 
   const canCreateUsers = hasPermission("users", "write");
+  const canManageRoles = hasPermission("users", "write");
 
-  if (isLoading) {
+  const handleOpenRoleDialog = (role?: Role) => {
+    setSelectedRole(role ?? null);
+    setRoleDialogOpen(true);
+  };
+
+  const handleCloseRoleDialog = (open: boolean) => {
+    setRoleDialogOpen(open);
+    if (!open) {
+      setSelectedRole(null);
+    }
+  };
+
+  if (usersLoading || rolesLoading) {
     return <LoadingSpinner />;
   }
 
-  if (error) {
+  if (usersError) {
     return (
       <div className="text-center">
         <h1 className="text-2xl font-semibold mb-4">Error Loading Users</h1>
-        <p className="text-muted-foreground">{error.message}</p>
+        <p className="text-muted-foreground">{usersError.message}</p>
       </div>
     );
   }
 
-  const users = data?.users ?? [];
+  if (rolesError) {
+    return (
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold mb-4">Error Loading Roles</h1>
+        <p className="text-muted-foreground">{rolesError.message}</p>
+      </div>
+    );
+  }
+
+  const users = usersData?.users ?? [];
+  const roles = rolesData?.roles ?? [];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold mb-2">Users</h1>
-          <p className="text-muted-foreground">
-            Manage user accounts and permissions.
-          </p>
+    <div className="space-y-12">
+      {/* Users Section */}
+      <div>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold mb-2">Users</h1>
+            <p className="text-muted-foreground">
+              Manage user accounts and permissions.
+            </p>
+          </div>
+          {canCreateUsers && (
+            <Button asChild size="sm">
+              <Link to="/settings/users/create">
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Link>
+            </Button>
+          )}
         </div>
-        {canCreateUsers && (
-          <Button asChild size="sm">
-            <Link to="/settings/users/create">
-              <Plus className="h-4 w-4 mr-2" />
-              Add User
-            </Link>
-          </Button>
+
+        {users.length === 0 ? (
+          <div className="border border-border rounded-md p-8 text-center">
+            <p className="text-muted-foreground">No users found.</p>
+          </div>
+        ) : (
+          <div className="border border-border rounded-md divide-y divide-border">
+            {users.map((user) => (
+              <UserRow key={user.id} user={user} />
+            ))}
+          </div>
         )}
       </div>
 
-      {users.length === 0 ? (
-        <div className="border border-border rounded-md p-8 text-center">
-          <p className="text-muted-foreground">No users found.</p>
+      {/* Roles Section */}
+      <div>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-semibold mb-2">Roles</h2>
+            <p className="text-muted-foreground">
+              Define roles with custom permissions.
+            </p>
+          </div>
+          {canManageRoles && (
+            <Button onClick={() => handleOpenRoleDialog()} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Role
+            </Button>
+          )}
         </div>
-      ) : (
-        <div className="border border-border rounded-md divide-y divide-border">
-          {users.map((user) => (
-            <UserRow key={user.id} user={user} />
-          ))}
-        </div>
-      )}
+
+        {roles.length === 0 ? (
+          <div className="border border-border rounded-md p-8 text-center">
+            <p className="text-muted-foreground">No roles found.</p>
+          </div>
+        ) : (
+          <div className="border border-border rounded-md divide-y divide-border">
+            {roles.map((role) => (
+              <RoleRow
+                key={role.id}
+                onClick={() => handleOpenRoleDialog(role)}
+                role={role}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Role Dialog */}
+      <RoleDialog
+        onOpenChange={handleCloseRoleDialog}
+        open={roleDialogOpen}
+        role={selectedRole}
+      />
     </div>
   );
 };
