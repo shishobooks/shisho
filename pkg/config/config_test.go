@@ -137,4 +137,5 @@ func TestToSnakeCase(t *testing.T) {
 	assert.Equal(t, "database_file_path", toSnakeCase("DatabaseFilePath"))
 	assert.Equal(t, "server_port", toSnakeCase("ServerPort"))
 	assert.Equal(t, "sync_interval_minutes", toSnakeCase("SyncIntervalMinutes"))
+	assert.Equal(t, "jwt_secret", toSnakeCase("JWTSecret"))
 }

@@ -150,12 +150,20 @@ func validateConfig(cfg *Config) error {
 	return errors.New("configuration validation failed:\n\n" + strings.Join(msgs, "\n\n"))
 }
 
-// toSnakeCase converts PascalCase to snake_case.
+// toSnakeCase converts PascalCase to snake_case, handling acronyms properly.
+// e.g., "JWTSecret" -> "jwt_secret", "DatabaseFilePath" -> "database_file_path"
 func toSnakeCase(s string) string {
 	var result strings.Builder
-	for i, r := range s {
+	runes := []rune(s)
+	for i, r := range runes {
 		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('_')
+			// Insert underscore if previous char is lowercase,
+			// or if next char is lowercase (end of acronym like "JWTSecret")
+			prevLower := runes[i-1] >= 'a' && runes[i-1] <= 'z'
+			nextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
+			if prevLower || nextLower {
+				result.WriteRune('_')
+			}
 		}
 		result.WriteRune(r)
 	}
