@@ -434,16 +434,23 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		log.Info("book already exists", logger.Data{"book_id": existingBook.ID})
 
 		// Check to see if we need to update any of the metadata on the book.
+		// Important: We only update metadata if:
+		// 1. The new source has higher priority (lower number)
+		// 2. The new value is non-empty (we always prefer having some data over no data)
 		updateOptions := books.UpdateBookOptions{Columns: make([]string, 0)}
 		metadataChanged := false
-		if models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
+
+		// Update title only if the new title is non-empty and from a higher priority source
+		if strings.TrimSpace(title) != "" && models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
 			log.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
 			metadataChanged = true
 		}
-		if models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
+
+		// Update authors only if we have authors and they're from a higher priority source
+		if len(authorNames) > 0 && models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
 			log.Info("updating authors", logger.Data{"new_author_count": len(authorNames), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
@@ -490,6 +497,27 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		// If authors were updated, create new Author entries
+		// (UpdateBook deletes old authors, we need to create the new ones)
+		if updateOptions.UpdateAuthors {
+			for i, authorName := range updateOptions.AuthorNames {
+				person, err := w.personService.FindOrCreatePerson(ctx, authorName, libraryID)
+				if err != nil {
+					log.Error("failed to find/create person", logger.Data{"author": authorName, "error": err.Error()})
+					continue
+				}
+				author := &models.Author{
+					BookID:    existingBook.ID,
+					PersonID:  person.ID,
+					SortOrder: i + 1,
+				}
+				err = w.bookService.CreateAuthor(ctx, author)
+				if err != nil {
+					log.Error("failed to create author", logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
+				}
+			}
 		}
 
 		// Track for post-scan organization if this is a root-level file or metadata changed
