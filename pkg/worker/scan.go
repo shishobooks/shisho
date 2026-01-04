@@ -580,7 +580,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 
 		// Track for post-scan organization if this is a root-level file
-		if library.OrganizeFileStructure && needsOrganization {
+		// or a new directory-based book (to apply [Author] Title naming convention)
+		if library.OrganizeFileStructure {
 			booksToOrganize[existingBook.ID] = struct{}{}
 		}
 	}

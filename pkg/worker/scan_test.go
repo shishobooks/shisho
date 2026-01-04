@@ -851,7 +851,7 @@ func TestProcessScanJob_OrganizeFileStructure_Disabled(t *testing.T) {
 	assert.Equal(t, originalPath, allBooks[0].Filepath)
 }
 
-func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_NotMoved(t *testing.T) {
+func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T) {
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -871,14 +871,18 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_NotMoved(t *testing.
 	err := tc.runScan()
 	require.NoError(t, err)
 
-	// File should remain in its original folder (organize only applies to root-level files)
-	assert.True(t, testgen.FileExists(originalPath), "file in directory should not be moved")
+	// Folder should be renamed to match [Author] Title convention
+	expectedFolder := filepath.Join(libraryPath, "[Author Name] Book In Folder")
+	// File keeps its original name inside the renamed folder
+	expectedFilePath := filepath.Join(expectedFolder, "book.epub")
+	assert.True(t, testgen.FileExists(expectedFilePath), "file should be in renamed folder")
+	assert.False(t, testgen.FileExists(originalPath), "original file should no longer exist")
 
-	// Verify the book record uses the directory path
+	// Verify the book record uses the new directory path
 	allBooks := tc.listBooks()
 	require.Len(t, allBooks, 1)
 	assert.Equal(t, "Book In Folder", allBooks[0].Title)
-	assert.Equal(t, bookDir, allBooks[0].Filepath)
+	assert.Equal(t, expectedFolder, allBooks[0].Filepath)
 }
 
 func TestProcessScanJob_OrganizeFileStructure_WithCover(t *testing.T) {
