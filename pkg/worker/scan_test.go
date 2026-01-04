@@ -1301,3 +1301,201 @@ func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T)
 	assert.NotEmpty(t, epubCoverData, "EPUB cover should have content")
 	assert.NotEmpty(t, m4bCoverData, "M4B cover should have content")
 }
+
+// TestProcessScanJob_OrganizeFileStructure_MultipleRootLevelFiles tests that multiple
+// root-level files can be scanned and organized without path errors.
+// This is a regression test for the bug where organization during scan would move files
+// before subsequent files in the scan were processed, causing file-not-found errors.
+func TestProcessScanJob_OrganizeFileStructure_MultipleRootLevelFiles(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	// Enable organize_file_structure
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create multiple root-level files
+	// The bug would occur because:
+	// 1. Discovery phase collects all file paths
+	// 2. Processing file1 would move it to a new folder
+	// 3. Processing file2, file3 would fail if organization happened during processing
+	// With the fix, organization is deferred to post-scan, so all files are processed first
+	testgen.GenerateEPUB(t, libraryPath, "[Author One] Book One.epub", testgen.EPUBOptions{
+		Title:   "Book One",
+		Authors: []string{"Author One"},
+	})
+	testgen.GenerateEPUB(t, libraryPath, "[Author Two] Book Two.epub", testgen.EPUBOptions{
+		Title:   "Book Two",
+		Authors: []string{"Author Two"},
+	})
+	testgen.GenerateEPUB(t, libraryPath, "[Author Three] Book Three.epub", testgen.EPUBOptions{
+		Title:   "Book Three",
+		Authors: []string{"Author Three"},
+	})
+
+	// Verify all files exist at root before scan
+	assert.True(t, testgen.FileExists(filepath.Join(libraryPath, "[Author One] Book One.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Two] Book Two.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Three] Book Three.epub")))
+
+	// This should NOT fail - the bug would cause file-not-found errors here
+	err := tc.runScan()
+	require.NoError(t, err, "scan should complete without errors even with multiple root-level files")
+
+	// All three books should be created
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 3, "all three books should be created")
+
+	// All three files should be created
+	files := tc.listFiles()
+	require.Len(t, files, 3, "all three files should be created")
+
+	// All files should be organized into their own folders
+	organizedFolder1 := filepath.Join(libraryPath, "[Author One] Book One")
+	organizedFolder2 := filepath.Join(libraryPath, "[Author Two] Book Two")
+	organizedFolder3 := filepath.Join(libraryPath, "[Author Three] Book Three")
+
+	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder 1 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder 2 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder3), "organized folder 3 should exist")
+
+	// Original files should no longer exist at root
+	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "[Author One] Book One.epub")))
+	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Two] Book Two.epub")))
+	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Three] Book Three.epub")))
+
+	// Files should be in their organized folders
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder1, "[Author One] Book One.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder2, "[Author Two] Book Two.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder3, "[Author Three] Book Three.epub")))
+}
+
+// TestProcessScanJob_OrganizeFileStructure_DeferredOrganization verifies that
+// organization happens AFTER all files are scanned, not during scanning.
+// This is verified by checking that the database file paths reflect the ORIGINAL
+// locations during scan, and only get updated to organized paths after scan completes.
+func TestProcessScanJob_OrganizeFileStructure_DeferredOrganization(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create multiple root-level files
+	// If organization happened during scan, the second file's original path would be invalid
+	// after the first file was organized (moved to a new folder)
+	file1Path := filepath.Join(libraryPath, "book1.epub")
+	file2Path := filepath.Join(libraryPath, "book2.epub")
+
+	testgen.GenerateEPUB(t, libraryPath, "book1.epub", testgen.EPUBOptions{
+		Title:   "Book One",
+		Authors: []string{"Author One"},
+	})
+	testgen.GenerateEPUB(t, libraryPath, "book2.epub", testgen.EPUBOptions{
+		Title:   "Book Two",
+		Authors: []string{"Author Two"},
+	})
+
+	// Verify files exist at original paths before scan
+	assert.True(t, testgen.FileExists(file1Path), "file1 should exist before scan")
+	assert.True(t, testgen.FileExists(file2Path), "file2 should exist before scan")
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Both books should be created
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 2, "both books should be created")
+
+	// Both files should be created
+	files := tc.listFiles()
+	require.Len(t, files, 2, "both files should be created")
+
+	// Files should now be in organized folders (organization happened after scan)
+	organizedFolder1 := filepath.Join(libraryPath, "[Author One] Book One")
+	organizedFolder2 := filepath.Join(libraryPath, "[Author Two] Book Two")
+
+	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder 1 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder 2 should exist")
+
+	// Original files should no longer exist at root
+	assert.False(t, testgen.FileExists(file1Path), "file1 should be moved from root")
+	assert.False(t, testgen.FileExists(file2Path), "file2 should be moved from root")
+
+	// Database paths should reflect the organized locations
+	for _, file := range files {
+		assert.Contains(t, file.Filepath, libraryPath, "file path should be in library")
+		assert.NotEqual(t, file1Path, file.Filepath, "file path should not be original path")
+		assert.NotEqual(t, file2Path, file.Filepath, "file path should not be original path")
+	}
+}
+
+// TestProcessScanJob_OrganizeFileStructure_DirectoryRenameDoesNotBreakScan tests that
+// directory renames during the post-scan organization phase don't break the scan.
+// This is a regression test for the bug where organization during scan would rename
+// directories before subsequent files in that directory were processed.
+func TestProcessScanJob_OrganizeFileStructure_DirectoryRenameDoesNotBreakScan(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create a directory with a name that DIFFERS from what the metadata would produce.
+	// The first file's metadata will cause the directory to be renamed during organization.
+	// If organization happened during scan, subsequent files would fail because their
+	// paths (collected during discovery) would point to the old directory name.
+	//
+	// Directory: "Old Folder Name"
+	// Metadata says: title="New Title"
+	// Expected organized name: "New Title" (folder name is based on title)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Old Folder Name")
+
+	// All files have metadata that would rename the folder
+	testgen.GenerateEPUB(t, bookDir, "file1.epub", testgen.EPUBOptions{
+		Title:   "New Title",
+		Authors: []string{"New Author"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "file2.epub", testgen.EPUBOptions{
+		Title:   "New Title",
+		Authors: []string{"New Author"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "file3.epub", testgen.EPUBOptions{
+		Title:   "New Title",
+		Authors: []string{"New Author"},
+	})
+
+	// Verify all files exist in the OLD directory before scan
+	assert.True(t, testgen.FileExists(filepath.Join(bookDir, "file1.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(bookDir, "file2.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(bookDir, "file3.epub")))
+
+	// This should NOT fail - the bug would cause file-not-found errors
+	// if organization happened during scan and renamed the directory before
+	// file2 and file3 were processed
+	err := tc.runScan()
+	require.NoError(t, err, "scan should complete without errors")
+
+	// All files should be created and belong to the same book
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "New Title", allBooks[0].Title)
+
+	files := tc.listFiles()
+	require.Len(t, files, 3, "all three files should be processed")
+
+	// Verify all files belong to the same book
+	for _, file := range files {
+		assert.Equal(t, allBooks[0].ID, file.BookID, "all files should belong to the same book")
+	}
+
+	// Verify the old directory no longer exists (was renamed)
+	assert.False(t, testgen.FileExists(bookDir), "old directory should no longer exist")
+
+	// Verify the book's filepath was updated to the new location
+	assert.NotEqual(t, bookDir, allBooks[0].Filepath, "book filepath should be updated")
+
+	// Verify all files are in the new directory (wherever it was renamed to)
+	newBookDir := allBooks[0].Filepath
+	for _, file := range files {
+		assert.Contains(t, file.Filepath, newBookDir, "file should be in the book's directory")
+		assert.True(t, testgen.FileExists(file.Filepath), "file should exist at its database path")
+	}
+}

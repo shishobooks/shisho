@@ -136,3 +136,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Add shadcn components using `npx shadcn@latest add`.
 - You never have to run tygo manually. It is run as part of `make start`, so if that's running in the background, then it should already have run `make tygo`. If you see that new types haven't been generated, check the logs of `make start` to see if `make tygo` failed.
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
+- Whenever fixing a bug, test-driven development should be employed: write a test for the bug, confirm that it fails, fix the bug, and confirm that it passes.

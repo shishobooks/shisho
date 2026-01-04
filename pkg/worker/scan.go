@@ -96,10 +96,37 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 			}
 		}
 
+		// Track books that need organization after scan completes.
+		// Organization is deferred to avoid breaking file paths during scan.
+		booksToOrganize := make(map[int]struct{})
+
 		for _, path := range filesToScan {
-			err := w.scanFile(ctx, path, library.ID)
+			err := w.scanFile(ctx, path, library.ID, booksToOrganize)
 			if err != nil {
 				return errors.WithStack(err)
+			}
+		}
+
+		// Organize files after all scanning is complete
+		if library.OrganizeFileStructure && len(booksToOrganize) > 0 {
+			log.Info("organizing books after scan", logger.Data{"count": len(booksToOrganize)})
+			for bookID := range booksToOrganize {
+				book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+				if err != nil {
+					log.Warn("failed to retrieve book for organization", logger.Data{
+						"book_id": bookID,
+						"error":   err.Error(),
+					})
+					continue
+				}
+
+				err = w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true})
+				if err != nil {
+					log.Warn("failed to organize book", logger.Data{
+						"book_id": bookID,
+						"error":   err.Error(),
+					})
+				}
 			}
 		}
 	}
@@ -137,7 +164,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 	return nil
 }
 
-func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error {
+func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, booksToOrganize map[int]struct{}) error {
 	log := logger.FromContext(ctx).Data(logger.Data{"path": path})
 	log.Info("processing file")
 
@@ -161,7 +188,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	// Get the size of the file.
 	stats, err := os.Stat(path)
 	if err != nil {
-		return errors.WithStack(err)
+		// File may have been moved by concurrent API-triggered organization
+		log.Warn("file not accessible, skipping", logger.Data{"path": path, "error": err.Error()})
+		return nil
 	}
 	size := stats.Size()
 	fileType := strings.ToLower(strings.ReplaceAll(filepath.Ext(path), ".", ""))
@@ -369,8 +398,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		return errors.WithStack(err)
 	}
 
-	// Check if we should organize this file (only for root-level files when organize_file_structure is enabled)
-	var organizeResult *fileutils.OrganizeFileResult
+	// Check if this is a root-level file that needs organization.
+	// Organization is deferred to post-scan phase to avoid breaking file paths during scan.
+	needsOrganization := false
 	if library.OrganizeFileStructure && isRootLevelFile {
 		// If there's already a book for this exact file path, skip organization to avoid duplicates
 		if existingBookByFile != nil {
@@ -379,44 +409,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 				"file_path": path,
 			})
 		} else {
-			log.Info("organizing root-level file", logger.Data{
-				"organize_file_structure": library.OrganizeFileStructure,
-				"is_root_level":           isRootLevelFile,
-			})
-
-			// Create organized name options (use first series number if available)
-			var firstSeriesNumber *float64
-			if len(seriesList) > 0 {
-				firstSeriesNumber = seriesList[0].number
-			}
-			organizeOpts := fileutils.OrganizedNameOptions{
-				AuthorNames:  authorNames,
-				Title:        title,
-				SeriesNumber: firstSeriesNumber,
-				FileType:     fileType,
-			}
-
-			// Organize the file
-			organizeResult, err = fileutils.OrganizeRootLevelFile(path, organizeOpts)
-			if err != nil {
-				log.Error("failed to organize file", logger.Data{"error": err.Error()})
-				// Don't fail the entire scan if organization fails
-			} else if organizeResult.Moved {
-				logData := logger.Data{
-					"original_path":  organizeResult.OriginalPath,
-					"new_path":       organizeResult.NewPath,
-					"folder_created": organizeResult.FolderCreated,
-					"covers_moved":   organizeResult.CoversMoved,
-				}
-				if organizeResult.CoversError != nil {
-					logData["covers_error"] = organizeResult.CoversError.Error()
-				}
-				log.Info("file organized", logData)
-
-				// Update path and book path for further processing
-				path = organizeResult.NewPath
-				bookPath = filepath.Dir(path)
-			}
+			needsOrganization = true
 		}
 	}
 
@@ -442,20 +435,20 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 
 		// Check to see if we need to update any of the metadata on the book.
 		updateOptions := books.UpdateBookOptions{Columns: make([]string, 0)}
-		shouldOrganizeFiles := false
+		metadataChanged := false
 		if models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
 			log.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
-			shouldOrganizeFiles = true
+			metadataChanged = true
 		}
 		if models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
 			log.Info("updating authors", logger.Data{"new_author_count": len(authorNames), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
 			updateOptions.AuthorNames = authorNames
-			shouldOrganizeFiles = true
+			metadataChanged = true
 		}
 		// Update series if we have a higher priority source
 		// Get existing series source for comparison
@@ -494,57 +487,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			}
 		}
 
-		// If file was organized and we're using an existing book by file path,
-		// update the book and file paths to reflect the new locations
-		if organizeResult != nil && organizeResult.Moved && existingBookByFile != nil {
-			log.Info("updating book and file paths after organization", logger.Data{
-				"old_book_path": existingBook.Filepath,
-				"new_book_path": bookPath,
-				"old_file_path": organizeResult.OriginalPath,
-				"new_file_path": organizeResult.NewPath,
-			})
-
-			// Update book filepath
-			existingBook.Filepath = bookPath
-			updateOptions.Columns = append(updateOptions.Columns, "filepath")
-
-			// Also need to update the file record
-			for _, file := range existingBook.Files {
-				if file.Filepath == organizeResult.OriginalPath {
-					file.Filepath = organizeResult.NewPath
-					err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-						Columns: []string{"filepath"},
-					})
-					if err != nil {
-						log.Error("failed to update file path", logger.Data{
-							"file_id": file.ID,
-							"error":   err.Error(),
-						})
-					}
-					break
-				}
-			}
-		}
-
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		// Organize files if metadata changed (rename folders/files based on new metadata)
-		if shouldOrganizeFiles && library.OrganizeFileStructure {
-			// Reload the book with fresh data (including newly created authors/series)
-			existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
-				ID: &existingBook.ID,
-			})
-			if err != nil {
-				log.Warn("failed to reload book for file organization", logger.Data{"error": err.Error()})
-			} else {
-				organizeOpts := books.UpdateBookOptions{OrganizeFiles: true}
-				if err := w.bookService.UpdateBook(ctx, existingBook, organizeOpts); err != nil {
-					log.Warn("failed to organize book files", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
-				}
-			}
+		// Track for post-scan organization if this is a root-level file or metadata changed
+		if library.OrganizeFileStructure && (needsOrganization || metadataChanged) {
+			booksToOrganize[existingBook.ID] = struct{}{}
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
@@ -599,6 +549,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			if err != nil {
 				log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
 			}
+		}
+
+		// Track for post-scan organization if this is a root-level file
+		if library.OrganizeFileStructure && needsOrganization {
+			booksToOrganize[existingBook.ID] = struct{}{}
 		}
 	}
 

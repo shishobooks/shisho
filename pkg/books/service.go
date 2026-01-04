@@ -521,11 +521,15 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	log := logger.FromContext(ctx)
 	now := time.Now()
 
-	// Get the library to check if organize_file_structure is enabled
+	// Get the library with paths to check if organize_file_structure is enabled
+	// and to determine if files are at root level
 	var library models.Library
 	err := svc.db.NewSelect().
 		Model(&library).
-		Where("id = ?", book.LibraryID).
+		Relation("LibraryPaths", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("filepath ASC")
+		}).
+		Where("l.id = ?", book.LibraryID).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -579,6 +583,15 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	// Check if this is a directory-based book or root-level files
 	isDirectoryBased := filepath.Dir(files[0].Filepath) == book.Filepath
 
+	// Check if this is a root-level book (files directly in a library path, not yet organized into folders)
+	isRootLevelBook := false
+	for _, libraryPath := range library.LibraryPaths {
+		if filepath.Dir(files[0].Filepath) == libraryPath.Filepath {
+			isRootLevelBook = true
+			break
+		}
+	}
+
 	if isDirectoryBased {
 		// For directory-based books, rename the folder and update all file paths
 		newFolderPath, err := fileutils.RenameOrganizedFolder(book.Filepath, organizeOpts)
@@ -628,9 +641,62 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				return errors.WithStack(err)
 			}
 		}
+	} else if isRootLevelBook {
+		// For root-level files that need folder creation, organize each file into a new folder
+		log.Info("organizing root-level files into folder", logger.Data{"file_count": len(files)})
+
+		var newBookPath string
+		for _, file := range files {
+			// Set file type for proper volume formatting
+			organizeOpts.FileType = file.FileType
+
+			result, err := fileutils.OrganizeRootLevelFile(file.Filepath, organizeOpts)
+			if err != nil {
+				log.Error("failed to organize root-level file", logger.Data{
+					"file_id": file.ID,
+					"path":    file.Filepath,
+					"error":   err.Error(),
+				})
+				continue
+			}
+
+			if result.Moved {
+				log.Info("organized file into folder", logger.Data{
+					"file_id":  file.ID,
+					"old_path": result.OriginalPath,
+					"new_path": result.NewPath,
+				})
+
+				pathUpdates = append(pathUpdates, struct {
+					fileID  int
+					oldPath string
+					newPath string
+				}{file.ID, result.OriginalPath, result.NewPath})
+
+				// Track the new folder path (should be same for all files)
+				if newBookPath == "" {
+					newBookPath = filepath.Dir(result.NewPath)
+				}
+			}
+		}
+
+		// Update book filepath to the new folder
+		if newBookPath != "" && newBookPath != book.Filepath {
+			book.Filepath = newBookPath
+			book.UpdatedAt = now
+
+			_, err = svc.db.NewUpdate().
+				Model(book).
+				Column("filepath", "updated_at").
+				WherePK().
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
 	} else {
-		// For root-level files, rename each file individually
-		log.Info("organizing root-level files", logger.Data{"file_count": len(files)})
+		// For files already in a subfolder, just rename them in place
+		log.Info("renaming files in place", logger.Data{"file_count": len(files)})
 
 		for _, file := range files {
 			// Set file type for proper volume formatting
