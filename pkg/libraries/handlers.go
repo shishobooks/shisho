@@ -49,15 +49,22 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Trigger a scan job after creating the library
-	scanJob := &models.Job{
-		Type:       models.JobTypeScan,
-		Status:     models.JobStatusPending,
-		DataParsed: &models.JobScanData{},
-	}
-	if err := h.jobService.CreateJob(ctx, scanJob); err != nil {
-		// Log the error but don't fail the library creation
-		c.Logger().Errorf("failed to create scan job after library creation: %v", err)
+	// Trigger a scan job after creating the library if one isn't already running
+	hasActive, err := h.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+	if err != nil {
+		c.Logger().Errorf("failed to check for active scan job: %v", err)
+	} else if hasActive {
+		c.Logger().Info("skipping scan job creation: a scan job is already running or pending")
+	} else {
+		scanJob := &models.Job{
+			Type:       models.JobTypeScan,
+			Status:     models.JobStatusPending,
+			DataParsed: &models.JobScanData{},
+		}
+		if err := h.jobService.CreateJob(ctx, scanJob); err != nil {
+			// Log the error but don't fail the library creation
+			c.Logger().Errorf("failed to create scan job after library creation: %v", err)
+		}
 	}
 
 	library, err = h.libraryService.RetrieveLibrary(ctx, RetrieveLibraryOptions{

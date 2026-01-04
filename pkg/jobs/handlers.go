@@ -23,6 +23,17 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Check if a scan job is already running or pending.
+	if params.Type == models.JobTypeScan {
+		hasActive, err := h.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if hasActive {
+			return errcodes.Conflict("A scan job is already running or pending.")
+		}
+	}
+
 	job := &models.Job{
 		Type:       params.Type,
 		Status:     models.JobStatusPending,

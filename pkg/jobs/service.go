@@ -156,6 +156,22 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 	return jobs, total, nil
 }
 
+// HasActiveJobByType checks if there's a pending or in-progress job of the given type.
+func (svc *Service) HasActiveJobByType(ctx context.Context, jobType string) (bool, error) {
+	count, err := svc.db.NewSelect().
+		Model((*models.Job)(nil)).
+		Where("type = ?", jobType).
+		WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Where("status = ?", models.JobStatusPending).
+				WhereOr("status = ?", models.JobStatusInProgress)
+		}).
+		Count(ctx)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return count > 0, nil
+}
+
 func (svc *Service) UpdateJob(ctx context.Context, job *models.Job, opts UpdateJobOptions) error {
 	if len(opts.Columns) == 0 {
 		return nil

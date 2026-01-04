@@ -39,6 +39,7 @@ type Worker struct {
 	shutdown       chan struct{}
 	doneFetching   chan struct{}
 	doneProcessing chan struct{}
+	doneScheduling chan struct{}
 }
 
 func New(cfg *config.Config, db *bun.DB) *Worker {
@@ -64,6 +65,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		shutdown:       make(chan struct{}),
 		doneFetching:   make(chan struct{}),
 		doneProcessing: make(chan struct{}, cfg.WorkerProcesses),
+		doneScheduling: make(chan struct{}),
 	}
 
 	w.processFuncs = map[string]func(ctx context.Context, job *models.Job) error{
@@ -77,6 +79,14 @@ func (w *Worker) Start() {
 	go w.fetchJobs()
 	for i := 0; i < w.config.WorkerProcesses; i++ {
 		go w.processJobs()
+	}
+	if w.config.SyncIntervalMinutes > 0 {
+		go w.scheduleScanJobs()
+	} else {
+		// No scheduling needed, mark as done immediately
+		go func() {
+			w.doneScheduling <- struct{}{}
+		}()
 	}
 }
 
@@ -163,10 +173,71 @@ func (w *Worker) processJobs() {
 	}
 }
 
+func (w *Worker) scheduleScanJobs() {
+	duration := time.Duration(w.config.SyncIntervalMinutes) * time.Minute
+	timer := time.NewTimer(duration)
+
+	for {
+		select {
+		case <-w.shutdown:
+			timer.Stop()
+			w.doneScheduling <- struct{}{}
+			return
+		case <-timer.C:
+			ctx := context.Background()
+			log := w.log.Root(logger.Data{"scheduler": "scan"})
+
+			// Check if there are any non-deleted libraries
+			libs, err := w.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
+				Limit: pointerutil.Int(1),
+			})
+			if err != nil {
+				log.Err(err).Error("failed to list libraries for scheduled scan")
+				timer.Reset(duration)
+				continue
+			}
+			if len(libs) == 0 {
+				log.Debug("no libraries configured, skipping scheduled scan")
+				timer.Reset(duration)
+				continue
+			}
+
+			// Check if a scan job is already active
+			hasActive, err := w.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+			if err != nil {
+				log.Err(err).Error("failed to check for active scan job")
+				timer.Reset(duration)
+				continue
+			}
+			if hasActive {
+				log.Debug("scan job already running or pending, skipping scheduled scan")
+				timer.Reset(duration)
+				continue
+			}
+
+			// Create a new scan job
+			scanJob := &models.Job{
+				Type:       models.JobTypeScan,
+				Status:     models.JobStatusPending,
+				DataParsed: &models.JobScanData{},
+			}
+			if err := w.jobService.CreateJob(ctx, scanJob); err != nil {
+				log.Err(err).Error("failed to create scheduled scan job")
+				timer.Reset(duration)
+				continue
+			}
+
+			log.Info("created scheduled scan job")
+			timer.Reset(duration)
+		}
+	}
+}
+
 func (w *Worker) Shutdown() {
 	close(w.shutdown)
 
 	<-w.doneFetching
+	<-w.doneScheduling
 	for i := 0; i < w.config.WorkerProcesses; i++ {
 		<-w.doneProcessing
 	}

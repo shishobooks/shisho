@@ -123,8 +123,10 @@ const AdminJobs = () => {
         payload: { type: JobTypeScan, data: {} },
       });
       toast.success("Library scan started");
-    } catch {
-      toast.error("Failed to start scan");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start scan";
+      toast.error(message);
     }
   }, [createJobMutation]);
 

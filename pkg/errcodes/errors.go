@@ -111,3 +111,12 @@ func Unauthorized(msg string) error {
 		"unauthorized",
 	}
 }
+
+// Conflict returns a 409 error with the given message.
+func Conflict(msg string) error {
+	return &Error{
+		http.StatusConflict,
+		msg,
+		"conflict",
+	}
+}
