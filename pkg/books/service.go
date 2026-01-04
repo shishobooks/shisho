@@ -512,6 +512,7 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 	err := svc.db.
 		NewSelect().
 		Model(&book).
+		Relation("Files").
 		Join("INNER JOIN book_series bs ON bs.book_id = b.id").
 		Where("bs.series_id = ?", seriesID).
 		Order("bs.series_number ASC", "b.title ASC").
