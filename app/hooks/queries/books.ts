@@ -6,7 +6,13 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, ListBooksQuery, UpdateBookPayload } from "@/types";
+import type {
+  Book,
+  File,
+  ListBooksQuery,
+  UpdateBookPayload,
+  UpdateFilePayload,
+} from "@/types";
 
 export enum QueryKey {
   RetrieveBook = "RetrieveBook",
@@ -65,7 +71,86 @@ export const useUpdateBook = () => {
     },
     onSuccess: (data: Book) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
-      queryClient.setQueryData([QueryKey.RetrieveBook, data.id], data);
+      queryClient.setQueryData([QueryKey.RetrieveBook, String(data.id)], data);
+    },
+  });
+};
+
+interface UpdateFileMutationVariables {
+  id: number;
+  payload: UpdateFilePayload;
+}
+
+export const useUpdateFile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<File, ShishoAPIError, UpdateFileMutationVariables>({
+    mutationFn: ({ id, payload }) => {
+      return API.request("POST", `/books/files/${id}`, payload, null);
+    },
+    onSuccess: () => {
+      // Invalidate book queries to refresh file data
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+    },
+  });
+};
+
+interface UploadBookCoverVariables {
+  id: number;
+  file: globalThis.File;
+}
+
+export const useUploadBookCover = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Book, Error, UploadBookCoverVariables>({
+    mutationFn: async ({ id, file }) => {
+      const formData = new FormData();
+      formData.append("cover", file);
+      const response = await fetch(`/api/books/${id}/cover`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Failed to upload cover");
+      }
+      return response.json();
+    },
+    onSuccess: (data: Book) => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.setQueryData([QueryKey.RetrieveBook, String(data.id)], data);
+    },
+  });
+};
+
+interface UploadFileCoverVariables {
+  id: number;
+  file: globalThis.File;
+}
+
+export const useUploadFileCover = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<File, Error, UploadFileCoverVariables>({
+    mutationFn: async ({ id, file }) => {
+      const formData = new FormData();
+      formData.append("cover", file);
+      const response = await fetch(`/api/books/files/${id}/cover`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Failed to upload cover");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate book queries to refresh file/cover data
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
     },
   });
 };

@@ -10,5 +10,19 @@ type ListBooksQuery struct {
 }
 
 type UpdateBookPayload struct {
-	Title *string `json:"title,omitempty" validate:"omitempty,max=300"`
+	Title    *string       `json:"title,omitempty" validate:"omitempty,max=300"`
+	Subtitle *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
+	Authors  []string      `json:"authors,omitempty" validate:"omitempty,dive,max=200"`
+	Series   []SeriesInput `json:"series,omitempty"`
+}
+
+// SeriesInput represents a series association with optional number.
+type SeriesInput struct {
+	Name   string   `json:"name" validate:"required,max=200"`
+	Number *float64 `json:"number,omitempty"`
+}
+
+// UpdateFilePayload is the payload for updating a file's metadata.
+type UpdateFilePayload struct {
+	Narrators []string `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
 }

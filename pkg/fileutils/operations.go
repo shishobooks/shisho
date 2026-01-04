@@ -1,13 +1,21 @@
 package fileutils
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
+
+	_ "image/gif" // Register GIF decoder for image normalization.
+
+	_ "golang.org/x/image/webp" // Register WebP decoder for image normalization.
 )
 
 // OrganizeFileResult contains the results of organizing a file.
@@ -366,4 +374,35 @@ func CoverExistsWithBaseName(dir, baseName string) string {
 		}
 	}
 	return ""
+}
+
+// NormalizeImage decodes and re-encodes an image to strip problematic metadata
+// (like gAMA chunks without sRGB in PNG) that cause color rendering issues in browsers.
+// Returns the normalized image data and the new MIME type.
+// If the input is a JPEG, it stays as JPEG to preserve quality. Otherwise, it becomes PNG.
+func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
+	// Decode the image
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		// If we can't decode, return original data
+		return data, mimeType, nil
+	}
+
+	var buf bytes.Buffer
+
+	// Preserve JPEG format to avoid quality loss, otherwise use PNG
+	if mimeType == "image/jpeg" || mimeType == "image/jpg" {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+			return data, mimeType, nil
+		}
+		return buf.Bytes(), "image/jpeg", nil
+	}
+
+	// Re-encode as PNG (universal, lossless)
+	if err := png.Encode(&buf, img); err != nil {
+		// If we can't encode, return original data
+		return data, mimeType, nil
+	}
+
+	return buf.Bytes(), "image/png", nil
 }

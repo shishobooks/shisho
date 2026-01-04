@@ -31,6 +31,7 @@ require (
 	github.com/uptrace/bun/driver/sqliteshim v1.2.11
 	github.com/urfave/cli/v2 v2.27.6
 	golang.org/x/crypto v0.41.0
+	golang.org/x/image v0.30.0
 )
 
 require (

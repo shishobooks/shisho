@@ -157,6 +157,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 	if existingFile != nil {
 		log.Info("file already exists", logger.Data{"file_id": existingFile.ID})
+		// Check if cover is missing and recover it if needed
+		if err := w.recoverMissingCover(ctx, existingFile); err != nil {
+			log.Warn("failed to recover missing cover", logger.Data{"file_id": existingFile.ID, "error": err.Error()})
+		}
 		return nil
 	}
 
@@ -603,17 +607,29 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		// This allows users to provide custom covers that won't be overwritten
 		existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
 		if existingCoverPath == "" {
-			coverFilepath := filepath.Join(coverDir, coverBaseName+metadata.CoverExtension())
-			log.Info("saving cover", logger.Data{"mime": metadata.CoverMimeType})
+			// Normalize the cover image to strip problematic metadata (like gAMA without sRGB)
+			// that can cause color rendering issues in browsers
+			normalizedData, normalizedMime, _ := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+			coverExt := ".png" // normalizeImage always outputs PNG
+			if normalizedMime == metadata.CoverMimeType {
+				// Normalization didn't change the format, use original extension
+				coverExt = metadata.CoverExtension()
+			}
+
+			coverFilepath := filepath.Join(coverDir, coverBaseName+coverExt)
+			log.Info("saving cover", logger.Data{"original_mime": metadata.CoverMimeType, "normalized_mime": normalizedMime})
 			coverFile, err := os.Create(coverFilepath)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 			defer coverFile.Close()
-			_, err = io.Copy(coverFile, bytes.NewReader(metadata.CoverData))
+			_, err = io.Copy(coverFile, bytes.NewReader(normalizedData))
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			// Update metadata with normalized values for the file record
+			metadata.CoverData = normalizedData
+			metadata.CoverMimeType = normalizedMime
 			// Set cover source to the metadata source since we extracted it
 			coverSource = &metadata.DataSource
 		} else {
@@ -873,4 +889,96 @@ func (w *Worker) copyFile(src, dst string) error {
 
 	_, err = io.Copy(destFile, sourceFile)
 	return errors.WithStack(err)
+}
+
+// recoverMissingCover checks if a file's cover is missing on disk and re-extracts it if needed.
+func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) error {
+	log := logger.FromContext(ctx).Data(logger.Data{"file_id": file.ID, "filepath": file.Filepath})
+
+	// If file has no cover mime type, nothing to recover
+	if file.CoverMimeType == nil {
+		return nil
+	}
+
+	// Determine cover directory
+	var coverDir string
+	if file.Book != nil {
+		// Check if book filepath is a directory or file
+		if info, err := os.Stat(file.Book.Filepath); err == nil && info.IsDir() {
+			coverDir = file.Book.Filepath
+		} else {
+			coverDir = filepath.Dir(file.Book.Filepath)
+		}
+	} else {
+		coverDir = filepath.Dir(file.Filepath)
+	}
+
+	// Check if cover file exists
+	filename := filepath.Base(file.Filepath)
+	coverBaseName := filename + ".cover"
+	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
+
+	if existingCoverPath != "" {
+		// Cover exists, nothing to do
+		return nil
+	}
+
+	log.Info("cover file missing, re-extracting")
+
+	// Re-extract cover from the media file
+	var metadata *mediafile.ParsedMetadata
+	var parseErr error
+
+	switch file.FileType {
+	case models.FileTypeM4B:
+		metadata, parseErr = mp4.Parse(file.Filepath)
+	case models.FileTypeEPUB:
+		metadata, parseErr = epub.Parse(file.Filepath)
+	case models.FileTypeCBZ:
+		metadata, parseErr = cbz.Parse(file.Filepath)
+	default:
+		return nil // Unknown file type, skip
+	}
+
+	if parseErr != nil {
+		return errors.WithStack(parseErr)
+	}
+
+	if metadata == nil || len(metadata.CoverData) == 0 {
+		log.Info("no cover data in media file")
+		return nil
+	}
+
+	// Normalize the cover image
+	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	coverExt := ".png"
+	if normalizedMime == metadata.CoverMimeType {
+		coverExt = metadata.CoverExtension()
+	}
+
+	// Save the cover
+	coverFilepath := filepath.Join(coverDir, coverBaseName+coverExt)
+	coverFile, err := os.Create(coverFilepath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer coverFile.Close()
+
+	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
+		return errors.WithStack(err)
+	}
+
+	log.Info("recovered missing cover", logger.Data{"cover_path": coverFilepath})
+
+	// Update file's cover mime type if it changed due to normalization
+	if normalizedMime != *file.CoverMimeType {
+		file.CoverMimeType = &normalizedMime
+		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+			Columns: []string{"cover_mime_type"},
+		}); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
 }

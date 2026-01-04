@@ -12,10 +12,11 @@ import (
 
 // OrganizedNameOptions contains the data needed to generate organized file/folder names.
 type OrganizedNameOptions struct {
-	AuthorNames  []string // Author names as strings for file naming
-	Title        string
-	SeriesNumber *float64
-	FileType     string // for determining volume number formatting
+	AuthorNames   []string // Author names as strings for file naming
+	NarratorNames []string // Narrator names for M4B file naming
+	Title         string
+	SeriesNumber  *float64
+	FileType      string // for determining volume number formatting
 }
 
 // GenerateOrganizedFolderName creates a standardized folder name: [Author] Title #Volume.
@@ -56,6 +57,7 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 }
 
 // GenerateOrganizedFileName creates a standardized filename: [Author] Title.ext.
+// For M4B files, includes narrator in braces: [Author] Title {Narrator}.m4b.
 func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath string) string {
 	ext := filepath.Ext(originalFilepath)
 
@@ -67,6 +69,13 @@ func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath strin
 	optsWithoutVolume := opts
 	optsWithoutVolume.SeriesNumber = nil
 	baseName := GenerateOrganizedFolderName(optsWithoutVolume)
+
+	// Add narrator in braces for M4B files
+	if opts.FileType == models.FileTypeM4B && len(opts.NarratorNames) > 0 && opts.NarratorNames[0] != "" {
+		narrator := sanitizeForFilename(opts.NarratorNames[0])
+		baseName = fmt.Sprintf("%s {%s}", baseName, narrator)
+	}
+
 	return baseName + ext
 }
 

@@ -82,6 +82,11 @@ func (svc *Service) RetrieveSeries(ctx context.Context, opts RetrieveSeriesOptio
 	return series, nil
 }
 
+// RetrieveSeriesByID retrieves a series by its ID.
+func (svc *Service) RetrieveSeriesByID(ctx context.Context, id int) (*models.Series, error) {
+	return svc.RetrieveSeries(ctx, RetrieveSeriesOptions{ID: &id})
+}
+
 // FindOrCreateSeries finds an existing series or creates a new one (case-insensitive match).
 func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, libraryID int, nameSource string) (*models.Series, error) {
 	// Normalize the name by trimming whitespace

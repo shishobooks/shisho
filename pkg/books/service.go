@@ -3,6 +3,7 @@ package books
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -280,53 +281,59 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 }
 
 func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts UpdateBookOptions) error {
-	if len(opts.Columns) == 0 && !opts.UpdateAuthors {
+	// Check if there's any actual database work to do
+	hasDBWork := len(opts.Columns) > 0 || opts.UpdateAuthors
+
+	if !hasDBWork && !opts.OrganizeFiles {
 		return nil
 	}
 
-	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		if opts.UpdateAuthors {
-			// Delete all previous authors associations.
-			// Note: The actual Person records are not deleted - they may be referenced by other books.
-			// AuthorNames in opts should be used by the caller to create new Author entries
-			// after calling personService.FindOrCreatePerson.
+	// Only run transaction if there's database work to do
+	if hasDBWork {
+		err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+			if opts.UpdateAuthors {
+				// Delete all previous authors associations.
+				// Note: The actual Person records are not deleted - they may be referenced by other books.
+				// AuthorNames in opts should be used by the caller to create new Author entries
+				// after calling personService.FindOrCreatePerson.
+				_, err := tx.
+					NewDelete().
+					Model((*models.Author)(nil)).
+					Where("book_id = ?", book.ID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+
+			// Update updated_at.
+			now := time.Now()
+			book.UpdatedAt = now
+			columns := append(opts.Columns, "updated_at")
+
 			_, err := tx.
-				NewDelete().
-				Model((*models.Author)(nil)).
-				Where("book_id = ?", book.ID).
+				NewUpdate().
+				Model(book).
+				Column(columns...).
+				WherePK().
 				Exec(ctx)
 			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errcodes.NotFound("Book")
+				}
 				return errors.WithStack(err)
 			}
-		}
 
-		// Update updated_at.
-		now := time.Now()
-		book.UpdatedAt = now
-		columns := append(opts.Columns, "updated_at")
-
-		_, err := tx.
-			NewUpdate().
-			Model(book).
-			Column(columns...).
-			WherePK().
-			Exec(ctx)
+			return nil
+		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return errcodes.NotFound("Book")
-			}
 			return errors.WithStack(err)
 		}
-
-		return nil
-	})
-	if err != nil {
-		return errors.WithStack(err)
 	}
 
 	// Handle file organization if requested
 	if opts.OrganizeFiles {
-		err = svc.organizeBookFiles(ctx, book)
+		err := svc.organizeBookFiles(ctx, book)
 		if err != nil {
 			// Log error but don't fail the update
 			log := logger.FromContext(ctx)
@@ -381,6 +388,30 @@ func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) 
 	}
 
 	err := q.Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcodes.NotFound("File")
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	return file, nil
+}
+
+// RetrieveFileWithNarrators retrieves a file with its narrators loaded.
+func (svc *Service) RetrieveFileWithNarrators(ctx context.Context, fileID int) (*models.File, error) {
+	file := &models.File{}
+
+	err := svc.db.
+		NewSelect().
+		Model(file).
+		Relation("Book").
+		Relation("Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Narrators.Person").
+		Where("f.id = ?", fileID).
+		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errcodes.NotFound("File")
@@ -550,8 +581,6 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 	if isDirectoryBased {
 		// For directory-based books, rename the folder and update all file paths
-		log.Info("organizing directory-based book", logger.Data{"book_path": book.Filepath})
-
 		newFolderPath, err := fileutils.RenameOrganizedFolder(book.Filepath, organizeOpts)
 		if err != nil {
 			return errors.WithStack(err)
@@ -562,6 +591,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				"old_path": book.Filepath,
 				"new_path": newFolderPath,
 			})
+
+			// Delete old sidecar file (it has the old folder name in its filename)
+			// The old sidecar is now at: newFolderPath/oldFolderName.metadata.json
+			oldFolderName := filepath.Base(book.Filepath)
+			oldSidecarPath := filepath.Join(newFolderPath, oldFolderName+".metadata.json")
+			if err := os.Remove(oldSidecarPath); err != nil && !os.IsNotExist(err) {
+				log.Warn("failed to remove old sidecar", logger.Data{
+					"path":  oldSidecarPath,
+					"error": err.Error(),
+				})
+			}
 
 			// Update all file paths
 			for _, file := range files {
@@ -737,4 +777,93 @@ func buildFTSPrefixQuery(input string) string {
 
 	// Wrap in double quotes and add prefix wildcard: "query"*
 	return `"` + input + `"*`
+}
+
+// FindOrCreateSeries finds an existing series or creates a new one (case-insensitive match).
+// This is duplicated from series service to avoid import cycles.
+func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, libraryID int, nameSource string) (*models.Series, error) {
+	// Normalize the name by trimming whitespace
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("series name cannot be empty")
+	}
+
+	// Try to find existing series (case-insensitive)
+	series := &models.Series{}
+	err := svc.db.
+		NewSelect().
+		Model(series).
+		Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", name, libraryID).
+		Scan(ctx)
+	if err == nil {
+		// Series exists, check if we should update the source
+		if models.DataSourcePriority[nameSource] < models.DataSourcePriority[series.NameSource] {
+			series.NameSource = nameSource
+			series.UpdatedAt = time.Now()
+			_, err = svc.db.
+				NewUpdate().
+				Model(series).
+				Column("name_source", "updated_at").
+				WherePK().
+				Exec(ctx)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+		}
+		return series, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.WithStack(err)
+	}
+
+	// Create new series
+	now := time.Now()
+	series = &models.Series{
+		LibraryID:  libraryID,
+		Name:       name,
+		NameSource: nameSource,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	_, err = svc.db.
+		NewInsert().
+		Model(series).
+		Returning("*").
+		Exec(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return series, nil
+}
+
+// CleanupOrphanedSeries soft-deletes series with no books.
+// This is duplicated from series service to avoid import cycles.
+func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
+	result, err := svc.db.NewDelete().
+		Model((*models.Series)(nil)).
+		Where("id NOT IN (SELECT DISTINCT series_id FROM book_series)").
+		Exec(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}
+
+// RetrieveSeriesByID retrieves a series by its ID.
+func (svc *Service) RetrieveSeriesByID(ctx context.Context, id int) (*models.Series, error) {
+	series := &models.Series{}
+	err := svc.db.
+		NewSelect().
+		Model(series).
+		Relation("Library").
+		Where("s.id = ?", id).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcodes.NotFound("Series")
+		}
+		return nil, errors.WithStack(err)
+	}
+	return series, nil
 }
