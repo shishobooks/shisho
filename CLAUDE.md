@@ -78,6 +78,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Authn and authz needs to be considered for all pieces of functionality
 - Both frontend and backend checks need to be made so that everything is protected on all fronts
 
+**Config**:
+- This is a self-hosted app, so all configs are defined by a config file
+- Each config field is also configurable by environment variables as well
+- If a new field is added to `config.Config` in `pkg/config/config.go`, `shisho.example.yaml` should also be updated to reflect the new config field
+
 ### Frontend Architecture
 
 **React Router** (`app/router.tsx`):

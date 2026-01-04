@@ -23,6 +23,8 @@ type Config struct {
 	DatabaseConnectRetryDelay time.Duration `koanf:"database_connect_retry_delay" json:"database_connect_retry_delay"`
 	DatabaseDebug             bool          `koanf:"database_debug" json:"database_debug"`
 	DatabaseFilePath          string        `koanf:"database_file_path" json:"database_file_path" validate:"required"`
+	DatabaseBusyTimeout       time.Duration `koanf:"database_busy_timeout" json:"database_busy_timeout"`
+	DatabaseMaxRetries        int           `koanf:"database_max_retries" json:"database_max_retries"`
 
 	// Server settings
 	ServerHost string `koanf:"server_host" json:"server_host"`
@@ -46,6 +48,8 @@ func defaults() *Config {
 		DatabaseConnectRetryDelay: 2 * time.Second,
 		DatabaseDebug:             false,
 		DatabaseFilePath:          "/config/shisho.db",
+		DatabaseBusyTimeout:       5 * time.Second,
+		DatabaseMaxRetries:        5,
 		ServerHost:                "0.0.0.0",
 		ServerPort:                3689,
 		SyncIntervalMinutes:       60,
@@ -108,6 +112,8 @@ func NewForTest() *Config {
 	cfg := defaults()
 	cfg.DatabaseFilePath = ":memory:"
 	cfg.DatabaseDebug = true
+	cfg.DatabaseBusyTimeout = 1 * time.Second // Shorter timeout for tests
+	cfg.DatabaseMaxRetries = 3                // Fewer retries for tests
 	cfg.ServerHost = "127.0.0.1"
 	cfg.ServerPort = 0
 	cfg.Hostname = "test-host"

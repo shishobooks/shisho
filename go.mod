@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/DarthSim/hivemind v1.1.0
 	github.com/abema/go-mp4 v1.4.1
-	github.com/air-verse/air v1.63.4
+	github.com/air-verse/air v1.63.5
 	github.com/creasty/defaults v1.8.0
 	github.com/gabriel-vasile/mimetype v1.4.8
 	github.com/go-playground/mold/v4 v4.5.1

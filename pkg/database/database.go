@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"time"
 
 	"github.com/pkg/errors"
@@ -53,10 +54,22 @@ func CheckFTS5Support(db *bun.DB) error {
 }
 
 func New(cfg *config.Config) (*bun.DB, error) {
-	sqldb, err := sql.Open(sqliteshim.ShimName, cfg.DatabaseFilePath)
+	// Get the underlying SQLite driver and create a connector with retry logic.
+	drv := sqliteshim.Driver()
+	drvCtx, ok := drv.(interface {
+		OpenConnector(name string) (driver.Connector, error)
+	})
+	if !ok {
+		return nil, errors.New("sqlite driver does not support OpenConnector")
+	}
+	connector, err := drvCtx.OpenConnector(cfg.DatabaseFilePath)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+
+	// Wrap the connector with retry logic for SQLITE_BUSY errors.
+	retryConnector := newRetryConnector(connector, cfg.DatabaseMaxRetries)
+	sqldb := sql.OpenDB(retryConnector)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
@@ -77,6 +90,21 @@ func New(cfg *config.Config) (*bun.DB, error) {
 	}
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	// Configure SQLite for better concurrency handling.
+	// WAL mode allows concurrent reads during writes.
+	_, err = db.Exec("PRAGMA journal_mode=WAL")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to enable WAL mode")
+	}
+
+	// busy_timeout makes SQLite wait before returning SQLITE_BUSY.
+	// This handles short-term lock contention automatically.
+	busyTimeoutMs := cfg.DatabaseBusyTimeout.Milliseconds()
+	_, err = db.Exec("PRAGMA busy_timeout=?", busyTimeoutMs)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to set busy_timeout")
 	}
 
 	return db, nil

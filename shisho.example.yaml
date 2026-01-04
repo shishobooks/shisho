@@ -29,6 +29,16 @@ database_connect_retry_count: 5
 # Default: 2s
 database_connect_retry_delay: 2s
 
+# SQLite busy timeout - how long to wait when the database is locked
+# Env: DATABASE_BUSY_TIMEOUT
+# Default: 5s
+database_busy_timeout: 5s
+
+# Maximum number of retries for database operations on busy/locked errors
+# Env: DATABASE_MAX_RETRIES
+# Default: 5
+database_max_retries: 5
+
 # =============================================================================
 # SERVER SETTINGS
 # =============================================================================
