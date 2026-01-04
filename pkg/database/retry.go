@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+// driverConnector wraps a driver.Driver to implement driver.Connector.
+// This allows using sql.OpenDB() with drivers that don't natively support OpenConnector.
+type driverConnector struct {
+	driver driver.Driver
+	dsn    string
+}
+
+// newDriverConnector creates a connector from a driver and DSN.
+func newDriverConnector(drv driver.Driver, dsn string) *driverConnector {
+	return &driverConnector{driver: drv, dsn: dsn}
+}
+
+func (dc *driverConnector) Connect(_ context.Context) (driver.Conn, error) {
+	return dc.driver.Open(dc.dsn)
+}
+
+func (dc *driverConnector) Driver() driver.Driver {
+	return dc.driver
+}
+
 // retryConnector wraps a driver.Connector and adds retry logic for SQLITE_BUSY errors.
 type retryConnector struct {
 	connector  driver.Connector

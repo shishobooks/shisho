@@ -54,22 +54,30 @@ func CheckFTS5Support(db *bun.DB) error {
 }
 
 func New(cfg *config.Config) (*bun.DB, error) {
-	// Get the underlying SQLite driver and create a connector with retry logic.
+	var sqldb *sql.DB
+	var err error
+
+	// Get the underlying SQLite driver.
 	drv := sqliteshim.Driver()
+
+	// Try to use native OpenConnector if supported, otherwise create our own connector.
+	var connector driver.Connector
 	drvCtx, ok := drv.(interface {
 		OpenConnector(name string) (driver.Connector, error)
 	})
-	if !ok {
-		return nil, errors.New("sqlite driver does not support OpenConnector")
-	}
-	connector, err := drvCtx.OpenConnector(cfg.DatabaseFilePath)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	if ok {
+		connector, err = drvCtx.OpenConnector(cfg.DatabaseFilePath)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+	} else {
+		// Fallback: wrap the driver in our own connector implementation.
+		connector = newDriverConnector(drv, cfg.DatabaseFilePath)
 	}
 
 	// Wrap the connector with retry logic for SQLITE_BUSY errors.
 	retryConnector := newRetryConnector(connector, cfg.DatabaseMaxRetries)
-	sqldb := sql.OpenDB(retryConnector)
+	sqldb = sql.OpenDB(retryConnector)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
