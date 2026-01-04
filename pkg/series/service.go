@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
 
@@ -46,6 +47,16 @@ func (svc *Service) CreateSeries(ctx context.Context, series *models.Series) err
 		series.CreatedAt = now
 	}
 	series.UpdatedAt = series.CreatedAt
+
+	// Generate sort name if not provided
+	if series.SortName == "" {
+		series.SortName = sortname.ForTitle(series.Name)
+		series.SortNameSource = models.DataSourceFilepath // Auto-generated
+	}
+	// Ensure source is set if not already
+	if series.SortNameSource == "" {
+		series.SortNameSource = models.DataSourceFilepath
+	}
 
 	_, err := svc.db.
 		NewInsert().
@@ -118,9 +129,11 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 
 	// Create new series
 	series = &models.Series{
-		LibraryID:  libraryID,
-		Name:       name,
-		NameSource: nameSource,
+		LibraryID:      libraryID,
+		Name:           name,
+		NameSource:     nameSource,
+		SortName:       sortname.ForTitle(name),
+		SortNameSource: models.DataSourceFilepath,
 	}
 	err = svc.CreateSeries(ctx, series)
 	if err != nil {
@@ -150,7 +163,7 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		Relation("Library").
 		ColumnExpr("s.*").
 		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count").
-		Order("s.name ASC")
+		Order("s.sort_name ASC")
 
 	if opts.LibraryID != nil {
 		q = q.Where("s.library_id = ?", *opts.LibraryID)

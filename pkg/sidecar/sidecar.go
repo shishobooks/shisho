@@ -135,9 +135,10 @@ func WriteFileSidecar(filePath string, s *FileSidecar) error {
 // BookSidecarFromModel creates a BookSidecar from a Book model.
 func BookSidecarFromModel(book *models.Book) *BookSidecar {
 	s := &BookSidecar{
-		Version:  CurrentVersion,
-		Title:    book.Title,
-		Subtitle: book.Subtitle,
+		Version:   CurrentVersion,
+		Title:     book.Title,
+		SortTitle: book.SortTitle,
+		Subtitle:  book.Subtitle,
 	}
 
 	// Convert authors from Authors
@@ -145,6 +146,7 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 		if author.Person != nil {
 			s.Authors = append(s.Authors, AuthorMetadata{
 				Name:      author.Person.Name,
+				SortName:  author.Person.SortName,
 				SortOrder: author.SortOrder,
 			})
 		}
@@ -155,6 +157,7 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 		if bs.Series != nil {
 			s.Series = append(s.Series, SeriesMetadata{
 				Name:      bs.Series.Name,
+				SortName:  bs.Series.SortName,
 				Number:    bs.SeriesNumber,
 				SortOrder: bs.SortOrder,
 			})
@@ -175,6 +178,7 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 		if narrator.Person != nil {
 			s.Narrators = append(s.Narrators, NarratorMetadata{
 				Name:      narrator.Person.Name,
+				SortName:  narrator.Person.SortName,
 				SortOrder: narrator.SortOrder,
 			})
 		}

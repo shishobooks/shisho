@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
 type handler struct {
@@ -139,6 +140,25 @@ func (h *handler) update(c echo.Context) error {
 		series.Name = *params.Name
 		series.NameSource = models.DataSourceManual
 		opts.Columns = append(opts.Columns, "name", "name_source")
+		// Regenerate sort name when name changes (unless sort_name_source is manual)
+		if series.SortNameSource != models.DataSourceManual {
+			series.SortName = sortname.ForTitle(*params.Name)
+			series.SortNameSource = models.DataSourceFilepath
+			opts.Columns = append(opts.Columns, "sort_name", "sort_name_source")
+		}
+	}
+
+	// Update sort name
+	if params.SortName != nil && *params.SortName != series.SortName {
+		if *params.SortName == "" {
+			// Empty string means regenerate from name
+			series.SortName = sortname.ForTitle(series.Name)
+			series.SortNameSource = models.DataSourceFilepath
+		} else {
+			series.SortName = *params.SortName
+			series.SortNameSource = models.DataSourceManual
+		}
+		opts.Columns = append(opts.Columns, "sort_name", "sort_name_source")
 	}
 
 	if params.Description != nil {

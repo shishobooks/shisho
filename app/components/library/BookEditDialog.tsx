@@ -47,6 +47,7 @@ export function BookEditDialog({
   onOpenChange,
 }: BookEditDialogProps) {
   const [title, setTitle] = useState(book.title);
+  const [sortTitle, setSortTitle] = useState(book.sort_title || "");
   const [subtitle, setSubtitle] = useState(book.subtitle || "");
   const [authors, setAuthors] = useState<string[]>(
     book.authors?.map((a) => a.person?.name || "") || [],
@@ -78,6 +79,7 @@ export function BookEditDialog({
   useEffect(() => {
     if (open) {
       setTitle(book.title);
+      setSortTitle(book.sort_title || "");
       setSubtitle(book.subtitle || "");
       setAuthors(book.authors?.map((a) => a.person?.name || "") || []);
       setSeriesEntries(
@@ -143,6 +145,7 @@ export function BookEditDialog({
   const handleSubmit = async () => {
     const payload: {
       title?: string;
+      sort_title?: string;
       subtitle?: string;
       authors?: string[];
       series?: SeriesInput[];
@@ -151,6 +154,9 @@ export function BookEditDialog({
     // Only include changed fields
     if (title !== book.title) {
       payload.title = title;
+    }
+    if (sortTitle !== (book.sort_title || "")) {
+      payload.sort_title = sortTitle;
     }
     if (subtitle !== (book.subtitle || "")) {
       payload.subtitle = subtitle;
@@ -225,6 +231,20 @@ export function BookEditDialog({
               onChange={(e) => setTitle(e.target.value)}
               value={title}
             />
+          </div>
+
+          {/* Sort Title */}
+          <div className="space-y-2">
+            <Label htmlFor="sort_title">Sort Title</Label>
+            <Input
+              id="sort_title"
+              onChange={(e) => setSortTitle(e.target.value)}
+              placeholder="Leave empty to auto-generate from title"
+              value={sortTitle}
+            />
+            <p className="text-xs text-muted-foreground">
+              Used for sorting. Clear to regenerate automatically.
+            </p>
           </div>
 
           {/* Subtitle */}

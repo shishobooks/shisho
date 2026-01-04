@@ -161,6 +161,11 @@ const BookDetail = () => {
                   Edit
                 </Button>
               </div>
+              {book.sort_title && book.sort_title !== book.title && (
+                <p className="text-sm text-muted-foreground italic">
+                  Sort title: {book.sort_title}
+                </p>
+              )}
               {book.subtitle && (
                 <p className="text-lg text-muted-foreground">{book.subtitle}</p>
               )}

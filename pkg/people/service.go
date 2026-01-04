@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
 
@@ -49,7 +50,12 @@ func (svc *Service) CreatePerson(ctx context.Context, person *models.Person) err
 
 	// Generate sort name if not provided
 	if person.SortName == "" {
-		person.SortName = GenerateSortName(person.Name)
+		person.SortName = sortname.ForPerson(person.Name)
+		person.SortNameSource = models.DataSourceFilepath // Auto-generated
+	}
+	// Ensure source is set if not already
+	if person.SortNameSource == "" {
+		person.SortNameSource = models.DataSourceFilepath
 	}
 
 	_, err := svc.db.
@@ -107,9 +113,10 @@ func (svc *Service) FindOrCreatePerson(ctx context.Context, name string, library
 
 	// Create new person
 	person = &models.Person{
-		LibraryID: libraryID,
-		Name:      name,
-		SortName:  GenerateSortName(name),
+		LibraryID:      libraryID,
+		Name:           name,
+		SortName:       sortname.ForPerson(name),
+		SortNameSource: models.DataSourceFilepath,
 	}
 	err = svc.CreatePerson(ctx, person)
 	if err != nil {
@@ -321,26 +328,6 @@ func (svc *Service) CleanupOrphanedPeople(ctx context.Context) (int, error) {
 	}
 	n, _ := result.RowsAffected()
 	return int(n), nil
-}
-
-// GenerateSortName generates a sort name from a display name.
-// For example, "Stephen King" becomes "King, Stephen".
-func GenerateSortName(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-
-	parts := strings.Fields(name)
-	if len(parts) == 1 {
-		return name
-	}
-
-	// Take the last part as the surname
-	lastName := parts[len(parts)-1]
-	firstName := strings.Join(parts[:len(parts)-1], " ")
-
-	return lastName + ", " + firstName
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.

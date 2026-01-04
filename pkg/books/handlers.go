@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
 type handler struct {
@@ -137,6 +138,25 @@ func (h *handler) update(c echo.Context) error {
 		book.TitleSource = models.DataSourceManual
 		opts.Columns = append(opts.Columns, "title", "title_source")
 		shouldOrganizeFiles = true
+		// Regenerate sort title when title changes (unless sort_title_source is manual)
+		if book.SortTitleSource != models.DataSourceManual {
+			book.SortTitle = sortname.ForTitle(*params.Title)
+			book.SortTitleSource = models.DataSourceFilepath
+			opts.Columns = append(opts.Columns, "sort_title", "sort_title_source")
+		}
+	}
+
+	// Update sort title
+	if params.SortTitle != nil && *params.SortTitle != book.SortTitle {
+		if *params.SortTitle == "" {
+			// Empty string means regenerate from title
+			book.SortTitle = sortname.ForTitle(book.Title)
+			book.SortTitleSource = models.DataSourceFilepath
+		} else {
+			book.SortTitle = *params.SortTitle
+			book.SortTitleSource = models.DataSourceManual
+		}
+		opts.Columns = append(opts.Columns, "sort_title", "sort_title_source")
 	}
 
 	// Update subtitle

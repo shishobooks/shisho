@@ -63,6 +63,8 @@ func init() {
 				library_id INTEGER REFERENCES libraries (id) NOT NULL,
 				name TEXT NOT NULL,
 				name_source TEXT NOT NULL,
+				sort_name TEXT NOT NULL,
+				sort_name_source TEXT NOT NULL,
 				description TEXT,
 				cover_image_path TEXT
 			)
@@ -88,6 +90,8 @@ func init() {
 				filepath TEXT NOT NULL,
 				title TEXT NOT NULL,
 				title_source TEXT NOT NULL,
+				sort_title TEXT NOT NULL,
+				sort_title_source TEXT NOT NULL,
 				subtitle TEXT,
 				subtitle_source TEXT,
 				author_source TEXT NOT NULL
@@ -185,7 +189,8 @@ func init() {
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				library_id INTEGER REFERENCES libraries (id) NOT NULL,
 				name TEXT NOT NULL,
-				sort_name TEXT NOT NULL
+				sort_name TEXT NOT NULL,
+				sort_name_source TEXT NOT NULL
 			)
 `)
 		if err != nil {

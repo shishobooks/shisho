@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
 
@@ -74,6 +75,16 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 		book.CreatedAt = now
 	}
 	book.UpdatedAt = book.CreatedAt
+
+	// Generate sort title if not provided
+	if book.SortTitle == "" {
+		book.SortTitle = sortname.ForTitle(book.Title)
+		book.SortTitleSource = models.DataSourceFilepath // Auto-generated
+	}
+	// Ensure source is set if not already
+	if book.SortTitleSource == "" {
+		book.SortTitleSource = models.DataSourceFilepath
+	}
 
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// Insert book.
@@ -236,7 +247,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	if opts.orderByRecent {
 		q = q.Order("b.updated_at DESC")
 	} else {
-		q = q.Order("b.created_at ASC")
+		q = q.Order("b.sort_title ASC")
 	}
 
 	if opts.Limit != nil {
@@ -885,11 +896,13 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	// Create new series
 	now := time.Now()
 	series = &models.Series{
-		LibraryID:  libraryID,
-		Name:       name,
-		NameSource: nameSource,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		LibraryID:      libraryID,
+		Name:           name,
+		NameSource:     nameSource,
+		SortName:       sortname.ForTitle(name),
+		SortNameSource: models.DataSourceFilepath,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	_, err = svc.db.
 		NewInsert().

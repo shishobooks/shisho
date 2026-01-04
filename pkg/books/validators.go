@@ -10,10 +10,11 @@ type ListBooksQuery struct {
 }
 
 type UpdateBookPayload struct {
-	Title    *string       `json:"title,omitempty" validate:"omitempty,max=300"`
-	Subtitle *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
-	Authors  []string      `json:"authors,omitempty" validate:"omitempty,dive,max=200"`
-	Series   []SeriesInput `json:"series,omitempty"`
+	Title     *string       `json:"title,omitempty" validate:"omitempty,max=300"`
+	SortTitle *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
+	Subtitle  *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
+	Authors   []string      `json:"authors,omitempty" validate:"omitempty,dive,max=200"`
+	Series    []SeriesInput `json:"series,omitempty"`
 }
 
 // SeriesInput represents a series association with optional number.

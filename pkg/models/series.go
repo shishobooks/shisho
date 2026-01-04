@@ -17,6 +17,8 @@ type Series struct {
 	Library        *Library      `bun:"rel:belongs-to" json:"library,omitempty" tstype:"Library"`
 	Name           string        `bun:",nullzero" json:"name"`
 	NameSource     string        `bun:",nullzero" json:"name_source" tstype:"DataSource"`
+	SortName       string        `bun:",notnull" json:"sort_name"`
+	SortNameSource string        `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
 	Description    *string       `json:"description,omitempty"`
 	CoverImagePath *string       `json:"cover_image_path,omitempty"`
 	BookSeries     []*BookSeries `bun:"rel:has-many" json:"book_series,omitempty" tstype:"BookSeries[]"`

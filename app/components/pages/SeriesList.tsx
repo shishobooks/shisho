@@ -71,12 +71,14 @@ const SeriesList = () => {
   const renderSeriesItem = (seriesItem: Series) => {
     const bookCount = seriesItem.book_count ?? 0;
     const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
+    const showSortName =
+      seriesItem.sort_name && seriesItem.sort_name !== seriesItem.name;
 
     return (
       <div
         className="w-32"
         key={seriesItem.id}
-        title={`${seriesItem.name}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
+        title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
       >
         <Link
           className="group cursor-pointer"

@@ -9,12 +9,13 @@ import (
 type Person struct {
 	bun.BaseModel `bun:"table:persons,alias:p" tstype:"-"`
 
-	ID        int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	LibraryID int       `bun:",nullzero" json:"library_id"`
-	Name      string    `bun:",nullzero" json:"name"`
-	SortName  string    `bun:",nullzero" json:"sort_name"`
+	ID             int       `bun:",pk,nullzero" json:"id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	LibraryID      int       `bun:",nullzero" json:"library_id"`
+	Name           string    `bun:",nullzero" json:"name"`
+	SortName       string    `bun:",notnull" json:"sort_name"`
+	SortNameSource string    `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
 }
 
 type Author struct {
