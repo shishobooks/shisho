@@ -83,6 +83,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Each config field is also configurable by environment variables as well
 - If a new field is added to `config.Config` in `pkg/config/config.go`, `shisho.example.yaml` should also be updated to reflect the new config field
 
+**Sidecars**:
+- We keep sidecar metadata files for every file we parse into the system
+- We don't want to keep non-modifiable intrinsic properies of the file in the sidecar (e.g. bitrate, duration, etc.)
+- Source fields (e.g. title\_source, name\_source, etc.) shouldn't be saved into the sidecar
+
 ### Frontend Architecture
 
 **React Router** (`app/router.tsx`):

@@ -442,17 +442,20 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 
 		// Check to see if we need to update any of the metadata on the book.
 		updateOptions := books.UpdateBookOptions{Columns: make([]string, 0)}
+		shouldOrganizeFiles := false
 		if models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
 			log.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
+			shouldOrganizeFiles = true
 		}
 		if models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
 			log.Info("updating authors", logger.Data{"new_author_count": len(authorNames), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
 			updateOptions.AuthorNames = authorNames
+			shouldOrganizeFiles = true
 		}
 		// Update series if we have a higher priority source
 		// Get existing series source for comparison
@@ -526,6 +529,22 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		// Organize files if metadata changed (rename folders/files based on new metadata)
+		if shouldOrganizeFiles && library.OrganizeFileStructure {
+			// Reload the book with fresh data (including newly created authors/series)
+			existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+				ID: &existingBook.ID,
+			})
+			if err != nil {
+				log.Warn("failed to reload book for file organization", logger.Data{"error": err.Error()})
+			} else {
+				organizeOpts := books.UpdateBookOptions{OrganizeFiles: true}
+				if err := w.bookService.UpdateBook(ctx, existingBook, organizeOpts); err != nil {
+					log.Warn("failed to organize book files", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
+				}
+			}
 		}
 	} else {
 		log.Info("creating book", logger.Data{"title": title})
