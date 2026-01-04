@@ -1,9 +1,11 @@
-import { Plus, Settings } from "lucide-react";
-import { Link } from "react-router-dom";
+import { BookPlus, Plus, Settings } from "lucide-react";
+import { useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import type { Library } from "@/types";
 
@@ -39,10 +41,35 @@ const LibraryRow = ({ library }: LibraryRowProps) => (
 );
 
 const AdminLibraries = () => {
+  const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { data, isLoading, error } = useLibraries({});
+  const createLibraryMutation = useCreateLibrary();
+  const isDevelopment = import.meta.env.DEV;
 
   const canCreateLibraries = hasPermission("libraries", "write");
+
+  const handleCreateDefaultLibrary = useCallback(async () => {
+    try {
+      const library = await createLibraryMutation.mutateAsync({
+        payload: {
+          name: "Main",
+          cover_aspect_ratio: "book",
+          library_paths: [
+            "/Users/robinjoseph/code/personal/shisho/tmp/library",
+          ],
+        },
+      });
+      toast.success("Default library created! Scanning for media...");
+      navigate(`/libraries/${library.id}`);
+    } catch (e) {
+      let msg = "Something went wrong.";
+      if (e instanceof Error) {
+        msg = e.message;
+      }
+      toast.error(msg);
+    }
+  }, [createLibraryMutation, navigate]);
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -68,14 +95,27 @@ const AdminLibraries = () => {
             Manage your media libraries and their settings.
           </p>
         </div>
-        {canCreateLibraries && (
-          <Button asChild size="sm">
-            <Link to="/libraries/create">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Library
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isDevelopment && (
+            <Button
+              disabled={createLibraryMutation.isPending}
+              onClick={handleCreateDefaultLibrary}
+              size="sm"
+              variant="outline"
+            >
+              <BookPlus className="h-4 w-4 mr-2" />
+              Create default library (dev)
+            </Button>
+          )}
+          {canCreateLibraries && (
+            <Button asChild size="sm">
+              <Link to="/libraries/create">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Library
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {libraries.length === 0 ? (
