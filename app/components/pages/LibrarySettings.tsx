@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
 
@@ -19,6 +26,7 @@ const LibrarySettings = () => {
 
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
+  const [coverAspectRatio, setCoverAspectRatio] = useState("book");
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -26,6 +34,7 @@ const LibrarySettings = () => {
   if (libraryQuery.isSuccess && libraryQuery.data && !isInitialized) {
     setName(libraryQuery.data.name);
     setOrganizeFileStructure(libraryQuery.data.organize_file_structure);
+    setCoverAspectRatio(libraryQuery.data.cover_aspect_ratio);
     setLibraryPaths(
       libraryQuery.data.library_paths?.map((lp) => lp.filepath) || [""],
     );
@@ -63,6 +72,7 @@ const LibrarySettings = () => {
         payload: {
           name: name.trim(),
           organize_file_structure: organizeFileStructure,
+          cover_aspect_ratio: coverAspectRatio,
           library_paths: validPaths,
         },
       });
@@ -201,6 +211,36 @@ const LibrarySettings = () => {
                 directory structure during scanning operations.
               </p>
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Cover Aspect Ratio Setting */}
+          <div className="space-y-2">
+            <Label htmlFor="cover-aspect-ratio">
+              Cover Display Aspect Ratio
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              How book and series covers should be displayed in gallery views
+            </p>
+            <Select
+              onValueChange={setCoverAspectRatio}
+              value={coverAspectRatio}
+            >
+              <SelectTrigger className="w-full" id="cover-aspect-ratio">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="book">Book Cover (2:3)</SelectItem>
+                <SelectItem value="audiobook">Audiobook Cover (1:1)</SelectItem>
+                <SelectItem value="book_fallback_audiobook">
+                  Book Cover (2:3), fallback to Audiobook (1:1)
+                </SelectItem>
+                <SelectItem value="audiobook_fallback_book">
+                  Audiobook Cover (1:1), fallback to Book (2:3)
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />

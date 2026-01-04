@@ -2,19 +2,80 @@ import { uniqBy } from "lodash";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
-import type { Book } from "@/types";
+import { cn } from "@/libraries/utils";
+import type { Book, File } from "@/types";
 
 interface BookItemProps {
   book: Book;
   libraryId: string;
   seriesId?: number;
+  coverAspectRatio?: string;
 }
 
-const BookItem = ({ book, libraryId, seriesId }: BookItemProps) => {
+// Selects the file that would be used for the cover based on cover_aspect_ratio setting
+// This mirrors the backend's selectCoverFile logic
+const selectCoverFile = (
+  files: File[] | undefined,
+  coverAspectRatio: string,
+): File | null => {
+  if (!files) return null;
+
+  const bookFiles = files.filter(
+    (f) =>
+      (f.file_type === "epub" || f.file_type === "cbz") && f.cover_image_path,
+  );
+  const audiobookFiles = files.filter(
+    (f) => f.file_type === "m4b" && f.cover_image_path,
+  );
+
+  switch (coverAspectRatio) {
+    case "audiobook":
+    case "audiobook_fallback_book":
+      if (audiobookFiles.length > 0) return audiobookFiles[0];
+      if (bookFiles.length > 0) return bookFiles[0];
+      break;
+    default: // "book", "book_fallback_audiobook"
+      if (bookFiles.length > 0) return bookFiles[0];
+      if (audiobookFiles.length > 0) return audiobookFiles[0];
+  }
+  return null;
+};
+
+const getAspectRatioClass = (
+  coverAspectRatio: string,
+  files?: File[],
+): string => {
+  // For non-fallback modes, just use the specified aspect ratio
+  if (coverAspectRatio === "audiobook") return "aspect-square";
+  if (coverAspectRatio === "book") return "aspect-[2/3]";
+
+  // For fallback modes, determine which file's cover is being displayed
+  const coverFile = selectCoverFile(files, coverAspectRatio);
+  const isAudiobookCover = coverFile?.file_type === "m4b";
+
+  switch (coverAspectRatio) {
+    case "book_fallback_audiobook":
+      return isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
+    case "audiobook_fallback_book":
+      return isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
+    default:
+      return "aspect-[2/3]";
+  }
+};
+
+const BookItem = ({
+  book,
+  libraryId,
+  seriesId,
+  coverAspectRatio = "book",
+}: BookItemProps) => {
   // Find the series number for the specific series context (if provided)
   const seriesNumber = seriesId
     ? book.book_series?.find((bs) => bs.series_id === seriesId)?.series_number
     : undefined;
+
+  const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
+
   return (
     <div className="w-32" key={book.id}>
       <Link
@@ -23,7 +84,10 @@ const BookItem = ({ book, libraryId, seriesId }: BookItemProps) => {
       >
         <img
           alt={`${book.title} Cover`}
-          className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
+          className={cn(
+            "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+            aspectClass,
+          )}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = "none";
             (e.target as HTMLImageElement).nextElementSibling!.textContent =

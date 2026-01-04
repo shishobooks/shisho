@@ -106,8 +106,9 @@ func (tc *testContext) createLibrary(paths []string) {
 	}
 
 	library := &models.Library{
-		Name:         "Test Library",
-		LibraryPaths: libraryPaths,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		LibraryPaths:     libraryPaths,
 	}
 
 	err := tc.libraryService.CreateLibrary(tc.ctx, library)
@@ -130,6 +131,7 @@ func (tc *testContext) createLibraryWithOptions(paths []string, organizeFileStru
 	library := &models.Library{
 		Name:                  "Test Library",
 		OrganizeFileStructure: organizeFileStructure,
+		CoverAspectRatio:      "book",
 		LibraryPaths:          libraryPaths,
 	}
 

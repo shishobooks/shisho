@@ -431,15 +431,14 @@ func TestProcessScanJob_ExistingCanonicalCoverNotOverwritten(t *testing.T) {
 	coverData := testgen.ReadFile(t, existingCoverPath)
 	assert.Equal(t, existingCoverContent, coverData, "existing canonical cover should not be overwritten")
 
-	// Verify that no cover.jpg was created
-	jpegCoverPath := filepath.Join(bookDir, "cover.jpg")
-	assert.False(t, testgen.FileExists(jpegCoverPath), "canonical cover.jpg should not be created when cover.png exists")
-
-	// Verify the book uses the existing cover.png
+	// Verify the file-specific cover was extracted (separate from canonical)
+	// The existing cover.png is a canonical cover (which we no longer create)
+	// but file-specific covers (e.g., mybook.epub.cover.jpg) are still created
 	allBooks := tc.listBooks()
 	require.Len(t, allBooks, 1)
-	require.NotNil(t, allBooks[0].CoverImagePath)
-	assert.Equal(t, "cover.png", *allBooks[0].CoverImagePath)
+	require.Len(t, allBooks[0].Files, 1)
+	require.NotNil(t, allBooks[0].Files[0].CoverImagePath)
+	assert.Contains(t, *allBooks[0].Files[0].CoverImagePath, ".cover.")
 }
 
 func TestProcessScanJob_ExistingAudiobookCoverNotOverwritten(t *testing.T) {
@@ -468,11 +467,14 @@ func TestProcessScanJob_ExistingAudiobookCoverNotOverwritten(t *testing.T) {
 	coverData := testgen.ReadFile(t, existingCoverPath)
 	assert.Equal(t, existingCoverContent, coverData, "existing audiobook cover should not be overwritten")
 
-	// Verify the book uses the existing audiobook_cover.png
+	// Verify the file's cover path is set (file-specific cover)
+	// The existing audiobook_cover.png is a canonical cover (which we no longer create)
+	// but file-specific covers (e.g., audiobook.m4b.cover.jpg) are still created
 	allBooks := tc.listBooks()
 	require.Len(t, allBooks, 1)
-	require.NotNil(t, allBooks[0].CoverImagePath)
-	assert.Equal(t, "audiobook_cover.png", *allBooks[0].CoverImagePath)
+	require.Len(t, allBooks[0].Files, 1)
+	require.NotNil(t, allBooks[0].Files[0].CoverImagePath)
+	assert.Contains(t, *allBooks[0].Files[0].CoverImagePath, ".cover.")
 }
 
 func TestProcessScanJob_VolumeNormalization(t *testing.T) {

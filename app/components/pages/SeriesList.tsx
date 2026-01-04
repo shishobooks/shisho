@@ -5,9 +5,26 @@ import Gallery from "@/components/library/Gallery";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useDebounce } from "@/hooks/useDebounce";
+import { cn } from "@/libraries/utils";
 import type { Series } from "@/types";
+
+// For series, we don't have access to the underlying files, so we use the
+// library's cover_aspect_ratio preference to determine aspect ratio.
+// For fallback modes, we use the primary preference.
+const getSeriesAspectRatioClass = (coverAspectRatio: string): string => {
+  switch (coverAspectRatio) {
+    case "audiobook":
+    case "audiobook_fallback_book":
+      return "aspect-square";
+    case "book":
+    case "book_fallback_audiobook":
+    default:
+      return "aspect-[2/3]";
+  }
+};
 
 const ITEMS_PER_PAGE = 24;
 
@@ -22,6 +39,9 @@ const SeriesList = () => {
 
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
+
+  const libraryQuery = useLibrary(libraryId);
+  const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
   // Handle search input change
   const handleSearchChange = (value: string) => {
@@ -50,6 +70,7 @@ const SeriesList = () => {
 
   const renderSeriesItem = (seriesItem: Series) => {
     const bookCount = seriesItem.book_count ?? 0;
+    const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
 
     return (
       <div
@@ -63,7 +84,10 @@ const SeriesList = () => {
         >
           <img
             alt={`${seriesItem.name} Cover`}
-            className="h-48 object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1"
+            className={cn(
+              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+              aspectClass,
+            )}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
               (e.target as HTMLImageElement).nextElementSibling!.textContent =

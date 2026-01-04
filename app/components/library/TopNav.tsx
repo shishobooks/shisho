@@ -70,6 +70,7 @@ const TopNav = () => {
       const library = await createLibraryMutation.mutateAsync({
         payload: {
           name: "Main",
+          cover_aspect_ratio: "book",
           library_paths: [
             "/Users/robinjoseph/code/personal/shisho/tmp/library",
           ],

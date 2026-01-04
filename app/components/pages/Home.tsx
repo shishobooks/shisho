@@ -7,6 +7,7 @@ import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useBooks } from "@/hooks/queries/books";
+import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeries } from "@/hooks/queries/series";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Book } from "@/types";
@@ -103,6 +104,9 @@ const Home = () => {
 
   const booksQuery = useBooks(booksQueryParams);
 
+  const libraryQuery = useLibrary(libraryId);
+  const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
+
   const seriesQuery = useSeries(seriesId, {
     enabled: Boolean(seriesId),
   });
@@ -110,6 +114,7 @@ const Home = () => {
   const renderBookItem = (book: Book) => (
     <BookItem
       book={book}
+      coverAspectRatio={coverAspectRatio}
       key={book.id}
       libraryId={libraryId!}
       seriesId={seriesId}

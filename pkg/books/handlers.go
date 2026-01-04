@@ -1,7 +1,6 @@
 package books
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"os"
@@ -654,9 +653,13 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Regenerate canonical cover for the book
-	if err := h.regenerateCanonicalCover(ctx, book); err != nil {
-		log.Warn("failed to regenerate canonical cover", logger.Data{"book_id": book.ID, "error": err.Error()})
+	// Update the file's cover_image_path
+	coverFilename := coverBaseName + finalExt
+	file.CoverImagePath = &coverFilename
+	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
+		Columns: []string{"cover_image_path"},
+	}); err != nil {
+		return errors.WithStack(err)
 	}
 
 	// Reload the file
@@ -666,113 +669,6 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, file))
-}
-
-// regenerateCanonicalCover regenerates the canonical cover for a book based on its files.
-// This follows the same logic as the scan worker.
-func (h *handler) regenerateCanonicalCover(ctx context.Context, book *models.Book) error {
-	log := logger.FromContext(ctx)
-
-	// Determine cover directory
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	var bookCoverSource, audiobookCoverSource string
-	var bookCoverExt, audiobookCoverExt string
-
-	// Find the best covers from the available files
-	for _, file := range book.Files {
-		if file.CoverMimeType == nil {
-			continue
-		}
-
-		filename := filepath.Base(file.Filepath)
-		individualCoverPath := filepath.Join(coverDir, filename+".cover"+file.CoverExtension())
-
-		// Check if the individual cover file exists
-		if _, err := os.Stat(individualCoverPath); err != nil {
-			continue
-		}
-
-		// Determine cover type based on file type
-		switch file.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ:
-			if bookCoverSource == "" {
-				bookCoverSource = individualCoverPath
-				bookCoverExt = file.CoverExtension()
-			}
-		case models.FileTypeM4B:
-			if audiobookCoverSource == "" {
-				audiobookCoverSource = individualCoverPath
-				audiobookCoverExt = file.CoverExtension()
-			}
-		}
-	}
-
-	var canonicalCover string
-	if isRootLevelBook {
-		// For root-level files, canonical cover is just the individual cover filename
-		if bookCoverSource != "" {
-			canonicalCover = filepath.Base(bookCoverSource)
-		} else if audiobookCoverSource != "" {
-			canonicalCover = filepath.Base(audiobookCoverSource)
-		}
-	} else {
-		// Directory-based books: generate separate canonical cover files
-		if bookCoverSource != "" {
-			// Check if any canonical cover already exists
-			existingCover := fileutils.CoverExistsWithBaseName(coverDir, "cover")
-			if existingCover == "" {
-				canonicalCover = "cover" + bookCoverExt
-				if err := copyFile(bookCoverSource, filepath.Join(coverDir, canonicalCover)); err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("generated canonical book cover", logger.Data{"source": bookCoverSource, "canonical": canonicalCover})
-			} else {
-				// Update the existing canonical cover
-				canonicalCover = "cover" + bookCoverExt
-				if err := copyFile(bookCoverSource, filepath.Join(coverDir, canonicalCover)); err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("updated canonical book cover", logger.Data{"source": bookCoverSource, "canonical": canonicalCover})
-			}
-		} else if audiobookCoverSource != "" {
-			existingCover := fileutils.CoverExistsWithBaseName(coverDir, "audiobook_cover")
-			if existingCover == "" {
-				canonicalCover = "audiobook_cover" + audiobookCoverExt
-				if err := copyFile(audiobookCoverSource, filepath.Join(coverDir, canonicalCover)); err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("generated canonical audiobook cover", logger.Data{"source": audiobookCoverSource, "canonical": canonicalCover})
-			} else {
-				canonicalCover = "audiobook_cover" + audiobookCoverExt
-				if err := copyFile(audiobookCoverSource, filepath.Join(coverDir, canonicalCover)); err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("updated canonical audiobook cover", logger.Data{"source": audiobookCoverSource, "canonical": canonicalCover})
-			}
-		}
-	}
-
-	// Update the book's cover_image_path if we have a canonical cover
-	if canonicalCover != "" {
-		book.CoverImagePath = &canonicalCover
-		if err := h.bookService.UpdateBook(ctx, book, UpdateBookOptions{
-			Columns: []string{"cover_image_path"},
-		}); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	return nil
 }
 
 // isValidImageType checks if the content type is a valid image type for covers.
@@ -800,150 +696,6 @@ func getExtensionFromMimeType(mimeType string) string {
 	}
 }
 
-// copyFile copies a file from source to destination.
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
-	return errors.WithStack(err)
-}
-
-func (h *handler) uploadBookCover(c echo.Context) error {
-	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
-
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		return errcodes.NotFound("Book")
-	}
-
-	// Get the uploaded file
-	fileHeader, err := c.FormFile("cover")
-	if err != nil {
-		return errcodes.ValidationError("Cover image is required")
-	}
-
-	// Validate file type
-	contentType := fileHeader.Header.Get("Content-Type")
-	if !isValidImageType(contentType) {
-		return errcodes.ValidationError("Invalid image type. Allowed types: JPEG, PNG, WebP")
-	}
-
-	// Get extension from content type
-	ext := getExtensionFromMimeType(contentType)
-	if ext == "" {
-		return errcodes.ValidationError("Could not determine image extension")
-	}
-
-	// Fetch the book
-	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
-	}
-
-	// Determine cover directory
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	// For book covers, we save as cover.{ext}
-	coverBaseName := "cover"
-
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
-
-	// Read the uploaded file data
-	src, err := fileHeader.Open()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer src.Close()
-
-	uploadedData, err := io.ReadAll(src)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Normalize the image to strip problematic metadata
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(uploadedData, contentType)
-
-	// Determine final extension based on normalized MIME type
-	finalExt := getExtensionFromMimeType(normalizedMime)
-	if finalExt == "" {
-		finalExt = ext // fallback to original extension
-	}
-
-	// Save the normalized cover
-	coverFilePath := filepath.Join(coverDir, coverBaseName+finalExt)
-	dst, err := os.Create(coverFilePath)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer dst.Close()
-
-	if _, err := dst.Write(normalizedData); err != nil {
-		return errors.WithStack(err)
-	}
-
-	log.Info("uploaded book cover", logger.Data{
-		"book_id":       book.ID,
-		"cover_path":    coverFilePath,
-		"normalized_to": normalizedMime,
-	})
-
-	// Update book's cover_image_path
-	coverFilename := coverBaseName + finalExt
-	book.CoverImagePath = &coverFilename
-	if err := h.bookService.UpdateBook(ctx, book, UpdateBookOptions{
-		Columns: []string{"cover_image_path"},
-	}); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Reload the book with all relations
-	book, err = h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(c.JSON(http.StatusOK, book))
-}
-
 func (h *handler) bookCover(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := strconv.Atoi(c.Param("id"))
@@ -965,8 +717,17 @@ func (h *handler) bookCover(c echo.Context) error {
 		}
 	}
 
-	coverImage := book.ResolveCoverImage()
-	if coverImage == "" {
+	// Get the library to determine cover aspect ratio preference
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &book.LibraryID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Select the appropriate file based on the library's cover aspect ratio setting
+	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
+	if coverFile == nil || coverFile.CoverImagePath == nil || *coverFile.CoverImagePath == "" {
 		return errcodes.NotFound("Cover")
 	}
 
@@ -986,6 +747,41 @@ func (h *handler) bookCover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverPath := filepath.Join(coverDir, coverImage)
+	coverPath := filepath.Join(coverDir, *coverFile.CoverImagePath)
 	return errors.WithStack(c.File(coverPath))
+}
+
+// selectCoverFile selects the appropriate file for cover display based on the library's
+// cover aspect ratio setting.
+func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
+	var bookFiles, audiobookFiles []*models.File
+	for _, f := range files {
+		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+			continue
+		}
+		switch f.FileType {
+		case models.FileTypeEPUB, models.FileTypeCBZ:
+			bookFiles = append(bookFiles, f)
+		case models.FileTypeM4B:
+			audiobookFiles = append(audiobookFiles, f)
+		}
+	}
+
+	switch coverAspectRatio {
+	case "audiobook", "audiobook_fallback_book":
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+	default: // "book", "book_fallback_audiobook"
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+	}
+	return nil
 }

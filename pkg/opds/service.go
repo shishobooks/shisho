@@ -155,7 +155,7 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 
 	// Add book entries
 	for _, book := range booksResult {
-		entry := svc.bookToEntry(baseURL, fileTypes, libraryID, book, types)
+		entry := svc.bookToEntry(baseURL, book, lib.CoverAspectRatio, types)
 		feed.AddEntry(entry)
 	}
 
@@ -217,6 +217,13 @@ func (svc *Service) BuildLibrarySeriesListFeed(ctx context.Context, baseURL, fil
 func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fileTypes string, libraryID, seriesID, limit, offset int) (*Feed, error) {
 	types := parseFileTypes(fileTypes)
 
+	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	s, err := svc.seriesService.RetrieveSeries(ctx, series.RetrieveSeriesOptions{
 		ID: &seriesID,
 	})
@@ -251,7 +258,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 
 	// Add book entries
 	for _, book := range booksResult {
-		entry := svc.bookToEntry(baseURL, fileTypes, libraryID, book, types)
+		entry := svc.bookToEntry(baseURL, book, lib.CoverAspectRatio, types)
 		feed.AddEntry(entry)
 	}
 
@@ -438,7 +445,7 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL, fi
 
 	// Add book entries
 	for _, book := range booksResult {
-		entry := svc.bookToEntry(baseURL, fileTypes, libraryID, book, types)
+		entry := svc.bookToEntry(baseURL, book, lib.CoverAspectRatio, types)
 		feed.AddEntry(entry)
 	}
 
@@ -487,7 +494,7 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 
 	// Add book entries
 	for _, book := range booksResult {
-		entry := svc.bookToEntry(baseURL, fileTypes, libraryID, book, types)
+		entry := svc.bookToEntry(baseURL, book, lib.CoverAspectRatio, types)
 		feed.AddEntry(entry)
 	}
 
@@ -505,7 +512,7 @@ func (svc *Service) BuildLibraryOpenSearchDescription(baseURL, fileTypes string,
 }
 
 // bookToEntry converts a Book model to an OPDS entry.
-func (svc *Service) bookToEntry(baseURL, _ string, _ int, book *models.Book, types []string) Entry {
+func (svc *Service) bookToEntry(baseURL string, book *models.Book, coverAspectRatio string, types []string) Entry {
 	entry := NewEntry(
 		fmt.Sprintf("urn:shisho:book:%d", book.ID),
 		book.Title,
@@ -545,10 +552,10 @@ func (svc *Service) bookToEntry(baseURL, _ string, _ int, book *models.Book, typ
 	// Extract API base from baseURL (baseURL is like "http://host/api/opds/v1", we need "http://host/api")
 	apiBase := strings.TrimSuffix(baseURL, "/opds/v1")
 
-	// Cover image link
-	coverImage := book.ResolveCoverImage()
-	if coverImage != "" {
-		ext := filepath.Ext(coverImage)
+	// Cover image link - select appropriate file based on cover aspect ratio
+	coverFile := selectCoverFile(book.Files, coverAspectRatio)
+	if coverFile != nil && coverFile.CoverImagePath != nil && *coverFile.CoverImagePath != "" {
+		ext := filepath.Ext(*coverFile.CoverImagePath)
 		mimeType := CoverMimeType(ext)
 		coverURL := fmt.Sprintf("%s/books/%d/cover", apiBase, book.ID)
 		entry.AddImageLink(coverURL, mimeType)
@@ -568,6 +575,41 @@ func (svc *Service) bookToEntry(baseURL, _ string, _ int, book *models.Book, typ
 	}
 
 	return entry
+}
+
+// selectCoverFile selects the appropriate file for cover display based on the library's
+// cover aspect ratio setting.
+func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
+	var bookFiles, audiobookFiles []*models.File
+	for _, f := range files {
+		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+			continue
+		}
+		switch f.FileType {
+		case models.FileTypeEPUB, models.FileTypeCBZ:
+			bookFiles = append(bookFiles, f)
+		case models.FileTypeM4B:
+			audiobookFiles = append(audiobookFiles, f)
+		}
+	}
+
+	switch coverAspectRatio {
+	case "audiobook", "audiobook_fallback_book":
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+	default: // "book", "book_fallback_audiobook"
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+	}
+	return nil
 }
 
 // addPaginationLinks adds pagination links to a feed.

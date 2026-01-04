@@ -102,12 +102,6 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 				return errors.WithStack(err)
 			}
 		}
-
-		// After scanning all files, generate canonical covers for each book
-		err = w.generateCanonicalCovers(ctx, library.ID)
-		if err != nil {
-			return errors.WithStack(err)
-		}
 	}
 
 	// TODO: go through and delete files/books that have been deleted
@@ -590,6 +584,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	// Handle cover extraction before creating the file so we can set the cover source
+	var coverImagePath *string
 	if metadata != nil && len(metadata.CoverData) > 0 {
 		// Save the cover image as a separate file using filename.cover.ext format
 		// This includes the original file extension to avoid conflicts when files
@@ -616,7 +611,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 				coverExt = metadata.CoverExtension()
 			}
 
-			coverFilepath := filepath.Join(coverDir, coverBaseName+coverExt)
+			coverFilename := coverBaseName + coverExt
+			coverFilepath := filepath.Join(coverDir, coverFilename)
 			log.Info("saving cover", logger.Data{"original_mime": metadata.CoverMimeType, "normalized_mime": normalizedMime})
 			coverFile, err := os.Create(coverFilepath)
 			if err != nil {
@@ -632,23 +628,29 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 			metadata.CoverMimeType = normalizedMime
 			// Set cover source to the metadata source since we extracted it
 			coverSource = &metadata.DataSource
+			// Store the cover filename for the file record
+			coverImagePath = &coverFilename
 		} else {
 			log.Info("cover already exists, skipping extraction", logger.Data{"existing_cover": existingCoverPath})
 			// Set cover source to existing cover since we're using the existing one
 			existingCoverSource := models.DataSourceExistingCover
 			coverSource = &existingCoverSource
+			// Extract the filename from the existing cover path
+			existingCoverFilename := filepath.Base(existingCoverPath)
+			coverImagePath = &existingCoverFilename
 		}
 	}
 
 	log.Info("creating file", logger.Data{"filesize": size})
 	file := &models.File{
-		LibraryID:     libraryID,
-		BookID:        existingBook.ID,
-		Filepath:      path,
-		FileType:      fileType,
-		FilesizeBytes: size,
-		CoverMimeType: coverMimeType,
-		CoverSource:   coverSource,
+		LibraryID:      libraryID,
+		BookID:         existingBook.ID,
+		Filepath:       path,
+		FileType:       fileType,
+		FilesizeBytes:  size,
+		CoverImagePath: coverImagePath,
+		CoverMimeType:  coverMimeType,
+		CoverSource:    coverSource,
 	}
 
 	// Apply file sidecar data for narrators (higher priority than file metadata)
@@ -710,185 +712,6 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int) error
 	}
 
 	return nil
-}
-
-func (w *Worker) generateCanonicalCovers(ctx context.Context, libraryID int) error {
-	log := logger.FromContext(ctx)
-	log.Info("generating canonical covers for library", logger.Data{"library_id": libraryID})
-
-	// Get all books in this library
-	allBooks, err := w.bookService.ListBooks(ctx, books.ListBooksOptions{
-		LibraryID: &libraryID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	for _, book := range allBooks {
-		err := w.generateBookCanonicalCover(ctx, book)
-		if err != nil {
-			log.Error("failed to generate canonical cover for book", logger.Data{"book_id": book.ID, "error": err.Error()})
-			// Don't fail the entire job if one book fails
-			continue
-		}
-	}
-
-	return nil
-}
-
-func (w *Worker) generateBookCanonicalCover(ctx context.Context, book *models.Book) error {
-	log := logger.FromContext(ctx).Data(logger.Data{"book_id": book.ID, "book_path": book.Filepath})
-
-	// Get all files for this book with cover data
-	bookWithFiles, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
-		ID: &book.ID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check if this is a root-level book by seeing if any file is directly in a library path
-	isRootLevelBook := false
-	if len(bookWithFiles.Files) > 0 {
-		// Get the library to check its paths
-		library, err := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
-			ID: &book.LibraryID,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Check if any file is directly in a library path
-		for _, file := range bookWithFiles.Files {
-			fileDir := filepath.Dir(file.Filepath)
-			for _, libraryPath := range library.LibraryPaths {
-				if fileDir == libraryPath.Filepath {
-					isRootLevelBook = true
-					break
-				}
-			}
-			if isRootLevelBook {
-				break
-			}
-		}
-	}
-
-	var bookCoverSource, audiobookCoverSource string
-	var bookCoverExt, audiobookCoverExt string
-
-	// Find the best covers from the available files
-	for _, file := range bookWithFiles.Files {
-		if file.CoverMimeType == nil {
-			continue
-		}
-
-		filename := filepath.Base(file.Filepath)
-		var individualCoverPath string
-		if isRootLevelBook {
-			// For root-level books, cover is in the same directory as the file
-			individualCoverPath = filepath.Join(filepath.Dir(file.Filepath), filename+".cover"+file.CoverExtension())
-		} else {
-			// For directory-based books, cover is in the book directory
-			individualCoverPath = filepath.Join(book.Filepath, filename+".cover"+file.CoverExtension())
-		}
-
-		// Check if the individual cover file exists
-		if _, err := os.Stat(individualCoverPath); err != nil {
-			continue
-		}
-
-		// Determine cover type based on file type
-		switch file.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ:
-			if bookCoverSource == "" {
-				bookCoverSource = individualCoverPath
-				bookCoverExt = file.CoverExtension()
-			}
-		case models.FileTypeM4B:
-			if audiobookCoverSource == "" {
-				audiobookCoverSource = individualCoverPath
-				audiobookCoverExt = file.CoverExtension()
-			}
-		}
-	}
-
-	// For root-level books, the canonical cover is just the individual cover filename
-	// For directory-based books, generate separate canonical cover files
-	var canonicalCover string
-	if isRootLevelBook {
-		// For root-level files, canonical cover is just the individual cover filename
-		if bookCoverSource != "" {
-			canonicalCover = filepath.Base(bookCoverSource)
-			log.Info("using individual cover as canonical for root-level book", logger.Data{"canonical": canonicalCover})
-		} else if audiobookCoverSource != "" {
-			canonicalCover = filepath.Base(audiobookCoverSource)
-			log.Info("using individual audiobook cover as canonical for root-level book", logger.Data{"canonical": canonicalCover})
-		}
-	} else {
-		// Directory-based books: generate separate canonical cover files
-		// But only if no cover with that base name already exists (respects user-provided covers)
-		if bookCoverSource != "" {
-			// Check if any canonical cover already exists (regardless of extension)
-			existingCover := fileutils.CoverExistsWithBaseName(book.Filepath, "cover")
-			if existingCover == "" {
-				canonicalCover = "cover" + bookCoverExt
-				err := w.copyFile(bookCoverSource, filepath.Join(book.Filepath, canonicalCover))
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("generated canonical book cover", logger.Data{"source": bookCoverSource, "canonical": canonicalCover})
-			} else {
-				// Use the existing cover as the canonical cover
-				canonicalCover = filepath.Base(existingCover)
-				log.Info("using existing canonical book cover", logger.Data{"existing_cover": existingCover})
-			}
-		} else if audiobookCoverSource != "" {
-			// Check if any audiobook cover already exists (regardless of extension)
-			existingCover := fileutils.CoverExistsWithBaseName(book.Filepath, "audiobook_cover")
-			if existingCover == "" {
-				canonicalCover = "audiobook_cover" + audiobookCoverExt
-				err := w.copyFile(audiobookCoverSource, filepath.Join(book.Filepath, canonicalCover))
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				log.Info("generated canonical audiobook cover", logger.Data{"source": audiobookCoverSource, "canonical": canonicalCover})
-			} else {
-				// Use the existing cover as the canonical cover
-				canonicalCover = filepath.Base(existingCover)
-				log.Info("using existing canonical audiobook cover", logger.Data{"existing_cover": existingCover})
-			}
-		}
-	}
-
-	// Update the book's cover_image_path if we generated a canonical cover
-	if canonicalCover != "" {
-		book.CoverImagePath = &canonicalCover
-		err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{
-			Columns: []string{"cover_image_path"},
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	return nil
-}
-
-func (w *Worker) copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
-	return errors.WithStack(err)
 }
 
 // recoverMissingCover checks if a file's cover is missing on disk and re-extracts it if needed.

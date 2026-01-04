@@ -35,6 +35,7 @@ func (h *handler) create(c echo.Context) error {
 	library := &models.Library{
 		Name:                  params.Name,
 		OrganizeFileStructure: organizeFileStructure,
+		CoverAspectRatio:      params.CoverAspectRatio,
 		LibraryPaths:          make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
 	}
 	for _, path := range params.LibraryPaths {
@@ -153,6 +154,10 @@ func (h *handler) update(c echo.Context) error {
 	if params.OrganizeFileStructure != nil && *params.OrganizeFileStructure != library.OrganizeFileStructure {
 		library.OrganizeFileStructure = *params.OrganizeFileStructure
 		opts.Columns = append(opts.Columns, "organize_file_structure")
+	}
+	if params.CoverAspectRatio != nil && *params.CoverAspectRatio != library.CoverAspectRatio {
+		library.CoverAspectRatio = *params.CoverAspectRatio
+		opts.Columns = append(opts.Columns, "cover_aspect_ratio")
 	}
 	if params.LibraryPaths != nil {
 		library.LibraryPaths = make([]*models.LibraryPath, 0, len(params.LibraryPaths))

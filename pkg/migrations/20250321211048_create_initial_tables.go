@@ -31,6 +31,7 @@ func init() {
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				name TEXT NOT NULL,
 				organize_file_structure BOOLEAN NOT NULL DEFAULT TRUE,
+				cover_aspect_ratio TEXT NOT NULL,
 				deleted_at TIMESTAMPTZ
 			)
 `)
@@ -89,8 +90,7 @@ func init() {
 				title_source TEXT NOT NULL,
 				subtitle TEXT,
 				subtitle_source TEXT,
-				author_source TEXT NOT NULL,
-				cover_image_path TEXT
+				author_source TEXT NOT NULL
 			)
 `)
 		if err != nil {
@@ -138,6 +138,7 @@ func init() {
 				filepath TEXT NOT NULL,
 				file_type TEXT NOT NULL,
 				filesize_bytes INTEGER NOT NULL,
+				cover_image_path TEXT,
 				cover_mime_type TEXT,
 				cover_source TEXT,
 				audiobook_duration DOUBLE,

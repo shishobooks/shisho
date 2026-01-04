@@ -11,14 +11,16 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
 type handler struct {
-	seriesService *Service
-	bookService   *books.Service
-	searchService *search.Service
+	seriesService  *Service
+	bookService    *books.Service
+	libraryService *libraries.Service
+	searchService  *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -229,15 +231,23 @@ func (h *handler) seriesCover(c echo.Context) error {
 		}
 	}
 
+	// Get the library to determine cover aspect ratio preference
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &series.LibraryID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Get the first book in the series for cover
 	book, err := h.bookService.GetFirstBookInSeriesByID(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Use the book's cover image
-	coverImageFileName := book.ResolveCoverImage()
-	if coverImageFileName == "" {
+	// Select the appropriate file based on the library's cover aspect ratio setting
+	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
+	if coverFile == nil || coverFile.CoverImagePath == nil || *coverFile.CoverImagePath == "" {
 		return errcodes.NotFound("Series cover")
 	}
 
@@ -255,12 +265,47 @@ func (h *handler) seriesCover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverImagePath := filepath.Join(coverDir, coverImageFileName)
+	coverImagePath := filepath.Join(coverDir, *coverFile.CoverImagePath)
 
 	// Set appropriate headers
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 
 	return errors.WithStack(c.File(coverImagePath))
+}
+
+// selectCoverFile selects the appropriate file for cover display based on the library's
+// cover aspect ratio setting.
+func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
+	var bookFiles, audiobookFiles []*models.File
+	for _, f := range files {
+		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+			continue
+		}
+		switch f.FileType {
+		case models.FileTypeEPUB, models.FileTypeCBZ:
+			bookFiles = append(bookFiles, f)
+		case models.FileTypeM4B:
+			audiobookFiles = append(audiobookFiles, f)
+		}
+	}
+
+	switch coverAspectRatio {
+	case "audiobook", "audiobook_fallback_book":
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+	default: // "book", "book_fallback_audiobook"
+		if len(bookFiles) > 0 {
+			return bookFiles[0]
+		}
+		if len(audiobookFiles) > 0 {
+			return audiobookFiles[0]
+		}
+	}
+	return nil
 }
 
 func (h *handler) merge(c echo.Context) error {

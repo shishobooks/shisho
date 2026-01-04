@@ -27,6 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Type Generation
 - `make tygo` - Generate TypeScript types from Go structs
 - Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
+- If `make tygo` returns the message "make: Nothing to be done for \`tygo'.", then that means tygo was already run and the generated types are up-to-date. There's no reason to try to run `tygo` manually outside of `make`.
 
 ## Architecture Overview
 

@@ -1,5 +1,5 @@
-import { ArrowLeft, Edit, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { ArrowLeft, Edit } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { BookEditDialog } from "@/components/library/BookEditDialog";
@@ -9,8 +9,38 @@ import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useBook, useUploadBookCover } from "@/hooks/queries/books";
+import { useBook } from "@/hooks/queries/books";
+import { useLibrary } from "@/hooks/queries/libraries";
 import type { File } from "@/types";
+
+// Selects the file that would be used for the cover based on cover_aspect_ratio setting
+// This mirrors the backend's selectCoverFile logic
+const selectCoverFile = (
+  files: File[] | undefined,
+  coverAspectRatio: string,
+): File | null => {
+  if (!files) return null;
+
+  const bookFiles = files.filter(
+    (f) =>
+      (f.file_type === "epub" || f.file_type === "cbz") && f.cover_image_path,
+  );
+  const audiobookFiles = files.filter(
+    (f) => f.file_type === "m4b" && f.cover_image_path,
+  );
+
+  switch (coverAspectRatio) {
+    case "audiobook":
+    case "audiobook_fallback_book":
+      if (audiobookFiles.length > 0) return audiobookFiles[0];
+      if (bookFiles.length > 0) return bookFiles[0];
+      break;
+    default: // "book", "book_fallback_audiobook"
+      if (bookFiles.length > 0) return bookFiles[0];
+      if (audiobookFiles.length > 0) return audiobookFiles[0];
+  }
+  return null;
+};
 
 const formatFileSize = (bytes: number): string => {
   const sizes = ["B", "KB", "MB", "GB"];
@@ -35,27 +65,9 @@ const formatDate = (dateString: string): string => {
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
-  const uploadCoverMutation = useUploadBookCover();
-  const coverInputRef = useRef<HTMLInputElement>(null);
+  const libraryQuery = useLibrary(libraryId);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
-
-  const handleCoverUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file || !bookQuery.data) return;
-
-    await uploadCoverMutation.mutateAsync({
-      id: bookQuery.data.id,
-      file,
-    });
-
-    // Reset the file input
-    if (coverInputRef.current) {
-      coverInputRef.current.value = "";
-    }
-  };
 
   if (bookQuery.isLoading) {
     return (
@@ -93,9 +105,11 @@ const BookDetail = () => {
 
   const book = bookQuery.data;
 
-  // Check if book cover is from an audiobook based on cover_image_path
-  // If cover path contains "audiobook_cover", it should be square
-  const isAudiobookCover = book.cover_image_path?.includes("audiobook_cover");
+  // Determine which file's cover is being displayed based on library's cover_aspect_ratio setting
+  const libraryCoverAspectRatio =
+    libraryQuery.data?.cover_aspect_ratio ?? "book";
+  const coverFile = selectCoverFile(book.files, libraryCoverAspectRatio);
+  const isAudiobookCover = coverFile?.file_type === "m4b";
   const coverAspectRatio = isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
 
   // Cache-busting parameter for cover images
@@ -117,7 +131,7 @@ const BookDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Book Cover */}
           <div className="lg:col-span-1">
-            <div className={`${coverAspectRatio} w-full relative group`}>
+            <div className={`${coverAspectRatio} w-full`}>
               <img
                 alt={`${book.title} Cover`}
                 className="w-full h-full object-cover rounded-md border border-border"
@@ -130,25 +144,6 @@ const BookDetail = () => {
                 src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
               />
               <div className="hidden text-center text-muted-foreground"></div>
-              {/* Cover upload overlay */}
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center">
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={handleCoverUpload}
-                  ref={coverInputRef}
-                  type="file"
-                />
-                <Button
-                  disabled={uploadCoverMutation.isPending}
-                  onClick={() => coverInputRef.current?.click()}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  {uploadCoverMutation.isPending ? "Uploading..." : "Replace"}
-                </Button>
-              </div>
             </div>
           </div>
 

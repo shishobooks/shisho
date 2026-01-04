@@ -25,6 +25,7 @@ type File struct {
 	Filepath          string      `bun:",nullzero" json:"filepath"`
 	FileType          string      `bun:",nullzero" json:"file_type" tstype:"FileType"`
 	FilesizeBytes     int64       `bun:",nullzero" json:"filesize_bytes"`
+	CoverImagePath    *string     `json:"cover_image_path"`
 	CoverMimeType     *string     `json:"cover_mime_type"`
 	CoverSource       *string     `json:"cover_source" tstype:"DataSource"`
 	AudiobookDuration *float64    `json:"audiobook_duration"`

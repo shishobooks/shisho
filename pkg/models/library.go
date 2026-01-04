@@ -14,6 +14,7 @@ type Library struct {
 	UpdatedAt             time.Time      `json:"updated_at"`
 	Name                  string         `bun:",nullzero" json:"name"`
 	OrganizeFileStructure bool           `json:"organize_file_structure"`
+	CoverAspectRatio      string         `bun:",nullzero" json:"cover_aspect_ratio"`
 	LibraryPaths          []*LibraryPath `bun:"rel:has-many" json:"library_paths,omitempty" tstype:"LibraryPath[]"`
 	DeletedAt             *time.Time     `json:"deleted_at,omitempty"`
 }

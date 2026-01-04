@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { Input } from "@/components/ui/input";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useGlobalSearch,
   type BookSearchResult,
@@ -10,6 +11,20 @@ import {
   type SeriesSearchResult,
 } from "@/hooks/queries/search";
 import { useDebounce } from "@/hooks/useDebounce";
+import { cn } from "@/libraries/utils";
+
+const getSearchThumbnailClasses = (coverAspectRatio: string): string => {
+  // For search thumbnails, we use a fixed width and vary the aspect ratio
+  switch (coverAspectRatio) {
+    case "audiobook":
+    case "audiobook_fallback_book":
+      return "w-10 aspect-square";
+    case "book":
+    case "book_fallback_audiobook":
+    default:
+      return "w-8 aspect-[2/3]";
+  }
+};
 
 const GlobalSearch = () => {
   const { libraryId } = useParams();
@@ -18,6 +33,10 @@ const GlobalSearch = () => {
   const debouncedQuery = useDebounce(query, 300);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const libraryQuery = useLibrary(libraryId);
+  const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
+  const thumbnailClasses = getSearchThumbnailClasses(coverAspectRatio);
 
   const searchQuery = useGlobalSearch(
     {
@@ -78,7 +97,12 @@ const GlobalSearch = () => {
       title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
       to={`/libraries/${libraryId}/books/${book.id}`}
     >
-      <div className="w-8 h-12 flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden">
+      <div
+        className={cn(
+          "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
+          thumbnailClasses,
+        )}
+      >
         <img
           alt=""
           className="w-full h-full object-cover"
@@ -107,7 +131,12 @@ const GlobalSearch = () => {
       title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
       to={`/libraries/${libraryId}/series/${series.id}`}
     >
-      <div className="w-8 h-12 flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden">
+      <div
+        className={cn(
+          "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
+          thumbnailClasses,
+        )}
+      >
         <img
           alt=""
           className="w-full h-full object-cover"
