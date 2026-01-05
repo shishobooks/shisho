@@ -188,3 +188,31 @@ func extractVolumeFromTitle(title string) *float64 {
 	}
 	return nil
 }
+
+// ExtractSeriesFromTitle extracts series name and volume number from a normalized title.
+// Only applies to CBZ files with volume indicators in the "v{number}" format.
+// Returns the base title (series name), volume number, and whether extraction succeeded.
+func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, volumeNumber *float64, ok bool) {
+	if fileType != models.FileTypeCBZ {
+		return "", nil, false
+	}
+
+	// Match normalized volume format: "Title v{number}"
+	volumePattern := regexp.MustCompile(`^(.+?)\s+v(\d+(?:\.\d+)?)\s*$`)
+	matches := volumePattern.FindStringSubmatch(title)
+	if len(matches) < 3 {
+		return "", nil, false
+	}
+
+	seriesName = strings.TrimSpace(matches[1])
+	if seriesName == "" {
+		return "", nil, false
+	}
+
+	volume, err := strconv.ParseFloat(matches[2], 64)
+	if err != nil {
+		return "", nil, false
+	}
+
+	return seriesName, &volume, true
+}

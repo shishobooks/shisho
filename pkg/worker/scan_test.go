@@ -1555,6 +1555,160 @@ func TestProcessScanJob_HigherPriorityEmptyTitleDoesNotOverwrite(t *testing.T) {
 // TestProcessScanJob_LowerPriorityPopulatesEmptyField tests that when a book is first
 // created with empty authors from a high priority source, a subsequent file with authors
 // from a lower priority source will populate the empty field.
+func TestProcessScanJob_VolumeToSeriesInference(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a CBZ file with a volume number in the directory name but no series in metadata
+	// The base title should be used as the series name
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Naruto #005")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		// No series in ComicInfo - should infer from filepath
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should be normalized from "Naruto #005" to "Naruto v5"
+	assert.Equal(t, "Naruto v5", book.Title)
+	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
+
+	// Series should be inferred from the base title
+	require.Len(t, book.BookSeries, 1, "book should have a series inferred from title")
+	require.NotNil(t, book.BookSeries[0].SeriesNumber)
+	assert.InDelta(t, 5.0, *book.BookSeries[0].SeriesNumber, 0.001)
+
+	// Verify series was created with the base title (without volume)
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 1)
+	assert.Equal(t, "Naruto", allSeries[0].Name)
+	assert.Equal(t, models.DataSourceFilepath, allSeries[0].NameSource)
+	assert.Equal(t, book.BookSeries[0].SeriesID, allSeries[0].ID)
+}
+
+func TestProcessScanJob_VolumeToSeriesInference_MultipleVolumes(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create multiple CBZ files with volume numbers - they should all be grouped into the same series
+	bookDir1 := testgen.CreateSubDir(t, libraryPath, "[Author] One Piece v1")
+	testgen.GenerateCBZ(t, bookDir1, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	bookDir2 := testgen.CreateSubDir(t, libraryPath, "[Author] One Piece v2")
+	testgen.GenerateCBZ(t, bookDir2, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	bookDir3 := testgen.CreateSubDir(t, libraryPath, "[Author] One Piece v3")
+	testgen.GenerateCBZ(t, bookDir3, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 3)
+
+	// All books should have series
+	for _, book := range allBooks {
+		require.Len(t, book.BookSeries, 1, "book %s should have a series", book.Title)
+	}
+
+	// Should only have one series (all volumes grouped together)
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 1, "all volumes should be grouped into one series")
+	assert.Equal(t, "One Piece", allSeries[0].Name)
+	assert.Equal(t, models.DataSourceFilepath, allSeries[0].NameSource)
+}
+
+func TestProcessScanJob_VolumeToSeriesInference_MetadataOverrides(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a CBZ file with a volume number in the directory name AND series in metadata
+	// The metadata series should take precedence over the filepath-inferred series
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Attack on Titan #010")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:        "Attack on Titan",
+		Series:       "Shingeki no Kyojin", // Official series name from metadata
+		SeriesNumber: pointerutil.Float64(10),
+		HasComicInfo: true,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title comes from ComicInfo
+	assert.Equal(t, "Attack on Titan", book.Title)
+	assert.Equal(t, models.DataSourceCBZMetadata, book.TitleSource)
+
+	// Series should come from ComicInfo, not filepath-inferred
+	require.Len(t, book.BookSeries, 1, "book should have a series")
+	require.NotNil(t, book.BookSeries[0].SeriesNumber)
+	assert.InDelta(t, 10.0, *book.BookSeries[0].SeriesNumber, 0.001)
+
+	// Verify series was created with the metadata name, not the filepath name
+	allSeries := tc.listSeries()
+	require.Len(t, allSeries, 1)
+	assert.Equal(t, "Shingeki no Kyojin", allSeries[0].Name)
+	assert.Equal(t, models.DataSourceCBZMetadata, allSeries[0].NameSource)
+}
+
+func TestProcessScanJob_VolumeToSeriesInference_EPUBNotAffected(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create an EPUB with a number in the title that is NOT a volume indicator
+	// "Fahrenheit 451" should NOT be parsed as series "Fahrenheit" with volume 451
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Fahrenheit 451")
+	testgen.GenerateEPUB(t, bookDir, "Fahrenheit 451.epub", testgen.EPUBOptions{
+		Title:   "Fahrenheit 451",
+		Authors: []string{"Ray Bradbury"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Title should remain "Fahrenheit 451" (not normalized since it's an EPUB)
+	assert.Equal(t, "Fahrenheit 451", book.Title)
+
+	// Should NOT have a series inferred (series inference only applies to CBZ)
+	assert.Empty(t, book.BookSeries, "EPUB should not have series inferred from title number")
+
+	// No series should be created
+	allSeries := tc.listSeries()
+	assert.Empty(t, allSeries, "no series should be created for EPUB with number in title")
+}
+
 func TestProcessScanJob_LowerPriorityPopulatesEmptyField(t *testing.T) {
 	tc := newTestContext(t)
 

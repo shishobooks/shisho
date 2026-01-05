@@ -343,6 +343,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		title = normalizedTitle
 	}
 
+	// Infer series from title if it contains a volume indicator and no series is set from a higher priority source
+	if len(seriesList) == 0 {
+		if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
+			seriesList = append(seriesList, seriesData{
+				name:      seriesName,
+				number:    volumeNumber,
+				sortOrder: 1,
+			})
+			seriesSource = models.DataSourceFilepath
+		}
+	}
+
 	// Read sidecar files if they exist (sidecar has priority 1, higher than file metadata)
 	var fileSidecarData *sidecar.FileSidecar
 	bookSidecarData, err := sidecar.ReadBookSidecar(bookPath)
