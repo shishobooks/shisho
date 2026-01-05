@@ -174,7 +174,7 @@ const TopNav = () => {
             {libraryId && (
               <nav className="flex gap-1">
                 <Button
-                  className={`h-9 ${
+                  className={`h-9 cursor-pointer ${
                     isBooksActive
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
                       : "hover:text-primary dark:hover:text-violet-300"

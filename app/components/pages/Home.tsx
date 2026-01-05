@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
@@ -30,6 +30,11 @@ const Home = () => {
 
   const [searchInput, setSearchInput] = useState(searchQuery);
   const debouncedSearch = useDebounce(searchInput, 300);
+
+  // Sync searchInput with URL when searchQuery changes (e.g., when clicking nav links)
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   // Parse file types from URL
   const selectedFileTypes = fileTypesParam

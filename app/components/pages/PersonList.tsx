@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -25,6 +25,11 @@ const PersonList = () => {
   const searchQuery = searchParams.get("search") ?? "";
   const [searchInput, setSearchInput] = useState(searchQuery);
   const debouncedSearch = useDebounce(searchInput, 300);
+
+  // Sync searchInput with URL when searchQuery changes (e.g., when clicking nav links)
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
