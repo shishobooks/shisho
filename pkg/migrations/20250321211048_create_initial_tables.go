@@ -145,8 +145,8 @@ func init() {
 				cover_image_path TEXT,
 				cover_mime_type TEXT,
 				cover_source TEXT,
-				audiobook_duration DOUBLE,
-				audiobook_bitrate INTEGER,
+				audiobook_duration_seconds DOUBLE,
+				audiobook_bitrate_bps INTEGER,
 				narrator_source TEXT
 			)
 `)

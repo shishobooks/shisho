@@ -275,14 +275,15 @@ const BookDetail = () => {
                         </div>
 
                         <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
-                          {file.audiobook_duration && (
+                          {file.audiobook_duration_seconds && (
                             <span>
-                              {formatDuration(file.audiobook_duration)}
+                              {formatDuration(file.audiobook_duration_seconds)}
                             </span>
                           )}
-                          {file.audiobook_bitrate && (
+                          {file.audiobook_bitrate_bps && (
                             <span>
-                              {Math.round(file.audiobook_bitrate)} kbps
+                              {Math.round(file.audiobook_bitrate_bps / 1000)}{" "}
+                              kbps
                             </span>
                           )}
                           <span>{formatFileSize(file.filesize_bytes)}</span>

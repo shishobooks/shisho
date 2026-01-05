@@ -668,6 +668,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		CoverSource:    coverSource,
 	}
 
+	// Set audiobook-specific metadata for M4B files
+	if metadata != nil && fileType == models.FileTypeM4B {
+		if metadata.Duration > 0 {
+			durationSeconds := metadata.Duration.Seconds()
+			file.AudiobookDurationSeconds = &durationSeconds
+		}
+		if metadata.BitrateBps > 0 {
+			bitrateBps := metadata.BitrateBps
+			file.AudiobookBitrateBps = &bitrateBps
+		}
+	}
+
 	// Apply file sidecar data for narrators (higher priority than file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
 		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[narratorSource] {

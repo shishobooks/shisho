@@ -1,8 +1,6 @@
 package mp4
 
 import (
-	"os"
-
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -30,6 +28,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverMimeType: meta.CoverMimeType,
 		CoverData:     meta.CoverData,
 		DataSource:    models.DataSourceM4BMetadata,
+		Duration:      meta.Duration,
+		BitrateBps:    meta.Bitrate, // from esds, already in bps
 	}, nil
 }
 
@@ -42,17 +42,6 @@ func ParseFull(path string) (*Metadata, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	// Convert to the full Metadata struct
-	meta := convertRawMetadata(raw)
-
-	// Calculate bitrate if we have duration
-	if meta.Duration > 0 {
-		fi, err := os.Stat(path)
-		if err == nil {
-			// Bitrate in kbps = (file size in bytes * 8) / (duration in seconds * 1000)
-			meta.Bitrate = int(fi.Size() * 8 / int64(meta.Duration.Seconds()) / 1000)
-		}
-	}
-
-	return meta, nil
+	// Convert to the full Metadata struct (bitrate is set from esds)
+	return convertRawMetadata(raw), nil
 }

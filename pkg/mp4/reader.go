@@ -25,6 +25,7 @@ type rawMetadata struct {
 	mediaType   int64
 	timescale   uint32            // from mvhd - units per second
 	duration    uint64            // from mvhd - in timescale units
+	avgBitrate  uint32            // from esds - average bitrate in bps
 	freeform    map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
 	chapters    []Chapter         // chapter list
 }
@@ -56,7 +57,7 @@ func readMetadata(path string) (*rawMetadata, error) {
 func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 	meta := &rawMetadata{}
 
-	// Read the box structure looking for moov/udta/meta/ilst
+	// Read the box structure looking for moov/udta/meta/ilst and audio track info
 	_, err := gomp4.ReadBoxStructure(r, func(h *gomp4.ReadHandle) (interface{}, error) {
 		switch h.BoxInfo.Type {
 		case BoxTypeMoov:
@@ -66,6 +67,34 @@ func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 		case BoxTypeMvhd:
 			// Read movie header for duration info
 			return processMvhd(h, meta)
+
+		case BoxTypeTrak:
+			// Descend into trak to find audio track
+			return h.Expand()
+
+		case BoxTypeMdia:
+			// Descend into mdia
+			return h.Expand()
+
+		case BoxTypeMinf:
+			// Descend into minf
+			return h.Expand()
+
+		case BoxTypeStbl:
+			// Descend into stbl
+			return h.Expand()
+
+		case BoxTypeStsd:
+			// Descend into stsd (sample description)
+			return h.Expand()
+
+		case BoxTypeMp4a:
+			// Descend into mp4a (MPEG-4 audio)
+			return h.Expand()
+
+		case BoxTypeEsds:
+			// Read esds for bitrate info
+			return processEsds(h, meta)
 
 		case BoxTypeUdta:
 			// Descend into udta
@@ -93,6 +122,29 @@ func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 	}
 
 	return meta, nil
+}
+
+// processEsds reads the elementary stream descriptor for bitrate info.
+func processEsds(h *gomp4.ReadHandle, meta *rawMetadata) (interface{}, error) {
+	payload, _, err := h.ReadPayload()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	esds, ok := payload.(*gomp4.Esds)
+	if !ok {
+		return nil, nil
+	}
+
+	// Extract average bitrate from the descriptor
+	for _, desc := range esds.Descriptors {
+		if desc.DecoderConfigDescriptor != nil {
+			meta.avgBitrate = desc.DecoderConfigDescriptor.AvgBitrate
+			break
+		}
+	}
+
+	return nil, nil
 }
 
 // isMetadataAtom checks if a box type is a known metadata atom.

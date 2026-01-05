@@ -182,6 +182,40 @@ func TestProcessScanJob_M4BBasic(t *testing.T) {
 	assert.Equal(t, models.FileTypeM4B, files[0].FileType)
 }
 
+func TestProcessScanJob_M4BDurationAndBitrate(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create M4B with a specific duration to verify duration and bitrate extraction
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Audiobook With Duration")
+	testgen.GenerateM4B(t, bookDir, "audiobook.m4b", testgen.M4BOptions{
+		Title:    "Test Audiobook",
+		Duration: 5.0, // 5 seconds
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	assert.Equal(t, models.FileTypeM4B, file.FileType)
+
+	// Verify duration was extracted (should be approximately 5 seconds)
+	require.NotNil(t, file.AudiobookDurationSeconds, "audiobook_duration_seconds should be populated")
+	assert.InDelta(t, 5.0, *file.AudiobookDurationSeconds, 0.5, "duration should be approximately 5 seconds")
+
+	// Verify bitrate was extracted from esds (ffmpeg generates at 64 kbps = 64000 bps)
+	// Small delta to account for VBR encoding variations
+	require.NotNil(t, file.AudiobookBitrateBps, "audiobook_bitrate_bps should be populated")
+	assert.InDelta(t, 64000, *file.AudiobookBitrateBps, 1000, "bitrate should be approximately 64000 bps")
+}
+
 func TestProcessScanJob_UnsupportedExtension(t *testing.T) {
 	tc := newTestContext(t)
 

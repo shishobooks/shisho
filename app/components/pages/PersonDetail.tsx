@@ -118,8 +118,8 @@ const PersonDetail = () => {
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {file.file_type.toUpperCase()} -{" "}
-                        {file.audiobook_duration
-                          ? `${Math.round(file.audiobook_duration / 60)} min`
+                        {file.audiobook_duration_seconds
+                          ? `${Math.round(file.audiobook_duration_seconds / 60)} min`
                           : "Duration unknown"}
                       </div>
                     </div>

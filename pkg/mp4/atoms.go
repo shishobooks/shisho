@@ -51,6 +51,11 @@ var (
 	BoxTypeTrak = gomp4.BoxTypeTrak()        // trak - Track box
 	BoxTypeHdlr = gomp4.BoxTypeHdlr()        // hdlr - Handler box
 	BoxTypeMdia = gomp4.BoxTypeMdia()        // mdia - Media box
+	BoxTypeMinf = gomp4.BoxTypeMinf()        // minf - Media information box
+	BoxTypeStbl = gomp4.BoxTypeStbl()        // stbl - Sample table box
+	BoxTypeStsd = gomp4.BoxTypeStsd()        // stsd - Sample description box
+	BoxTypeMp4a = gomp4.BoxTypeMp4a()        // mp4a - MPEG-4 audio
+	BoxTypeEsds = gomp4.BoxTypeEsds()        // esds - Elementary stream descriptor
 	BoxTypeChpl = gomp4.StrToBoxType("chpl") // chpl - Chapter list (Nero)
 	BoxTypeTref = gomp4.StrToBoxType("tref") // tref - Track reference
 	BoxTypeChap = gomp4.StrToBoxType("chap") // chap - Chapter reference

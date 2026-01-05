@@ -19,8 +19,8 @@ type Metadata struct {
 	Description   string            // from desc
 	CoverData     []byte            // cover artwork
 	CoverMimeType string            // "image/jpeg" or "image/png"
-	Duration      time.Duration     // from mvhd (Phase 2)
-	Bitrate       int               // kbps (Phase 2)
+	Duration      time.Duration     // from mvhd
+	Bitrate       int               // bps from esds
 	Chapters      []Chapter         // chapter list (Phase 3)
 	MediaType     int               // from stik (2 = audiobook)
 	Freeform      map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
@@ -76,6 +76,9 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		durationSec := float64(raw.duration) / float64(raw.timescale)
 		meta.Duration = time.Duration(durationSec * float64(time.Second))
 	}
+
+	// Copy bitrate from esds (already in bps)
+	meta.Bitrate = int(raw.avgBitrate)
 
 	// Copy freeform atoms
 	if len(raw.freeform) > 0 {

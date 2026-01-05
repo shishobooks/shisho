@@ -124,6 +124,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - Run `make tygo` after changing Go structs to update TypeScript types
+- All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make lint`, `make test`, and `yarn lint` before committing
 
 ### Testing Strategy

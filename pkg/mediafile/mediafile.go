@@ -1,6 +1,9 @@
 package mediafile
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type ParsedMetadata struct {
 	Title         string
@@ -12,6 +15,10 @@ type ParsedMetadata struct {
 	CoverData     []byte
 	// DataSource should be a value of books.DataSource
 	DataSource string
+	// Duration is the length of the audiobook (M4B files only)
+	Duration time.Duration
+	// BitrateBps is the audio bitrate in bits per second (M4B files only)
+	BitrateBps int
 }
 
 func (m *ParsedMetadata) String() string {
