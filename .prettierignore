@@ -7,3 +7,4 @@ app/types/generated
 .claude/settings.local.json
 CLAUDE.md
 .cursor
+docs/*.md

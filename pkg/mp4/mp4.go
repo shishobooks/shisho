@@ -21,6 +21,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	// Convert to the mediafile.ParsedMetadata format
 	return &mediafile.ParsedMetadata{
 		Title:         meta.Title,
+		Subtitle:      meta.Subtitle,
 		Authors:       meta.Authors,
 		Narrators:     meta.Narrators,
 		Series:        meta.Series,

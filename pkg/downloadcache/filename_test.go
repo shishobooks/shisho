@@ -3,6 +3,7 @@ package downloadcache
 import (
 	"testing"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,7 +23,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 					{SortOrder: 0, Person: &models.Person{Name: "Brandon Sanderson"}},
 				},
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 0, SeriesNumber: floatPtr(1), Series: &models.Series{Name: "The Stormlight Archive"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "The Stormlight Archive"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
@@ -46,7 +47,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 				Title:   "Anonymous Work",
 				Authors: nil,
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 0, SeriesNumber: floatPtr(2), Series: &models.Series{Name: "Mystery Series"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "Mystery Series"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
@@ -84,7 +85,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 				},
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 0, SeriesNumber: floatPtr(1.5), Series: &models.Series{Name: "Series"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1.5), Series: &models.Series{Name: "Series"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
@@ -112,24 +113,96 @@ func TestFormatDownloadFilename(t *testing.T) {
 					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 				},
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 1, SeriesNumber: floatPtr(5), Series: &models.Series{Name: "Second Series"}},
-					{SortOrder: 0, SeriesNumber: floatPtr(3), Series: &models.Series{Name: "First Series"}},
+					{SortOrder: 1, SeriesNumber: pointerutil.Float64(5), Series: &models.Series{Name: "Second Series"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(3), Series: &models.Series{Name: "First Series"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
 			expected: "[Author] First Series #3 - Crossover.epub",
 		},
 		{
-			name: "m4b file type",
+			name: "m4b file type with narrator",
 			book: &models.Book{
 				Title: "Audiobook Title",
 				Authors: []*models.Author{
-					{SortOrder: 0, Person: &models.Person{Name: "Narrator"}},
+					{SortOrder: 0, Person: &models.Person{Name: "Author Name"}},
+				},
+				BookSeries: nil,
+			},
+			file: &models.File{
+				FileType: "m4b",
+				Narrators: []*models.Narrator{
+					{SortOrder: 0, Person: &models.Person{Name: "Ray Porter"}},
+				},
+			},
+			expected: "[Author Name] Audiobook Title {Ray Porter}.m4b",
+		},
+		{
+			name: "m4b full format with series and narrator",
+			book: &models.Book{
+				Title: "Project Hail Mary",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Andy Weir"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Standalone"}},
+				},
+			},
+			file: &models.File{
+				FileType: "m4b",
+				Narrators: []*models.Narrator{
+					{SortOrder: 0, Person: &models.Person{Name: "Ray Porter"}},
+				},
+			},
+			expected: "[Andy Weir] Standalone #1 - Project Hail Mary {Ray Porter}.m4b",
+		},
+		{
+			name: "m4b without narrator",
+			book: &models.Book{
+				Title: "Audiobook Without Narrator",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Some Author"}},
 				},
 				BookSeries: nil,
 			},
 			file:     &models.File{FileType: "m4b"},
-			expected: "[Narrator] Audiobook Title.m4b",
+			expected: "[Some Author] Audiobook Without Narrator.m4b",
+		},
+		{
+			name: "m4b multiple narrators - picks first by sort order",
+			book: &models.Book{
+				Title: "Multi-Narrator Book",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file: &models.File{
+				FileType: "m4b",
+				Narrators: []*models.Narrator{
+					{SortOrder: 1, Person: &models.Person{Name: "Second Narrator"}},
+					{SortOrder: 0, Person: &models.Person{Name: "First Narrator"}},
+					{SortOrder: 2, Person: &models.Person{Name: "Third Narrator"}},
+				},
+			},
+			expected: "[Author] Multi-Narrator Book {First Narrator}.m4b",
+		},
+		{
+			name: "invalid characters in narrator name are removed",
+			book: &models.Book{
+				Title: "Audiobook",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file: &models.File{
+				FileType: "m4b",
+				Narrators: []*models.Narrator{
+					{SortOrder: 0, Person: &models.Person{Name: "Narrator/Reader"}},
+				},
+			},
+			expected: "[Author] Audiobook {NarratorReader}.m4b",
 		},
 		{
 			name: "invalid characters in title are removed",
@@ -163,7 +236,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 				},
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 0, SeriesNumber: floatPtr(1), Series: &models.Series{Name: "Series: The Saga"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Series: The Saga"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
@@ -177,7 +250,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 				},
 				BookSeries: []*models.BookSeries{
-					{SortOrder: 0, SeriesNumber: floatPtr(10.0), Series: &models.Series{Name: "Series"}},
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(10.0), Series: &models.Series{Name: "Series"}},
 				},
 			},
 			file:     &models.File{FileType: "epub"},
@@ -242,8 +315,4 @@ func TestFormatSeriesNumber(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func floatPtr(f float64) *float64 {
-	return &f
 }

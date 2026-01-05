@@ -35,7 +35,7 @@ pkg/
 ├── filegen/                    # File generation
 │   ├── generator.go            # Generator interface
 │   ├── epub.go                 # EPUB generation
-│   ├── m4b.go                  # M4B generation (stub)
+│   ├── m4b.go                  # M4B generation
 │   └── cbz.go                  # CBZ generation (stub)
 ├── books/                      # API endpoints
 │   ├── handlers.go             # Download handlers
@@ -92,6 +92,15 @@ For EPUB files:
 - Series (name, number, sort_order for each)
 - Cover image (path, mime type, file modification time)
 
+For M4B files:
+
+- Book title
+- Book subtitle
+- Authors (name, sort_order for each)
+- Narrators (name, sort_order for each)
+- Series (name, number, sort_order for each)
+- Cover image (path, mime type, file modification time)
+
 #### Validation Flow
 
 1. Compute current fingerprint from Book + File models
@@ -136,7 +145,33 @@ The following elements are modified while preserving the rest of the OPF structu
 - Calibre meta tags → all series information
 - Subtitle in appropriate metadata element
 
-### M4B/CBZ Generation
+### M4B Generation
+
+The M4B generator:
+
+1. Parses source M4B using go-mp4 library
+2. Preserves existing metadata (description, genre, chapters, duration, bitrate)
+3. Updates metadata from book/file models
+4. Writes to cache location using atomic pattern (temp file + rename)
+
+#### Metadata Mapping
+
+| Shisho Field | M4B Atom                         | Notes                              |
+| ------------ | -------------------------------- | ---------------------------------- |
+| Title        | `©nam`                           | Standard iTunes title atom         |
+| Subtitle     | `----:com.apple.iTunes:SUBTITLE` | Freeform atom                      |
+| Authors      | `©ART`                           | Comma-separated artist names       |
+| Narrators    | `©nrt` + `©cmp`                  | Written to both for compatibility  |
+| Series       | `©alb`                           | Formatted as "Series Name #N"      |
+| Cover        | `covr`                           | Image data atom                    |
+
+#### Series Number Formatting
+
+- Integer numbers: `Series Name #1`
+- Decimal numbers: `Series Name #1.5`
+- No number: `Series Name`
+
+### CBZ Generation
 
 Currently stubbed - returns "not yet implemented" error. Will be implemented in future iterations.
 
@@ -148,11 +183,18 @@ Generated files are served with a formatted filename:
 [{Author}] {Series} #{SeriesNumber} - {Title}.{ext}
 ```
 
+For audiobooks with narrators:
+
+```
+[{Author}] {Series} #{SeriesNumber} - {Title} {Narrator}.{ext}
+```
+
 ### Rules
 
 - **Author**: First author by `sort_order`, using `Name` field
 - **Series**: First series by `sort_order`, using `Name` field
 - **Series Number**: Integer if whole number (`1`), decimal otherwise (`1.5`)
+- **Narrator**: First narrator by `sort_order`, using `Name` field (audiobooks only)
 - **No series**: `[{Author}] {Title}.{ext}`
 - **No author**: `{Title}.{ext}`
 - **Sanitization**: Invalid characters (`/ \ : * ? " < > |`) are removed
@@ -161,6 +203,7 @@ Generated files are served with a formatted filename:
 
 - `[Brandon Sanderson] The Stormlight Archive #1 - The Way of Kings.epub`
 - `[George Orwell] 1984.epub` (no series)
+- `[Andy Weir] Standalone #1 - Project Hail Mary {Ray Porter}.m4b` (audiobook with narrator)
 
 ## LRU Cache Cleanup
 
@@ -221,7 +264,6 @@ For OPDS clients (which can't show UI):
 
 ## Future Enhancements
 
-- **M4B generation**: Embed metadata in M4B audiobook files
 - **CBZ generation**: Embed metadata in CBZ comic archives
 - **Cover resizing**: Optionally resize large covers to reduce file size
 - **Batch downloads**: Download multiple files as a zip archive

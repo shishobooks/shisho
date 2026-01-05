@@ -248,6 +248,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	seriesSource := models.DataSourceFilepath
 	var coverMimeType *string
 	var coverSource *string
+	var subtitle *string
+	subtitleSource := models.DataSourceFilepath
 
 	// Extract metadata from each file based on its file type.
 	var metadata *mediafile.ParsedMetadata
@@ -298,6 +300,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 		if metadata.CoverMimeType != "" {
 			coverMimeType = &metadata.CoverMimeType
+		}
+		if trimmedSubtitle := strings.TrimSpace(metadata.Subtitle); trimmedSubtitle != "" {
+			subtitle = &trimmedSubtitle
+			subtitleSource = metadata.DataSource
 		}
 	}
 
@@ -393,6 +399,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 			}
 		}
+		if bookSidecarData.Subtitle != nil && *bookSidecarData.Subtitle != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[subtitleSource] {
+			subtitle = bookSidecarData.Subtitle
+			subtitleSource = models.DataSourceSidecar
+		}
 	}
 
 	// Final safety check: ensure title is never empty after all processing.
@@ -458,6 +468,19 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
+			metadataChanged = true
+		}
+
+		// Update subtitle only if the new subtitle is non-empty and from a higher priority source
+		existingSubtitleSource := models.DataSourceFilepath
+		if existingBook.SubtitleSource != nil {
+			existingSubtitleSource = *existingBook.SubtitleSource
+		}
+		if subtitle != nil && *subtitle != "" && models.DataSourcePriority[subtitleSource] < models.DataSourcePriority[existingSubtitleSource] {
+			log.Info("updating subtitle", logger.Data{"new_subtitle": *subtitle})
+			existingBook.Subtitle = subtitle
+			existingBook.SubtitleSource = &subtitleSource
+			updateOptions.Columns = append(updateOptions.Columns, "subtitle", "subtitle_source")
 			metadataChanged = true
 		}
 
@@ -544,6 +567,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			Title:        title,
 			TitleSource:  titleSource,
 			AuthorSource: authorSource,
+			Subtitle:     subtitle,
+		}
+		// Set subtitle source only if we have a subtitle
+		if subtitle != nil && *subtitle != "" {
+			existingBook.SubtitleSource = &subtitleSource
 		}
 		err := w.bookService.CreateBook(ctx, existingBook)
 		if err != nil {

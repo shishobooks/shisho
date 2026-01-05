@@ -611,7 +611,8 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			return errors.WithStack(err)
 		}
 
-		if newFolderPath != book.Filepath {
+		folderRenamed := newFolderPath != book.Filepath
+		if folderRenamed {
 			log.Info("renamed book folder", logger.Data{
 				"old_path": book.Filepath,
 				"new_path": newFolderPath,
@@ -628,17 +629,6 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				})
 			}
 
-			// Update all file paths
-			for _, file := range files {
-				oldPath := file.Filepath
-				newPath := strings.Replace(file.Filepath, book.Filepath, newFolderPath, 1)
-				pathUpdates = append(pathUpdates, struct {
-					fileID  int
-					oldPath string
-					newPath string
-				}{file.ID, oldPath, newPath})
-			}
-
 			// Update book filepath
 			book.Filepath = newFolderPath
 			book.UpdatedAt = now
@@ -653,6 +643,57 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				return errors.WithStack(err)
 			}
 		}
+
+		// Rename files inside the folder (whether or not folder was renamed)
+		for _, file := range files {
+			// Calculate the current path (after potential folder rename)
+			currentPath := file.Filepath
+			if folderRenamed {
+				currentPath = strings.Replace(file.Filepath, filepath.Dir(file.Filepath), newFolderPath, 1)
+			}
+
+			// Set file type and narrator names for proper naming
+			organizeOpts.FileType = file.FileType
+			organizeOpts.NarratorNames = nil
+			for _, n := range file.Narrators {
+				if n.Person != nil {
+					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
+				}
+			}
+
+			// Rename the file to the organized name
+			newPath, err := fileutils.RenameOrganizedFile(currentPath, organizeOpts)
+			if err != nil {
+				log.Error("failed to rename file in folder", logger.Data{
+					"file_id": file.ID,
+					"path":    currentPath,
+					"error":   err.Error(),
+				})
+				// If file rename failed but folder was renamed, still track the folder path change
+				if folderRenamed && currentPath != file.Filepath {
+					pathUpdates = append(pathUpdates, struct {
+						fileID  int
+						oldPath string
+						newPath string
+					}{file.ID, file.Filepath, currentPath})
+				}
+				continue
+			}
+
+			// Track path update if anything changed
+			if newPath != file.Filepath {
+				log.Info("renamed file", logger.Data{
+					"file_id":  file.ID,
+					"old_path": file.Filepath,
+					"new_path": newPath,
+				})
+				pathUpdates = append(pathUpdates, struct {
+					fileID  int
+					oldPath string
+					newPath string
+				}{file.ID, file.Filepath, newPath})
+			}
+		}
 	} else if isRootLevelBook {
 		// For root-level files that need folder creation, organize each file into a new folder
 		log.Info("organizing root-level files into folder", logger.Data{"file_count": len(files)})
@@ -661,6 +702,14 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		for _, file := range files {
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
+
+			// Populate narrator names from file's narrators for M4B files
+			organizeOpts.NarratorNames = nil
+			for _, n := range file.Narrators {
+				if n.Person != nil {
+					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
+				}
+			}
 
 			result, err := fileutils.OrganizeRootLevelFile(file.Filepath, organizeOpts)
 			if err != nil {
@@ -713,6 +762,14 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		for _, file := range files {
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
+
+			// Populate narrator names from file's narrators for M4B files
+			organizeOpts.NarratorNames = nil
+			for _, n := range file.Narrators {
+				if n.Person != nil {
+					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
+				}
+			}
 
 			newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
 			if err != nil {

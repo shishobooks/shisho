@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"os"
+	"strconv"
 
 	gomp4 "github.com/abema/go-mp4"
 	"github.com/pkg/errors"
@@ -40,6 +41,35 @@ func Write(path string, metadata *Metadata, opts WriteOptions) error {
 
 	// Write back
 	if err := os.WriteFile(path, outputData, 0600); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+// WriteToFile writes modified metadata to a new file (source → destination).
+// Uses atomic write pattern with temp file + rename.
+func WriteToFile(srcPath, destPath string, metadata *Metadata) error {
+	// Read the source file
+	inputData, err := os.ReadFile(srcPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Modify the metadata
+	outputData, err := writeMetadataToBytes(inputData, metadata)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Atomic write: temp file + rename
+	tmpPath := destPath + ".tmp"
+	if err := os.WriteFile(tmpPath, outputData, 0600); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath) // cleanup on failure
 		return errors.WithStack(err)
 	}
 
@@ -248,14 +278,20 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildItunesTextAtom(AtomArtist, joinStrings(metadata.Authors)))
 	}
 
-	// Album
-	if metadata.Album != "" {
-		content.Write(buildItunesTextAtom(AtomAlbum, metadata.Album))
+	// Album: format from series info if available, otherwise use existing album
+	album := metadata.Album
+	if metadata.Series != "" {
+		album = formatAlbumFromSeries(metadata.Series, metadata.SeriesNumber)
+	}
+	if album != "" {
+		content.Write(buildItunesTextAtom(AtomAlbum, album))
 	}
 
-	// Composer (narrators)
+	// Narrators: write to both ©nrt (dedicated narrator) and ©cmp (composer) for compatibility
 	if len(metadata.Narrators) > 0 {
-		content.Write(buildItunesTextAtom(AtomComposer, joinStrings(metadata.Narrators)))
+		narratorStr := joinStrings(metadata.Narrators)
+		content.Write(buildItunesTextAtom(AtomNarrator, narratorStr))
+		content.Write(buildItunesTextAtom(AtomComposer, narratorStr))
 	}
 
 	// Genre
@@ -266,6 +302,11 @@ func buildIlst(metadata *Metadata) []byte {
 	// Description
 	if metadata.Description != "" {
 		content.Write(buildItunesTextAtom(AtomDescription, metadata.Description))
+	}
+
+	// Subtitle as freeform atom
+	if metadata.Subtitle != "" {
+		content.Write(buildFreeformAtom("com.apple.iTunes", "SUBTITLE", metadata.Subtitle))
 	}
 
 	// Cover
@@ -283,6 +324,51 @@ func buildIlst(metadata *Metadata) []byte {
 // buildItunesTextAtom builds a text-based iTunes atom.
 func buildItunesTextAtom(atomType [4]byte, value string) []byte {
 	return buildItunesDataAtom(atomType, DataTypeUTF8, []byte(value))
+}
+
+// buildFreeformAtom builds a freeform (----) atom with mean, name, and data boxes.
+// This is used for custom metadata like ----:com.apple.iTunes:SUBTITLE.
+func buildFreeformAtom(namespace, name, value string) []byte {
+	var content bytes.Buffer
+
+	// Build mean box: [size][mean][version/flags (4 bytes)][namespace string]
+	meanContent := make([]byte, 4+len(namespace))
+	// First 4 bytes are version/flags (all zeros)
+	copy(meanContent[4:], namespace)
+	content.Write(buildBox("mean", meanContent))
+
+	// Build name box: [size][name][version/flags (4 bytes)][name string]
+	nameContent := make([]byte, 4+len(name))
+	// First 4 bytes are version/flags (all zeros)
+	copy(nameContent[4:], name)
+	content.Write(buildBox("name", nameContent))
+
+	// Build data box with UTF-8 text
+	var dataContent bytes.Buffer
+	dataContent.WriteByte(0)                  // version
+	dataContent.WriteByte(0)                  // type byte 1
+	dataContent.WriteByte(0)                  // type byte 2
+	dataContent.WriteByte(byte(DataTypeUTF8)) // type byte 3 (UTF-8)
+	dataContent.Write([]byte{0, 0, 0, 0})     // locale
+	dataContent.Write([]byte(value))
+	content.Write(buildBox("data", dataContent.Bytes()))
+
+	return buildBoxWithType(AtomFreeform, content.Bytes())
+}
+
+// formatAlbumFromSeries formats series info as album: "Series Name #N".
+func formatAlbumFromSeries(series string, number *float64) string {
+	if series == "" {
+		return ""
+	}
+	if number == nil {
+		return series
+	}
+	// Format: "Series Name #N" (integer if whole, decimal otherwise)
+	if *number == float64(int(*number)) {
+		return series + " #" + strconv.Itoa(int(*number))
+	}
+	return series + " #" + strconv.FormatFloat(*number, 'f', -1, 64)
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.

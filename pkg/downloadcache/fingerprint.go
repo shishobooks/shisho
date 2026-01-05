@@ -14,15 +14,22 @@ import (
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
-	Title    string              `json:"title"`
-	Subtitle *string             `json:"subtitle,omitempty"`
-	Authors  []FingerprintAuthor `json:"authors"`
-	Series   []FingerprintSeries `json:"series"`
-	Cover    *FingerprintCover   `json:"cover,omitempty"`
+	Title     string                `json:"title"`
+	Subtitle  *string               `json:"subtitle,omitempty"`
+	Authors   []FingerprintAuthor   `json:"authors"`
+	Narrators []FingerprintNarrator `json:"narrators"`
+	Series    []FingerprintSeries   `json:"series"`
+	Cover     *FingerprintCover     `json:"cover,omitempty"`
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
 type FingerprintAuthor struct {
+	Name      string `json:"name"`
+	SortOrder int    `json:"sort_order"`
+}
+
+// FingerprintNarrator represents narrator information for fingerprinting.
+type FingerprintNarrator struct {
 	Name      string `json:"name"`
 	SortOrder int    `json:"sort_order"`
 }
@@ -44,10 +51,11 @@ type FingerprintCover struct {
 // ComputeFingerprint creates a fingerprint from a book and file.
 func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, error) {
 	fp := &Fingerprint{
-		Title:    book.Title,
-		Subtitle: book.Subtitle,
-		Authors:  make([]FingerprintAuthor, 0),
-		Series:   make([]FingerprintSeries, 0),
+		Title:     book.Title,
+		Subtitle:  book.Subtitle,
+		Authors:   make([]FingerprintAuthor, 0),
+		Narrators: make([]FingerprintNarrator, 0),
+		Series:    make([]FingerprintSeries, 0),
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting
@@ -62,6 +70,23 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 				fp.Authors = append(fp.Authors, FingerprintAuthor{
 					Name:      a.Person.Name,
 					SortOrder: a.SortOrder,
+				})
+			}
+		}
+	}
+
+	// Add narrators sorted by SortOrder for consistent fingerprinting (from file)
+	if file != nil && len(file.Narrators) > 0 {
+		narrators := make([]*models.Narrator, len(file.Narrators))
+		copy(narrators, file.Narrators)
+		sort.Slice(narrators, func(i, j int) bool {
+			return narrators[i].SortOrder < narrators[j].SortOrder
+		})
+		for _, n := range narrators {
+			if n.Person != nil {
+				fp.Narrators = append(fp.Narrators, FingerprintNarrator{
+					Name:      n.Person.Name,
+					SortOrder: n.SortOrder,
 				})
 			}
 		}

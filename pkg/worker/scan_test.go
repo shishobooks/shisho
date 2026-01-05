@@ -8,6 +8,7 @@ import (
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -907,9 +908,9 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T
 
 	// Folder should be renamed to match [Author] Title convention
 	expectedFolder := filepath.Join(libraryPath, "[Author Name] Book In Folder")
-	// File keeps its original name inside the renamed folder
-	expectedFilePath := filepath.Join(expectedFolder, "book.epub")
-	assert.True(t, testgen.FileExists(expectedFilePath), "file should be in renamed folder")
+	// File is also renamed to match [Author] Title convention
+	expectedFilePath := filepath.Join(expectedFolder, "[Author Name] Book In Folder.epub")
+	assert.True(t, testgen.FileExists(expectedFilePath), "file should be renamed in folder")
 	assert.False(t, testgen.FileExists(originalPath), "original file should no longer exist")
 
 	// Verify the book record uses the new directory path
@@ -1741,6 +1742,97 @@ func TestProcessScanJob_VolumeToSeriesInference_EPUBNotAffected(t *testing.T) {
 	// No series should be created
 	allSeries := tc.listSeries()
 	assert.Empty(t, allSeries, "no series should be created for EPUB with number in title")
+}
+
+func TestProcessScanJob_M4BSubtitleExtraction(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Audiobook With Subtitle")
+
+	// Generate M4B with basic metadata
+	m4bPath := testgen.GenerateM4B(t, bookDir, "audiobook.m4b", testgen.M4BOptions{
+		Title:    "Main Title",
+		Artist:   "Author Name",
+		Duration: 1.0,
+	})
+
+	// Use mp4.Write to add a subtitle to the generated file
+	meta, err := mp4.ParseFull(m4bPath)
+	require.NoError(t, err)
+	meta.Subtitle = "A Compelling Subtitle"
+	err = mp4.Write(m4bPath, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	// Run the scan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify the book was created with subtitle
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Main Title", book.Title)
+	require.NotNil(t, book.Subtitle, "subtitle should be extracted from M4B metadata")
+	assert.Equal(t, "A Compelling Subtitle", *book.Subtitle)
+	require.NotNil(t, book.SubtitleSource)
+	assert.Equal(t, models.DataSourceM4BMetadata, *book.SubtitleSource)
+}
+
+func TestProcessScanJob_M4BSubtitleNotOverwrittenByHigherPriorityEmpty(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Audiobook With Subtitle")
+
+	// Create first M4B with subtitle
+	m4bPath1 := testgen.GenerateM4B(t, bookDir, "audiobook1.m4b", testgen.M4BOptions{
+		Title:    "Main Title",
+		Artist:   "Author Name",
+		Duration: 1.0,
+	})
+
+	// Add subtitle to first file
+	meta, err := mp4.ParseFull(m4bPath1)
+	require.NoError(t, err)
+	meta.Subtitle = "Existing Subtitle"
+	err = mp4.Write(m4bPath1, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	// First scan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.NotNil(t, allBooks[0].Subtitle)
+	assert.Equal(t, "Existing Subtitle", *allBooks[0].Subtitle)
+
+	// Create second M4B WITHOUT subtitle (same priority source but empty value)
+	testgen.GenerateM4B(t, bookDir, "audiobook2.m4b", testgen.M4BOptions{
+		Title:    "Main Title",
+		Artist:   "Author Name",
+		Duration: 1.0,
+		// No subtitle
+	})
+
+	// Second scan - subtitle should NOT be cleared
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.NotNil(t, allBooks[0].Subtitle, "subtitle should not be cleared by file without subtitle")
+	assert.Equal(t, "Existing Subtitle", *allBooks[0].Subtitle)
 }
 
 func TestProcessScanJob_LowerPriorityPopulatesEmptyField(t *testing.T) {

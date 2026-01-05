@@ -16,12 +16,14 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 
 // FormatDownloadFilename generates a formatted filename for downloading a file.
 // Format: [Author] Series #Number - Title.ext
+// For audiobooks with narrators: [Author] Series #Number - Title {Narrator}.ext
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
 	title := sanitizeFilename(book.Title)
 	author := getFirstAuthorName(book)
 	series, number := getFirstSeries(book)
+	narrator := getFirstNarratorName(file)
 	ext := file.FileType
 
 	var parts []string
@@ -44,6 +46,11 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 	// Add title
 	parts = append(parts, title)
 
+	// Add narrator for audiobooks if available
+	if narrator != "" {
+		parts = append(parts, fmt.Sprintf("{%s}", sanitizeFilename(narrator)))
+	}
+
 	// Join parts with spaces and add extension
 	filename := strings.Join(parts, " ")
 	return filename + "." + ext
@@ -64,6 +71,27 @@ func getFirstAuthorName(book *models.Book) string {
 	})
 
 	first := authors[0]
+	if first.Person != nil {
+		return first.Person.Name
+	}
+	return ""
+}
+
+// getFirstNarratorName returns the name of the first narrator by sort order.
+// Returns empty string if no narrators.
+func getFirstNarratorName(file *models.File) string {
+	if len(file.Narrators) == 0 {
+		return ""
+	}
+
+	// Sort narrators by SortOrder
+	narrators := make([]*models.Narrator, len(file.Narrators))
+	copy(narrators, file.Narrators)
+	sort.Slice(narrators, func(i, j int) bool {
+		return narrators[i].SortOrder < narrators[j].SortOrder
+	})
+
+	first := narrators[0]
 	if first.Person != nil {
 		return first.Person.Name
 	}

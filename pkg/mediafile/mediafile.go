@@ -7,6 +7,7 @@ import (
 
 type ParsedMetadata struct {
 	Title         string
+	Subtitle      string // from M4B freeform SUBTITLE atom
 	Authors       []string
 	Narrators     []string
 	Series        string

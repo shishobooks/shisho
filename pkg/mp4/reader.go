@@ -16,6 +16,7 @@ type rawMetadata struct {
 	title       string
 	artist      string
 	album       string
+	narrator    string // from ©nrt (dedicated narrator atom)
 	composer    string // from ©cmp
 	writer      string // from ©wrt (ffmpeg uses this for composer)
 	genre       string
@@ -152,6 +153,7 @@ func isMetadataAtom(boxType gomp4.BoxType) bool {
 	return atomTypeEquals(boxType, AtomTitle) ||
 		atomTypeEquals(boxType, AtomArtist) ||
 		atomTypeEquals(boxType, AtomAlbum) ||
+		atomTypeEquals(boxType, AtomNarrator) ||
 		atomTypeEquals(boxType, AtomComposer) ||
 		atomTypeEquals(boxType, AtomGenre) ||
 		atomTypeEquals(boxType, AtomGenreID) ||
@@ -302,6 +304,9 @@ func processMetadataAtom(child ilstChild, meta *rawMetadata) {
 
 	case atomTypeEquals(boxType, AtomAlbum):
 		meta.album = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomNarrator):
+		meta.narrator = parseTextData(child.data)
 
 	case atomTypeEquals(boxType, AtomComposer):
 		meta.composer = parseTextData(child.data)

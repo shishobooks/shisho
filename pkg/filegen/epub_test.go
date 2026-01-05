@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,7 +103,7 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 			},
 			BookSeries: []*models.BookSeries{
-				{SortOrder: 0, SeriesNumber: floatPtr(3), Series: &models.Series{Name: "Test Series"}},
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(3), Series: &models.Series{Name: "Test Series"}},
 			},
 		}
 		file := &models.File{FileType: models.FileTypeEPUB}
@@ -144,7 +145,7 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
 			},
 			BookSeries: []*models.BookSeries{
-				{SortOrder: 0, SeriesNumber: floatPtr(1.5), Series: &models.Series{Name: "Series"}},
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(1.5), Series: &models.Series{Name: "Series"}},
 			},
 		}
 		file := &models.File{FileType: models.FileTypeEPUB}
@@ -510,8 +511,4 @@ func readFileFromEPUB(t *testing.T, epubPath, fileName string) []byte {
 
 	t.Fatalf("file %s not found in EPUB", fileName)
 	return nil
-}
-
-func floatPtr(f float64) *float64 {
-	return &f
 }

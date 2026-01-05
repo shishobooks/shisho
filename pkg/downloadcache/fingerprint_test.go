@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func TestComputeFingerprint(t *testing.T) {
 				{SortOrder: 1, Person: &models.Person{Name: "Author Two"}},
 			},
 			BookSeries: []*models.BookSeries{
-				{SortOrder: 0, SeriesNumber: floatPtr(1), Series: &models.Series{Name: "Series One"}},
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Series One"}},
 			},
 		}
 		file := &models.File{
@@ -88,8 +89,8 @@ func TestComputeFingerprint(t *testing.T) {
 		book := &models.Book{
 			Title: "Multi Series",
 			BookSeries: []*models.BookSeries{
-				{SortOrder: 1, SeriesNumber: floatPtr(2), Series: &models.Series{Name: "Second Series"}},
-				{SortOrder: 0, SeriesNumber: floatPtr(1), Series: &models.Series{Name: "First Series"}},
+				{SortOrder: 1, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "Second Series"}},
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "First Series"}},
 			},
 		}
 		file := &models.File{}
@@ -100,6 +101,38 @@ func TestComputeFingerprint(t *testing.T) {
 		assert.Len(t, fp.Series, 2)
 		assert.Equal(t, "First Series", fp.Series[0].Name)
 		assert.Equal(t, "Second Series", fp.Series[1].Name)
+	})
+
+	t.Run("narrators are sorted by sort order", func(t *testing.T) {
+		book := &models.Book{Title: "Audiobook"}
+		file := &models.File{
+			Narrators: []*models.Narrator{
+				{SortOrder: 2, Person: &models.Person{Name: "Third Narrator"}},
+				{SortOrder: 0, Person: &models.Person{Name: "First Narrator"}},
+				{SortOrder: 1, Person: &models.Person{Name: "Second Narrator"}},
+			},
+		}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Len(t, fp.Narrators, 3)
+		assert.Equal(t, "First Narrator", fp.Narrators[0].Name)
+		assert.Equal(t, 0, fp.Narrators[0].SortOrder)
+		assert.Equal(t, "Second Narrator", fp.Narrators[1].Name)
+		assert.Equal(t, 1, fp.Narrators[1].SortOrder)
+		assert.Equal(t, "Third Narrator", fp.Narrators[2].Name)
+		assert.Equal(t, 2, fp.Narrators[2].SortOrder)
+	})
+
+	t.Run("file with no narrators", func(t *testing.T) {
+		book := &models.Book{Title: "Book"}
+		file := &models.File{Narrators: nil}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Empty(t, fp.Narrators)
 	})
 
 	t.Run("cover information is included", func(t *testing.T) {
@@ -248,11 +281,47 @@ func TestFingerprintHash(t *testing.T) {
 	t.Run("different series number produces different hash", func(t *testing.T) {
 		fp1 := &Fingerprint{
 			Title:  "Test",
-			Series: []FingerprintSeries{{Name: "Series", Number: floatPtr(1), SortOrder: 0}},
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(1), SortOrder: 0}},
 		}
 		fp2 := &Fingerprint{
 			Title:  "Test",
-			Series: []FingerprintSeries{{Name: "Series", Number: floatPtr(2), SortOrder: 0}},
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(2), SortOrder: 0}},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("different narrators produce different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:     "Test",
+			Narrators: []FingerprintNarrator{{Name: "Narrator A", SortOrder: 0}},
+		}
+		fp2 := &Fingerprint{
+			Title:     "Test",
+			Narrators: []FingerprintNarrator{{Name: "Narrator B", SortOrder: 0}},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("different narrator sort order produces different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:     "Test",
+			Narrators: []FingerprintNarrator{{Name: "Narrator", SortOrder: 0}},
+		}
+		fp2 := &Fingerprint{
+			Title:     "Test",
+			Narrators: []FingerprintNarrator{{Name: "Narrator", SortOrder: 1}},
 		}
 
 		hash1, err1 := fp1.Hash()

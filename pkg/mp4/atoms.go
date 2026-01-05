@@ -26,6 +26,7 @@ var (
 	AtomArtist   = [4]byte{0xA9, 'A', 'R', 'T'} // ©ART - Artist (author)
 	AtomAlbum    = [4]byte{0xA9, 'a', 'l', 'b'} // ©alb - Album
 	AtomComposer = [4]byte{0xA9, 'c', 'm', 'p'} // ©cmp - Composer (narrator for audiobooks)
+	AtomNarrator = [4]byte{0xA9, 'n', 'r', 't'} // ©nrt - Narrator (dedicated audiobook narrator atom)
 	AtomGenre    = [4]byte{0xA9, 'g', 'e', 'n'} // ©gen - Genre (custom text)
 	AtomWriter   = [4]byte{0xA9, 'w', 'r', 't'} // ©wrt - Writer
 	AtomComment  = [4]byte{0xA9, 'c', 'm', 't'} // ©cmt - Comment

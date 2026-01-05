@@ -3,6 +3,7 @@ package mp4_test
 import (
 	"testing"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/stretchr/testify/assert"
@@ -144,4 +145,168 @@ func TestWrite_Roundtrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Modified Title", modified.Title)
 	assert.Contains(t, modified.Authors, "New Author")
+}
+
+// TestWrite_Subtitle tests subtitle roundtrip through freeform atom.
+func TestWrite_Subtitle(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-subtitle-*")
+
+	// Generate initial M4B
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Main Title",
+		Duration: 1.0,
+	})
+
+	// Parse and add subtitle
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	meta.Subtitle = "A Compelling Subtitle"
+
+	err = mp4.Write(path, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	// Re-read and verify subtitle was written
+	modified, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "A Compelling Subtitle", modified.Subtitle)
+}
+
+// TestWrite_NarratorAtoms tests that narrators are written to both ©nrt and ©cmp.
+func TestWrite_NarratorAtoms(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-narrator-*")
+
+	// Generate initial M4B without narrators
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Narrator Test",
+		Duration: 1.0,
+	})
+
+	// Parse and set narrators
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	meta.Narrators = []string{"John Smith", "Jane Doe"}
+
+	err = mp4.Write(path, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	// Re-read and verify narrators
+	modified, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	require.Len(t, modified.Narrators, 2)
+	assert.Equal(t, "John Smith", modified.Narrators[0])
+	assert.Equal(t, "Jane Doe", modified.Narrators[1])
+}
+
+// TestWrite_SeriesFormatting tests album formatting from series info.
+func TestWrite_SeriesFormatting(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tests := []struct {
+		name          string
+		series        string
+		seriesNumber  *float64
+		expectedAlbum string
+	}{
+		{"integer number", "Test Series", pointerutil.Float64(1), "Test Series #1"},
+		{"decimal number", "Test Series", pointerutil.Float64(1.5), "Test Series #1.5"},
+		{"no number", "Test Series", nil, "Test Series"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := testgen.TempDir(t, "mp4-series-format-*")
+
+			// Generate M4B
+			path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+				Title:    "Series Test",
+				Duration: 1.0,
+			})
+
+			// Parse, set series, and write
+			meta, err := mp4.ParseFull(path)
+			require.NoError(t, err)
+			meta.Series = tc.series
+			meta.SeriesNumber = tc.seriesNumber
+
+			err = mp4.Write(path, meta, mp4.WriteOptions{})
+			require.NoError(t, err)
+
+			// Re-read and verify album was formatted correctly
+			modified, err := mp4.ParseFull(path)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedAlbum, modified.Album)
+		})
+	}
+}
+
+// TestWriteToFile_AtomicWrite tests that WriteToFile creates a new file atomically.
+func TestWriteToFile_AtomicWrite(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-writeto-*")
+
+	// Generate source M4B
+	srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+		Title:    "Source Title",
+		Duration: 1.0,
+	})
+
+	destPath := dir + "/dest.m4b"
+
+	// Parse source and modify
+	meta, err := mp4.ParseFull(srcPath)
+	require.NoError(t, err)
+	meta.Title = "Destination Title"
+
+	// Write to new file
+	err = mp4.WriteToFile(srcPath, destPath, meta)
+	require.NoError(t, err)
+
+	// Verify destination file exists
+	assert.FileExists(t, destPath)
+
+	// Verify no temp file remains
+	assert.NoFileExists(t, destPath+".tmp")
+
+	// Verify source is unchanged
+	source, err := mp4.ParseFull(srcPath)
+	require.NoError(t, err)
+	assert.Equal(t, "Source Title", source.Title)
+
+	// Verify destination has modified metadata
+	dest, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, "Destination Title", dest.Title)
+}
+
+// TestWrite_PreservesMetadata tests that unmodified fields are preserved.
+func TestWrite_PreservesMetadata(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-preserve-*")
+
+	// Generate M4B with various metadata
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Original Title",
+		Artist:   "Original Author",
+		Composer: "Original Narrator",
+		Genre:    "Fantasy",
+		Duration: 1.0,
+	})
+
+	// Parse and only modify title
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	meta.Title = "Modified Title"
+
+	err = mp4.Write(path, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	// Re-read and verify other fields are preserved
+	modified, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Modified Title", modified.Title)
+	assert.Contains(t, modified.Authors, "Original Author")
+	assert.Contains(t, modified.Narrators, "Original Narrator")
+	assert.Equal(t, "Fantasy", modified.Genre)
 }

@@ -10,8 +10,9 @@ import (
 // Metadata represents extracted M4B audiobook metadata.
 type Metadata struct {
 	Title         string
+	Subtitle      string            // from ----:com.apple.iTunes:SUBTITLE freeform atom
 	Authors       []string          // from ©ART (artist)
-	Narrators     []string          // from ©cmp (composer)
+	Narrators     []string          // from ©nrt (narrator) or ©cmp (composer)
 	Album         string            // from ©alb
 	Series        string            // parsed from album or ©grp
 	SeriesNumber  *float64          // parsed from album
@@ -54,9 +55,11 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	// Parse authors from artist field (comma-separated)
 	meta.Authors = splitMultiValue(raw.artist)
 
-	// Parse narrators from composer field (comma-separated)
-	// Check both ©cmp (composer) and ©wrt (writer) - ffmpeg uses ©wrt for composer
-	if raw.composer != "" {
+	// Parse narrators (comma-separated)
+	// Prefer ©nrt (dedicated narrator), fall back to ©cmp (composer), then ©wrt (writer)
+	if raw.narrator != "" {
+		meta.Narrators = splitMultiValue(raw.narrator)
+	} else if raw.composer != "" {
 		meta.Narrators = splitMultiValue(raw.composer)
 	} else if raw.writer != "" {
 		meta.Narrators = splitMultiValue(raw.writer)
@@ -80,11 +83,15 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	// Copy bitrate from esds (already in bps)
 	meta.Bitrate = int(raw.avgBitrate)
 
-	// Copy freeform atoms
+	// Copy freeform atoms and extract subtitle
 	if len(raw.freeform) > 0 {
 		meta.Freeform = make(map[string]string, len(raw.freeform))
 		for k, v := range raw.freeform {
 			meta.Freeform[k] = v
+		}
+		// Extract subtitle from freeform SUBTITLE atom
+		if subtitle, ok := raw.freeform["com.apple.iTunes:SUBTITLE"]; ok {
+			meta.Subtitle = subtitle
 		}
 	}
 

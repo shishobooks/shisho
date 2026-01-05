@@ -126,6 +126,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run `make tygo` after changing Go structs to update TypeScript types
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make lint`, `make test`, and `yarn lint` before committing
+- If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
 
 ### Testing Strategy
 
