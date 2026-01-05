@@ -68,6 +68,23 @@ sync_interval_minutes: 60
 worker_processes: 2
 
 # =============================================================================
+# DOWNLOAD CACHE SETTINGS
+# =============================================================================
+
+# Directory for caching generated download files
+# When users download files, modified versions with embedded metadata are generated
+# and cached here to avoid regenerating on each download.
+# Env: DOWNLOAD_CACHE_DIR
+# Default: /config/cache/downloads
+download_cache_dir: /config/cache/downloads
+
+# Maximum size of the download cache in gigabytes
+# When the cache exceeds this size, older files are automatically removed (LRU).
+# Env: DOWNLOAD_CACHE_MAX_SIZE_GB
+# Default: 5
+download_cache_max_size_gb: 5
+
+# =============================================================================
 # AUTHENTICATION SETTINGS
 # =============================================================================
 

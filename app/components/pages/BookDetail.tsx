@@ -1,6 +1,7 @@
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Download, Edit } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
@@ -8,6 +9,14 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -62,12 +71,82 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString();
 };
 
+interface DownloadError {
+  fileId: number;
+  message: string;
+}
+
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
   const libraryQuery = useLibrary(libraryId);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
+  const [downloadError, setDownloadError] = useState<DownloadError | null>(
+    null,
+  );
+  const [downloadingFileId, setDownloadingFileId] = useState<number | null>(
+    null,
+  );
+
+  const handleDownload = async (fileId: number) => {
+    setDownloadingFileId(fileId);
+    try {
+      const response = await fetch(`/api/books/files/${fileId}/download`);
+
+      if (!response.ok) {
+        // Try to parse error message from JSON response
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const error = await response.json();
+          setDownloadError({
+            fileId,
+            message: error.message || "Failed to generate file",
+          });
+        } else {
+          setDownloadError({
+            fileId,
+            message: "Failed to download file",
+          });
+        }
+        return;
+      }
+
+      // Get the filename from Content-Disposition header
+      const disposition = response.headers.get("content-disposition");
+      let filename = "download";
+      if (disposition) {
+        const filenameMatch = disposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success("Download started");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Failed to download file");
+    } finally {
+      setDownloadingFileId(null);
+    }
+  };
+
+  const handleDownloadOriginal = (fileId: number) => {
+    // Direct download of original file - this won't show any error since it's a simple file serve
+    window.location.href = `/api/books/files/${fileId}/download/original`;
+    setDownloadError(null);
+  };
 
   if (bookQuery.isLoading) {
     return (
@@ -288,8 +367,18 @@ const BookDetail = () => {
                           )}
                           <span>{formatFileSize(file.filesize_bytes)}</span>
                           <Button
+                            disabled={downloadingFileId === file.id}
+                            onClick={() => handleDownload(file.id)}
+                            size="sm"
+                            title="Download"
+                            variant="ghost"
+                          >
+                            <Download className="h-3 w-3" />
+                          </Button>
+                          <Button
                             onClick={() => setEditingFile(file)}
                             size="sm"
+                            title="Edit"
                             variant="ghost"
                           >
                             <Edit className="h-3 w-3" />
@@ -340,6 +429,33 @@ const BookDetail = () => {
           open={!!editingFile}
         />
       )}
+
+      {/* Download Error Dialog */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setDownloadError(null);
+        }}
+        open={!!downloadError}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Download Failed</DialogTitle>
+            <DialogDescription>{downloadError?.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button onClick={() => setDownloadError(null)} variant="outline">
+              Cancel
+            </Button>
+            {downloadError && (
+              <Button
+                onClick={() => handleDownloadOriginal(downloadError.fileId)}
+              >
+                Download Original
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

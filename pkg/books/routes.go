@@ -3,6 +3,8 @@ package books
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -11,17 +13,19 @@ import (
 )
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
 	bookService := NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
+	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
 		personService:  personService,
 		searchService:  searchService,
+		downloadCache:  cache,
 	}
 
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
@@ -31,4 +35,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Mid
 	g.GET("/files/:id/cover", h.fileCover)
 	g.POST("/files/:id", h.updateFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/files/:id/cover", h.uploadFileCover, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.GET("/files/:id/download", h.downloadFile)
+	g.GET("/files/:id/download/original", h.downloadOriginalFile)
 }

@@ -4,17 +4,21 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all OPDS routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
+func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
 	opdsService := NewService(db)
 	bookService := books.NewService(db)
+	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
-		opdsService: opdsService,
-		bookService: bookService,
+		opdsService:   opdsService,
+		bookService:   bookService,
+		downloadCache: cache,
 	}
 
 	// OPDS 1.2 routes with file type parameter

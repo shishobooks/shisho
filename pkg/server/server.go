@@ -54,10 +54,10 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, authMiddleware)
+	registerProtectedRoutes(e, db, cfg, authMiddleware)
 
 	// Register OPDS routes with Basic Auth
-	opds.RegisterRoutes(e, db, authMiddleware)
+	opds.RegisterRoutes(e, db, cfg, authMiddleware)
 
 	// Config routes (require authentication)
 	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)
@@ -78,12 +78,12 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
+func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, authMiddleware)
+	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware)
 
 	// Libraries routes
 	librariesGroup := e.Group("/libraries")

@@ -10,7 +10,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -25,6 +27,7 @@ type handler struct {
 	libraryService *libraries.Service
 	personService  *people.Service
 	searchService  *search.Service
+	downloadCache  *downloadcache.Cache
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -886,4 +889,99 @@ func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File
 		}
 	}
 	return nil
+}
+
+// downloadFile handles downloading a file with generated metadata embedded.
+func (h *handler) downloadFile(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	// Fetch the file with its book
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Get the full book with relations for generation
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &file.BookID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check if the source file exists
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("Source file not found on disk")
+	}
+
+	// Try to generate/get from cache
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
+	if err != nil {
+		// Check if it's a "not implemented" error for M4B/CBZ
+		var genErr *filegen.GenerationError
+		if errors.As(err, &genErr) {
+			if errors.Is(genErr.Err, filegen.ErrNotImplemented) {
+				// Return a specific error that tells the user this format isn't supported yet
+				return errcodes.ValidationError("File generation for " + file.FileType + " is not yet supported. Use 'Download Original' instead.")
+			}
+			// Other generation error - return details
+			return errcodes.ValidationError("Failed to generate file: " + genErr.Message)
+		}
+		return errors.WithStack(err)
+	}
+
+	// Set content disposition for download with the formatted filename
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+
+	return c.File(cachedPath)
+}
+
+// downloadOriginalFile handles downloading the original file without any modifications.
+func (h *handler) downloadOriginalFile(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	// Fetch the file
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Check if the file exists
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("File not found on disk")
+	}
+
+	// Set content disposition for download with the original filename
+	filename := filepath.Base(file.Filepath)
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
+	return c.File(file.Filepath)
 }

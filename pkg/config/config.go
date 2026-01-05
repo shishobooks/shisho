@@ -34,6 +34,10 @@ type Config struct {
 	SyncIntervalMinutes int `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
 	WorkerProcesses     int `koanf:"worker_processes" json:"worker_processes"`
 
+	// Download cache settings
+	DownloadCacheDir       string `koanf:"download_cache_dir" json:"download_cache_dir"`
+	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
+
 	// Authentication settings
 	JWTSecret string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
 
@@ -54,6 +58,8 @@ func defaults() *Config {
 		ServerPort:                3689,
 		SyncIntervalMinutes:       60,
 		WorkerProcesses:           2,
+		DownloadCacheDir:          "/config/cache/downloads",
+		DownloadCacheMaxSizeGB:    5,
 		JWTSecret:                 "", // Must be set via config or env var
 	}
 }
@@ -118,8 +124,15 @@ func NewForTest() *Config {
 	cfg.ServerPort = 0
 	cfg.Hostname = "test-host"
 	cfg.WorkerProcesses = 1
+	cfg.DownloadCacheDir = "" // Must be set by test
+	cfg.DownloadCacheMaxSizeGB = 1
 	cfg.JWTSecret = "test-secret-key-for-testing-only"
 	return cfg
+}
+
+// DownloadCacheMaxSizeBytes returns the maximum cache size in bytes.
+func (c *Config) DownloadCacheMaxSizeBytes() int64 {
+	return int64(c.DownloadCacheMaxSizeGB) * 1024 * 1024 * 1024
 }
 
 // validateConfig validates the config and returns user-friendly error messages.

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -22,6 +24,12 @@ func main() {
 	if err != nil {
 		log.Err(err).Fatal("config error")
 	}
+
+	// Initialize download cache directory
+	if err := initDownloadCacheDir(cfg.DownloadCacheDir); err != nil {
+		log.Err(err).Fatal("download cache directory error")
+	}
+	log.Info("download cache directory initialized", logger.Data{"path": cfg.DownloadCacheDir})
 
 	db, err := database.New(cfg)
 	if err != nil {
@@ -82,4 +90,26 @@ func main() {
 		log.Err(err).Error("database close error")
 	}
 	log.Info("database closed")
+}
+
+// initDownloadCacheDir creates the download cache directory and verifies write permissions.
+func initDownloadCacheDir(dir string) error {
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create download cache directory: %s", dir)
+	}
+
+	// Verify write permissions by creating and removing a temp file
+	testFile := filepath.Join(dir, ".write_test")
+	f, err := os.Create(testFile)
+	if err != nil {
+		return errors.Wrapf(err, "download cache directory is not writable: %s", dir)
+	}
+	f.Close()
+
+	if err := os.Remove(testFile); err != nil {
+		return errors.Wrapf(err, "failed to clean up write test file: %s", testFile)
+	}
+
+	return nil
 }

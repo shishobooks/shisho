@@ -10,8 +10,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -21,8 +24,9 @@ const (
 )
 
 type handler struct {
-	opdsService *Service
-	bookService *books.Service
+	opdsService   *Service
+	bookService   *books.Service
+	downloadCache *downloadcache.Cache
 }
 
 // getBaseURL returns the base URL for OPDS feeds.
@@ -363,9 +367,13 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 	return c.XML(http.StatusOK, desc)
 }
 
-// download handles file downloads.
+// download handles file downloads with generated metadata.
+// For OPDS clients, we try to generate a file with embedded metadata.
+// If generation fails, we fall back to the original file.
 func (h *handler) download(c echo.Context) error {
 	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
 	fileID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("File")
@@ -383,16 +391,42 @@ func (h *handler) download(c echo.Context) error {
 		return err
 	}
 
-	// Check if file exists
+	// Check if source file exists
 	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
 		return errcodes.NotFound("File")
 	}
 
-	// Set content disposition for download
-	filename := filepath.Base(file.Filepath)
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	// Get the full book with relations for generation
+	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+		ID: &file.BookID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
-	return c.File(file.Filepath)
+	// Try to generate/get from cache
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
+	if err != nil {
+		// For OPDS clients, fall back to original file on generation error
+		var genErr *filegen.GenerationError
+		if errors.As(err, &genErr) {
+			log.Warn("file generation failed, serving original", logger.Data{
+				"file_id":   file.ID,
+				"file_type": file.FileType,
+				"error":     genErr.Message,
+			})
+			// Fall back to original file
+			filename := filepath.Base(file.Filepath)
+			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			return c.File(file.Filepath)
+		}
+		return errors.WithStack(err)
+	}
+
+	// Set content disposition for download with the formatted filename
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+
+	return c.File(cachedPath)
 }
 
 // respondXML sends an XML response with the correct content type.
