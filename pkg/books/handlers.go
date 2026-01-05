@@ -132,6 +132,12 @@ func (h *handler) update(c echo.Context) error {
 		oldSeriesIDs = append(oldSeriesIDs, bs.SeriesID)
 	}
 
+	// Track old author person IDs for FTS re-indexing
+	oldPersonIDs := make([]int, 0)
+	for _, author := range book.Authors {
+		oldPersonIDs = append(oldPersonIDs, author.PersonID)
+	}
+
 	// Update title
 	if params.Title != nil && *params.Title != book.Title {
 		book.Title = *params.Title
@@ -332,10 +338,45 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Update FTS index for affected people (old and new)
+	if authorsChanged {
+		// Re-index new people (they may be newly created)
+		for _, author := range book.Authors {
+			if author.Person != nil {
+				if err := h.searchService.IndexPerson(ctx, author.Person); err != nil {
+					log.Warn("failed to update search index for new person", logger.Data{"person_id": author.PersonID, "error": err.Error()})
+				}
+			}
+		}
+	}
+
 	// Cleanup orphaned records
 	if authorsChanged {
+		// Get list of orphaned people before deleting them (for FTS cleanup)
+		orphanedPersonIDs := make([]int, 0)
+		for _, personID := range oldPersonIDs {
+			// Check if this old person is still associated with any books
+			isOrphaned := true
+			for _, author := range book.Authors {
+				if author.PersonID == personID {
+					isOrphaned = false
+					break
+				}
+			}
+			if isOrphaned {
+				orphanedPersonIDs = append(orphanedPersonIDs, personID)
+			}
+		}
+
 		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
 			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
+		}
+
+		// Remove orphaned people from FTS index
+		for _, personID := range orphanedPersonIDs {
+			if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
+				log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
+			}
 		}
 	}
 	if seriesChanged {
@@ -400,6 +441,12 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	narratorsChanged := false
 	opts := UpdateFileOptions{Columns: []string{}}
+
+	// Track old narrator person IDs for FTS re-indexing
+	oldNarratorPersonIDs := make([]int, 0)
+	for _, narrator := range file.Narrators {
+		oldNarratorPersonIDs = append(oldNarratorPersonIDs, narrator.PersonID)
+	}
 
 	// Update narrators
 	if params.Narrators != nil {
@@ -498,10 +545,45 @@ func (h *handler) updateFile(c echo.Context) error {
 		}
 	}
 
+	// Update FTS index for affected people (new narrators)
+	if narratorsChanged {
+		// Re-index new people (they may be newly created)
+		for _, narrator := range file.Narrators {
+			if narrator.Person != nil {
+				if err := h.searchService.IndexPerson(ctx, narrator.Person); err != nil {
+					log.Warn("failed to update search index for new person", logger.Data{"person_id": narrator.PersonID, "error": err.Error()})
+				}
+			}
+		}
+	}
+
 	// Cleanup orphaned people
 	if narratorsChanged {
+		// Get list of orphaned people before deleting them (for FTS cleanup)
+		orphanedPersonIDs := make([]int, 0)
+		for _, personID := range oldNarratorPersonIDs {
+			// Check if this old person is still associated with any files as narrator
+			isOrphaned := true
+			for _, narrator := range file.Narrators {
+				if narrator.PersonID == personID {
+					isOrphaned = false
+					break
+				}
+			}
+			if isOrphaned {
+				orphanedPersonIDs = append(orphanedPersonIDs, personID)
+			}
+		}
+
 		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
 			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
+		}
+
+		// Remove orphaned people from FTS index
+		for _, personID := range orphanedPersonIDs {
+			if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
+				log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
+			}
 		}
 	}
 

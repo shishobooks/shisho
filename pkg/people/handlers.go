@@ -288,6 +288,12 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Remove the merged (source) person from FTS index
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromPersonIndex(ctx, params.SourceID); err != nil {
+		log.Warn("failed to remove merged person from search index", logger.Data{"person_id": params.SourceID, "error": err.Error()})
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 

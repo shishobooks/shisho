@@ -361,6 +361,23 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	log := logger.FromContext(ctx)
+
+	// Remove the merged (source) series from FTS index
+	if err := h.searchService.DeleteFromSeriesIndex(ctx, params.SourceID); err != nil {
+		log.Warn("failed to remove merged series from search index", logger.Data{"series_id": params.SourceID, "error": err.Error()})
+	}
+
+	// Re-index the target series since it now has more books
+	series, err = h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &id,
+	})
+	if err == nil {
+		if err := h.searchService.IndexSeries(ctx, series); err != nil {
+			log.Warn("failed to update search index for target series", logger.Data{"series_id": id, "error": err.Error()})
+		}
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
