@@ -113,7 +113,7 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 	q := svc.db.
 		NewSelect().
 		Model(&jobs).
-		Order("j.created_at ASC")
+		Order("j.created_at DESC")
 
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
