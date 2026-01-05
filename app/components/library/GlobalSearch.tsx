@@ -1,6 +1,6 @@
 import { Search, User, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -28,6 +28,7 @@ const getSearchThumbnailClasses = (coverAspectRatio: string): string => {
 
 const GlobalSearch = () => {
   const { libraryId } = useParams();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
@@ -88,6 +89,57 @@ const GlobalSearch = () => {
     setIsOpen(false);
     setQuery("");
   }, []);
+
+  // Get the URL of the first visible result
+  // If there's exactly 1 result, go to the detail page
+  // If there's more than 1 result, go to the list page with search query
+  const getFirstResultUrl = useCallback((): string | null => {
+    if (!searchQuery.data || !libraryId) return null;
+
+    const searchParam = `?search=${encodeURIComponent(debouncedQuery)}&page=1`;
+
+    // Check books first
+    if (searchQuery.data.books && searchQuery.data.books.length > 0) {
+      if (searchQuery.data.books.length === 1) {
+        return `/libraries/${libraryId}/books/${searchQuery.data.books[0].id}`;
+      }
+      return `/libraries/${libraryId}${searchParam}`;
+    }
+
+    // Then series
+    if (searchQuery.data.series && searchQuery.data.series.length > 0) {
+      if (searchQuery.data.series.length === 1) {
+        return `/libraries/${libraryId}/series/${searchQuery.data.series[0].id}`;
+      }
+      return `/libraries/${libraryId}/series${searchParam}`;
+    }
+
+    // Then people
+    if (searchQuery.data.people && searchQuery.data.people.length > 0) {
+      if (searchQuery.data.people.length === 1) {
+        return `/libraries/${libraryId}/people/${searchQuery.data.people[0].id}`;
+      }
+      return `/libraries/${libraryId}/people${searchParam}`;
+    }
+
+    return null;
+  }, [searchQuery.data, libraryId, debouncedQuery]);
+
+  // Handle Enter key to navigate to first result
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        const firstResultUrl = getFirstResultUrl();
+        if (firstResultUrl) {
+          event.preventDefault();
+          setIsOpen(false);
+          setQuery("");
+          navigate(firstResultUrl);
+        }
+      }
+    },
+    [getFirstResultUrl, navigate],
+  );
 
   const renderBookResult = (book: BookSearchResult) => (
     <Link
@@ -185,6 +237,7 @@ const GlobalSearch = () => {
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder="Search library..."
           ref={inputRef}
           type="search"
