@@ -330,7 +330,7 @@ export function BookEditDialog({
             </div>
 
             {/* Series Combobox */}
-            <Popover onOpenChange={setSeriesOpen} open={seriesOpen}>
+            <Popover modal onOpenChange={setSeriesOpen} open={seriesOpen}>
               <PopoverTrigger asChild>
                 <Button
                   aria-expanded={seriesOpen}
