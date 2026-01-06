@@ -92,13 +92,20 @@ const BookDetail = () => {
   const handleDownload = async (fileId: number) => {
     setDownloadingFileId(fileId);
     try {
-      const response = await fetch(`/api/books/files/${fileId}/download`);
+      // Use HEAD request to trigger generation and check for errors
+      // This avoids loading the entire file into browser memory
+      const headResponse = await fetch(`/api/books/files/${fileId}/download`, {
+        method: "HEAD",
+      });
 
-      if (!response.ok) {
-        // Try to parse error message from JSON response
-        const contentType = response.headers.get("content-type");
+      if (!headResponse.ok) {
+        // HEAD failed - make a GET request to get the error message (small JSON response)
+        const errorResponse = await fetch(
+          `/api/books/files/${fileId}/download`,
+        );
+        const contentType = errorResponse.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
-          const error = await response.json();
+          const error = await errorResponse.json();
           setDownloadError({
             fileId,
             message: error.message || "Failed to generate file",
@@ -112,27 +119,8 @@ const BookDetail = () => {
         return;
       }
 
-      // Get the filename from Content-Disposition header
-      const disposition = response.headers.get("content-disposition");
-      let filename = "download";
-      if (disposition) {
-        const filenameMatch = disposition.match(/filename="(.+)"/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      // Create blob and trigger download
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
+      // HEAD succeeded - file is ready, trigger streaming download
+      window.location.href = `/api/books/files/${fileId}/download`;
       toast.success("Download started");
     } catch (error) {
       console.error("Download error:", error);

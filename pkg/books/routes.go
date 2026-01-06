@@ -36,5 +36,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.POST("/files/:id", h.updateFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/files/:id/cover", h.uploadFileCover, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("/files/:id/download", h.downloadFile)
+	g.HEAD("/files/:id/download", h.downloadFile)
 	g.GET("/files/:id/download/original", h.downloadOriginalFile)
 }
