@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Edit } from "lucide-react";
+import { ArrowLeft, Download, Edit, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -373,7 +373,11 @@ const BookDetail = () => {
                             title="Download"
                             variant="ghost"
                           >
-                            <Download className="h-3 w-3" />
+                            {downloadingFileId === file.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Download className="h-3 w-3" />
+                            )}
                           </Button>
                           <Button
                             onClick={() => setEditingFile(file)}
