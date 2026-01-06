@@ -62,6 +62,10 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		// Preserve from source
 		Genre:       src.Genre,
 		Description: src.Description,
+		Comment:     src.Comment,
+		Year:        src.Year,
+		Copyright:   src.Copyright,
+		Encoder:     src.Encoder,
 		Duration:    src.Duration,
 		Bitrate:     src.Bitrate,
 		Chapters:    src.Chapters,
@@ -71,6 +75,9 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		// Preserve cover from source initially (may be replaced below)
 		CoverData:     src.CoverData,
 		CoverMimeType: src.CoverMimeType,
+
+		// Preserve unknown atoms for complete tag preservation
+		UnknownAtoms: src.UnknownAtoms,
 	}
 
 	// Set subtitle from book model

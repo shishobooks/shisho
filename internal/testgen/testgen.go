@@ -33,13 +33,17 @@ type CBZOptions struct {
 
 // M4BOptions configures the generated M4B file.
 type M4BOptions struct {
-	Title    string
-	Artist   string  // Author
-	Album    string  // Series/Grouping (e.g., "Series Name #7")
-	Composer string  // Narrator
-	Genre    string  // Genre text
-	Duration float64 // Duration in seconds
-	HasCover bool
+	Title       string
+	Artist      string  // Author
+	Album       string  // Series/Grouping (e.g., "Series Name #7")
+	Composer    string  // Narrator
+	Genre       string  // Genre text
+	Duration    float64 // Duration in seconds
+	HasCover    bool
+	Copyright   string // Copyright notice
+	Date        string // Year/date (e.g., "2024")
+	AlbumArtist string // Album artist (different from artist)
+	Comment     string // Comment/description
 }
 
 // TempDir creates a temporary directory for testing and registers cleanup.

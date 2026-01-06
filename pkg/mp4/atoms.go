@@ -22,16 +22,18 @@ const (
 // Note: © symbol is encoded as 0xA9 in MacRoman.
 var (
 	// Standard iTunes metadata atoms.
-	AtomTitle    = [4]byte{0xA9, 'n', 'a', 'm'} // ©nam - Title
-	AtomArtist   = [4]byte{0xA9, 'A', 'R', 'T'} // ©ART - Artist (author)
-	AtomAlbum    = [4]byte{0xA9, 'a', 'l', 'b'} // ©alb - Album
-	AtomComposer = [4]byte{0xA9, 'c', 'm', 'p'} // ©cmp - Composer (narrator for audiobooks)
-	AtomNarrator = [4]byte{0xA9, 'n', 'r', 't'} // ©nrt - Narrator (dedicated audiobook narrator atom)
-	AtomGenre    = [4]byte{0xA9, 'g', 'e', 'n'} // ©gen - Genre (custom text)
-	AtomWriter   = [4]byte{0xA9, 'w', 'r', 't'} // ©wrt - Writer
-	AtomComment  = [4]byte{0xA9, 'c', 'm', 't'} // ©cmt - Comment
-	AtomYear     = [4]byte{0xA9, 'd', 'a', 'y'} // ©day - Year/Date
-	AtomGrouping = [4]byte{0xA9, 'g', 'r', 'p'} // ©grp - Grouping
+	AtomTitle     = [4]byte{0xA9, 'n', 'a', 'm'} // ©nam - Title
+	AtomArtist    = [4]byte{0xA9, 'A', 'R', 'T'} // ©ART - Artist (author)
+	AtomAlbum     = [4]byte{0xA9, 'a', 'l', 'b'} // ©alb - Album
+	AtomComposer  = [4]byte{0xA9, 'c', 'm', 'p'} // ©cmp - Composer (narrator for audiobooks)
+	AtomNarrator  = [4]byte{0xA9, 'n', 'r', 't'} // ©nrt - Narrator (dedicated audiobook narrator atom)
+	AtomGenre     = [4]byte{0xA9, 'g', 'e', 'n'} // ©gen - Genre (custom text)
+	AtomWriter    = [4]byte{0xA9, 'w', 'r', 't'} // ©wrt - Writer
+	AtomComment   = [4]byte{0xA9, 'c', 'm', 't'} // ©cmt - Comment
+	AtomYear      = [4]byte{0xA9, 'd', 'a', 'y'} // ©day - Year/Date
+	AtomGrouping  = [4]byte{0xA9, 'g', 'r', 'p'} // ©grp - Grouping
+	AtomCopyright = [4]byte{0xA9, 'c', 'p', 'y'} // ©cpy - Copyright
+	AtomEncoder   = [4]byte{0xA9, 't', 'o', 'o'} // ©too - Encoder/Encoding tool
 
 	// Non-copyright atoms (standard ASCII).
 	AtomCover       = [4]byte{'c', 'o', 'v', 'r'} // covr - Cover artwork

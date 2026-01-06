@@ -13,22 +13,27 @@ import (
 // rawMetadata holds the raw extracted metadata from the MP4 file
 // before post-processing (like series parsing).
 type rawMetadata struct {
-	title       string
-	artist      string
-	album       string
-	narrator    string // from ©nrt (dedicated narrator atom)
-	composer    string // from ©cmp
-	writer      string // from ©wrt (ffmpeg uses this for composer)
-	genre       string
-	description string
-	coverData   []byte
-	coverMime   string
-	mediaType   int64
-	timescale   uint32            // from mvhd - units per second
-	duration    uint64            // from mvhd - in timescale units
-	avgBitrate  uint32            // from esds - average bitrate in bps
-	freeform    map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
-	chapters    []Chapter         // chapter list
+	title        string
+	artist       string
+	album        string
+	narrator     string // from ©nrt (dedicated narrator atom)
+	composer     string // from ©cmp
+	writer       string // from ©wrt (ffmpeg uses this for composer)
+	genre        string
+	description  string
+	comment      string // from ©cmt
+	year         string // from ©day
+	copyright    string // from ©cpy
+	encoder      string // from ©too
+	coverData    []byte
+	coverMime    string
+	mediaType    int64
+	timescale    uint32            // from mvhd - units per second
+	duration     uint64            // from mvhd - in timescale units
+	avgBitrate   uint32            // from esds - average bitrate in bps
+	freeform     map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
+	chapters     []Chapter         // chapter list
+	unknownAtoms []RawAtom         // unrecognized atoms to preserve
 }
 
 // readMetadata reads metadata from an MP4 file using go-mp4.
@@ -111,7 +116,9 @@ func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 
 		default:
 			// Check if this is a metadata atom (child of ilst)
-			if isMetadataAtom(h.BoxInfo.Type) {
+			// Process ALL potential metadata atoms - known ones are parsed,
+			// unknown ones are preserved as raw atoms
+			if isPotentialMetadataAtom(h.BoxInfo.Type) {
 				return processMetadataBox(h, meta)
 			}
 			return nil, nil
@@ -162,7 +169,42 @@ func isMetadataAtom(boxType gomp4.BoxType) bool {
 		atomTypeEquals(boxType, AtomMediaType) ||
 		atomTypeEquals(boxType, AtomWriter) ||
 		atomTypeEquals(boxType, AtomGrouping) ||
+		atomTypeEquals(boxType, AtomComment) ||
+		atomTypeEquals(boxType, AtomYear) ||
+		atomTypeEquals(boxType, AtomCopyright) ||
+		atomTypeEquals(boxType, AtomEncoder) ||
 		atomTypeEquals(boxType, AtomFreeform)
+}
+
+// isPotentialMetadataAtom checks if a box type could be an ilst metadata atom.
+// This is more permissive than isMetadataAtom and includes any box that could
+// be inside an ilst container. Returns true for:
+// - Known metadata atoms
+// - Atoms starting with © (0xA9) - iTunes metadata convention
+// - Freeform (----) atoms
+// - Common unknown atoms like cprt, aART, etc.
+func isPotentialMetadataAtom(boxType gomp4.BoxType) bool {
+	// Known atoms
+	if isMetadataAtom(boxType) {
+		return true
+	}
+
+	// Atoms starting with © (0xA9) are iTunes metadata convention
+	if boxType[0] == 0xA9 {
+		return true
+	}
+
+	// aART (album artist) is a common metadata atom
+	if boxType == [4]byte{'a', 'A', 'R', 'T'} {
+		return true
+	}
+
+	// cprt (copyright) is also common
+	if boxType == [4]byte{'c', 'p', 'r', 't'} {
+		return true
+	}
+
+	return false
 }
 
 // processMvhd reads the movie header box to extract duration info.
@@ -206,13 +248,23 @@ func processMetadataBox(h *gomp4.ReadHandle, meta *rawMetadata) (interface{}, er
 		return nil, nil
 	}
 
-	// The data should contain a "data" box
-	dataContent := extractDataBoxContent(data)
-	if dataContent == nil {
-		return nil, nil
+	// Check if this is a known metadata atom
+	if isMetadataAtom(boxType) {
+		// The data should contain a "data" box
+		dataContent := extractDataBoxContent(data)
+		if dataContent == nil {
+			return nil, nil
+		}
+		processMetadataAtom(ilstChild{atomType: boxType, data: dataContent}, meta)
+	} else {
+		// Unknown atom - preserve it as raw data
+		// Rebuild the full atom with header
+		fullAtom := buildBoxWithType(boxType, data)
+		meta.unknownAtoms = append(meta.unknownAtoms, RawAtom{
+			Type: boxType,
+			Data: fullAtom,
+		})
 	}
-
-	processMetadataAtom(ilstChild{atomType: boxType, data: dataContent}, meta)
 
 	return nil, nil
 }
@@ -336,6 +388,18 @@ func processMetadataAtom(child ilstChild, meta *rawMetadata) {
 		if id, ok := parseIntegerData(child.data); ok {
 			meta.mediaType = id
 		}
+
+	case atomTypeEquals(boxType, AtomComment):
+		meta.comment = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomYear):
+		meta.year = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomCopyright):
+		meta.copyright = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomEncoder):
+		meta.encoder = parseTextData(child.data)
 	}
 }
 

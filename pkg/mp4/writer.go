@@ -318,6 +318,36 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildItunesDataAtom(AtomCover, dataType, metadata.CoverData))
 	}
 
+	// Comment
+	if metadata.Comment != "" {
+		content.Write(buildItunesTextAtom(AtomComment, metadata.Comment))
+	}
+
+	// Year
+	if metadata.Year != "" {
+		content.Write(buildItunesTextAtom(AtomYear, metadata.Year))
+	}
+
+	// Copyright
+	if metadata.Copyright != "" {
+		content.Write(buildItunesTextAtom(AtomCopyright, metadata.Copyright))
+	}
+
+	// Encoder
+	if metadata.Encoder != "" {
+		content.Write(buildItunesTextAtom(AtomEncoder, metadata.Encoder))
+	}
+
+	// Media Type (stik) - audiobook = 2
+	if metadata.MediaType > 0 {
+		content.Write(buildItunesDataAtom(AtomMediaType, DataTypeInteger, []byte{byte(metadata.MediaType)}))
+	}
+
+	// Write preserved unknown atoms
+	for _, atom := range metadata.UnknownAtoms {
+		content.Write(atom.Data)
+	}
+
 	return buildBox("ilst", content.Bytes())
 }
 

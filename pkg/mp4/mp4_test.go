@@ -310,3 +310,125 @@ func TestWrite_PreservesMetadata(t *testing.T) {
 	assert.Contains(t, modified.Narrators, "Original Narrator")
 	assert.Equal(t, "Fantasy", modified.Genre)
 }
+
+// TestWrite_PreservesUnknownAtoms tests that unknown/unrecognized atoms are preserved.
+// This ensures tags like album_artist, copyright, date, etc. that we don't explicitly
+// handle are still preserved when writing files.
+func TestWrite_PreservesUnknownAtoms(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-unknown-atoms-*")
+
+	const (
+		expectedCopyright   = "©2024 Test Publisher"
+		expectedAlbumArtist = "Test Album Artist"
+	)
+
+	// Generate M4B with metadata that includes atoms we treat as "unknown"
+	// (album_artist is stored as aART, copyright as cprt - both are unknown atoms)
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:       "Test Book",
+		Artist:      "Test Author",
+		Duration:    1.0,
+		Copyright:   expectedCopyright,
+		AlbumArtist: expectedAlbumArtist,
+	})
+
+	// Parse the file
+	original, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Test Book", original.Title)
+
+	// Verify we captured unknown atoms
+	assert.NotEmpty(t, original.UnknownAtoms, "Should have captured unknown atoms (aART, cprt)")
+
+	// Find the specific unknown atoms we expect and verify their data
+	var foundAlbumArtist, foundCopyright []byte
+	for _, atom := range original.UnknownAtoms {
+		atomType := string(atom.Type[:])
+		if atomType == "aART" {
+			foundAlbumArtist = atom.Data
+		}
+		if atomType == "cprt" {
+			foundCopyright = atom.Data
+		}
+	}
+	assert.NotNil(t, foundAlbumArtist, "Should have captured aART (album_artist) atom")
+	assert.NotNil(t, foundCopyright, "Should have captured cprt (copyright) atom")
+
+	// Modify the title and write back
+	original.Title = "Modified Title"
+	destPath := dir + "/modified.m4b"
+	err = mp4.WriteToFile(path, destPath, original)
+	require.NoError(t, err)
+
+	// Re-read the modified file
+	modified, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+
+	// Verify title was modified
+	assert.Equal(t, "Modified Title", modified.Title)
+
+	// Verify unknown atoms were preserved with same data
+	assert.Len(t, modified.UnknownAtoms, len(original.UnknownAtoms),
+		"Unknown atoms count should be preserved")
+
+	// Verify specific atoms are still present with the same raw data
+	var modifiedAlbumArtist, modifiedCopyright []byte
+	for _, atom := range modified.UnknownAtoms {
+		atomType := string(atom.Type[:])
+		if atomType == "aART" {
+			modifiedAlbumArtist = atom.Data
+		}
+		if atomType == "cprt" {
+			modifiedCopyright = atom.Data
+		}
+	}
+	assert.NotNil(t, modifiedAlbumArtist, "aART atom should be preserved after write")
+	assert.NotNil(t, modifiedCopyright, "cprt atom should be preserved after write")
+
+	// Verify the raw atom data is identical (byte-for-byte preservation)
+	assert.Equal(t, foundAlbumArtist, modifiedAlbumArtist,
+		"aART atom data should be byte-for-byte identical")
+	assert.Equal(t, foundCopyright, modifiedCopyright,
+		"cprt atom data should be byte-for-byte identical")
+
+	// Also verify using ffprobe that the actual tag values are correct
+	tags := testgen.GetM4BTags(t, destPath)
+	assert.Equal(t, expectedAlbumArtist, tags["album_artist"],
+		"album_artist value should be preserved")
+	assert.Equal(t, expectedCopyright, tags["copyright"],
+		"copyright value should be preserved")
+}
+
+// TestWrite_PreservesCommentAndYear tests that comment and year fields are preserved.
+func TestWrite_PreservesCommentAndYear(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-comment-year-*")
+
+	// Generate M4B with comment and date
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Test Book",
+		Duration: 1.0,
+		Comment:  "This is a test comment with detailed description.",
+		Date:     "2024",
+	})
+
+	// Parse the file
+	original, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "This is a test comment with detailed description.", original.Comment)
+	assert.Equal(t, "2024", original.Year)
+
+	// Modify title and write to new file
+	original.Title = "Modified Title"
+	destPath := dir + "/modified.m4b"
+	err = mp4.WriteToFile(path, destPath, original)
+	require.NoError(t, err)
+
+	// Re-read and verify comment and year are preserved
+	modified, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, "Modified Title", modified.Title)
+	assert.Equal(t, "This is a test comment with detailed description.", modified.Comment)
+	assert.Equal(t, "2024", modified.Year)
+}

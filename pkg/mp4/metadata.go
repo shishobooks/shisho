@@ -18,6 +18,10 @@ type Metadata struct {
 	SeriesNumber  *float64          // parsed from album
 	Genre         string            // from ©gen or gnre
 	Description   string            // from desc
+	Comment       string            // from ©cmt
+	Year          string            // from ©day
+	Copyright     string            // from ©cpy
+	Encoder       string            // from ©too
 	CoverData     []byte            // cover artwork
 	CoverMimeType string            // "image/jpeg" or "image/png"
 	Duration      time.Duration     // from mvhd
@@ -25,6 +29,13 @@ type Metadata struct {
 	Chapters      []Chapter         // chapter list (Phase 3)
 	MediaType     int               // from stik (2 = audiobook)
 	Freeform      map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
+	UnknownAtoms  []RawAtom         // preserved unrecognized atoms from source
+}
+
+// RawAtom represents an MP4 atom preserved in its raw form.
+type RawAtom struct {
+	Type [4]byte // 4-byte atom type code
+	Data []byte  // complete atom data including header
 }
 
 // Chapter represents a chapter in the audiobook.
@@ -47,6 +58,10 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		Album:         raw.album,
 		Genre:         raw.genre,
 		Description:   raw.description,
+		Comment:       raw.comment,
+		Year:          raw.year,
+		Copyright:     raw.copyright,
+		Encoder:       raw.encoder,
 		CoverData:     raw.coverData,
 		CoverMimeType: raw.coverMime,
 		MediaType:     int(raw.mediaType),
@@ -97,6 +112,9 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 
 	// Copy chapters
 	meta.Chapters = raw.chapters
+
+	// Copy unknown atoms for preservation
+	meta.UnknownAtoms = raw.unknownAtoms
 
 	return meta
 }

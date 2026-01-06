@@ -1,6 +1,7 @@
 package testgen
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,6 +80,18 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 	if opts.Genre != "" {
 		args = append(args, "-metadata", "genre="+opts.Genre)
 	}
+	if opts.Copyright != "" {
+		args = append(args, "-metadata", "copyright="+opts.Copyright)
+	}
+	if opts.Date != "" {
+		args = append(args, "-metadata", "date="+opts.Date)
+	}
+	if opts.AlbumArtist != "" {
+		args = append(args, "-metadata", "album_artist="+opts.AlbumArtist)
+	}
+	if opts.Comment != "" {
+		args = append(args, "-metadata", "comment="+opts.Comment)
+	}
 
 	// Add mapping if we have cover
 	if hasCover {
@@ -104,4 +117,42 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 	}
 
 	return path
+}
+
+// ffprobeFormat represents the format section of ffprobe JSON output.
+type ffprobeFormat struct {
+	Tags map[string]string `json:"tags"`
+}
+
+// ffprobeOutput represents the ffprobe JSON output structure.
+type ffprobeOutput struct {
+	Format ffprobeFormat `json:"format"`
+}
+
+// GetM4BTags reads the metadata tags from an M4B file using ffprobe.
+// Returns a map of tag names to values. This is useful for verifying
+// that tags were correctly written to files.
+func GetM4BTags(t *testing.T, path string) map[string]string {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		path,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe failed for %s: %v", path, err)
+	}
+
+	var result ffprobeOutput
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse ffprobe output: %v", err)
+	}
+
+	if result.Format.Tags == nil {
+		return make(map[string]string)
+	}
+	return result.Format.Tags
 }
