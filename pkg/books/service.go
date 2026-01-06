@@ -243,9 +243,18 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		}).
 		Relation("Files.Narrators.Person")
 
+	// Apply series filter first (affects ordering)
+	if opts.SeriesID != nil {
+		q = q.Join("INNER JOIN book_series bs_filter ON bs_filter.book_id = b.id").
+			Where("bs_filter.series_id = ?", *opts.SeriesID)
+	}
+
 	// Apply ordering
 	if opts.orderByRecent {
 		q = q.Order("b.updated_at DESC")
+	} else if opts.SeriesID != nil {
+		// When filtering by series, order by series_number then sort_title
+		q = q.Order("bs_filter.series_number ASC", "b.sort_title ASC")
 	} else {
 		q = q.Order("b.sort_title ASC")
 	}
@@ -261,9 +270,6 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("b.library_id IN (?)", bun.In(opts.LibraryIDs))
-	}
-	if opts.SeriesID != nil {
-		q = q.Where("b.id IN (SELECT book_id FROM book_series WHERE series_id = ?)", *opts.SeriesID)
 	}
 
 	// Filter by file types
