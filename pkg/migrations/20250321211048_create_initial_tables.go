@@ -145,6 +145,7 @@ func init() {
 				cover_image_path TEXT,
 				cover_mime_type TEXT,
 				cover_source TEXT,
+				cover_page INTEGER,
 				audiobook_duration_seconds DOUBLE,
 				audiobook_bitrate_bps INTEGER,
 				narrator_source TEXT
@@ -209,7 +210,8 @@ func init() {
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				book_id INTEGER REFERENCES books (id) NOT NULL,
 				person_id INTEGER REFERENCES persons (id) NOT NULL,
-				sort_order INTEGER NOT NULL
+				sort_order INTEGER NOT NULL,
+				role TEXT
 			)
 `)
 		if err != nil {
@@ -223,7 +225,7 @@ func init() {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		_, err = db.Exec(`CREATE UNIQUE INDEX ux_authors_book_person ON authors (book_id, person_id)`)
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_authors_book_person_role ON authors (book_id, person_id, role)`)
 		if err != nil {
 			return errors.WithStack(err)
 		}

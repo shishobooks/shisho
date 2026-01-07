@@ -5,6 +5,7 @@ import (
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,7 +52,8 @@ func TestParse_BasicMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "My Test Book", metadata.Title)
-	assert.Contains(t, metadata.Authors, "Author Name")
+	require.Len(t, metadata.Authors, 1)
+	assert.Equal(t, "Author Name", metadata.Authors[0].Name)
 	assert.Contains(t, metadata.Narrators, "Narrator Name")
 }
 
@@ -132,7 +134,7 @@ func TestWrite_Roundtrip(t *testing.T) {
 
 	// Modify and write
 	original.Title = "Modified Title"
-	original.Authors = []string{"New Author"}
+	original.Authors = []mediafile.ParsedAuthor{{Name: "New Author"}}
 
 	err = mp4.Write(path, original, mp4.WriteOptions{CreateBackup: true})
 	require.NoError(t, err)
@@ -144,7 +146,8 @@ func TestWrite_Roundtrip(t *testing.T) {
 	modified, err := mp4.ParseFull(path)
 	require.NoError(t, err)
 	assert.Equal(t, "Modified Title", modified.Title)
-	assert.Contains(t, modified.Authors, "New Author")
+	require.Len(t, modified.Authors, 1)
+	assert.Equal(t, "New Author", modified.Authors[0].Name)
 }
 
 // TestWrite_Subtitle tests subtitle roundtrip through freeform atom.
@@ -306,7 +309,8 @@ func TestWrite_PreservesMetadata(t *testing.T) {
 	modified, err := mp4.ParseFull(path)
 	require.NoError(t, err)
 	assert.Equal(t, "Modified Title", modified.Title)
-	assert.Contains(t, modified.Authors, "Original Author")
+	require.Len(t, modified.Authors, 1)
+	assert.Equal(t, "Original Author", modified.Authors[0].Name)
 	assert.Contains(t, modified.Narrators, "Original Narrator")
 	assert.Equal(t, "Fantasy", modified.Genre)
 }

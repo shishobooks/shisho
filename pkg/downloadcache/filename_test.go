@@ -256,6 +256,90 @@ func TestFormatDownloadFilename(t *testing.T) {
 			file:     &models.File{FileType: "epub"},
 			expected: "[Author] Series #10 - Book.epub",
 		},
+		{
+			name: "title with v1 skips series and pads to 3 digits",
+			book: &models.Book{
+				Title: "My Manga v1",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "My Manga"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Author] My Manga v001.cbz",
+		},
+		{
+			name: "title with vol. 2 skips series and pads to 3 digits",
+			book: &models.Book{
+				Title: "Comic Title vol. 2",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "Comic Title"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Author] Comic Title vol. 002.cbz",
+		},
+		{
+			name: "title with Vol 10 skips series and pads to 3 digits",
+			book: &models.Book{
+				Title: "Manga Vol 10",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Artist"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(10), Series: &models.Series{Name: "Manga"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Artist] Manga Vol 010.cbz",
+		},
+		{
+			name: "title with V3 uppercase skips series and pads to 3 digits",
+			book: &models.Book{
+				Title: "Comic V3",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(3), Series: &models.Series{Name: "Comic"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Author] Comic V003.cbz",
+		},
+		{
+			name: "title with v100 keeps 3 digits (no padding needed)",
+			book: &models.Book{
+				Title: "Long Series v100",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(100), Series: &models.Series{Name: "Long Series"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Author] Long Series v100.cbz",
+		},
+		{
+			name: "title without volume keeps series",
+			book: &models.Book{
+				Title: "Chapter One",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Story"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "[Author] Story #1 - Chapter One.cbz",
+		},
 	}
 
 	for _, tt := range tests {

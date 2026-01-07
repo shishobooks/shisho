@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
-import type { File } from "@/types";
+import { FileTypeCBZ, type File } from "@/types";
 
 interface FileEditDialogProps {
   file: File;
@@ -112,46 +112,48 @@ export function FileEditDialog({
             </div>
           </div>
 
-          {/* Cover Upload */}
-          <div className="space-y-2">
-            <Label>Cover Image</Label>
-            <div className="w-32 relative group">
-              {file.cover_mime_type ? (
-                <img
-                  alt="File cover"
-                  className="w-full h-auto rounded border border-border"
-                  src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
-                />
-              ) : (
-                <div className="w-full aspect-square rounded border border-dashed border-border flex items-center justify-center text-muted-foreground text-xs bg-muted/30">
-                  No cover
+          {/* Cover Upload (not available for CBZ - cover is page-based) */}
+          {file.file_type !== FileTypeCBZ && (
+            <div className="space-y-2">
+              <Label>Cover Image</Label>
+              <div className="w-32 relative group">
+                {file.cover_mime_type ? (
+                  <img
+                    alt="File cover"
+                    className="w-full h-auto rounded border border-border"
+                    src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                  />
+                ) : (
+                  <div className="w-full aspect-square rounded border border-dashed border-border flex items-center justify-center text-muted-foreground text-xs bg-muted/30">
+                    No cover
+                  </div>
+                )}
+                {/* Cover upload overlay */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                  <input
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleCoverUpload}
+                    ref={fileInputRef}
+                    type="file"
+                  />
+                  <Button
+                    disabled={uploadCoverMutation.isPending}
+                    onClick={() => fileInputRef.current?.click()}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {uploadCoverMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    {file.cover_mime_type ? "Replace" : "Upload"}
+                  </Button>
                 </div>
-              )}
-              {/* Cover upload overlay */}
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={handleCoverUpload}
-                  ref={fileInputRef}
-                  type="file"
-                />
-                <Button
-                  disabled={uploadCoverMutation.isPending}
-                  onClick={() => fileInputRef.current?.click()}
-                  size="sm"
-                  variant="secondary"
-                >
-                  {uploadCoverMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4 mr-2" />
-                  )}
-                  {file.cover_mime_type ? "Replace" : "Upload"}
-                </Button>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Narrators (only for M4B files) */}
           {file.file_type === "m4b" && (

@@ -97,15 +97,15 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// Extract cover image
-	coverData, coverMimeType, err := extractCoverImage(zipReader, comicInfo)
+	// Extract cover image and page index
+	coverData, coverMimeType, coverPage, err := extractCoverImage(zipReader, comicInfo)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	// Build metadata from ComicInfo
 	title := ""
-	authors := []string{}
+	authors := []mediafile.ParsedAuthor{}
 	series := ""
 	var seriesNumber *float64
 
@@ -120,26 +120,33 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 			}
 		}
 
-		// Collect all creator fields as authors
-		creators := []string{}
-		if comicInfo.Writer != "" {
-			creators = append(creators, splitCreators(comicInfo.Writer)...)
-		}
-		if comicInfo.Penciller != "" {
-			creators = append(creators, splitCreators(comicInfo.Penciller)...)
-		}
-		if comicInfo.CoverArtist != "" {
-			creators = append(creators, splitCreators(comicInfo.CoverArtist)...)
-		}
+		// Collect all creator fields with their roles
+		// Track seen names per role to avoid duplicates within the same role
+		seenByRole := make(map[string]map[string]bool)
 
-		// Remove duplicates
-		seen := make(map[string]bool)
-		for _, creator := range creators {
-			if !seen[creator] {
-				authors = append(authors, creator)
-				seen[creator] = true
+		addCreators := func(creatorStr, role string) {
+			if creatorStr == "" {
+				return
+			}
+			if seenByRole[role] == nil {
+				seenByRole[role] = make(map[string]bool)
+			}
+			for _, name := range splitCreators(creatorStr) {
+				if !seenByRole[role][name] {
+					authors = append(authors, mediafile.ParsedAuthor{Name: name, Role: role})
+					seenByRole[role][name] = true
+				}
 			}
 		}
+
+		addCreators(comicInfo.Writer, models.AuthorRoleWriter)
+		addCreators(comicInfo.Penciller, models.AuthorRolePenciller)
+		addCreators(comicInfo.Inker, models.AuthorRoleInker)
+		addCreators(comicInfo.Colorist, models.AuthorRoleColorist)
+		addCreators(comicInfo.Letterer, models.AuthorRoleLetterer)
+		addCreators(comicInfo.CoverArtist, models.AuthorRoleCoverArtist)
+		addCreators(comicInfo.Editor, models.AuthorRoleEditor)
+		addCreators(comicInfo.Translator, models.AuthorRoleTranslator)
 	}
 
 	// If no series number from ComicInfo, try to extract from filename
@@ -157,6 +164,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		SeriesNumber:  seriesNumber,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
+		CoverPage:     coverPage,
 		DataSource:    models.DataSourceCBZMetadata,
 	}, nil
 }
@@ -178,7 +186,9 @@ func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {
 	return comicInfo, nil
 }
 
-func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, error) {
+// extractCoverImage extracts the cover image data and returns the page index.
+// Returns coverData, mimeType, pageIndex, error.
+func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, *int, error) {
 	// Create a sorted list of all image files
 	var imageFiles []*zip.File
 	for _, file := range zipReader.File {
@@ -194,10 +204,11 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 	})
 
 	if len(imageFiles) == 0 {
-		return nil, "", nil
+		return nil, "", nil, nil
 	}
 
 	var targetFile *zip.File
+	var coverPageIndex *int
 
 	// Strategy 1: Look for FrontCover in ComicInfo.xml
 	if comicInfo != nil && len(comicInfo.Pages.Page) > 0 {
@@ -207,6 +218,7 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 				pageNum, err := strconv.Atoi(page.Image)
 				if err == nil && pageNum >= 0 && pageNum < len(imageFiles) {
 					targetFile = imageFiles[pageNum]
+					coverPageIndex = &pageNum
 					break
 				}
 			}
@@ -219,6 +231,7 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 					pageNum, err := strconv.Atoi(page.Image)
 					if err == nil && pageNum >= 0 && pageNum < len(imageFiles) {
 						targetFile = imageFiles[pageNum]
+						coverPageIndex = &pageNum
 						break
 					}
 				}
@@ -229,18 +242,20 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 	// Strategy 3: Use the first image file
 	if targetFile == nil {
 		targetFile = imageFiles[0]
+		zero := 0
+		coverPageIndex = &zero
 	}
 
 	// Extract the cover image data
 	r, err := targetFile.Open()
 	if err != nil {
-		return nil, "", errors.WithStack(err)
+		return nil, "", nil, errors.WithStack(err)
 	}
 	defer r.Close()
 
 	coverData, err := io.ReadAll(r)
 	if err != nil {
-		return nil, "", errors.WithStack(err)
+		return nil, "", nil, errors.WithStack(err)
 	}
 
 	// Determine MIME type from extension
@@ -257,7 +272,7 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 		mimeType = "image/webp"
 	}
 
-	return coverData, mimeType, nil
+	return coverData, mimeType, coverPageIndex, nil
 }
 
 func splitCreators(creators string) []string {

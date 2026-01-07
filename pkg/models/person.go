@@ -18,6 +18,18 @@ type Person struct {
 	SortNameSource string    `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
 }
 
+// Author role constants for CBZ ComicInfo.xml creator types.
+const (
+	AuthorRoleWriter      = "writer"
+	AuthorRolePenciller   = "penciller"
+	AuthorRoleInker       = "inker"
+	AuthorRoleColorist    = "colorist"
+	AuthorRoleLetterer    = "letterer"
+	AuthorRoleCoverArtist = "cover_artist"
+	AuthorRoleEditor      = "editor"
+	AuthorRoleTranslator  = "translator"
+)
+
 type Author struct {
 	bun.BaseModel `bun:"table:authors,alias:a" tstype:"-"`
 
@@ -26,6 +38,7 @@ type Author struct {
 	PersonID  int     `bun:",nullzero" json:"person_id"`
 	Person    *Person `bun:"rel:belongs-to,join:person_id=id" json:"person,omitempty" tstype:"Person"`
 	SortOrder int     `bun:",nullzero" json:"sort_order"`
+	Role      *string `json:"role"` // CBZ creator role: writer, penciller, inker, etc. NULL for generic author
 }
 
 type Narrator struct {

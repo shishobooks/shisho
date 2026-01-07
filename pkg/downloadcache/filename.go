@@ -3,12 +3,33 @@ package downloadcache
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/shishobooks/shisho/pkg/models"
 )
+
+// volumePattern matches volume indicators in titles (e.g., "v1", "V2", "vol. 3").
+var volumePattern = regexp.MustCompile(`(?i)\bv(?:ol\.?)?\s*(\d+)`)
+
+// volumeNumberPattern extracts just the number from a volume match for replacement.
+var volumeNumberPattern = regexp.MustCompile(`(\d+)$`)
+
+// padVolumeNumber pads volume numbers in titles to at least 3 digits for lexicographic sorting.
+// e.g., "Manga v1" becomes "Manga v001", "Manga vol. 10" becomes "Manga vol. 010".
+func padVolumeNumber(title string) string {
+	return volumePattern.ReplaceAllStringFunc(title, func(match string) string {
+		// Find the number at the end of the match
+		return volumeNumberPattern.ReplaceAllStringFunc(match, func(numStr string) string {
+			if len(numStr) < 3 {
+				return fmt.Sprintf("%03s", numStr)
+			}
+			return numStr
+		})
+	})
+}
 
 // invalidFilenameChars contains characters that are not allowed in filenames
 // across Windows, macOS, and Linux.
@@ -20,7 +41,8 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
-	title := sanitizeFilename(book.Title)
+	// Pad volume numbers for lexicographic sorting, then sanitize
+	title := sanitizeFilename(padVolumeNumber(book.Title))
 	author := getFirstAuthorName(book)
 	series, number := getFirstSeries(book)
 	narrator := getFirstNarratorName(file)
@@ -33,8 +55,9 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 		parts = append(parts, fmt.Sprintf("[%s]", sanitizeFilename(author)))
 	}
 
-	// Add series and number if available
-	if series != "" {
+	// Add series and number if available, unless title already has a volume number
+	titleHasVolume := volumePattern.MatchString(book.Title)
+	if series != "" && !titleHasVolume {
 		seriesPart := sanitizeFilename(series)
 		if number != nil {
 			seriesPart += " #" + formatSeriesNumber(*number)

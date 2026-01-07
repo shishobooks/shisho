@@ -3,7 +3,13 @@ import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libraries/utils";
-import type { Book, File } from "@/types";
+import {
+  AuthorRolePenciller,
+  AuthorRoleWriter,
+  FileTypeCBZ,
+  type Book,
+  type File,
+} from "@/types";
 
 interface BookItemProps {
   book: Book;
@@ -99,11 +105,36 @@ const BookItem = ({
           {book.title}
         </div>
       </Link>
-      {book.authors && book.authors.length > 0 && (
-        <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
-          {book.authors.map((a) => a.person?.name ?? "Unknown").join(", ")}
-        </div>
-      )}
+      {book.authors &&
+        book.authors.length > 0 &&
+        (() => {
+          const hasCBZFiles = book.files?.some(
+            (f) => f.file_type === FileTypeCBZ,
+          );
+
+          // For CBZ files, only show Writer and Penciller roles, deduplicated by name
+          const displayAuthors = hasCBZFiles
+            ? book.authors.filter(
+                (a) =>
+                  a.role === AuthorRoleWriter ||
+                  a.role === AuthorRolePenciller ||
+                  !a.role,
+              )
+            : book.authors;
+
+          // Get unique author names
+          const uniqueNames = [
+            ...new Set(displayAuthors.map((a) => a.person?.name ?? "Unknown")),
+          ];
+
+          if (uniqueNames.length === 0) return null;
+
+          return (
+            <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
+              {uniqueNames.join(", ")}
+            </div>
+          );
+        })()}
       {book.files && (
         <div className="mt-2 flex gap-2 text-sm">
           {uniqBy(book.files, "file_type").map((f) => (

@@ -20,12 +20,14 @@ type Fingerprint struct {
 	Narrators []FingerprintNarrator `json:"narrators"`
 	Series    []FingerprintSeries   `json:"series"`
 	Cover     *FingerprintCover     `json:"cover,omitempty"`
+	CoverPage *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
 type FingerprintAuthor struct {
-	Name      string `json:"name"`
-	SortOrder int    `json:"sort_order"`
+	Name      string  `json:"name"`
+	Role      *string `json:"role,omitempty"` // CBZ author role (writer, penciller, etc.)
+	SortOrder int     `json:"sort_order"`
 }
 
 // FingerprintNarrator represents narrator information for fingerprinting.
@@ -69,6 +71,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 			if a.Person != nil {
 				fp.Authors = append(fp.Authors, FingerprintAuthor{
 					Name:      a.Person.Name,
+					Role:      a.Role,
 					SortOrder: a.SortOrder,
 				})
 			}
@@ -129,6 +132,11 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 			MimeType: mimeType,
 			ModTime:  modTime,
 		}
+	}
+
+	// Add cover page for CBZ files
+	if file.CoverPage != nil {
+		fp.CoverPage = file.CoverPage
 	}
 
 	return fp, nil

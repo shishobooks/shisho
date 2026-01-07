@@ -90,6 +90,27 @@ func generateComicInfo(opts CBZOptions, pageCount int) string {
 	if opts.Writer != "" {
 		buf.WriteString(fmt.Sprintf("  <Writer>%s</Writer>\n", escapeXML(opts.Writer)))
 	}
+	if opts.Penciller != "" {
+		buf.WriteString(fmt.Sprintf("  <Penciller>%s</Penciller>\n", escapeXML(opts.Penciller)))
+	}
+	if opts.Inker != "" {
+		buf.WriteString(fmt.Sprintf("  <Inker>%s</Inker>\n", escapeXML(opts.Inker)))
+	}
+	if opts.Colorist != "" {
+		buf.WriteString(fmt.Sprintf("  <Colorist>%s</Colorist>\n", escapeXML(opts.Colorist)))
+	}
+	if opts.Letterer != "" {
+		buf.WriteString(fmt.Sprintf("  <Letterer>%s</Letterer>\n", escapeXML(opts.Letterer)))
+	}
+	if opts.CoverArtist != "" {
+		buf.WriteString(fmt.Sprintf("  <CoverArtist>%s</CoverArtist>\n", escapeXML(opts.CoverArtist)))
+	}
+	if opts.Editor != "" {
+		buf.WriteString(fmt.Sprintf("  <Editor>%s</Editor>\n", escapeXML(opts.Editor)))
+	}
+	if opts.Translator != "" {
+		buf.WriteString(fmt.Sprintf("  <Translator>%s</Translator>\n", escapeXML(opts.Translator)))
+	}
 
 	buf.WriteString(fmt.Sprintf("  <PageCount>%d</PageCount>\n", pageCount))
 
@@ -98,7 +119,7 @@ func generateComicInfo(opts CBZOptions, pageCount int) string {
 		buf.WriteString("  <Pages>\n")
 		for i := 0; i < pageCount; i++ {
 			pageType := ""
-			if i == 0 && opts.CoverPageType != "" {
+			if i == opts.CoverPageIndex && opts.CoverPageType != "" {
 				pageType = fmt.Sprintf(" Type=\"%s\"", opts.CoverPageType)
 			}
 			buf.WriteString(fmt.Sprintf("    <Page Image=\"%d\"%s/>\n", i, pageType))

@@ -13,8 +13,14 @@ type UpdateBookPayload struct {
 	Title     *string       `json:"title,omitempty" validate:"omitempty,max=300"`
 	SortTitle *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
 	Subtitle  *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
-	Authors   []string      `json:"authors,omitempty" validate:"omitempty,dive,max=200"`
+	Authors   []AuthorInput `json:"authors,omitempty"`
 	Series    []SeriesInput `json:"series,omitempty"`
+}
+
+// AuthorInput represents an author with an optional role (for CBZ files).
+type AuthorInput struct {
+	Name string  `json:"name" validate:"required,max=200"`
+	Role *string `json:"role,omitempty" validate:"omitempty,oneof=writer penciller inker colorist letterer cover_artist editor translator"`
 }
 
 // SeriesInput represents a series association with optional number.

@@ -20,7 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
-import type { File } from "@/types";
+import { FileTypeCBZ, type File } from "@/types";
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
 // This mirrors the backend's selectCoverFile logic
@@ -69,6 +69,21 @@ const formatDuration = (seconds: number): string => {
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString();
+};
+
+const getRoleLabel = (role: string | undefined): string | null => {
+  if (!role) return null;
+  const roleLabels: Record<string, string> = {
+    writer: "Writer",
+    penciller: "Penciller",
+    inker: "Inker",
+    colorist: "Colorist",
+    letterer: "Letterer",
+    cover_artist: "Cover Artist",
+    editor: "Editor",
+    translator: "Translator",
+  };
+  return roleLabels[role] || role;
 };
 
 interface DownloadError {
@@ -240,26 +255,41 @@ const BookDetail = () => {
 
             <div className="space-y-6">
               {/* Authors */}
-              {book.authors && book.authors.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2">Authors</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {book.authors.map((author) => (
-                      <Link
-                        key={author.id}
-                        to={`/libraries/${libraryId}/people/${author.person_id}`}
-                      >
-                        <Badge
-                          className="cursor-pointer hover:bg-secondary/80"
-                          variant="secondary"
-                        >
-                          {author.person?.name ?? "Unknown"}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {book.authors &&
+                book.authors.length > 0 &&
+                (() => {
+                  const hasCBZFiles = book.files?.some(
+                    (f) => f.file_type === FileTypeCBZ,
+                  );
+                  return (
+                    <div>
+                      <h3 className="font-semibold mb-2">Authors</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {book.authors.map((author) => {
+                          const roleLabel = getRoleLabel(author.role);
+                          return (
+                            <Link
+                              key={author.id}
+                              to={`/libraries/${libraryId}/people/${author.person_id}`}
+                            >
+                              <Badge
+                                className="cursor-pointer hover:bg-secondary/80"
+                                variant="secondary"
+                              >
+                                {author.person?.name ?? "Unknown"}
+                                {hasCBZFiles && roleLabel && (
+                                  <span className="text-muted-foreground ml-1">
+                                    ({roleLabel})
+                                  </span>
+                                )}
+                              </Badge>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               {/* Series */}
               {book.book_series && book.book_series.length > 0 && (

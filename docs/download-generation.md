@@ -101,6 +101,13 @@ For M4B files:
 - Series (name, number, sort_order for each)
 - Cover image (path, mime type, file modification time)
 
+For CBZ files:
+
+- Book title
+- Authors (name, role, sort_order for each)
+- Series (name, number, sort_order for each)
+- Cover page index (0-indexed page number)
+
 #### Validation Flow
 
 1. Compute current fingerprint from Book + File models
@@ -173,7 +180,60 @@ The M4B generator:
 
 ### CBZ Generation
 
-Currently stubbed - returns "not yet implemented" error. Will be implemented in future iterations.
+The CBZ generator:
+
+1. Opens source CBZ as a zip archive
+2. Creates new zip at cache location
+3. Parses existing ComicInfo.xml (if present) to preserve untracked fields
+4. For each file in source:
+   - `ComicInfo.xml` → modify tracked fields, write modified version
+   - All other files (page images) → copy unchanged
+5. If no ComicInfo.xml existed, creates one
+6. Uses atomic write (temp file + rename) for safety
+
+#### ComicInfo.xml Modifications
+
+Only the following fields are modified (all others are preserved from the original):
+
+| Shisho Field | ComicInfo Element | Notes                              |
+| ------------ | ----------------- | ---------------------------------- |
+| Title        | `<Title>`         | Book title                         |
+| Series       | `<Series>`        | Primary series name                |
+| Number       | `<Number>`        | Series number (integer or decimal) |
+| Authors      | Creator fields    | Mapped by role (see below)         |
+| Cover page   | `<Pages>`         | FrontCover type on specified page  |
+
+#### Author Role Mapping
+
+CBZ files support distinct creator roles from ComicInfo.xml v2.1. Authors are written to the appropriate element based on their role:
+
+| Author Role   | ComicInfo Element |
+| ------------- | ----------------- |
+| `writer`      | `<Writer>`        |
+| `penciller`   | `<Penciller>`     |
+| `inker`       | `<Inker>`         |
+| `colorist`    | `<Colorist>`      |
+| `letterer`    | `<Letterer>`      |
+| `cover_artist`| `<CoverArtist>`   |
+| `editor`      | `<Editor>`        |
+| `translator`  | `<Translator>`    |
+| (no role)     | `<Writer>`        |
+
+Multiple authors with the same role are comma-separated (e.g., `Writer One, Writer Two`).
+
+#### Cover Page Handling
+
+Unlike EPUB/M4B files which have embedded cover images, CBZ files use a page index to identify the cover:
+
+- The `File.CoverPage` field stores the 0-indexed page number
+- During generation, the `<Pages>` section is updated to set `Type="FrontCover"` on the specified page
+- The actual page image is not modified
+- Cover page index is extracted during scanning from ComicInfo.xml if a FrontCover type exists, otherwise defaults to page 0
+
+#### Series Number Formatting
+
+- Integer numbers: `1`, `2`, `10`
+- Decimal numbers: `1.5`, `2.25`
 
 ## Download Filename Format
 
@@ -197,6 +257,7 @@ For audiobooks with narrators:
 - **Narrator**: First narrator by `sort_order`, using `Name` field (audiobooks only)
 - **No series**: `[{Author}] {Title}.{ext}`
 - **No author**: `{Title}.{ext}`
+- **Volume in title**: If title contains a volume indicator (e.g., `v1`, `Vol. 2`, `V3`), series is omitted from filename and volume numbers are padded to 3 digits for lexicographic sorting (e.g., `v1` → `v001`)
 - **Sanitization**: Invalid characters (`/ \ : * ? " < > |`) are removed
 
 ### Examples
@@ -204,6 +265,7 @@ For audiobooks with narrators:
 - `[Brandon Sanderson] The Stormlight Archive #1 - The Way of Kings.epub`
 - `[George Orwell] 1984.epub` (no series)
 - `[Andy Weir] Standalone #1 - Project Hail Mary {Ray Porter}.m4b` (audiobook with narrator)
+- `[Author Name] My Manga v001.cbz` (volume in title, series omitted, padded to 3 digits)
 
 ## LRU Cache Cleanup
 
@@ -264,7 +326,7 @@ For OPDS clients (which can't show UI):
 
 ## Future Enhancements
 
-- **CBZ generation**: Embed metadata in CBZ comic archives
 - **Cover resizing**: Optionally resize large covers to reduce file size
 - **Batch downloads**: Download multiple files as a zip archive
 - **Progress indication**: Show generation progress for large files
+- **CBZ cover page selection**: UI to select which page is the cover (currently extracted from ComicInfo.xml or defaults to first page)

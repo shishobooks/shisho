@@ -12,6 +12,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
@@ -39,8 +40,8 @@ type ListBooksOptions struct {
 type UpdateBookOptions struct {
 	Columns       []string
 	UpdateAuthors bool
-	AuthorNames   []string // Author names for updating (requires UpdateAuthors to be true)
-	OrganizeFiles bool     // Whether to rename files when metadata changes
+	Authors       []mediafile.ParsedAuthor // Authors with roles for updating (requires UpdateAuthors to be true)
+	OrganizeFiles bool                     // Whether to rename files when metadata changes
 }
 
 type RetrieveFileOptions struct {

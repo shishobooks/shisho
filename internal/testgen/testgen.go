@@ -24,9 +24,17 @@ type CBZOptions struct {
 	Series          string
 	SeriesNumber    *float64
 	Writer          string
+	Penciller       string
+	Inker           string
+	Colorist        string
+	Letterer        string
+	CoverArtist     string
+	Editor          string
+	Translator      string
 	PageCount       int    // defaults to 3
 	HasComicInfo    bool   // whether to include ComicInfo.xml
 	CoverPageType   string // "FrontCover", "InnerCover", or "" (none specified)
+	CoverPageIndex  int    // 0-indexed page number for cover (used with CoverPageType)
 	ImageFormat     string // "png" or "jpeg", defaults to "png"
 	ForceEmptyTitle bool   // if true, writes an empty <Title></Title> element (for testing empty title handling)
 }

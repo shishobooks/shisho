@@ -53,7 +53,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "New Title", meta.Title)
 		require.Len(t, meta.Authors, 1)
-		assert.Equal(t, "New Author", meta.Authors[0])
+		assert.Equal(t, "New Author", meta.Authors[0].Name)
 	})
 
 	t.Run("modifies multiple authors in sort order", func(t *testing.T) {
@@ -85,9 +85,9 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		meta, err := mp4.ParseFull(destPath)
 		require.NoError(t, err)
 		require.Len(t, meta.Authors, 3)
-		assert.Equal(t, "First Author", meta.Authors[0])
-		assert.Equal(t, "Second Author", meta.Authors[1])
-		assert.Equal(t, "Third Author", meta.Authors[2])
+		assert.Equal(t, "First Author", meta.Authors[0].Name)
+		assert.Equal(t, "Second Author", meta.Authors[1].Name)
+		assert.Equal(t, "Third Author", meta.Authors[2].Name)
 	})
 
 	t.Run("modifies narrators", func(t *testing.T) {

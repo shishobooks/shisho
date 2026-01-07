@@ -9,6 +9,7 @@ import (
 
 	gomp4 "github.com/abema/go-mp4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 )
 
 // WriteOptions configures the write operation.
@@ -275,7 +276,7 @@ func buildIlst(metadata *Metadata) []byte {
 
 	// Artist (authors)
 	if len(metadata.Authors) > 0 {
-		content.Write(buildItunesTextAtom(AtomArtist, joinStrings(metadata.Authors)))
+		content.Write(buildItunesTextAtom(AtomArtist, joinAuthorNames(metadata.Authors)))
 	}
 
 	// Album: format from series info if available, otherwise use existing album
@@ -471,6 +472,23 @@ func joinStrings(strs []string) string {
 	for i := 1; i < len(strs); i++ {
 		buf.WriteString(", ")
 		buf.WriteString(strs[i])
+	}
+	return buf.String()
+}
+
+// joinAuthorNames joins author names from ParsedAuthor slice with comma separator.
+func joinAuthorNames(authors []mediafile.ParsedAuthor) string {
+	if len(authors) == 0 {
+		return ""
+	}
+	if len(authors) == 1 {
+		return authors[0].Name
+	}
+	var buf bytes.Buffer
+	buf.WriteString(authors[0].Name)
+	for i := 1; i < len(authors); i++ {
+		buf.WriteString(", ")
+		buf.WriteString(authors[i].Name)
 	}
 	return buf.String()
 }

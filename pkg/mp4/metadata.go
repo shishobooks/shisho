@@ -5,31 +5,33 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shishobooks/shisho/pkg/mediafile"
 )
 
 // Metadata represents extracted M4B audiobook metadata.
 type Metadata struct {
 	Title         string
-	Subtitle      string            // from ----:com.apple.iTunes:SUBTITLE freeform atom
-	Authors       []string          // from ©ART (artist)
-	Narrators     []string          // from ©nrt (narrator) or ©cmp (composer)
-	Album         string            // from ©alb
-	Series        string            // parsed from album or ©grp
-	SeriesNumber  *float64          // parsed from album
-	Genre         string            // from ©gen or gnre
-	Description   string            // from desc
-	Comment       string            // from ©cmt
-	Year          string            // from ©day
-	Copyright     string            // from ©cpy
-	Encoder       string            // from ©too
-	CoverData     []byte            // cover artwork
-	CoverMimeType string            // "image/jpeg" or "image/png"
-	Duration      time.Duration     // from mvhd
-	Bitrate       int               // bps from esds
-	Chapters      []Chapter         // chapter list (Phase 3)
-	MediaType     int               // from stik (2 = audiobook)
-	Freeform      map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
-	UnknownAtoms  []RawAtom         // preserved unrecognized atoms from source
+	Subtitle      string                   // from ----:com.apple.iTunes:SUBTITLE freeform atom
+	Authors       []mediafile.ParsedAuthor // from ©ART (artist)
+	Narrators     []string                 // from ©nrt (narrator) or ©cmp (composer)
+	Album         string                   // from ©alb
+	Series        string                   // parsed from album or ©grp
+	SeriesNumber  *float64                 // parsed from album
+	Genre         string                   // from ©gen or gnre
+	Description   string                   // from desc
+	Comment       string                   // from ©cmt
+	Year          string                   // from ©day
+	Copyright     string                   // from ©cpy
+	Encoder       string                   // from ©too
+	CoverData     []byte                   // cover artwork
+	CoverMimeType string                   // "image/jpeg" or "image/png"
+	Duration      time.Duration            // from mvhd
+	Bitrate       int                      // bps from esds
+	Chapters      []Chapter                // chapter list (Phase 3)
+	MediaType     int                      // from stik (2 = audiobook)
+	Freeform      map[string]string        // freeform (----) atoms like com.apple.iTunes:ASIN
+	UnknownAtoms  []RawAtom                // preserved unrecognized atoms from source
 }
 
 // RawAtom represents an MP4 atom preserved in its raw form.
@@ -68,7 +70,12 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	}
 
 	// Parse authors from artist field (comma-separated)
-	meta.Authors = splitMultiValue(raw.artist)
+	// M4B authors have no specific role (generic author)
+	authorNames := splitMultiValue(raw.artist)
+	meta.Authors = make([]mediafile.ParsedAuthor, len(authorNames))
+	for i, name := range authorNames {
+		meta.Authors[i] = mediafile.ParsedAuthor{Name: name, Role: ""}
+	}
 
 	// Parse narrators (comma-separated)
 	// Prefer ©nrt (dedicated narrator), fall back to ©cmp (composer), then ©wrt (writer)

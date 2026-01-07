@@ -1956,3 +1956,356 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryRenameDoesNotBreakScan(t 
 		assert.True(t, testgen.FileExists(file.Filepath), "file should exist at its database path")
 	}
 }
+
+// TestProcessScanJob_CBZWriterRole tests that the writer role is correctly parsed from
+// ComicInfo.xml and stored in the author's role field.
+func TestProcessScanJob_CBZWriterRole(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic With Writer")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:        "Comic With Writer Role",
+		Writer:       "John Writer",
+		HasComicInfo: true,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Comic With Writer Role", book.Title)
+
+	// Verify the author has the writer role
+	require.Len(t, book.Authors, 1)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "John Writer", book.Authors[0].Person.Name)
+	require.NotNil(t, book.Authors[0].Role, "author should have a role")
+	assert.Equal(t, models.AuthorRoleWriter, *book.Authors[0].Role)
+}
+
+// TestProcessScanJob_CBZMultipleRoles tests that multiple author roles (writer, penciller,
+// colorist, etc.) are correctly parsed from ComicInfo.xml.
+func TestProcessScanJob_CBZMultipleRoles(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic With Multiple Roles")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:        "Multi-Role Comic",
+		Writer:       "Alice Writer",
+		Penciller:    "Bob Penciller",
+		Inker:        "Carol Inker",
+		Colorist:     "Dan Colorist",
+		Letterer:     "Eve Letterer",
+		CoverArtist:  "Frank Cover",
+		Editor:       "Grace Editor",
+		Translator:   "Henry Translator",
+		HasComicInfo: true,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Multi-Role Comic", book.Title)
+
+	// Verify all 8 authors with their respective roles
+	require.Len(t, book.Authors, 8, "should have 8 authors with different roles")
+
+	// Build a map of role to author name for easier verification
+	roleToName := make(map[string]string)
+	for _, author := range book.Authors {
+		require.NotNil(t, author.Person)
+		require.NotNil(t, author.Role, "all authors should have roles")
+		roleToName[*author.Role] = author.Person.Name
+	}
+
+	assert.Equal(t, "Alice Writer", roleToName[models.AuthorRoleWriter])
+	assert.Equal(t, "Bob Penciller", roleToName[models.AuthorRolePenciller])
+	assert.Equal(t, "Carol Inker", roleToName[models.AuthorRoleInker])
+	assert.Equal(t, "Dan Colorist", roleToName[models.AuthorRoleColorist])
+	assert.Equal(t, "Eve Letterer", roleToName[models.AuthorRoleLetterer])
+	assert.Equal(t, "Frank Cover", roleToName[models.AuthorRoleCoverArtist])
+	assert.Equal(t, "Grace Editor", roleToName[models.AuthorRoleEditor])
+	assert.Equal(t, "Henry Translator", roleToName[models.AuthorRoleTranslator])
+}
+
+// TestProcessScanJob_CBZCoverPageExtraction tests that the cover page index is correctly
+// extracted from ComicInfo.xml Pages section with FrontCover type.
+func TestProcessScanJob_CBZCoverPageExtraction(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic With Cover Page")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:          "Comic With Cover",
+		Writer:         "Test Writer",
+		HasComicInfo:   true,
+		CoverPageType:  "FrontCover",
+		CoverPageIndex: 0, // Cover is first page
+		PageCount:      5,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	assert.Equal(t, models.FileTypeCBZ, file.FileType)
+
+	// Verify cover page index was extracted
+	require.NotNil(t, file.CoverPage, "file should have cover page index")
+	assert.Equal(t, 0, *file.CoverPage)
+}
+
+// TestProcessScanJob_CBZCoverPageNonZeroIndex tests that cover page extraction works
+// when the cover is not on the first page.
+func TestProcessScanJob_CBZCoverPageNonZeroIndex(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic With Inner Cover")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:          "Comic With Inner Cover",
+		Writer:         "Test Writer",
+		HasComicInfo:   true,
+		CoverPageType:  "FrontCover",
+		CoverPageIndex: 2, // Cover is on third page (0-indexed)
+		PageCount:      5,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	// Verify cover page index was correctly extracted as page 2
+	require.NotNil(t, file.CoverPage, "file should have cover page index")
+	assert.Equal(t, 2, *file.CoverPage)
+}
+
+// TestProcessScanJob_CBZNoCoverPageType tests that when no cover page type is specified
+// in ComicInfo.xml, CoverPage remains nil.
+func TestProcessScanJob_CBZNoCoverPageType(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic Without Cover Type")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:         "No Cover Type",
+		Writer:        "Test Writer",
+		HasComicInfo:  true,
+		CoverPageType: "", // No cover page type specified
+		PageCount:     5,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	// When no FrontCover is specified, we fall back to first image (page 0)
+	// The CBZ parser uses the first image as cover when no explicit cover is defined
+	require.NotNil(t, file.CoverPage, "file should have cover page index from fallback")
+	assert.Equal(t, 0, *file.CoverPage, "cover page should be 0 (first image fallback)")
+}
+
+// TestProcessScanJob_CBZRolesPreservedOnRescan tests that author roles are preserved
+// when the same CBZ file is rescanned.
+func TestProcessScanJob_CBZRolesPreservedOnRescan(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic To Rescan")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:        "Rescan Comic",
+		Writer:       "Original Writer",
+		Penciller:    "Original Penciller",
+		HasComicInfo: true,
+		PageCount:    3,
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.Len(t, allBooks[0].Authors, 2)
+
+	// Verify roles after first scan
+	roleToName := make(map[string]string)
+	for _, author := range allBooks[0].Authors {
+		require.NotNil(t, author.Role)
+		roleToName[*author.Role] = author.Person.Name
+	}
+	assert.Equal(t, "Original Writer", roleToName[models.AuthorRoleWriter])
+	assert.Equal(t, "Original Penciller", roleToName[models.AuthorRolePenciller])
+
+	// Second scan - roles should remain unchanged
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	require.Len(t, allBooks[0].Authors, 2)
+
+	// Verify roles are still the same after rescan
+	roleToName = make(map[string]string)
+	for _, author := range allBooks[0].Authors {
+		require.NotNil(t, author.Role)
+		roleToName[*author.Role] = author.Person.Name
+	}
+	assert.Equal(t, "Original Writer", roleToName[models.AuthorRoleWriter])
+	assert.Equal(t, "Original Penciller", roleToName[models.AuthorRolePenciller])
+}
+
+// TestProcessScanJob_CBZCoverPagePreservedOnRescan tests that cover page index is preserved
+// when the same CBZ file is rescanned.
+func TestProcessScanJob_CBZCoverPagePreservedOnRescan(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic Cover Rescan")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:          "Cover Rescan Comic",
+		Writer:         "Test Writer",
+		HasComicInfo:   true,
+		CoverPageType:  "FrontCover",
+		CoverPageIndex: 1, // Cover is on second page
+		PageCount:      5,
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.NotNil(t, files[0].CoverPage)
+	assert.Equal(t, 1, *files[0].CoverPage)
+
+	// Second scan - cover page should remain unchanged
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	files = tc.listFiles()
+	require.Len(t, files, 1)
+	require.NotNil(t, files[0].CoverPage)
+	assert.Equal(t, 1, *files[0].CoverPage, "cover page should be preserved after rescan")
+}
+
+// TestProcessScanJob_CBZNoComicInfoNoRoles tests that CBZ files without ComicInfo.xml
+// have authors without roles (from filepath).
+func TestProcessScanJob_CBZNoComicInfoNoRoles(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Filepath Author] No Metadata Comic")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo: false, // No ComicInfo.xml
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	// Author comes from filepath, which has no role concept
+	require.Len(t, book.Authors, 1)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "Filepath Author", book.Authors[0].Person.Name)
+	assert.Nil(t, book.Authors[0].Role, "filepath authors should have no role")
+}
+
+// TestProcessScanJob_EPUBAuthorsNoRoles tests that EPUB authors don't have roles
+// since EPUBs don't have the role concept like CBZ ComicInfo.xml.
+func TestProcessScanJob_EPUBAuthorsNoRoles(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "EPUB Without Roles")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "EPUB Book",
+		Authors: []string{"EPUB Author One", "EPUB Author Two"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	require.Len(t, book.Authors, 2)
+
+	// All EPUB authors should have no role
+	for _, author := range book.Authors {
+		assert.Nil(t, author.Role, "EPUB authors should have no role")
+	}
+}
+
+// TestProcessScanJob_M4BAuthorsNoRoles tests that M4B authors don't have roles
+// since M4B files use artist tags without role distinction.
+func TestProcessScanJob_M4BAuthorsNoRoles(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "M4B Without Roles")
+	testgen.GenerateM4B(t, bookDir, "audiobook.m4b", testgen.M4BOptions{
+		Title:  "M4B Audiobook",
+		Artist: "M4B Artist",
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	require.Len(t, book.Authors, 1)
+	require.NotNil(t, book.Authors[0].Person)
+	assert.Equal(t, "M4B Artist", book.Authors[0].Person.Name)
+	assert.Nil(t, book.Authors[0].Role, "M4B authors should have no role")
+}

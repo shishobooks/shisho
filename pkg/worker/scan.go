@@ -234,7 +234,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 	titleSource := models.DataSourceFilepath
-	authorNames := make([]string, 0)
+	authors := make([]mediafile.ParsedAuthor, 0)
 	authorSource := models.DataSourceFilepath
 	narratorNames := make([]string, 0)
 	narratorSource := models.DataSourceFilepath
@@ -276,6 +276,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Track cover page for CBZ files
+	var coverPage *int
+
 	if metadata != nil {
 		// Only use metadata values if they're non-empty (after trimming whitespace), otherwise keep filepath-based values
 		if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
@@ -284,7 +287,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 		if len(metadata.Authors) > 0 {
 			authorSource = metadata.DataSource
-			authorNames = append(authorNames, metadata.Authors...)
+			authors = append(authors, metadata.Authors...)
+		}
+		// Capture cover page for CBZ files
+		if metadata.CoverPage != nil {
+			coverPage = metadata.CoverPage
 		}
 		if len(metadata.Narrators) > 0 {
 			narratorSource = metadata.DataSource
@@ -308,7 +315,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	}
 
 	// If we didn't find any authors in the metadata, try getting it from the filename.
-	if len(authorNames) == 0 && filepathAuthorRE.MatchString(filename) {
+	if len(authors) == 0 && filepathAuthorRE.MatchString(filename) {
 		log.Info("no authors found in metadata; parsing filename", logger.Data{"filename": filename})
 		// Use FindAllStringSubmatch to get the capture group (content inside brackets)
 		matches := filepathAuthorRE.FindAllStringSubmatch(filename, -1)
@@ -316,7 +323,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			// matches[0][1] is the first capture group (author name without brackets)
 			names := strings.Split(matches[0][1], ",")
 			for _, author := range names {
-				authorNames = append(authorNames, strings.TrimSpace(author))
+				// Filepath-based authors have no specific role (generic author)
+				authors = append(authors, mediafile.ParsedAuthor{Name: strings.TrimSpace(author), Role: ""})
 			}
 		}
 	}
@@ -381,9 +389,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 		if len(bookSidecarData.Authors) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[authorSource] {
 			authorSource = models.DataSourceSidecar
-			authorNames = make([]string, 0)
+			authors = make([]mediafile.ParsedAuthor, 0)
 			for _, a := range bookSidecarData.Authors {
-				authorNames = append(authorNames, a.Name)
+				// Sidecar authors currently don't have role info, so use generic author
+				authors = append(authors, mediafile.ParsedAuthor{Name: a.Name, Role: ""})
 			}
 		}
 		if len(bookSidecarData.Series) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
@@ -485,11 +494,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 
 		// Update authors only if we have authors and they're from a higher priority source
-		if len(authorNames) > 0 && models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
-			log.Info("updating authors", logger.Data{"new_author_count": len(authorNames), "old_author_count": len(existingBook.Authors)})
+		if len(authors) > 0 && models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
+			log.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
-			updateOptions.AuthorNames = authorNames
+			updateOptions.Authors = authors
 			metadataChanged = true
 		}
 		// Update series if we have a higher priority source
@@ -537,16 +546,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		// If authors were updated, create new Author entries
 		// (UpdateBook deletes old authors, we need to create the new ones)
 		if updateOptions.UpdateAuthors {
-			for i, authorName := range updateOptions.AuthorNames {
-				person, err := w.personService.FindOrCreatePerson(ctx, authorName, libraryID)
+			for i, parsedAuthor := range updateOptions.Authors {
+				person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, libraryID)
 				if err != nil {
-					log.Error("failed to find/create person", logger.Data{"author": authorName, "error": err.Error()})
+					log.Error("failed to find/create person", logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
 					continue
+				}
+				var role *string
+				if parsedAuthor.Role != "" {
+					role = &parsedAuthor.Role
 				}
 				author := &models.Author{
 					BookID:    existingBook.ID,
 					PersonID:  person.ID,
 					SortOrder: i + 1,
+					Role:      role,
 				}
 				err = w.bookService.CreateAuthor(ctx, author)
 				if err != nil {
@@ -579,16 +593,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 
 		// Create Author entries for each author
-		for i, authorName := range authorNames {
-			person, err := w.personService.FindOrCreatePerson(ctx, authorName, libraryID)
+		for i, parsedAuthor := range authors {
+			person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, libraryID)
 			if err != nil {
-				log.Error("failed to find/create person", logger.Data{"author": authorName, "error": err.Error()})
+				log.Error("failed to find/create person", logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
 				continue
+			}
+			var role *string
+			if parsedAuthor.Role != "" {
+				role = &parsedAuthor.Role
 			}
 			author := &models.Author{
 				BookID:    existingBook.ID,
 				PersonID:  person.ID,
 				SortOrder: i + 1,
+				Role:      role,
 			}
 			err = w.bookService.CreateAuthor(ctx, author)
 			if err != nil {
@@ -694,6 +713,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		CoverImagePath: coverImagePath,
 		CoverMimeType:  coverMimeType,
 		CoverSource:    coverSource,
+		CoverPage:      coverPage,
 	}
 
 	// Set audiobook-specific metadata for M4B files

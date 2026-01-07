@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 )
@@ -94,7 +95,11 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		})
 		for _, a := range authors {
 			if a.Person != nil {
-				meta.Authors = append(meta.Authors, a.Person.Name)
+				// M4B doesn't support author roles, so we just store the name
+				meta.Authors = append(meta.Authors, mediafile.ParsedAuthor{
+					Name: a.Person.Name,
+					Role: "",
+				})
 			}
 		}
 	}

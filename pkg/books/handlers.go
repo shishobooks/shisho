@@ -199,19 +199,20 @@ func (h *handler) update(c echo.Context) error {
 		}
 
 		// Create new author associations
-		for i, authorName := range params.Authors {
-			if authorName == "" {
+		for i, authorInput := range params.Authors {
+			if authorInput.Name == "" {
 				continue
 			}
-			person, err := h.personService.FindOrCreatePerson(ctx, authorName, book.LibraryID)
+			person, err := h.personService.FindOrCreatePerson(ctx, authorInput.Name, book.LibraryID)
 			if err != nil {
-				log.Error("failed to find/create person", logger.Data{"author": authorName, "error": err.Error()})
+				log.Error("failed to find/create person", logger.Data{"author": authorInput.Name, "error": err.Error()})
 				continue
 			}
 			author := &models.Author{
 				BookID:    book.ID,
 				PersonID:  person.ID,
 				SortOrder: i + 1,
+				Role:      authorInput.Role,
 			}
 			if err := h.bookService.CreateAuthor(ctx, author); err != nil {
 				log.Error("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})

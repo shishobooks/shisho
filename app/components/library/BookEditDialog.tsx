@@ -24,11 +24,31 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useDebounce } from "@/hooks/useDebounce";
-import type { Book, SeriesInput } from "@/types";
+import {
+  AuthorRoleColorist,
+  AuthorRoleCoverArtist,
+  AuthorRoleEditor,
+  AuthorRoleInker,
+  AuthorRoleLetterer,
+  AuthorRolePenciller,
+  AuthorRoleTranslator,
+  AuthorRoleWriter,
+  FileTypeCBZ,
+  type AuthorInput,
+  type Book,
+  type SeriesInput,
+} from "@/types";
 
 interface BookEditDialogProps {
   book: Book;
@@ -41,6 +61,18 @@ interface SeriesEntry {
   number: string;
 }
 
+// Author role options for CBZ files
+const AUTHOR_ROLES = [
+  { value: AuthorRoleWriter, label: "Writer" },
+  { value: AuthorRolePenciller, label: "Penciller" },
+  { value: AuthorRoleInker, label: "Inker" },
+  { value: AuthorRoleColorist, label: "Colorist" },
+  { value: AuthorRoleLetterer, label: "Letterer" },
+  { value: AuthorRoleCoverArtist, label: "Cover Artist" },
+  { value: AuthorRoleEditor, label: "Editor" },
+  { value: AuthorRoleTranslator, label: "Translator" },
+] as const;
+
 export function BookEditDialog({
   book,
   open,
@@ -49,10 +81,16 @@ export function BookEditDialog({
   const [title, setTitle] = useState(book.title);
   const [sortTitle, setSortTitle] = useState(book.sort_title || "");
   const [subtitle, setSubtitle] = useState(book.subtitle || "");
-  const [authors, setAuthors] = useState<string[]>(
-    book.authors?.map((a) => a.person?.name || "") || [],
+  const [authors, setAuthors] = useState<AuthorInput[]>(
+    book.authors?.map((a) => ({
+      name: a.person?.name || "",
+      role: a.role,
+    })) || [],
   );
   const [newAuthor, setNewAuthor] = useState("");
+  const [newAuthorRole, setNewAuthorRole] = useState<string | undefined>(
+    undefined,
+  );
   const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
     book.book_series?.map((bs) => ({
       name: bs.series?.name || "",
@@ -64,6 +102,9 @@ export function BookEditDialog({
   const debouncedSeriesSearch = useDebounce(seriesSearch, 200);
 
   const updateBookMutation = useUpdateBook();
+
+  // Check if book has CBZ files (determines whether to show role selection)
+  const hasCBZFiles = book.files?.some((f) => f.file_type === FileTypeCBZ);
 
   // Query for series in this library with server-side search
   const { data: seriesData, isLoading: isLoadingSeries } = useSeriesList(
@@ -81,7 +122,14 @@ export function BookEditDialog({
       setTitle(book.title);
       setSortTitle(book.sort_title || "");
       setSubtitle(book.subtitle || "");
-      setAuthors(book.authors?.map((a) => a.person?.name || "") || []);
+      setAuthors(
+        book.authors?.map((a) => ({
+          name: a.person?.name || "",
+          role: a.role,
+        })) || [],
+      );
+      setNewAuthor("");
+      setNewAuthorRole(undefined);
       setSeriesEntries(
         book.book_series?.map((bs) => ({
           name: bs.series?.name || "",
@@ -92,14 +140,25 @@ export function BookEditDialog({
   }, [open, book]);
 
   const handleAddAuthor = () => {
-    if (newAuthor.trim() && !authors.includes(newAuthor.trim())) {
-      setAuthors([...authors, newAuthor.trim()]);
+    const name = newAuthor.trim();
+    if (
+      name &&
+      !authors.some((a) => a.name === name && a.role === newAuthorRole)
+    ) {
+      setAuthors([...authors, { name, role: newAuthorRole }]);
       setNewAuthor("");
+      setNewAuthorRole(undefined);
     }
   };
 
   const handleRemoveAuthor = (index: number) => {
     setAuthors(authors.filter((_, i) => i !== index));
+  };
+
+  const handleAuthorRoleChange = (index: number, role: string | undefined) => {
+    const updated = [...authors];
+    updated[index] = { ...updated[index], role };
+    setAuthors(updated);
   };
 
   const handleSelectSeries = (seriesName: string) => {
@@ -136,9 +195,14 @@ export function BookEditDialog({
   };
 
   const handleAuthorBlur = () => {
-    if (newAuthor.trim() && !authors.includes(newAuthor.trim())) {
-      setAuthors([...authors, newAuthor.trim()]);
+    const name = newAuthor.trim();
+    if (
+      name &&
+      !authors.some((a) => a.name === name && a.role === newAuthorRole)
+    ) {
+      setAuthors([...authors, { name, role: newAuthorRole }]);
       setNewAuthor("");
+      setNewAuthorRole(undefined);
     }
   };
 
@@ -147,9 +211,19 @@ export function BookEditDialog({
       title?: string;
       sort_title?: string;
       subtitle?: string;
-      authors?: string[];
+      authors?: AuthorInput[];
       series?: SeriesInput[];
     } = {};
+
+    // Include any pending author from the input field
+    let finalAuthors = authors;
+    const pendingName = newAuthor.trim();
+    if (
+      pendingName &&
+      !authors.some((a) => a.name === pendingName && a.role === newAuthorRole)
+    ) {
+      finalAuthors = [...authors, { name: pendingName, role: newAuthorRole }];
+    }
 
     // Only include changed fields
     if (title !== book.title) {
@@ -162,11 +236,14 @@ export function BookEditDialog({
       payload.subtitle = subtitle;
     }
 
-    // Check if authors changed
-    const originalAuthors =
-      book.authors?.map((a) => a.person?.name || "") || [];
-    if (JSON.stringify(authors) !== JSON.stringify(originalAuthors)) {
-      payload.authors = authors;
+    // Check if authors changed (compare name and role)
+    const originalAuthors: AuthorInput[] =
+      book.authors?.map((a) => ({
+        name: a.person?.name || "",
+        role: a.role,
+      })) || [];
+    if (JSON.stringify(finalAuthors) !== JSON.stringify(originalAuthors)) {
+      payload.authors = finalAuthors.filter((a) => a.name.trim());
     }
 
     // Check if series changed
@@ -261,41 +338,135 @@ export function BookEditDialog({
           {/* Authors */}
           <div className="space-y-2">
             <Label>Authors</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {authors.map((author, index) => (
-                <Badge
-                  className="flex items-center gap-1"
-                  key={index}
-                  variant="secondary"
-                >
-                  {author}
-                  <button
-                    className="ml-1 cursor-pointer hover:text-destructive"
-                    onClick={() => handleRemoveAuthor(index)}
+            {hasCBZFiles ? (
+              // CBZ files: show authors as rows with role selection
+              <div className="space-y-2">
+                {authors.map((author, index) => (
+                  <div className="flex items-center gap-2" key={index}>
+                    <div className="flex-1">
+                      <Input disabled value={author.name} />
+                    </div>
+                    <div className="w-36">
+                      <Select
+                        onValueChange={(value) =>
+                          handleAuthorRoleChange(
+                            index,
+                            value === "none" ? undefined : value,
+                          )
+                        }
+                        value={author.role || "none"}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No role</SelectItem>
+                          {AUTHOR_ROLES.map((role) => (
+                            <SelectItem key={role.value} value={role.value}>
+                              {role.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      onClick={() => handleRemoveAuthor(index)}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      onChange={(e) => setNewAuthor(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddAuthor();
+                        }
+                      }}
+                      placeholder="Add author..."
+                      value={newAuthor}
+                    />
+                  </div>
+                  <div className="w-36">
+                    <Select
+                      onValueChange={(value) =>
+                        setNewAuthorRole(value === "none" ? undefined : value)
+                      }
+                      value={newAuthorRole || "none"}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No role</SelectItem>
+                        {AUTHOR_ROLES.map((role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            {role.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleAddAuthor}
+                    size="icon"
                     type="button"
+                    variant="outline"
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                onBlur={handleAuthorBlur}
-                onChange={(e) => setNewAuthor(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddAuthor();
-                  }
-                }}
-                placeholder="Add author..."
-                value={newAuthor}
-              />
-              <Button onClick={handleAddAuthor} type="button" variant="outline">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              // Non-CBZ files: simple badge-based author list
+              <>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {authors.map((author, index) => (
+                    <Badge
+                      className="flex items-center gap-1"
+                      key={index}
+                      variant="secondary"
+                    >
+                      {author.name}
+                      <button
+                        className="ml-1 cursor-pointer hover:text-destructive"
+                        onClick={() => handleRemoveAuthor(index)}
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    onBlur={handleAuthorBlur}
+                    onChange={(e) => setNewAuthor(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddAuthor();
+                      }
+                    }}
+                    placeholder="Add author..."
+                    value={newAuthor}
+                  />
+                  <Button
+                    onClick={handleAddAuthor}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Series */}

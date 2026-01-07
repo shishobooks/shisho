@@ -16,7 +16,7 @@ import (
 
 type OPF struct {
 	Title         string
-	Authors       []string
+	Authors       []mediafile.ParsedAuthor
 	Series        string
 	SeriesNumber  *float64
 	CoverFilepath string
@@ -214,14 +214,15 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
-	authors := []string{}
+	authors := []mediafile.ParsedAuthor{}
 	for _, creator := range pkg.Metadata.Creator {
 		role := creator.Role
 		if role == "" && creator.ID != "" && metaProperties[creator.ID] != nil {
 			role = metaProperties[creator.ID]["role"]
 		}
 		if role == "aut" || len(pkg.Metadata.Creator) == 1 {
-			authors = append(authors, creator.Text)
+			// EPUB authors have no specific role (generic author)
+			authors = append(authors, mediafile.ParsedAuthor{Name: creator.Text, Role: ""})
 		}
 	}
 
