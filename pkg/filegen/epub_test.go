@@ -114,18 +114,42 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 
 		pkg := readOPFFromEPUB(t, destPath)
 
-		// Find calibre:series and calibre:series_index meta tags
-		var seriesName, seriesIndex string
+		// Find calibre:series and calibre:series_index meta tags (Calibre compatibility)
+		var calibreSeriesName, calibreSeriesIndex string
+		// Find EPUB3-style series meta tags (Kobo and modern readers)
+		var epub3SeriesID, epub3SeriesName string
+		var epub3CollectionTypeRefines, epub3CollectionType string
+		var epub3GroupPositionRefines, epub3GroupPosition string
 		for _, meta := range pkg.Metadata.Meta {
 			if meta.Name == "calibre:series" {
-				seriesName = meta.Content
+				calibreSeriesName = meta.Content
 			}
 			if meta.Name == "calibre:series_index" {
-				seriesIndex = meta.Content
+				calibreSeriesIndex = meta.Content
+			}
+			if meta.Property == "belongs-to-collection" {
+				epub3SeriesID = meta.ID
+				epub3SeriesName = meta.Text
+			}
+			if meta.Property == "collection-type" {
+				epub3CollectionTypeRefines = meta.Refines
+				epub3CollectionType = meta.Text
+			}
+			if meta.Property == "group-position" {
+				epub3GroupPositionRefines = meta.Refines
+				epub3GroupPosition = meta.Text
 			}
 		}
-		assert.Equal(t, "Test Series", seriesName)
-		assert.Equal(t, "3", seriesIndex)
+		// Verify Calibre-style metadata
+		assert.Equal(t, "Test Series", calibreSeriesName)
+		assert.Equal(t, "3", calibreSeriesIndex)
+		// Verify EPUB3-style metadata with proper id and refines attributes
+		assert.Equal(t, "series-1", epub3SeriesID, "belongs-to-collection should have id attribute")
+		assert.Equal(t, "Test Series", epub3SeriesName)
+		assert.Equal(t, "#series-1", epub3CollectionTypeRefines, "collection-type should refine series-1")
+		assert.Equal(t, "series", epub3CollectionType)
+		assert.Equal(t, "#series-1", epub3GroupPositionRefines, "group-position should refine series-1")
+		assert.Equal(t, "3", epub3GroupPosition)
 	})
 
 	t.Run("handles decimal series number", func(t *testing.T) {
@@ -156,13 +180,18 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 
 		pkg := readOPFFromEPUB(t, destPath)
 
-		var seriesIndex string
+		var calibreSeriesIndex, epub3GroupPosition string
 		for _, meta := range pkg.Metadata.Meta {
 			if meta.Name == "calibre:series_index" {
-				seriesIndex = meta.Content
+				calibreSeriesIndex = meta.Content
+			}
+			if meta.Property == "group-position" {
+				epub3GroupPosition = meta.Text
 			}
 		}
-		assert.Equal(t, "1.5", seriesIndex)
+		// Verify decimal series number in both formats
+		assert.Equal(t, "1.5", calibreSeriesIndex)
+		assert.Equal(t, "1.5", epub3GroupPosition)
 	})
 
 	t.Run("replaces cover image", func(t *testing.T) {

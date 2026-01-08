@@ -986,3 +986,62 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 
 	return c.File(file.Filepath)
 }
+
+// downloadKepubFile handles downloading a file converted to KePub format.
+// KePub conversion is only supported for EPUB and CBZ files.
+func (h *handler) downloadKepubFile(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	// Fetch the file with its book
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Get the full book with relations for generation
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &file.BookID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check if the source file exists
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("Source file not found on disk")
+	}
+
+	// Try to generate/get from cache
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, file)
+	if err != nil {
+		// Check if this file type doesn't support KePub conversion
+		if errors.Is(err, filegen.ErrKepubNotSupported) {
+			return errcodes.ValidationError("KePub conversion is not supported for " + file.FileType + " files")
+		}
+		// Check for other generation errors
+		var genErr *filegen.GenerationError
+		if errors.As(err, &genErr) {
+			return errcodes.ValidationError("Failed to generate KePub file: " + genErr.Message)
+		}
+		return errors.WithStack(err)
+	}
+
+	// Set content disposition for download with the formatted filename
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+
+	return c.File(cachedPath)
+}

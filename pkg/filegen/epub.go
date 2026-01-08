@@ -289,13 +289,19 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 	}
 	pkg.Metadata.Creators = newCreators
 
-	// Update series - using Calibre meta tags
-	// First, remove existing series meta tags
+	// Update series - using both Calibre meta tags and EPUB3 properties
+	// First, remove existing series meta tags (both formats)
 	var filteredMetas []opfMeta
 	for _, meta := range pkg.Metadata.Meta {
-		if meta.Name != "calibre:series" && meta.Name != "calibre:series_index" {
-			filteredMetas = append(filteredMetas, meta)
+		// Skip Calibre series tags
+		if meta.Name == "calibre:series" || meta.Name == "calibre:series_index" {
+			continue
 		}
+		// Skip EPUB3 series tags
+		if meta.Property == "belongs-to-collection" || meta.Property == "collection-type" || meta.Property == "group-position" {
+			continue
+		}
+		filteredMetas = append(filteredMetas, meta)
 	}
 
 	// Add series info sorted by sort order
@@ -306,9 +312,10 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 			return series[i].SortOrder < series[j].SortOrder
 		})
 
-		// For primary series (first one), use calibre:series
+		// For primary series (first one), add both Calibre and EPUB3 metadata
 		first := series[0]
 		if first.Series != nil {
+			// Calibre-style (for Calibre compatibility)
 			filteredMetas = append(filteredMetas, opfMeta{
 				Name:    "calibre:series",
 				Content: first.Series.Name,
@@ -317,6 +324,26 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 				filteredMetas = append(filteredMetas, opfMeta{
 					Name:    "calibre:series_index",
 					Content: formatFloat(*first.SeriesNumber),
+				})
+			}
+
+			// EPUB3-style (for Kobo and other modern readers)
+			// Uses id and refines attributes to link the metadata together
+			filteredMetas = append(filteredMetas, opfMeta{
+				Property: "belongs-to-collection",
+				ID:       "series-1",
+				Text:     first.Series.Name,
+			})
+			filteredMetas = append(filteredMetas, opfMeta{
+				Refines:  "#series-1",
+				Property: "collection-type",
+				Text:     "series",
+			})
+			if first.SeriesNumber != nil {
+				filteredMetas = append(filteredMetas, opfMeta{
+					Refines:  "#series-1",
+					Property: "group-position",
+					Text:     formatFloat(*first.SeriesNumber),
 				})
 			}
 		}
@@ -442,6 +469,7 @@ type opfMeta struct {
 	Text     string `xml:",chardata"`
 	Name     string `xml:"name,attr,omitempty"`
 	Content  string `xml:"content,attr,omitempty"`
+	ID       string `xml:"id,attr,omitempty"`
 	Refines  string `xml:"refines,attr,omitempty"`
 	Property string `xml:"property,attr,omitempty"`
 }

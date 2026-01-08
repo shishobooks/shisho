@@ -24,9 +24,10 @@ type FileSidecar struct {
 
 // AuthorMetadata represents an author in the sidecar file.
 type AuthorMetadata struct {
-	Name      string `json:"name"`
-	SortName  string `json:"sort_name,omitempty"`
-	SortOrder int    `json:"sort_order,omitempty"`
+	Name      string  `json:"name"`
+	SortName  string  `json:"sort_name,omitempty"`
+	SortOrder int     `json:"sort_order,omitempty"`
+	Role      *string `json:"role,omitempty"` // CBZ creator role: writer, penciller, inker, etc.
 }
 
 // NarratorMetadata represents a narrator in the sidecar file.

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BookEditDialog } from "@/components/library/BookEditDialog";
+import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
@@ -20,7 +21,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
-import { FileTypeCBZ, type File } from "@/types";
+import {
+  DownloadFormatAsk,
+  DownloadFormatKepub,
+  FileTypeCBZ,
+  FileTypeEPUB,
+  type File,
+} from "@/types";
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
 // This mirrors the backend's selectCoverFile logic
@@ -91,6 +98,11 @@ interface DownloadError {
   message: string;
 }
 
+// KePub format is only supported for EPUB and CBZ files
+const supportsKepub = (fileType: string): boolean => {
+  return fileType === FileTypeEPUB || fileType === FileTypeCBZ;
+};
+
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
@@ -104,20 +116,21 @@ const BookDetail = () => {
     null,
   );
 
-  const handleDownload = async (fileId: number) => {
+  const handleDownloadWithEndpoint = async (
+    fileId: number,
+    endpoint: string,
+  ) => {
     setDownloadingFileId(fileId);
     try {
       // Use HEAD request to trigger generation and check for errors
       // This avoids loading the entire file into browser memory
-      const headResponse = await fetch(`/api/books/files/${fileId}/download`, {
+      const headResponse = await fetch(endpoint, {
         method: "HEAD",
       });
 
       if (!headResponse.ok) {
         // HEAD failed - make a GET request to get the error message (small JSON response)
-        const errorResponse = await fetch(
-          `/api/books/files/${fileId}/download`,
-        );
+        const errorResponse = await fetch(endpoint);
         const contentType = errorResponse.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
           const error = await errorResponse.json();
@@ -135,7 +148,7 @@ const BookDetail = () => {
       }
 
       // HEAD succeeded - file is ready, trigger streaming download
-      window.location.href = `/api/books/files/${fileId}/download`;
+      window.location.href = endpoint;
       toast.success("Download started");
     } catch (error) {
       console.error("Download error:", error);
@@ -143,6 +156,31 @@ const BookDetail = () => {
     } finally {
       setDownloadingFileId(null);
     }
+  };
+
+  const handleDownload = async (fileId: number, fileType: string) => {
+    const preference = libraryQuery.data?.download_format_preference;
+
+    // For kepub preference with supported files, use kepub endpoint
+    if (preference === DownloadFormatKepub && supportsKepub(fileType)) {
+      await handleDownloadWithEndpoint(
+        fileId,
+        `/api/books/files/${fileId}/download/kepub`,
+      );
+    } else {
+      // Original format for unsupported files or "original" preference
+      await handleDownloadWithEndpoint(
+        fileId,
+        `/api/books/files/${fileId}/download`,
+      );
+    }
+  };
+
+  const handleDownloadKepub = async (fileId: number) => {
+    await handleDownloadWithEndpoint(
+      fileId,
+      `/api/books/files/${fileId}/download/kepub`,
+    );
   };
 
   const handleDownloadOriginal = (fileId: number) => {
@@ -384,19 +422,40 @@ const BookDetail = () => {
                             </span>
                           )}
                           <span>{formatFileSize(file.filesize_bytes)}</span>
-                          <Button
-                            disabled={downloadingFileId === file.id}
-                            onClick={() => handleDownload(file.id)}
-                            size="sm"
-                            title="Download"
-                            variant="ghost"
-                          >
-                            {downloadingFileId === file.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Download className="h-3 w-3" />
-                            )}
-                          </Button>
+                          {/* Show format popover for "ask" preference on EPUB/CBZ files */}
+                          {libraryQuery.data?.download_format_preference ===
+                            DownloadFormatAsk &&
+                          supportsKepub(file.file_type) ? (
+                            <DownloadFormatPopover
+                              disabled={downloadingFileId === file.id}
+                              isLoading={downloadingFileId === file.id}
+                              onDownloadKepub={() =>
+                                handleDownloadKepub(file.id)
+                              }
+                              onDownloadOriginal={() =>
+                                handleDownloadWithEndpoint(
+                                  file.id,
+                                  `/api/books/files/${file.id}/download`,
+                                )
+                              }
+                            />
+                          ) : (
+                            <Button
+                              disabled={downloadingFileId === file.id}
+                              onClick={() =>
+                                handleDownload(file.id, file.file_type)
+                              }
+                              size="sm"
+                              title="Download"
+                              variant="ghost"
+                            >
+                              {downloadingFileId === file.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3" />
+                              )}
+                            </Button>
+                          )}
                           <Button
                             onClick={() => setEditingFile(file)}
                             size="sm"

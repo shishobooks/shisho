@@ -94,9 +94,91 @@ func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *mode
 	return destPath, downloadFilename, nil
 }
 
+// GetOrGenerateKepub returns the path to a cached KePub file, generating it if necessary.
+// It returns the cached file path, the formatted download filename, and any error.
+// Returns ErrKepubNotSupported if the file type cannot be converted to KePub.
+func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file *models.File) (cachedPath string, downloadFilename string, err error) {
+	// Check if this file type supports KePub conversion
+	if !filegen.SupportsKepub(file.FileType) {
+		return "", "", filegen.ErrKepubNotSupported
+	}
+
+	// Compute the fingerprint for the current state with KePub format
+	fp, err := ComputeFingerprint(book, file)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to compute fingerprint")
+	}
+	fp.Format = FormatKepub
+
+	hash, err := fp.Hash()
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to hash fingerprint")
+	}
+
+	// Check if we have a valid cached file
+	existingPath, err := GetKepubCachedFilePath(c.dir, file.ID, hash)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to check kepub cache")
+	}
+
+	downloadFilename = FormatKepubDownloadFilename(book, file)
+
+	if existingPath != "" {
+		// Update last accessed time (non-fatal if it fails)
+		_ = UpdateKepubLastAccessed(c.dir, file.ID)
+		return existingPath, downloadFilename, nil
+	}
+
+	// Need to generate a new file
+	destPath := kepubCachedFilename(c.dir, file.ID)
+
+	// Get the appropriate KePub generator
+	generator, err := filegen.GetKepubGenerator(file.FileType)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get kepub generator")
+	}
+
+	// Generate the file
+	if err := generator.Generate(ctx, file.Filepath, destPath, book, file); err != nil {
+		return "", "", errors.Wrap(err, "failed to generate kepub file")
+	}
+
+	// Get the size of the generated file
+	info, err := os.Stat(destPath)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to stat generated kepub file")
+	}
+
+	// Write the metadata
+	now := time.Now()
+	meta := &CacheMetadata{
+		FileID:          file.ID,
+		Format:          FormatKepub,
+		FingerprintHash: hash,
+		GeneratedAt:     now,
+		LastAccessedAt:  now,
+		SizeBytes:       info.Size(),
+	}
+	if err := WriteKepubMetadata(c.dir, meta); err != nil {
+		// Clean up the generated file if we can't write metadata
+		os.Remove(destPath)
+		return "", "", errors.Wrap(err, "failed to write kepub cache metadata")
+	}
+
+	// Trigger cleanup in background
+	go c.TriggerCleanup()
+
+	return destPath, downloadFilename, nil
+}
+
 // Invalidate removes the cached file for a given file ID.
 func (c *Cache) Invalidate(fileID int, fileType string) error {
 	return DeleteCachedFile(c.dir, fileID, fileType)
+}
+
+// InvalidateKepub removes the cached KePub file for a given file ID.
+func (c *Cache) InvalidateKepub(fileID int) error {
+	return DeleteKepubCachedFile(c.dir, fileID)
 }
 
 // GetCachedPath returns the path to a cached file if it exists and is valid.

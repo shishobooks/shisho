@@ -391,8 +391,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			authorSource = models.DataSourceSidecar
 			authors = make([]mediafile.ParsedAuthor, 0)
 			for _, a := range bookSidecarData.Authors {
-				// Sidecar authors currently don't have role info, so use generic author
-				authors = append(authors, mediafile.ParsedAuthor{Name: a.Name, Role: ""})
+				role := ""
+				if a.Role != nil {
+					role = *a.Role
+				}
+				authors = append(authors, mediafile.ParsedAuthor{Name: a.Name, Role: role})
 			}
 		}
 		if len(bookSidecarData.Series) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {

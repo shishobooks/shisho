@@ -46,6 +46,11 @@ func getBaseURL(c echo.Context) string {
 	return scheme + "://" + c.Request().Host + prefix + "/opds/v1"
 }
 
+// getBaseURLKepub returns the base URL for KePub OPDS feeds.
+func getBaseURLKepub(c echo.Context) string {
+	return getBaseURL(c) + "/kepub"
+}
+
 // getPaginationParams extracts limit and offset from query params.
 func getPaginationParams(c echo.Context) (int, int) {
 	limit := defaultLimit
@@ -367,6 +372,267 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 	return c.XML(http.StatusOK, desc)
 }
 
+// KePub handlers - same as regular handlers but generate feeds with KePub download links.
+
+// catalogKepub handles the root catalog feed (lists libraries) with KePub links.
+func (h *handler) catalogKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	baseURL := getBaseURLKepub(c)
+	libraryIDs := getUserAccessibleLibraryIDs(c)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryCatalogKepub handles the library catalog feed with KePub links.
+func (h *handler) libraryCatalogKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	baseURL := getBaseURLKepub(c)
+	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, fileTypes, libraryID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAllBooksKepub handles the all books feed with KePub links.
+func (h *handler) libraryAllBooksKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibraryAllBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySeriesListKepub handles the series list feed with KePub links.
+func (h *handler) librarySeriesListKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySeriesBooksKepub handles the books in a series feed with KePub links.
+func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	seriesID, err := strconv.Atoi(c.Param("seriesID"))
+	if err != nil {
+		return errcodes.NotFound("Series")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAuthorsListKepub handles the authors list feed with KePub links.
+func (h *handler) libraryAuthorsListKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryAuthorBooksKepub handles the books by author feed with KePub links.
+func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	authorName, err := url.PathUnescape(c.Param("authorName"))
+	if err != nil {
+		return errcodes.NotFound("Author")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// librarySearchKepub handles the search feed with KePub links.
+func (h *handler) librarySearchKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	query := c.QueryParam("q")
+	if query == "" {
+		return errcodes.ValidationError("Search query is required")
+	}
+
+	limit, offset := getPaginationParams(c)
+	baseURL := getBaseURLKepub(c)
+
+	feed, err := h.opdsService.BuildLibrarySearchFeedKepub(ctx, baseURL, fileTypes, libraryID, query, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// libraryOpenSearchKepub handles the OpenSearch description for KePub feeds.
+func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
+	fileTypes := c.Param("types")
+
+	if err := validateFileTypes(fileTypes); err != nil {
+		return err
+	}
+
+	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := checkLibraryAccess(c, libraryID); err != nil {
+		return err
+	}
+
+	baseURL := getBaseURLKepub(c)
+	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, fileTypes, libraryID)
+
+	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
+	return c.XML(http.StatusOK, desc)
+}
+
 // download handles file downloads with generated metadata.
 // For OPDS clients, we try to generate a file with embedded metadata.
 // If generation fails, we fall back to the original file.
@@ -416,6 +682,77 @@ func (h *handler) download(c echo.Context) error {
 				"error":     genErr.Message,
 			})
 			// Fall back to original file
+			filename := filepath.Base(file.Filepath)
+			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			return c.File(file.Filepath)
+		}
+		return errors.WithStack(err)
+	}
+
+	// Set content disposition for download with the formatted filename
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+
+	return c.File(cachedPath)
+}
+
+// downloadKepub handles KePub file downloads.
+// KePub conversion is only supported for EPUB and CBZ files.
+func (h *handler) downloadKepub(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	fileID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+		ID: &fileID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if err := checkLibraryAccess(c, file.LibraryID); err != nil {
+		return err
+	}
+
+	// Check if source file exists
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("File")
+	}
+
+	// Get the full book with relations for generation
+	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+		ID: &file.BookID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Try to generate/get KePub from cache
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, file)
+	if err != nil {
+		// Check if this file type doesn't support KePub conversion
+		if errors.Is(err, filegen.ErrKepubNotSupported) {
+			log.Warn("kepub conversion not supported, serving original", logger.Data{
+				"file_id":   file.ID,
+				"file_type": file.FileType,
+			})
+			// Fall back to original file for unsupported types (M4B)
+			filename := filepath.Base(file.Filepath)
+			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			return c.File(file.Filepath)
+		}
+		// For other errors, also fall back to original
+		var genErr *filegen.GenerationError
+		if errors.As(err, &genErr) {
+			log.Warn("kepub generation failed, serving original", logger.Data{
+				"file_id":   file.ID,
+				"file_type": file.FileType,
+				"error":     genErr.Message,
+			})
 			filename := filepath.Base(file.Filepath)
 			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 			return c.File(file.Filepath)

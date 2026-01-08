@@ -44,6 +44,9 @@ func NewGenerationError(fileType string, err error, message string) *GenerationE
 // ErrNotImplemented is returned when a file type generator is not yet implemented.
 var ErrNotImplemented = errors.New("file type generation not yet implemented")
 
+// ErrKepubNotSupported is returned when KePub conversion is not supported for a file type.
+var ErrKepubNotSupported = errors.New("KePub conversion not supported for this file type")
+
 // GetGenerator returns the appropriate generator for a file type.
 func GetGenerator(fileType string) (Generator, error) {
 	switch fileType {
@@ -55,5 +58,30 @@ func GetGenerator(fileType string) (Generator, error) {
 		return &CBZGenerator{}, nil
 	default:
 		return nil, errors.Errorf("unsupported file type: %s", fileType)
+	}
+}
+
+// GetKepubGenerator returns the appropriate KePub generator for a file type.
+// Returns ErrKepubNotSupported for file types that don't support KePub conversion (M4B).
+func GetKepubGenerator(fileType string) (Generator, error) {
+	switch fileType {
+	case models.FileTypeEPUB:
+		return NewKepubEPUBGenerator(), nil
+	case models.FileTypeCBZ:
+		return NewKepubCBZGenerator(), nil
+	case models.FileTypeM4B:
+		return nil, ErrKepubNotSupported
+	default:
+		return nil, errors.Errorf("unsupported file type: %s", fileType)
+	}
+}
+
+// SupportsKepub returns true if the file type can be converted to KePub format.
+func SupportsKepub(fileType string) bool {
+	switch fileType {
+	case models.FileTypeEPUB, models.FileTypeCBZ:
+		return true
+	default:
+		return false
 	}
 }

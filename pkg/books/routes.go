@@ -38,4 +38,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/download", h.downloadFile)
 	g.HEAD("/files/:id/download", h.downloadFile)
 	g.GET("/files/:id/download/original", h.downloadOriginalFile)
+	g.GET("/files/:id/download/kepub", h.downloadKepubFile)
+	g.HEAD("/files/:id/download/kepub", h.downloadKepubFile)
 }

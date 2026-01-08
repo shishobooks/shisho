@@ -32,6 +32,7 @@ func init() {
 				name TEXT NOT NULL,
 				organize_file_structure BOOLEAN NOT NULL DEFAULT TRUE,
 				cover_aspect_ratio TEXT NOT NULL,
+				download_format_preference TEXT NOT NULL DEFAULT 'original',
 				deleted_at TIMESTAMPTZ
 			)
 `)

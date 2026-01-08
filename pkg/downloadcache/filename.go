@@ -165,3 +165,64 @@ func sanitizeFilename(s string) string {
 	}
 	return result
 }
+
+// koboUnsafeChars contains characters that cause problems with Kobo e-readers.
+// Based on https://github.com/kobolabs/epub-spec which states:
+// "File names containing non-alphanumeric characters are not fully supported,
+// and their use may lead to undefined behaviour."
+// Additionally, colons are known to prevent Kobo from seeing kepub files:
+// https://github.com/seblucas/cops/issues/263
+var koboUnsafeChars = regexp.MustCompile(`[^a-zA-Z0-9\s\-_.,()']`)
+
+// sanitizeKoboFilename aggressively sanitizes a filename for Kobo compatibility.
+// It removes special characters that can cause Kobo to fail reading the file.
+func sanitizeKoboFilename(s string) string {
+	// Replace unsafe characters with nothing
+	result := koboUnsafeChars.ReplaceAllString(s, "")
+	// Trim leading/trailing whitespace and collapse multiple spaces
+	result = strings.TrimSpace(result)
+	for strings.Contains(result, "  ") {
+		result = strings.ReplaceAll(result, "  ", " ")
+	}
+	return result
+}
+
+// FormatKepubDownloadFilename generates a formatted filename for downloading a KePub file.
+// Uses Kobo-safe characters only to ensure compatibility with Kobo e-readers.
+// Format: Author - Series Number - Title.kepub.epub (no brackets, no hash symbols).
+func FormatKepubDownloadFilename(book *models.Book, _ *models.File) string {
+	// Pad volume numbers for lexicographic sorting, then sanitize for Kobo
+	title := sanitizeKoboFilename(padVolumeNumber(book.Title))
+	author := sanitizeKoboFilename(getFirstAuthorName(book))
+	series, number := getFirstSeries(book)
+
+	var parts []string
+
+	// Add author if available (no brackets - Kobo doesn't like them)
+	if author != "" {
+		parts = append(parts, author)
+		parts = append(parts, "-")
+	}
+
+	// Add series and number if available, unless title already has a volume number
+	// Use plain number format instead of # (Kobo doesn't like #)
+	titleHasVolume := volumePattern.MatchString(book.Title)
+	if series != "" && !titleHasVolume {
+		seriesPart := sanitizeKoboFilename(series)
+		if number != nil {
+			seriesPart += " " + formatSeriesNumber(*number)
+		}
+		parts = append(parts, seriesPart)
+		parts = append(parts, "-")
+	}
+
+	// Add title
+	parts = append(parts, title)
+
+	// Skip narrator for KePub (CBZ converted to KePub won't have narrators anyway,
+	// and curly braces are problematic for Kobo)
+
+	// Join parts with spaces and add .kepub.epub extension
+	filename := strings.Join(parts, " ")
+	return filename + ".kepub.epub"
+}

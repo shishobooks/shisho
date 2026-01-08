@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
+import {
+  DownloadFormatAsk,
+  DownloadFormatKepub,
+  DownloadFormatOriginal,
+} from "@/types/generated/models";
 
 const LibrarySettings = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
@@ -27,6 +32,9 @@ const LibrarySettings = () => {
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
   const [coverAspectRatio, setCoverAspectRatio] = useState("book");
+  const [downloadFormatPreference, setDownloadFormatPreference] = useState(
+    DownloadFormatOriginal,
+  );
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -35,6 +43,9 @@ const LibrarySettings = () => {
     setName(libraryQuery.data.name);
     setOrganizeFileStructure(libraryQuery.data.organize_file_structure);
     setCoverAspectRatio(libraryQuery.data.cover_aspect_ratio);
+    setDownloadFormatPreference(
+      libraryQuery.data.download_format_preference || DownloadFormatOriginal,
+    );
     setLibraryPaths(
       libraryQuery.data.library_paths?.map((lp) => lp.filepath) || [""],
     );
@@ -73,6 +84,7 @@ const LibrarySettings = () => {
           name: name.trim(),
           organize_file_structure: organizeFileStructure,
           cover_aspect_ratio: coverAspectRatio,
+          download_format_preference: downloadFormatPreference,
           library_paths: validPaths,
         },
       });
@@ -241,6 +253,39 @@ const LibrarySettings = () => {
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <Separator />
+
+          {/* Download Format Preference Setting */}
+          <div className="space-y-2">
+            <Label htmlFor="download-format">Download Format Preference</Label>
+            <p className="text-sm text-muted-foreground">
+              How EPUB and CBZ files should be downloaded for e-readers
+            </p>
+            <Select
+              onValueChange={setDownloadFormatPreference}
+              value={downloadFormatPreference}
+            >
+              <SelectTrigger className="w-full" id="download-format">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DownloadFormatOriginal}>
+                  Original format
+                </SelectItem>
+                <SelectItem value={DownloadFormatKepub}>
+                  KePub (Kobo-optimized)
+                </SelectItem>
+                <SelectItem value={DownloadFormatAsk}>
+                  Ask on download
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              KePub format improves reading statistics and page turning on Kobo
+              devices. Only affects EPUB and CBZ files.
+            </p>
           </div>
 
           <Separator />

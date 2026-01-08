@@ -400,3 +400,167 @@ func TestFormatSeriesNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeKoboFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"normal name", "normal name", "normal name"},
+		{"with brackets", "[Author] Title", "Author Title"},
+		{"with hash", "Series #1", "Series 1"},
+		{"with colon", "Title: Subtitle", "Title Subtitle"},
+		{"with curly braces", "Title {Narrator}", "Title Narrator"},
+		{"with parentheses (allowed)", "Title (2024)", "Title (2024)"},
+		{"with dashes (allowed)", "Title - Subtitle", "Title - Subtitle"},
+		{"with underscores (allowed)", "snake_case", "snake_case"},
+		{"with period (allowed)", "Vol. 1", "Vol. 1"},
+		{"with comma (allowed)", "Author, Jr.", "Author, Jr."},
+		{"with apostrophe (allowed)", "Harry's Book", "Harry's Book"},
+		{"multiple spaces collapse", "Title    Here", "Title Here"},
+		{"leading spaces trim", "  Title", "Title"},
+		{"trailing spaces trim", "Title  ", "Title"},
+		{"special chars removed", "[J.K. Rowling] Harry Potter #1 - Title", "J.K. Rowling Harry Potter 1 - Title"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeKoboFilename(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatKepubDownloadFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		book     *models.Book
+		file     *models.File
+		expected string
+	}{
+		{
+			name: "full format with author, series, and title",
+			book: &models.Book{
+				Title: "Harry Potter and the Sorcerer's Stone",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "J.K. Rowling"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Harry Potter"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "J.K. Rowling - Harry Potter 1 - Harry Potter and the Sorcerer's Stone.kepub.epub",
+		},
+		{
+			name: "no brackets around author name",
+			book: &models.Book{
+				Title: "1984",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "George Orwell"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "George Orwell - 1984.kepub.epub",
+		},
+		{
+			name: "no hash before series number",
+			book: &models.Book{
+				Title: "The Way of Kings",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Brandon Sanderson"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "The Stormlight Archive"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Brandon Sanderson - The Stormlight Archive 1 - The Way of Kings.kepub.epub",
+		},
+		{
+			name: "no author",
+			book: &models.Book{
+				Title:   "Anonymous Work",
+				Authors: nil,
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "Mystery Series"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Mystery Series 2 - Anonymous Work.kepub.epub",
+		},
+		{
+			name: "no author and no series",
+			book: &models.Book{
+				Title:      "Just a Title",
+				Authors:    nil,
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Just a Title.kepub.epub",
+		},
+		{
+			name: "series without number",
+			book: &models.Book{
+				Title: "The Book",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Some Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: nil, Series: &models.Series{Name: "Some Series"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Some Author - Some Series - The Book.kepub.epub",
+		},
+		{
+			name: "special characters in title are removed",
+			book: &models.Book{
+				Title: "Title: With <Special> *Characters*?",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Author - Title With Special Characters.kepub.epub",
+		},
+		{
+			name: "title with v1 skips series and pads to 3 digits",
+			book: &models.Book{
+				Title: "My Manga v1",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "My Manga"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "Author - My Manga v001.kepub.epub",
+		},
+		{
+			name: "real world case that was breaking",
+			book: &models.Book{
+				Title: "Harry Potter and the Sorcerer's Stone",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "J.K. Rowling"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Harry Potter"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "J.K. Rowling - Harry Potter 1 - Harry Potter and the Sorcerer's Stone.kepub.epub",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatKepubDownloadFilename(tt.book, tt.file)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

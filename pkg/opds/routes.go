@@ -41,7 +41,22 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	v1.GET("/:types/libraries/:libraryID/search", h.librarySearch)
 	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
 
+	// KePub routes - same structure but downloads as KePub format
+	// These routes generate feeds with KePub download links for EPUB and CBZ files
+	v1Kepub := e.Group("/opds/v1/kepub", authMiddleware.BasicAuth)
+
+	v1Kepub.GET("/:types/catalog", h.catalogKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID", h.libraryCatalogKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/all", h.libraryAllBooksKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/series", h.librarySeriesListKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/series/:seriesID", h.librarySeriesBooksKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/authors", h.libraryAuthorsListKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/authors/:authorName", h.libraryAuthorBooksKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/search", h.librarySearchKepub)
+	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
+
 	// File downloads (version-agnostic, shared across OPDS versions)
 	// Also requires Basic Auth
 	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth)
+	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
 }

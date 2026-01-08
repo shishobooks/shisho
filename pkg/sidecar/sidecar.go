@@ -148,6 +148,7 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 				Name:      author.Person.Name,
 				SortName:  author.Person.SortName,
 				SortOrder: author.SortOrder,
+				Role:      author.Role,
 			})
 		}
 	}

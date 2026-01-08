@@ -11,6 +11,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// Download format constants.
+const (
+	FormatOriginal = "original"
+	FormatKepub    = "kepub"
+)
+
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
@@ -21,6 +27,7 @@ type Fingerprint struct {
 	Series    []FingerprintSeries   `json:"series"`
 	Cover     *FingerprintCover     `json:"cover,omitempty"`
 	CoverPage *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
+	Format    string                `json:"format,omitempty"`     // Download format: original or kepub
 }
 
 // FingerprintAuthor represents author information for fingerprinting.

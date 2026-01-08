@@ -162,6 +162,50 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 	return feed, nil
 }
 
+// BuildLibraryAllBooksFeedKepub builds an acquisition feed with all books using KePub download links.
+func (svc *Service) BuildLibraryAllBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, limit, offset int) (*Feed, error) {
+	types := parseFileTypes(fileTypes)
+
+	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		Limit:     &limit,
+		Offset:    &offset,
+		LibraryID: &libraryID,
+		FileTypes: types,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	libBase := fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, libraryID)
+
+	feed := NewFeed(libBase+"/all", "All Books - "+lib.Name)
+	feed.Author = &Author{Name: "Shisho"}
+
+	// Links
+	feed.AddLink(RelSelf, fmt.Sprintf("%s/all?limit=%d&offset=%d", libBase, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, baseURL+"/"+fileTypes+"/catalog", MimeTypeNavigation)
+	feed.AddLink(RelUp, libBase, MimeTypeNavigation)
+	feed.AddLink(RelSearch, libBase+"/opensearch.xml", MimeTypeOpenSearch)
+
+	// Pagination links
+	addPaginationLinks(feed, libBase+"/all", limit, offset, total)
+
+	// Add book entries with KePub links
+	for _, book := range booksResult {
+		entry := svc.bookToEntryWithKepub(baseURL, book, lib.CoverAspectRatio, types, true)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
 // BuildLibrarySeriesListFeed builds a navigation feed listing all series in a library.
 func (svc *Service) BuildLibrarySeriesListFeed(ctx context.Context, baseURL, fileTypes string, libraryID, limit, offset int) (*Feed, error) {
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -259,6 +303,58 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 	// Add book entries
 	for _, book := range booksResult {
 		entry := svc.bookToEntry(baseURL, book, lib.CoverAspectRatio, types)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
+// BuildLibrarySeriesBooksFeedKepub builds an acquisition feed with books in a series using KePub download links.
+func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, seriesID, limit, offset int) (*Feed, error) {
+	types := parseFileTypes(fileTypes)
+
+	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := svc.seriesService.RetrieveSeries(ctx, series.RetrieveSeriesOptions{
+		ID: &seriesID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		Limit:     &limit,
+		Offset:    &offset,
+		LibraryID: &libraryID,
+		SeriesID:  &seriesID,
+		FileTypes: types,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	libBase := fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, libraryID)
+
+	feed := NewFeed(fmt.Sprintf("%s/series/%d", libBase, seriesID), s.Name)
+	feed.Author = &Author{Name: "Shisho"}
+
+	// Links
+	feed.AddLink(RelSelf, fmt.Sprintf("%s/series/%d?limit=%d&offset=%d", libBase, seriesID, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, baseURL+"/"+fileTypes+"/catalog", MimeTypeNavigation)
+	feed.AddLink(RelUp, libBase+"/series", MimeTypeNavigation)
+	feed.AddLink(RelSearch, libBase+"/opensearch.xml", MimeTypeOpenSearch)
+
+	// Pagination links
+	addPaginationLinks(feed, fmt.Sprintf("%s/series/%d", libBase, seriesID), limit, offset, total)
+
+	// Add book entries with KePub links
+	for _, book := range booksResult {
+		entry := svc.bookToEntryWithKepub(baseURL, book, lib.CoverAspectRatio, types, true)
 		feed.AddEntry(entry)
 	}
 
@@ -452,6 +548,46 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL, fi
 	return feed, nil
 }
 
+// BuildLibraryAuthorBooksFeedKepub builds an acquisition feed with books by an author using KePub download links.
+func (svc *Service) BuildLibraryAuthorBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, authorName string, limit, offset int) (*Feed, error) {
+	types := parseFileTypes(fileTypes)
+
+	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	booksResult, total, err := svc.ListBooksByAuthor(ctx, libraryID, authorName, types, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	libBase := fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, libraryID)
+	encodedName := url.PathEscape(authorName)
+
+	feed := NewFeed(fmt.Sprintf("%s/authors/%s", libBase, encodedName), authorName+" - "+lib.Name)
+	feed.Author = &Author{Name: "Shisho"}
+
+	// Links
+	feed.AddLink(RelSelf, fmt.Sprintf("%s/authors/%s?limit=%d&offset=%d", libBase, encodedName, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, baseURL+"/"+fileTypes+"/catalog", MimeTypeNavigation)
+	feed.AddLink(RelUp, libBase+"/authors", MimeTypeNavigation)
+	feed.AddLink(RelSearch, libBase+"/opensearch.xml", MimeTypeOpenSearch)
+
+	// Pagination links
+	addPaginationLinks(feed, fmt.Sprintf("%s/authors/%s", libBase, encodedName), limit, offset, total)
+
+	// Add book entries with KePub links
+	for _, book := range booksResult {
+		entry := svc.bookToEntryWithKepub(baseURL, book, lib.CoverAspectRatio, types, true)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
 // BuildLibrarySearchFeed builds an acquisition feed with search results.
 func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTypes string, libraryID int, query string, limit, offset int) (*Feed, error) {
 	types := parseFileTypes(fileTypes)
@@ -501,6 +637,55 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 	return feed, nil
 }
 
+// BuildLibrarySearchFeedKepub builds an acquisition feed with search results using KePub download links.
+func (svc *Service) BuildLibrarySearchFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, query string, limit, offset int) (*Feed, error) {
+	types := parseFileTypes(fileTypes)
+
+	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		Limit:     &limit,
+		Offset:    &offset,
+		LibraryID: &libraryID,
+		FileTypes: types,
+		Search:    &query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	libBase := fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, libraryID)
+	encodedQuery := url.QueryEscape(query)
+
+	feed := NewFeed(
+		fmt.Sprintf("%s/search?q=%s", libBase, encodedQuery),
+		"Search: "+query+" - "+lib.Name,
+	)
+	feed.Author = &Author{Name: "Shisho"}
+
+	// Links
+	feed.AddLink(RelSelf, fmt.Sprintf("%s/search?q=%s&limit=%d&offset=%d", libBase, encodedQuery, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, baseURL+"/"+fileTypes+"/catalog", MimeTypeNavigation)
+	feed.AddLink(RelUp, libBase, MimeTypeNavigation)
+	feed.AddLink(RelSearch, libBase+"/opensearch.xml", MimeTypeOpenSearch)
+
+	// Pagination links
+	addPaginationLinksWithQuery(feed, libBase+"/search", "q="+encodedQuery, limit, offset, total)
+
+	// Add book entries with KePub links
+	for _, book := range booksResult {
+		entry := svc.bookToEntryWithKepub(baseURL, book, lib.CoverAspectRatio, types, true)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
 // BuildLibraryOpenSearchDescription builds an OpenSearch description for a library.
 func (svc *Service) BuildLibraryOpenSearchDescription(baseURL, fileTypes string, libraryID int) *OpenSearchDescription {
 	libBase := fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, libraryID)
@@ -513,6 +698,11 @@ func (svc *Service) BuildLibraryOpenSearchDescription(baseURL, fileTypes string,
 
 // bookToEntry converts a Book model to an OPDS entry.
 func (svc *Service) bookToEntry(baseURL string, book *models.Book, coverAspectRatio string, types []string) Entry {
+	return svc.bookToEntryWithKepub(baseURL, book, coverAspectRatio, types, false)
+}
+
+// bookToEntryWithKepub converts a Book model to an OPDS entry, optionally using KePub download links.
+func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, coverAspectRatio string, types []string, kepubMode bool) Entry {
 	entry := NewEntry(
 		fmt.Sprintf("urn:shisho:book:%d", book.ID),
 		book.Title,
@@ -549,8 +739,10 @@ func (svc *Service) bookToEntry(baseURL string, book *models.Book, coverAspectRa
 		}
 	}
 
-	// Extract API base from baseURL (baseURL is like "http://host/api/opds/v1", we need "http://host/api")
-	apiBase := strings.TrimSuffix(baseURL, "/opds/v1")
+	// Extract API base from the URL.
+	// URL format is "http://host/opds/v1" or "http://host/opds/v1/kepub"
+	apiBase := strings.TrimSuffix(baseURL, "/opds/v1/kepub")
+	apiBase = strings.TrimSuffix(apiBase, "/opds/v1")
 
 	// Cover image link - select appropriate file based on cover aspect ratio
 	coverFile := selectCoverFile(book.Files, coverAspectRatio)
@@ -570,11 +762,24 @@ func (svc *Service) bookToEntry(baseURL string, book *models.Book, coverAspectRa
 		}
 
 		mimeType := FileTypeMimeType(file.FileType)
-		downloadURL := fmt.Sprintf("%s/opds/download/%d", apiBase, file.ID)
+		var downloadURL string
+		// Use KePub download URL for supported file types in KePub mode
+		if kepubMode && supportsKepub(file.FileType) {
+			downloadURL = fmt.Sprintf("%s/opds/download/%d/kepub", apiBase, file.ID)
+			// KePub files use application/kepub+zip mime type
+			mimeType = MimeTypeKepub
+		} else {
+			downloadURL = fmt.Sprintf("%s/opds/download/%d", apiBase, file.ID)
+		}
 		entry.AddAcquisitionLink(downloadURL, mimeType)
 	}
 
 	return entry
+}
+
+// supportsKepub returns true if the file type can be converted to KePub.
+func supportsKepub(fileType string) bool {
+	return fileType == models.FileTypeEPUB || fileType == models.FileTypeCBZ
 }
 
 // selectCoverFile selects the appropriate file for cover display based on the library's
