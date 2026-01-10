@@ -1,0 +1,60 @@
+#!/bin/bash
+set -e
+
+# Get repo name from git remote
+get_repo_name() {
+    git remote get-url origin 2>/dev/null | sed 's/.*[/:]\([^/]*\)\.git$/\1/' | sed 's/.*[/:]\([^/]*\)$/\1/'
+}
+
+# Check if we're in a tmux session
+if [ -z "$TMUX" ]; then
+    echo "Error: Must be run inside a tmux session"
+    exit 1
+fi
+
+# Get repo root and name
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$REPO_ROOT" ]; then
+    echo "Error: Not in a git repository"
+    exit 1
+fi
+
+REPO_NAME=$(get_repo_name)
+if [ -z "$REPO_NAME" ]; then
+    echo "Error: Could not determine repository name from git remote"
+    exit 1
+fi
+
+# Generate or use provided task name
+if [ -n "$1" ]; then
+    TASK_NAME="$1"
+else
+    RANDOM_CHARS=$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c 3)
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    TASK_NAME="${RANDOM_CHARS}-${TIMESTAMP}"
+fi
+
+BRANCH_NAME="task/$TASK_NAME"
+WORKTREE_BASE="$HOME/.worktrees/$REPO_NAME"
+WORKTREE_DIR="$WORKTREE_BASE/$TASK_NAME"
+
+# Create worktree base directory if it doesn't exist
+mkdir -p "$WORKTREE_BASE"
+
+# Create the worktree
+echo "Creating worktree at $WORKTREE_DIR..."
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME"
+
+# Create tmux window with split panes
+echo "Opening tmux window..."
+tmux new-window -d -n "$TASK_NAME" -c "$WORKTREE_DIR"
+# Calculate 30% of window height for bottom pane
+WINDOW_HEIGHT=$(tmux display-message -t "$TASK_NAME" -p "#{window_height}")
+BOTTOM_PANE_SIZE=$((WINDOW_HEIGHT * 30 / 100))
+tmux split-window -d -v -l "$BOTTOM_PANE_SIZE" -t "$TASK_NAME" -c "$WORKTREE_DIR"
+tmux send-keys -t "${TASK_NAME}.1" "make setup" Enter
+tmux send-keys -t "${TASK_NAME}.0" "claude --dangerously-skip-permissions --permission-mode plan" Enter
+tmux select-window -t "$TASK_NAME"
+tmux select-pane -t "${TASK_NAME}.0"
+
+echo "Task '$TASK_NAME' started in new tmux window"

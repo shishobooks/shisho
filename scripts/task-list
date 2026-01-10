@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Get repo name from git remote
+get_repo_name() {
+    git remote get-url origin 2>/dev/null | sed 's/.*[/:]\([^/]*\)\.git$/\1/' | sed 's/.*[/:]\([^/]*\)$/\1/'
+}
+
+# Get repo name
+REPO_NAME=$(get_repo_name)
+if [ -z "$REPO_NAME" ]; then
+    echo "Error: Could not determine repository name from git remote"
+    exit 1
+fi
+
+WORKTREE_BASE="$HOME/.worktrees/$REPO_NAME"
+
+# Check if worktree directory exists
+if [ ! -d "$WORKTREE_BASE" ]; then
+    echo "No active tasks"
+    exit 0
+fi
+
+# List all task directories
+TASKS=$(ls -1 "$WORKTREE_BASE" 2>/dev/null)
+if [ -z "$TASKS" ]; then
+    echo "No active tasks"
+    exit 0
+fi
+
+echo "Active tasks for $REPO_NAME:"
+echo ""
+
+for task in $TASKS; do
+    WORKTREE_DIR="$WORKTREE_BASE/$task"
+    BRANCH_NAME="task/$task"
+
+    if [ -d "$WORKTREE_DIR" ]; then
+        # Get last commit info from the worktree
+        LAST_COMMIT=$(cd "$WORKTREE_DIR" && git log -1 --format="%h %s" 2>/dev/null || echo "no commits")
+
+        echo "  $task"
+        echo "    Branch: $BRANCH_NAME"
+        echo "    Last commit: $LAST_COMMIT"
+        echo ""
+    fi
+done

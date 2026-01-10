@@ -1,0 +1,87 @@
+#!/bin/bash
+set -e
+
+# Get repo name from git remote
+get_repo_name() {
+    git remote get-url origin 2>/dev/null | sed 's/.*[/:]\([^/]*\)\.git$/\1/' | sed 's/.*[/:]\([^/]*\)$/\1/'
+}
+
+# Get current task from directory path
+get_current_task() {
+    local repo_name=$(get_repo_name)
+    local worktree_base="$HOME/.worktrees/$repo_name"
+    local cwd=$(pwd)
+
+    if [[ "$cwd" == "$worktree_base/"* ]]; then
+        echo "${cwd#$worktree_base/}" | cut -d'/' -f1
+    fi
+}
+
+# Parse arguments
+FORCE=false
+TASK_NAME=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        *)
+            TASK_NAME="$1"
+            shift
+            ;;
+    esac
+done
+
+# Get repo name
+REPO_NAME=$(get_repo_name)
+if [ -z "$REPO_NAME" ]; then
+    echo "Error: Could not determine repository name from git remote"
+    exit 1
+fi
+
+# Get task name from argument or current directory
+if [ -z "$TASK_NAME" ]; then
+    TASK_NAME=$(get_current_task)
+    if [ -z "$TASK_NAME" ]; then
+        echo "Error: No task name provided and not in a worktree directory"
+        echo "Usage: task-cancel [-f] [task-name]"
+        exit 1
+    fi
+fi
+
+BRANCH_NAME="task/$TASK_NAME"
+WORKTREE_BASE="$HOME/.worktrees/$REPO_NAME"
+WORKTREE_DIR="$WORKTREE_BASE/$TASK_NAME"
+
+# Verify the worktree exists
+if [ ! -d "$WORKTREE_DIR" ]; then
+    echo "Error: Worktree directory not found: $WORKTREE_DIR"
+    exit 1
+fi
+
+# Confirm unless force flag is set
+if [ "$FORCE" = false ]; then
+    echo "This will delete the worktree and branch for task '$TASK_NAME'."
+    echo "Any uncommitted changes will be lost."
+    read -p "Are you sure? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled"
+        exit 0
+    fi
+fi
+
+# Get the main repo worktree
+MAIN_WORKTREE=$(git worktree list | grep -v "$WORKTREE_BASE" | head -1 | awk '{print $1}')
+if [ -z "$MAIN_WORKTREE" ]; then
+    echo "Error: Could not find main repository worktree"
+    exit 1
+fi
+
+echo "Cancelling task '$TASK_NAME'..."
+
+# Use exec so bash doesn't need to read from the script file after deletion
+cd "$MAIN_WORKTREE"
+exec bash -c "git worktree remove --force '$WORKTREE_DIR' && git branch -D '$BRANCH_NAME' && echo \"Task '$TASK_NAME' cancelled\""
