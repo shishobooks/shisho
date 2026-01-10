@@ -147,6 +147,7 @@ func init() {
 				cover_mime_type TEXT,
 				cover_source TEXT,
 				cover_page INTEGER,
+				page_count INTEGER,
 				audiobook_duration_seconds DOUBLE,
 				audiobook_bitrate_bps INTEGER,
 				narrator_source TEXT

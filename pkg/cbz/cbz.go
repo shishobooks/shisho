@@ -98,8 +98,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// Extract cover image and page index
-	coverData, coverMimeType, coverPage, err := extractCoverImage(zipReader, comicInfo)
+	// Extract cover image, page index, and page count
+	coverData, coverMimeType, coverPage, pageCount, err := extractCoverImage(zipReader, comicInfo)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -166,6 +166,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
 		CoverPage:     coverPage,
+		PageCount:     pageCount,
 		DataSource:    models.DataSourceCBZMetadata,
 	}, nil
 }
@@ -187,9 +188,9 @@ func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {
 	return comicInfo, nil
 }
 
-// extractCoverImage extracts the cover image data and returns the page index.
-// Returns coverData, mimeType, pageIndex, error.
-func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, *int, error) {
+// extractCoverImage extracts the cover image data and returns the page index and total page count.
+// Returns coverData, mimeType, pageIndex, pageCount, error.
+func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, *int, *int, error) {
 	// Create a sorted list of all image files
 	var imageFiles []*zip.File
 	for _, file := range zipReader.File {
@@ -204,8 +205,11 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 		return imageFiles[i].Name < imageFiles[j].Name
 	})
 
+	// Calculate page count from actual image files
+	pageCount := len(imageFiles)
+
 	if len(imageFiles) == 0 {
-		return nil, "", nil, nil
+		return nil, "", nil, nil, nil
 	}
 
 	var targetFile *zip.File
@@ -250,13 +254,13 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 	// Extract the cover image data
 	r, err := targetFile.Open()
 	if err != nil {
-		return nil, "", nil, errors.WithStack(err)
+		return nil, "", nil, nil, errors.WithStack(err)
 	}
 	defer r.Close()
 
 	coverData, err := io.ReadAll(r)
 	if err != nil {
-		return nil, "", nil, errors.WithStack(err)
+		return nil, "", nil, nil, errors.WithStack(err)
 	}
 
 	// Determine MIME type from extension
@@ -273,7 +277,7 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 		mimeType = "image/webp"
 	}
 
-	return coverData, mimeType, coverPageIndex, nil
+	return coverData, mimeType, coverPageIndex, &pageCount, nil
 }
 
 func splitCreators(creators string) []string {

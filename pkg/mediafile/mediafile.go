@@ -30,6 +30,8 @@ type ParsedMetadata struct {
 	Duration time.Duration
 	// BitrateBps is the audio bitrate in bits per second (M4B files only)
 	BitrateBps int
+	// PageCount is the number of pages (CBZ files only)
+	PageCount *int
 }
 
 func (m *ParsedMetadata) String() string {

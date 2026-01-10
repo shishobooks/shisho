@@ -731,6 +731,13 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Set page count for CBZ files
+	if metadata != nil && fileType == models.FileTypeCBZ {
+		if metadata.PageCount != nil {
+			file.PageCount = metadata.PageCount
+		}
+	}
+
 	// Apply file sidecar data for narrators (higher priority than file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
 		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[narratorSource] {

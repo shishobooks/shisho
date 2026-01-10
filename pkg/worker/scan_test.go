@@ -2296,6 +2296,63 @@ func TestProcessScanJob_CBZNoComicInfoNoRoles(t *testing.T) {
 	assert.Nil(t, book.Authors[0].Role, "filepath authors should have no role")
 }
 
+// TestProcessScanJob_CBZPageCount tests that page count is correctly extracted from CBZ files.
+func TestProcessScanJob_CBZPageCount(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic With Pages")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		Title:        "Test Comic",
+		Writer:       "Test Writer",
+		HasComicInfo: true,
+		PageCount:    7, // Create CBZ with 7 pages
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	assert.Equal(t, models.FileTypeCBZ, file.FileType)
+
+	// Verify page count was extracted
+	require.NotNil(t, file.PageCount, "file should have page count")
+	assert.Equal(t, 7, *file.PageCount)
+}
+
+// TestProcessScanJob_CBZPageCountNoComicInfo tests that page count is correctly extracted
+// from CBZ files even without ComicInfo.xml (counts actual images in archive).
+func TestProcessScanJob_CBZPageCountNoComicInfo(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Writer] Comic Without Metadata")
+	testgen.GenerateCBZ(t, bookDir, "comic.cbz", testgen.CBZOptions{
+		HasComicInfo: false, // No ComicInfo.xml
+		PageCount:    12,    // Create CBZ with 12 pages
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	file := files[0]
+	assert.Equal(t, models.FileTypeCBZ, file.FileType)
+
+	// Verify page count was extracted from actual image count
+	require.NotNil(t, file.PageCount, "file should have page count even without ComicInfo")
+	assert.Equal(t, 12, *file.PageCount)
+}
+
 // TestProcessScanJob_EPUBAuthorsNoRoles tests that EPUB authors don't have roles
 // since EPUBs don't have the role concept like CBZ ComicInfo.xml.
 func TestProcessScanJob_EPUBAuthorsNoRoles(t *testing.T) {
