@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"strings"
 
 	gomp4 "github.com/abema/go-mp4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 )
 
 // rawMetadata holds the raw extracted metadata from the MP4 file
@@ -403,19 +403,9 @@ func processMetadataAtom(child ilstChild, meta *rawMetadata) {
 	}
 }
 
-// splitMultiValue splits a comma-separated string into individual values.
+// splitMultiValue splits a string of values by common delimiters (comma and semicolon).
 func splitMultiValue(s string) []string {
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if trimmed := strings.TrimSpace(p); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
+	return fileutils.SplitNames(s)
 }
 
 // genreIDToString converts an ID3v1 genre ID to its string representation.

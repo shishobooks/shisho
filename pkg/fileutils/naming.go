@@ -189,6 +189,26 @@ func extractVolumeFromTitle(title string) *float64 {
 	return nil
 }
 
+// SplitNames splits a string of names by common delimiters (comma and semicolon),
+// trims whitespace from each name, and returns non-empty names.
+// This is used for parsing author and narrator lists from metadata.
+func SplitNames(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	// Split by both comma and semicolon
+	var parts []string
+	for _, segment := range strings.Split(s, ";") {
+		for _, part := range strings.Split(segment, ",") {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				parts = append(parts, trimmed)
+			}
+		}
+	}
+	return parts
+}
+
 // ExtractSeriesFromTitle extracts series name and volume number from a normalized title.
 // Only applies to CBZ files with volume indicators in the "v{number}" format.
 // Returns the base title (series name), volume number, and whether extraction succeeded.

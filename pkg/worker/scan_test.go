@@ -52,6 +52,50 @@ func TestProcessScanJob_EPUBBasic(t *testing.T) {
 	assert.NotNil(t, files[0].CoverMimeType)
 }
 
+func TestProcessScanJob_SemicolonSeparatedAuthorsAndNarrators(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Test semicolon-separated authors in directory name and narrators in filename
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author One; Author Two] My Book")
+	testgen.GenerateM4B(t, bookDir, "[Author One; Author Two] My Book {Narrator One; Narrator Two}.m4b", testgen.M4BOptions{
+		// No metadata - should fall back to filename parsing
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "My Book", book.Title)
+
+	// Authors should be split by semicolon
+	require.Len(t, book.Authors, 2, "should have two authors from semicolon-separated list")
+	authorNames := make([]string, len(book.Authors))
+	for i, author := range book.Authors {
+		require.NotNil(t, author.Person)
+		authorNames[i] = author.Person.Name
+	}
+	assert.Contains(t, authorNames, "Author One")
+	assert.Contains(t, authorNames, "Author Two")
+
+	// Narrators should be split by semicolon (narrators are on File, not Book)
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.Len(t, files[0].Narrators, 2, "should have two narrators from semicolon-separated list")
+	narratorNames := make([]string, len(files[0].Narrators))
+	for i, narrator := range files[0].Narrators {
+		require.NotNil(t, narrator.Person)
+		narratorNames[i] = narrator.Person.Name
+	}
+	assert.Contains(t, narratorNames, "Narrator One")
+	assert.Contains(t, narratorNames, "Narrator Two")
+}
+
 func TestProcessScanJob_EPUBWithSeries(t *testing.T) {
 	tc := newTestContext(t)
 

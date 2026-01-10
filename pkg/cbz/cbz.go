@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -276,19 +277,7 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 }
 
 func splitCreators(creators string) []string {
-	if creators == "" {
-		return nil
-	}
-
-	// Split by comma and clean up whitespace
-	parts := strings.Split(creators, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
+	return fileutils.SplitNames(creators)
 }
 
 func extractSeriesNumberFromFilename(filename string) *float64 {

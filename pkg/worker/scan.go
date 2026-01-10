@@ -321,10 +321,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		matches := filepathAuthorRE.FindAllStringSubmatch(filename, -1)
 		if len(matches) > 0 && len(matches[0]) > 1 {
 			// matches[0][1] is the first capture group (author name without brackets)
-			names := strings.Split(matches[0][1], ",")
+			names := fileutils.SplitNames(matches[0][1])
 			for _, author := range names {
 				// Filepath-based authors have no specific role (generic author)
-				authors = append(authors, mediafile.ParsedAuthor{Name: strings.TrimSpace(author), Role: ""})
+				authors = append(authors, mediafile.ParsedAuthor{Name: author, Role: ""})
 			}
 		}
 	}
@@ -344,9 +344,9 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			matches := filepathNarratorRE.FindAllStringSubmatch(nameToCheck, -1)
 			if len(matches) > 0 && len(matches[0]) > 1 {
 				// matches[0][1] is the first capture group (narrator name without braces)
-				names := strings.Split(matches[0][1], ",")
+				names := fileutils.SplitNames(matches[0][1])
 				for _, narrator := range names {
-					narratorNames = append(narratorNames, strings.TrimSpace(narrator))
+					narratorNames = append(narratorNames, narrator)
 				}
 			}
 		}
