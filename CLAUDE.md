@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Backend (Go)
+- `make setup` - Install dependencies and build tools (run this when setting up a new worktree)
 - `make build` - Build production API binary
 - `make start` - Start development environment with Hivemind (both API and web)
 - `make start:air` - Start API with hot reload via Air
@@ -166,3 +167,9 @@ When adding or modifying book/file metadata fields, ensure these files are updat
 - Each commit should be in the format of `[{Category}] {Change description}`
 - Always develop in a git worktree and the squash the changes back into master
 - This repo currently doesn't utilize pull requests, so instead of creating a PR, it should create a squash commit back into master
+
+### Worktree Setup
+
+- Worktrees should be created in `~/.worktrees/shisho/`
+- After creating a new worktree, run `make setup` to install dependencies and build tools
+- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && make setup`
