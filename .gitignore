@@ -330,8 +330,8 @@ Sessionx.vim
 # Temporary
 .netrwhist
 *~
-# Auto-generated tag files
-tags
+# Auto-generated tag files (ctags)
+/tags
 # Persistent undo
 [._]*.un~
 
