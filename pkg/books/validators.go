@@ -7,6 +7,8 @@ type ListBooksQuery struct {
 	SeriesID  *int     `query:"series_id" json:"series_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string  `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
 	FileTypes []string `query:"file_types" json:"file_types,omitempty"` // Filter by file types (e.g., ["epub", "m4b"])
+	GenreIDs  []int    `query:"genre_ids" json:"genre_ids,omitempty"`   // Filter by genre IDs
+	TagIDs    []int    `query:"tag_ids" json:"tag_ids,omitempty"`       // Filter by tag IDs
 }
 
 type UpdateBookPayload struct {
@@ -15,6 +17,8 @@ type UpdateBookPayload struct {
 	Subtitle  *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
 	Authors   []AuthorInput `json:"authors,omitempty"`
 	Series    []SeriesInput `json:"series,omitempty"`
+	Genres    []string      `json:"genres,omitempty" validate:"omitempty,dive,max=100"` // Genre names
+	Tags      []string      `json:"tags,omitempty" validate:"omitempty,dive,max=100"`   // Tag names
 }
 
 // AuthorInput represents an author with an optional role (for CBZ files).

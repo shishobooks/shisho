@@ -2,12 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Read This First
+
+**When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
+
+**ALWAYS** use the `AskUserQuestion` tool when asking the user questions, in any context. If you have too many questions for the tool, split them up into multiple calls.
+
 ## Development Commands
 
 ### Backend (Go)
 - `make build` - Build production API binary
 - `make start` - Start development environment with Hivemind (both API and web)
 - `make start:air` - Start API with hot reload via Air
+- `make check` - Run all validation checks in parallel (tests, Go lint, JS lint)
 - `make lint` - Run Go linting with golangci-lint
 - `make test` - Run all Go tests with race detection and coverage
 
@@ -25,9 +32,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make db:migrate:create name=migration_name` - Create new migration
 
 ### Type Generation
-- `make tygo` - Generate TypeScript types from Go structs
+- `make tygo` - Generate TypeScript types from Go structs (see note at top about "Nothing to be done" message)
 - Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
-- If `make tygo` returns the message "make: Nothing to be done for \`tygo'.", then that means tygo was already run and the generated types are up-to-date. There's no reason to try to run `tygo` manually outside of `make`.
 
 ## Architecture Overview
 
@@ -88,6 +94,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - We don't want to keep non-modifiable intrinsic properies of the file in the sidecar (e.g. bitrate, duration, etc.)
 - Source fields (e.g. title\_source, name\_source, etc.) shouldn't be saved into the sidecar
 
+**Metadata Sync Checklist**:
+When adding or modifying book/file metadata fields, ensure these files are updated:
+1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` struct for persistence
+2. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
+3. **File parsers** - Update to extract the new field:
+   - EPUB: `pkg/epub/opf.go`
+   - CBZ: `pkg/cbz/cbz.go`
+   - M4B: `pkg/mp4/metadata.go`
+4. **File generators** - Update to write the field back:
+   - EPUB: `pkg/filegen/epub.go`
+   - CBZ: `pkg/filegen/cbz.go`
+   - M4B: `pkg/filegen/m4b.go`
+   - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
+5. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
+6. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
+
 ### Frontend Architecture
 
 **React Router** (`app/router.tsx`):
@@ -103,6 +125,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `app/libraries/api.ts` contains HTTP client functions
 - Query hooks in `app/hooks/queries/` wrap API calls with Tanstack Query
 - TypeScript types auto-imported from `app/types/generated/`
+- **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
+- **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
 
 **UI Components**:
 - Custom components in `app/components/` using Radix UI primitives
@@ -120,12 +144,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Development Workflow
 
-- Use `make start` to run both API and frontend in development
+- Use `make start` to run both API and frontend in development (this also runs `make tygo` automatically)
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
-- Run `make tygo` after changing Go structs to update TypeScript types
 - All Go files are formatted with `goimports` so all changes should continue that formatting
-- Always run `make lint`, `make test`, and `yarn lint` before committing
+- Always run `make check` before committing
 - If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
 
 ### Testing Strategy
@@ -134,8 +157,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tests should use `TZ=America/Chicago CI=true` environment
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
-- To generate types, run `make tygo`. If it says that ``make: Nothing to be done for `tygo'.``, that means the types are already up-to-date.
 - Add shadcn components using `npx shadcn@latest add`.
-- You never have to run tygo manually. It is run as part of `make start`, so if that's running in the background, then it should already have run `make tygo`. If you see that new types haven't been generated, check the logs of `make start` to see if `make tygo` failed.
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
 - Whenever fixing a bug, test-driven development should be employed: write a test for the bug, confirm that it fails, fix the bug, and confirm that it passes.
+
+### Git Conventions
+
+- Each commit should be in the format of `[{Category}] {Change description}`
+- Always develop in a git worktree and the squash the changes back into master
+- This repo currently doesn't utilize pull requests, so instead of creating a PR, it should create a squash commit back into master

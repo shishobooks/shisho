@@ -353,6 +353,50 @@ const BookDetail = () => {
                 </div>
               )}
 
+              {/* Genres */}
+              {book.book_genres && book.book_genres.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2">Genres</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {book.book_genres.map((bg) => (
+                      <Link
+                        key={bg.id}
+                        to={`/libraries/${libraryId}?genre_ids=${bg.genre_id}`}
+                      >
+                        <Badge
+                          className="cursor-pointer hover:bg-secondary/80"
+                          variant="secondary"
+                        >
+                          {bg.genre?.name ?? "Unknown"}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tags */}
+              {book.book_tags && book.book_tags.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2">Tags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {book.book_tags.map((bt) => (
+                      <Link
+                        key={bt.id}
+                        to={`/libraries/${libraryId}?tag_ids=${bt.tag_id}`}
+                      >
+                        <Badge
+                          className="cursor-pointer hover:bg-secondary/80"
+                          variant="secondary"
+                        >
+                          {bt.tag?.name ?? "Unknown"}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Separator />
 
               {/* Metadata */}

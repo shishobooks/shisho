@@ -14,12 +14,14 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/shishobooks/shisho/pkg/tags"
 )
 
 type handler struct {
@@ -27,6 +29,8 @@ type handler struct {
 	libraryService *libraries.Service
 	personService  *people.Service
 	searchService  *search.Service
+	genreService   *genres.Service
+	tagService     *tags.Service
 	downloadCache  *downloadcache.Cache
 }
 
@@ -70,6 +74,8 @@ func (h *handler) list(c echo.Context) error {
 		SeriesID:  params.SeriesID,
 		Search:    params.Search,
 		FileTypes: params.FileTypes,
+		GenreIDs:  params.GenreIDs,
+		TagIDs:    params.TagIDs,
 	}
 
 	// Filter by user's library access if user is in context
@@ -274,13 +280,129 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Update genres
+	genresChanged := false
+	if params.Genres != nil {
+		genresChanged = true
+
+		// Track old genre IDs for FTS re-indexing
+		oldGenreIDs := make([]int, 0)
+		for _, bg := range book.BookGenres {
+			oldGenreIDs = append(oldGenreIDs, bg.GenreID)
+		}
+
+		// Delete existing genre associations
+		if err := h.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Create new genre associations
+		for _, genreName := range params.Genres {
+			if genreName == "" {
+				continue
+			}
+			genreRecord, err := h.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+			if err != nil {
+				log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
+				continue
+			}
+			bookGenre := &models.BookGenre{
+				BookID:  book.ID,
+				GenreID: genreRecord.ID,
+			}
+			if err := h.bookService.CreateBookGenre(ctx, bookGenre); err != nil {
+				log.Error("failed to create book genre", logger.Data{"book_id": book.ID, "genre_id": genreRecord.ID, "error": err.Error()})
+			}
+		}
+
+		// Update genre source to manual
+		genreSource := models.DataSourceManual
+		book.GenreSource = &genreSource
+		opts.Columns = append(opts.Columns, "genre_source")
+
+		// Cleanup orphaned genres after deletion
+		if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
+		}
+
+		// Re-index old genres
+		for _, genreID := range oldGenreIDs {
+			genre, err := h.genreService.RetrieveGenre(ctx, genres.RetrieveGenreOptions{ID: &genreID})
+			if err == nil {
+				if err := h.searchService.IndexGenre(ctx, genre); err != nil {
+					log.Warn("failed to update search index for old genre", logger.Data{"genre_id": genreID, "error": err.Error()})
+				}
+			}
+		}
+	}
+
+	// Update tags
+	tagsChanged := false
+	if params.Tags != nil {
+		tagsChanged = true
+
+		// Track old tag IDs for FTS re-indexing
+		oldTagIDs := make([]int, 0)
+		for _, bt := range book.BookTags {
+			oldTagIDs = append(oldTagIDs, bt.TagID)
+		}
+
+		// Delete existing tag associations
+		if err := h.bookService.DeleteBookTags(ctx, book.ID); err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Create new tag associations
+		for _, tagName := range params.Tags {
+			if tagName == "" {
+				continue
+			}
+			tagRecord, err := h.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
+			if err != nil {
+				log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
+				continue
+			}
+			bookTag := &models.BookTag{
+				BookID: book.ID,
+				TagID:  tagRecord.ID,
+			}
+			if err := h.bookService.CreateBookTag(ctx, bookTag); err != nil {
+				log.Error("failed to create book tag", logger.Data{"book_id": book.ID, "tag_id": tagRecord.ID, "error": err.Error()})
+			}
+		}
+
+		// Update tag source to manual
+		tagSource := models.DataSourceManual
+		book.TagSource = &tagSource
+		opts.Columns = append(opts.Columns, "tag_source")
+
+		// Cleanup orphaned tags after deletion
+		if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+		}
+
+		// Re-index old tags
+		for _, tagID := range oldTagIDs {
+			tag, err := h.tagService.RetrieveTag(ctx, tags.RetrieveTagOptions{ID: &tagID})
+			if err == nil {
+				if err := h.searchService.IndexTag(ctx, tag); err != nil {
+					log.Warn("failed to update search index for old tag", logger.Data{"tag_id": tagID, "error": err.Error()})
+				}
+			}
+		}
+	}
+
+	// Silence unused variable warnings
+	_ = genresChanged
+	_ = tagsChanged
+
 	// Update the model first (without file organization).
 	err = h.bookService.UpdateBook(ctx, book, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Reload the model with all relations (including newly created authors/series)
+	// Reload the model with all relations (including newly created authors/series/genres/tags)
 	// This is needed BEFORE organizing files so that organizeBookFiles has fresh data
 	book, err = h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
 		ID: &id,

@@ -75,5 +75,19 @@ func buildCBZMetadata(book *models.Book) *kepub.CBZMetadata {
 		}
 	}
 
+	// Add genres
+	for _, bg := range book.BookGenres {
+		if bg.Genre != nil {
+			metadata.Genres = append(metadata.Genres, bg.Genre.Name)
+		}
+	}
+
+	// Add tags
+	for _, bt := range book.BookTags {
+		if bt.Tag != nil {
+			metadata.Tags = append(metadata.Tags, bt.Tag.Name)
+		}
+	}
+
 	return metadata
 }

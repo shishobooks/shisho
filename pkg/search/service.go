@@ -377,6 +377,56 @@ func (svc *Service) DeleteFromPersonIndex(ctx context.Context, personID int) err
 	return errors.WithStack(err)
 }
 
+// IndexGenre adds or updates a genre in the FTS index.
+func (svc *Service) IndexGenre(ctx context.Context, genre *models.Genre) error {
+	// First, delete any existing entry
+	err := svc.DeleteFromGenreIndex(ctx, genre.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = svc.db.ExecContext(ctx,
+		`INSERT INTO genres_fts (genre_id, library_id, name)
+		 VALUES (?, ?, ?)`,
+		genre.ID, genre.LibraryID, genre.Name,
+	)
+	return errors.WithStack(err)
+}
+
+// DeleteFromGenreIndex removes a genre from the FTS index.
+func (svc *Service) DeleteFromGenreIndex(ctx context.Context, genreID int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr("genres_fts").
+		Where("genre_id = ?", genreID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// IndexTag adds or updates a tag in the FTS index.
+func (svc *Service) IndexTag(ctx context.Context, tag *models.Tag) error {
+	// First, delete any existing entry
+	err := svc.DeleteFromTagIndex(ctx, tag.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = svc.db.ExecContext(ctx,
+		`INSERT INTO tags_fts (tag_id, library_id, name)
+		 VALUES (?, ?, ?)`,
+		tag.ID, tag.LibraryID, tag.Name,
+	)
+	return errors.WithStack(err)
+}
+
+// DeleteFromTagIndex removes a tag from the FTS index.
+func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr("tags_fts").
+		Where("tag_id = ?", tagID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // RebuildAllIndexes rebuilds all FTS indexes from scratch.
 // This should be called after a scan job completes.
 func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
@@ -390,6 +440,14 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 	_, err = svc.db.ExecContext(ctx, "DELETE FROM persons_fts")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = svc.db.ExecContext(ctx, "DELETE FROM genres_fts")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = svc.db.ExecContext(ctx, "DELETE FROM tags_fts")
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -435,6 +493,26 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 		INSERT INTO persons_fts (person_id, library_id, name, sort_name)
 		SELECT id, library_id, name, sort_name
 		FROM persons
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Rebuild genres index
+	_, err = svc.db.ExecContext(ctx, `
+		INSERT INTO genres_fts (genre_id, library_id, name)
+		SELECT id, library_id, name
+		FROM genres
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Rebuild tags index
+	_, err = svc.db.ExecContext(ctx, `
+		INSERT INTO tags_fts (tag_id, library_id, name)
+		SELECT id, library_id, name
+		FROM tags
 	`)
 	if err != nil {
 		return errors.WithStack(err)

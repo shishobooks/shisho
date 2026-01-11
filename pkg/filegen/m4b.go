@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -61,7 +62,6 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		Subtitle: "",
 
 		// Preserve from source
-		Genre:       src.Genre,
 		Description: src.Description,
 		Comment:     src.Comment,
 		Year:        src.Year,
@@ -79,6 +79,33 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 
 		// Preserve unknown atoms for complete tag preservation
 		UnknownAtoms: src.UnknownAtoms,
+	}
+
+	// Build genres from book model, or preserve source genres if none in book
+	if len(book.BookGenres) > 0 {
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				meta.Genres = append(meta.Genres, bg.Genre.Name)
+			}
+		}
+		// Set Genre field as comma-separated for compatibility
+		meta.Genre = strings.Join(meta.Genres, ", ")
+	} else {
+		// Preserve source genres
+		meta.Genre = src.Genre
+		meta.Genres = src.Genres
+	}
+
+	// Build tags from book model, or preserve source tags if none in book
+	if len(book.BookTags) > 0 {
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				meta.Tags = append(meta.Tags, bt.Tag.Name)
+			}
+		}
+	} else {
+		// Preserve source tags
+		meta.Tags = src.Tags
 	}
 
 	// Set subtitle from book model

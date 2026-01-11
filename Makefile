@@ -15,6 +15,10 @@ COVERAGE_PROFILE ?= coverage.out
 TYGO_INPUTS = $(shell yq '.packages[] | .path + "/" + (.include_files[] // "*.go")' tygo.yaml | sed 's|github.com/shishobooks/shisho/||' | tr '\n' ' ')
 TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 
+.PHONY: check
+check:
+	$(MAKE) -j3 test lint lint\:js
+
 .PHONY: build
 build:
 	CGO_ENABLED=0 go build -o $(BUILD_DIR)/api -installsuffix cgo -ldflags '-w -s' ./cmd/api
@@ -43,6 +47,10 @@ docker:
 .PHONY: lint
 lint: $(BUILD_DIR)/golangci-lint
 	$(BUILD_DIR)/golangci-lint run
+
+.PHONY: lint\:js
+lint\:js:
+	yarn lint
 
 $(BUILD_DIR)/golangci-lint:
 	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(BUILD_DIR) v2.7.2

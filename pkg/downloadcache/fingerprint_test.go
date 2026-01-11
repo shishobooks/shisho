@@ -175,6 +175,61 @@ func TestComputeFingerprint(t *testing.T) {
 		require.NotNil(t, fp.Cover)
 		assert.True(t, fp.Cover.ModTime.IsZero())
 	})
+
+	t.Run("genres are sorted alphabetically", func(t *testing.T) {
+		book := &models.Book{
+			Title: "Book with Genres",
+			BookGenres: []*models.BookGenre{
+				{Genre: &models.Genre{Name: "Science Fiction"}},
+				{Genre: &models.Genre{Name: "Adventure"}},
+				{Genre: &models.Genre{Name: "Fantasy"}},
+			},
+		}
+		file := &models.File{}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Len(t, fp.Genres, 3)
+		assert.Equal(t, "Adventure", fp.Genres[0])
+		assert.Equal(t, "Fantasy", fp.Genres[1])
+		assert.Equal(t, "Science Fiction", fp.Genres[2])
+	})
+
+	t.Run("tags are sorted alphabetically", func(t *testing.T) {
+		book := &models.Book{
+			Title: "Book with Tags",
+			BookTags: []*models.BookTag{
+				{Tag: &models.Tag{Name: "Must Read"}},
+				{Tag: &models.Tag{Name: "Favorites"}},
+				{Tag: &models.Tag{Name: "To Review"}},
+			},
+		}
+		file := &models.File{}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Len(t, fp.Tags, 3)
+		assert.Equal(t, "Favorites", fp.Tags[0])
+		assert.Equal(t, "Must Read", fp.Tags[1])
+		assert.Equal(t, "To Review", fp.Tags[2])
+	})
+
+	t.Run("book with no genres or tags", func(t *testing.T) {
+		book := &models.Book{
+			Title:      "Simple Book",
+			BookGenres: nil,
+			BookTags:   nil,
+		}
+		file := &models.File{}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Empty(t, fp.Genres)
+		assert.Empty(t, fp.Tags)
+	})
 }
 
 func TestFingerprintHash(t *testing.T) {
@@ -359,6 +414,78 @@ func TestFingerprintHash(t *testing.T) {
 		fp2 := &Fingerprint{
 			Title: "Test",
 			Cover: &FingerprintCover{Path: "/path/cover.jpg", MimeType: "image/jpeg", ModTime: now.Add(time.Hour)},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("different genres produce different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:  "Test",
+			Genres: []string{"Fantasy"},
+		}
+		fp2 := &Fingerprint{
+			Title:  "Test",
+			Genres: []string{"Science Fiction"},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("different tags produce different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title: "Test",
+			Tags:  []string{"Must Read"},
+		}
+		fp2 := &Fingerprint{
+			Title: "Test",
+			Tags:  []string{"Favorites"},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("adding genre produces different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:  "Test",
+			Genres: []string{},
+		}
+		fp2 := &Fingerprint{
+			Title:  "Test",
+			Genres: []string{"Fantasy"},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("adding tag produces different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title: "Test",
+			Tags:  []string{},
+		}
+		fp2 := &Fingerprint{
+			Title: "Test",
+			Tags:  []string{"Must Read"},
 		}
 
 		hash1, err1 := fp1.Hash()

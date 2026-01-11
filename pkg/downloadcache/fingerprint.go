@@ -25,6 +25,8 @@ type Fingerprint struct {
 	Authors   []FingerprintAuthor   `json:"authors"`
 	Narrators []FingerprintNarrator `json:"narrators"`
 	Series    []FingerprintSeries   `json:"series"`
+	Genres    []string              `json:"genres"`
+	Tags      []string              `json:"tags"`
 	Cover     *FingerprintCover     `json:"cover,omitempty"`
 	CoverPage *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
 	Format    string                `json:"format,omitempty"`     // Download format: original or kepub
@@ -65,6 +67,8 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		Authors:   make([]FingerprintAuthor, 0),
 		Narrators: make([]FingerprintNarrator, 0),
 		Series:    make([]FingerprintSeries, 0),
+		Genres:    make([]string, 0),
+		Tags:      make([]string, 0),
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting
@@ -118,6 +122,26 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 				})
 			}
 		}
+	}
+
+	// Add genres (sorted for consistent fingerprinting)
+	if len(book.BookGenres) > 0 {
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				fp.Genres = append(fp.Genres, bg.Genre.Name)
+			}
+		}
+		sort.Strings(fp.Genres)
+	}
+
+	// Add tags (sorted for consistent fingerprinting)
+	if len(book.BookTags) > 0 {
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				fp.Tags = append(fp.Tags, bt.Tag.Name)
+			}
+		}
+		sort.Strings(fp.Tags)
 	}
 
 	// Add cover information if present

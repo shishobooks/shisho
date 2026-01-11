@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -348,7 +349,53 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 			}
 		}
 	}
-	pkg.Metadata.Meta = filteredMetas
+
+	// Update genres - replace all dc:subject elements if book has genres
+	if len(book.BookGenres) > 0 {
+		var newSubjects []string
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				newSubjects = append(newSubjects, bg.Genre.Name)
+			}
+		}
+		pkg.Metadata.Subjects = newSubjects
+	}
+	// If no book genres, preserve existing Subjects (already in pkg.Metadata)
+
+	// Update tags - using Calibre meta tag (comma-separated)
+	// Remove existing calibre:tags meta if we're updating tags
+	var finalMetas []opfMeta
+	var existingCalibreTags string
+	for _, meta := range filteredMetas {
+		if meta.Name == "calibre:tags" {
+			existingCalibreTags = meta.Content
+		} else {
+			finalMetas = append(finalMetas, meta)
+		}
+	}
+
+	// Add new calibre:tags if we have tags, or preserve existing
+	if len(book.BookTags) > 0 {
+		var tagNames []string
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				tagNames = append(tagNames, bt.Tag.Name)
+			}
+		}
+		if len(tagNames) > 0 {
+			finalMetas = append(finalMetas, opfMeta{
+				Name:    "calibre:tags",
+				Content: strings.Join(tagNames, ", "),
+			})
+		}
+	} else if existingCalibreTags != "" {
+		// Preserve existing tags if book has no tags
+		finalMetas = append(finalMetas, opfMeta{
+			Name:    "calibre:tags",
+			Content: existingCalibreTags,
+		})
+	}
+	pkg.Metadata.Meta = finalMetas
 
 	// Update cover mime type in manifest if we're replacing the cover
 	if coverInfo != nil && newCoverMimeType != "" {

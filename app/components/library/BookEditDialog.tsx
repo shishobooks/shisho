@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
 import {
   Popover,
   PopoverContent,
@@ -33,7 +34,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
+import { useGenresList } from "@/hooks/queries/genres";
 import { useSeriesList } from "@/hooks/queries/series";
+import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
 import {
   AuthorRoleColorist,
@@ -101,6 +104,18 @@ export function BookEditDialog({
   const [seriesSearch, setSeriesSearch] = useState("");
   const debouncedSeriesSearch = useDebounce(seriesSearch, 200);
 
+  const [genres, setGenres] = useState<string[]>(
+    book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [],
+  );
+  const [genreSearch, setGenreSearch] = useState("");
+  const debouncedGenreSearch = useDebounce(genreSearch, 200);
+
+  const [tags, setTags] = useState<string[]>(
+    book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
+  );
+  const [tagSearch, setTagSearch] = useState("");
+  const debouncedTagSearch = useDebounce(tagSearch, 200);
+
   const updateBookMutation = useUpdateBook();
 
   // Check if book has CBZ files (determines whether to show role selection)
@@ -112,6 +127,26 @@ export function BookEditDialog({
       library_id: book.library_id,
       limit: 50,
       search: debouncedSeriesSearch || undefined,
+    },
+    { enabled: open && !!book.library_id },
+  );
+
+  // Query for genres in this library with server-side search
+  const { data: genresData, isLoading: isLoadingGenres } = useGenresList(
+    {
+      library_id: book.library_id,
+      limit: 50,
+      search: debouncedGenreSearch || undefined,
+    },
+    { enabled: open && !!book.library_id },
+  );
+
+  // Query for tags in this library with server-side search
+  const { data: tagsData, isLoading: isLoadingTags } = useTagsList(
+    {
+      library_id: book.library_id,
+      limit: 50,
+      search: debouncedTagSearch || undefined,
     },
     { enabled: open && !!book.library_id },
   );
@@ -136,6 +171,15 @@ export function BookEditDialog({
           number: bs.series_number?.toString() || "",
         })) || [],
       );
+      setGenres(
+        book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) ||
+          [],
+      );
+      setGenreSearch("");
+      setTags(
+        book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
+      );
+      setTagSearch("");
     }
   }, [open, book]);
 
@@ -213,6 +257,8 @@ export function BookEditDialog({
       subtitle?: string;
       authors?: AuthorInput[];
       series?: SeriesInput[];
+      genres?: string[];
+      tags?: string[];
     } = {};
 
     // Include any pending author from the input field
@@ -259,6 +305,26 @@ export function BookEditDialog({
           name: s.name,
           number: s.number ? parseFloat(s.number) : undefined,
         }));
+    }
+
+    // Check if genres changed
+    const originalGenres =
+      book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [];
+    if (
+      JSON.stringify([...genres].sort()) !==
+      JSON.stringify([...originalGenres].sort())
+    ) {
+      payload.genres = genres.filter((g) => g.trim());
+    }
+
+    // Check if tags changed
+    const originalTags =
+      book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [];
+    if (
+      JSON.stringify([...tags].sort()) !==
+      JSON.stringify([...originalTags].sort())
+    ) {
+      payload.tags = tags.filter((t) => t.trim());
     }
 
     // Only submit if something changed
@@ -562,6 +628,36 @@ export function BookEditDialog({
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* Genres */}
+          <div className="space-y-2">
+            <Label>Genres</Label>
+            <MultiSelectCombobox
+              isLoading={isLoadingGenres}
+              label="Genres"
+              onChange={setGenres}
+              onSearch={setGenreSearch}
+              options={genresData?.genres.map((g) => g.name) || []}
+              placeholder="Add genres..."
+              searchValue={genreSearch}
+              values={genres}
+            />
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <MultiSelectCombobox
+              isLoading={isLoadingTags}
+              label="Tags"
+              onChange={setTags}
+              onSearch={setTagSearch}
+              options={tagsData?.tags.map((t) => t.name) || []}
+              placeholder="Add tags..."
+              searchValue={tagSearch}
+              values={tags}
+            />
           </div>
         </div>
 

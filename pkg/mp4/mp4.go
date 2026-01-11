@@ -26,6 +26,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Narrators:     meta.Narrators,
 		Series:        meta.Series,
 		SeriesNumber:  meta.SeriesNumber,
+		Genres:        meta.Genres,
+		Tags:          meta.Tags,
 		CoverMimeType: meta.CoverMimeType,
 		CoverData:     meta.CoverData,
 		DataSource:    models.DataSourceM4BMetadata,

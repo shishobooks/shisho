@@ -18,7 +18,9 @@ type Metadata struct {
 	Album         string                   // from ©alb
 	Series        string                   // parsed from album or ©grp
 	SeriesNumber  *float64                 // parsed from album
-	Genre         string                   // from ©gen or gnre
+	Genre         string                   // from ©gen or gnre (original, may be comma-separated)
+	Genres        []string                 // parsed from ©gen (comma-separated)
+	Tags          []string                 // from ----:com.shisho:tags freeform atom
 	Description   string                   // from desc
 	Comment       string                   // from ©cmt
 	Year          string                   // from ©day
@@ -105,7 +107,12 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	// Copy bitrate from esds (already in bps)
 	meta.Bitrate = int(raw.avgBitrate)
 
-	// Copy freeform atoms and extract subtitle
+	// Parse genres from genre field (comma-separated)
+	if raw.genre != "" {
+		meta.Genres = splitMultiValue(raw.genre)
+	}
+
+	// Copy freeform atoms and extract subtitle/tags
 	if len(raw.freeform) > 0 {
 		meta.Freeform = make(map[string]string, len(raw.freeform))
 		for k, v := range raw.freeform {
@@ -114,6 +121,10 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		// Extract subtitle from freeform SUBTITLE atom
 		if subtitle, ok := raw.freeform["com.apple.iTunes:SUBTITLE"]; ok {
 			meta.Subtitle = subtitle
+		}
+		// Extract tags from freeform shisho:tags atom (comma-separated)
+		if tagsStr, ok := raw.freeform["com.shisho:tags"]; ok {
+			meta.Tags = splitMultiValue(tagsStr)
 		}
 	}
 

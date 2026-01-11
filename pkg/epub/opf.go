@@ -19,6 +19,8 @@ type OPF struct {
 	Authors       []mediafile.ParsedAuthor
 	Series        string
 	SeriesNumber  *float64
+	Genres        []string
+	Tags          []string
 	CoverFilepath string
 	CoverMimeType string
 	CoverData     []byte
@@ -51,8 +53,9 @@ type Package struct {
 			Text string `xml:",chardata"`
 			Role string `xml:"role,attr"`
 		} `xml:"contributor"`
-		Description string `xml:"description"`
-		Publisher   string `xml:"publisher"`
+		Description string   `xml:"description"`
+		Subject     []string `xml:"subject"`
+		Publisher   string   `xml:"publisher"`
 		Identifier  []struct {
 			Text   string `xml:",chardata"`
 			ID     string `xml:"id,attr"`
@@ -158,6 +161,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Authors:       opf.Authors,
 		Series:        opf.Series,
 		SeriesNumber:  opf.SeriesNumber,
+		Genres:        opf.Genres,
+		Tags:          opf.Tags,
 		CoverMimeType: opf.CoverMimeType,
 		CoverData:     opf.CoverData,
 		DataSource:    models.DataSourceEPUBMetadata,
@@ -246,11 +251,33 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
+	// Parse genres from dc:subject elements
+	var genres []string
+	for _, subject := range pkg.Metadata.Subject {
+		subject = strings.TrimSpace(subject)
+		if subject != "" {
+			genres = append(genres, subject)
+		}
+	}
+
+	// Parse tags from calibre:tags meta (comma-separated)
+	var tags []string
+	if calibreTags := metaContent["calibre:tags"]; calibreTags != "" {
+		for _, tag := range strings.Split(calibreTags, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+	}
+
 	return &OPF{
 		Title:         title,
 		Authors:       authors,
 		Series:        series,
 		SeriesNumber:  seriesNumber,
+		Genres:        genres,
+		Tags:          tags,
 		CoverFilepath: coverFilepath,
 		CoverMimeType: coverMimeType,
 	}, nil

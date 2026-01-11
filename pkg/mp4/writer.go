@@ -310,6 +310,11 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildFreeformAtom("com.apple.iTunes", "SUBTITLE", metadata.Subtitle))
 	}
 
+	// Tags as freeform atom (comma-separated)
+	if len(metadata.Tags) > 0 {
+		content.Write(buildFreeformAtom("com.shisho", "tags", joinStrings(metadata.Tags)))
+	}
+
 	// Cover
 	if len(metadata.CoverData) > 0 {
 		dataType := DataTypeJPEG

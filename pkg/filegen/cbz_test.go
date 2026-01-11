@@ -433,6 +433,88 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		assert.Empty(t, comicInfo.Series)
 		assert.Empty(t, comicInfo.Number)
 	})
+
+	t.Run("writes genres to Genre field", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title:     "Test Comic",
+			pageCount: 3,
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+			BookGenres: []*models.BookGenre{
+				{Genre: &models.Genre{Name: "Action"}},
+				{Genre: &models.Genre{Name: "Adventure"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Action, Adventure", comicInfo.Genre)
+	})
+
+	t.Run("writes tags to Tags field", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title:     "Test Comic",
+			pageCount: 3,
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+			BookTags: []*models.BookTag{
+				{Tag: &models.Tag{Name: "Must Read"}},
+				{Tag: &models.Tag{Name: "Favorites"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Must Read, Favorites", comicInfo.Tags)
+	})
+
+	t.Run("preserves source genres when book has none", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title:     "Test Comic",
+			genre:     "Original Genre",
+			pageCount: 3,
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Modified Title",
+			// No genres
+		}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Original Genre", comicInfo.Genre)
+	})
 }
 
 // Helper types and functions for testing
@@ -451,6 +533,7 @@ type testCBZOptions struct {
 	translator    string
 	publisher     string
 	genre         string
+	tags          string
 	pageCount     int
 	skipComicInfo bool
 }
@@ -517,6 +600,9 @@ func createTestCBZ(t *testing.T, path string, opts testCBZOptions) {
 		}
 		if opts.genre != "" {
 			comicInfoXML.WriteString("  <Genre>" + opts.genre + "</Genre>\n")
+		}
+		if opts.tags != "" {
+			comicInfoXML.WriteString("  <Tags>" + opts.tags + "</Tags>\n")
 		}
 		comicInfoXML.WriteString("</ComicInfo>")
 

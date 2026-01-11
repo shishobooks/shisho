@@ -385,6 +385,110 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 		require.ErrorAs(t, err, &genErr)
 		assert.Contains(t, genErr.Message, "cancelled")
 	})
+
+	t.Run("writes genres as dc:subject", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.epub")
+		createTestEPUB(t, srcPath, testEPUBOptions{
+			title:   "Test Book",
+			authors: []string{"Author"},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.epub")
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookGenres: []*models.BookGenre{
+				{Genre: &models.Genre{Name: "Fantasy"}},
+				{Genre: &models.Genre{Name: "Science Fiction"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeEPUB}
+
+		gen := &EPUBGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		pkg := readOPFFromEPUB(t, destPath)
+		require.Len(t, pkg.Metadata.Subjects, 2)
+		assert.Equal(t, "Fantasy", pkg.Metadata.Subjects[0])
+		assert.Equal(t, "Science Fiction", pkg.Metadata.Subjects[1])
+	})
+
+	t.Run("writes tags as calibre:tags meta", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.epub")
+		createTestEPUB(t, srcPath, testEPUBOptions{
+			title:   "Test Book",
+			authors: []string{"Author"},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.epub")
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookTags: []*models.BookTag{
+				{Tag: &models.Tag{Name: "Must Read"}},
+				{Tag: &models.Tag{Name: "Favorites"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeEPUB}
+
+		gen := &EPUBGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		pkg := readOPFFromEPUB(t, destPath)
+
+		// Find calibre:tags meta
+		var calibreTags string
+		for _, meta := range pkg.Metadata.Meta {
+			if meta.Name == "calibre:tags" {
+				calibreTags = meta.Content
+				break
+			}
+		}
+		assert.Equal(t, "Must Read, Favorites", calibreTags)
+	})
+
+	t.Run("preserves source genres when book has none", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.epub")
+		createTestEPUB(t, srcPath, testEPUBOptions{
+			title:    "Test Book",
+			authors:  []string{"Author"},
+			subjects: []string{"Original Genre"},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.epub")
+
+		book := &models.Book{
+			Title: "Modified Title",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			// No genres
+		}
+		file := &models.File{FileType: models.FileTypeEPUB}
+
+		gen := &EPUBGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		pkg := readOPFFromEPUB(t, destPath)
+		// Genre should be preserved from source
+		require.Len(t, pkg.Metadata.Subjects, 1)
+		assert.Equal(t, "Original Genre", pkg.Metadata.Subjects[0])
+	})
 }
 
 func TestFormatFloat(t *testing.T) {
@@ -415,6 +519,7 @@ type testEPUBOptions struct {
 	title     string
 	authors   []string
 	coverData []byte
+	subjects  []string
 }
 
 func createTestEPUB(t *testing.T, path string, opts testEPUBOptions) {
@@ -455,6 +560,13 @@ func createTestEPUB(t *testing.T, path string, opts testEPUBOptions) {
 		authorsXML.WriteString("</dc:creator>\n")
 	}
 
+	var subjectsXML strings.Builder
+	for _, subject := range opts.subjects {
+		subjectsXML.WriteString(`    <dc:subject>`)
+		subjectsXML.WriteString(subject)
+		subjectsXML.WriteString("</dc:subject>\n")
+	}
+
 	var manifestItems strings.Builder
 	manifestItems.WriteString(`    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>`)
 	manifestItems.WriteString("\n")
@@ -470,7 +582,7 @@ func createTestEPUB(t *testing.T, path string, opts testEPUBOptions) {
 <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
     <dc:title>` + opts.title + `</dc:title>
-` + authorsXML.String() + `    <dc:identifier id="bookid">test-book-id</dc:identifier>
+` + authorsXML.String() + subjectsXML.String() + `    <dc:identifier id="bookid">test-book-id</dc:identifier>
     <dc:language>en</dc:language>
 ` + coverMeta + `  </metadata>
   <manifest>

@@ -13,6 +13,8 @@ type BookSidecar struct {
 	Subtitle  *string          `json:"subtitle,omitempty"`
 	Authors   []AuthorMetadata `json:"authors,omitempty"`
 	Series    []SeriesMetadata `json:"series,omitempty"`
+	Genres    []string         `json:"genres,omitempty"`
+	Tags      []string         `json:"tags,omitempty"`
 }
 
 // FileSidecar represents the metadata sidecar for a media file.

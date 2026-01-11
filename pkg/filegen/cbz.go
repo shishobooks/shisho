@@ -292,6 +292,30 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo.Writer = strings.Join(authorsByRole[""], ", ")
 	}
 
+	// Update genres (comma-separated) or preserve existing
+	if len(book.BookGenres) > 0 {
+		var genreNames []string
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				genreNames = append(genreNames, bg.Genre.Name)
+			}
+		}
+		comicInfo.Genre = strings.Join(genreNames, ", ")
+	}
+	// If no book genres, preserve existing Genre from comicInfo (already copied from existing)
+
+	// Update tags (comma-separated) or preserve existing
+	if len(book.BookTags) > 0 {
+		var tagNames []string
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				tagNames = append(tagNames, bt.Tag.Name)
+			}
+		}
+		comicInfo.Tags = strings.Join(tagNames, ", ")
+	}
+	// If no book tags, preserve existing Tags from comicInfo (already copied from existing)
+
 	// Update cover page in Pages section
 	if file.CoverPage != nil {
 		updateCoverPage(&comicInfo, *file.CoverPage)

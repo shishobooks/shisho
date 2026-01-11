@@ -50,3 +50,11 @@ packages:
     output_path: "app/types/generated/people.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/genres"
+    output_path: "app/types/generated/genres.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/tags"
+    output_path: "app/types/generated/tags.ts"
+    include_files:
+      - validators.go

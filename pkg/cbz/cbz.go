@@ -150,6 +150,18 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		addCreators(comicInfo.Translator, models.AuthorRoleTranslator)
 	}
 
+	// Extract genres and tags from ComicInfo
+	var genres []string
+	var tags []string
+	if comicInfo != nil {
+		if comicInfo.Genre != "" {
+			genres = fileutils.SplitNames(comicInfo.Genre)
+		}
+		if comicInfo.Tags != "" {
+			tags = fileutils.SplitNames(comicInfo.Tags)
+		}
+	}
+
 	// If no series number from ComicInfo, try to extract from filename
 	if seriesNumber == nil {
 		filename := filepath.Base(path)
@@ -163,6 +175,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Authors:       authors,
 		Series:        series,
 		SeriesNumber:  seriesNumber,
+		Genres:        genres,
+		Tags:          tags,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
 		CoverPage:     coverPage,

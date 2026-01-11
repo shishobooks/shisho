@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filesystem"
+	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -25,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/users"
 	"github.com/uptrace/bun"
 )
@@ -108,6 +110,18 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
 	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware)
+
+	// Genres routes
+	genresGroup := e.Group("/genres")
+	genresGroup.Use(authMiddleware.Authenticate)
+	genresGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	genres.RegisterRoutesWithGroup(genresGroup, db, authMiddleware)
+
+	// Tags routes
+	tagsGroup := e.Group("/tags")
+	tagsGroup.Use(authMiddleware.Authenticate)
+	tagsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	tags.RegisterRoutesWithGroup(tagsGroup, db, authMiddleware)
 
 	// Search routes (requires read access to books, series, and people)
 	searchGroup := e.Group("/search")

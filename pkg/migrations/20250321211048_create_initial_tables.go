@@ -95,7 +95,9 @@ func init() {
 				sort_title_source TEXT NOT NULL,
 				subtitle TEXT,
 				subtitle_source TEXT,
-				author_source TEXT NOT NULL
+				author_source TEXT NOT NULL,
+				genre_source TEXT,
+				tag_source TEXT
 			)
 `)
 		if err != nil {
@@ -251,6 +253,94 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`CREATE UNIQUE INDEX ux_narrators_file_person ON narrators (file_id, person_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Genres (normalized, case-insensitive per library)
+		_, err = db.Exec(`
+			CREATE TABLE genres (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				library_id INTEGER REFERENCES libraries (id) ON DELETE CASCADE NOT NULL,
+				name TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_genres_name_library_id ON genres (name COLLATE NOCASE, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_genres_library_id ON genres (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`
+			CREATE TABLE book_genres (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				book_id INTEGER REFERENCES books (id) ON DELETE CASCADE NOT NULL,
+				genre_id INTEGER REFERENCES genres (id) ON DELETE CASCADE NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_genres_book_id ON book_genres (book_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_genres_genre_id ON book_genres (genre_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_book_genres_book_genre ON book_genres (book_id, genre_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Tags (normalized, case-insensitive per library)
+		_, err = db.Exec(`
+			CREATE TABLE tags (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				library_id INTEGER REFERENCES libraries (id) ON DELETE CASCADE NOT NULL,
+				name TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_tags_name_library_id ON tags (name COLLATE NOCASE, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_tags_library_id ON tags (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`
+			CREATE TABLE book_tags (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				book_id INTEGER REFERENCES books (id) ON DELETE CASCADE NOT NULL,
+				tag_id INTEGER REFERENCES tags (id) ON DELETE CASCADE NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_tags_book_id ON book_tags (book_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_book_tags_tag_id ON book_tags (tag_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_book_tags_book_tag ON book_tags (book_id, tag_id)`)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -433,12 +523,48 @@ func init() {
 			return errors.WithStack(err)
 		}
 
+		// Genres FTS
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE genres_fts USING fts5(
+				genre_id UNINDEXED,
+				library_id UNINDEXED,
+				name,
+				tokenize='unicode61',
+				prefix='2,3'
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Tags FTS
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE tags_fts USING fts5(
+				tag_id UNINDEXED,
+				library_id UNINDEXED,
+				name,
+				tokenize='unicode61',
+				prefix='2,3'
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		return nil
 	}
 
 	down := func(_ context.Context, db *bun.DB) error {
 		// Drop FTS5 tables first
-		_, err := db.Exec("DROP TABLE IF EXISTS persons_fts")
+		_, err := db.Exec("DROP TABLE IF EXISTS tags_fts")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS genres_fts")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS persons_fts")
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -468,6 +594,22 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec("DROP TABLE IF EXISTS narrators")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS book_tags")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS tags")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS book_genres")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS genres")
 		if err != nil {
 			return errors.WithStack(err)
 		}

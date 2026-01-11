@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/tags"
 
 	"github.com/google/uuid"
 	"github.com/robinjoseph08/golib/logger"
@@ -29,11 +31,13 @@ type Worker struct {
 	processFuncs map[string]func(ctx context.Context, job *models.Job) error
 
 	bookService    *books.Service
+	genreService   *genres.Service
 	jobService     *jobs.Service
 	libraryService *libraries.Service
 	personService  *people.Service
 	searchService  *search.Service
 	seriesService  *series.Service
+	tagService     *tags.Service
 
 	queue          chan *models.Job
 	shutdown       chan struct{}
@@ -44,22 +48,26 @@ type Worker struct {
 
 func New(cfg *config.Config, db *bun.DB) *Worker {
 	bookService := books.NewService(db)
+	genreService := genres.NewService(db)
 	jobService := jobs.NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
 	seriesService := series.NewService(db)
+	tagService := tags.NewService(db)
 
 	w := &Worker{
 		config: cfg,
 		log:    logger.New(),
 
 		bookService:    bookService,
+		genreService:   genreService,
 		jobService:     jobService,
 		libraryService: libraryService,
 		personService:  personService,
 		searchService:  searchService,
 		seriesService:  seriesService,
+		tagService:     tagService,
 
 		queue:          make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:       make(chan struct{}),

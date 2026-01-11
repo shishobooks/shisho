@@ -31,6 +31,8 @@ type ListBooksOptions struct {
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	SeriesID   *int
 	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
+	GenreIDs   []int    // Filter by genre IDs
+	TagIDs     []int    // Filter by tag IDs
 	Search     *string  // Search query for title/author
 
 	includeTotal  bool
@@ -143,6 +145,10 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
+		Relation("BookGenres").
+		Relation("BookGenres.Genre").
+		Relation("BookTags").
+		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
 		}).
@@ -188,6 +194,10 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
+		Relation("BookGenres").
+		Relation("BookGenres.Genre").
+		Relation("BookTags").
+		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.filepath ASC")
 		}).
@@ -236,6 +246,10 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
+		Relation("BookGenres").
+		Relation("BookGenres.Genre").
+		Relation("BookTags").
+		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
 		}).
@@ -276,6 +290,16 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by file types
 	if len(opts.FileTypes) > 0 {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(opts.FileTypes))
+	}
+
+	// Filter by genre IDs
+	if len(opts.GenreIDs) > 0 {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_genres WHERE genre_id IN (?))", bun.In(opts.GenreIDs))
+	}
+
+	// Filter by tag IDs
+	if len(opts.TagIDs) > 0 {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_tags WHERE tag_id IN (?))", bun.In(opts.TagIDs))
 	}
 
 	// Search using FTS5
@@ -1010,4 +1034,44 @@ func (svc *Service) RetrieveSeriesByID(ctx context.Context, id int) (*models.Ser
 		return nil, errors.WithStack(err)
 	}
 	return series, nil
+}
+
+// CreateBookGenre creates a book-genre association.
+func (svc *Service) CreateBookGenre(ctx context.Context, bookGenre *models.BookGenre) error {
+	_, err := svc.db.
+		NewInsert().
+		Model(bookGenre).
+		Returning("*").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteBookGenres deletes all genre associations for a book.
+func (svc *Service) DeleteBookGenres(ctx context.Context, bookID int) error {
+	_, err := svc.db.
+		NewDelete().
+		Model((*models.BookGenre)(nil)).
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// CreateBookTag creates a book-tag association.
+func (svc *Service) CreateBookTag(ctx context.Context, bookTag *models.BookTag) error {
+	_, err := svc.db.
+		NewInsert().
+		Model(bookTag).
+		Returning("*").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteBookTags deletes all tag associations for a book.
+func (svc *Service) DeleteBookTags(ctx context.Context, bookID int) error {
+	_, err := svc.db.
+		NewDelete().
+		Model((*models.BookTag)(nil)).
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }

@@ -28,6 +28,8 @@ type CBZMetadata struct {
 	Subtitle *string
 	Authors  []CBZAuthor
 	Series   []CBZSeries
+	Genres   []string
+	Tags     []string
 }
 
 // CBZAuthor represents an author/creator for CBZ metadata.
@@ -377,6 +379,24 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 			buf.WriteString(fmt.Sprintf(`    <meta refines="#series-1" property="group-position">%g</meta>
 `, *series.Number))
 		}
+	}
+
+	// Add genres as dc:subject elements
+	if metadata != nil {
+		for _, genre := range metadata.Genres {
+			buf.WriteString(`    <dc:subject>`)
+			buf.WriteString(html.EscapeString(genre))
+			buf.WriteString(`</dc:subject>
+`)
+		}
+	}
+
+	// Add tags as calibre:tags meta (comma-separated)
+	if metadata != nil && len(metadata.Tags) > 0 {
+		buf.WriteString(`    <meta name="calibre:tags" content="`)
+		buf.WriteString(html.EscapeString(strings.Join(metadata.Tags, ", ")))
+		buf.WriteString(`"/>
+`)
 	}
 
 	buf.WriteString(`    <meta property="dcterms:modified">`)

@@ -9,7 +9,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc -b && vite build",
-    "lint": "yarn lint:eslint && yarn lint:types && yarn lint:prettier",
+    "lint": "concurrently --kill-others-on-fail --group \"yarn:lint:*\"",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:prettier": "prettier --check .",
     "lint:types": "tsc -b --noEmit",
@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "concurrently": "^9.1.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
     "@types/lodash": "^4.17.16",
     "@types/node": "^22.13.10",

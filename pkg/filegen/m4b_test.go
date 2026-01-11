@@ -435,4 +435,103 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		// Verify no temp file remains
 		assert.NoFileExists(t, destPath+".tmp")
 	})
+
+	t.Run("writes genres to genre atom", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookGenres: []*models.BookGenre{
+				{Genre: &models.Genre{Name: "Fantasy"}},
+				{Genre: &models.Genre{Name: "Science Fiction"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// Genres should be comma-separated
+		assert.Equal(t, "Fantasy, Science Fiction", meta.Genre)
+	})
+
+	t.Run("writes tags to custom atom", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookTags: []*models.BookTag{
+				{Tag: &models.Tag{Name: "Must Read"}},
+				{Tag: &models.Tag{Name: "Favorites"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// Tags should be comma-separated
+		require.Len(t, meta.Tags, 2)
+		assert.Equal(t, "Must Read", meta.Tags[0])
+		assert.Equal(t, "Favorites", meta.Tags[1])
+	})
+
+	t.Run("preserves source genre when book has none", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Original Title",
+			Genre:    "Original Genre",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Modified Title",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			// No genres
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// Genre should be preserved from source
+		assert.Equal(t, "Original Genre", meta.Genre)
+	})
 }

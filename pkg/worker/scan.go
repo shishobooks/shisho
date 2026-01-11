@@ -149,6 +149,22 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 		log.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
 	}
 
+	// Cleanup orphaned genres (delete genres with no books)
+	deletedGenresCount, err := w.genreService.CleanupOrphanedGenres(ctx)
+	if err != nil {
+		log.Err(err).Error("failed to cleanup orphaned genres")
+	} else if deletedGenresCount > 0 {
+		log.Info("cleaned up orphaned genres", logger.Data{"count": deletedGenresCount})
+	}
+
+	// Cleanup orphaned tags (delete tags with no books)
+	deletedTagsCount, err := w.tagService.CleanupOrphanedTags(ctx)
+	if err != nil {
+		log.Err(err).Error("failed to cleanup orphaned tags")
+	} else if deletedTagsCount > 0 {
+		log.Info("cleaned up orphaned tags", logger.Data{"count": deletedTagsCount})
+	}
+
 	// Rebuild FTS indexes after scan completes
 	if w.searchService != nil {
 		log.Info("rebuilding search indexes")
@@ -246,6 +262,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	}
 	var seriesList []seriesData
 	seriesSource := models.DataSourceFilepath
+	var genreNames []string
+	genreSource := models.DataSourceFilepath
+	var tagNames []string
+	tagSource := models.DataSourceFilepath
 	var coverMimeType *string
 	var coverSource *string
 	var subtitle *string
@@ -305,6 +325,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			})
 			seriesSource = metadata.DataSource
 		}
+		if len(metadata.Genres) > 0 {
+			genreNames = append(genreNames, metadata.Genres...)
+			genreSource = metadata.DataSource
+		}
+		if len(metadata.Tags) > 0 {
+			tagNames = append(tagNames, metadata.Tags...)
+			tagSource = metadata.DataSource
+		}
 		if metadata.CoverMimeType != "" {
 			coverMimeType = &metadata.CoverMimeType
 		}
@@ -345,9 +373,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			if len(matches) > 0 && len(matches[0]) > 1 {
 				// matches[0][1] is the first capture group (narrator name without braces)
 				names := fileutils.SplitNames(matches[0][1])
-				for _, narrator := range names {
-					narratorNames = append(narratorNames, narrator)
-				}
+				narratorNames = append(narratorNames, names...)
 			}
 		}
 	}
@@ -410,6 +436,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 					})
 				}
 			}
+		}
+		if len(bookSidecarData.Genres) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[genreSource] {
+			genreSource = models.DataSourceSidecar
+			genreNames = bookSidecarData.Genres
+		}
+		if len(bookSidecarData.Tags) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[tagSource] {
+			tagSource = models.DataSourceSidecar
+			tagNames = bookSidecarData.Tags
 		}
 		if bookSidecarData.Subtitle != nil && *bookSidecarData.Subtitle != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[subtitleSource] {
 			subtitle = bookSidecarData.Subtitle
@@ -541,6 +575,70 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			}
 		}
 
+		// Update genres if we have a higher priority source
+		var existingGenreSource string
+		if existingBook.GenreSource != nil {
+			existingGenreSource = *existingBook.GenreSource
+		}
+		if len(genreNames) > 0 && (len(existingBook.BookGenres) == 0 || models.DataSourcePriority[genreSource] < models.DataSourcePriority[existingGenreSource]) {
+			log.Info("updating genres", logger.Data{"new_genre_count": len(genreNames), "old_genre_count": len(existingBook.BookGenres)})
+			// Delete existing book genre entries
+			err = w.bookService.DeleteBookGenres(ctx, existingBook.ID)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			// Create new book genre entries
+			for _, genreName := range genreNames {
+				genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, libraryID)
+				if err != nil {
+					log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
+					continue
+				}
+				bookGenreEntry := &models.BookGenre{
+					BookID:  existingBook.ID,
+					GenreID: genreRecord.ID,
+				}
+				err = w.bookService.CreateBookGenre(ctx, bookGenreEntry)
+				if err != nil {
+					log.Error("failed to create book genre", logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
+				}
+			}
+			existingBook.GenreSource = &genreSource
+			updateOptions.Columns = append(updateOptions.Columns, "genre_source")
+		}
+
+		// Update tags if we have a higher priority source
+		var existingTagSource string
+		if existingBook.TagSource != nil {
+			existingTagSource = *existingBook.TagSource
+		}
+		if len(tagNames) > 0 && (len(existingBook.BookTags) == 0 || models.DataSourcePriority[tagSource] < models.DataSourcePriority[existingTagSource]) {
+			log.Info("updating tags", logger.Data{"new_tag_count": len(tagNames), "old_tag_count": len(existingBook.BookTags)})
+			// Delete existing book tag entries
+			err = w.bookService.DeleteBookTags(ctx, existingBook.ID)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			// Create new book tag entries
+			for _, tagName := range tagNames {
+				tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, libraryID)
+				if err != nil {
+					log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
+					continue
+				}
+				bookTagEntry := &models.BookTag{
+					BookID: existingBook.ID,
+					TagID:  tagRecord.ID,
+				}
+				err = w.bookService.CreateBookTag(ctx, bookTagEntry)
+				if err != nil {
+					log.Error("failed to create book tag", logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
+				}
+			}
+			existingBook.TagSource = &tagSource
+			updateOptions.Columns = append(updateOptions.Columns, "tag_source")
+		}
+
 		err := w.bookService.UpdateBook(ctx, existingBook, updateOptions)
 		if err != nil {
 			return errors.WithStack(err)
@@ -638,6 +736,58 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			err = w.bookService.CreateBookSeries(ctx, bookSeriesEntry)
 			if err != nil {
 				log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
+			}
+		}
+
+		// Create BookGenre entries for each genre
+		if len(genreNames) > 0 {
+			existingBook.GenreSource = &genreSource
+			err = w.bookService.UpdateBook(ctx, existingBook, books.UpdateBookOptions{
+				Columns: []string{"genre_source"},
+			})
+			if err != nil {
+				log.Error("failed to update book genre source", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
+			}
+			for _, genreName := range genreNames {
+				genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, libraryID)
+				if err != nil {
+					log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
+					continue
+				}
+				bookGenreEntry := &models.BookGenre{
+					BookID:  existingBook.ID,
+					GenreID: genreRecord.ID,
+				}
+				err = w.bookService.CreateBookGenre(ctx, bookGenreEntry)
+				if err != nil {
+					log.Error("failed to create book genre", logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
+				}
+			}
+		}
+
+		// Create BookTag entries for each tag
+		if len(tagNames) > 0 {
+			existingBook.TagSource = &tagSource
+			err = w.bookService.UpdateBook(ctx, existingBook, books.UpdateBookOptions{
+				Columns: []string{"tag_source"},
+			})
+			if err != nil {
+				log.Error("failed to update book tag source", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
+			}
+			for _, tagName := range tagNames {
+				tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, libraryID)
+				if err != nil {
+					log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
+					continue
+				}
+				bookTagEntry := &models.BookTag{
+					BookID: existingBook.ID,
+					TagID:  tagRecord.ID,
+				}
+				err = w.bookService.CreateBookTag(ctx, bookTagEntry)
+				if err != nil {
+					log.Error("failed to create book tag", logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
+				}
 			}
 		}
 

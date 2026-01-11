@@ -5,10 +5,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
 )
 
@@ -18,6 +20,8 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
+	genreService := genres.NewService(db)
+	tagService := tags.NewService(db)
 	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
@@ -25,6 +29,8 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		libraryService: libraryService,
 		personService:  personService,
 		searchService:  searchService,
+		genreService:   genreService,
+		tagService:     tagService,
 		downloadCache:  cache,
 	}
 

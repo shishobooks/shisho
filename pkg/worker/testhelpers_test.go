@@ -8,12 +8,14 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -57,6 +59,8 @@ func newTestContext(t *testing.T) *testContext {
 	jobService := jobs.NewService(db)
 	personService := people.NewService(db)
 	seriesService := series.NewService(db)
+	genreService := genres.NewService(db)
+	tagService := tags.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -70,6 +74,8 @@ func newTestContext(t *testing.T) *testContext {
 		jobService:     jobService,
 		personService:  personService,
 		seriesService:  seriesService,
+		genreService:   genreService,
+		tagService:     tagService,
 	}
 
 	// Create context with logger

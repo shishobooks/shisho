@@ -100,12 +100,20 @@ const TopNav = () => {
     (location.pathname.startsWith(`/libraries/${libraryId}/books`) &&
       !location.pathname.startsWith(`/libraries/${libraryId}/series`) &&
       !location.pathname.startsWith(`/libraries/${libraryId}/people`) &&
+      !location.pathname.startsWith(`/libraries/${libraryId}/genres`) &&
+      !location.pathname.startsWith(`/libraries/${libraryId}/tags`) &&
       !location.pathname.startsWith(`/libraries/${libraryId}/settings`));
   const isSeriesActive = location.pathname.startsWith(
     `/libraries/${libraryId}/series`,
   );
   const isPeopleActive = location.pathname.startsWith(
     `/libraries/${libraryId}/people`,
+  );
+  const isGenresActive = location.pathname.startsWith(
+    `/libraries/${libraryId}/genres`,
+  );
+  const isTagsActive = location.pathname.startsWith(
+    `/libraries/${libraryId}/tags`,
   );
   const isLibrarySettingsActive = location.pathname.startsWith(
     `/libraries/${libraryId}/settings`,
@@ -208,6 +216,28 @@ const TopNav = () => {
                   variant={isPeopleActive ? "default" : "ghost"}
                 >
                   <Link to={`/libraries/${libraryId}/people`}>People</Link>
+                </Button>
+                <Button
+                  asChild
+                  className={`h-9 ${
+                    isGenresActive
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-primary dark:hover:text-violet-300"
+                  }`}
+                  variant={isGenresActive ? "default" : "ghost"}
+                >
+                  <Link to={`/libraries/${libraryId}/genres`}>Genres</Link>
+                </Button>
+                <Button
+                  asChild
+                  className={`h-9 ${
+                    isTagsActive
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                      : "hover:text-primary dark:hover:text-violet-300"
+                  }`}
+                  variant={isTagsActive ? "default" : "ghost"}
+                >
+                  <Link to={`/libraries/${libraryId}/tags`}>Tags</Link>
                 </Button>
                 {hasPermission("libraries", "write") && (
                   <Button

@@ -9,3 +9,5 @@ export * from "./generated/roles";
 export * from "./generated/search";
 export * from "./generated/series";
 export * from "./generated/people";
+export * from "./generated/genres";
+export * from "./generated/tags";

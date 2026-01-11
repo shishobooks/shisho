@@ -9,6 +9,7 @@ import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
 import CreateLibrary from "@/components/pages/CreateLibrary";
 import CreateUser from "@/components/pages/CreateUser";
+import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
@@ -19,6 +20,7 @@ import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
+import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
 import UserSettings from "@/components/pages/UserSettings";
 
@@ -200,6 +202,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute checkLibraryAccess>
             <PersonDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/genres",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <GenresList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/tags",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <TagsList />
           </ProtectedRoute>
         ),
       },

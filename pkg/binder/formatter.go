@@ -69,27 +69,45 @@ func formatValidationError(err validator.FieldError) string {
 		// e.g. EndTime, not end_time
 		return fmt.Sprintf("%q must be less than %s", field, err.Param())
 	case mx:
-		resource := "character"
-		if err.Kind() == reflect.Slice {
-			resource = "element"
+		//exhaustive:ignore
+		switch err.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+			reflect.Float32, reflect.Float64:
+			return fmt.Sprintf("%q must be less than or equal to %s", field, err.Param())
+		case reflect.Slice:
+			resource := "element"
+			if err.Param() != "1" {
+				resource += "s"
+			}
+			return fmt.Sprintf("%q length must be less than or equal to %s %s", field, err.Param(), resource)
+		default:
+			resource := "character"
+			if err.Param() != "1" {
+				resource += "s"
+			}
+			return fmt.Sprintf("%q length must be less than or equal to %s %s", field, err.Param(), resource)
 		}
-
-		if err.Param() != "1" {
-			resource += "s"
-		}
-
-		return fmt.Sprintf("%q length must be less than or equal to %s %s", field, err.Param(), resource)
 	case mn:
-		resource := "character"
-		if err.Kind() == reflect.Slice {
-			resource = "element"
+		//exhaustive:ignore
+		switch err.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+			reflect.Float32, reflect.Float64:
+			return fmt.Sprintf("%q must be greater than or equal to %s", field, err.Param())
+		case reflect.Slice:
+			resource := "element"
+			if err.Param() != "1" {
+				resource += "s"
+			}
+			return fmt.Sprintf("%q length must be greater than or equal to %s %s", field, err.Param(), resource)
+		default:
+			resource := "character"
+			if err.Param() != "1" {
+				resource += "s"
+			}
+			return fmt.Sprintf("%q length must be greater than or equal to %s %s", field, err.Param(), resource)
 		}
-
-		if err.Param() != "1" {
-			resource += "s"
-		}
-
-		return fmt.Sprintf("%q length must be greater than or equal to %s %s", field, err.Param(), resource)
 	case ne:
 		return fmt.Sprintf("%q can't be %q", field, err.Param())
 	case oneof:
