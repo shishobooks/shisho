@@ -4,13 +4,13 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useTagsList } from "@/hooks/queries/tags";
+import { useImprintsList } from "@/hooks/queries/imprints";
 import { useDebounce } from "@/hooks/useDebounce";
-import type { Tag } from "@/types";
+import type { Imprint } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
-const TagsList = () => {
+const ImprintsList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
@@ -44,14 +44,14 @@ const TagsList = () => {
     }, 300);
   };
 
-  const tagsQuery = useTagsList({
+  const imprintsQuery = useImprintsList({
     limit,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
 
-  const total = tagsQuery.data?.total ?? 0;
+  const total = imprintsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
   const handlePageChange = (page: number) => {
@@ -60,18 +60,18 @@ const TagsList = () => {
     setSearchParams(newParams);
   };
 
-  const renderTagItem = (tag: Tag) => {
-    const bookCount = tag.book_count ?? 0;
+  const renderImprintItem = (imprint: Imprint) => {
+    const fileCount = imprint.file_count ?? 0;
 
     return (
       <Link
         className="flex items-center justify-between p-3 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-        key={tag.id}
-        to={`/libraries/${libraryId}/tags/${tag.id}`}
+        key={imprint.id}
+        to={`/libraries/${libraryId}/imprints/${imprint.id}`}
       >
-        <span className="font-medium">{tag.name}</span>
+        <span className="font-medium">{imprint.name}</span>
         <Badge variant="secondary">
-          {bookCount} book{bookCount !== 1 ? "s" : ""}
+          {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
       </Link>
     );
@@ -82,31 +82,34 @@ const TagsList = () => {
       <TopNav />
       <div className="max-w-3xl w-full mx-auto px-6 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2">Tags</h1>
-          <p className="text-muted-foreground">Browse tags in your library</p>
+          <h1 className="text-2xl font-semibold mb-2">Imprints</h1>
+          <p className="text-muted-foreground">
+            Browse imprints in your library
+          </p>
         </div>
 
         <div className="mb-6">
           <Input
             className="max-w-xs"
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search tags..."
+            placeholder="Search imprints..."
             type="search"
             value={searchInput}
           />
         </div>
 
-        {tagsQuery.isLoading && (
+        {imprintsQuery.isLoading && (
           <div className="text-muted-foreground">Loading...</div>
         )}
 
-        {tagsQuery.isSuccess && tagsQuery.data.tags.length === 0 && (
-          <div className="text-muted-foreground">No tags found</div>
-        )}
+        {imprintsQuery.isSuccess &&
+          imprintsQuery.data.imprints.length === 0 && (
+            <div className="text-muted-foreground">No imprints found</div>
+          )}
 
-        {tagsQuery.isSuccess && tagsQuery.data.tags.length > 0 && (
+        {imprintsQuery.isSuccess && imprintsQuery.data.imprints.length > 0 && (
           <div className="space-y-1">
-            {tagsQuery.data.tags.map(renderTagItem)}
+            {imprintsQuery.data.imprints.map(renderImprintItem)}
           </div>
         )}
 
@@ -136,4 +139,4 @@ const TagsList = () => {
   );
 };
 
-export default TagsList;
+export default ImprintsList;

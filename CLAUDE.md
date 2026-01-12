@@ -35,6 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Type Generation
 - `make tygo` - Generate TypeScript types from Go structs (see note at top about "Nothing to be done" message)
 - Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
+- **IMPORTANT**: The `app/types/generated/` directory is gitignored - these files are auto-generated and cannot be `git add`ed. If you need to update types, modify the Go source structs and run `make tygo`
 
 ## Architecture Overview
 
@@ -123,6 +124,33 @@ When adding a new entity type that files or books reference:
 3. Add service to worker (`pkg/worker/worker.go`) and initialize in `New()`
 4. Update scanner to use the new service for entity creation
 
+**Search Index (FTS)**:
+The app uses SQLite Full-Text Search (FTS5) for fast searching. Key files:
+- `pkg/search/service.go` - Search service with index methods
+- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`
+
+**IMPORTANT - Search Index Updates**:
+When creating or modifying entities that are searchable, ensure the FTS index is updated:
+1. **New entities created via `FindOrCreate*()` methods MUST be indexed** - When `FindOrCreateGenre()`, `FindOrCreateTag()`, etc. create a new entity, call `IndexGenre()`, `IndexTag()`, etc. afterward
+2. **Entity updates must re-index** - Call `Index*()` after updating an entity's searchable fields
+3. **Entity deletions must remove from index** - Call `DeleteFrom*Index()` when deleting entities
+4. **Book metadata changes affecting search** - When book authors, series, genres, or tags change, call `IndexBook()` to update the book's search index
+
+Example pattern in `pkg/books/handlers.go`:
+```go
+// Track new entity IDs when creating associations
+newGenreIDs := make([]int, 0)
+for _, name := range params.Genres {
+    genre, _ := h.genreService.FindOrCreateGenre(ctx, name, libraryID)
+    newGenreIDs = append(newGenreIDs, genre.ID)
+}
+// Index new entities after creation
+for _, id := range newGenreIDs {
+    genre, _ := h.genreService.RetrieveGenre(ctx, opts{ID: &id})
+    h.searchService.IndexGenre(ctx, genre)
+}
+```
+
 ### Frontend Architecture
 
 **React Router** (`app/router.tsx`):
@@ -140,6 +168,19 @@ When adding a new entity type that files or books reference:
 - TypeScript types auto-imported from `app/types/generated/`
 - **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
 - **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
+
+**React Query Cache Invalidation**:
+- When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes
+- **Cross-resource invalidation is required**: When metadata entities (genres, tags, series, people, publishers, imprints) are modified, also invalidate `ListBooks` and `RetrieveBook` queries since books display this metadata
+- Pattern: Import `QueryKey as BooksQueryKey from "./books"` and add invalidation calls in mutation `onSuccess`:
+  ```typescript
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
+    // Also invalidate book queries since they display genre info
+    queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+    queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+  }
+  ```
 
 **UI Components**:
 - Custom components in `app/components/` using Radix UI primitives

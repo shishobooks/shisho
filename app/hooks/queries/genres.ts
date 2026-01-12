@@ -1,3 +1,4 @@
+import { QueryKey as BooksQueryKey } from "./books";
 import {
   useMutation,
   useQuery,
@@ -91,6 +92,9 @@ export const useUpdateGenre = () => {
         queryKey: [QueryKey.RetrieveGenre, variables.genreId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
+      // Invalidate book queries since they display genre info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };
@@ -104,6 +108,36 @@ export const useDeleteGenre = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
+      // Invalidate book queries since they display genre info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+    },
+  });
+};
+
+export const useMergeGenre = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      targetId,
+      sourceId,
+    }: {
+      targetId: number;
+      sourceId: number;
+    }) => {
+      return API.request<void>("POST", `/genres/${targetId}/merge`, {
+        source_id: sourceId,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrieveGenre, variables.targetId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
+      // Invalidate book queries since they display genre info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };

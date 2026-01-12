@@ -11,3 +11,5 @@ export * from "./generated/series";
 export * from "./generated/people";
 export * from "./generated/genres";
 export * from "./generated/tags";
+export * from "./generated/publishers";
+export * from "./generated/imprints";

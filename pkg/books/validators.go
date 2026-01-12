@@ -12,13 +12,14 @@ type ListBooksQuery struct {
 }
 
 type UpdateBookPayload struct {
-	Title     *string       `json:"title,omitempty" validate:"omitempty,max=300"`
-	SortTitle *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
-	Subtitle  *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
-	Authors   []AuthorInput `json:"authors,omitempty"`
-	Series    []SeriesInput `json:"series,omitempty"`
-	Genres    []string      `json:"genres,omitempty" validate:"omitempty,dive,max=100"` // Genre names
-	Tags      []string      `json:"tags,omitempty" validate:"omitempty,dive,max=100"`   // Tag names
+	Title       *string       `json:"title,omitempty" validate:"omitempty,max=300"`
+	SortTitle   *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
+	Subtitle    *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
+	Description *string       `json:"description,omitempty" validate:"omitempty,max=10000"`
+	Authors     []AuthorInput `json:"authors,omitempty"`
+	Series      []SeriesInput `json:"series,omitempty"`
+	Genres      []string      `json:"genres,omitempty" validate:"omitempty,dive,max=100"` // Genre names
+	Tags        []string      `json:"tags,omitempty" validate:"omitempty,dive,max=100"`   // Tag names
 }
 
 // AuthorInput represents an author with an optional role (for CBZ files).
@@ -35,5 +36,9 @@ type SeriesInput struct {
 
 // UpdateFilePayload is the payload for updating a file's metadata.
 type UpdateFilePayload struct {
-	Narrators []string `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
+	Narrators   []string `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
+	URL         *string  `json:"url,omitempty" validate:"omitempty,max=500,url"`
+	Publisher   *string  `json:"publisher,omitempty" validate:"omitempty,max=200"`
+	Imprint     *string  `json:"imprint,omitempty" validate:"omitempty,max=200"`
+	ReleaseDate *string  `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 }

@@ -58,3 +58,11 @@ packages:
     output_path: "app/types/generated/tags.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/publishers"
+    output_path: "app/types/generated/publishers.ts"
+    include_files:
+      - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/imprints"
+    output_path: "app/types/generated/imprints.ts"
+    include_files:
+      - validators.go

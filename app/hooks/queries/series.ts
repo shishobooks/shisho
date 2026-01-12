@@ -1,7 +1,17 @@
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import { QueryKey as BooksQueryKey } from "./books";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { Book, Series } from "@/types";
+import type {
+  ListSeriesQuery,
+  UpdateSeriesPayload,
+} from "@/types/generated/series";
 
 export enum QueryKey {
   ListSeries = "ListSeries",
@@ -9,12 +19,11 @@ export enum QueryKey {
   SeriesBooks = "SeriesBooks",
 }
 
-export interface ListSeriesQuery {
-  limit?: number;
-  offset?: number;
-  library_id?: number;
-  search?: string;
+export interface SeriesWithCount extends Series {
+  book_count: number;
 }
+
+export type { ListSeriesQuery };
 
 export interface ListSeriesData {
   series: Series[];
@@ -40,11 +49,11 @@ export const useSeriesList = (
 export const useSeries = (
   seriesId?: number,
   options: Omit<
-    UseQueryOptions<Series, ShishoAPIError>,
+    UseQueryOptions<SeriesWithCount, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Series, ShishoAPIError>({
+  return useQuery<SeriesWithCount, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
@@ -75,6 +84,78 @@ export const useSeriesBooks = (
         null,
         signal,
       );
+    },
+  });
+};
+
+export const useUpdateSeries = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      seriesId,
+      payload,
+    }: {
+      seriesId: number;
+      payload: UpdateSeriesPayload;
+    }) => {
+      return API.request<SeriesWithCount>(
+        "PATCH",
+        `/series/${seriesId}`,
+        payload,
+      );
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrieveSeries, variables.seriesId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
+      // Invalidate book queries since they display series info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+    },
+  });
+};
+
+export const useMergeSeries = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      targetId,
+      sourceId,
+    }: {
+      targetId: number;
+      sourceId: number;
+    }) => {
+      return API.request<void>("POST", `/series/${targetId}/merge`, {
+        source_id: sourceId,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrieveSeries, variables.targetId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
+      // Invalidate book queries since they display series info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+    },
+  });
+};
+
+export const useDeleteSeries = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ seriesId }: { seriesId: number }) => {
+      return API.request<void>("DELETE", `/series/${seriesId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
+      // Invalidate book queries since they display series info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };

@@ -6,9 +6,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
@@ -22,16 +24,20 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	searchService := search.NewService(db)
 	genreService := genres.NewService(db)
 	tagService := tags.NewService(db)
+	publisherService := publishers.NewService(db)
+	imprintService := imprints.NewService(db)
 	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
-		bookService:    bookService,
-		libraryService: libraryService,
-		personService:  personService,
-		searchService:  searchService,
-		genreService:   genreService,
-		tagService:     tagService,
-		downloadCache:  cache,
+		bookService:      bookService,
+		libraryService:   libraryService,
+		personService:    personService,
+		searchService:    searchService,
+		genreService:     genreService,
+		tagService:       tagService,
+		publisherService: publisherService,
+		imprintService:   imprintService,
+		downloadCache:    cache,
 	}
 
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))

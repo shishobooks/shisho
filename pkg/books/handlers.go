@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -15,9 +16,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -25,13 +28,15 @@ import (
 )
 
 type handler struct {
-	bookService    *Service
-	libraryService *libraries.Service
-	personService  *people.Service
-	searchService  *search.Service
-	genreService   *genres.Service
-	tagService     *tags.Service
-	downloadCache  *downloadcache.Cache
+	bookService      *Service
+	libraryService   *libraries.Service
+	personService    *people.Service
+	searchService    *search.Service
+	genreService     *genres.Service
+	tagService       *tags.Service
+	publisherService *publishers.Service
+	imprintService   *imprints.Service
+	downloadCache    *downloadcache.Cache
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -192,6 +197,24 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Update description
+	if params.Description != nil {
+		// Check if description actually changed
+		currentDescription := ""
+		if book.Description != nil {
+			currentDescription = *book.Description
+		}
+		if *params.Description != currentDescription {
+			if *params.Description == "" {
+				book.Description = nil
+			} else {
+				book.Description = params.Description
+			}
+			book.DescriptionSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "description", "description_source")
+		}
+	}
+
 	// Update authors
 	if params.Authors != nil {
 		authorsChanged = true
@@ -296,7 +319,8 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
-		// Create new genre associations
+		// Create new genre associations and track new genre IDs
+		newGenreIDs := make([]int, 0)
 		for _, genreName := range params.Genres {
 			if genreName == "" {
 				continue
@@ -306,6 +330,7 @@ func (h *handler) update(c echo.Context) error {
 				log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
 				continue
 			}
+			newGenreIDs = append(newGenreIDs, genreRecord.ID)
 			bookGenre := &models.BookGenre{
 				BookID:  book.ID,
 				GenreID: genreRecord.ID,
@@ -325,12 +350,22 @@ func (h *handler) update(c echo.Context) error {
 			log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
 		}
 
-		// Re-index old genres
+		// Re-index old genres (some may have been deleted/orphaned)
 		for _, genreID := range oldGenreIDs {
 			genre, err := h.genreService.RetrieveGenre(ctx, genres.RetrieveGenreOptions{ID: &genreID})
 			if err == nil {
 				if err := h.searchService.IndexGenre(ctx, genre); err != nil {
 					log.Warn("failed to update search index for old genre", logger.Data{"genre_id": genreID, "error": err.Error()})
+				}
+			}
+		}
+
+		// Index new genres (including newly created ones)
+		for _, genreID := range newGenreIDs {
+			genre, err := h.genreService.RetrieveGenre(ctx, genres.RetrieveGenreOptions{ID: &genreID})
+			if err == nil {
+				if err := h.searchService.IndexGenre(ctx, genre); err != nil {
+					log.Warn("failed to update search index for new genre", logger.Data{"genre_id": genreID, "error": err.Error()})
 				}
 			}
 		}
@@ -352,7 +387,8 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
-		// Create new tag associations
+		// Create new tag associations and track new tag IDs
+		newTagIDs := make([]int, 0)
 		for _, tagName := range params.Tags {
 			if tagName == "" {
 				continue
@@ -362,6 +398,7 @@ func (h *handler) update(c echo.Context) error {
 				log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
 				continue
 			}
+			newTagIDs = append(newTagIDs, tagRecord.ID)
 			bookTag := &models.BookTag{
 				BookID: book.ID,
 				TagID:  tagRecord.ID,
@@ -381,12 +418,22 @@ func (h *handler) update(c echo.Context) error {
 			log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
 		}
 
-		// Re-index old tags
+		// Re-index old tags (some may have been deleted/orphaned)
 		for _, tagID := range oldTagIDs {
 			tag, err := h.tagService.RetrieveTag(ctx, tags.RetrieveTagOptions{ID: &tagID})
 			if err == nil {
 				if err := h.searchService.IndexTag(ctx, tag); err != nil {
 					log.Warn("failed to update search index for old tag", logger.Data{"tag_id": tagID, "error": err.Error()})
+				}
+			}
+		}
+
+		// Index new tags (including newly created ones)
+		for _, tagID := range newTagIDs {
+			tag, err := h.tagService.RetrieveTag(ctx, tags.RetrieveTagOptions{ID: &tagID})
+			if err == nil {
+				if err := h.searchService.IndexTag(ctx, tag); err != nil {
+					log.Warn("failed to update search index for new tag", logger.Data{"tag_id": tagID, "error": err.Error()})
 				}
 			}
 		}
@@ -642,6 +689,98 @@ func (h *handler) updateFile(c echo.Context) error {
 				file.Filepath = newPath
 				opts.Columns = append(opts.Columns, "filepath")
 			}
+		}
+	}
+
+	// Update URL
+	if params.URL != nil {
+		currentURL := ""
+		if file.URL != nil {
+			currentURL = *file.URL
+		}
+		if *params.URL != currentURL {
+			if *params.URL == "" {
+				file.URL = nil
+			} else {
+				file.URL = params.URL
+			}
+			file.URLSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "url", "url_source")
+		}
+	}
+
+	// Update publisher
+	if params.Publisher != nil {
+		currentPublisher := ""
+		if file.Publisher != nil {
+			currentPublisher = file.Publisher.Name
+		}
+		if *params.Publisher != currentPublisher {
+			if *params.Publisher == "" {
+				file.PublisherID = nil
+				file.Publisher = nil
+			} else {
+				publisher, err := h.publisherService.FindOrCreatePublisher(ctx, *params.Publisher, file.LibraryID)
+				if err != nil {
+					log.Error("failed to find/create publisher", logger.Data{"publisher": *params.Publisher, "error": err.Error()})
+				} else {
+					file.PublisherID = &publisher.ID
+					file.Publisher = publisher
+				}
+			}
+			file.PublisherSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "publisher_id", "publisher_source")
+		}
+	}
+
+	// Update imprint
+	if params.Imprint != nil {
+		currentImprint := ""
+		if file.Imprint != nil {
+			currentImprint = file.Imprint.Name
+		}
+		if *params.Imprint != currentImprint {
+			if *params.Imprint == "" {
+				file.ImprintID = nil
+				file.Imprint = nil
+			} else {
+				imprint, err := h.imprintService.FindOrCreateImprint(ctx, *params.Imprint, file.LibraryID)
+				if err != nil {
+					log.Error("failed to find/create imprint", logger.Data{"imprint": *params.Imprint, "error": err.Error()})
+				} else {
+					file.ImprintID = &imprint.ID
+					file.Imprint = imprint
+				}
+			}
+			file.ImprintSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "imprint_id", "imprint_source")
+		}
+	}
+
+	// Update release date
+	if params.ReleaseDate != nil {
+		var currentReleaseDate string
+		if file.ReleaseDate != nil {
+			currentReleaseDate = file.ReleaseDate.Format(time.RFC3339)
+		}
+		if *params.ReleaseDate != currentReleaseDate {
+			if *params.ReleaseDate == "" {
+				file.ReleaseDate = nil
+			} else {
+				// Try parsing the date
+				parsedDate, err := time.Parse("2006-01-02", *params.ReleaseDate)
+				if err != nil {
+					// Try RFC3339 format as well
+					parsedDate, err = time.Parse(time.RFC3339, *params.ReleaseDate)
+				}
+				if err != nil {
+					log.Error("failed to parse release date", logger.Data{"release_date": *params.ReleaseDate, "error": err.Error()})
+				} else {
+					file.ReleaseDate = &parsedDate
+				}
+			}
+			file.ReleaseDateSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "release_date", "release_date_source")
 		}
 	}
 

@@ -1,22 +1,82 @@
-import { Link, useParams } from "react-router-dom";
+import { Edit, GitMerge, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
+import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
+import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
+  useDeletePerson,
+  useMergePerson,
+  usePeopleList,
   usePerson,
   usePersonAuthoredBooks,
   usePersonNarratedFiles,
+  useUpdatePerson,
 } from "@/hooks/queries/people";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const PersonDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const personId = id ? parseInt(id, 10) : undefined;
 
+  const navigate = useNavigate();
+
   const personQuery = usePerson(personId);
   const authoredBooksQuery = usePersonAuthoredBooks(personId);
   const narratedFilesQuery = usePersonNarratedFiles(personId);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const debouncedMergeSearch = useDebounce(mergeSearch, 200);
+
+  const updatePersonMutation = useUpdatePerson();
+  const mergePersonMutation = useMergePerson();
+  const deletePersonMutation = useDeletePerson();
+
+  const peopleListQuery = usePeopleList(
+    {
+      library_id: personQuery.data?.library_id,
+      limit: 50,
+      search: debouncedMergeSearch || undefined,
+    },
+    { enabled: mergeOpen && !!personQuery.data?.library_id },
+  );
+
+  const handleEdit = async (data: { name: string; sort_name?: string }) => {
+    if (!personId) return;
+    await updatePersonMutation.mutateAsync({
+      personId,
+      payload: {
+        name: data.name,
+        sort_name: data.sort_name,
+      },
+    });
+    setEditOpen(false);
+  };
+
+  const handleMerge = async (sourceId: number) => {
+    if (!personId) return;
+    await mergePersonMutation.mutateAsync({
+      targetId: personId,
+      sourceId,
+    });
+    setMergeOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!personId) return;
+    await deletePersonMutation.mutateAsync({ personId });
+    setDeleteOpen(false);
+    navigate(`/libraries/${libraryId}/people`);
+  };
 
   if (personQuery.isLoading) {
     return (
@@ -53,6 +113,8 @@ const PersonDetail = () => {
   }
 
   const person = personQuery.data;
+  const canDelete =
+    person.authored_book_count === 0 && person.narrated_file_count === 0;
 
   return (
     <div>
@@ -60,8 +122,36 @@ const PersonDetail = () => {
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
         {/* Person Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-4 mb-2">
+          <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold">{person.name}</h1>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setEditOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                onClick={() => setMergeOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                <GitMerge className="h-4 w-4 mr-2" />
+                Merge
+              </Button>
+              {canDelete && (
+                <Button
+                  onClick={() => setDeleteOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
           </div>
           {person.sort_name !== person.name && (
             <p className="text-muted-foreground mb-2">
@@ -139,6 +229,44 @@ const PersonDetail = () => {
             </div>
           )}
       </div>
+
+      <MetadataEditDialog
+        entityName={person.name}
+        entityType="person"
+        isPending={updatePersonMutation.isPending}
+        onOpenChange={setEditOpen}
+        onSave={handleEdit}
+        open={editOpen}
+        sortName={person.sort_name}
+      />
+
+      <MetadataMergeDialog
+        entities={
+          peopleListQuery.data?.people.map((p) => ({
+            id: p.id,
+            name: p.name,
+            count: p.authored_book_count + p.narrated_file_count,
+          })) ?? []
+        }
+        entityType="person"
+        isLoadingEntities={peopleListQuery.isLoading}
+        isPending={mergePersonMutation.isPending}
+        onMerge={handleMerge}
+        onOpenChange={setMergeOpen}
+        onSearch={setMergeSearch}
+        open={mergeOpen}
+        targetId={personId!}
+        targetName={person.name}
+      />
+
+      <MetadataDeleteDialog
+        entityName={person.name}
+        entityType="person"
+        isPending={deletePersonMutation.isPending}
+        onDelete={handleDelete}
+        onOpenChange={setDeleteOpen}
+        open={deleteOpen}
+      />
     </div>
   );
 };

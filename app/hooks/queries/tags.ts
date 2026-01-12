@@ -1,3 +1,4 @@
+import { QueryKey as BooksQueryKey } from "./books";
 import {
   useMutation,
   useQuery,
@@ -88,6 +89,9 @@ export const useUpdateTag = () => {
         queryKey: [QueryKey.RetrieveTag, variables.tagId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
+      // Invalidate book queries since they display tag info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };
@@ -101,6 +105,36 @@ export const useDeleteTag = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
+      // Invalidate book queries since they display tag info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+    },
+  });
+};
+
+export const useMergeTag = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      targetId,
+      sourceId,
+    }: {
+      targetId: number;
+      sourceId: number;
+    }) => {
+      return API.request<void>("POST", `/tags/${targetId}/merge`, {
+        source_id: sourceId,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrieveTag, variables.targetId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
+      // Invalidate book queries since they display tag info
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };

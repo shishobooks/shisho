@@ -9,17 +9,23 @@ import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
 import CreateLibrary from "@/components/pages/CreateLibrary";
 import CreateUser from "@/components/pages/CreateUser";
+import GenreDetail from "@/components/pages/GenreDetail";
 import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
+import ImprintDetail from "@/components/pages/ImprintDetail";
+import ImprintsList from "@/components/pages/ImprintsList";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
 import Login from "@/components/pages/Login";
 import PersonDetail from "@/components/pages/PersonDetail";
 import PersonList from "@/components/pages/PersonList";
+import PublisherDetail from "@/components/pages/PublisherDetail";
+import PublishersList from "@/components/pages/PublishersList";
 import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
+import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
 import UserSettings from "@/components/pages/UserSettings";
@@ -214,10 +220,58 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "libraries/:libraryId/genres/:id",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <GenreDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "libraries/:libraryId/tags",
         element: (
           <ProtectedRoute checkLibraryAccess>
             <TagsList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/tags/:id",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <TagDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/publishers",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <PublishersList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/publishers/:id",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <PublisherDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/imprints",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <ImprintsList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/imprints/:id",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <ImprintDetail />
           </ProtectedRoute>
         ),
       },

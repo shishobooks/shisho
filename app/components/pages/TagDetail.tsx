@@ -11,22 +11,22 @@ import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  useDeleteSeries,
-  useMergeSeries,
-  useSeries,
-  useSeriesBooks,
-  useSeriesList,
-  useUpdateSeries,
-} from "@/hooks/queries/series";
+  useDeleteTag,
+  useMergeTag,
+  useTag,
+  useTagBooks,
+  useTagsList,
+  useUpdateTag,
+} from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
 
-const SeriesDetail = () => {
+const TagDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const navigate = useNavigate();
-  const seriesId = id ? parseInt(id, 10) : undefined;
+  const tagId = id ? parseInt(id, 10) : undefined;
 
-  const seriesQuery = useSeries(seriesId);
-  const seriesBooksQuery = useSeriesBooks(seriesId);
+  const tagQuery = useTag(tagId);
+  const tagBooksQuery = useTagBooks(tagId);
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -34,48 +34,45 @@ const SeriesDetail = () => {
   const [mergeSearch, setMergeSearch] = useState("");
   const debouncedMergeSearch = useDebounce(mergeSearch, 200);
 
-  const updateSeriesMutation = useUpdateSeries();
-  const mergeSeriesMutation = useMergeSeries();
-  const deleteSeriesMutation = useDeleteSeries();
+  const updateTagMutation = useUpdateTag();
+  const mergeTagMutation = useMergeTag();
+  const deleteTagMutation = useDeleteTag();
 
-  const seriesListQuery = useSeriesList(
+  const tagsListQuery = useTagsList(
     {
-      library_id: seriesQuery.data?.library_id,
+      library_id: tagQuery.data?.library_id,
       limit: 50,
       search: debouncedMergeSearch || undefined,
     },
-    { enabled: mergeOpen && !!seriesQuery.data?.library_id },
+    { enabled: mergeOpen && !!tagQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string; sort_name?: string }) => {
-    if (!seriesId) return;
-    await updateSeriesMutation.mutateAsync({
-      seriesId,
-      payload: {
-        name: data.name,
-        sort_name: data.sort_name,
-      },
+  const handleEdit = async (data: { name: string }) => {
+    if (!tagId) return;
+    await updateTagMutation.mutateAsync({
+      tagId,
+      payload: { name: data.name },
     });
     setEditOpen(false);
   };
 
   const handleMerge = async (sourceId: number) => {
-    if (!seriesId) return;
-    await mergeSeriesMutation.mutateAsync({
-      targetId: seriesId,
+    if (!tagId) return;
+    await mergeTagMutation.mutateAsync({
+      targetId: tagId,
       sourceId,
     });
     setMergeOpen(false);
   };
 
   const handleDelete = async () => {
-    if (!seriesId) return;
-    await deleteSeriesMutation.mutateAsync({ seriesId });
+    if (!tagId) return;
+    await deleteTagMutation.mutateAsync({ tagId });
     setDeleteOpen(false);
-    navigate(`/libraries/${libraryId}/series`);
+    navigate(`/libraries/${libraryId}/tags`);
   };
 
-  if (seriesQuery.isLoading) {
+  if (tagQuery.isLoading) {
     return (
       <div>
         <TopNav />
@@ -86,22 +83,21 @@ const SeriesDetail = () => {
     );
   }
 
-  if (!seriesQuery.isSuccess || !seriesQuery.data) {
+  if (!tagQuery.isSuccess || !tagQuery.data) {
     return (
       <div>
         <TopNav />
         <div className="max-w-7xl w-full mx-auto px-6 py-8">
           <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">Series Not Found</h1>
+            <h1 className="text-2xl font-semibold mb-4">Tag Not Found</h1>
             <p className="text-muted-foreground mb-6">
-              The series you're looking for doesn't exist or may have been
-              removed.
+              The tag you're looking for doesn't exist or may have been removed.
             </p>
             <Link
               className="text-primary hover:underline"
-              to={`/libraries/${libraryId}/series`}
+              to={`/libraries/${libraryId}/tags`}
             >
-              Back to Series
+              Back to Tags
             </Link>
           </div>
         </div>
@@ -109,17 +105,18 @@ const SeriesDetail = () => {
     );
   }
 
-  const series = seriesQuery.data;
-  const canDelete = series.book_count === 0;
+  const tag = tagQuery.data;
+  const bookCount = tag.book_count ?? 0;
+  const canDelete = bookCount === 0;
 
   return (
     <div>
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        {/* Series Header */}
+        {/* Tag Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold">{series.name}</h1>
+            <h1 className="text-3xl font-bold">{tag.name}</h1>
             <div className="flex gap-2">
               <Button
                 onClick={() => setEditOpen(true)}
@@ -149,27 +146,19 @@ const SeriesDetail = () => {
               )}
             </div>
           </div>
-          {series.sort_name !== series.name && (
-            <p className="text-muted-foreground mb-2">
-              Sort name: {series.sort_name}
-            </p>
-          )}
-          {series.description && (
-            <p className="text-muted-foreground mb-2">{series.description}</p>
-          )}
           <Badge variant="secondary">
-            {series.book_count} book{series.book_count !== 1 ? "s" : ""}
+            {bookCount} book{bookCount !== 1 ? "s" : ""}
           </Badge>
         </div>
 
-        {/* Books in Series */}
-        {series.book_count > 0 && (
+        {/* Books with this Tag */}
+        {bookCount > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-semibold mb-4">Books in Series</h2>
-            {seriesBooksQuery.isLoading && <LoadingSpinner />}
-            {seriesBooksQuery.isSuccess && (
+            <h2 className="text-xl font-semibold mb-4">Books</h2>
+            {tagBooksQuery.isLoading && <LoadingSpinner />}
+            {tagBooksQuery.isSuccess && (
               <div className="flex flex-wrap gap-6">
-                {seriesBooksQuery.data.map((book) => (
+                {tagBooksQuery.data.map((book) => (
                   <BookItem book={book} key={book.id} libraryId={libraryId!} />
                 ))}
               </div>
@@ -178,45 +167,44 @@ const SeriesDetail = () => {
         )}
 
         {/* No Books */}
-        {series.book_count === 0 && (
+        {bookCount === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            This series has no associated books.
+            This tag has no associated books.
           </div>
         )}
 
         <MetadataEditDialog
-          entityName={series.name}
-          entityType="series"
-          isPending={updateSeriesMutation.isPending}
+          entityName={tag.name}
+          entityType="tag"
+          isPending={updateTagMutation.isPending}
           onOpenChange={setEditOpen}
           onSave={handleEdit}
           open={editOpen}
-          sortName={series.sort_name}
         />
 
         <MetadataMergeDialog
           entities={
-            seriesListQuery.data?.series.map((s) => ({
-              id: s.id,
-              name: s.name,
-              count: s.book_count ?? 0,
+            tagsListQuery.data?.tags.map((t) => ({
+              id: t.id,
+              name: t.name,
+              count: t.book_count ?? 0,
             })) ?? []
           }
-          entityType="series"
-          isLoadingEntities={seriesListQuery.isLoading}
-          isPending={mergeSeriesMutation.isPending}
+          entityType="tag"
+          isLoadingEntities={tagsListQuery.isLoading}
+          isPending={mergeTagMutation.isPending}
           onMerge={handleMerge}
           onOpenChange={setMergeOpen}
           onSearch={setMergeSearch}
           open={mergeOpen}
-          targetId={seriesId!}
-          targetName={series.name}
+          targetId={tagId!}
+          targetName={tag.name}
         />
 
         <MetadataDeleteDialog
-          entityName={series.name}
-          entityType="series"
-          isPending={deleteSeriesMutation.isPending}
+          entityName={tag.name}
+          entityType="tag"
+          isPending={deleteTagMutation.isPending}
           onDelete={handleDelete}
           onOpenChange={setDeleteOpen}
           open={deleteOpen}
@@ -226,4 +214,4 @@ const SeriesDetail = () => {
   );
 };
 
-export default SeriesDetail;
+export default TagDetail;

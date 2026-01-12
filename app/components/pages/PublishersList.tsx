@@ -4,13 +4,13 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useTagsList } from "@/hooks/queries/tags";
+import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
-import type { Tag } from "@/types";
+import type { Publisher } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
-const TagsList = () => {
+const PublishersList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
@@ -44,14 +44,14 @@ const TagsList = () => {
     }, 300);
   };
 
-  const tagsQuery = useTagsList({
+  const publishersQuery = usePublishersList({
     limit,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
 
-  const total = tagsQuery.data?.total ?? 0;
+  const total = publishersQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
   const handlePageChange = (page: number) => {
@@ -60,18 +60,18 @@ const TagsList = () => {
     setSearchParams(newParams);
   };
 
-  const renderTagItem = (tag: Tag) => {
-    const bookCount = tag.book_count ?? 0;
+  const renderPublisherItem = (publisher: Publisher) => {
+    const fileCount = publisher.file_count ?? 0;
 
     return (
       <Link
         className="flex items-center justify-between p-3 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-        key={tag.id}
-        to={`/libraries/${libraryId}/tags/${tag.id}`}
+        key={publisher.id}
+        to={`/libraries/${libraryId}/publishers/${publisher.id}`}
       >
-        <span className="font-medium">{tag.name}</span>
+        <span className="font-medium">{publisher.name}</span>
         <Badge variant="secondary">
-          {bookCount} book{bookCount !== 1 ? "s" : ""}
+          {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
       </Link>
     );
@@ -82,33 +82,37 @@ const TagsList = () => {
       <TopNav />
       <div className="max-w-3xl w-full mx-auto px-6 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2">Tags</h1>
-          <p className="text-muted-foreground">Browse tags in your library</p>
+          <h1 className="text-2xl font-semibold mb-2">Publishers</h1>
+          <p className="text-muted-foreground">
+            Browse publishers in your library
+          </p>
         </div>
 
         <div className="mb-6">
           <Input
             className="max-w-xs"
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search tags..."
+            placeholder="Search publishers..."
             type="search"
             value={searchInput}
           />
         </div>
 
-        {tagsQuery.isLoading && (
+        {publishersQuery.isLoading && (
           <div className="text-muted-foreground">Loading...</div>
         )}
 
-        {tagsQuery.isSuccess && tagsQuery.data.tags.length === 0 && (
-          <div className="text-muted-foreground">No tags found</div>
-        )}
+        {publishersQuery.isSuccess &&
+          publishersQuery.data.publishers.length === 0 && (
+            <div className="text-muted-foreground">No publishers found</div>
+          )}
 
-        {tagsQuery.isSuccess && tagsQuery.data.tags.length > 0 && (
-          <div className="space-y-1">
-            {tagsQuery.data.tags.map(renderTagItem)}
-          </div>
-        )}
+        {publishersQuery.isSuccess &&
+          publishersQuery.data.publishers.length > 0 && (
+            <div className="space-y-1">
+              {publishersQuery.data.publishers.map(renderPublisherItem)}
+            </div>
+          )}
 
         {totalPages > 1 && (
           <div className="mt-6 flex justify-center gap-2">
@@ -136,4 +140,4 @@ const TagsList = () => {
   );
 };
 
-export default TagsList;
+export default PublishersList;

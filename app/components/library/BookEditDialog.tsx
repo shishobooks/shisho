@@ -84,6 +84,7 @@ export function BookEditDialog({
   const [title, setTitle] = useState(book.title);
   const [sortTitle, setSortTitle] = useState(book.sort_title || "");
   const [subtitle, setSubtitle] = useState(book.subtitle || "");
+  const [description, setDescription] = useState(book.description || "");
   const [authors, setAuthors] = useState<AuthorInput[]>(
     book.authors?.map((a) => ({
       name: a.person?.name || "",
@@ -157,6 +158,7 @@ export function BookEditDialog({
       setTitle(book.title);
       setSortTitle(book.sort_title || "");
       setSubtitle(book.subtitle || "");
+      setDescription(book.description || "");
       setAuthors(
         book.authors?.map((a) => ({
           name: a.person?.name || "",
@@ -255,6 +257,7 @@ export function BookEditDialog({
       title?: string;
       sort_title?: string;
       subtitle?: string;
+      description?: string;
       authors?: AuthorInput[];
       series?: SeriesInput[];
       genres?: string[];
@@ -280,6 +283,9 @@ export function BookEditDialog({
     }
     if (subtitle !== (book.subtitle || "")) {
       payload.subtitle = subtitle;
+    }
+    if (description !== (book.description || "")) {
+      payload.description = description;
     }
 
     // Check if authors changed (compare name and role)
@@ -398,6 +404,18 @@ export function BookEditDialog({
               onChange={(e) => setSubtitle(e.target.value)}
               rows={2}
               value={subtitle}
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Book description or summary..."
+              rows={4}
+              value={description}
             />
           </div>
 
