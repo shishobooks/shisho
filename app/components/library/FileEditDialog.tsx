@@ -255,20 +255,23 @@ export function FileEditDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Edit File</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 min-w-0">
           {/* File Info */}
           <div className="space-y-2">
             <Label>File</Label>
-            <div className="flex items-center gap-2">
-              <Badge className="uppercase text-xs" variant="secondary">
+            <div className="flex items-center gap-2 min-w-0">
+              <Badge className="uppercase text-xs shrink-0" variant="secondary">
                 {file.file_type}
               </Badge>
-              <span className="text-sm text-muted-foreground truncate">
+              <span
+                className="text-sm text-muted-foreground truncate"
+                title={file.filepath.split("/").pop()}
+              >
                 {file.filepath.split("/").pop()}
               </span>
             </div>
@@ -324,13 +327,15 @@ export function FileEditDialog({
               <div className="flex flex-wrap gap-2 mb-2">
                 {narrators.map((narrator, index) => (
                   <Badge
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-1 max-w-full"
                     key={index}
                     variant="secondary"
                   >
-                    {narrator}
+                    <span className="truncate" title={narrator}>
+                      {narrator}
+                    </span>
                     <button
-                      className="ml-1 cursor-pointer hover:text-destructive"
+                      className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                       onClick={() => handleRemoveNarrator(index)}
                       type="button"
                     >
@@ -379,10 +384,15 @@ export function FileEditDialog({
             <Label>Publisher</Label>
             {publisher ? (
               <div className="flex items-center gap-2">
-                <Badge className="flex items-center gap-1" variant="secondary">
-                  {publisher}
+                <Badge
+                  className="flex items-center gap-1 max-w-full"
+                  variant="secondary"
+                >
+                  <span className="truncate" title={publisher}>
+                    {publisher}
+                  </span>
                   <button
-                    className="ml-1 cursor-pointer hover:text-destructive"
+                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                     onClick={handleClearPublisher}
                     type="button"
                   >
@@ -438,13 +448,15 @@ export function FileEditDialog({
                               value={p.name}
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
+                                className={`mr-2 h-4 w-4 shrink-0 ${
                                   publisher === p.name
                                     ? "opacity-100"
                                     : "opacity-0"
                                 }`}
                               />
-                              {p.name}
+                              <span className="truncate" title={p.name}>
+                                {p.name}
+                              </span>
                             </CommandItem>
                           ))}
                           {showCreatePublisherOption && (
@@ -452,8 +464,10 @@ export function FileEditDialog({
                               onSelect={handleCreatePublisher}
                               value={`create-${publisherSearch}`}
                             >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Create "{publisherSearch}"
+                              <Plus className="mr-2 h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                Create "{publisherSearch}"
+                              </span>
                             </CommandItem>
                           )}
                         </CommandGroup>
@@ -470,10 +484,15 @@ export function FileEditDialog({
             <Label>Imprint</Label>
             {imprint ? (
               <div className="flex items-center gap-2">
-                <Badge className="flex items-center gap-1" variant="secondary">
-                  {imprint}
+                <Badge
+                  className="flex items-center gap-1 max-w-full"
+                  variant="secondary"
+                >
+                  <span className="truncate" title={imprint}>
+                    {imprint}
+                  </span>
                   <button
-                    className="ml-1 cursor-pointer hover:text-destructive"
+                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                     onClick={handleClearImprint}
                     type="button"
                   >
@@ -525,13 +544,15 @@ export function FileEditDialog({
                               value={i.name}
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
+                                className={`mr-2 h-4 w-4 shrink-0 ${
                                   imprint === i.name
                                     ? "opacity-100"
                                     : "opacity-0"
                                 }`}
                               />
-                              {i.name}
+                              <span className="truncate" title={i.name}>
+                                {i.name}
+                              </span>
                             </CommandItem>
                           ))}
                           {showCreateImprintOption && (
@@ -539,8 +560,10 @@ export function FileEditDialog({
                               onSelect={handleCreateImprint}
                               value={`create-${imprintSearch}`}
                             >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Create "{imprintSearch}"
+                              <Plus className="mr-2 h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                Create "{imprintSearch}"
+                              </span>
                             </CommandItem>
                           )}
                         </CommandGroup>

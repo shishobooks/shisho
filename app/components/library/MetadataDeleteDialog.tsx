@@ -42,12 +42,15 @@ export function MetadataDeleteDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            Delete {ENTITY_LABELS[entityType]}
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+            <span className="truncate">Delete {ENTITY_LABELS[entityType]}</span>
           </DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete "{entityName}"? This action cannot
-            be undone.
+            Are you sure you want to delete{" "}
+            <span className="font-medium break-all" title={entityName}>
+              "{entityName}"
+            </span>
+            ? This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 

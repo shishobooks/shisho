@@ -187,6 +187,15 @@ for _, id := range newGenreIDs {
 - Tailwind CSS for styling with dark/light theme support
 - Components follow shadcn/ui patterns
 
+**Handling Long Text in UI**:
+When displaying user-generated content that may be long (names, titles, etc.):
+- **Dialogs**: Use `overflow-x-hidden` on `DialogContent` to prevent horizontal scrolling. Avoid `overflow-hidden` on inner containers as it clips focus rings.
+- **Dialog headers**: Add `pr-8` to `DialogHeader` to leave room for the close button. Let titles wrap naturally rather than truncating.
+- **Page headers with buttons**: Use `flex items-start justify-between gap-4`, add `min-w-0 break-words` to the title, and `shrink-0` to the button container so buttons don't get pushed off-screen.
+- **Badges with long text**: Add `max-w-full` to the badge, wrap text in `<span className="truncate" title={text}>`, and add `shrink-0` to action buttons inside.
+- **Flex containers with truncation**: Parent needs `min-w-0` for `truncate` to work on children.
+- **Dropdowns/Command items**: Add `shrink-0` to icons, wrap text in `<span className="truncate" title={text}>`.
+
 ### File Processing Flow
 
 1. **Scan Job Creation**: User triggers scan via API

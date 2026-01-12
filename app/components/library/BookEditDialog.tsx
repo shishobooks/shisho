@@ -513,13 +513,15 @@ export function BookEditDialog({
                 <div className="flex flex-wrap gap-2 mb-2">
                   {authors.map((author, index) => (
                     <Badge
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 max-w-full"
                       key={index}
                       variant="secondary"
                     >
-                      {author.name}
+                      <span className="truncate" title={author.name}>
+                        {author.name}
+                      </span>
                       <button
-                        className="ml-1 cursor-pointer hover:text-destructive"
+                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                         onClick={() => handleRemoveAuthor(index)}
                         type="button"
                       >
@@ -627,8 +629,10 @@ export function BookEditDialog({
                             onSelect={() => handleSelectSeries(s.name)}
                             value={s.name}
                           >
-                            <Check className="mr-2 h-4 w-4 opacity-0" />
-                            {s.name}
+                            <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
+                            <span className="truncate" title={s.name}>
+                              {s.name}
+                            </span>
                           </CommandItem>
                         ))}
                         {showCreateOption && (
@@ -636,8 +640,10 @@ export function BookEditDialog({
                             onSelect={handleCreateSeries}
                             value={`create-${seriesSearch}`}
                           >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create "{seriesSearch}"
+                            <Plus className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">
+                              Create "{seriesSearch}"
+                            </span>
                           </CommandItem>
                         )}
                       </CommandGroup>

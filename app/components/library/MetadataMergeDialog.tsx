@@ -98,9 +98,11 @@ export function MetadataMergeDialog({
 
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Merge into "{targetName}"</DialogTitle>
+      <DialogContent className="max-w-xl overflow-x-hidden">
+        <DialogHeader className="pr-8">
+          <DialogTitle title={`Merge into "${targetName}"`}>
+            Merge into "{targetName}"
+          </DialogTitle>
           <DialogDescription>
             Select a {entityType} to merge into this one. All associated books
             will be transferred and the selected {entityType} will be deleted.
@@ -112,13 +114,15 @@ export function MetadataMergeDialog({
             <PopoverTrigger asChild>
               <Button
                 aria-expanded={comboboxOpen}
-                className="w-full justify-between"
+                className="w-full justify-between min-w-0"
                 role="combobox"
                 variant="outline"
               >
-                {selectedEntity
-                  ? `${selectedEntity.name} (${selectedEntity.count} books)`
-                  : `Select ${entityType} to merge...`}
+                <span className="truncate">
+                  {selectedEntity
+                    ? `${selectedEntity.name} (${selectedEntity.count} books)`
+                    : `Select ${entityType} to merge...`}
+                </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -152,14 +156,16 @@ export function MetadataMergeDialog({
                           value={String(entity.id)}
                         >
                           <Check
-                            className={`mr-2 h-4 w-4 ${
+                            className={`mr-2 h-4 w-4 shrink-0 ${
                               selectedId === entity.id
                                 ? "opacity-100"
                                 : "opacity-0"
                             }`}
                           />
-                          <span className="flex-1">{entity.name}</span>
-                          <span className="text-muted-foreground text-sm">
+                          <span className="flex-1 truncate" title={entity.name}>
+                            {entity.name}
+                          </span>
+                          <span className="text-muted-foreground text-sm shrink-0 ml-2">
                             {entity.count} book{entity.count !== 1 ? "s" : ""}
                           </span>
                         </CommandItem>

@@ -116,9 +116,11 @@ const GenreDetail = () => {
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
         {/* Genre Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold">{genre.name}</h1>
-            <div className="flex gap-2">
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <h1 className="text-3xl font-bold min-w-0 break-words">
+              {genre.name}
+            </h1>
+            <div className="flex gap-2 shrink-0">
               <Button
                 onClick={() => setEditOpen(true)}
                 size="sm"
