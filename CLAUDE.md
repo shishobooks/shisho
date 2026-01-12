@@ -226,3 +226,10 @@ for _, id := range newGenreIDs {
 - Worktrees should be created in `~/.worktrees/shisho/`
 - After creating a new worktree, run `make setup` to install dependencies and build tools
 - Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && make setup`
+
+### Database Best Practices
+
+- **Always consider indexes** when modifying database schema or query patterns
+- For deletion queries, ensure indexes exist on the WHERE clause columns
+- For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
+- Composite indexes should match query patterns (column order matters)
