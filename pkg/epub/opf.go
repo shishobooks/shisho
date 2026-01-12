@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -21,6 +22,11 @@ type OPF struct {
 	SeriesNumber  *float64
 	Genres        []string
 	Tags          []string
+	Description   string
+	Publisher     string
+	Imprint       string
+	URL           string
+	ReleaseDate   *time.Time
 	CoverFilepath string
 	CoverMimeType string
 	CoverData     []byte
@@ -61,9 +67,11 @@ type Package struct {
 			ID     string `xml:"id,attr"`
 			Scheme string `xml:"scheme,attr"`
 		} `xml:"identifier"`
-		Date     string `xml:"date"`
-		Rights   string `xml:"rights"`
-		Language string `xml:"language"`
+		Date     string   `xml:"date"`
+		Relation []string `xml:"relation"`
+		Source   []string `xml:"source"`
+		Rights   string   `xml:"rights"`
+		Language string   `xml:"language"`
 		Meta     []struct {
 			Text     string `xml:",chardata"`
 			Name     string `xml:"name,attr"`
@@ -163,6 +171,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		SeriesNumber:  opf.SeriesNumber,
 		Genres:        opf.Genres,
 		Tags:          opf.Tags,
+		Description:   opf.Description,
+		Publisher:     opf.Publisher,
+		Imprint:       opf.Imprint,
+		URL:           opf.URL,
+		ReleaseDate:   opf.ReleaseDate,
 		CoverMimeType: opf.CoverMimeType,
 		CoverData:     opf.CoverData,
 		DataSource:    models.DataSourceEPUBMetadata,
@@ -271,6 +284,59 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
+	// Extract description
+	description := pkg.Metadata.Description
+
+	// Extract publisher
+	publisher := pkg.Metadata.Publisher
+
+	// Extract release date from dc:date
+	var releaseDate *time.Time
+	if pkg.Metadata.Date != "" {
+		// Try various date formats
+		formats := []string{
+			"2006-01-02",
+			"2006-01-02T15:04:05Z",
+			"2006-01-02T15:04:05-07:00",
+			"2006",
+		}
+		for _, format := range formats {
+			if t, err := time.Parse(format, pkg.Metadata.Date); err == nil {
+				releaseDate = &t
+				break
+			}
+		}
+	}
+
+	// Extract imprint from meta tags
+	var imprint string
+	for _, m := range pkg.Metadata.Meta {
+		if m.Property == "ibooks:imprint" || m.Name == "imprint" {
+			imprint = m.Text
+			if imprint == "" {
+				imprint = m.Content
+			}
+			break
+		}
+	}
+
+	// Extract URL from dc:relation or dc:source
+	var url string
+	for _, rel := range pkg.Metadata.Relation {
+		if strings.HasPrefix(rel, "http://") || strings.HasPrefix(rel, "https://") {
+			url = rel
+			break
+		}
+	}
+	if url == "" {
+		for _, src := range pkg.Metadata.Source {
+			if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+				url = src
+				break
+			}
+		}
+	}
+
 	return &OPF{
 		Title:         title,
 		Authors:       authors,
@@ -278,6 +344,11 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		SeriesNumber:  seriesNumber,
 		Genres:        genres,
 		Tags:          tags,
+		Description:   description,
+		Publisher:     publisher,
+		Imprint:       imprint,
+		URL:           url,
+		ReleaseDate:   releaseDate,
 		CoverFilepath: coverFilepath,
 		CoverMimeType: coverMimeType,
 	}, nil

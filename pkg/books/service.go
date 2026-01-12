@@ -155,7 +155,9 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 		Relation("Files.Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("n.sort_order ASC")
 		}).
-		Relation("Files.Narrators.Person")
+		Relation("Files.Narrators.Person").
+		Relation("Files.Publisher").
+		Relation("Files.Imprint")
 
 	if opts.ID != nil {
 		q = q.Where("b.id = ?", *opts.ID)
@@ -205,6 +207,8 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 			return sq.Order("n.sort_order ASC")
 		}).
 		Relation("Files.Narrators.Person").
+		Relation("Files.Publisher").
+		Relation("Files.Imprint").
 		Join("INNER JOIN files fil ON fil.book_id = b.id").
 		Where("fil.filepath = ? AND b.library_id = ?", filepath, libraryID)
 
@@ -256,7 +260,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		Relation("Files.Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("n.sort_order ASC")
 		}).
-		Relation("Files.Narrators.Person")
+		Relation("Files.Narrators.Person").
+		Relation("Files.Publisher").
+		Relation("Files.Imprint")
 
 	// Apply series filter first (affects ordering)
 	if opts.SeriesID != nil {

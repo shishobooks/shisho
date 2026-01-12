@@ -23,6 +23,11 @@ type ParsedMetadata struct {
 	SeriesNumber  *float64
 	Genres        []string // Genre names from file metadata
 	Tags          []string // Tag names from file metadata
+	Description   string
+	Publisher     string
+	Imprint       string
+	URL           string
+	ReleaseDate   *time.Time
 	CoverMimeType string
 	CoverData     []byte
 	CoverPage     *int // 0-indexed page number for CBZ cover, nil for other file types

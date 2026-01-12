@@ -24,12 +24,17 @@ import (
 
 // CBZMetadata holds metadata for CBZ to KePub conversion.
 type CBZMetadata struct {
-	Title    string
-	Subtitle *string
-	Authors  []CBZAuthor
-	Series   []CBZSeries
-	Genres   []string
-	Tags     []string
+	Title       string
+	Subtitle    *string
+	Description *string
+	Authors     []CBZAuthor
+	Series      []CBZSeries
+	Genres      []string
+	Tags        []string
+	URL         *string
+	Publisher   *string
+	Imprint     *string
+	ReleaseDate *time.Time
 }
 
 // CBZAuthor represents an author/creator for CBZ metadata.
@@ -395,6 +400,46 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 	if metadata != nil && len(metadata.Tags) > 0 {
 		buf.WriteString(`    <meta name="calibre:tags" content="`)
 		buf.WriteString(html.EscapeString(strings.Join(metadata.Tags, ", ")))
+		buf.WriteString(`"/>
+`)
+	}
+
+	// Add description
+	if metadata != nil && metadata.Description != nil && *metadata.Description != "" {
+		buf.WriteString(`    <dc:description>`)
+		buf.WriteString(html.EscapeString(*metadata.Description))
+		buf.WriteString(`</dc:description>
+`)
+	}
+
+	// Add publisher
+	if metadata != nil && metadata.Publisher != nil && *metadata.Publisher != "" {
+		buf.WriteString(`    <dc:publisher>`)
+		buf.WriteString(html.EscapeString(*metadata.Publisher))
+		buf.WriteString(`</dc:publisher>
+`)
+	}
+
+	// Add release date
+	if metadata != nil && metadata.ReleaseDate != nil {
+		buf.WriteString(`    <dc:date>`)
+		buf.WriteString(metadata.ReleaseDate.Format("2006-01-02"))
+		buf.WriteString(`</dc:date>
+`)
+	}
+
+	// Add URL as custom meta (not standard EPUB but preserved for round-trip)
+	if metadata != nil && metadata.URL != nil && *metadata.URL != "" {
+		buf.WriteString(`    <meta name="shisho:url" content="`)
+		buf.WriteString(html.EscapeString(*metadata.URL))
+		buf.WriteString(`"/>
+`)
+	}
+
+	// Add imprint as custom meta (not standard EPUB but preserved for round-trip)
+	if metadata != nil && metadata.Imprint != nil && *metadata.Imprint != "" {
+		buf.WriteString(`    <meta name="shisho:imprint" content="`)
+		buf.WriteString(html.EscapeString(*metadata.Imprint))
 		buf.WriteString(`"/>
 `)
 	}

@@ -106,7 +106,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 
 		if srcZipFile.Name == opfPath {
 			// Modify the OPF file
-			destFileContent, err = modifyOPF(srcZipFile, book, coverInfo, newCoverMimeType)
+			destFileContent, err = modifyOPF(srcZipFile, book, file, coverInfo, newCoverMimeType)
 			if err != nil {
 				return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 			}
@@ -213,7 +213,7 @@ func findCoverImageInOPF(opfFile *zip.File) (*coverImageInfo, error) {
 }
 
 // modifyOPF modifies the OPF file with new metadata.
-func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error) {
+func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error) {
 	r, err := opfFile.Open()
 	if err != nil {
 		return nil, err
@@ -260,6 +260,21 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 		} else {
 			pkg.Metadata.Titles[1].Text = *book.Subtitle
 		}
+	}
+
+	// Update description if book has one
+	if book.Description != nil && *book.Description != "" {
+		pkg.Metadata.Description = *book.Description
+	}
+
+	// Update publisher from file if available
+	if file != nil && file.Publisher != nil {
+		pkg.Metadata.Publisher = file.Publisher.Name
+	}
+
+	// Update release date from file if available
+	if file != nil && file.ReleaseDate != nil {
+		pkg.Metadata.Date = file.ReleaseDate.Format("2006-01-02")
 	}
 
 	// Update authors - replace all creators with role="aut"
@@ -395,6 +410,37 @@ func modifyOPF(opfFile *zip.File, book *models.Book, coverInfo *coverImageInfo, 
 			Content: existingCalibreTags,
 		})
 	}
+
+	// Remove and add URL meta tag if file has one
+	var filteredForURL []opfMeta
+	for _, meta := range finalMetas {
+		if meta.Name != "shisho:url" {
+			filteredForURL = append(filteredForURL, meta)
+		}
+	}
+	if file != nil && file.URL != nil && *file.URL != "" {
+		filteredForURL = append(filteredForURL, opfMeta{
+			Name:    "shisho:url",
+			Content: *file.URL,
+		})
+	}
+	finalMetas = filteredForURL
+
+	// Remove and add imprint meta tag if file has one
+	var filteredForImprint []opfMeta
+	for _, meta := range finalMetas {
+		if meta.Name != "shisho:imprint" {
+			filteredForImprint = append(filteredForImprint, meta)
+		}
+	}
+	if file != nil && file.Imprint != nil {
+		filteredForImprint = append(filteredForImprint, opfMeta{
+			Name:    "shisho:imprint",
+			Content: file.Imprint.Name,
+		})
+	}
+	finalMetas = filteredForImprint
+
 	pkg.Metadata.Meta = finalMetas
 
 	// Update cover mime type in manifest if we're replacing the cover

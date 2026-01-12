@@ -95,6 +95,8 @@ func init() {
 				sort_title_source TEXT NOT NULL,
 				subtitle TEXT,
 				subtitle_source TEXT,
+				description TEXT,
+				description_source TEXT,
 				author_source TEXT NOT NULL,
 				genre_source TEXT,
 				tag_source TEXT
@@ -152,7 +154,15 @@ func init() {
 				page_count INTEGER,
 				audiobook_duration_seconds DOUBLE,
 				audiobook_bitrate_bps INTEGER,
-				narrator_source TEXT
+				narrator_source TEXT,
+				url TEXT,
+				url_source TEXT,
+				release_date DATE,
+				release_date_source TEXT,
+				publisher_id INTEGER REFERENCES publishers (id),
+				publisher_source TEXT,
+				imprint_id INTEGER REFERENCES imprints (id),
+				imprint_source TEXT
 			)
 `)
 		if err != nil {
@@ -341,6 +351,50 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec(`CREATE UNIQUE INDEX ux_book_tags_book_tag ON book_tags (book_id, tag_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Publishers (normalized, case-insensitive per library)
+		_, err = db.Exec(`
+			CREATE TABLE publishers (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				library_id INTEGER REFERENCES libraries (id) ON DELETE CASCADE NOT NULL,
+				name TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_publishers_name_library_id ON publishers (name COLLATE NOCASE, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_publishers_library_id ON publishers (library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Imprints (normalized, case-insensitive per library)
+		_, err = db.Exec(`
+			CREATE TABLE imprints (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				library_id INTEGER REFERENCES libraries (id) ON DELETE CASCADE NOT NULL,
+				name TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE UNIQUE INDEX ux_imprints_name_library_id ON imprints (name COLLATE NOCASE, library_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX ix_imprints_library_id ON imprints (library_id)`)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -626,6 +680,14 @@ func init() {
 			return errors.WithStack(err)
 		}
 		_, err = db.Exec("DROP TABLE IF EXISTS files")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS imprints")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec("DROP TABLE IF EXISTS publishers")
 		if err != nil {
 			return errors.WithStack(err)
 		}

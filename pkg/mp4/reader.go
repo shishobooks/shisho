@@ -25,6 +25,8 @@ type rawMetadata struct {
 	year         string // from ©day
 	copyright    string // from ©cpy
 	encoder      string // from ©too
+	publisher    string // from ©pub
+	releaseDate  string // from rldt (Audible release date)
 	coverData    []byte
 	coverMime    string
 	mediaType    int64
@@ -173,6 +175,8 @@ func isMetadataAtom(boxType gomp4.BoxType) bool {
 		atomTypeEquals(boxType, AtomYear) ||
 		atomTypeEquals(boxType, AtomCopyright) ||
 		atomTypeEquals(boxType, AtomEncoder) ||
+		atomTypeEquals(boxType, AtomPublisher) ||
+		atomTypeEquals(boxType, AtomReleaseDate) ||
 		atomTypeEquals(boxType, AtomFreeform)
 }
 
@@ -400,6 +404,12 @@ func processMetadataAtom(child ilstChild, meta *rawMetadata) {
 
 	case atomTypeEquals(boxType, AtomEncoder):
 		meta.encoder = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomPublisher):
+		meta.publisher = parseTextData(child.data)
+
+	case atomTypeEquals(boxType, AtomReleaseDate):
+		meta.releaseDate = parseTextData(child.data)
 	}
 }
 

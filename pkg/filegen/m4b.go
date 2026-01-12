@@ -61,7 +61,7 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		Title:    book.Title,
 		Subtitle: "",
 
-		// Preserve from source
+		// Preserve from source (will be overwritten if we have new values)
 		Description: src.Description,
 		Comment:     src.Comment,
 		Year:        src.Year,
@@ -72,6 +72,10 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		Chapters:    src.Chapters,
 		MediaType:   src.MediaType,
 		Freeform:    src.Freeform,
+		Publisher:   src.Publisher,
+		Imprint:     src.Imprint,
+		URL:         src.URL,
+		ReleaseDate: src.ReleaseDate,
 
 		// Preserve cover from source initially (may be replaced below)
 		CoverData:     src.CoverData,
@@ -79,6 +83,31 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 
 		// Preserve unknown atoms for complete tag preservation
 		UnknownAtoms: src.UnknownAtoms,
+	}
+
+	// Set description from book if available
+	if book.Description != nil && *book.Description != "" {
+		meta.Description = *book.Description
+	}
+
+	// Set publisher from file if available
+	if file.Publisher != nil {
+		meta.Publisher = file.Publisher.Name
+	}
+
+	// Set imprint from file if available
+	if file.Imprint != nil {
+		meta.Imprint = file.Imprint.Name
+	}
+
+	// Set URL from file if available
+	if file.URL != nil && *file.URL != "" {
+		meta.URL = *file.URL
+	}
+
+	// Set release date from file if available
+	if file.ReleaseDate != nil {
+		meta.ReleaseDate = file.ReleaseDate
 	}
 
 	// Build genres from book model, or preserve source genres if none in book

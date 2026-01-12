@@ -20,16 +20,21 @@ const (
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
-	Title     string                `json:"title"`
-	Subtitle  *string               `json:"subtitle,omitempty"`
-	Authors   []FingerprintAuthor   `json:"authors"`
-	Narrators []FingerprintNarrator `json:"narrators"`
-	Series    []FingerprintSeries   `json:"series"`
-	Genres    []string              `json:"genres"`
-	Tags      []string              `json:"tags"`
-	Cover     *FingerprintCover     `json:"cover,omitempty"`
-	CoverPage *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
-	Format    string                `json:"format,omitempty"`     // Download format: original or kepub
+	Title       string                `json:"title"`
+	Subtitle    *string               `json:"subtitle,omitempty"`
+	Description *string               `json:"description,omitempty"`
+	Authors     []FingerprintAuthor   `json:"authors"`
+	Narrators   []FingerprintNarrator `json:"narrators"`
+	Series      []FingerprintSeries   `json:"series"`
+	Genres      []string              `json:"genres"`
+	Tags        []string              `json:"tags"`
+	URL         *string               `json:"url,omitempty"`
+	Publisher   *string               `json:"publisher,omitempty"`
+	Imprint     *string               `json:"imprint,omitempty"`
+	ReleaseDate *time.Time            `json:"release_date,omitempty"`
+	Cover       *FingerprintCover     `json:"cover,omitempty"`
+	CoverPage   *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
+	Format      string                `json:"format,omitempty"`     // Download format: original or kepub
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -62,13 +67,26 @@ type FingerprintCover struct {
 // ComputeFingerprint creates a fingerprint from a book and file.
 func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, error) {
 	fp := &Fingerprint{
-		Title:     book.Title,
-		Subtitle:  book.Subtitle,
-		Authors:   make([]FingerprintAuthor, 0),
-		Narrators: make([]FingerprintNarrator, 0),
-		Series:    make([]FingerprintSeries, 0),
-		Genres:    make([]string, 0),
-		Tags:      make([]string, 0),
+		Title:       book.Title,
+		Subtitle:    book.Subtitle,
+		Description: book.Description,
+		Authors:     make([]FingerprintAuthor, 0),
+		Narrators:   make([]FingerprintNarrator, 0),
+		Series:      make([]FingerprintSeries, 0),
+		Genres:      make([]string, 0),
+		Tags:        make([]string, 0),
+	}
+
+	// Add file-level metadata
+	if file != nil {
+		fp.URL = file.URL
+		fp.ReleaseDate = file.ReleaseDate
+		if file.Publisher != nil {
+			fp.Publisher = &file.Publisher.Name
+		}
+		if file.Imprint != nil {
+			fp.Imprint = &file.Imprint.Name
+		}
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting

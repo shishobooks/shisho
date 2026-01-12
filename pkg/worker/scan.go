@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
@@ -270,6 +271,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	var coverSource *string
 	var subtitle *string
 	subtitleSource := models.DataSourceFilepath
+	var description *string
+	descriptionSource := models.DataSourceFilepath
+
+	// File-level metadata
+	var fileURL *string
+	fileURLSource := models.DataSourceFilepath
+	var publisherName *string
+	publisherSource := models.DataSourceFilepath
+	var imprintName *string
+	imprintSource := models.DataSourceFilepath
+	var releaseDate *time.Time
+	releaseDateSource := models.DataSourceFilepath
 
 	// Extract metadata from each file based on its file type.
 	var metadata *mediafile.ParsedMetadata
@@ -339,6 +352,27 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		if trimmedSubtitle := strings.TrimSpace(metadata.Subtitle); trimmedSubtitle != "" {
 			subtitle = &trimmedSubtitle
 			subtitleSource = metadata.DataSource
+		}
+		if trimmedDescription := strings.TrimSpace(metadata.Description); trimmedDescription != "" {
+			description = &trimmedDescription
+			descriptionSource = metadata.DataSource
+		}
+		// File-level metadata
+		if trimmedURL := strings.TrimSpace(metadata.URL); trimmedURL != "" {
+			fileURL = &trimmedURL
+			fileURLSource = metadata.DataSource
+		}
+		if trimmedPublisher := strings.TrimSpace(metadata.Publisher); trimmedPublisher != "" {
+			publisherName = &trimmedPublisher
+			publisherSource = metadata.DataSource
+		}
+		if trimmedImprint := strings.TrimSpace(metadata.Imprint); trimmedImprint != "" {
+			imprintName = &trimmedImprint
+			imprintSource = metadata.DataSource
+		}
+		if metadata.ReleaseDate != nil {
+			releaseDate = metadata.ReleaseDate
+			releaseDateSource = metadata.DataSource
 		}
 	}
 
@@ -449,6 +483,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			subtitle = bookSidecarData.Subtitle
 			subtitleSource = models.DataSourceSidecar
 		}
+		if bookSidecarData.Description != nil && *bookSidecarData.Description != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[descriptionSource] {
+			description = bookSidecarData.Description
+			descriptionSource = models.DataSourceSidecar
+		}
 	}
 
 	// Final safety check: ensure title is never empty after all processing.
@@ -527,6 +565,19 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingBook.Subtitle = subtitle
 			existingBook.SubtitleSource = &subtitleSource
 			updateOptions.Columns = append(updateOptions.Columns, "subtitle", "subtitle_source")
+			metadataChanged = true
+		}
+
+		// Update description only if the new description is non-empty and from a higher priority source
+		existingDescriptionSource := models.DataSourceFilepath
+		if existingBook.DescriptionSource != nil {
+			existingDescriptionSource = *existingBook.DescriptionSource
+		}
+		if description != nil && *description != "" && models.DataSourcePriority[descriptionSource] < models.DataSourcePriority[existingDescriptionSource] {
+			log.Info("updating description")
+			existingBook.Description = description
+			existingBook.DescriptionSource = &descriptionSource
+			updateOptions.Columns = append(updateOptions.Columns, "description", "description_source")
 			metadataChanged = true
 		}
 
@@ -683,10 +734,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			TitleSource:  titleSource,
 			AuthorSource: authorSource,
 			Subtitle:     subtitle,
+			Description:  description,
 		}
 		// Set subtitle source only if we have a subtitle
 		if subtitle != nil && *subtitle != "" {
 			existingBook.SubtitleSource = &subtitleSource
+		}
+		// Set description source only if we have a description
+		if description != nil && *description != "" {
+			existingBook.DescriptionSource = &descriptionSource
 		}
 		err := w.bookService.CreateBook(ctx, existingBook)
 		if err != nil {
@@ -900,9 +956,76 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Apply file sidecar data for URL (higher priority than file metadata)
+	if fileSidecarData != nil && fileSidecarData.URL != nil && *fileSidecarData.URL != "" {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[fileURLSource] {
+			fileURL = fileSidecarData.URL
+			fileURLSource = models.DataSourceSidecar
+		}
+	}
+
+	// Apply file sidecar data for publisher (higher priority than file metadata)
+	if fileSidecarData != nil && fileSidecarData.Publisher != nil && *fileSidecarData.Publisher != "" {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[publisherSource] {
+			publisherName = fileSidecarData.Publisher
+			publisherSource = models.DataSourceSidecar
+		}
+	}
+
+	// Apply file sidecar data for imprint (higher priority than file metadata)
+	if fileSidecarData != nil && fileSidecarData.Imprint != nil && *fileSidecarData.Imprint != "" {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[imprintSource] {
+			imprintName = fileSidecarData.Imprint
+			imprintSource = models.DataSourceSidecar
+		}
+	}
+
+	// Apply file sidecar data for release date (higher priority than file metadata)
+	if fileSidecarData != nil && fileSidecarData.ReleaseDate != nil && *fileSidecarData.ReleaseDate != "" {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[releaseDateSource] {
+			// Parse the ISO 8601 date string from sidecar
+			if t, err := time.Parse("2006-01-02", *fileSidecarData.ReleaseDate); err == nil {
+				releaseDate = &t
+				releaseDateSource = models.DataSourceSidecar
+			}
+		}
+	}
+
 	// Set narrator source on file if we have narrators
 	if len(narratorNames) > 0 {
 		file.NarratorSource = &narratorSource
+	}
+
+	// Set file-level metadata
+	if fileURL != nil {
+		file.URL = fileURL
+		file.URLSource = &fileURLSource
+	}
+	if releaseDate != nil {
+		file.ReleaseDate = releaseDate
+		file.ReleaseDateSource = &releaseDateSource
+	}
+
+	// Create publisher entity if we have a publisher name
+	if publisherName != nil && *publisherName != "" {
+		publisher, err := w.publisherService.FindOrCreatePublisher(ctx, *publisherName, libraryID)
+		if err != nil {
+			log.Error("failed to find/create publisher", logger.Data{"publisher": *publisherName, "error": err.Error()})
+		} else {
+			file.PublisherID = &publisher.ID
+			file.PublisherSource = &publisherSource
+		}
+	}
+
+	// Create imprint entity if we have an imprint name
+	if imprintName != nil && *imprintName != "" {
+		imprint, err := w.imprintService.FindOrCreateImprint(ctx, *imprintName, libraryID)
+		if err != nil {
+			log.Error("failed to find/create imprint", logger.Data{"imprint": *imprintName, "error": err.Error()})
+		} else {
+			file.ImprintID = &imprint.ID
+			file.ImprintSource = &imprintSource
+		}
 	}
 
 	err = w.bookService.CreateFile(ctx, file)

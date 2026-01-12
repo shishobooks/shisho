@@ -34,8 +34,10 @@ var (
 	AtomGrouping  = [4]byte{0xA9, 'g', 'r', 'p'} // ©grp - Grouping
 	AtomCopyright = [4]byte{0xA9, 'c', 'p', 'y'} // ©cpy - Copyright
 	AtomEncoder   = [4]byte{0xA9, 't', 'o', 'o'} // ©too - Encoder/Encoding tool
+	AtomPublisher = [4]byte{0xA9, 'p', 'u', 'b'} // ©pub - Publisher
 
 	// Non-copyright atoms (standard ASCII).
+	AtomReleaseDate = [4]byte{'r', 'l', 'd', 't'} // rldt - Release date (Audible)
 	AtomCover       = [4]byte{'c', 'o', 'v', 'r'} // covr - Cover artwork
 	AtomGenreID     = [4]byte{'g', 'n', 'r', 'e'} // gnre - Genre ID (ID3v1 index)
 	AtomMediaType   = [4]byte{'s', 't', 'i', 'k'} // stik - Media type (2 = audiobook)

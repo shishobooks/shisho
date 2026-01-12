@@ -97,19 +97,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Metadata Sync Checklist**:
 When adding or modifying book/file metadata fields, ensure these files are updated:
-1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` struct for persistence
-2. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
-3. **File parsers** - Update to extract the new field:
+1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` or `FileSidecar` struct for persistence
+2. **Sidecar conversion** (`pkg/sidecar/sidecar.go`) - Update `BookSidecarFromModel()` or `FileSidecarFromModel()` to include the new field
+3. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
+4. **File parsers** - Update to extract the new field:
    - EPUB: `pkg/epub/opf.go`
    - CBZ: `pkg/cbz/cbz.go`
    - M4B: `pkg/mp4/metadata.go`
-4. **File generators** - Update to write the field back:
+5. **File generators** - Update to write the field back:
    - EPUB: `pkg/filegen/epub.go`
    - CBZ: `pkg/filegen/cbz.go`
    - M4B: `pkg/filegen/m4b.go`
    - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
-5. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
-6. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
+6. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
+7. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
+8. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
+9. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
+
+**Adding New Entity Types** (like Publisher, Imprint, Genre, Tag):
+When adding a new entity type that files or books reference:
+1. Create model in `pkg/models/` with appropriate fields and Bun struct tags
+2. Create service in `pkg/{entity}/service.go` following the pattern from `pkg/genres/service.go`:
+   - Include `FindOrCreate{Entity}()` method for scanner to use
+   - Include `Retrieve{Entity}()` and `List{Entity}s()` methods
+3. Add service to worker (`pkg/worker/worker.go`) and initialize in `New()`
+4. Update scanner to use the new service for entity creation
 
 ### Frontend Architecture
 

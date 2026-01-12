@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/fileutils"
@@ -36,6 +37,8 @@ type ComicInfo struct {
 	Translator      string   `xml:"Translator"`
 	Publisher       string   `xml:"Publisher"`
 	Imprint         string   `xml:"Imprint"`
+	Summary         string   `xml:"Summary"`
+	Web             string   `xml:"Web"`
 	Genre           string   `xml:"Genre"`
 	Tags            string   `xml:"Tags"`
 	Characters      string   `xml:"Characters"`
@@ -162,6 +165,52 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	// Extract description from Summary
+	var description string
+	if comicInfo != nil && comicInfo.Summary != "" {
+		description = comicInfo.Summary
+	}
+
+	// Extract URL from Web
+	var url string
+	if comicInfo != nil && comicInfo.Web != "" {
+		url = comicInfo.Web
+	}
+
+	// Extract publisher
+	var publisher string
+	if comicInfo != nil && comicInfo.Publisher != "" {
+		publisher = comicInfo.Publisher
+	}
+
+	// Extract imprint
+	var imprint string
+	if comicInfo != nil && comicInfo.Imprint != "" {
+		imprint = comicInfo.Imprint
+	}
+
+	// Extract release date from Year/Month/Day
+	var releaseDate *time.Time
+	if comicInfo != nil && comicInfo.Year != "" {
+		year, err := strconv.Atoi(comicInfo.Year)
+		if err == nil {
+			month := 1
+			day := 1
+			if comicInfo.Month != "" {
+				if m, err := strconv.Atoi(comicInfo.Month); err == nil && m >= 1 && m <= 12 {
+					month = m
+				}
+			}
+			if comicInfo.Day != "" {
+				if d, err := strconv.Atoi(comicInfo.Day); err == nil && d >= 1 && d <= 31 {
+					day = d
+				}
+			}
+			t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+			releaseDate = &t
+		}
+	}
+
 	// If no series number from ComicInfo, try to extract from filename
 	if seriesNumber == nil {
 		filename := filepath.Base(path)
@@ -177,6 +226,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		SeriesNumber:  seriesNumber,
 		Genres:        genres,
 		Tags:          tags,
+		Description:   description,
+		Publisher:     publisher,
+		Imprint:       imprint,
+		URL:           url,
+		ReleaseDate:   releaseDate,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
 		CoverPage:     coverPage,

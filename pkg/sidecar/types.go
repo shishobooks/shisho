@@ -7,21 +7,26 @@ const CurrentVersion = 1
 // BookSidecar represents the metadata sidecar for a book.
 // This is stored as {bookname}.metadata.json in the book directory.
 type BookSidecar struct {
-	Version   int              `json:"version"`
-	Title     string           `json:"title,omitempty"`
-	SortTitle string           `json:"sort_title,omitempty"`
-	Subtitle  *string          `json:"subtitle,omitempty"`
-	Authors   []AuthorMetadata `json:"authors,omitempty"`
-	Series    []SeriesMetadata `json:"series,omitempty"`
-	Genres    []string         `json:"genres,omitempty"`
-	Tags      []string         `json:"tags,omitempty"`
+	Version     int              `json:"version"`
+	Title       string           `json:"title,omitempty"`
+	SortTitle   string           `json:"sort_title,omitempty"`
+	Subtitle    *string          `json:"subtitle,omitempty"`
+	Description *string          `json:"description,omitempty"`
+	Authors     []AuthorMetadata `json:"authors,omitempty"`
+	Series      []SeriesMetadata `json:"series,omitempty"`
+	Genres      []string         `json:"genres,omitempty"`
+	Tags        []string         `json:"tags,omitempty"`
 }
 
 // FileSidecar represents the metadata sidecar for a media file.
 // This is stored as {filename}.metadata.json alongside the media file.
 type FileSidecar struct {
-	Version   int                `json:"version"`
-	Narrators []NarratorMetadata `json:"narrators,omitempty"`
+	Version     int                `json:"version"`
+	Narrators   []NarratorMetadata `json:"narrators,omitempty"`
+	URL         *string            `json:"url,omitempty"`
+	Publisher   *string            `json:"publisher,omitempty"`
+	Imprint     *string            `json:"imprint,omitempty"`
+	ReleaseDate *string            `json:"release_date,omitempty"` // ISO 8601 date string (YYYY-MM-DD)
 }
 
 // AuthorMetadata represents an author in the sidecar file.

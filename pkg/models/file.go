@@ -34,6 +34,16 @@ type File struct {
 	AudiobookBitrateBps      *int        `json:"audiobook_bitrate_bps"`
 	Narrators                []*Narrator `bun:"rel:has-many,join:id=file_id" json:"narrators,omitempty" tstype:"Narrator[]"`
 	NarratorSource           *string     `json:"narrator_source" tstype:"DataSource"`
+	URL                      *string     `json:"url"`
+	URLSource                *string     `json:"url_source" tstype:"DataSource"`
+	ReleaseDate              *time.Time  `json:"release_date"`
+	ReleaseDateSource        *string     `json:"release_date_source" tstype:"DataSource"`
+	PublisherID              *int        `json:"publisher_id"`
+	PublisherSource          *string     `json:"publisher_source" tstype:"DataSource"`
+	Publisher                *Publisher  `bun:"rel:belongs-to,join:publisher_id=id" json:"publisher,omitempty" tstype:"Publisher"`
+	ImprintID                *int        `json:"imprint_id"`
+	ImprintSource            *string     `json:"imprint_source" tstype:"DataSource"`
+	Imprint                  *Imprint    `bun:"rel:belongs-to,join:imprint_id=id" json:"imprint,omitempty" tstype:"Imprint"`
 }
 
 func (f *File) CoverExtension() string {

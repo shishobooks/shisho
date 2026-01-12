@@ -156,6 +156,7 @@ type cbzComicInfo struct {
 	Series          string    `xml:"Series,omitempty"`
 	Number          string    `xml:"Number,omitempty"`
 	Volume          string    `xml:"Volume,omitempty"`
+	Summary         string    `xml:"Summary,omitempty"`
 	Year            string    `xml:"Year,omitempty"`
 	Month           string    `xml:"Month,omitempty"`
 	Day             string    `xml:"Day,omitempty"`
@@ -171,6 +172,7 @@ type cbzComicInfo struct {
 	Imprint         string    `xml:"Imprint,omitempty"`
 	Genre           string    `xml:"Genre,omitempty"`
 	Tags            string    `xml:"Tags,omitempty"`
+	Web             string    `xml:"Web,omitempty"`
 	Characters      string    `xml:"Characters,omitempty"`
 	Teams           string    `xml:"Teams,omitempty"`
 	Locations       string    `xml:"Locations,omitempty"`
@@ -315,6 +317,33 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo.Tags = strings.Join(tagNames, ", ")
 	}
 	// If no book tags, preserve existing Tags from comicInfo (already copied from existing)
+
+	// Update description (Summary in ComicInfo.xml)
+	if book.Description != nil && *book.Description != "" {
+		comicInfo.Summary = *book.Description
+	}
+
+	// Update URL (Web in ComicInfo.xml)
+	if file.URL != nil && *file.URL != "" {
+		comicInfo.Web = *file.URL
+	}
+
+	// Update publisher
+	if file.Publisher != nil {
+		comicInfo.Publisher = file.Publisher.Name
+	}
+
+	// Update imprint
+	if file.Imprint != nil {
+		comicInfo.Imprint = file.Imprint.Name
+	}
+
+	// Update release date (Year, Month, Day)
+	if file.ReleaseDate != nil {
+		comicInfo.Year = strconv.Itoa(file.ReleaseDate.Year())
+		comicInfo.Month = strconv.Itoa(int(file.ReleaseDate.Month()))
+		comicInfo.Day = strconv.Itoa(file.ReleaseDate.Day())
+	}
 
 	// Update cover page in Pages section
 	if file.CoverPage != nil {

@@ -289,6 +289,11 @@ const BookDetail = () => {
               {book.subtitle && (
                 <p className="text-lg text-muted-foreground">{book.subtitle}</p>
               )}
+              {book.description && (
+                <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap">
+                  {book.description}
+                </p>
+              )}
             </div>
 
             <div className="space-y-6">
@@ -528,6 +533,48 @@ const BookDetail = () => {
                               </Link>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* File metadata: publisher, imprint, release date, URL */}
+                      {(file.publisher ||
+                        file.imprint ||
+                        file.release_date ||
+                        file.url) && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {file.publisher && (
+                            <span>
+                              <span className="font-medium">Publisher:</span>{" "}
+                              {file.publisher.name}
+                            </span>
+                          )}
+                          {file.imprint && (
+                            <span>
+                              <span className="font-medium">Imprint:</span>{" "}
+                              {file.imprint.name}
+                            </span>
+                          )}
+                          {file.release_date && (
+                            <span>
+                              <span className="font-medium">Released:</span>{" "}
+                              {formatDate(file.release_date)}
+                            </span>
+                          )}
+                          {file.url && (
+                            <span>
+                              <span className="font-medium">URL:</span>{" "}
+                              <a
+                                className="text-primary hover:underline"
+                                href={file.url}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                              >
+                                {file.url.length > 50
+                                  ? file.url.substring(0, 50) + "..."
+                                  : file.url}
+                              </a>
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

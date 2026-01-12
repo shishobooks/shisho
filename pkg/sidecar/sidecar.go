@@ -135,10 +135,11 @@ func WriteFileSidecar(filePath string, s *FileSidecar) error {
 // BookSidecarFromModel creates a BookSidecar from a Book model.
 func BookSidecarFromModel(book *models.Book) *BookSidecar {
 	s := &BookSidecar{
-		Version:   CurrentVersion,
-		Title:     book.Title,
-		SortTitle: book.SortTitle,
-		Subtitle:  book.Subtitle,
+		Version:     CurrentVersion,
+		Title:       book.Title,
+		SortTitle:   book.SortTitle,
+		Subtitle:    book.Subtitle,
+		Description: book.Description,
 	}
 
 	// Convert authors from Authors
@@ -171,7 +172,26 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 // FileSidecarFromModel creates a FileSidecar from a File model.
 func FileSidecarFromModel(file *models.File) *FileSidecar {
 	s := &FileSidecar{
-		Version: CurrentVersion,
+		Version:   CurrentVersion,
+		URL:       file.URL,
+		Publisher: nil,
+		Imprint:   nil,
+	}
+
+	// Set publisher name if available
+	if file.Publisher != nil {
+		s.Publisher = &file.Publisher.Name
+	}
+
+	// Set imprint name if available
+	if file.Imprint != nil {
+		s.Imprint = &file.Imprint.Name
+	}
+
+	// Format release date as ISO 8601 string (YYYY-MM-DD)
+	if file.ReleaseDate != nil {
+		dateStr := file.ReleaseDate.Format("2006-01-02")
+		s.ReleaseDate = &dateStr
 	}
 
 	// Convert narrators from Narrators

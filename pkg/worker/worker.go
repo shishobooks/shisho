@@ -7,10 +7,12 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/tags"
@@ -30,14 +32,16 @@ type Worker struct {
 
 	processFuncs map[string]func(ctx context.Context, job *models.Job) error
 
-	bookService    *books.Service
-	genreService   *genres.Service
-	jobService     *jobs.Service
-	libraryService *libraries.Service
-	personService  *people.Service
-	searchService  *search.Service
-	seriesService  *series.Service
-	tagService     *tags.Service
+	bookService      *books.Service
+	genreService     *genres.Service
+	imprintService   *imprints.Service
+	jobService       *jobs.Service
+	libraryService   *libraries.Service
+	personService    *people.Service
+	publisherService *publishers.Service
+	searchService    *search.Service
+	seriesService    *series.Service
+	tagService       *tags.Service
 
 	queue          chan *models.Job
 	shutdown       chan struct{}
@@ -49,9 +53,11 @@ type Worker struct {
 func New(cfg *config.Config, db *bun.DB) *Worker {
 	bookService := books.NewService(db)
 	genreService := genres.NewService(db)
+	imprintService := imprints.NewService(db)
 	jobService := jobs.NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
+	publisherService := publishers.NewService(db)
 	searchService := search.NewService(db)
 	seriesService := series.NewService(db)
 	tagService := tags.NewService(db)
@@ -60,14 +66,16 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		config: cfg,
 		log:    logger.New(),
 
-		bookService:    bookService,
-		genreService:   genreService,
-		jobService:     jobService,
-		libraryService: libraryService,
-		personService:  personService,
-		searchService:  searchService,
-		seriesService:  seriesService,
-		tagService:     tagService,
+		bookService:      bookService,
+		genreService:     genreService,
+		imprintService:   imprintService,
+		jobService:       jobService,
+		libraryService:   libraryService,
+		personService:    personService,
+		publisherService: publisherService,
+		searchService:    searchService,
+		seriesService:    seriesService,
+		tagService:       tagService,
 
 		queue:          make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:       make(chan struct{}),
