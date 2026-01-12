@@ -6,9 +6,10 @@ This skill documents the KePub (Kobo EPUB) format as used in Shisho for conversi
 
 KePub is Kobo's enhanced EPUB format with:
 
-- Span wrapping for reading statistics
-- Kobo-specific XHTML structure
-- Fixed-layout support for comics
+- Span wrapping for reading statistics and progress tracking
+- Kobo-specific XHTML structure (wrapper divs)
+- kobo.js injection for pagination
+- Fixed-layout support for comics (CBZ conversion)
 - Enhanced metadata for Kobo devices
 
 ## File Structure
@@ -16,182 +17,393 @@ KePub is Kobo's enhanced EPUB format with:
 KePub files are EPUBs with `.kepub.epub` extension:
 
 ```
-mimetype
+mimetype                     # Uncompressed, "application/epub+zip"
 META-INF/
   container.xml
+kobo.js                      # Injected JavaScript for Kobo features
 OEBPS/
-  content.opf              # Enhanced OPF with Kobo extensions
+  content.opf                # Enhanced OPF with Kobo extensions
   toc.ncx
-  *.xhtml                  # Content with kobo spans
-  styles/
-    kobo.css               # Kobo-specific styles
+  nav.xhtml                  # EPUB3 navigation (CBZ conversion)
+  styles.css                 # Minimal CSS (CBZ conversion)
+  *.xhtml                    # Content with koboSpan elements
 ```
 
-## Kobo Extensions
+## EPUB to KePub Conversion (`pkg/kepub/converter.go`)
 
-### XHTML Span Wrapping
+### Conversion Process
 
-Kobo wraps text in spans for reading progress:
+1. **Identify Content Files:**
+   - Parse OPF manifest using string-based parsing (avoids namespace issues)
+   - Filter for `application/xhtml+xml` and `text/html` media types
+   - Exclude NCX files (navigation, not content)
 
-```html
-<!-- Original EPUB -->
-<p>This is a paragraph.</p>
+2. **Inject kobo.js:**
+   - Added to EPUB root if not present
+   - Provides pagination, progress tracking, page navigation
+   - Functions: `paginate()`, `goBack()`, `goForward()`, `goPage()`, `goProgress()`
 
-<!-- KePub -->
-<p>
-  <span class="koboSpan" id="kobo.1.1">This is a paragraph.</span>
-</p>
+3. **Transform Content Files:**
+   - Each file gets new `SpanCounter` (per-file, starting at 1)
+   - Compute relative script path for kobo.js reference
+   - Apply `TransformContentWithOptions()`
+
+4. **Transform OPF:**
+   - Ensure cover image has `cover-image` property
+
+5. **Atomic Write:**
+   - Write to `.tmp` file, rename on success
+
+### Key Function
+
+```go
+func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) error
 ```
 
-### Kobo CSS
+## Content Transformation (`pkg/kepub/content.go`)
 
-```css
-/* Required Kobo styles */
-.koboSpan {
-  /* Kobo reading progress tracking */
+### Span Wrapping System
+
+**SpanCounter:**
+```go
+type SpanCounter struct {
+    paragraph   int
+    sentence    int
+    incParaNext bool  // Deferred increment
 }
+
+// Generated format: "kobo.{paragraph}.{sentence}"
+// Example: kobo.1.1, kobo.1.2, kobo.2.1
 ```
 
-### Fixed-Layout for Comics
+**Key Behaviors:**
+- Per-file paragraph counters start at 1 (not 0)
+- Sentence counter resets at paragraph boundaries
+- `markParagraphBoundary()`: Deferred increment
+- `incrementParagraph()`: Immediate increment (for images)
 
-For CBZ-to-KePub conversion, uses fixed-layout:
+### Text Segmentation
 
-```xml
-<!-- In OPF metadata -->
-<meta property="rendition:layout">pre-paginated</meta>
-<meta property="rendition:spread">none</meta>
-<meta property="rendition:orientation">auto</meta>
+Splits text on sentence-ending punctuation:
+```
+"First sentence. Second sentence."
+→ ["First sentence.", " ", "Second sentence."]
 ```
 
-XHTML page structure:
+**Rules:**
+- Splits on `.!?:` followed by whitespace
+- Splits on newlines (`\n`)
+- Preserves whitespace as separate segments
+- Handles quotes after punctuation
+- Non-breaking space (U+00A0) is wrapped
+
+### XHTML Output Structure
 
 ```html
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="utf-8" />
-    <title>Page 1</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-      }
-      img {
-        max-width: 100%;
-        max-height: 100%;
-      }
-    </style>
-  </head>
-  <body>
-    <img src="images/page001.jpg" alt="Page 1" />
-  </body>
-</html>
+<!-- Input -->
+<p>Hello world. How are you?</p>
+
+<!-- Output -->
+<body>
+  <div id="book-columns">
+    <div id="book-inner">
+      <p>
+        <span class="koboSpan" id="kobo.1.1">Hello world.</span>
+        <span class="koboSpan" id="kobo.1.2"> </span>
+        <span class="koboSpan" id="kobo.1.3">How are you?</span>
+      </p>
+    </div>
+  </div>
+</body>
 ```
 
-## Shisho Implementation
+### Injected Elements
 
-### EPUB to KePub Conversion (`pkg/kepub/converter.go`)
+**Kobo Style Hacks:**
+```html
+<style id="kobostylehacks" type="text/css">
+  div#book-inner { margin-top: 0; margin-bottom: 0; }
+</style>
+```
 
-Transforms standard EPUB to KePub:
+**Body Wrapper Structure:**
+- `book-columns`: Used by kobo.js for pagination setup
+- `book-inner`: Target for CSS-based column layout
 
-1. Add span wrapping to content files
-2. Add Kobo-specific styles
-3. Update manifest with new files
-4. Rename to `.kepub.epub`
+**Script Reference:**
+```html
+<script type="text/javascript" src="../../kobo.js"></script>
+```
 
-### CBZ to KePub Conversion (`pkg/kepub/cbz.go`)
+### Elements NOT Wrapped
 
-Converts CBZ comics to fixed-layout KePub:
+- `<script>`, `<style>`, `<pre>`, `<code>`, `<svg>`, `<math>`
+- Whitespace-only text nodes
+- Empty elements
 
-1. Extract page images from CBZ
-2. Generate fixed-layout XHTML pages
-3. Create OPF with comic metadata
-4. Build NCX navigation
-5. Package as KePub
+### Block Elements (Trigger Paragraph Boundary)
+
+`<p>`, `<ol>`, `<ul>`, `<table>`, `<h1>` through `<h6>`
+
+## OPF Transformation (`pkg/kepub/opf.go`)
+
+Ensures cover images have the `cover-image` property required by Kobo.
+
+**Cover ID Detection:**
+1. `<meta name="cover" content="ID"/>`
+2. `<meta content="ID" name="cover"/>`
+3. `<item properties="cover-image" ... id="ID"/>`
+
+**Property Addition:**
+- Finds manifest item by ID
+- Adds `cover-image` to properties (idempotent)
+- Handles both self-closing and regular tag formats
+
+## CBZ to Fixed-Layout KePub (`pkg/kepub/cbz.go`)
+
+### Conversion Process
+
+1. **Image Collection:**
+   - Filter: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`
+   - Skip hidden files (starting with `.`)
+   - **Natural sorting** (page2 < page10)
+
+2. **Parallel Image Processing:**
+   - Worker pool: `min(CPU count, image count)`
+   - Context cancellation support
+
+3. **Image Processing (`processImageForKobo`):**
+   - **Resize** if larger than Kobo Libra Color (1264×1680)
+   - **PNG→JPEG conversion** (85% quality)
+   - **Grayscale detection** for manga optimization
+
+4. **Generate EPUB Structure:**
+   - Fixed-layout OPF with rendition properties
+   - NCX navigation with page navPoints
+   - EPUB3 nav.xhtml
+   - XHTML pages with KCC-style div+img structure
 
 ### CBZMetadata Structure
 
 ```go
 type CBZMetadata struct {
-    Title        string
-    Authors      []AuthorInfo
-    Series       string
-    SeriesNumber *float64
-    Genres       []string    // Written as dc:subject
-    Tags         []string    // Written as calibre:tags
-    PageCount    int
-    CoverPage    int
+    Title       string
+    Subtitle    *string
+    Description *string
+    Authors     []CBZAuthor
+    Series      []CBZSeries
+    Genres      []string
+    Tags        []string
+    URL         *string
+    Publisher   *string
+    Imprint     *string
+    ReleaseDate *time.Time
+}
+
+type CBZAuthor struct {
+    Name     string
+    SortName string  // e.g., "Doe, Jane"
+    Role     string  // writer, penciller, inker, etc.
+}
+
+type CBZSeries struct {
+    Name   string
+    Number *float64
 }
 ```
 
-### OPF Generation
+### Image Processing Details
 
-```go
-func generateFixedLayoutOPF(meta CBZMetadata, pages []pageInfo) []byte {
-    // Generate OPF with:
-    // - dc:title, dc:creator
-    // - dc:subject for each genre
-    // - calibre:series, calibre:series_index meta
-    // - calibre:tags meta
-    // - Fixed-layout rendition properties
-    // - Manifest with page items
-    // - Linear spine
-}
+**Resize Strategy:**
+- Only resize if > Kobo screen (1264×1680)
+- Maintain aspect ratio with bilinear interpolation
+- Uses smaller ratio to fit both dimensions
+
+**Grayscale Detection (`isGrayscaleImage`):**
+- Samples every 10th pixel (performance)
+- Tolerance: ±10 per RGB channel
+- Threshold: <2% colored pixels = grayscale
+- Minimum image size: 1000px
+- Returns true for native `image.Gray` types
+
+**Palette Quantization (`quantizeToKoboPalette`):**
+- 16-level grayscale: `0x00, 0x11, 0x22, ..., 0xff`
+- Formula: `level = (value + 8) / 17`
+- Optimized for e-ink display
+
+### Fixed-Layout OPF Generation
+
+```xml
+<meta property="rendition:layout">pre-paginated</meta>
+<meta property="rendition:spread">landscape</meta>
 ```
 
-### Key Functions
+**Author Role Mapping:**
 
-```go
-// Convert EPUB to KePub
-func ConvertToKePub(srcPath, destPath string) error
+| Input Role | EPUB Code | Meaning |
+|------------|-----------|---------|
+| writer/empty | aut | Author |
+| penciller/artist/inker | art | Artist |
+| colorist | clr | Colorist |
+| letterer | ill | Illustrator |
+| cover artist/cover | cov | Cover artist |
+| editor | edt | Editor |
+| other | aut | Fallback |
 
-// Convert CBZ to KePub
-func ConvertCBZToKePub(ctx context.Context, srcPath, destPath string, meta CBZMetadata) error
+**Metadata Elements:**
+- `<dc:title>` from title
+- `<dc:creator>` with role and file-as
+- `<meta property="belongs-to-collection">` for series
+- `<dc:subject>` for each genre
+- `<meta name="calibre:tags">` for tags (comma-separated)
+- `<meta name="shisho:url">` and `<meta name="shisho:imprint">` for custom fields
 
-// Transform existing OPF (preserves metadata)
-func TransformOPF(opfContent []byte) ([]byte, error)
+### XHTML Page Structure (KCC-style)
+
+```html
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>Page N</title>
+  <link href="styles.css" rel="stylesheet"/>
+  <meta name="viewport" content="width=800, height=1200"/>
+</head>
+<body style="">
+  <div style="text-align:center;top:0%;">
+    <img width="800" height="1200" src="images/page0001.jpg"/>
+  </div>
+</body>
+</html>
 ```
 
-## Metadata Handling
+- Viewport matches image dimensions
+- Alternating page-spread properties (left/right)
 
-### From CBZ to KePub
+### Generated Files
 
-| CBZ Field | KePub Element                        |
-| --------- | ------------------------------------ |
-| Title     | `<dc:title>`                         |
-| Series    | `<meta name="calibre:series">`       |
-| Number    | `<meta name="calibre:series_index">` |
-| Writer    | `<dc:creator opf:role="aut">`        |
-| Genre     | `<dc:subject>` (one per genre)       |
-| Tags      | `<meta name="calibre:tags">`         |
+```
+mimetype (uncompressed)
+META-INF/container.xml
+OEBPS/
+  content.opf
+  toc.ncx
+  nav.xhtml
+  styles.css
+  page0001.xhtml, page0002.xhtml, ...
+  images/
+    page0001.jpg, page0002.jpg, ...
+```
 
-### EPUB to KePub
+## XHTML Processing (`pkg/kepub/xhtml.go`)
 
-Metadata is preserved via OPF transformation. No changes to metadata elements.
+### XML Declaration Preservation
 
-## Cover Handling
+Go's `html.Parse` treats as HTML5 and removes XML declarations.
 
-For CBZ-to-KePub:
+**Pre-process:** Extracts `<?xml version="1.0" encoding="UTF-8"?>`
+**Post-process:** Restores XML declaration and XHTML self-closing elements
 
-1. Cover page identified by CoverPage index or page type
-2. First page used as cover if not specified
-3. Cover referenced in OPF manifest with cover-image properties
+### Void Element Conversion
 
-## Navigation
+```
+HTML5: <img attr>
+XHTML: <img attr/>
+```
 
-NCX file generated with:
+Converts: `area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `param`, `source`, `track`, `wbr`
 
-- One navPoint per page
-- Play order matching spine order
-- Page titles as "Page N"
+Also handles: `<script></script>` → `<script/>`, `<a id="..."></a>` → `<a id="..."/>`
+
+## kobo.js API Reference
+
+Injected JavaScript provides:
+
+```javascript
+// Position/Progress
+getPosition()           // Current reading position
+getProgress()           // Progress percentage
+getPageCount()          // Total pages
+getCurrentPage()        // Current page number
+
+// Setup
+setupBookColumns()      // Configure column layout
+paginate(tagId)         // Paginate with optional anchor
+repaginate(tagId)       // Re-paginate
+updateProgress()        // Update progress value
+updateBookmark()        // Save bookmark
+
+// Navigation
+goBack()                // Previous page/chapter
+goForward()             // Next page/chapter
+goPage(pageNum, callPageReady)  // Jump to page
+goProgress(progress)    // Jump to progress position
+
+// Anchors
+estimateFirstAnchorForPageNumber(page)
+estimatePageNumberForAnchor(spanId)
+```
+
+## Key Functions
+
+```go
+// EPUB to KePub conversion
+func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) error
+
+// CBZ to KePub conversion
+func ConvertCBZWithMetadata(ctx context.Context, srcPath, destPath string, metadata *CBZMetadata) error
+
+// Content transformation
+func TransformContent(r io.Reader, w io.Writer) error
+func TransformContentWithOptions(r io.Reader, w io.Writer, counter *SpanCounter, scriptPath string) error
+
+// OPF transformation
+func TransformOPF(r io.Reader, w io.Writer) error
+```
+
+## Integration Points
+
+**Generator Interface:**
+- `GetKepubGenerator()` returns appropriate generator (EPUB or CBZ)
+- `SupportsKepub()` checks if format can be converted
+
+**Download Cache:**
+- Fingerprint includes `format: "kepub"` vs `format: "original"`
+- Separate cache files: `{id}.kepub.epub`, `{id}.kepub.meta.json`
+
+**API Endpoints:**
+- `GET /api/books/files/:id/download/kepub` - Download as KePub
+- OPDS routes with `/kepub/` prefix for KePub-aware clients
+
+## Edge Cases
+
+**Idempotent Conversion:**
+- Can convert already-converted KePub (spans not double-wrapped)
+
+**Author Deduplication:**
+- Key: `{name}|{role}`
+- Prevents duplicate entries for same person in same role
+
+**XML Special Character Escaping:**
+- `&`, `<`, `>`, `'` properly escaped in metadata
+
+**Lossless Preservation:**
+- EPUB: Text preserved exactly (only wrapping added)
+- CBZ: Small images (<1264×1680) copied unchanged
+
+**Natural Page Sorting:**
+- `page2` sorts before `page10`
 
 ## Related Files
 
 - `pkg/kepub/converter.go` - EPUB to KePub conversion
 - `pkg/kepub/cbz.go` - CBZ to KePub conversion
+- `pkg/kepub/content.go` - XHTML content transformation
+- `pkg/kepub/xhtml.go` - XHTML pre/post processing
 - `pkg/kepub/opf.go` - OPF transformation
-- `pkg/kepub/opf_test.go` - OPF transformation tests
+- `pkg/kepub/kobo.js` - Injected JavaScript
+- `pkg/kepub/converter_test.go` - EPUB conversion tests
 - `pkg/kepub/cbz_test.go` - CBZ conversion tests
-- `pkg/kepub/content.go` - XHTML content handling
 - `pkg/kepub/content_test.go` - Content transformation tests
+- `pkg/kepub/opf_test.go` - OPF transformation tests
+- `pkg/filegen/kepub_cbz.go` - KePub CBZ generator wrapper

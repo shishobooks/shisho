@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ IMPORTANT: Read This First
+## Important Notes
 
 **When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
 
@@ -44,168 +44,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
 - **Development**: Air for Go hot reload, Hivemind for process management
 
-### Backend Architecture
+For detailed architecture information, see the skills:
+- **Backend details**: `.claude/skills/backend.md`
+- **Frontend details**: `.claude/skills/frontend.md`
 
-**Entry Point**: `cmd/api/main.go` starts both HTTP server and background worker
-
-**Core Services Pattern**:
-- Each domain (books, jobs, libraries) has: `handlers.go`, `routes.go`, `service.go`, `validators.go`
-- Services contain business logic and database operations
-- Handlers contain HTTP request/response logic
-- Routes register HTTP endpoints
-- Validators define request/response schemas
-
-**Database Models** (`pkg/models/`):
-- Use Bun ORM with struct tags for database mapping
-- Models include JSON tags for API serialization
-- TypeScript types auto-generated via tygo from Go structs
-
-**Background Worker** (`pkg/worker/`):
-- Processes jobs from database queue
-- Main job type: scan job that processes ebook/audiobook files
-- Extracts metadata from EPUB (via `pkg/epub/`) and M4B files (via `pkg/mp4/`)
-- Generates cover images with filename-based storage strategy
-
-**Cover Image System**:
-- Individual file covers: `{filename}.cover.{ext}`
-- Canonical covers: `cover.{ext}` (book priority) or `audiobook_cover.{ext}` (fallback)
-- Book model has `ResolveCoverImage()` method that finds covers dynamically
-- API endpoints: `/books/{id}/cover` (canonical) and `/files/{id}/cover` (individual)
-
-**Data Source Priority System**:
-- Metadata sources ranked: Manual > EPUB > M4B > Filepath
-- Lower priority number = higher precedence
-- Used to determine which metadata to keep when conflicts occur
-
-**OPDS**:
-- There is an OPDS v1.2 server hosted in the application
-- As new functionality is added, it's important to keep the OPDS server up-to-date with the new features
-
-**Authentication**:
-- RBAC is used throughout the app
-- Authn and authz needs to be considered for all pieces of functionality
-- Both frontend and backend checks need to be made so that everything is protected on all fronts
-
-**Config**:
-- This is a self-hosted app, so all configs are defined by a config file
-- Each config field is also configurable by environment variables as well
-- If a new field is added to `config.Config` in `pkg/config/config.go`, `shisho.example.yaml` should also be updated to reflect the new config field
-
-**Sidecars**:
-- We keep sidecar metadata files for every file we parse into the system
-- We don't want to keep non-modifiable intrinsic properies of the file in the sidecar (e.g. bitrate, duration, etc.)
-- Source fields (e.g. title\_source, name\_source, etc.) shouldn't be saved into the sidecar
-
-**Metadata Sync Checklist**:
-When adding or modifying book/file metadata fields, ensure these files are updated:
-1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` or `FileSidecar` struct for persistence
-2. **Sidecar conversion** (`pkg/sidecar/sidecar.go`) - Update `BookSidecarFromModel()` or `FileSidecarFromModel()` to include the new field
-3. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
-4. **File parsers** - Update to extract the new field:
-   - EPUB: `pkg/epub/opf.go`
-   - CBZ: `pkg/cbz/cbz.go`
-   - M4B: `pkg/mp4/metadata.go`
-5. **File generators** - Update to write the field back:
-   - EPUB: `pkg/filegen/epub.go`
-   - CBZ: `pkg/filegen/cbz.go`
-   - M4B: `pkg/filegen/m4b.go`
-   - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
-6. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
-7. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
-8. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
-9. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
-
-**Adding New Entity Types** (like Publisher, Imprint, Genre, Tag):
-When adding a new entity type that files or books reference:
-1. Create model in `pkg/models/` with appropriate fields and Bun struct tags
-2. Create service in `pkg/{entity}/service.go` following the pattern from `pkg/genres/service.go`:
-   - Include `FindOrCreate{Entity}()` method for scanner to use
-   - Include `Retrieve{Entity}()` and `List{Entity}s()` methods
-3. Add service to worker (`pkg/worker/worker.go`) and initialize in `New()`
-4. Update scanner to use the new service for entity creation
-
-**Search Index (FTS)**:
-The app uses SQLite Full-Text Search (FTS5) for fast searching. Key files:
-- `pkg/search/service.go` - Search service with index methods
-- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`
-
-**IMPORTANT - Search Index Updates**:
-When creating or modifying entities that are searchable, ensure the FTS index is updated:
-1. **New entities created via `FindOrCreate*()` methods MUST be indexed** - When `FindOrCreateGenre()`, `FindOrCreateTag()`, etc. create a new entity, call `IndexGenre()`, `IndexTag()`, etc. afterward
-2. **Entity updates must re-index** - Call `Index*()` after updating an entity's searchable fields
-3. **Entity deletions must remove from index** - Call `DeleteFrom*Index()` when deleting entities
-4. **Book metadata changes affecting search** - When book authors, series, genres, or tags change, call `IndexBook()` to update the book's search index
-
-Example pattern in `pkg/books/handlers.go`:
-```go
-// Track new entity IDs when creating associations
-newGenreIDs := make([]int, 0)
-for _, name := range params.Genres {
-    genre, _ := h.genreService.FindOrCreateGenre(ctx, name, libraryID)
-    newGenreIDs = append(newGenreIDs, genre.ID)
-}
-// Index new entities after creation
-for _, id := range newGenreIDs {
-    genre, _ := h.genreService.RetrieveGenre(ctx, opts{ID: &id})
-    h.searchService.IndexGenre(ctx, genre)
-}
-```
-
-### Frontend Architecture
-
-**React Router** (`app/router.tsx`):
-- Single page app with client-side routing
-- Main route loads Home page with book gallery
-
-**State Management**:
-- Tanstack Query for server state (books, jobs, libraries)
-- React Context for theme management
-- No global client state management library
-
-**API Integration**:
-- `app/libraries/api.ts` contains HTTP client functions
-- Query hooks in `app/hooks/queries/` wrap API calls with Tanstack Query
-- TypeScript types auto-imported from `app/types/generated/`
-- **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
-- **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
-
-**React Query Cache Invalidation**:
-- When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes
-- **Cross-resource invalidation is required**: When metadata entities (genres, tags, series, people, publishers, imprints) are modified, also invalidate `ListBooks` and `RetrieveBook` queries since books display this metadata
-- Pattern: Import `QueryKey as BooksQueryKey from "./books"` and add invalidation calls in mutation `onSuccess`:
-  ```typescript
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
-    // Also invalidate book queries since they display genre info
-    queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
-    queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
-  }
-  ```
-
-**UI Components**:
-- Custom components in `app/components/` using Radix UI primitives
-- Tailwind CSS for styling with dark/light theme support
-- Components follow shadcn/ui patterns
-
-**Handling Long Text in UI**:
-When displaying user-generated content that may be long (names, titles, etc.):
-- **Dialogs**: Use `overflow-x-hidden` on `DialogContent` to prevent horizontal scrolling. Avoid `overflow-hidden` on inner containers as it clips focus rings.
-- **Dialog headers**: Add `pr-8` to `DialogHeader` to leave room for the close button. Let titles wrap naturally rather than truncating.
-- **Page headers with buttons**: Use `flex items-start justify-between gap-4`, add `min-w-0 break-words` to the title, and `shrink-0` to the button container so buttons don't get pushed off-screen.
-- **Badges with long text**: Add `max-w-full` to the badge, wrap text in `<span className="truncate" title={text}>`, and add `shrink-0` to action buttons inside.
-- **Flex containers with truncation**: Parent needs `min-w-0` for `truncate` to work on children.
-- **Dropdowns/Command items**: Add `shrink-0` to icons, wrap text in `<span className="truncate" title={text}>`.
-
-### File Processing Flow
-
-1. **Scan Job Creation**: User triggers scan via API
-2. **File Discovery**: Worker scans library paths for `.epub`, `.m4b`, `.cbz` files
-3. **Metadata Extraction**: Parse files to extract title, authors, cover images
-4. **Database Storage**: Create/update Book and File records
-5. **Cover Generation**: Save individual covers + generate canonical covers
-6. **Priority Resolution**: Use data source priority to resolve metadata conflicts
-
-### Development Workflow
+## Development Workflow
 
 - Use `make start` to run both API and frontend in development (this also runs `make tygo` automatically)
 - Database is SQLite file at `tmp/data.sqlite`
@@ -214,29 +57,28 @@ When displaying user-generated content that may be long (names, titles, etc.):
 - Always run `make check` before committing
 - If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
 
-### Testing Strategy
+## Testing Strategy
 
 - Go tests use standard testing package with testify assertions
 - Tests should use `TZ=America/Chicago CI=true` environment
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
-- Add shadcn components using `npx shadcn@latest add`.
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
 - Whenever fixing a bug, test-driven development should be employed: write a test for the bug, confirm that it fails, fix the bug, and confirm that it passes.
 
-### Git Conventions
+## Git Conventions
 
 - Each commit should be in the format of `[{Category}] {Change description}`
 - Always develop in a git worktree and the squash the changes back into master
 - This repo currently doesn't utilize pull requests, so instead of creating a PR, it should create a squash commit back into master
 
-### Worktree Setup
+## Worktree Setup
 
 - Worktrees should be created in `~/.worktrees/shisho/`
 - After creating a new worktree, run `make setup` to install dependencies and build tools
 - Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && make setup`
 
-### Database Best Practices
+## Database Best Practices
 
 - **Always consider indexes** when modifying database schema or query patterns
 - For deletion queries, ensure indexes exist on the WHERE clause columns
