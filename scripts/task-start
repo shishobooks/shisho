@@ -45,15 +45,27 @@ mkdir -p "$WORKTREE_BASE"
 echo "Creating worktree at $WORKTREE_DIR..."
 git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME"
 
-# Create tmux window with split panes
+# Create tmux window with 3 evenly-sized vertical panes
 echo "Opening tmux window..."
 tmux new-window -d -n "$TASK_NAME" -c "$WORKTREE_DIR"
-# Calculate 30% of window height for bottom pane
+
+# Calculate pane sizes for 3 equal panes
 WINDOW_HEIGHT=$(tmux display-message -t "$TASK_NAME" -p "#{window_height}")
-BOTTOM_PANE_SIZE=$((WINDOW_HEIGHT * 30 / 100))
-tmux split-window -d -v -l "$BOTTOM_PANE_SIZE" -t "$TASK_NAME" -c "$WORKTREE_DIR"
-tmux send-keys -t "${TASK_NAME}.1" "make setup" Enter
-tmux send-keys -t "${TASK_NAME}.0" "claude --dangerously-skip-permissions --permission-mode plan" Enter
+TWO_THIRDS_SIZE=$((WINDOW_HEIGHT * 66 / 100))
+HALF_SIZE=$((TWO_THIRDS_SIZE / 2))
+
+# Split to create bottom 66%, leaving top 33%
+tmux split-window -d -v -l "$TWO_THIRDS_SIZE" -t "${TASK_NAME}.0" -c "$WORKTREE_DIR"
+# Split the bottom pane in half to create middle and bottom panes (each 33%)
+tmux split-window -d -v -l "$HALF_SIZE" -t "${TASK_NAME}.1" -c "$WORKTREE_DIR"
+
+# Pane layout:
+#   Pane 0 (top): claude
+#   Pane 1 (middle): make start (pre-typed, not executed)
+#   Pane 2 (bottom): other commands / make setup
+tmux send-keys -t "${TASK_NAME}.2" "make setup" Enter
+tmux send-keys -t "${TASK_NAME}.1" "make start"
+tmux send-keys -t "${TASK_NAME}.0" "claude --dangerously-skip-permissions" Enter
 tmux select-window -t "$TASK_NAME"
 tmux select-pane -t "${TASK_NAME}.0"
 
