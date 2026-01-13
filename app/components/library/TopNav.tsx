@@ -135,51 +135,51 @@ const TopNav = () => {
                     className="h-9 gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
                     variant="ghost"
                   >
-                  <Library className="h-4 w-4" />
-                  {currentLibrary?.name || "Select Library"}
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>Libraries</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {libraries.map((library) => (
-                  <DropdownMenuItem
-                    key={library.id}
-                    onClick={() => handleLibrarySwitch(library.id)}
-                  >
-                    <span className="flex-1">{library.name}</span>
-                    {library.id === Number(libraryId) && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-                {libraries.length === 0 && (
-                  <DropdownMenuItem disabled>
-                    <span className="text-muted-foreground">
-                      No libraries found
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                {canCreateLibrary && (
-                  <DropdownMenuItem asChild>
-                    <Link to="/libraries/create">
-                      <Plus className="h-4 w-4" />
-                      Create new library
-                    </Link>
-                  </DropdownMenuItem>
-                )}
-                {isDevelopment && (
-                  <DropdownMenuItem
-                    disabled={createLibraryMutation.isPending}
-                    onClick={handleCreateDefaultLibrary}
-                  >
-                    <BookPlus className="h-4 w-4" />
-                    Create default library (dev)
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
+                    <Library className="h-4 w-4" />
+                    {currentLibrary?.name || "Select Library"}
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel>Libraries</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {libraries.map((library) => (
+                    <DropdownMenuItem
+                      key={library.id}
+                      onClick={() => handleLibrarySwitch(library.id)}
+                    >
+                      <span className="flex-1">{library.name}</span>
+                      {library.id === Number(libraryId) && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                  {libraries.length === 0 && (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground">
+                        No libraries found
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  {canCreateLibrary && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/libraries/create">
+                        <Plus className="h-4 w-4" />
+                        Create new library
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {isDevelopment && (
+                    <DropdownMenuItem
+                      disabled={createLibraryMutation.isPending}
+                      onClick={handleCreateDefaultLibrary}
+                    >
+                      <BookPlus className="h-4 w-4" />
+                      Create default library (dev)
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
               </DropdownMenu>
               {/* Resync Button */}
               {libraryId && canResync && (

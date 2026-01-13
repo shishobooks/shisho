@@ -7,6 +7,7 @@ import Logo from "@/components/library/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { API } from "@/libraries/api";
 
@@ -94,6 +95,7 @@ const Setup = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
+      <Toaster richColors />
       <div className="w-full max-w-md p-8">
         <div className="flex flex-col items-center mb-8">
           <Logo className="mb-2" size="lg" />

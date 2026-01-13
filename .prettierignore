@@ -4,7 +4,7 @@ tsconfig.node.json
 app/types/generated
 .prettierrc
 .golangci.yml
-.claude/settings.local.json
+.claude/
 CLAUDE.md
 .cursor
 docs/
