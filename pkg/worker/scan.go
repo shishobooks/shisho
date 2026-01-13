@@ -39,12 +39,24 @@ var (
 	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
 )
 
-func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job, jobLog *joblogs.JobLogger) error {
+func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error {
 	jobLog.Info("processing scan job", nil)
 
 	allLibraries, err := w.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Filter to specific library if set
+	if job != nil && job.LibraryID != nil {
+		filtered := make([]*models.Library, 0, 1)
+		for _, lib := range allLibraries {
+			if lib.ID == *job.LibraryID {
+				filtered = append(filtered, lib)
+				break
+			}
+		}
+		allLibraries = filtered
 	}
 
 	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})

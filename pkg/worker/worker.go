@@ -256,7 +256,7 @@ func (w *Worker) scheduleScanJobs() {
 			}
 
 			// Check if a scan job is already active
-			hasActive, err := w.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+			hasActive, err := w.jobService.HasActiveJob(ctx, models.JobTypeScan, nil)
 			if err != nil {
 				log.Err(err).Error("failed to check for active scan job")
 				timer.Reset(duration)

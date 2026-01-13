@@ -21,6 +21,8 @@ type ListJobsOptions struct {
 	Offset             *int
 	Statuses           []string
 	ProcessIDToExclude *string
+	Type               *string
+	LibraryIDOrGlobal  *int // Matches library_id = X OR library_id IS NULL
 
 	includeTotal bool
 }
@@ -136,6 +138,16 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 				WhereOr("j.process_id != ?", *opts.ProcessIDToExclude)
 		})
 	}
+	if opts.Type != nil {
+		q = q.Where("j.type = ?", *opts.Type)
+	}
+	if opts.LibraryIDOrGlobal != nil {
+		q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				Where("j.library_id = ?", *opts.LibraryIDOrGlobal).
+				WhereOr("j.library_id IS NULL")
+		})
+	}
 
 	if opts.includeTotal {
 		total, err = q.ScanAndCount(ctx)
@@ -156,16 +168,27 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 	return jobs, total, nil
 }
 
-// HasActiveJobByType checks if there's a pending or in-progress job of the given type.
-func (svc *Service) HasActiveJobByType(ctx context.Context, jobType string) (bool, error) {
-	count, err := svc.db.NewSelect().
+// HasActiveJob checks if there's a pending or in-progress job of the given type.
+// If libraryID is nil, checks for any active scan.
+// If libraryID is set, checks for active scan with that library_id OR library_id IS NULL (global).
+func (svc *Service) HasActiveJob(ctx context.Context, jobType string, libraryID *int) (bool, error) {
+	q := svc.db.NewSelect().
 		Model((*models.Job)(nil)).
 		Where("type = ?", jobType).
 		WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Where("status = ?", models.JobStatusPending).
 				WhereOr("status = ?", models.JobStatusInProgress)
-		}).
-		Count(ctx)
+		})
+
+	if libraryID != nil {
+		q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				Where("library_id = ?", *libraryID).
+				WhereOr("library_id IS NULL")
+		})
+	}
+
+	count, err := q.Count(ctx)
 	if err != nil {
 		return false, errors.WithStack(err)
 	}

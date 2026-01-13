@@ -16,7 +16,7 @@ func TestScheduler_SkipsWhenNoLibraries(t *testing.T) {
 	tc := newTestContext(t)
 
 	// Check for active job before - should be false
-	hasActive, err := tc.jobService.HasActiveJobByType(tc.ctx, models.JobTypeScan)
+	hasActive, err := tc.jobService.HasActiveJob(tc.ctx, models.JobTypeScan, nil)
 	require.NoError(t, err)
 	assert.False(t, hasActive)
 
@@ -42,7 +42,7 @@ func TestScheduler_SkipsWhenScanJobPending(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check for active job - should be true
-	hasActive, err := tc.jobService.HasActiveJobByType(tc.ctx, models.JobTypeScan)
+	hasActive, err := tc.jobService.HasActiveJob(tc.ctx, models.JobTypeScan, nil)
 	require.NoError(t, err)
 	assert.True(t, hasActive)
 }
@@ -63,7 +63,7 @@ func TestScheduler_SkipsWhenScanJobInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check for active job - should be true
-	hasActive, err := tc.jobService.HasActiveJobByType(tc.ctx, models.JobTypeScan)
+	hasActive, err := tc.jobService.HasActiveJob(tc.ctx, models.JobTypeScan, nil)
 	require.NoError(t, err)
 	assert.True(t, hasActive)
 }
@@ -84,7 +84,7 @@ func TestScheduler_CreatesJobWhenNoneActive(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check for active job - should be false (completed jobs don't count)
-	hasActive, err := tc.jobService.HasActiveJobByType(tc.ctx, models.JobTypeScan)
+	hasActive, err := tc.jobService.HasActiveJob(tc.ctx, models.JobTypeScan, nil)
 	require.NoError(t, err)
 	assert.False(t, hasActive)
 
@@ -98,7 +98,7 @@ func TestScheduler_CreatesJobWhenNoneActive(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now check again - should be true
-	hasActive, err = tc.jobService.HasActiveJobByType(tc.ctx, models.JobTypeScan)
+	hasActive, err = tc.jobService.HasActiveJob(tc.ctx, models.JobTypeScan, nil)
 	require.NoError(t, err)
 	assert.True(t, hasActive)
 }

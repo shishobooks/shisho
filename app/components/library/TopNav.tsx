@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import GlobalSearch from "@/components/library/GlobalSearch";
 import Logo from "@/components/library/Logo";
+import { ResyncButton } from "@/components/library/ResyncButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +50,7 @@ const TopNav = () => {
     hasPermission("libraries", "read");
 
   const canCreateLibrary = hasPermission("libraries", "write");
+  const canResync = hasPermission("jobs", "write");
 
   // Load all libraries for the switcher
   const librariesQuery = useLibraries({});
@@ -125,13 +127,14 @@ const TopNav = () => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Logo asLink />
-            {/* Library Switcher Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  className="h-9 gap-2 text-muted-foreground hover:text-foreground"
-                  variant="ghost"
-                >
+            {/* Library Switcher and Resync */}
+            <div className="flex items-center gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    className="h-9 gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    variant="ghost"
+                  >
                   <Library className="h-4 w-4" />
                   {currentLibrary?.name || "Select Library"}
                   <ChevronDown className="h-3 w-3" />
@@ -177,7 +180,12 @@ const TopNav = () => {
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
-            </DropdownMenu>
+              </DropdownMenu>
+              {/* Resync Button */}
+              {libraryId && canResync && (
+                <ResyncButton libraryId={Number(libraryId)} />
+              )}
+            </div>
             {/* Navigation buttons for current library */}
             {libraryId && (
               <nav className="flex gap-1">

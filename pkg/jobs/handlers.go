@@ -25,7 +25,7 @@ func (h *handler) create(c echo.Context) error {
 
 	// Check if a scan job is already running or pending.
 	if params.Type == models.JobTypeScan {
-		hasActive, err := h.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+		hasActive, err := h.jobService.HasActiveJob(ctx, models.JobTypeScan, params.LibraryID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -38,6 +38,7 @@ func (h *handler) create(c echo.Context) error {
 		Type:       params.Type,
 		Status:     models.JobStatusPending,
 		DataParsed: params.Data,
+		LibraryID:  params.LibraryID,
 	}
 
 	err := h.jobService.CreateJob(ctx, job)
@@ -82,9 +83,11 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	jobs, total, err := h.jobService.ListJobsWithTotal(ctx, ListJobsOptions{
-		Limit:    &params.Limit,
-		Offset:   &params.Offset,
-		Statuses: params.Status,
+		Limit:             &params.Limit,
+		Offset:            &params.Offset,
+		Statuses:          params.Status,
+		Type:              params.Type,
+		LibraryIDOrGlobal: params.LibraryIDOrGlobal,
 	})
 	if err != nil {
 		return errors.WithStack(err)

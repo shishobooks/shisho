@@ -12,6 +12,7 @@ export enum QueryKey {
   RetrieveJob = "RetrieveJob",
   ListJobs = "ListJobs",
   ListJobLogs = "ListJobLogs",
+  LatestScanJob = "LatestScanJob",
 }
 
 export const useJob = (
@@ -48,6 +49,32 @@ export const useJobs = (
     queryKey: [QueryKey.ListJobs, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/jobs", null, query, signal);
+    },
+  });
+};
+
+export const useLatestScanJob = (libraryId: number | undefined) => {
+  return useQuery<ListJobsData, ShishoAPIError>({
+    queryKey: [QueryKey.LatestScanJob, libraryId],
+    queryFn: ({ signal }) => {
+      return API.request(
+        "GET",
+        "/jobs",
+        null,
+        {
+          type: "scan",
+          library_id_or_global: libraryId,
+          limit: 1,
+        },
+        signal,
+      );
+    },
+    enabled: libraryId !== undefined,
+    refetchInterval: (query) => {
+      const job = query.state.data?.jobs[0];
+      const isActive =
+        job?.status === "pending" || job?.status === "in_progress";
+      return isActive ? 2000 : 30000;
     },
   });
 };
@@ -103,6 +130,7 @@ export const useCreateJob = () => {
     },
     onSuccess: (data: Job) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListJobs] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.LatestScanJob] });
       queryClient.setQueryData([QueryKey.RetrieveJob, data.id], data);
     },
   });

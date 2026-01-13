@@ -56,7 +56,7 @@ func (h *handler) create(c echo.Context) error {
 	}
 
 	// Trigger a scan job after creating the library if one isn't already running
-	hasActive, err := h.jobService.HasActiveJobByType(ctx, models.JobTypeScan)
+	hasActive, err := h.jobService.HasActiveJob(ctx, models.JobTypeScan, nil)
 	if err != nil {
 		c.Logger().Errorf("failed to check for active scan job: %v", err)
 	} else if hasActive {

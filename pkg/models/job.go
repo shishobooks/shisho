@@ -34,6 +34,7 @@ type Job struct {
 	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
+	LibraryID  *int        `json:"library_id,omitempty"`
 }
 
 func (job *Job) UnmarshalData() error {
