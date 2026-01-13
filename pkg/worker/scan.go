@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -38,25 +39,23 @@ var (
 	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
 )
 
-func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
-	log := logger.FromContext(ctx)
-	log.Info("processing scan job")
+func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job, jobLog *joblogs.JobLogger) error {
+	jobLog.Info("processing scan job", nil)
 
 	allLibraries, err := w.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log.Info("processing libraries", logger.Data{"count": len(allLibraries)})
+	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})
 
 	for _, library := range allLibraries {
-		log.Info("processing library", logger.Data{"library_id": library.ID})
+		jobLog.Info("processing library", logger.Data{"library_id": library.ID})
 		filesToScan := make([]string, 0)
 
 		// Go through all the library paths to find all the .cbz files.
 		for _, libraryPath := range library.LibraryPaths {
-			log := log.Data(logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
-			log.Info("processing library path")
+			jobLog.Info("processing library path", logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
 			err := filepath.WalkDir(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
 				if err != nil {
 					return errors.WithStack(err)
@@ -74,14 +73,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 				mtype, err := mimetype.DetectFile(path)
 				if err != nil {
 					// We can't detect the mime type, so we just skip it.
-					log.Warn("can't detect the mime type of a file with a valid extension", logger.Data{"path": path, "err": err.Error()})
+					jobLog.Warn("can't detect the mime type of a file with a valid extension", logger.Data{"path": path, "err": err.Error()})
 					return nil
 				}
 				if _, ok := expectedMimeTypes[mtype.String()]; !ok {
 					// Since files can have any extension, we try to check it against the mime type that we expect it to
 					// be. This might be overly restrictive in the future, so it might be something that we remove, but
 					// we can keep it for now.
-					log.Warn("mime type is not expected for extension", logger.Data{"path": path, "mimetype": mtype.String()})
+					jobLog.Warn("mime type is not expected for extension", logger.Data{"path": path, "mimetype": mtype.String()})
 					return nil
 				}
 
@@ -102,7 +101,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 		booksToOrganize := make(map[int]struct{})
 
 		for _, path := range filesToScan {
-			err := w.scanFile(ctx, path, library.ID, booksToOrganize)
+			err := w.scanFile(ctx, path, library.ID, booksToOrganize, jobLog)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -110,11 +109,11 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 
 		// Organize files after all scanning is complete
 		if library.OrganizeFileStructure && len(booksToOrganize) > 0 {
-			log.Info("organizing books after scan", logger.Data{"count": len(booksToOrganize)})
+			jobLog.Info("organizing books after scan", logger.Data{"count": len(booksToOrganize)})
 			for bookID := range booksToOrganize {
 				book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 				if err != nil {
-					log.Warn("failed to retrieve book for organization", logger.Data{
+					jobLog.Warn("failed to retrieve book for organization", logger.Data{
 						"book_id": bookID,
 						"error":   err.Error(),
 					})
@@ -123,7 +122,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 
 				err = w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true})
 				if err != nil {
-					log.Warn("failed to organize book", logger.Data{
+					jobLog.Warn("failed to organize book", logger.Data{
 						"book_id": bookID,
 						"error":   err.Error(),
 					})
@@ -137,53 +136,52 @@ func (w *Worker) ProcessScanJob(ctx context.Context, _ *models.Job) error {
 	// Cleanup orphaned series (soft delete series with no books)
 	deletedCount, err := w.seriesService.CleanupOrphanedSeries(ctx)
 	if err != nil {
-		log.Err(err).Error("failed to cleanup orphaned series")
+		jobLog.Error("failed to cleanup orphaned series", err, nil)
 	} else if deletedCount > 0 {
-		log.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
+		jobLog.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
 	}
 
 	// Cleanup orphaned people (delete people with no authors or narrators)
 	deletedPeopleCount, err := w.personService.CleanupOrphanedPeople(ctx)
 	if err != nil {
-		log.Err(err).Error("failed to cleanup orphaned people")
+		jobLog.Error("failed to cleanup orphaned people", err, nil)
 	} else if deletedPeopleCount > 0 {
-		log.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
+		jobLog.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
 	}
 
 	// Cleanup orphaned genres (delete genres with no books)
 	deletedGenresCount, err := w.genreService.CleanupOrphanedGenres(ctx)
 	if err != nil {
-		log.Err(err).Error("failed to cleanup orphaned genres")
+		jobLog.Error("failed to cleanup orphaned genres", err, nil)
 	} else if deletedGenresCount > 0 {
-		log.Info("cleaned up orphaned genres", logger.Data{"count": deletedGenresCount})
+		jobLog.Info("cleaned up orphaned genres", logger.Data{"count": deletedGenresCount})
 	}
 
 	// Cleanup orphaned tags (delete tags with no books)
 	deletedTagsCount, err := w.tagService.CleanupOrphanedTags(ctx)
 	if err != nil {
-		log.Err(err).Error("failed to cleanup orphaned tags")
+		jobLog.Error("failed to cleanup orphaned tags", err, nil)
 	} else if deletedTagsCount > 0 {
-		log.Info("cleaned up orphaned tags", logger.Data{"count": deletedTagsCount})
+		jobLog.Info("cleaned up orphaned tags", logger.Data{"count": deletedTagsCount})
 	}
 
 	// Rebuild FTS indexes after scan completes
 	if w.searchService != nil {
-		log.Info("rebuilding search indexes")
+		jobLog.Info("rebuilding search indexes", nil)
 		err = w.searchService.RebuildAllIndexes(ctx)
 		if err != nil {
-			log.Err(err).Error("failed to rebuild search indexes")
+			jobLog.Error("failed to rebuild search indexes", err, nil)
 		} else {
-			log.Info("search indexes rebuilt successfully")
+			jobLog.Info("search indexes rebuilt successfully", nil)
 		}
 	}
 
-	log.Info("finished scan job")
+	jobLog.Info("finished scan job", nil)
 	return nil
 }
 
-func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, booksToOrganize map[int]struct{}) error {
-	log := logger.FromContext(ctx).Data(logger.Data{"path": path})
-	log.Info("processing file")
+func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, booksToOrganize map[int]struct{}, jobLog *joblogs.JobLogger) error {
+	jobLog.Info("processing file", logger.Data{"path": path})
 
 	// Check if this file already exists based on its filepath.
 	existingFile, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
@@ -194,10 +192,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		return errors.WithStack(err)
 	}
 	if existingFile != nil {
-		log.Info("file already exists", logger.Data{"file_id": existingFile.ID})
+		jobLog.Info("file already exists", logger.Data{"file_id": existingFile.ID})
 		// Check if cover is missing and recover it if needed
 		if err := w.recoverMissingCover(ctx, existingFile); err != nil {
-			log.Warn("failed to recover missing cover", logger.Data{"file_id": existingFile.ID, "error": err.Error()})
+			jobLog.Warn("failed to recover missing cover", logger.Data{"file_id": existingFile.ID, "error": err.Error()})
 		}
 		return nil
 	}
@@ -206,7 +204,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	stats, err := os.Stat(path)
 	if err != nil {
 		// File may have been moved by concurrent API-triggered organization
-		log.Warn("file not accessible, skipping", logger.Data{"path": path, "error": err.Error()})
+		jobLog.Warn("file not accessible, skipping", logger.Data{"path": path, "error": err.Error()})
 		return nil
 	}
 	size := stats.Size()
@@ -288,23 +286,22 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	var metadata *mediafile.ParsedMetadata
 	switch fileType {
 	case models.FileTypeEPUB:
-		log.Info("parsing file as epub", logger.Data{"file_type": fileType})
+		jobLog.Info("parsing file as epub", logger.Data{"file_type": fileType})
 		metadata, err = epub.Parse(path)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 	case models.FileTypeCBZ:
-		log.Info("parsing file as cbz", logger.Data{"file_type": fileType})
+		jobLog.Info("parsing file as cbz", logger.Data{"file_type": fileType})
 		metadata, err = cbz.Parse(path)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 	case models.FileTypeM4B:
-		log.Info("parsing file as m4b", logger.Data{"file_type": fileType})
+		jobLog.Info("parsing file as m4b", logger.Data{"file_type": fileType})
 		metadata, err = mp4.Parse(path)
 		if err != nil {
-			// TODO: save this as a job log so we can surface in the UI
-			log.Error("failed to parse as m4b", logger.Data{"file_type": fileType, "error": err.Error()})
+			jobLog.Error("failed to parse as m4b", err, logger.Data{"file_type": fileType})
 			return nil
 		}
 	}
@@ -378,7 +375,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 
 	// If we didn't find any authors in the metadata, try getting it from the filename.
 	if len(authors) == 0 && filepathAuthorRE.MatchString(filename) {
-		log.Info("no authors found in metadata; parsing filename", logger.Data{"filename": filename})
+		jobLog.Info("no authors found in metadata; parsing filename", logger.Data{"filename": filename})
 		// Use FindAllStringSubmatch to get the capture group (content inside brackets)
 		matches := filepathAuthorRE.FindAllStringSubmatch(filename, -1)
 		if len(matches) > 0 && len(matches[0]) > 1 {
@@ -401,7 +398,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			nameToCheck = actualFilename
 		}
 		if filepathNarratorRE.MatchString(nameToCheck) {
-			log.Info("no narrators found in metadata; parsing filename", logger.Data{"filename": nameToCheck})
+			jobLog.Info("no narrators found in metadata; parsing filename", logger.Data{"filename": nameToCheck})
 			// Use FindAllStringSubmatch to get the capture group (content inside braces)
 			matches := filepathNarratorRE.FindAllStringSubmatch(nameToCheck, -1)
 			if len(matches) > 0 && len(matches[0]) > 1 {
@@ -433,16 +430,16 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	var fileSidecarData *sidecar.FileSidecar
 	bookSidecarData, err := sidecar.ReadBookSidecar(bookPath)
 	if err != nil {
-		log.Warn("failed to read book sidecar", logger.Data{"error": err.Error()})
+		jobLog.Warn("failed to read book sidecar", logger.Data{"error": err.Error()})
 	}
 	fileSidecarData, err = sidecar.ReadFileSidecar(path)
 	if err != nil {
-		log.Warn("failed to read file sidecar", logger.Data{"error": err.Error()})
+		jobLog.Warn("failed to read file sidecar", logger.Data{"error": err.Error()})
 	}
 
 	// Apply book sidecar data (higher priority than file metadata)
 	if bookSidecarData != nil {
-		log.Info("applying book sidecar data")
+		jobLog.Info("applying book sidecar data", nil)
 		if bookSidecarData.Title != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[titleSource] {
 			title = bookSidecarData.Title
 			titleSource = models.DataSourceSidecar
@@ -494,7 +491,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if strings.TrimSpace(title) == "" {
 		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 		titleSource = models.DataSourceFilepath
-		log.Warn("title was empty after all processing, falling back to filename", logger.Data{"title": title})
+		jobLog.Warn("title was empty after all processing, falling back to filename", logger.Data{"title": title})
 	}
 
 	// First, check if there's already a book for this file path
@@ -510,7 +507,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if library.OrganizeFileStructure && isRootLevelFile {
 		// If there's already a book for this exact file path, skip organization to avoid duplicates
 		if existingBookByFile != nil {
-			log.Info("skipping organization - book already exists for this file", logger.Data{
+			jobLog.Info("skipping organization - book already exists for this file", logger.Data{
 				"book_id":   existingBookByFile.ID,
 				"file_path": path,
 			})
@@ -524,7 +521,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if existingBookByFile != nil {
 		// If we found a book by the original file path, use that
 		existingBook = existingBookByFile
-		log.Info("using existing book found by file path", logger.Data{"book_id": existingBook.ID})
+		jobLog.Info("using existing book found by file path", logger.Data{"book_id": existingBook.ID})
 	} else {
 		// Otherwise, check for existing book by the final book path (after potential organization)
 		existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
@@ -537,7 +534,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	}
 
 	if existingBook != nil {
-		log.Info("book already exists", logger.Data{"book_id": existingBook.ID})
+		jobLog.Info("book already exists", logger.Data{"book_id": existingBook.ID})
 
 		// Check to see if we need to update any of the metadata on the book.
 		// Important: We only update metadata if:
@@ -548,7 +545,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 
 		// Update title only if the new title is non-empty and from a higher priority source
 		if strings.TrimSpace(title) != "" && models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
-			log.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
+			jobLog.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
@@ -561,7 +558,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingSubtitleSource = *existingBook.SubtitleSource
 		}
 		if subtitle != nil && *subtitle != "" && models.DataSourcePriority[subtitleSource] < models.DataSourcePriority[existingSubtitleSource] {
-			log.Info("updating subtitle", logger.Data{"new_subtitle": *subtitle})
+			jobLog.Info("updating subtitle", logger.Data{"new_subtitle": *subtitle})
 			existingBook.Subtitle = subtitle
 			existingBook.SubtitleSource = &subtitleSource
 			updateOptions.Columns = append(updateOptions.Columns, "subtitle", "subtitle_source")
@@ -574,7 +571,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingDescriptionSource = *existingBook.DescriptionSource
 		}
 		if description != nil && *description != "" && models.DataSourcePriority[descriptionSource] < models.DataSourcePriority[existingDescriptionSource] {
-			log.Info("updating description")
+			jobLog.Info("updating description", nil)
 			existingBook.Description = description
 			existingBook.DescriptionSource = &descriptionSource
 			updateOptions.Columns = append(updateOptions.Columns, "description", "description_source")
@@ -583,7 +580,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 
 		// Update authors only if we have authors and they're from a higher priority source
 		if len(authors) > 0 && models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
-			log.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
+			jobLog.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
 			updateOptions.Authors = authors
@@ -596,7 +593,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingSeriesSource = existingBook.BookSeries[0].Series.NameSource
 		}
 		if len(seriesList) > 0 && (len(existingBook.BookSeries) == 0 || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
-			log.Info("updating series", logger.Data{"new_series_count": len(seriesList), "old_series_count": len(existingBook.BookSeries)})
+			jobLog.Info("updating series", logger.Data{"new_series_count": len(seriesList), "old_series_count": len(existingBook.BookSeries)})
 			// Delete existing book series entries
 			err = w.bookService.DeleteBookSeries(ctx, existingBook.ID)
 			if err != nil {
@@ -606,7 +603,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			for i, s := range seriesList {
 				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, s.name, libraryID, seriesSource)
 				if err != nil {
-					log.Error("failed to find/create series", logger.Data{"series": s.name, "error": err.Error()})
+					jobLog.Error("failed to find/create series", nil, logger.Data{"series": s.name, "error": err.Error()})
 					continue
 				}
 				sortOrder := s.sortOrder
@@ -621,7 +618,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateBookSeries(ctx, bookSeriesEntry)
 				if err != nil {
-					log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
+					jobLog.Error("failed to create book series", nil, logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
 				}
 			}
 		}
@@ -632,7 +629,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingGenreSource = *existingBook.GenreSource
 		}
 		if len(genreNames) > 0 && (len(existingBook.BookGenres) == 0 || models.DataSourcePriority[genreSource] < models.DataSourcePriority[existingGenreSource]) {
-			log.Info("updating genres", logger.Data{"new_genre_count": len(genreNames), "old_genre_count": len(existingBook.BookGenres)})
+			jobLog.Info("updating genres", logger.Data{"new_genre_count": len(genreNames), "old_genre_count": len(existingBook.BookGenres)})
 			// Delete existing book genre entries
 			err = w.bookService.DeleteBookGenres(ctx, existingBook.ID)
 			if err != nil {
@@ -642,7 +639,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			for _, genreName := range genreNames {
 				genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, libraryID)
 				if err != nil {
-					log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
+					jobLog.Error("failed to find/create genre", nil, logger.Data{"genre": genreName, "error": err.Error()})
 					continue
 				}
 				bookGenreEntry := &models.BookGenre{
@@ -651,7 +648,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateBookGenre(ctx, bookGenreEntry)
 				if err != nil {
-					log.Error("failed to create book genre", logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
+					jobLog.Error("failed to create book genre", nil, logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
 				}
 			}
 			existingBook.GenreSource = &genreSource
@@ -664,7 +661,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingTagSource = *existingBook.TagSource
 		}
 		if len(tagNames) > 0 && (len(existingBook.BookTags) == 0 || models.DataSourcePriority[tagSource] < models.DataSourcePriority[existingTagSource]) {
-			log.Info("updating tags", logger.Data{"new_tag_count": len(tagNames), "old_tag_count": len(existingBook.BookTags)})
+			jobLog.Info("updating tags", logger.Data{"new_tag_count": len(tagNames), "old_tag_count": len(existingBook.BookTags)})
 			// Delete existing book tag entries
 			err = w.bookService.DeleteBookTags(ctx, existingBook.ID)
 			if err != nil {
@@ -674,7 +671,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			for _, tagName := range tagNames {
 				tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, libraryID)
 				if err != nil {
-					log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
+					jobLog.Error("failed to find/create tag", nil, logger.Data{"tag": tagName, "error": err.Error()})
 					continue
 				}
 				bookTagEntry := &models.BookTag{
@@ -683,7 +680,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateBookTag(ctx, bookTagEntry)
 				if err != nil {
-					log.Error("failed to create book tag", logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
+					jobLog.Error("failed to create book tag", nil, logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
 				}
 			}
 			existingBook.TagSource = &tagSource
@@ -701,7 +698,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			for i, parsedAuthor := range updateOptions.Authors {
 				person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, libraryID)
 				if err != nil {
-					log.Error("failed to find/create person", logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
+					jobLog.Error("failed to find/create person", nil, logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
 					continue
 				}
 				var role *string
@@ -716,7 +713,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateAuthor(ctx, author)
 				if err != nil {
-					log.Error("failed to create author", logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
+					jobLog.Error("failed to create author", nil, logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
 				}
 			}
 		}
@@ -726,7 +723,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			booksToOrganize[existingBook.ID] = struct{}{}
 		}
 	} else {
-		log.Info("creating book", logger.Data{"title": title})
+		jobLog.Info("creating book", logger.Data{"title": title})
 		existingBook = &models.Book{
 			LibraryID:    libraryID,
 			Filepath:     bookPath,
@@ -753,7 +750,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		for i, parsedAuthor := range authors {
 			person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, libraryID)
 			if err != nil {
-				log.Error("failed to find/create person", logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
+				jobLog.Error("failed to find/create person", nil, logger.Data{"author": parsedAuthor.Name, "error": err.Error()})
 				continue
 			}
 			var role *string
@@ -768,7 +765,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			}
 			err = w.bookService.CreateAuthor(ctx, author)
 			if err != nil {
-				log.Error("failed to create author", logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
+				jobLog.Error("failed to create author", nil, logger.Data{"book_id": existingBook.ID, "person_id": person.ID, "error": err.Error()})
 			}
 		}
 
@@ -776,7 +773,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		for i, s := range seriesList {
 			seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, s.name, libraryID, seriesSource)
 			if err != nil {
-				log.Error("failed to find/create series", logger.Data{"series": s.name, "error": err.Error()})
+				jobLog.Error("failed to find/create series", nil, logger.Data{"series": s.name, "error": err.Error()})
 				continue
 			}
 			sortOrder := s.sortOrder
@@ -791,7 +788,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			}
 			err = w.bookService.CreateBookSeries(ctx, bookSeriesEntry)
 			if err != nil {
-				log.Error("failed to create book series", logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
+				jobLog.Error("failed to create book series", nil, logger.Data{"book_id": existingBook.ID, "series_id": seriesRecord.ID, "error": err.Error()})
 			}
 		}
 
@@ -802,12 +799,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				Columns: []string{"genre_source"},
 			})
 			if err != nil {
-				log.Error("failed to update book genre source", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
+				jobLog.Error("failed to update book genre source", nil, logger.Data{"book_id": existingBook.ID, "error": err.Error()})
 			}
 			for _, genreName := range genreNames {
 				genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, libraryID)
 				if err != nil {
-					log.Error("failed to find/create genre", logger.Data{"genre": genreName, "error": err.Error()})
+					jobLog.Error("failed to find/create genre", nil, logger.Data{"genre": genreName, "error": err.Error()})
 					continue
 				}
 				bookGenreEntry := &models.BookGenre{
@@ -816,7 +813,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateBookGenre(ctx, bookGenreEntry)
 				if err != nil {
-					log.Error("failed to create book genre", logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
+					jobLog.Error("failed to create book genre", nil, logger.Data{"book_id": existingBook.ID, "genre_id": genreRecord.ID, "error": err.Error()})
 				}
 			}
 		}
@@ -828,12 +825,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				Columns: []string{"tag_source"},
 			})
 			if err != nil {
-				log.Error("failed to update book tag source", logger.Data{"book_id": existingBook.ID, "error": err.Error()})
+				jobLog.Error("failed to update book tag source", nil, logger.Data{"book_id": existingBook.ID, "error": err.Error()})
 			}
 			for _, tagName := range tagNames {
 				tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, libraryID)
 				if err != nil {
-					log.Error("failed to find/create tag", logger.Data{"tag": tagName, "error": err.Error()})
+					jobLog.Error("failed to find/create tag", nil, logger.Data{"tag": tagName, "error": err.Error()})
 					continue
 				}
 				bookTagEntry := &models.BookTag{
@@ -842,7 +839,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 				err = w.bookService.CreateBookTag(ctx, bookTagEntry)
 				if err != nil {
-					log.Error("failed to create book tag", logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
+					jobLog.Error("failed to create book tag", nil, logger.Data{"book_id": existingBook.ID, "tag_id": tagRecord.ID, "error": err.Error()})
 				}
 			}
 		}
@@ -884,7 +881,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 
 			coverFilename := coverBaseName + coverExt
 			coverFilepath := filepath.Join(coverDir, coverFilename)
-			log.Info("saving cover", logger.Data{"original_mime": metadata.CoverMimeType, "normalized_mime": normalizedMime})
+			jobLog.Info("saving cover", logger.Data{"original_mime": metadata.CoverMimeType, "normalized_mime": normalizedMime})
 			coverFile, err := os.Create(coverFilepath)
 			if err != nil {
 				return errors.WithStack(err)
@@ -902,7 +899,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			// Store the cover filename for the file record
 			coverImagePath = &coverFilename
 		} else {
-			log.Info("cover already exists, skipping extraction", logger.Data{"existing_cover": existingCoverPath})
+			jobLog.Info("cover already exists, skipping extraction", logger.Data{"existing_cover": existingCoverPath})
 			// Set cover source to existing cover since we're using the existing one
 			existingCoverSource := models.DataSourceExistingCover
 			coverSource = &existingCoverSource
@@ -912,7 +909,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
-	log.Info("creating file", logger.Data{"filesize": size})
+	jobLog.Info("creating file", logger.Data{"filesize": size})
 	file := &models.File{
 		LibraryID:      libraryID,
 		BookID:         existingBook.ID,
@@ -947,7 +944,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	// Apply file sidecar data for narrators (higher priority than file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
 		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[narratorSource] {
-			log.Info("applying file sidecar data for narrators", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
+			jobLog.Info("applying file sidecar data for narrators", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
 			narratorSource = models.DataSourceSidecar
 			narratorNames = make([]string, 0)
 			for _, n := range fileSidecarData.Narrators {
@@ -1010,7 +1007,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if publisherName != nil && *publisherName != "" {
 		publisher, err := w.publisherService.FindOrCreatePublisher(ctx, *publisherName, libraryID)
 		if err != nil {
-			log.Error("failed to find/create publisher", logger.Data{"publisher": *publisherName, "error": err.Error()})
+			jobLog.Error("failed to find/create publisher", nil, logger.Data{"publisher": *publisherName, "error": err.Error()})
 		} else {
 			file.PublisherID = &publisher.ID
 			file.PublisherSource = &publisherSource
@@ -1021,7 +1018,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if imprintName != nil && *imprintName != "" {
 		imprint, err := w.imprintService.FindOrCreateImprint(ctx, *imprintName, libraryID)
 		if err != nil {
-			log.Error("failed to find/create imprint", logger.Data{"imprint": *imprintName, "error": err.Error()})
+			jobLog.Error("failed to find/create imprint", nil, logger.Data{"imprint": *imprintName, "error": err.Error()})
 		} else {
 			file.ImprintID = &imprint.ID
 			file.ImprintSource = &imprintSource
@@ -1037,7 +1034,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	for i, narratorName := range narratorNames {
 		person, err := w.personService.FindOrCreatePerson(ctx, narratorName, libraryID)
 		if err != nil {
-			log.Error("failed to find/create person for narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
+			jobLog.Error("failed to find/create person for narrator", nil, logger.Data{"narrator": narratorName, "error": err.Error()})
 			continue
 		}
 		narrator := &models.Narrator{
@@ -1047,7 +1044,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 		err = w.bookService.CreateNarrator(ctx, narrator)
 		if err != nil {
-			log.Error("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
+			jobLog.Error("failed to create narrator", nil, logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
 		}
 	}
 
@@ -1057,16 +1054,16 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		ID: &existingBook.ID,
 	})
 	if err != nil {
-		log.Warn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
+		jobLog.Warn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
 	} else {
 		if err := sidecar.WriteBookSidecarFromModel(existingBook); err != nil {
-			log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+			jobLog.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
 		}
 	}
 
 	// Write file sidecar
 	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
-		log.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
+		jobLog.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
 	}
 
 	return nil

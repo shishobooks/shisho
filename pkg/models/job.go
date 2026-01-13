@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	//tygo:emit export type JobStatus = typeof JobStatusPending | typeof JobStatusInProgress | typeof JobStatusCompleted;
+	//tygo:emit export type JobStatus = typeof JobStatusPending | typeof JobStatusInProgress | typeof JobStatusCompleted | typeof JobStatusFailed;
 	JobStatusPending    = "pending"
 	JobStatusInProgress = "in_progress"
 	JobStatusCompleted  = "completed"
+	JobStatusFailed     = "failed"
 )
 
 const (

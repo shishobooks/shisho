@@ -67,6 +67,12 @@ sync_interval_minutes: 60
 # Default: 2
 worker_processes: 2
 
+# How many days to retain completed/failed jobs (older jobs are deleted)
+# Set to 0 to disable retention cleanup
+# Env: JOB_RETENTION_DAYS
+# Default: 30
+job_retention_days: 30
+
 # =============================================================================
 # DOWNLOAD CACHE SETTINGS
 # =============================================================================

@@ -1,7 +1,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -30,6 +30,8 @@ const getStatusColor = (status: string) => {
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
     case "pending":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+    case "failed":
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
   }
@@ -57,7 +59,10 @@ interface JobRowProps {
 }
 
 const JobRow = ({ job }: JobRowProps) => (
-  <div className="flex items-center justify-between py-4 border-b border-border last:border-b-0">
+  <Link
+    className="flex items-center justify-between py-4 border-b border-border last:border-b-0 hover:bg-muted/50 -mx-6 px-6 transition-colors"
+    to={`/settings/jobs/${job.id}`}
+  >
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-3">
         <span className="font-medium text-foreground">{job.type}</span>
@@ -70,12 +75,14 @@ const JobRow = ({ job }: JobRowProps) => (
         {job.status === JobStatusInProgress && job.created_at && (
           <span>Running for {formatDuration(job.created_at)}</span>
         )}
-        {job.status === "completed" && job.created_at && job.updated_at && (
-          <span>Took {formatDuration(job.created_at, job.updated_at)}</span>
-        )}
+        {(job.status === "completed" || job.status === "failed") &&
+          job.created_at &&
+          job.updated_at && (
+            <span>Took {formatDuration(job.created_at, job.updated_at)}</span>
+          )}
       </div>
     </div>
-  </div>
+  </Link>
 );
 
 const AdminJobs = () => {

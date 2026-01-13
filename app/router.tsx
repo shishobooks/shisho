@@ -14,6 +14,7 @@ import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
 import ImprintDetail from "@/components/pages/ImprintDetail";
 import ImprintsList from "@/components/pages/ImprintsList";
+import JobDetail from "@/components/pages/JobDetail";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
 import Login from "@/components/pages/Login";
@@ -116,6 +117,16 @@ export const router = createBrowserRouter([
             requiredPermission={{ resource: "jobs", operation: "read" }}
           >
             <AdminJobs />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "jobs/:id",
+        element: (
+          <ProtectedRoute
+            requiredPermission={{ resource: "jobs", operation: "read" }}
+          >
+            <JobDetail />
           </ProtectedRoute>
         ),
       },

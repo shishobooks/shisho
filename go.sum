@@ -9,12 +9,8 @@ github.com/DarthSim/hivemind v1.1.0 h1:om9ELlhZ07p+yZ+OzYzaXd5RYw/j+X7UwgWyNLpOc
 github.com/DarthSim/hivemind v1.1.0/go.mod h1:hXtCeYrLuyrV8/5z8d9sue+hbi2Y4rzaVgKneVpP/Ow=
 github.com/abema/go-mp4 v1.4.1 h1:YoS4VRqd+pAmddRPLFf8vMk74kuGl6ULSjzhsIqwr6M=
 github.com/abema/go-mp4 v1.4.1/go.mod h1:vPl9t5ZK7K0x68jh12/+ECWBCXoWuIDtNgPtU2f04ws=
-github.com/air-verse/air v1.63.6 h1:izaqxGhacjPCBtVIGtEJ8wXEtwx4TxruFnE0wGJzipI=
-github.com/air-verse/air v1.63.6/go.mod h1:Dnn4m4DlC9IQiNd3ir57SOdpvGJ3gnC1+OlIGMi2fJY=
-github.com/air-verse/air v1.63.7 h1:Wi85jUmyhGWcNpm/OUUvPiGNp65X+mUVKjr1N9HfZ3Q=
-github.com/air-verse/air v1.63.7/go.mod h1:Dnn4m4DlC9IQiNd3ir57SOdpvGJ3gnC1+OlIGMi2fJY=
-github.com/air-verse/air v1.63.8 h1:H37it5L2VL2VtAW5ICV3RDuuy7xXxAZ8o/IjxyRrsR4=
-github.com/air-verse/air v1.63.8/go.mod h1:Dnn4m4DlC9IQiNd3ir57SOdpvGJ3gnC1+OlIGMi2fJY=
+github.com/air-verse/air v1.64.0 h1:lKEvIQzaOM5vAVKOdQxq1WrXLfLmzz+e+hPrhmgF6yo=
+github.com/air-verse/air v1.64.0/go.mod h1:Dnn4m4DlC9IQiNd3ir57SOdpvGJ3gnC1+OlIGMi2fJY=
 github.com/alecthomas/chroma/v2 v2.20.0 h1:sfIHpxPyR07/Oylvmcai3X/exDlE8+FA820NTz+9sGw=
 github.com/alecthomas/chroma/v2 v2.20.0/go.mod h1:e7tViK0xh/Nf4BYHl00ycY6rV7b8iXBksI9E359yNmA=
 github.com/armon/go-radix v1.0.1-0.20221118154546-54df44f2176c h1:651/eoCRnQ7YtSjAnSzRucrJz+3iGEFt+ysraELS81M=

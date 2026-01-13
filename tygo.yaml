@@ -18,6 +18,10 @@ packages:
       import { JobExportData, JobScanData } from "@/types";
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/joblogs"
+    output_path: "app/types/generated/joblogs.ts"
+    include_files:
+      - validators.go
   - path: "github.com/shishobooks/shisho/pkg/libraries"
     output_path: "app/types/generated/libraries.ts"
     include_files:

@@ -197,3 +197,29 @@ func (svc *Service) UpdateJob(ctx context.Context, job *models.Job, opts UpdateJ
 
 	return nil
 }
+
+// CleanupOldJobs deletes completed and failed jobs older than the retention period.
+// Associated job_logs are deleted automatically via ON DELETE CASCADE.
+func (svc *Service) CleanupOldJobs(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+
+	res, err := svc.db.NewDelete().
+		Model((*models.Job)(nil)).
+		Where("created_at < ?", cutoff).
+		Where("status IN (?, ?)", models.JobStatusCompleted, models.JobStatusFailed).
+		Exec(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	return count, nil
+}

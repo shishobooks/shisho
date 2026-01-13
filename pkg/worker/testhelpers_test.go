@@ -9,6 +9,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -30,6 +31,7 @@ type testContext struct {
 	bookService    *books.Service
 	libraryService *libraries.Service
 	jobService     *jobs.Service
+	jobLogService  *joblogs.Service
 	personService  *people.Service
 	seriesService  *series.Service
 }
@@ -57,6 +59,7 @@ func newTestContext(t *testing.T) *testContext {
 	bookService := books.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
+	jobLogService := joblogs.NewService(db)
 	personService := people.NewService(db)
 	seriesService := series.NewService(db)
 	genreService := genres.NewService(db)
@@ -72,6 +75,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		jobLogService:  jobLogService,
 		personService:  personService,
 		seriesService:  seriesService,
 		genreService:   genreService,
@@ -89,6 +93,7 @@ func newTestContext(t *testing.T) *testContext {
 		bookService:    bookService,
 		libraryService: libraryService,
 		jobService:     jobService,
+		jobLogService:  jobLogService,
 		personService:  personService,
 		seriesService:  seriesService,
 	}
@@ -171,7 +176,9 @@ func (tc *testContext) listFiles() []*models.File {
 
 // runScan executes the scan job for all libraries.
 func (tc *testContext) runScan() error {
-	return tc.worker.ProcessScanJob(tc.ctx, nil)
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	return tc.worker.ProcessScanJob(tc.ctx, nil, jobLog)
 }
 
 // listSeries returns all series in the database.

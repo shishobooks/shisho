@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
+	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -18,24 +19,30 @@ import (
 	"github.com/shishobooks/shisho/pkg/tags"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/uptrace/bun"
 )
 
-var processID = randStringBytes(8)
+var (
+	processID         = randStringBytes(8)
+	errJobPanicked    = errors.New("job panicked")
+	errUnknownJobType = errors.New("unknown job type")
+)
 
 type Worker struct {
 	config *config.Config
 	log    logger.Logger
 
-	processFuncs map[string]func(ctx context.Context, job *models.Job) error
+	processFuncs map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error
 
 	bookService      *books.Service
 	genreService     *genres.Service
 	imprintService   *imprints.Service
 	jobService       *jobs.Service
+	jobLogService    *joblogs.Service
 	libraryService   *libraries.Service
 	personService    *people.Service
 	publisherService *publishers.Service
@@ -48,6 +55,7 @@ type Worker struct {
 	doneFetching   chan struct{}
 	doneProcessing chan struct{}
 	doneScheduling chan struct{}
+	doneCleanup    chan struct{}
 }
 
 func New(cfg *config.Config, db *bun.DB) *Worker {
@@ -55,6 +63,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 	genreService := genres.NewService(db)
 	imprintService := imprints.NewService(db)
 	jobService := jobs.NewService(db)
+	jobLogService := joblogs.NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	publisherService := publishers.NewService(db)
@@ -70,6 +79,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		genreService:     genreService,
 		imprintService:   imprintService,
 		jobService:       jobService,
+		jobLogService:    jobLogService,
 		libraryService:   libraryService,
 		personService:    personService,
 		publisherService: publisherService,
@@ -82,9 +92,10 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		doneFetching:   make(chan struct{}),
 		doneProcessing: make(chan struct{}, cfg.WorkerProcesses),
 		doneScheduling: make(chan struct{}),
+		doneCleanup:    make(chan struct{}),
 	}
 
-	w.processFuncs = map[string]func(ctx context.Context, job *models.Job) error{
+	w.processFuncs = map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error{
 		models.JobTypeScan: w.ProcessScanJob,
 	}
 
@@ -103,6 +114,9 @@ func (w *Worker) Start() {
 		go func() {
 			w.doneScheduling <- struct{}{}
 		}()
+	}
+	if w.config.JobRetentionDays > 0 {
+		go w.cleanupOldJobs()
 	}
 }
 
@@ -151,6 +165,9 @@ func (w *Worker) processJobs() {
 			log := w.log.ID(id.String()).Root(logger.Data{"job_id": job.ID, "type": job.Type, "process_id": processID})
 			ctx := log.WithContext(context.Background())
 
+			// Create job logger for DB persistence
+			jobLog := w.jobLogService.NewJobLogger(ctx, job.ID, log)
+
 			// Update job to be in progress and claimed by this process.
 			job.Status = models.JobStatusInProgress
 			job.ProcessID = &processID
@@ -163,28 +180,48 @@ func (w *Worker) processJobs() {
 				continue
 			}
 
-			// Find and invoke the appropriate process function.
-			fn, ok := w.processFuncs[job.Type]
-			if !ok {
-				log.Err(err).Error("can't find process function for type")
-				continue
-			}
-			err = fn(ctx, job)
-			if err != nil {
-				log.Err(err).Error("process error")
-				continue
-			}
+			// Process with panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						jobLog.Fatal("job panicked", errors.Wrapf(errJobPanicked, "%v", r), logger.Data{"panic": r})
+						job.Status = models.JobStatusFailed
+						_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
+							Columns: []string{"status"},
+						})
+					}
+				}()
 
-			// Update job to be completed so that it's not picked up anymore.
-			job.Status = models.JobStatusCompleted
+				// Find and invoke the appropriate process function.
+				fn, ok := w.processFuncs[job.Type]
+				if !ok {
+					jobLog.Error("can't find process function for type", errors.Wrapf(errUnknownJobType, "%s", job.Type), nil)
+					job.Status = models.JobStatusFailed
+					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
+						Columns: []string{"status"},
+					})
+					return
+				}
 
-			err = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
-				Columns: []string{"status"},
-			})
-			if err != nil {
-				log.Err(err).Error("update job error")
-				continue
-			}
+				err = fn(ctx, job, jobLog)
+				if err != nil {
+					jobLog.Error("job failed", err, nil)
+					job.Status = models.JobStatusFailed
+					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
+						Columns: []string{"status"},
+					})
+					return
+				}
+
+				// Update job to be completed so that it's not picked up anymore.
+				job.Status = models.JobStatusCompleted
+				err = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
+					Columns: []string{"status"},
+				})
+				if err != nil {
+					log.Err(err).Error("update job error")
+				}
+			}()
 		}
 	}
 }
@@ -249,6 +286,32 @@ func (w *Worker) scheduleScanJobs() {
 	}
 }
 
+func (w *Worker) cleanupOldJobs() {
+	// Run cleanup hourly
+	duration := 1 * time.Hour
+	timer := time.NewTimer(duration)
+
+	for {
+		select {
+		case <-w.shutdown:
+			timer.Stop()
+			w.doneCleanup <- struct{}{}
+			return
+		case <-timer.C:
+			ctx := context.Background()
+			log := w.log.Root(logger.Data{"cleanup": "jobs"})
+
+			count, err := w.jobService.CleanupOldJobs(ctx, w.config.JobRetentionDays)
+			if err != nil {
+				log.Err(err).Error("failed to cleanup old jobs")
+			} else if count > 0 {
+				log.Info("cleaned up old jobs", logger.Data{"count": count})
+			}
+			timer.Reset(duration)
+		}
+	}
+}
+
 func (w *Worker) Shutdown() {
 	close(w.shutdown)
 
@@ -256,6 +319,9 @@ func (w *Worker) Shutdown() {
 	<-w.doneScheduling
 	for i := 0; i < w.config.WorkerProcesses; i++ {
 		<-w.doneProcessing
+	}
+	if w.config.JobRetentionDays > 0 {
+		<-w.doneCleanup
 	}
 }
 

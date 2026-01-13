@@ -34,6 +34,9 @@ type Config struct {
 	SyncIntervalMinutes int `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
 	WorkerProcesses     int `koanf:"worker_processes" json:"worker_processes"`
 
+	// Job retention settings
+	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
+
 	// Download cache settings
 	DownloadCacheDir       string `koanf:"download_cache_dir" json:"download_cache_dir"`
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
@@ -58,6 +61,7 @@ func defaults() *Config {
 		ServerPort:                3689,
 		SyncIntervalMinutes:       60,
 		WorkerProcesses:           2,
+		JobRetentionDays:          30,
 		DownloadCacheDir:          "/config/cache/downloads",
 		DownloadCacheMaxSizeGB:    5,
 		JWTSecret:                 "", // Must be set via config or env var

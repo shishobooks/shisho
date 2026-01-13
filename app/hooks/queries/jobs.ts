@@ -6,11 +6,12 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { CreateJobPayload, Job, ListJobsQuery } from "@/types";
+import type { CreateJobPayload, Job, JobLog, ListJobsQuery } from "@/types";
 
 export enum QueryKey {
   RetrieveJob = "RetrieveJob",
   ListJobs = "ListJobs",
+  ListJobLogs = "ListJobLogs",
 }
 
 export const useJob = (
@@ -47,6 +48,44 @@ export const useJobs = (
     queryKey: [QueryKey.ListJobs, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/jobs", null, query, signal);
+    },
+  });
+};
+
+interface ListJobLogsData {
+  logs: JobLog[];
+  job: Job;
+}
+
+interface UseJobLogsOptions {
+  afterId?: number;
+  level?: string[];
+}
+
+export const useJobLogs = (
+  jobId?: string,
+  options: UseJobLogsOptions = {},
+  queryOptions: Omit<
+    UseQueryOptions<ListJobLogsData, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ListJobLogsData, ShishoAPIError>({
+    enabled:
+      queryOptions.enabled !== undefined
+        ? queryOptions.enabled
+        : Boolean(jobId),
+    ...queryOptions,
+    queryKey: [QueryKey.ListJobLogs, jobId, options],
+    queryFn: ({ signal }) => {
+      const params: Record<string, string | string[]> = {};
+      if (options.afterId !== undefined) {
+        params.after_id = String(options.afterId);
+      }
+      if (options.level && options.level.length > 0) {
+        params.level = options.level;
+      }
+      return API.request("GET", `/jobs/${jobId}/logs`, null, params, signal);
     },
   });
 };
