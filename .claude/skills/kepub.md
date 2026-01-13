@@ -1,3 +1,8 @@
+---
+name: kepub
+description: Use when working on KePub conversion for Kobo devices. Covers EPUB-to-KePub transformation, CBZ-to-KePub fixed-layout conversion, koboSpan wrapping, and the kepub package.
+---
+
 # KePub Format Reference
 
 This skill documents the KePub (Kobo EPUB) format as used in Shisho for conversion and generation.

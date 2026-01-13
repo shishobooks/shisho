@@ -1,3 +1,8 @@
+---
+name: m4b
+description: Use when working on M4B audiobook parsing, generation, or MP4 atom metadata. Covers iTunes atoms, chapters, narrators, and the mp4/filegen packages.
+---
+
 # M4B Format Reference
 
 This skill documents the M4B (MPEG-4 Audiobook) format as used in Shisho for parsing and generation.

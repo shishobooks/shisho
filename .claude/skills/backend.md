@@ -1,3 +1,9 @@
+---
+name: backend
+description: Use when working on Go backend code. Covers Echo handlers, Bun ORM, worker jobs, file parsers, and the metadata sync checklist.
+user-invocable: false
+---
+
 # Shisho Backend Development
 
 This skill documents backend patterns and conventions specific to Shisho.

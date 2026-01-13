@@ -1,3 +1,8 @@
+---
+name: cbz
+description: Use when working on CBZ (comic) parsing, generation, or ComicInfo.xml metadata. Covers creator roles, page handling, and the cbz/filegen packages.
+---
+
 # CBZ Format Reference
 
 This skill documents the CBZ (Comic Book ZIP) format as used in Shisho for parsing and generation.

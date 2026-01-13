@@ -1,3 +1,9 @@
+---
+name: frontend
+description: Use when working on React/TypeScript frontend code. Covers Tanstack Query, API integration, component patterns, and UI conventions for Shisho.
+user-invocable: false
+---
+
 # Shisho Frontend Development
 
 This skill documents frontend patterns and conventions specific to Shisho.

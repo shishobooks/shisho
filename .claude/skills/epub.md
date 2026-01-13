@@ -1,3 +1,8 @@
+---
+name: epub
+description: Use when working on EPUB parsing, generation, or metadata. Covers OPF structure, Dublin Core elements, Calibre meta tags, and the epub/filegen packages.
+---
+
 # EPUB Format Reference
 
 This skill documents the EPUB format as used in Shisho for parsing and generation.
