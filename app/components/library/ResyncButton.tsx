@@ -1,6 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { useCreateJob, useLatestScanJob } from "@/hooks/queries/jobs";
 
 interface ResyncButtonProps {
@@ -17,6 +20,8 @@ interface ResyncButtonProps {
 
 export function ResyncButton({ libraryId }: ResyncButtonProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useLatestScanJob(libraryId);
   const createJob = useCreateJob();
 
@@ -27,6 +32,21 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
   const isCompleted = latestJob?.status === "completed";
   // Show spinning when mutation is pending or job is active
   const showSpinning = createJob.isPending || isActive;
+
+  // Track previous active state to detect when scan completes
+  const wasActiveRef = useRef(false);
+
+  useEffect(() => {
+    // Detect transition from active to completed
+    if (wasActiveRef.current && !isActive && isCompleted) {
+      // Check if we're on the home page (library books list)
+      const isHomePage = /^\/libraries\/\d+\/?$/.test(location.pathname);
+      if (isHomePage) {
+        queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      }
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive, isCompleted, location.pathname, queryClient]);
 
   const handleClick = () => {
     if (isActive || isFailed) {
