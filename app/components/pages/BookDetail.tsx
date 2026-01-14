@@ -78,6 +78,27 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString();
 };
 
+function formatIdentifierType(type: string): string {
+  switch (type) {
+    case "isbn_10":
+      return "ISBN-10";
+    case "isbn_13":
+      return "ISBN-13";
+    case "asin":
+      return "ASIN";
+    case "uuid":
+      return "UUID";
+    case "goodreads":
+      return "Goodreads";
+    case "google":
+      return "Google";
+    case "other":
+      return "Other";
+    default:
+      return type;
+  }
+}
+
 const getRoleLabel = (role: string | undefined): string | null => {
   if (!role) return null;
   const roleLabels: Record<string, string> = {
@@ -575,6 +596,27 @@ const BookDetail = () => {
                               </a>
                             </span>
                           )}
+                        </div>
+                      )}
+
+                      {/* Identifiers */}
+                      {file.identifiers && file.identifiers.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {file.identifiers.map((id, idx) => (
+                            <Badge
+                              className="text-xs"
+                              key={idx}
+                              variant="outline"
+                            >
+                              <span className="font-medium">
+                                {formatIdentifierType(id.type)}
+                              </span>
+                              <span className="mx-1">:</span>
+                              <span className="font-mono select-all">
+                                {id.value}
+                              </span>
+                            </Badge>
+                          ))}
                         </div>
                       )}
                     </div>

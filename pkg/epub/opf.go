@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -30,6 +31,7 @@ type OPF struct {
 	CoverFilepath string
 	CoverMimeType string
 	CoverData     []byte
+	Identifiers   []mediafile.ParsedIdentifier
 }
 
 type Package struct {
@@ -179,6 +181,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverMimeType: opf.CoverMimeType,
 		CoverData:     opf.CoverData,
 		DataSource:    models.DataSourceEPUBMetadata,
+		Identifiers:   opf.Identifiers,
 	}, nil
 }
 
@@ -337,6 +340,24 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
+	// Parse identifiers from dc:identifier elements
+	var identifiersList []mediafile.ParsedIdentifier
+	for _, identifier := range pkg.Metadata.Identifier {
+		value := strings.TrimSpace(identifier.Text)
+		if value == "" {
+			continue
+		}
+		idType := identifiers.DetectType(value, identifier.Scheme)
+		if idType == identifiers.TypeUnknown {
+			// Skip unknown identifier types for EPUB
+			continue
+		}
+		identifiersList = append(identifiersList, mediafile.ParsedIdentifier{
+			Type:  string(idType),
+			Value: value,
+		})
+	}
+
 	return &OPF{
 		Title:         title,
 		Authors:       authors,
@@ -351,5 +372,6 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		ReleaseDate:   releaseDate,
 		CoverFilepath: coverFilepath,
 		CoverMimeType: coverMimeType,
+		Identifiers:   identifiersList,
 	}, nil
 }

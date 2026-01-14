@@ -1,6 +1,6 @@
 ---
 name: m4b
-description: Use when working on M4B audiobook parsing, generation, or MP4 atom metadata. Covers iTunes atoms, chapters, narrators, and the mp4/filegen packages.
+description: You MUST use this before working on anything M4B/audiobook-related (e.g. parsing, generation, MP4 atom metadata, etc.). Covers iTunes atoms, chapters, narrators, and the mp4/filegen packages.
 ---
 
 # M4B Format Reference

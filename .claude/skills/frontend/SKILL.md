@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Use when working on React/TypeScript frontend code. Covers Tanstack Query, API integration, component patterns, and UI conventions for Shisho.
+description: You MUST use this before working on any React/TypeScript frontend code or anything UI related. Covers Tanstack Query, API integration, component patterns, and UI conventions for Shisho.
 user-invocable: false
 ---
 

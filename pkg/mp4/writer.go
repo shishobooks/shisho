@@ -315,6 +315,14 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildFreeformAtom("com.shisho", "tags", joinStrings(metadata.Tags)))
 	}
 
+	// ASIN as freeform atom (from identifiers)
+	for _, id := range metadata.Identifiers {
+		if id.Type == "asin" && id.Value != "" {
+			content.Write(buildFreeformAtom("com.apple.iTunes", "ASIN", id.Value))
+			break // Only write first ASIN
+		}
+	}
+
 	// Cover
 	if len(metadata.CoverData) > 0 {
 		dataType := DataTypeJPEG

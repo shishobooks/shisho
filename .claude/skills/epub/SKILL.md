@@ -1,6 +1,6 @@
 ---
 name: epub
-description: Use when working on EPUB parsing, generation, or metadata. Covers OPF structure, Dublin Core elements, Calibre meta tags, and the epub/filegen packages.
+description: You MUST use this before working on anything EPUB-related (e.g. parsing, generation, metadata, etc.). Covers OPF structure, Dublin Core elements, Calibre meta tags, and the epub/filegen packages.
 ---
 
 # EPUB Format Reference

@@ -784,13 +784,35 @@ func (h *handler) updateFile(c echo.Context) error {
 		}
 	}
 
+	// Update identifiers
+	if params.Identifiers != nil {
+		// Delete existing identifiers
+		if err := h.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
+			return errors.WithStack(err)
+		}
+		// Create new identifiers
+		for _, id := range *params.Identifiers {
+			fileID := &models.FileIdentifier{
+				FileID: file.ID,
+				Type:   id.Type,
+				Value:  id.Value,
+				Source: models.DataSourceManual,
+			}
+			if err := h.bookService.CreateFileIdentifier(ctx, fileID); err != nil {
+				log.Error("failed to create file identifier", logger.Data{"file_id": file.ID, "type": id.Type, "error": err.Error()})
+			}
+		}
+		file.IdentifierSource = strPtr(models.DataSourceManual)
+		opts.Columns = append(opts.Columns, "identifier_source")
+	}
+
 	// Update the file
 	if err := h.bookService.UpdateFile(ctx, file, opts); err != nil {
 		return errors.WithStack(err)
 	}
 
 	// Reload the file with narrators
-	file, err = h.bookService.RetrieveFileWithNarrators(ctx, file.ID)
+	file, err = h.bookService.RetrieveFileWithRelations(ctx, file.ID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -1030,7 +1052,7 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	}
 
 	// Reload the file
-	file, err = h.bookService.RetrieveFileWithNarrators(ctx, file.ID)
+	file, err = h.bookService.RetrieveFileWithRelations(ctx, file.ID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -1185,13 +1207,25 @@ func (h *handler) downloadFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
+	var fileWithRelations *models.File
+	for _, f := range book.Files {
+		if f.ID == file.ID {
+			fileWithRelations = f
+			break
+		}
+	}
+	if fileWithRelations == nil {
+		fileWithRelations = file // Fallback to original file if not found
+	}
+
 	// Check if the source file exists
-	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+	if _, err := os.Stat(fileWithRelations.Filepath); os.IsNotExist(err) {
 		return errcodes.NotFound("Source file not found on disk")
 	}
 
 	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
 	if err != nil {
 		// Check if it's a "not implemented" error for M4B/CBZ
 		var genErr *filegen.GenerationError
@@ -1281,13 +1315,25 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
+	var fileWithRelations *models.File
+	for _, f := range book.Files {
+		if f.ID == file.ID {
+			fileWithRelations = f
+			break
+		}
+	}
+	if fileWithRelations == nil {
+		fileWithRelations = file // Fallback to original file if not found
+	}
+
 	// Check if the source file exists
-	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+	if _, err := os.Stat(fileWithRelations.Filepath); os.IsNotExist(err) {
 		return errcodes.NotFound("Source file not found on disk")
 	}
 
 	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, file)
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
 	if err != nil {
 		// Check if this file type doesn't support KePub conversion
 		if errors.Is(err, filegen.ErrKepubNotSupported) {

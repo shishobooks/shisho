@@ -1,5 +1,7 @@
 # File Identifiers Design
 
+> **Status:** Implemented (2026-01-13)
+
 ## Overview
 
 Add support for file identifiers (ISBN, ASIN, etc.) to track unique identifiers for ebook and audiobook files. Identifiers are tied to files (not books) because each file represents a different edition with potentially different identifiers.

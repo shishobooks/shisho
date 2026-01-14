@@ -1,6 +1,6 @@
 ---
 name: backend
-description: Use when working on Go backend code. Covers Echo handlers, Bun ORM, worker jobs, file parsers, and the metadata sync checklist.
+description: You MUST use this before working on any Go backend code or working with the API. Covers Echo handlers, Bun ORM, worker jobs, file parsers, and the metadata sync checklist.
 user-invocable: false
 ---
 
@@ -93,6 +93,37 @@ Used to determine which metadata to keep when conflicts occur.
 - Don't store non-modifiable intrinsic properties (e.g., bitrate, duration)
 - Source fields (e.g., title_source, name_source) shouldn't be saved into the sidecar
 
+## File Retrieval and Relations
+
+**CRITICAL**: When calling `WriteFileSidecarFromModel()` or `ComputeFingerprint()`, the file MUST have all relations loaded:
+
+| Function | Required Relations |
+|----------|-------------------|
+| `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Imprint |
+| `ComputeFingerprint()` | Narrators, Identifiers |
+
+**Use the right retrieval method:**
+- `RetrieveFile()` - Basic file with Book and Identifiers only. Use for simple lookups.
+- `RetrieveFileWithRelations()` - Complete file with all relations. **Use this for sidecar writing or fingerprinting.**
+- Book queries (`RetrieveBook`) - Already include `Files.Identifiers`, `Files.Narrators`, etc.
+
+**Common mistake**: Retrieving a file with `RetrieveFile()` then passing it to `WriteFileSidecarFromModel()` or `ComputeFingerprint()`. The sidecar/fingerprint will be missing data because relations aren't loaded.
+
+**Correct pattern:**
+```go
+// For sidecar writing after file updates
+file, _ := h.bookService.RetrieveFileWithRelations(ctx, file.ID)
+sidecar.WriteFileSidecarFromModel(file)
+
+// For fingerprinting in download handlers - use file from book.Files
+book, _ := h.bookService.RetrieveBook(ctx, opts)
+for _, f := range book.Files {
+    if f.ID == targetFileID {
+        downloadcache.ComputeFingerprint(book, f) // f has all relations
+    }
+}
+```
+
 ## Metadata Sync Checklist
 
 When adding or modifying book/file metadata fields, ensure these files are updated:
@@ -112,7 +143,8 @@ When adding or modifying book/file metadata fields, ensure these files are updat
 6. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
 7. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
 8. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
-9. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
+9. **File retrieval** (`pkg/books/service.go`) - If the new field is a File relation used by sidecar or fingerprint, add it to `RetrieveFileWithRelations()` and consider adding to `RetrieveFile()` if lightweight
+10. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
 
 ## Adding New Entity Types
 

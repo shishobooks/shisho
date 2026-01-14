@@ -34,11 +34,18 @@ type SeriesInput struct {
 	Number *float64 `json:"number,omitempty"`
 }
 
+// IdentifierPayload represents an identifier in update requests.
+type IdentifierPayload struct {
+	Type  string `json:"type" validate:"required,oneof=isbn_10 isbn_13 asin uuid goodreads google other"`
+	Value string `json:"value" validate:"required,max=100"`
+}
+
 // UpdateFilePayload is the payload for updating a file's metadata.
 type UpdateFilePayload struct {
-	Narrators   []string `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
-	URL         *string  `json:"url,omitempty" validate:"omitempty,max=500,url"`
-	Publisher   *string  `json:"publisher,omitempty" validate:"omitempty,max=200"`
-	Imprint     *string  `json:"imprint,omitempty" validate:"omitempty,max=200"`
-	ReleaseDate *string  `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
+	Narrators   []string             `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
+	URL         *string              `json:"url,omitempty" validate:"omitempty,max=500,url"`
+	Publisher   *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
+	Imprint     *string              `json:"imprint,omitempty" validate:"omitempty,max=200"`
+	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
+	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
 }

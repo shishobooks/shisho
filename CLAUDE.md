@@ -84,3 +84,7 @@ For detailed architecture information, see the skills:
 - For deletion queries, ensure indexes exist on the WHERE clause columns
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
+
+## User Preferences
+
+- **Plan execution:** Always use subagent-driven development (dispatch fresh subagent per task in current session) rather than parallel sessions

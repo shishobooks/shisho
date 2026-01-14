@@ -1,6 +1,6 @@
 ---
 name: cbz
-description: Use when working on CBZ (comic) parsing, generation, or ComicInfo.xml metadata. Covers creator roles, page handling, and the cbz/filegen packages.
+description: You MUST use this before working on anything CBZ/comic-related (e.g. parsing, generation, ComicInfo.xml metadata, etc.). Covers creator roles, page handling, and the cbz/filegen packages.
 ---
 
 # CBZ Format Reference

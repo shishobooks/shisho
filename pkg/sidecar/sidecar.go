@@ -205,6 +205,17 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 		}
 	}
 
+	// Map identifiers
+	if len(file.Identifiers) > 0 {
+		s.Identifiers = make([]IdentifierMetadata, len(file.Identifiers))
+		for i, id := range file.Identifiers {
+			s.Identifiers[i] = IdentifierMetadata{
+				Type:  id.Type,
+				Value: id.Value,
+			}
+		}
+	}
+
 	return s
 }
 

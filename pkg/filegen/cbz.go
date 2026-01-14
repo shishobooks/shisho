@@ -350,6 +350,13 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		updateCoverPage(&comicInfo, *file.CoverPage)
 	}
 
+	// Write GTIN from file identifiers (priority: ISBN-13 > ISBN-10 > Other > ASIN)
+	if file != nil && len(file.Identifiers) > 0 {
+		if gtin := selectGTIN(file.Identifiers); gtin != "" {
+			comicInfo.GTIN = gtin
+		}
+	}
+
 	return &comicInfo
 }
 
@@ -422,4 +429,17 @@ func formatCBZNumber(f float64) string {
 		return strconv.Itoa(int(f))
 	}
 	return fmt.Sprintf("%g", f)
+}
+
+// selectGTIN selects the best identifier to use as GTIN (priority: ISBN-13 > ISBN-10 > Other > ASIN).
+func selectGTIN(identifiers []*models.FileIdentifier) string {
+	priorityOrder := []string{"isbn_13", "isbn_10", "other", "asin"}
+	for _, priority := range priorityOrder {
+		for _, id := range identifiers {
+			if id.Type == priority {
+				return id.Value
+			}
+		}
+	}
+	return ""
 }

@@ -14,6 +14,12 @@ type ParsedAuthor struct {
 	Role string // empty for generic author, or one of: writer, penciller, inker, colorist, letterer, cover_artist, editor, translator
 }
 
+// ParsedIdentifier represents an identifier parsed from file metadata.
+type ParsedIdentifier struct {
+	Type  string // One of the IdentifierType constants (isbn_10, isbn_13, asin, uuid, goodreads, google, other)
+	Value string // The identifier value
+}
+
 type ParsedMetadata struct {
 	Title         string
 	Subtitle      string // from M4B freeform SUBTITLE atom
@@ -39,6 +45,8 @@ type ParsedMetadata struct {
 	BitrateBps int
 	// PageCount is the number of pages (CBZ files only)
 	PageCount *int
+	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata
+	Identifiers []ParsedIdentifier
 }
 
 func (m *ParsedMetadata) String() string {

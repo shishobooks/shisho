@@ -157,7 +157,8 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 		}).
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
-		Relation("Files.Imprint")
+		Relation("Files.Imprint").
+		Relation("Files.Identifiers")
 
 	if opts.ID != nil {
 		q = q.Where("b.id = ?", *opts.ID)
@@ -209,6 +210,7 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
 		Relation("Files.Imprint").
+		Relation("Files.Identifiers").
 		Join("INNER JOIN files fil ON fil.book_id = b.id").
 		Where("fil.filepath = ? AND b.library_id = ?", filepath, libraryID)
 
@@ -262,7 +264,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		}).
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
-		Relation("Files.Imprint")
+		Relation("Files.Imprint").
+		Relation("Files.Identifiers")
 
 	// Apply series filter first (affects ordering)
 	if opts.SeriesID != nil {
@@ -417,13 +420,29 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 	return nil
 }
 
+// CreateFileIdentifier creates a new file identifier record.
+func (svc *Service) CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error {
+	now := time.Now()
+	identifier.CreatedAt = now
+	identifier.UpdatedAt = now
+	_, err := svc.db.NewInsert().Model(identifier).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteFileIdentifiers deletes all identifiers for a file.
+func (svc *Service) DeleteFileIdentifiers(ctx context.Context, fileID int) error {
+	_, err := svc.db.NewDelete().Model((*models.FileIdentifier)(nil)).Where("file_id = ?", fileID).Exec(ctx)
+	return errors.WithStack(err)
+}
+
 func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) (*models.File, error) {
 	file := &models.File{}
 
 	q := svc.db.
 		NewSelect().
 		Model(file).
-		Relation("Book")
+		Relation("Book").
+		Relation("Identifiers")
 
 	if opts.ID != nil {
 		q = q.Where("f.id = ?", *opts.ID)
@@ -446,8 +465,11 @@ func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) 
 	return file, nil
 }
 
-// RetrieveFileWithNarrators retrieves a file with its narrators loaded.
-func (svc *Service) RetrieveFileWithNarrators(ctx context.Context, fileID int) (*models.File, error) {
+// RetrieveFileWithRelations retrieves a file with all relations needed for
+// sidecar writing and fingerprint generation (Narrators, Identifiers, Publisher, Imprint).
+// Use this instead of RetrieveFile when you need to call WriteFileSidecarFromModel
+// or ComputeFingerprint.
+func (svc *Service) RetrieveFileWithRelations(ctx context.Context, fileID int) (*models.File, error) {
 	file := &models.File{}
 
 	err := svc.db.
@@ -458,6 +480,9 @@ func (svc *Service) RetrieveFileWithNarrators(ctx context.Context, fileID int) (
 			return sq.Order("n.sort_order ASC")
 		}).
 		Relation("Narrators.Person").
+		Relation("Identifiers").
+		Relation("Publisher").
+		Relation("Imprint").
 		Where("f.id = ?", fileID).
 		Scan(ctx)
 	if err != nil {

@@ -443,6 +443,19 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 
 	pkg.Metadata.Meta = finalMetas
 
+	// Update identifiers from file
+	if file != nil && len(file.Identifiers) > 0 {
+		var newIdentifiers []opfID
+		for _, id := range file.Identifiers {
+			scheme := identifierTypeToScheme(id.Type)
+			newIdentifiers = append(newIdentifiers, opfID{
+				Text:   id.Value,
+				Scheme: scheme,
+			})
+		}
+		pkg.Metadata.Identifiers = newIdentifiers
+	}
+
 	// Update cover mime type in manifest if we're replacing the cover
 	if coverInfo != nil && newCoverMimeType != "" {
 		for i, item := range pkg.Manifest.Items {
@@ -507,6 +520,24 @@ func resolveCoverPath(book *models.Book, file *models.File) string {
 	}
 
 	return filepath.Join(coverDir, *file.CoverImagePath)
+}
+
+// identifierTypeToScheme converts an identifier type to an OPF scheme attribute.
+func identifierTypeToScheme(idType string) string {
+	switch idType {
+	case "isbn_10", "isbn_13":
+		return "ISBN"
+	case "asin":
+		return "ASIN"
+	case "uuid":
+		return "UUID"
+	case "goodreads":
+		return "GOODREADS"
+	case "google":
+		return "GOOGLE"
+	default:
+		return ""
+	}
 }
 
 // OPF XML structures for parsing and modifying EPUB metadata.

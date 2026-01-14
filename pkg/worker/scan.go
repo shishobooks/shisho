@@ -265,6 +265,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	authorSource := models.DataSourceFilepath
 	narratorNames := make([]string, 0)
 	narratorSource := models.DataSourceFilepath
+	identifiers := make([]mediafile.ParsedIdentifier, 0)
+	identifierSource := models.DataSourceFilepath
 	// Series data: supports multiple series per book
 	type seriesData struct {
 		name      string
@@ -354,6 +356,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		if len(metadata.Tags) > 0 {
 			tagNames = append(tagNames, metadata.Tags...)
 			tagSource = metadata.DataSource
+		}
+		if len(metadata.Identifiers) > 0 {
+			identifiers = metadata.Identifiers
+			identifierSource = metadata.DataSource
 		}
 		if metadata.CoverMimeType != "" {
 			coverMimeType = &metadata.CoverMimeType
@@ -965,6 +971,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Apply file sidecar data for identifiers (higher priority than file metadata)
+	if fileSidecarData != nil && len(fileSidecarData.Identifiers) > 0 {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[identifierSource] {
+			jobLog.Info("applying file sidecar data for identifiers", logger.Data{"identifier_count": len(fileSidecarData.Identifiers)})
+			identifierSource = models.DataSourceSidecar
+			identifiers = make([]mediafile.ParsedIdentifier, 0)
+			for _, id := range fileSidecarData.Identifiers {
+				identifiers = append(identifiers, mediafile.ParsedIdentifier{
+					Type:  id.Type,
+					Value: id.Value,
+				})
+			}
+		}
+	}
+
 	// Apply file sidecar data for URL (higher priority than file metadata)
 	if fileSidecarData != nil && fileSidecarData.URL != nil && *fileSidecarData.URL != "" {
 		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[fileURLSource] {
@@ -1003,6 +1024,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	// Set narrator source on file if we have narrators
 	if len(narratorNames) > 0 {
 		file.NarratorSource = &narratorSource
+	}
+
+	// Set identifier source on file if we have identifiers
+	if len(identifiers) > 0 {
+		file.IdentifierSource = &identifierSource
 	}
 
 	// Set file-level metadata
@@ -1060,6 +1086,20 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Create FileIdentifier entries for each identifier
+	for _, parsedID := range identifiers {
+		fileID := &models.FileIdentifier{
+			FileID: file.ID,
+			Type:   parsedID.Type,
+			Value:  parsedID.Value,
+			Source: identifierSource,
+		}
+		err = w.bookService.CreateFileIdentifier(ctx, fileID)
+		if err != nil {
+			jobLog.Error("failed to create file identifier", nil, logger.Data{"file_id": file.ID, "type": parsedID.Type, "error": err.Error()})
+		}
+	}
+
 	// Write sidecar files to keep them in sync with the database
 	// Reload the book with all relations to get complete data for the sidecar
 	existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
@@ -1071,11 +1111,16 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		if err := sidecar.WriteBookSidecarFromModel(existingBook); err != nil {
 			jobLog.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
 		}
-	}
 
-	// Write file sidecar
-	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
-		jobLog.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
+		// Write file sidecar using the reloaded file from the book (has all relations including identifiers)
+		for _, reloadedFile := range existingBook.Files {
+			if reloadedFile.ID == file.ID {
+				if err := sidecar.WriteFileSidecarFromModel(reloadedFile); err != nil {
+					jobLog.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
+				}
+				break
+			}
+		}
 	}
 
 	return nil

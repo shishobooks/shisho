@@ -534,4 +534,40 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		// Genre should be preserved from source
 		assert.Equal(t, "Original Genre", meta.Genre)
 	})
+
+	t.Run("writes ASIN identifier", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Identifiers: []*models.FileIdentifier{
+				{Type: models.IdentifierTypeASIN, Value: "B08N5WRWNW"},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// ASIN should be written as identifier
+		require.Len(t, meta.Identifiers, 1)
+		assert.Equal(t, "asin", meta.Identifiers[0].Type)
+		assert.Equal(t, "B08N5WRWNW", meta.Identifiers[0].Value)
+	})
 }

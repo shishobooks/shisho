@@ -515,6 +515,145 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		comicInfo := readComicInfoFromCBZ(t, destPath)
 		assert.Equal(t, "Original Genre", comicInfo.Genre)
 	})
+
+	t.Run("writes GTIN from file identifiers with priority", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		// Create book and file with identifiers
+		book := &models.Book{
+			Title: "Test Comic",
+		}
+		file := &models.File{
+			Identifiers: []*models.FileIdentifier{
+				{Type: "isbn_13", Value: "9780316769488"},
+				{Type: "isbn_10", Value: "0316769487"},
+				{Type: "asin", Value: "B08N5WRWNW"},
+			},
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse and verify - should use ISBN-13 (highest priority)
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "9780316769488", comicInfo.GTIN)
+	})
+
+	t.Run("writes GTIN with isbn_10 when no isbn_13", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+		}
+		file := &models.File{
+			Identifiers: []*models.FileIdentifier{
+				{Type: "isbn_10", Value: "0316769487"},
+				{Type: "asin", Value: "B08N5WRWNW"},
+			},
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "0316769487", comicInfo.GTIN)
+	})
+
+	t.Run("writes GTIN with other type when no isbn", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+		}
+		file := &models.File{
+			Identifiers: []*models.FileIdentifier{
+				{Type: "other", Value: "1234567890123"},
+				{Type: "asin", Value: "B08N5WRWNW"},
+			},
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "1234567890123", comicInfo.GTIN)
+	})
+
+	t.Run("writes GTIN with asin when only asin available", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+		}
+		file := &models.File{
+			Identifiers: []*models.FileIdentifier{
+				{Type: "asin", Value: "B08N5WRWNW"},
+			},
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "B08N5WRWNW", comicInfo.GTIN)
+	})
+
+	t.Run("does not write GTIN when no identifiers", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Test Comic",
+		}
+		file := &models.File{
+			Identifiers: []*models.FileIdentifier{},
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Empty(t, comicInfo.GTIN)
+	})
 }
 
 // Helper types and functions for testing

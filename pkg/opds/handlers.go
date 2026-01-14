@@ -670,8 +670,20 @@ func (h *handler) download(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
+	var fileWithRelations *models.File
+	for _, f := range book.Files {
+		if f.ID == file.ID {
+			fileWithRelations = f
+			break
+		}
+	}
+	if fileWithRelations == nil {
+		fileWithRelations = file // Fallback to original file if not found
+	}
+
 	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
 	if err != nil {
 		// For OPDS clients, fall back to original file on generation error
 		var genErr *filegen.GenerationError
@@ -731,8 +743,20 @@ func (h *handler) downloadKepub(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
+	var fileWithRelations *models.File
+	for _, f := range book.Files {
+		if f.ID == file.ID {
+			fileWithRelations = f
+			break
+		}
+	}
+	if fileWithRelations == nil {
+		fileWithRelations = file // Fallback to original file if not found
+	}
+
 	// Try to generate/get KePub from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, file)
+	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
 	if err != nil {
 		// Check if this file type doesn't support KePub conversion
 		if errors.Is(err, filegen.ErrKepubNotSupported) {

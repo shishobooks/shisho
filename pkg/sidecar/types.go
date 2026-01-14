@@ -21,12 +21,13 @@ type BookSidecar struct {
 // FileSidecar represents the metadata sidecar for a media file.
 // This is stored as {filename}.metadata.json alongside the media file.
 type FileSidecar struct {
-	Version     int                `json:"version"`
-	Narrators   []NarratorMetadata `json:"narrators,omitempty"`
-	URL         *string            `json:"url,omitempty"`
-	Publisher   *string            `json:"publisher,omitempty"`
-	Imprint     *string            `json:"imprint,omitempty"`
-	ReleaseDate *string            `json:"release_date,omitempty"` // ISO 8601 date string (YYYY-MM-DD)
+	Version     int                  `json:"version"`
+	Narrators   []NarratorMetadata   `json:"narrators,omitempty"`
+	URL         *string              `json:"url,omitempty"`
+	Publisher   *string              `json:"publisher,omitempty"`
+	Imprint     *string              `json:"imprint,omitempty"`
+	ReleaseDate *string              `json:"release_date,omitempty"` // ISO 8601 date string (YYYY-MM-DD)
+	Identifiers []IdentifierMetadata `json:"identifiers,omitempty"`
 }
 
 // AuthorMetadata represents an author in the sidecar file.
@@ -42,6 +43,12 @@ type NarratorMetadata struct {
 	Name      string `json:"name"`
 	SortName  string `json:"sort_name,omitempty"`
 	SortOrder int    `json:"sort_order,omitempty"`
+}
+
+// IdentifierMetadata represents an identifier in the sidecar file.
+type IdentifierMetadata struct {
+	Type  string `json:"type"` // isbn_10, isbn_13, asin, uuid, goodreads, google, other
+	Value string `json:"value"`
 }
 
 // SeriesMetadata represents series information in the sidecar file.

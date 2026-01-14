@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/robinjoseph08/golib/pointerutil"
+	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -652,4 +653,49 @@ func readFileFromEPUB(t *testing.T, epubPath, fileName string) []byte {
 
 	t.Fatalf("file %s not found in EPUB", fileName)
 	return nil
+}
+
+func TestGenerateEPUB_Identifiers(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a minimal source EPUB for generation
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	createTestEPUB(t, srcPath, testEPUBOptions{
+		title:   "Test Book",
+		authors: []string{"Author"},
+	})
+
+	outPath := filepath.Join(tmpDir, "output.epub")
+
+	// Create book and file with identifiers
+	book := &models.Book{
+		Title: "Test Book",
+		Authors: []*models.Author{
+			{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+		},
+	}
+	file := &models.File{
+		FileType: models.FileTypeEPUB,
+		Identifiers: []*models.FileIdentifier{
+			{Type: "isbn_13", Value: "9780316769488"},
+			{Type: "asin", Value: "B08N5WRWNW"},
+		},
+	}
+
+	generator := &EPUBGenerator{}
+	err := generator.Generate(context.Background(), srcPath, outPath, book, file)
+	require.NoError(t, err)
+
+	// Parse and verify
+	metadata, err := epub.Parse(outPath)
+	require.NoError(t, err)
+
+	require.Len(t, metadata.Identifiers, 2)
+	// Verify identifiers are present
+	idByType := make(map[string]string)
+	for _, id := range metadata.Identifiers {
+		idByType[id.Type] = id.Value
+	}
+	assert.Equal(t, "9780316769488", idByType["isbn_13"])
+	assert.Equal(t, "B08N5WRWNW", idByType["asin"])
 }

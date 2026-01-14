@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2, Plus, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,11 +25,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { FileTypeCBZ, type File } from "@/types";
+import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
   file: File;
@@ -47,6 +56,28 @@ const formatDateForInput = (dateString: string | undefined): string => {
   }
 };
 
+// Helper to format identifier types for display
+function formatIdentifierType(type: string): string {
+  switch (type) {
+    case "isbn_10":
+      return "ISBN-10";
+    case "isbn_13":
+      return "ISBN-13";
+    case "asin":
+      return "ASIN";
+    case "uuid":
+      return "UUID";
+    case "goodreads":
+      return "Goodreads";
+    case "google":
+      return "Google";
+    case "other":
+      return "Other";
+    default:
+      return type;
+  }
+}
+
 export function FileEditDialog({
   file,
   open,
@@ -57,6 +88,13 @@ export function FileEditDialog({
   );
   const [newNarrator, setNewNarrator] = useState("");
   const [coverCacheBuster, setCoverCacheBuster] = useState(Date.now());
+
+  // Identifier state
+  const [identifiers, setIdentifiers] = useState<
+    Array<{ type: string; value: string }>
+  >(file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || []);
+  const [newIdentifierType, setNewIdentifierType] = useState<string>("isbn_13");
+  const [newIdentifierValue, setNewIdentifierValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New file metadata fields
@@ -107,6 +145,12 @@ export function FileEditDialog({
       setImprint(file.imprint?.name || "");
       setImprintSearch("");
       setReleaseDate(formatDateForInput(file.release_date));
+      setIdentifiers(
+        file.identifiers?.map((id) => ({ type: id.type, value: id.value })) ||
+          [],
+      );
+      setNewIdentifierType("isbn_13");
+      setNewIdentifierValue("");
     }
   }, [open, file]);
 
@@ -155,6 +199,25 @@ export function FileEditDialog({
 
   const handleClearImprint = () => {
     setImprint("");
+  };
+
+  const handleAddIdentifier = () => {
+    if (!newIdentifierValue.trim()) return;
+
+    const validation = validateIdentifier(
+      newIdentifierType,
+      newIdentifierValue.trim(),
+    );
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+
+    setIdentifiers([
+      ...identifiers,
+      { type: newIdentifierType, value: newIdentifierValue.trim() },
+    ]);
+    setNewIdentifierValue("");
   };
 
   // Filter publishers - show all from search, or current selection if set
@@ -206,6 +269,7 @@ export function FileEditDialog({
       publisher?: string;
       imprint?: string;
       release_date?: string;
+      identifiers?: Array<{ type: string; value: string }>;
     } = {};
 
     // Check if narrators changed
@@ -237,6 +301,13 @@ export function FileEditDialog({
     const originalReleaseDate = formatDateForInput(file.release_date);
     if (releaseDate !== originalReleaseDate) {
       payload.release_date = releaseDate || undefined;
+    }
+
+    // Check if identifiers changed
+    const originalIdentifiers =
+      file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
+    if (JSON.stringify(identifiers) !== JSON.stringify(originalIdentifiers)) {
+      payload.identifiers = identifiers;
     }
 
     // Only submit if something changed
@@ -584,6 +655,72 @@ export function FileEditDialog({
               type="date"
               value={releaseDate}
             />
+          </div>
+
+          {/* Identifiers */}
+          <div className="space-y-2">
+            <Label>Identifiers</Label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {identifiers.map((id, idx) => (
+                <Badge
+                  className="flex items-center gap-1 max-w-full"
+                  key={idx}
+                  variant="secondary"
+                >
+                  <span className="text-xs">
+                    {formatIdentifierType(id.type)}
+                  </span>
+                  : {id.value}
+                  <button
+                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                    onClick={() => {
+                      setIdentifiers(identifiers.filter((_, i) => i !== idx));
+                    }}
+                    type="button"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Select
+                onValueChange={setNewIdentifierType}
+                value={newIdentifierType}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="isbn_10">ISBN-10</SelectItem>
+                  <SelectItem value="isbn_13">ISBN-13</SelectItem>
+                  <SelectItem value="asin">ASIN</SelectItem>
+                  <SelectItem value="uuid">UUID</SelectItem>
+                  <SelectItem value="goodreads">Goodreads</SelectItem>
+                  <SelectItem value="google">Google</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                className="flex-1"
+                onChange={(e) => setNewIdentifierValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddIdentifier();
+                  }
+                }}
+                placeholder="Enter value..."
+                value={newIdentifierValue}
+              />
+              <Button
+                onClick={handleAddIdentifier}
+                type="button"
+                variant="outline"
+              >
+                Add
+              </Button>
+            </div>
           </div>
         </div>
 

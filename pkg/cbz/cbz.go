@@ -14,6 +14,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -219,6 +220,21 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	// Parse GTIN as identifier
+	var identifiersList []mediafile.ParsedIdentifier
+	if comicInfo != nil && comicInfo.GTIN != "" {
+		gtin := strings.TrimSpace(comicInfo.GTIN)
+		idType := identifiers.DetectType(gtin, "")
+		if idType == identifiers.TypeUnknown {
+			// For CBZ, unknown GTIN is stored as "other"
+			idType = identifiers.TypeOther
+		}
+		identifiersList = append(identifiersList, mediafile.ParsedIdentifier{
+			Type:  string(idType),
+			Value: gtin,
+		})
+	}
+
 	return &mediafile.ParsedMetadata{
 		Title:         title,
 		Authors:       authors,
@@ -236,6 +252,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverPage:     coverPage,
 		PageCount:     pageCount,
 		DataSource:    models.DataSourceCBZMetadata,
+		Identifiers:   identifiersList,
 	}, nil
 }
 

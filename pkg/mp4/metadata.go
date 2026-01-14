@@ -12,32 +12,33 @@ import (
 // Metadata represents extracted M4B audiobook metadata.
 type Metadata struct {
 	Title         string
-	Subtitle      string                   // from ----:com.apple.iTunes:SUBTITLE freeform atom
-	Authors       []mediafile.ParsedAuthor // from ©ART (artist)
-	Narrators     []string                 // from ©nrt (narrator) or ©cmp (composer)
-	Album         string                   // from ©alb
-	Series        string                   // parsed from album or ©grp
-	SeriesNumber  *float64                 // parsed from album
-	Genre         string                   // from ©gen or gnre (original, may be comma-separated)
-	Genres        []string                 // parsed from ©gen (comma-separated)
-	Tags          []string                 // from ----:com.shisho:tags freeform atom
-	Description   string                   // from desc
-	Publisher     string                   // from ©pub
-	Imprint       string                   // from com.shisho:imprint freeform
-	URL           string                   // from com.shisho:url freeform
-	ReleaseDate   *time.Time               // parsed from rldt or ©day
-	Comment       string                   // from ©cmt
-	Year          string                   // from ©day
-	Copyright     string                   // from ©cpy
-	Encoder       string                   // from ©too
-	CoverData     []byte                   // cover artwork
-	CoverMimeType string                   // "image/jpeg" or "image/png"
-	Duration      time.Duration            // from mvhd
-	Bitrate       int                      // bps from esds
-	Chapters      []Chapter                // chapter list (Phase 3)
-	MediaType     int                      // from stik (2 = audiobook)
-	Freeform      map[string]string        // freeform (----) atoms like com.apple.iTunes:ASIN
-	UnknownAtoms  []RawAtom                // preserved unrecognized atoms from source
+	Subtitle      string                       // from ----:com.apple.iTunes:SUBTITLE freeform atom
+	Authors       []mediafile.ParsedAuthor     // from ©ART (artist)
+	Narrators     []string                     // from ©nrt (narrator) or ©cmp (composer)
+	Album         string                       // from ©alb
+	Series        string                       // parsed from album or ©grp
+	SeriesNumber  *float64                     // parsed from album
+	Genre         string                       // from ©gen or gnre (original, may be comma-separated)
+	Genres        []string                     // parsed from ©gen (comma-separated)
+	Tags          []string                     // from ----:com.shisho:tags freeform atom
+	Description   string                       // from desc
+	Publisher     string                       // from ©pub
+	Imprint       string                       // from com.shisho:imprint freeform
+	URL           string                       // from com.shisho:url freeform
+	ReleaseDate   *time.Time                   // parsed from rldt or ©day
+	Comment       string                       // from ©cmt
+	Year          string                       // from ©day
+	Copyright     string                       // from ©cpy
+	Encoder       string                       // from ©too
+	CoverData     []byte                       // cover artwork
+	CoverMimeType string                       // "image/jpeg" or "image/png"
+	Duration      time.Duration                // from mvhd
+	Bitrate       int                          // bps from esds
+	Chapters      []Chapter                    // chapter list (Phase 3)
+	MediaType     int                          // from stik (2 = audiobook)
+	Freeform      map[string]string            // freeform (----) atoms like com.apple.iTunes:ASIN
+	Identifiers   []mediafile.ParsedIdentifier // parsed identifiers from freeform atoms
+	UnknownAtoms  []RawAtom                    // preserved unrecognized atoms from source
 }
 
 // RawAtom represents an MP4 atom preserved in its raw form.
@@ -137,6 +138,22 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		// Extract URL from freeform
 		if url, ok := raw.freeform["com.shisho:url"]; ok {
 			meta.URL = url
+		}
+		// Extract ASIN from freeform - check multiple possible locations
+		// com.apple.iTunes:ASIN is the standard iTunes format
+		// com.pilabor.tone:AUDIBLE_ASIN is used by tools like tone for Audible files
+		asin := ""
+		if v, ok := raw.freeform["com.apple.iTunes:ASIN"]; ok {
+			asin = v
+		} else if v, ok := raw.freeform["com.pilabor.tone:AUDIBLE_ASIN"]; ok {
+			asin = v
+		}
+		asin = strings.TrimSpace(asin)
+		if asin != "" {
+			meta.Identifiers = append(meta.Identifiers, mediafile.ParsedIdentifier{
+				Type:  "asin",
+				Value: asin,
+			})
 		}
 	}
 

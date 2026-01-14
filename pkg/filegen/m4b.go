@@ -187,6 +187,16 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		}
 	}
 
+	// Convert file identifiers to parsed identifiers for writing
+	if len(file.Identifiers) > 0 {
+		for _, id := range file.Identifiers {
+			meta.Identifiers = append(meta.Identifiers, mediafile.ParsedIdentifier{
+				Type:  id.Type,
+				Value: id.Value,
+			})
+		}
+	}
+
 	return meta
 }
 

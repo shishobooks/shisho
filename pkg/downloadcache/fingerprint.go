@@ -20,21 +20,22 @@ const (
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
-	Title       string                `json:"title"`
-	Subtitle    *string               `json:"subtitle,omitempty"`
-	Description *string               `json:"description,omitempty"`
-	Authors     []FingerprintAuthor   `json:"authors"`
-	Narrators   []FingerprintNarrator `json:"narrators"`
-	Series      []FingerprintSeries   `json:"series"`
-	Genres      []string              `json:"genres"`
-	Tags        []string              `json:"tags"`
-	URL         *string               `json:"url,omitempty"`
-	Publisher   *string               `json:"publisher,omitempty"`
-	Imprint     *string               `json:"imprint,omitempty"`
-	ReleaseDate *time.Time            `json:"release_date,omitempty"`
-	Cover       *FingerprintCover     `json:"cover,omitempty"`
-	CoverPage   *int                  `json:"cover_page,omitempty"` // For CBZ files: page index of cover
-	Format      string                `json:"format,omitempty"`     // Download format: original or kepub
+	Title       string                  `json:"title"`
+	Subtitle    *string                 `json:"subtitle,omitempty"`
+	Description *string                 `json:"description,omitempty"`
+	Authors     []FingerprintAuthor     `json:"authors"`
+	Narrators   []FingerprintNarrator   `json:"narrators"`
+	Series      []FingerprintSeries     `json:"series"`
+	Genres      []string                `json:"genres"`
+	Tags        []string                `json:"tags"`
+	Identifiers []FingerprintIdentifier `json:"identifiers,omitempty"`
+	URL         *string                 `json:"url,omitempty"`
+	Publisher   *string                 `json:"publisher,omitempty"`
+	Imprint     *string                 `json:"imprint,omitempty"`
+	ReleaseDate *time.Time              `json:"release_date,omitempty"`
+	Cover       *FingerprintCover       `json:"cover,omitempty"`
+	CoverPage   *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
+	Format      string                  `json:"format,omitempty"`     // Download format: original or kepub
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -57,6 +58,12 @@ type FingerprintSeries struct {
 	SortOrder int      `json:"sort_order"`
 }
 
+// FingerprintIdentifier represents identifier information for fingerprinting.
+type FingerprintIdentifier struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
 // FingerprintCover represents cover image information for fingerprinting.
 type FingerprintCover struct {
 	Path     string    `json:"path"`
@@ -75,6 +82,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		Series:      make([]FingerprintSeries, 0),
 		Genres:      make([]string, 0),
 		Tags:        make([]string, 0),
+		Identifiers: make([]FingerprintIdentifier, 0),
 	}
 
 	// Add file-level metadata
@@ -121,6 +129,24 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 					SortOrder: n.SortOrder,
 				})
 			}
+		}
+	}
+
+	// Add identifiers sorted by type then value for consistent fingerprinting (from file)
+	if file != nil && len(file.Identifiers) > 0 {
+		identifiers := make([]*models.FileIdentifier, len(file.Identifiers))
+		copy(identifiers, file.Identifiers)
+		sort.Slice(identifiers, func(i, j int) bool {
+			if identifiers[i].Type != identifiers[j].Type {
+				return identifiers[i].Type < identifiers[j].Type
+			}
+			return identifiers[i].Value < identifiers[j].Value
+		})
+		for _, id := range identifiers {
+			fp.Identifiers = append(fp.Identifiers, FingerprintIdentifier{
+				Type:  id.Type,
+				Value: id.Value,
+			})
 		}
 	}
 

@@ -123,24 +123,49 @@ func (svc *Service) SearchPeople(ctx context.Context, libraryID int, query strin
 
 func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, libraryID int, fileTypes []string, limit, offset int) ([]BookSearchResult, error) {
 	results := []BookSearchResult{}
+	seenIDs := make(map[int]bool)
 
-	q := svc.db.NewSelect().
-		TableExpr("books_fts").
-		ColumnExpr("book_id AS id, library_id, title, subtitle, authors").
-		Where("books_fts MATCH ?", ftsQuery).
-		Where("library_id = ?", libraryID).
-		Order("rank").
-		Limit(limit).
-		Offset(offset)
-
-	if len(fileTypes) > 0 {
-		// Filter by file types - need to check if any file of the book matches
-		q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
+	// First, search by exact identifier match (only for first page to avoid complexity)
+	if offset == 0 {
+		idResults, err := svc.searchBooksByIdentifier(ctx, strings.TrimSuffix(ftsQuery, "*"), libraryID, fileTypes, limit)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		for _, r := range idResults {
+			results = append(results, r)
+			seenIDs[r.ID] = true
+		}
 	}
 
-	err := q.Scan(ctx, &results)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	// Then do FTS search
+	remaining := limit - len(results)
+	if remaining > 0 {
+		q := svc.db.NewSelect().
+			TableExpr("books_fts").
+			ColumnExpr("book_id AS id, library_id, title, subtitle, authors").
+			Where("books_fts MATCH ?", ftsQuery).
+			Where("library_id = ?", libraryID).
+			Order("rank").
+			Limit(remaining + len(seenIDs)). // Fetch extra to account for potential duplicates
+			Offset(offset)
+
+		if len(fileTypes) > 0 {
+			q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
+		}
+
+		ftsResults := []BookSearchResult{}
+		err := q.Scan(ctx, &ftsResults)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		// Add FTS results, skipping duplicates from identifier search
+		for _, r := range ftsResults {
+			if !seenIDs[r.ID] && len(results) < limit {
+				results = append(results, r)
+				seenIDs[r.ID] = true
+			}
+		}
 	}
 
 	return results, nil
@@ -160,6 +185,37 @@ func (svc *Service) countBooksInternal(ctx context.Context, ftsQuery string, lib
 	var count int
 	err := q.Scan(ctx, &count)
 	return count, errors.WithStack(err)
+}
+
+// searchBooksByIdentifier searches for books with matching file identifier values (exact match).
+func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, libraryID int, fileTypes []string, limit int) ([]BookSearchResult, error) {
+	// Clean query for identifier search
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []BookSearchResult{}, nil
+	}
+
+	q := svc.db.NewSelect().
+		TableExpr("file_identifiers fi").
+		ColumnExpr("DISTINCT b.id, b.library_id, b.title, b.subtitle").
+		ColumnExpr("(SELECT GROUP_CONCAT(p.name, ', ') FROM authors a JOIN people p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
+		Join("JOIN files f ON f.id = fi.file_id").
+		Join("JOIN books b ON b.id = f.book_id").
+		Where("fi.value = ?", query).
+		Where("b.library_id = ?", libraryID).
+		Limit(limit)
+
+	if len(fileTypes) > 0 {
+		q = q.Where("f.file_type IN (?)", bun.In(fileTypes))
+	}
+
+	results := []BookSearchResult{}
+	err := q.Scan(ctx, &results)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return results, nil
 }
 
 func (svc *Service) searchSeriesInternal(ctx context.Context, ftsQuery string, libraryID int, limit, offset int) ([]SeriesSearchResult, error) {

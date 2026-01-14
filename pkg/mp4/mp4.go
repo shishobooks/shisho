@@ -38,6 +38,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		DataSource:    models.DataSourceM4BMetadata,
 		Duration:      meta.Duration,
 		BitrateBps:    meta.Bitrate, // from esds, already in bps
+		Identifiers:   meta.Identifiers,
 	}, nil
 }
 

@@ -1,6 +1,6 @@
 ---
 name: kepub
-description: Use when working on KePub conversion for Kobo devices. Covers EPUB-to-KePub transformation, CBZ-to-KePub fixed-layout conversion, koboSpan wrapping, and the kepub package.
+description: You MUST use this before working on anything KePub/Kobo-related. Covers EPUB-to-KePub transformation, CBZ-to-KePub fixed-layout conversion, koboSpan wrapping, and the kepub package.
 ---
 
 # KePub Format Reference
