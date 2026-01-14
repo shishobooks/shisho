@@ -93,6 +93,36 @@ Used to determine which metadata to keep when conflicts occur.
 - Don't store non-modifiable intrinsic properties (e.g., bitrate, duration)
 - Source fields (e.g., title_source, name_source) shouldn't be saved into the sidecar
 
+### Request Context Propagation
+
+**Always pass `context.Context` through to long-running operations** to ensure request cancellations are respected. When a client disconnects or cancels a request, Go's context gets cancelled automatically - but only if we propagate it.
+
+**Pattern:**
+```go
+// In handlers - get context from Echo
+func (h *Handler) downloadFile(c echo.Context) error {
+    ctx := c.Request().Context()
+    result, err := h.service.GenerateFile(ctx, fileID)
+    // ...
+}
+
+// In services/utilities - accept and use context
+func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
+    // Check for cancellation at key points
+    if err := ctx.Err(); err != nil {
+        return nil, err
+    }
+    // Pass context to downstream operations
+    return s.generator.Generate(ctx, file)
+}
+```
+
+**Key points:**
+- Handlers get context via `c.Request().Context()`
+- Pass context as the first parameter to functions that do significant work
+- Check `ctx.Err()` before expensive operations (file I/O, loops over content)
+- Return early with `ctx.Err()` if cancelled - don't cache partial results
+
 ## File Retrieval and Relations
 
 **CRITICAL**: When calling `WriteFileSidecarFromModel()` or `ComputeFingerprint()`, the file MUST have all relations loaded:
