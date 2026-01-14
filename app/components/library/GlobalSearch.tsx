@@ -2,6 +2,7 @@ import { Search, User, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
@@ -26,6 +27,42 @@ const getSearchThumbnailClasses = (coverAspectRatio: string): string => {
   }
 };
 
+interface SearchResultCoverProps {
+  type: "book" | "series";
+  id: number;
+  thumbnailClasses: string;
+  variant: "book" | "audiobook";
+}
+
+const SearchResultCover = ({
+  type,
+  id,
+  thumbnailClasses,
+  variant,
+}: SearchResultCoverProps) => {
+  const [coverError, setCoverError] = useState(false);
+
+  return (
+    <div
+      className={cn(
+        "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
+        thumbnailClasses,
+      )}
+    >
+      {!coverError ? (
+        <img
+          alt=""
+          className="w-full h-full object-cover"
+          onError={() => setCoverError(true)}
+          src={`/api/${type === "book" ? "books" : "series"}/${id}/cover`}
+        />
+      ) : (
+        <CoverPlaceholder variant={variant} />
+      )}
+    </div>
+  );
+};
+
 const GlobalSearch = () => {
   const { libraryId } = useParams();
   const navigate = useNavigate();
@@ -38,6 +75,7 @@ const GlobalSearch = () => {
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
   const thumbnailClasses = getSearchThumbnailClasses(coverAspectRatio);
+  const isAudiobook = coverAspectRatio.startsWith("audiobook");
 
   const searchQuery = useGlobalSearch(
     {
@@ -149,21 +187,12 @@ const GlobalSearch = () => {
       title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
       to={`/libraries/${libraryId}/books/${book.id}`}
     >
-      <div
-        className={cn(
-          "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
-          thumbnailClasses,
-        )}
-      >
-        <img
-          alt=""
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-          src={`/api/books/${book.id}/cover`}
-        />
-      </div>
+      <SearchResultCover
+        id={book.id}
+        thumbnailClasses={thumbnailClasses}
+        type="book"
+        variant={isAudiobook ? "audiobook" : "book"}
+      />
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate">{book.title}</div>
         {book.authors && (
@@ -183,21 +212,12 @@ const GlobalSearch = () => {
       title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
       to={`/libraries/${libraryId}/series/${series.id}`}
     >
-      <div
-        className={cn(
-          "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
-          thumbnailClasses,
-        )}
-      >
-        <img
-          alt=""
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-          src={`/api/series/${series.id}/cover`}
-        />
-      </div>
+      <SearchResultCover
+        id={series.id}
+        thumbnailClasses={thumbnailClasses}
+        type="series"
+        variant={isAudiobook ? "audiobook" : "book"}
+      />
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate">{series.name}</div>
         <div className="text-sm text-muted-foreground">

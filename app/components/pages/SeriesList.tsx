@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import Gallery from "@/components/library/Gallery";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,65 @@ const getSeriesAspectRatioClass = (coverAspectRatio: string): string => {
 };
 
 const ITEMS_PER_PAGE = 24;
+
+interface SeriesCardProps {
+  seriesItem: Series;
+  libraryId: string;
+  aspectClass: string;
+  isAudiobook: boolean;
+}
+
+const SeriesCard = ({
+  seriesItem,
+  libraryId,
+  aspectClass,
+  isAudiobook,
+}: SeriesCardProps) => {
+  const [coverError, setCoverError] = useState(false);
+  const bookCount = seriesItem.book_count ?? 0;
+  const showSortName =
+    seriesItem.sort_name && seriesItem.sort_name !== seriesItem.name;
+
+  return (
+    <div
+      className="w-32"
+      title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
+    >
+      <Link
+        className="group cursor-pointer"
+        to={`/libraries/${libraryId}/series/${seriesItem.id}`}
+      >
+        {!coverError ? (
+          <img
+            alt={`${seriesItem.name} Cover`}
+            className={cn(
+              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+              aspectClass,
+            )}
+            onError={() => setCoverError(true)}
+            src={`/api/series/${seriesItem.id}/cover`}
+          />
+        ) : (
+          <CoverPlaceholder
+            className={cn(
+              "rounded-sm border border-neutral-300 dark:border-neutral-600",
+              aspectClass,
+            )}
+            variant={isAudiobook ? "audiobook" : "book"}
+          />
+        )}
+        <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
+          {seriesItem.name}
+        </div>
+      </Link>
+      <div className="mt-1 text-sm line-clamp-1 text-neutral-500 dark:text-neutral-500">
+        <Badge className="text-xs" variant="secondary">
+          {bookCount} book{bookCount !== 1 ? "s" : ""}
+        </Badge>
+      </div>
+    </div>
+  );
+};
 
 const SeriesList = () => {
   const { libraryId } = useParams();
@@ -74,44 +134,17 @@ const SeriesList = () => {
   });
 
   const renderSeriesItem = (seriesItem: Series) => {
-    const bookCount = seriesItem.book_count ?? 0;
     const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
-    const showSortName =
-      seriesItem.sort_name && seriesItem.sort_name !== seriesItem.name;
+    const isAudiobook = coverAspectRatio.startsWith("audiobook");
 
     return (
-      <div
-        className="w-32"
+      <SeriesCard
+        aspectClass={aspectClass}
+        isAudiobook={isAudiobook}
         key={seriesItem.id}
-        title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
-      >
-        <Link
-          className="group cursor-pointer"
-          to={`/libraries/${libraryId}/series/${seriesItem.id}`}
-        >
-          <img
-            alt={`${seriesItem.name} Cover`}
-            className={cn(
-              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
-              aspectClass,
-            )}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-              (e.target as HTMLImageElement).nextElementSibling!.textContent =
-                "no cover";
-            }}
-            src={`/api/series/${seriesItem.id}/cover`}
-          />
-          <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
-            {seriesItem.name}
-          </div>
-        </Link>
-        <div className="mt-1 text-sm line-clamp-1 text-neutral-500 dark:text-neutral-500">
-          <Badge className="text-xs" variant="secondary">
-            {bookCount} book{bookCount !== 1 ? "s" : ""}
-          </Badge>
-        </div>
-      </div>
+        libraryId={libraryId ?? ""}
+        seriesItem={seriesItem}
+      />
     );
   };
 

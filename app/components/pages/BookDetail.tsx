@@ -1,9 +1,10 @@
 import { ArrowLeft, Download, Edit, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BookEditDialog } from "@/components/library/BookEditDialog";
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -29,33 +30,31 @@ import {
   type File,
 } from "@/types";
 
-// Selects the file that would be used for the cover based on cover_aspect_ratio setting
-// This mirrors the backend's selectCoverFile logic
-const selectCoverFile = (
+// Determines which file type would provide the cover based on library preference.
+// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
+// Used for placeholder variant selection when there's no cover image.
+const getCoverFileType = (
   files: File[] | undefined,
   coverAspectRatio: string,
-): File | null => {
-  if (!files) return null;
+): "book" | "audiobook" => {
+  if (!files || files.length === 0) return "book";
 
-  const bookFiles = files.filter(
-    (f) =>
-      (f.file_type === "epub" || f.file_type === "cbz") && f.cover_image_path,
+  const hasBookFiles = files.some(
+    (f) => f.file_type === "epub" || f.file_type === "cbz",
   );
-  const audiobookFiles = files.filter(
-    (f) => f.file_type === "m4b" && f.cover_image_path,
-  );
+  const hasAudiobookFiles = files.some((f) => f.file_type === "m4b");
 
   switch (coverAspectRatio) {
     case "audiobook":
     case "audiobook_fallback_book":
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
-      if (bookFiles.length > 0) return bookFiles[0];
+      if (hasAudiobookFiles) return "audiobook";
+      if (hasBookFiles) return "book";
       break;
     default: // "book", "book_fallback_audiobook"
-      if (bookFiles.length > 0) return bookFiles[0];
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
+      if (hasBookFiles) return "book";
+      if (hasAudiobookFiles) return "audiobook";
   }
-  return null;
+  return "book";
 };
 
 const formatFileSize = (bytes: number): string => {
@@ -136,6 +135,11 @@ const BookDetail = () => {
   const [downloadingFileId, setDownloadingFileId] = useState<number | null>(
     null,
   );
+  const [coverError, setCoverError] = useState(false);
+
+  useEffect(() => {
+    setCoverError(false);
+  }, [bookQuery.data?.id]);
 
   const handleDownloadWithEndpoint = async (
     fileId: number,
@@ -246,12 +250,13 @@ const BookDetail = () => {
 
   const book = bookQuery.data;
 
-  // Determine which file's cover is being displayed based on library's cover_aspect_ratio setting
+  // Determine which file type would provide the cover based on library's cover_aspect_ratio setting
+  // This is used to determine the native aspect ratio (audiobook = square, book = 2:3)
   const libraryCoverAspectRatio =
     libraryQuery.data?.cover_aspect_ratio ?? "book";
-  const coverFile = selectCoverFile(book.files, libraryCoverAspectRatio);
-  const isAudiobookCover = coverFile?.file_type === "m4b";
-  const coverAspectRatio = isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
+  const coverFileType = getCoverFileType(book.files, libraryCoverAspectRatio);
+  const isAudiobook = coverFileType === "audiobook";
+  const coverAspectRatio = isAudiobook ? "aspect-square" : "aspect-[2/3]";
 
   // Cache-busting parameter for cover images
   const coverCacheBuster = bookQuery.dataUpdatedAt;
@@ -273,18 +278,19 @@ const BookDetail = () => {
           {/* Book Cover */}
           <div className="lg:col-span-1">
             <div className={`${coverAspectRatio} w-full`}>
-              <img
-                alt={`${book.title} Cover`}
-                className="w-full h-full object-cover rounded-md border border-border"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                  (
-                    e.target as HTMLImageElement
-                  ).nextElementSibling!.textContent = "No cover available";
-                }}
-                src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
-              />
-              <div className="hidden text-center text-muted-foreground"></div>
+              {!coverError ? (
+                <img
+                  alt={`${book.title} Cover`}
+                  className="w-full h-full object-cover rounded-md border border-border"
+                  onError={() => setCoverError(true)}
+                  src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
+                />
+              ) : (
+                <CoverPlaceholder
+                  className={`rounded-md border border-border ${coverAspectRatio}`}
+                  variant={coverFileType}
+                />
+              )}
             </div>
           </div>
 

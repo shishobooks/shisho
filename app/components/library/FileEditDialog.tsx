@@ -2,6 +2,7 @@ import { Check, ChevronsUpDown, Loader2, Plus, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -360,9 +361,10 @@ export function FileEditDialog({
                     src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
                   />
                 ) : (
-                  <div className="w-full aspect-square rounded border border-dashed border-border flex items-center justify-center text-muted-foreground text-xs bg-muted/30">
-                    No cover
-                  </div>
+                  <CoverPlaceholder
+                    className="rounded border border-dashed border-border aspect-square"
+                    variant={file.file_type === "m4b" ? "audiobook" : "book"}
+                  />
                 )}
                 {/* Cover upload overlay */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">

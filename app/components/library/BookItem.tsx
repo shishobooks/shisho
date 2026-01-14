@@ -1,6 +1,8 @@
 import { uniqBy } from "lodash";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libraries/utils";
 import {
@@ -19,7 +21,7 @@ interface BookItemProps {
 }
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
-// This mirrors the backend's selectCoverFile logic
+// This mirrors the backend's selectCoverFile logic (requires cover_image_path)
 const selectCoverFile = (
   files: File[] | undefined,
   coverAspectRatio: string,
@@ -47,6 +49,33 @@ const selectCoverFile = (
   return null;
 };
 
+// Determines which file type would provide the cover based on library preference.
+// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
+// Used for placeholder variant selection when there's no cover image.
+const getCoverFileType = (
+  files: File[] | undefined,
+  coverAspectRatio: string,
+): "book" | "audiobook" => {
+  if (!files || files.length === 0) return "book";
+
+  const hasBookFiles = files.some(
+    (f) => f.file_type === "epub" || f.file_type === "cbz",
+  );
+  const hasAudiobookFiles = files.some((f) => f.file_type === "m4b");
+
+  switch (coverAspectRatio) {
+    case "audiobook":
+    case "audiobook_fallback_book":
+      if (hasAudiobookFiles) return "audiobook";
+      if (hasBookFiles) return "book";
+      break;
+    default: // "book", "book_fallback_audiobook"
+      if (hasBookFiles) return "book";
+      if (hasAudiobookFiles) return "audiobook";
+  }
+  return "book";
+};
+
 const getAspectRatioClass = (
   coverAspectRatio: string,
   files?: File[],
@@ -55,18 +84,16 @@ const getAspectRatioClass = (
   if (coverAspectRatio === "audiobook") return "aspect-square";
   if (coverAspectRatio === "book") return "aspect-[2/3]";
 
-  // For fallback modes, determine which file's cover is being displayed
+  // For fallback modes, first check if there's an actual cover file
   const coverFile = selectCoverFile(files, coverAspectRatio);
-  const isAudiobookCover = coverFile?.file_type === "m4b";
-
-  switch (coverAspectRatio) {
-    case "book_fallback_audiobook":
-      return isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
-    case "audiobook_fallback_book":
-      return isAudiobookCover ? "aspect-square" : "aspect-[2/3]";
-    default:
-      return "aspect-[2/3]";
+  if (coverFile) {
+    // Use the actual cover file's type
+    return coverFile.file_type === "m4b" ? "aspect-square" : "aspect-[2/3]";
   }
+
+  // No cover - use getCoverFileType to determine which file type WOULD provide the cover
+  const fileType = getCoverFileType(files, coverAspectRatio);
+  return fileType === "audiobook" ? "aspect-square" : "aspect-[2/3]";
 };
 
 const BookItem = ({
@@ -81,6 +108,10 @@ const BookItem = ({
     : undefined;
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
+  const [coverError, setCoverError] = useState(false);
+
+  // For placeholder variant: use same priority logic as backend's selectCoverFile
+  const placeholderVariant = getCoverFileType(book.files, coverAspectRatio);
 
   return (
     <div className="w-32" key={book.id}>
@@ -88,19 +119,25 @@ const BookItem = ({
         className="group cursor-pointer"
         to={`/libraries/${libraryId}/books/${book.id}`}
       >
-        <img
-          alt={`${book.title} Cover`}
-          className={cn(
-            "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
-            aspectClass,
-          )}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-            (e.target as HTMLImageElement).nextElementSibling!.textContent =
-              "no cover";
-          }}
-          src={`/api/books/${book.id}/cover`}
-        />
+        {!coverError ? (
+          <img
+            alt={`${book.title} Cover`}
+            className={cn(
+              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+              aspectClass,
+            )}
+            onError={() => setCoverError(true)}
+            src={`/api/books/${book.id}/cover`}
+          />
+        ) : (
+          <CoverPlaceholder
+            className={cn(
+              "rounded-sm border border-neutral-300 dark:border-neutral-600",
+              aspectClass,
+            )}
+            variant={placeholderVariant}
+          />
+        )}
         <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
           {book.title}
         </div>
