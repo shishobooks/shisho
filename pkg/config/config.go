@@ -41,6 +41,9 @@ type Config struct {
 	DownloadCacheDir       string `koanf:"download_cache_dir" json:"download_cache_dir"`
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
 
+	// Supplement discovery settings
+	SupplementExcludePatterns []string `koanf:"supplement_exclude_patterns" json:"supplement_exclude_patterns"`
+
 	// Authentication settings
 	JWTSecret string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
 
@@ -64,6 +67,7 @@ func defaults() *Config {
 		JobRetentionDays:          30,
 		DownloadCacheDir:          "/config/cache/downloads",
 		DownloadCacheMaxSizeGB:    5,
+		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 		JWTSecret:                 "", // Must be set via config or env var
 	}
 }
@@ -130,6 +134,7 @@ func NewForTest() *Config {
 	cfg.WorkerProcesses = 1
 	cfg.DownloadCacheDir = "" // Must be set by test
 	cfg.DownloadCacheMaxSizeGB = 1
+	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
 	cfg.JWTSecret = "test-secret-key-for-testing-only"
 	return cfg
 }

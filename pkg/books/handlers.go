@@ -1,6 +1,7 @@
 package books
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -615,6 +616,92 @@ func (h *handler) updateFile(c echo.Context) error {
 	narratorsChanged := false
 	opts := UpdateFileOptions{Columns: []string{}}
 
+	// Handle file role change
+	if params.FileRole != nil && *params.FileRole != file.FileRole {
+		oldRole := file.FileRole
+		newRole := *params.FileRole
+
+		// When upgrading from supplement to main, validate file type is supported
+		if oldRole == models.FileRoleSupplement && newRole == models.FileRoleMain {
+			supportedTypes := map[string]bool{
+				models.FileTypeCBZ:  true,
+				models.FileTypeEPUB: true,
+				models.FileTypeM4B:  true,
+			}
+			if !supportedTypes[file.FileType] {
+				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("cannot upgrade to main file: file type '%s' is not supported as a main file (only cbz, epub, m4b)", file.FileType))
+			}
+		}
+
+		// When downgrading from main to supplement, clear all main-file-only metadata
+		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
+			// Delete cover image file if it exists
+			if file.CoverImagePath != nil {
+				if err := os.Remove(*file.CoverImagePath); err != nil && !os.IsNotExist(err) {
+					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": *file.CoverImagePath})
+				}
+			}
+
+			// Clear cover fields
+			file.CoverImagePath = nil
+			file.CoverMimeType = nil
+			file.CoverSource = nil
+			file.CoverPage = nil
+			opts.Columns = append(opts.Columns, "cover_image_path", "cover_mime_type", "cover_source", "cover_page")
+
+			// Clear audiobook fields
+			file.AudiobookDurationSeconds = nil
+			file.AudiobookBitrateBps = nil
+			opts.Columns = append(opts.Columns, "audiobook_duration_seconds", "audiobook_bitrate_bps")
+
+			// Clear publisher/imprint
+			file.PublisherID = nil
+			file.PublisherSource = nil
+			file.ImprintID = nil
+			file.ImprintSource = nil
+			opts.Columns = append(opts.Columns, "publisher_id", "publisher_source", "imprint_id", "imprint_source")
+
+			// Clear release date
+			file.ReleaseDate = nil
+			file.ReleaseDateSource = nil
+			opts.Columns = append(opts.Columns, "release_date", "release_date_source")
+
+			// Clear URL
+			file.URL = nil
+			file.URLSource = nil
+			opts.Columns = append(opts.Columns, "url", "url_source")
+
+			// Clear narrator source (narrators will be handled separately)
+			file.NarratorSource = nil
+			opts.Columns = append(opts.Columns, "narrator_source")
+
+			// Clear identifier source
+			file.IdentifierSource = nil
+			opts.Columns = append(opts.Columns, "identifier_source")
+
+			// Delete narrators for this file
+			_, err := h.bookService.DeleteNarratorsForFile(ctx, file.ID)
+			if err != nil {
+				log.Warn("failed to delete narrators on downgrade", logger.Data{"error": err.Error()})
+			}
+
+			// Delete identifiers for this file
+			_, err = h.bookService.DeleteIdentifiersForFile(ctx, file.ID)
+			if err != nil {
+				log.Warn("failed to delete identifiers on downgrade", logger.Data{"error": err.Error()})
+			}
+
+			// Delete sidecar file
+			sidecarPath := sidecar.FileSidecarPath(file.Filepath)
+			if err := os.Remove(sidecarPath); err != nil && !os.IsNotExist(err) {
+				log.Warn("failed to delete sidecar on downgrade", logger.Data{"error": err.Error(), "path": sidecarPath})
+			}
+		}
+
+		file.FileRole = newRole
+		opts.Columns = append(opts.Columns, "file_role")
+	}
+
 	// Track old narrator person IDs for FTS re-indexing
 	oldNarratorPersonIDs := make([]int, 0)
 	for _, narrator := range file.Narrators {
@@ -1190,6 +1277,11 @@ func (h *handler) downloadFile(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Supplements download as-is, no processing
+	if file.FileRole == models.FileRoleSupplement {
+		return h.downloadOriginalFile(c)
 	}
 
 	// Check library access

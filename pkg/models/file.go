@@ -13,6 +13,12 @@ const (
 	FileTypeM4B  = "m4b"
 )
 
+const (
+	//tygo:emit export type FileRole = typeof FileRoleMain | typeof FileRoleSupplement;
+	FileRoleMain       = "main"
+	FileRoleSupplement = "supplement"
+)
+
 type File struct {
 	bun.BaseModel `bun:"table:files,alias:f" tstype:"-"`
 
@@ -24,6 +30,7 @@ type File struct {
 	Book                     *Book             `bun:"rel:belongs-to" json:"book" tstype:"Book"`
 	Filepath                 string            `bun:",nullzero" json:"filepath"`
 	FileType                 string            `bun:",nullzero" json:"file_type" tstype:"FileType"`
+	FileRole                 string            `bun:",nullzero,default:'main'" json:"file_role" tstype:"FileRole"`
 	FilesizeBytes            int64             `bun:",nullzero" json:"filesize_bytes"`
 	CoverImagePath           *string           `json:"cover_image_path"`
 	CoverMimeType            *string           `json:"cover_mime_type"`

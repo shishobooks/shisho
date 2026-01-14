@@ -37,7 +37,15 @@ import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
-import { FileTypeCBZ, type File } from "@/types";
+import {
+  FileRoleMain,
+  FileRoleSupplement,
+  FileTypeCBZ,
+  FileTypeEPUB,
+  FileTypeM4B,
+  type File,
+  type FileRole,
+} from "@/types";
 import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
@@ -111,6 +119,8 @@ export function FileEditDialog({
   const [releaseDate, setReleaseDate] = useState(
     formatDateForInput(file.release_date),
   );
+  const [fileRole, setFileRole] = useState(file.file_role ?? FileRoleMain);
+  const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
@@ -152,6 +162,8 @@ export function FileEditDialog({
       );
       setNewIdentifierType("isbn_13");
       setNewIdentifierValue("");
+      setFileRole(file.file_role ?? FileRoleMain);
+      setShowDowngradeConfirm(false);
     }
   }, [open, file]);
 
@@ -265,6 +277,7 @@ export function FileEditDialog({
 
   const handleSubmit = async () => {
     const payload: {
+      file_role?: string;
       narrators?: string[];
       url?: string;
       publisher?: string;
@@ -272,6 +285,16 @@ export function FileEditDialog({
       release_date?: string;
       identifiers?: Array<{ type: string; value: string }>;
     } = {};
+
+    // Check if file role changed
+    if (fileRole !== (file.file_role ?? FileRoleMain)) {
+      // If downgrading to supplement, require confirmation
+      if (fileRole === FileRoleSupplement && !showDowngradeConfirm) {
+        setShowDowngradeConfirm(true);
+        return;
+      }
+      payload.file_role = fileRole;
+    }
 
     // Check if narrators changed
     const originalNarrators =
@@ -325,6 +348,13 @@ export function FileEditDialog({
   const isLoading =
     updateFileMutation.isPending || uploadCoverMutation.isPending;
 
+  const isSupplement = file.file_role === FileRoleSupplement;
+
+  // Check if file type can be a main file (only cbz, epub, m4b are supported)
+  const canBeMainFile = [FileTypeCBZ, FileTypeEPUB, FileTypeM4B].includes(
+    file.file_type as typeof FileTypeCBZ,
+  );
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
@@ -349,381 +379,428 @@ export function FileEditDialog({
             </div>
           </div>
 
-          {/* Cover Upload (not available for CBZ - cover is page-based) */}
-          {file.file_type !== FileTypeCBZ && (
-            <div className="space-y-2">
-              <Label>Cover Image</Label>
-              <div className="w-32 relative group">
-                {file.cover_mime_type ? (
-                  <img
-                    alt="File cover"
-                    className="w-full h-auto rounded border border-border"
-                    src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
-                  />
+          {/* File Role */}
+          <div className="space-y-2">
+            <Label>File Role</Label>
+            <Select
+              onValueChange={(v) => setFileRole(v as FileRole)}
+              value={fileRole}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  disabled={isSupplement && !canBeMainFile}
+                  value={FileRoleMain}
+                >
+                  Main File
+                </SelectItem>
+                <SelectItem value={FileRoleSupplement}>Supplement</SelectItem>
+              </SelectContent>
+            </Select>
+            {showDowngradeConfirm && (
+              <p className="text-sm text-destructive">
+                Changing to supplement will clear all metadata (narrators,
+                identifiers, publisher, etc.). Click Save again to confirm.
+              </p>
+            )}
+            {isSupplement && !canBeMainFile && (
+              <p className="text-sm text-muted-foreground">
+                This file type ({file.file_type}) cannot be upgraded to a main
+                file. Only cbz, epub, and m4b files can be main files.
+              </p>
+            )}
+          </div>
+
+          {/* Main file only sections */}
+          {!isSupplement && fileRole !== FileRoleSupplement && (
+            <>
+              {/* Cover Upload (not available for CBZ - cover is page-based) */}
+              {file.file_type !== FileTypeCBZ && (
+                <div className="space-y-2">
+                  <Label>Cover Image</Label>
+                  <div className="w-32 relative group">
+                    {file.cover_mime_type ? (
+                      <img
+                        alt="File cover"
+                        className="w-full h-auto rounded border border-border"
+                        src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                      />
+                    ) : (
+                      <CoverPlaceholder
+                        className="rounded border border-dashed border-border aspect-square"
+                        variant={
+                          file.file_type === "m4b" ? "audiobook" : "book"
+                        }
+                      />
+                    )}
+                    {/* Cover upload overlay */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                      <input
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleCoverUpload}
+                        ref={fileInputRef}
+                        type="file"
+                      />
+                      <Button
+                        disabled={uploadCoverMutation.isPending}
+                        onClick={() => fileInputRef.current?.click()}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        {uploadCoverMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4 mr-2" />
+                        )}
+                        {file.cover_mime_type ? "Replace" : "Upload"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Narrators (only for M4B files) */}
+              {file.file_type === "m4b" && (
+                <div className="space-y-2">
+                  <Label>Narrators</Label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {narrators.map((narrator, index) => (
+                      <Badge
+                        className="flex items-center gap-1 max-w-full"
+                        key={index}
+                        variant="secondary"
+                      >
+                        <span className="truncate" title={narrator}>
+                          {narrator}
+                        </span>
+                        <button
+                          className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                          onClick={() => handleRemoveNarrator(index)}
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      onChange={(e) => setNewNarrator(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddNarrator();
+                        }
+                      }}
+                      placeholder="Add narrator..."
+                      value={newNarrator}
+                    />
+                    <Button
+                      onClick={handleAddNarrator}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* URL */}
+              <div className="space-y-2">
+                <Label htmlFor="url">URL</Label>
+                <Input
+                  id="url"
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://..."
+                  type="url"
+                  value={url}
+                />
+              </div>
+
+              {/* Publisher */}
+              <div className="space-y-2">
+                <Label>Publisher</Label>
+                {publisher ? (
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className="flex items-center gap-1 max-w-full"
+                      variant="secondary"
+                    >
+                      <span className="truncate" title={publisher}>
+                        {publisher}
+                      </span>
+                      <button
+                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                        onClick={handleClearPublisher}
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  </div>
                 ) : (
-                  <CoverPlaceholder
-                    className="rounded border border-dashed border-border aspect-square"
-                    variant={file.file_type === "m4b" ? "audiobook" : "book"}
-                  />
+                  <Popover
+                    modal
+                    onOpenChange={setPublisherOpen}
+                    open={publisherOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        aria-expanded={publisherOpen}
+                        className="w-full justify-between"
+                        role="combobox"
+                        variant="outline"
+                      >
+                        Select publisher...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-full p-0">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          onValueChange={setPublisherSearch}
+                          placeholder="Search publishers..."
+                          value={publisherSearch}
+                        />
+                        <CommandList>
+                          {isLoadingPublishers && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              Loading publishers...
+                            </div>
+                          )}
+                          {!isLoadingPublishers &&
+                            filteredPublishers.length === 0 &&
+                            !showCreatePublisherOption && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                {!debouncedPublisherSearch
+                                  ? "No publishers. Type to create one."
+                                  : "No matching publishers."}
+                              </div>
+                            )}
+                          {!isLoadingPublishers && (
+                            <CommandGroup>
+                              {filteredPublishers.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  onSelect={() => handleSelectPublisher(p.name)}
+                                  value={p.name}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 shrink-0 ${
+                                      publisher === p.name
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    }`}
+                                  />
+                                  <span className="truncate" title={p.name}>
+                                    {p.name}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                              {showCreatePublisherOption && (
+                                <CommandItem
+                                  onSelect={handleCreatePublisher}
+                                  value={`create-${publisherSearch}`}
+                                >
+                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                  <span className="truncate">
+                                    Create "{publisherSearch}"
+                                  </span>
+                                </CommandItem>
+                              )}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
-                {/* Cover upload overlay */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
-                  <input
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={handleCoverUpload}
-                    ref={fileInputRef}
-                    type="file"
+              </div>
+
+              {/* Imprint */}
+              <div className="space-y-2">
+                <Label>Imprint</Label>
+                {imprint ? (
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className="flex items-center gap-1 max-w-full"
+                      variant="secondary"
+                    >
+                      <span className="truncate" title={imprint}>
+                        {imprint}
+                      </span>
+                      <button
+                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                        onClick={handleClearImprint}
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  </div>
+                ) : (
+                  <Popover
+                    modal
+                    onOpenChange={setImprintOpen}
+                    open={imprintOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        aria-expanded={imprintOpen}
+                        className="w-full justify-between"
+                        role="combobox"
+                        variant="outline"
+                      >
+                        Select imprint...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-full p-0">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          onValueChange={setImprintSearch}
+                          placeholder="Search imprints..."
+                          value={imprintSearch}
+                        />
+                        <CommandList>
+                          {isLoadingImprints && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              Loading imprints...
+                            </div>
+                          )}
+                          {!isLoadingImprints &&
+                            filteredImprints.length === 0 &&
+                            !showCreateImprintOption && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                {!debouncedImprintSearch
+                                  ? "No imprints. Type to create one."
+                                  : "No matching imprints."}
+                              </div>
+                            )}
+                          {!isLoadingImprints && (
+                            <CommandGroup>
+                              {filteredImprints.map((i) => (
+                                <CommandItem
+                                  key={i.id}
+                                  onSelect={() => handleSelectImprint(i.name)}
+                                  value={i.name}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 shrink-0 ${
+                                      imprint === i.name
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    }`}
+                                  />
+                                  <span className="truncate" title={i.name}>
+                                    {i.name}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                              {showCreateImprintOption && (
+                                <CommandItem
+                                  onSelect={handleCreateImprint}
+                                  value={`create-${imprintSearch}`}
+                                >
+                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                  <span className="truncate">
+                                    Create "{imprintSearch}"
+                                  </span>
+                                </CommandItem>
+                              )}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+
+              {/* Release Date */}
+              <div className="space-y-2">
+                <Label htmlFor="releaseDate">Release Date</Label>
+                <Input
+                  id="releaseDate"
+                  onChange={(e) => setReleaseDate(e.target.value)}
+                  type="date"
+                  value={releaseDate}
+                />
+              </div>
+
+              {/* Identifiers */}
+              <div className="space-y-2">
+                <Label>Identifiers</Label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {identifiers.map((id, idx) => (
+                    <Badge
+                      className="flex items-center gap-1 max-w-full"
+                      key={idx}
+                      variant="secondary"
+                    >
+                      <span className="text-xs">
+                        {formatIdentifierType(id.type)}
+                      </span>
+                      : {id.value}
+                      <button
+                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                        onClick={() => {
+                          setIdentifiers(
+                            identifiers.filter((_, i) => i !== idx),
+                          );
+                        }}
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Select
+                    onValueChange={setNewIdentifierType}
+                    value={newIdentifierType}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="isbn_10">ISBN-10</SelectItem>
+                      <SelectItem value="isbn_13">ISBN-13</SelectItem>
+                      <SelectItem value="asin">ASIN</SelectItem>
+                      <SelectItem value="uuid">UUID</SelectItem>
+                      <SelectItem value="goodreads">Goodreads</SelectItem>
+                      <SelectItem value="google">Google</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    className="flex-1"
+                    onChange={(e) => setNewIdentifierValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddIdentifier();
+                      }
+                    }}
+                    placeholder="Enter value..."
+                    value={newIdentifierValue}
                   />
                   <Button
-                    disabled={uploadCoverMutation.isPending}
-                    onClick={() => fileInputRef.current?.click()}
-                    size="sm"
-                    variant="secondary"
+                    onClick={handleAddIdentifier}
+                    type="button"
+                    variant="outline"
                   >
-                    {uploadCoverMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4 mr-2" />
-                    )}
-                    {file.cover_mime_type ? "Replace" : "Upload"}
+                    Add
                   </Button>
                 </div>
               </div>
-            </div>
+            </>
           )}
-
-          {/* Narrators (only for M4B files) */}
-          {file.file_type === "m4b" && (
-            <div className="space-y-2">
-              <Label>Narrators</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {narrators.map((narrator, index) => (
-                  <Badge
-                    className="flex items-center gap-1 max-w-full"
-                    key={index}
-                    variant="secondary"
-                  >
-                    <span className="truncate" title={narrator}>
-                      {narrator}
-                    </span>
-                    <button
-                      className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                      onClick={() => handleRemoveNarrator(index)}
-                      type="button"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  onChange={(e) => setNewNarrator(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddNarrator();
-                    }
-                  }}
-                  placeholder="Add narrator..."
-                  value={newNarrator}
-                />
-                <Button
-                  onClick={handleAddNarrator}
-                  type="button"
-                  variant="outline"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* URL */}
-          <div className="space-y-2">
-            <Label htmlFor="url">URL</Label>
-            <Input
-              id="url"
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://..."
-              type="url"
-              value={url}
-            />
-          </div>
-
-          {/* Publisher */}
-          <div className="space-y-2">
-            <Label>Publisher</Label>
-            {publisher ? (
-              <div className="flex items-center gap-2">
-                <Badge
-                  className="flex items-center gap-1 max-w-full"
-                  variant="secondary"
-                >
-                  <span className="truncate" title={publisher}>
-                    {publisher}
-                  </span>
-                  <button
-                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                    onClick={handleClearPublisher}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              </div>
-            ) : (
-              <Popover
-                modal
-                onOpenChange={setPublisherOpen}
-                open={publisherOpen}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    aria-expanded={publisherOpen}
-                    className="w-full justify-between"
-                    role="combobox"
-                    variant="outline"
-                  >
-                    Select publisher...
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-full p-0">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      onValueChange={setPublisherSearch}
-                      placeholder="Search publishers..."
-                      value={publisherSearch}
-                    />
-                    <CommandList>
-                      {isLoadingPublishers && (
-                        <div className="p-4 text-center text-sm text-muted-foreground">
-                          Loading publishers...
-                        </div>
-                      )}
-                      {!isLoadingPublishers &&
-                        filteredPublishers.length === 0 &&
-                        !showCreatePublisherOption && (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            {!debouncedPublisherSearch
-                              ? "No publishers. Type to create one."
-                              : "No matching publishers."}
-                          </div>
-                        )}
-                      {!isLoadingPublishers && (
-                        <CommandGroup>
-                          {filteredPublishers.map((p) => (
-                            <CommandItem
-                              key={p.id}
-                              onSelect={() => handleSelectPublisher(p.name)}
-                              value={p.name}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 shrink-0 ${
-                                  publisher === p.name
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                }`}
-                              />
-                              <span className="truncate" title={p.name}>
-                                {p.name}
-                              </span>
-                            </CommandItem>
-                          ))}
-                          {showCreatePublisherOption && (
-                            <CommandItem
-                              onSelect={handleCreatePublisher}
-                              value={`create-${publisherSearch}`}
-                            >
-                              <Plus className="mr-2 h-4 w-4 shrink-0" />
-                              <span className="truncate">
-                                Create "{publisherSearch}"
-                              </span>
-                            </CommandItem>
-                          )}
-                        </CommandGroup>
-                      )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-
-          {/* Imprint */}
-          <div className="space-y-2">
-            <Label>Imprint</Label>
-            {imprint ? (
-              <div className="flex items-center gap-2">
-                <Badge
-                  className="flex items-center gap-1 max-w-full"
-                  variant="secondary"
-                >
-                  <span className="truncate" title={imprint}>
-                    {imprint}
-                  </span>
-                  <button
-                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                    onClick={handleClearImprint}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              </div>
-            ) : (
-              <Popover modal onOpenChange={setImprintOpen} open={imprintOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    aria-expanded={imprintOpen}
-                    className="w-full justify-between"
-                    role="combobox"
-                    variant="outline"
-                  >
-                    Select imprint...
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-full p-0">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      onValueChange={setImprintSearch}
-                      placeholder="Search imprints..."
-                      value={imprintSearch}
-                    />
-                    <CommandList>
-                      {isLoadingImprints && (
-                        <div className="p-4 text-center text-sm text-muted-foreground">
-                          Loading imprints...
-                        </div>
-                      )}
-                      {!isLoadingImprints &&
-                        filteredImprints.length === 0 &&
-                        !showCreateImprintOption && (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            {!debouncedImprintSearch
-                              ? "No imprints. Type to create one."
-                              : "No matching imprints."}
-                          </div>
-                        )}
-                      {!isLoadingImprints && (
-                        <CommandGroup>
-                          {filteredImprints.map((i) => (
-                            <CommandItem
-                              key={i.id}
-                              onSelect={() => handleSelectImprint(i.name)}
-                              value={i.name}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 shrink-0 ${
-                                  imprint === i.name
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                }`}
-                              />
-                              <span className="truncate" title={i.name}>
-                                {i.name}
-                              </span>
-                            </CommandItem>
-                          ))}
-                          {showCreateImprintOption && (
-                            <CommandItem
-                              onSelect={handleCreateImprint}
-                              value={`create-${imprintSearch}`}
-                            >
-                              <Plus className="mr-2 h-4 w-4 shrink-0" />
-                              <span className="truncate">
-                                Create "{imprintSearch}"
-                              </span>
-                            </CommandItem>
-                          )}
-                        </CommandGroup>
-                      )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-
-          {/* Release Date */}
-          <div className="space-y-2">
-            <Label htmlFor="releaseDate">Release Date</Label>
-            <Input
-              id="releaseDate"
-              onChange={(e) => setReleaseDate(e.target.value)}
-              type="date"
-              value={releaseDate}
-            />
-          </div>
-
-          {/* Identifiers */}
-          <div className="space-y-2">
-            <Label>Identifiers</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {identifiers.map((id, idx) => (
-                <Badge
-                  className="flex items-center gap-1 max-w-full"
-                  key={idx}
-                  variant="secondary"
-                >
-                  <span className="text-xs">
-                    {formatIdentifierType(id.type)}
-                  </span>
-                  : {id.value}
-                  <button
-                    className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                    onClick={() => {
-                      setIdentifiers(identifiers.filter((_, i) => i !== idx));
-                    }}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Select
-                onValueChange={setNewIdentifierType}
-                value={newIdentifierType}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="isbn_10">ISBN-10</SelectItem>
-                  <SelectItem value="isbn_13">ISBN-13</SelectItem>
-                  <SelectItem value="asin">ASIN</SelectItem>
-                  <SelectItem value="uuid">UUID</SelectItem>
-                  <SelectItem value="goodreads">Goodreads</SelectItem>
-                  <SelectItem value="google">Google</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                className="flex-1"
-                onChange={(e) => setNewIdentifierValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddIdentifier();
-                  }
-                }}
-                placeholder="Enter value..."
-                value={newIdentifierValue}
-              />
-              <Button
-                onClick={handleAddIdentifier}
-                type="button"
-                variant="outline"
-              >
-                Add
-              </Button>
-            </div>
-          </div>
         </div>
 
         <DialogFooter>

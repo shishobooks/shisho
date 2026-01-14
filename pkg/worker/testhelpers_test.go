@@ -67,7 +67,8 @@ func newTestContext(t *testing.T) *testContext {
 
 	// Create worker
 	cfg := &config.Config{
-		WorkerProcesses: 1,
+		WorkerProcesses:           1,
+		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 	}
 	w := &Worker{
 		config:         cfg,

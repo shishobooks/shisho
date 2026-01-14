@@ -250,6 +250,12 @@ const BookDetail = () => {
 
   const book = bookQuery.data;
 
+  // Separate main files and supplements
+  const mainFiles =
+    book.files?.filter((f) => f.file_role !== "supplement") ?? [];
+  const supplements =
+    book.files?.filter((f) => f.file_role === "supplement") ?? [];
+
   // Determine which file type would provide the cover based on library's cover_aspect_ratio setting
   // This is used to determine the native aspect ratio (audiobook = square, book = 2:3)
   const libraryCoverAspectRatio =
@@ -464,10 +470,10 @@ const BookDetail = () => {
               {/* Files */}
               <div>
                 <h3 className="font-semibold mb-3">
-                  Files ({book.files.length})
+                  Files ({mainFiles.length})
                 </h3>
                 <div className="space-y-3">
-                  {book.files.map((file) => (
+                  {mainFiles.map((file) => (
                     <div
                       className="border-l-4 border-l-primary dark:border-l-violet-300 pl-4 py-2 space-y-2"
                       key={file.id}
@@ -629,6 +635,59 @@ const BookDetail = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Supplements */}
+              {supplements.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="font-semibold mb-3">
+                      Supplements ({supplements.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {supplements.map((file) => (
+                        <div
+                          className="border-l-4 border-l-muted-foreground/30 pl-4 py-2"
+                          key={file.id}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Badge
+                                className="uppercase text-xs"
+                                variant="outline"
+                              >
+                                {file.file_type}
+                              </Badge>
+                              <span className="text-sm truncate">
+                                {file.filepath.split("/").pop()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
+                              <span>{formatFileSize(file.filesize_bytes)}</span>
+                              <Button
+                                onClick={() => handleDownloadOriginal(file.id)}
+                                size="sm"
+                                title="Download"
+                                variant="ghost"
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                onClick={() => setEditingFile(file)}
+                                size="sm"
+                                title="Edit"
+                                variant="ghost"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

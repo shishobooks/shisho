@@ -1106,3 +1106,29 @@ func (svc *Service) DeleteBookTags(ctx context.Context, bookID int) error {
 		Exec(ctx)
 	return errors.WithStack(err)
 }
+
+// DeleteNarratorsForFile deletes all narrators for a file.
+func (svc *Service) DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error) {
+	result, err := svc.db.NewDelete().
+		Model((*models.Narrator)(nil)).
+		Where("file_id = ?", fileID).
+		Exec(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}
+
+// DeleteIdentifiersForFile deletes all identifiers for a file.
+func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (int, error) {
+	result, err := svc.db.NewDelete().
+		Model((*models.FileIdentifier)(nil)).
+		Where("file_id = ?", fileID).
+		Exec(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}

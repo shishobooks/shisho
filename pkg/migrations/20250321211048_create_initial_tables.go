@@ -146,6 +146,7 @@ func init() {
 				book_id TEXT REFERENCES books (id) NOT NULL,
 				filepath TEXT NOT NULL,
 				file_type TEXT NOT NULL,
+				file_role TEXT NOT NULL DEFAULT 'main',
 				filesize_bytes INTEGER NOT NULL,
 				cover_image_path TEXT,
 				cover_mime_type TEXT,

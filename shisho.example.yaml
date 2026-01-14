@@ -91,6 +91,20 @@ download_cache_dir: /config/cache/downloads
 download_cache_max_size_gb: 5
 
 # =============================================================================
+# SUPPLEMENT DISCOVERY SETTINGS
+# =============================================================================
+
+# Patterns to exclude from supplement discovery (glob patterns)
+# These files will not be picked up as supplements even if they're in book directories
+# Env: SUPPLEMENT_EXCLUDE_PATTERNS (comma-separated)
+# Default: [".*", ".DS_Store", "Thumbs.db", "desktop.ini"]
+supplement_exclude_patterns:
+  - ".*" # hidden files (dotfiles)
+  - ".DS_Store"
+  - "Thumbs.db"
+  - "desktop.ini"
+
+# =============================================================================
 # AUTHENTICATION SETTINGS
 # =============================================================================
 

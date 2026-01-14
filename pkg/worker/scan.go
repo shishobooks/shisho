@@ -39,6 +39,146 @@ var (
 	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
 )
 
+// isMainFileExtension returns true if the extension is a main file type.
+func isMainFileExtension(ext string) bool {
+	ext = strings.ToLower(ext)
+	_, ok := extensionsToScan[ext]
+	return ok
+}
+
+// isShishoSpecialFile returns true if the filename is a shisho-specific file.
+func isShishoSpecialFile(filename string) bool {
+	lower := strings.ToLower(filename)
+	// Exclude cover files: *.cover.* pattern
+	if strings.Contains(lower, ".cover.") {
+		return true
+	}
+	// Exclude metadata files: *.metadata.json
+	if strings.HasSuffix(lower, ".metadata.json") {
+		return true
+	}
+	// Exclude canonical cover files (cover.png, cover.jpg, etc.)
+	base := strings.TrimSuffix(lower, filepath.Ext(lower))
+	if base == "cover" {
+		return true
+	}
+	// Exclude user-provided cover files with common patterns (audiobook_cover.png, book_cover.jpg, etc.)
+	if strings.HasSuffix(base, "_cover") || strings.HasSuffix(base, "-cover") {
+		return true
+	}
+	return false
+}
+
+// matchesExcludePattern checks if filename matches any exclude pattern.
+func matchesExcludePattern(filename string, patterns []string) bool {
+	for _, pattern := range patterns {
+		// Simple prefix match for patterns starting with "."
+		if strings.HasPrefix(pattern, ".") && strings.HasPrefix(filename, pattern) {
+			return true
+		}
+		// Exact match
+		if filename == pattern {
+			return true
+		}
+		// Glob match for more complex patterns
+		if matched, _ := filepath.Match(pattern, filename); matched {
+			return true
+		}
+	}
+	return false
+}
+
+// discoverSupplements finds supplement files for a book directory.
+func discoverSupplements(bookDir string, excludePatterns []string) ([]string, error) {
+	var supplements []string
+
+	err := filepath.WalkDir(bookDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		filename := filepath.Base(path)
+		ext := filepath.Ext(path)
+
+		// Skip main file types
+		if isMainFileExtension(ext) {
+			return nil
+		}
+
+		// Skip shisho special files
+		if isShishoSpecialFile(filename) {
+			return nil
+		}
+
+		// Skip files matching exclude patterns
+		if matchesExcludePattern(filename, excludePatterns) {
+			return nil
+		}
+
+		supplements = append(supplements, path)
+		return nil
+	})
+
+	return supplements, err
+}
+
+// discoverRootLevelSupplements finds supplements for root-level books by basename matching.
+func discoverRootLevelSupplements(mainFilePath string, libraryPath string, excludePatterns []string) ([]string, error) {
+	var supplements []string
+
+	// Get basename without extension
+	mainFilename := filepath.Base(mainFilePath)
+	mainBasename := strings.TrimSuffix(mainFilename, filepath.Ext(mainFilename))
+
+	// List files in the same directory
+	entries, err := os.ReadDir(libraryPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		ext := filepath.Ext(filename)
+		basename := strings.TrimSuffix(filename, ext)
+
+		// Skip if it's the main file itself
+		if filename == mainFilename {
+			continue
+		}
+
+		// Skip main file types
+		if isMainFileExtension(ext) {
+			continue
+		}
+
+		// Skip shisho special files
+		if isShishoSpecialFile(filename) {
+			continue
+		}
+
+		// Skip excluded patterns
+		if matchesExcludePattern(filename, excludePatterns) {
+			continue
+		}
+
+		// Match if basename is same or starts with main basename
+		// "MyBook.pdf" matches "MyBook.m4b"
+		// "MyBook - Guide.txt" matches "MyBook.m4b"
+		if basename == mainBasename || strings.HasPrefix(basename, mainBasename) {
+			supplements = append(supplements, filepath.Join(libraryPath, filename))
+		}
+	}
+
+	return supplements, nil
+}
+
 func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error {
 	jobLog.Info("processing scan job", nil)
 
@@ -1117,6 +1257,97 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			if reloadedFile.ID == file.ID {
 				if err := sidecar.WriteFileSidecarFromModel(reloadedFile); err != nil {
 					jobLog.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
+				}
+				break
+			}
+		}
+	}
+
+	// Discover and create supplement files
+	if !isRootLevelFile {
+		// Directory-based book: scan directory for supplements
+		supplements, err := discoverSupplements(bookPath, w.config.SupplementExcludePatterns)
+		if err != nil {
+			jobLog.Warn("failed to discover supplements", logger.Data{"error": err.Error()})
+		} else {
+			for _, suppPath := range supplements {
+				// Check if supplement already exists
+				existingSupp, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+					Filepath:  &suppPath,
+					LibraryID: &libraryID,
+				})
+				if err != nil && !errors.Is(err, errcodes.NotFound("File")) {
+					jobLog.Warn("error checking supplement", logger.Data{"path": suppPath, "error": err.Error()})
+					continue
+				}
+				if existingSupp != nil {
+					continue // Already exists
+				}
+
+				// Get file info
+				suppStat, err := os.Stat(suppPath)
+				if err != nil {
+					jobLog.Warn("can't stat supplement", logger.Data{"path": suppPath, "error": err.Error()})
+					continue
+				}
+
+				suppExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(suppPath)), ".")
+				suppFile := &models.File{
+					LibraryID:     libraryID,
+					BookID:        existingBook.ID,
+					Filepath:      suppPath,
+					FileType:      suppExt,
+					FileRole:      models.FileRoleSupplement,
+					FilesizeBytes: suppStat.Size(),
+				}
+
+				if err := w.bookService.CreateFile(ctx, suppFile); err != nil {
+					jobLog.Warn("failed to create supplement", logger.Data{"path": suppPath, "error": err.Error()})
+					continue
+				}
+				jobLog.Info("created supplement file", logger.Data{"path": suppPath, "file_id": suppFile.ID})
+			}
+		}
+	} else {
+		// Root-level book: find supplements by basename matching
+		for _, libraryPath := range library.LibraryPaths {
+			if filepath.Dir(path) == libraryPath.Filepath {
+				supplements, err := discoverRootLevelSupplements(path, libraryPath.Filepath, w.config.SupplementExcludePatterns)
+				if err != nil {
+					jobLog.Warn("failed to discover root supplements", logger.Data{"error": err.Error()})
+					break
+				}
+				for _, suppPath := range supplements {
+					existingSupp, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+						Filepath:  &suppPath,
+						LibraryID: &libraryID,
+					})
+					if err != nil && !errors.Is(err, errcodes.NotFound("File")) {
+						continue
+					}
+					if existingSupp != nil {
+						continue
+					}
+
+					suppStat, err := os.Stat(suppPath)
+					if err != nil {
+						continue
+					}
+
+					suppExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(suppPath)), ".")
+					suppFile := &models.File{
+						LibraryID:     libraryID,
+						BookID:        existingBook.ID,
+						Filepath:      suppPath,
+						FileType:      suppExt,
+						FileRole:      models.FileRoleSupplement,
+						FilesizeBytes: suppStat.Size(),
+					}
+
+					if err := w.bookService.CreateFile(ctx, suppFile); err != nil {
+						continue
+					}
+					jobLog.Info("created root-level supplement", logger.Data{"path": suppPath, "file_id": suppFile.ID})
 				}
 				break
 			}
