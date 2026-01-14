@@ -56,4 +56,6 @@ Create a single commit summarizing all the work. Follow the `[Category] Descript
 
 The `-f` flag skips confirmation (non-interactive).
 
+**IMPORTANT:** After this command is run, you will probably see an error: `Path "~/.worktrees/shisho/my-feature" does not exist`. This is okay and expected. The worktree and the branch was still cleaned up.
+
 **Note:** The task name is the directory name under `~/.worktrees/shisho/` (e.g., if worktree is at `~/.worktrees/shisho/my-feature`, task name is `my-feature`).
