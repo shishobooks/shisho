@@ -76,7 +76,8 @@ mdat                      # Media data box (audio)
 Custom metadata uses freeform atoms with namespace:
 
 ```
-----:com.apple.iTunes:SUBTITLE     # Subtitle
+----:com.apple.iTunes:SUBTITLE     # Subtitle (preferred)
+----:com.pilabor.tone:SUBTITLE     # Subtitle (fallback, Tone audiobook player)
 ----:com.apple.iTunes:SERIES       # Series name (Audible style)
 ----:com.apple.iTunes:SERIES-PART  # Series number (Audible style)
 ----:com.shisho:tags               # Tags (comma-separated)
@@ -109,7 +110,7 @@ Freeform atom structure:
 | Field | Source | Notes |
 |-------|--------|-------|
 | Title | `©nam` | Direct extraction |
-| Subtitle | `com.apple.iTunes:SUBTITLE` | Freeform atom |
+| Subtitle | `com.apple.iTunes:SUBTITLE` → `com.pilabor.tone:SUBTITLE` | Fallback chain |
 | Authors | `©ART` | Split by comma/semicolon |
 | Narrators | `©nrt` → `©cmp` → `©wrt` | Fallback chain |
 | Series Name | Album or `©grp` | Parsed from album format |

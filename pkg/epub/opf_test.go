@@ -61,3 +61,56 @@ func TestParseOPF_IdentifiersPatternMatch(t *testing.T) {
 	assert.Equal(t, "9780316769488", idByType["isbn_13"])
 	assert.Equal(t, "0316769487", idByType["isbn_10"])
 }
+
+func TestParseOPF_Subtitle_TitleTypeProperty(t *testing.T) {
+	// EPUB3 style: subtitle identified by title-type="subtitle" property
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title id="title-main">The Way of Kings</dc:title>
+    <dc:title id="title-sub">Book One of the Stormlight Archive</dc:title>
+    <meta refines="#title-main" property="title-type">main</meta>
+    <meta refines="#title-sub" property="title-type">subtitle</meta>
+  </metadata>
+</package>`
+
+	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	assert.Equal(t, "The Way of Kings", opf.Title)
+	assert.Equal(t, "Book One of the Stormlight Archive", opf.Subtitle)
+}
+
+func TestParseOPF_Subtitle_ByID(t *testing.T) {
+	// Simple ID-based: subtitle identified by id="subtitle"
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title id="title-main">The Final Empire</dc:title>
+    <dc:title id="subtitle">Mistborn Book One</dc:title>
+    <meta refines="#title-main" property="title-type">main</meta>
+  </metadata>
+</package>`
+
+	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	assert.Equal(t, "The Final Empire", opf.Title)
+	assert.Equal(t, "Mistborn Book One", opf.Subtitle)
+}
+
+func TestParseOPF_Subtitle_SingleTitle(t *testing.T) {
+	// Single title: no subtitle
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Simple Book Title</dc:title>
+  </metadata>
+</package>`
+
+	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	assert.Equal(t, "Simple Book Title", opf.Title)
+	assert.Empty(t, opf.Subtitle)
+}

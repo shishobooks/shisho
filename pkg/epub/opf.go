@@ -18,6 +18,7 @@ import (
 
 type OPF struct {
 	Title         string
+	Subtitle      string
 	Authors       []mediafile.ParsedAuthor
 	Series        string
 	SeriesNumber  *float64
@@ -168,6 +169,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 
 	return &mediafile.ParsedMetadata{
 		Title:         opf.Title,
+		Subtitle:      opf.Subtitle,
 		Authors:       opf.Authors,
 		Series:        opf.Series,
 		SeriesNumber:  opf.SeriesNumber,
@@ -222,16 +224,29 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		}
 	}
 
-	// Parse out the main title of the book.
+	// Parse out the main title and subtitle of the book.
 	title := ""
+	subtitle := ""
 	if len(pkg.Metadata.Title) == 1 {
 		title = pkg.Metadata.Title[0].Text
 	} else if len(pkg.Metadata.Title) > 1 {
 		for _, t := range pkg.Metadata.Title {
-			if t.ID != "" && metaProperties[t.ID] != nil && metaProperties[t.ID]["title-type"] == "main" {
-				title = t.Text
-				break
+			titleType := ""
+			if t.ID != "" && metaProperties[t.ID] != nil {
+				titleType = metaProperties[t.ID]["title-type"]
 			}
+			// Check for main title
+			if titleType == "main" || t.ID == "title-main" {
+				title = t.Text
+			}
+			// Check for subtitle - either by title-type property or by id
+			if titleType == "subtitle" || t.ID == "subtitle" {
+				subtitle = t.Text
+			}
+		}
+		// If we didn't find a main title, use the first one
+		if title == "" && len(pkg.Metadata.Title) > 0 {
+			title = pkg.Metadata.Title[0].Text
 		}
 	}
 
@@ -360,6 +375,7 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 
 	return &OPF{
 		Title:         title,
+		Subtitle:      subtitle,
 		Authors:       authors,
 		Series:        series,
 		SeriesNumber:  seriesNumber,

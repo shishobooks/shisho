@@ -12,7 +12,7 @@ import (
 // Metadata represents extracted M4B audiobook metadata.
 type Metadata struct {
 	Title         string
-	Subtitle      string                       // from ----:com.apple.iTunes:SUBTITLE freeform atom
+	Subtitle      string                       // from ----:com.apple.iTunes:SUBTITLE or ----:com.pilabor.tone:SUBTITLE
 	Authors       []mediafile.ParsedAuthor     // from ©ART (artist)
 	Narrators     []string                     // from ©nrt (narrator) or ©cmp (composer)
 	Album         string                       // from ©alb
@@ -123,8 +123,10 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		for k, v := range raw.freeform {
 			meta.Freeform[k] = v
 		}
-		// Extract subtitle from freeform SUBTITLE atom
+		// Extract subtitle from freeform SUBTITLE atom (try iTunes first, then Tone)
 		if subtitle, ok := raw.freeform["com.apple.iTunes:SUBTITLE"]; ok {
+			meta.Subtitle = subtitle
+		} else if subtitle, ok := raw.freeform["com.pilabor.tone:SUBTITLE"]; ok {
 			meta.Subtitle = subtitle
 		}
 		// Extract tags from freeform shisho:tags atom (comma-separated)
