@@ -1,5 +1,5 @@
-import { ArrowLeft, Download, Edit, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, Download, Edit, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -136,6 +136,7 @@ const BookDetail = () => {
     null,
   );
   const [coverError, setCoverError] = useState(false);
+  const downloadAbortController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setCoverError(false);
@@ -145,17 +146,26 @@ const BookDetail = () => {
     fileId: number,
     endpoint: string,
   ) => {
+    setDownloadError(null);
     setDownloadingFileId(fileId);
+
+    // Create abort controller for this download
+    const abortController = new AbortController();
+    downloadAbortController.current = abortController;
+
     try {
       // Use HEAD request to trigger generation and check for errors
       // This avoids loading the entire file into browser memory
       const headResponse = await fetch(endpoint, {
         method: "HEAD",
+        signal: abortController.signal,
       });
 
       if (!headResponse.ok) {
         // HEAD failed - make a GET request to get the error message (small JSON response)
-        const errorResponse = await fetch(endpoint);
+        const errorResponse = await fetch(endpoint, {
+          signal: abortController.signal,
+        });
         const contentType = errorResponse.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
           const error = await errorResponse.json();
@@ -176,9 +186,14 @@ const BookDetail = () => {
       window.location.href = endpoint;
       toast.success("Download started");
     } catch (error) {
+      // Don't show error dialog for user-initiated cancellation
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       console.error("Download error:", error);
       toast.error("Failed to download file");
     } finally {
+      downloadAbortController.current = null;
       setDownloadingFileId(null);
     }
   };
@@ -212,6 +227,12 @@ const BookDetail = () => {
     // Direct download of original file - this won't show any error since it's a simple file serve
     window.location.href = `/api/books/files/${fileId}/download/original`;
     setDownloadError(null);
+  };
+
+  const handleCancelDownload = () => {
+    downloadAbortController.current?.abort();
+    downloadAbortController.current = null;
+    setDownloadingFileId(null);
   };
 
   if (bookQuery.isLoading) {
@@ -511,6 +532,7 @@ const BookDetail = () => {
                             <DownloadFormatPopover
                               disabled={downloadingFileId === file.id}
                               isLoading={downloadingFileId === file.id}
+                              onCancel={handleCancelDownload}
                               onDownloadKepub={() =>
                                 handleDownloadKepub(file.id)
                               }
@@ -521,9 +543,21 @@ const BookDetail = () => {
                                 )
                               }
                             />
+                          ) : downloadingFileId === file.id ? (
+                            <div className="flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Button
+                                className="h-6 w-6 p-0"
+                                onClick={handleCancelDownload}
+                                size="sm"
+                                title="Cancel download"
+                                variant="ghost"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
                           ) : (
                             <Button
-                              disabled={downloadingFileId === file.id}
                               onClick={() =>
                                 handleDownload(file.id, file.file_type)
                               }
@@ -531,11 +565,7 @@ const BookDetail = () => {
                               title="Download"
                               variant="ghost"
                             >
-                              {downloadingFileId === file.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Download className="h-3 w-3" />
-                              )}
+                              <Download className="h-3 w-3" />
                             </Button>
                           )}
                           <Button

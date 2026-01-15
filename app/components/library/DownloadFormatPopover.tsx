@@ -1,4 +1,4 @@
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
 interface DownloadFormatPopoverProps {
   onDownloadOriginal: () => void;
   onDownloadKepub: () => void;
+  onCancel?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
 }
@@ -18,6 +19,7 @@ interface DownloadFormatPopoverProps {
 const DownloadFormatPopover = ({
   onDownloadOriginal,
   onDownloadKepub,
+  onCancel,
   isLoading = false,
   disabled = false,
 }: DownloadFormatPopoverProps) => {
@@ -33,20 +35,31 @@ const DownloadFormatPopover = ({
     onDownloadKepub();
   };
 
+  // When loading, show spinner + cancel button instead of popover trigger
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-1">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {onCancel && (
+          <Button
+            className="h-6 w-6 p-0"
+            onClick={onCancel}
+            size="sm"
+            title="Cancel download"
+            variant="ghost"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
-        <Button
-          disabled={disabled || isLoading}
-          size="sm"
-          title="Download"
-          variant="ghost"
-        >
-          {isLoading ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Download className="h-3 w-3" />
-          )}
+        <Button disabled={disabled} size="sm" title="Download" variant="ghost">
+          <Download className="h-3 w-3" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-48 p-2">

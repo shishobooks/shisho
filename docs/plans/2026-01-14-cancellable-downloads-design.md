@@ -1,5 +1,7 @@
 # Cancellable Downloads Design
 
+> **Status:** Implemented - see commit history on `task/cancel-download` branch
+
 ## Problem
 
 Downloads can take a while, especially KePub conversions. If a user clicks download by accident, they're stuck waiting with no way to stop it. The current UI shows a spinner but no cancel option.
