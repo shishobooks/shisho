@@ -32,6 +32,7 @@ interface SearchResultCoverProps {
   id: number;
   thumbnailClasses: string;
   variant: "book" | "audiobook";
+  cacheBuster: number;
 }
 
 const SearchResultCover = ({
@@ -39,6 +40,7 @@ const SearchResultCover = ({
   id,
   thumbnailClasses,
   variant,
+  cacheBuster,
 }: SearchResultCoverProps) => {
   const [coverError, setCoverError] = useState(false);
 
@@ -54,7 +56,7 @@ const SearchResultCover = ({
           alt=""
           className="w-full h-full object-cover"
           onError={() => setCoverError(true)}
-          src={`/api/${type === "book" ? "books" : "series"}/${id}/cover`}
+          src={`/api/${type === "book" ? "books" : "series"}/${id}/cover?t=${cacheBuster}`}
         />
       ) : (
         <CoverPlaceholder variant={variant} />
@@ -188,6 +190,7 @@ const GlobalSearch = () => {
       to={`/libraries/${libraryId}/books/${book.id}`}
     >
       <SearchResultCover
+        cacheBuster={searchQuery.dataUpdatedAt}
         id={book.id}
         thumbnailClasses={thumbnailClasses}
         type="book"
@@ -213,6 +216,7 @@ const GlobalSearch = () => {
       to={`/libraries/${libraryId}/series/${series.id}`}
     >
       <SearchResultCover
+        cacheBuster={searchQuery.dataUpdatedAt}
         id={series.id}
         thumbnailClasses={thumbnailClasses}
         type="series"

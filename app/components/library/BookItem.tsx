@@ -127,7 +127,7 @@ const BookItem = ({
               aspectClass,
             )}
             onError={() => setCoverError(true)}
-            src={`/api/books/${book.id}/cover`}
+            src={`/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`}
           />
         ) : (
           <CoverPlaceholder

@@ -64,7 +64,7 @@ const SeriesCard = ({
               aspectClass,
             )}
             onError={() => setCoverError(true)}
-            src={`/api/series/${seriesItem.id}/cover`}
+            src={`/api/series/${seriesItem.id}/cover?t=${new Date(seriesItem.updated_at).getTime()}`}
           />
         ) : (
           <CoverPlaceholder
