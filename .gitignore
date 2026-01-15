@@ -359,3 +359,4 @@ Sessionx.vim
 build/
 tmp/
 app/types/generated/*.ts
+.playwright-mcp

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      width: 900px;
+      height: 600px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, #3d3d3d 0%, #1a1a1a 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    /* Subtle purple glow */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .logo {
+      font-family: 'Noto Sans', sans-serif;
+      font-weight: 700;
+      font-size: 108px;
+      letter-spacing: 0.03em;
+      color: #fafafa;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .icon {
+      width: 96px;
+      height: 96px;
+    }
+    .kanji {
+      font-weight: 400;
+      font-size: 64.8px;
+      color: #c4b5fd;
+      vertical-align: super;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <svg class="icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="40" width="40" height="4" rx="1" fill="#c4b5fd"/>
+      <rect x="8" y="12" width="7" height="28" rx="1" fill="#c4b5fd"/>
+      <rect x="17" y="8" width="6" height="32" rx="1" fill="#c4b5fd" opacity="0.7"/>
+      <rect x="25" y="16" width="8" height="24" rx="1" fill="#c4b5fd"/>
+      <rect x="35" y="10" width="5" height="30" rx="1" fill="#c4b5fd" opacity="0.7"/>
+    </svg>
+    <span>Shisho<span class="kanji">司書</span></span>
+  </div>
+</body>
+</html>
