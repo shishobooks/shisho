@@ -15,7 +15,8 @@ The current file display on the book detail page is visually busy. When a file h
 
 **Primary (always visible):**
 - File type (EPUB/M4B/CBZ)
-- Filename
+- Name (prominent display, defaults to title from metadata)
+- Filename (muted, smaller text below name)
 - File size
 - Duration and bitrate (M4B only)
 - Page count (CBZ only)
@@ -33,18 +34,24 @@ The current file display on the book detail page is visually busy. When a file h
 
 ### Primary Row
 
-Each file displays as a single horizontal row:
+Each file displays with name prominently and filename underneath:
 
 ```
-▶ [EPUB]  The Great Book.epub                    512 KB    ⬇  ✏️
-▶ [M4B]   Audiobook Title.m4b     8h 32m • 256 kbps • 1.2 GB    ⬇  ✏️
-▶ [CBZ]   Comic Issue 01.cbz      24 pages              45 MB    ⬇  ✏️
+▶ [EPUB]  The Great Book                                512 KB    ⬇  ✏️
+          The Great Book.epub
+
+▶ [M4B]   Audiobook Title             8h 32m • 256 kbps • 1.2 GB    ⬇  ✏️
+          Author Name/Series/Audiobook Title.m4b
+          Narrated by John Smith, Jane Doe
+
+▶ [CBZ]   Comic Issue 01              24 pages              45 MB    ⬇  ✏️
+          Publisher/Series Name/Comic Issue 01.cbz
 ```
 
 **Elements (left to right):**
 1. **Disclosure chevron** - Points right (▶) when collapsed, down (▼) when expanded. Only visible when secondary metadata exists.
 2. **File type badge** - Uppercase, subtle background color
-3. **Filename** - Extracted from filepath, truncates with ellipsis if too long
+3. **Name** - Prominent display (font-medium), defaults to title from file metadata, truncates with ellipsis if too long
 4. **File-specific stats** - Separated by bullet (•):
    - M4B: Duration • Bitrate
    - CBZ: Page count
@@ -52,23 +59,32 @@ Each file displays as a single horizontal row:
 5. **File size** - Always shown, right-aligned with stats
 6. **Action buttons** - Download and Edit icons, right-aligned
 
+**Filename row (below primary):**
+- Indented to align with name (past chevron and badge)
+- Displayed in `text-xs text-muted-foreground`
+- Has `truncate` class since paths can be long
+- Has `title` attribute with full filepath for hover tooltip
+- Always visible (not in expandable section)
+
 **Changes from current design:**
+- Name displayed prominently instead of filename
+- Filename moved to muted secondary line
 - Remove left colored border (visual noise)
-- Single row instead of multiple stacked rows
 - Inline stats separated by bullets
 - Chevron provides clear expand affordance
 
 ### Narrators Row
 
-For M4B files with narrators, a second line appears immediately below the primary row:
+For M4B files with narrators, a third line appears below the filename row:
 
 ```
-▶ [M4B]   Audiobook Title.m4b     8h 32m • 256 kbps • 1.2 GB    ⬇  ✏️
+▶ [M4B]   Audiobook Title             8h 32m • 256 kbps • 1.2 GB    ⬇  ✏️
+          Author Name/Series/Audiobook Title.m4b
           Narrated by John Smith, Jane Doe
 ```
 
 **Details:**
-- Indented to align with filename (past chevron and badge)
+- Indented to align with name (past chevron and badge)
 - Prefixed with "Narrated by" in muted text
 - Narrator names are clickable links to their person page
 - Smaller text size (text-xs) in muted color
@@ -80,7 +96,8 @@ For M4B files with narrators, a second line appears immediately below the primar
 When the chevron is clicked, secondary metadata appears in an indented block:
 
 ```
-▼ [EPUB]  The Great Book.epub                    512 KB    ⬇  ✏️
+▼ [EPUB]  The Great Book                                512 KB    ⬇  ✏️
+          The Great Book.epub
           ┌─────────────────────────────────────────────────────
           │  Publisher    Penguin Random House
           │  Imprint      Vintage Books
@@ -105,18 +122,22 @@ When the chevron is clicked, secondary metadata appears in an indented block:
 
 ### Supplements Section
 
-Supplements follow the same compact pattern with lighter visual treatment:
+Supplements follow the same pattern with name prominent and filename underneath:
 
 ```
 Supplements (2)
 
-  [PDF]   Reading Guide.pdf                      1.2 MB    ⬇  ✏️
-  [PDF]   Author Interview.pdf                   850 KB    ⬇  ✏️
+  [PDF]   Reading Guide                                 1.2 MB    ⬇  ✏️
+          Reading Guide.pdf
+
+  [PDF]   Author Interview                              850 KB    ⬇  ✏️
+          Author Interview.pdf
 ```
 
 **Details:**
 - No disclosure chevron (supplements rarely have metadata)
-- Same inline layout: badge → filename → size → actions
+- Same layout: badge → name → size → actions, with filename underneath
+- Filename has `truncate` class and `title` attribute
 - Slightly muted compared to main files
 - Section only appears if supplements exist
 - If a supplement has expandable metadata, show the chevron
@@ -151,7 +172,8 @@ Supplements (2)
 - Values: default text color
 
 ### Typography
-- Primary row: text-sm, font-medium for filename
+- Primary row: text-sm, font-medium for name
+- Filename row: text-xs, text-muted-foreground, truncate class, title attribute with full path
 - Narrator row: text-xs, text-muted-foreground
 - Expanded section: text-xs for labels and values
 
