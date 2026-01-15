@@ -365,3 +365,9 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 - `pkg/filegen/m4b.go` - M4B generation
 - `pkg/filegen/m4b_test.go` - M4B generation tests
 - `internal/testgen/m4b.go` - Test file generation
+
+## Debug Tools
+
+- `cmd/scripts/debug/print-mp4-atoms/` - CLI tool to inspect M4B metadata and atoms
+  - Run with: `go run ./cmd/scripts/debug/print-mp4-atoms <file.m4b>`
+  - Shows all parsed metadata, freeform atoms, unknown atoms, and chapters
