@@ -1,7 +1,6 @@
 import { Check, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -35,6 +34,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
+import { usePeopleList } from "@/hooks/queries/people";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -91,10 +91,6 @@ export function BookEditDialog({
       role: a.role,
     })) || [],
   );
-  const [newAuthor, setNewAuthor] = useState("");
-  const [newAuthorRole, setNewAuthorRole] = useState<string | undefined>(
-    undefined,
-  );
   const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
     book.book_series?.map((bs) => ({
       name: bs.series?.name || "",
@@ -103,6 +99,7 @@ export function BookEditDialog({
   );
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [seriesSearch, setSeriesSearch] = useState("");
+  const [authorOpen, setAuthorOpen] = useState(false);
   const debouncedSeriesSearch = useDebounce(seriesSearch, 200);
 
   const [genres, setGenres] = useState<string[]>(
@@ -116,6 +113,9 @@ export function BookEditDialog({
   );
   const [tagSearch, setTagSearch] = useState("");
   const debouncedTagSearch = useDebounce(tagSearch, 200);
+
+  const [authorSearch, setAuthorSearch] = useState("");
+  const debouncedAuthorSearch = useDebounce(authorSearch, 200);
 
   const updateBookMutation = useUpdateBook();
 
@@ -152,6 +152,16 @@ export function BookEditDialog({
     { enabled: open && !!book.library_id },
   );
 
+  // Query for people in this library with server-side search
+  const { data: peopleData, isLoading: isLoadingPeople } = usePeopleList(
+    {
+      library_id: book.library_id,
+      limit: 50,
+      search: debouncedAuthorSearch || undefined,
+    },
+    { enabled: open && !!book.library_id },
+  );
+
   // Reset form when dialog opens with new book data
   useEffect(() => {
     if (open) {
@@ -165,8 +175,6 @@ export function BookEditDialog({
           role: a.role,
         })) || [],
       );
-      setNewAuthor("");
-      setNewAuthorRole(undefined);
       setSeriesEntries(
         book.book_series?.map((bs) => ({
           name: bs.series?.name || "",
@@ -182,20 +190,9 @@ export function BookEditDialog({
         book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
       );
       setTagSearch("");
+      setAuthorSearch("");
     }
   }, [open, book]);
-
-  const handleAddAuthor = () => {
-    const name = newAuthor.trim();
-    if (
-      name &&
-      !authors.some((a) => a.name === name && a.role === newAuthorRole)
-    ) {
-      setAuthors([...authors, { name, role: newAuthorRole }]);
-      setNewAuthor("");
-      setNewAuthorRole(undefined);
-    }
-  };
 
   const handleRemoveAuthor = (index: number) => {
     setAuthors(authors.filter((_, i) => i !== index));
@@ -205,6 +202,25 @@ export function BookEditDialog({
     const updated = [...authors];
     updated[index] = { ...updated[index], role };
     setAuthors(updated);
+  };
+
+  const handleSelectAuthor = (personName: string) => {
+    // Check if author is already added (same name, any role)
+    if (!authors.some((a) => a.name === personName)) {
+      // Default to "Writer" role for CBZ
+      setAuthors([...authors, { name: personName, role: AuthorRoleWriter }]);
+    }
+    setAuthorOpen(false);
+    setAuthorSearch("");
+  };
+
+  const handleCreateAuthor = () => {
+    const name = authorSearch.trim();
+    if (name && !authors.some((a) => a.name === name)) {
+      setAuthors([...authors, { name, role: AuthorRoleWriter }]);
+    }
+    setAuthorOpen(false);
+    setAuthorSearch("");
   };
 
   const handleSelectSeries = (seriesName: string) => {
@@ -240,18 +256,6 @@ export function BookEditDialog({
     setSeriesEntries(updated);
   };
 
-  const handleAuthorBlur = () => {
-    const name = newAuthor.trim();
-    if (
-      name &&
-      !authors.some((a) => a.name === name && a.role === newAuthorRole)
-    ) {
-      setAuthors([...authors, { name, role: newAuthorRole }]);
-      setNewAuthor("");
-      setNewAuthorRole(undefined);
-    }
-  };
-
   const handleSubmit = async () => {
     const payload: {
       title?: string;
@@ -263,16 +267,6 @@ export function BookEditDialog({
       genres?: string[];
       tags?: string[];
     } = {};
-
-    // Include any pending author from the input field
-    let finalAuthors = authors;
-    const pendingName = newAuthor.trim();
-    if (
-      pendingName &&
-      !authors.some((a) => a.name === pendingName && a.role === newAuthorRole)
-    ) {
-      finalAuthors = [...authors, { name: pendingName, role: newAuthorRole }];
-    }
 
     // Only include changed fields
     if (title !== book.title) {
@@ -294,8 +288,8 @@ export function BookEditDialog({
         name: a.person?.name || "",
         role: a.role,
       })) || [];
-    if (JSON.stringify(finalAuthors) !== JSON.stringify(originalAuthors)) {
-      payload.authors = finalAuthors.filter((a) => a.name.trim());
+    if (JSON.stringify(authors) !== JSON.stringify(originalAuthors)) {
+      payload.authors = authors.filter((a) => a.name.trim());
     }
 
     // Check if series changed
@@ -363,6 +357,19 @@ export function BookEditDialog({
     !seriesEntries.find(
       (s) => s.name.toLowerCase() === seriesSearch.toLowerCase(),
     );
+
+  // Filter out already-selected authors from people options
+  const filteredPeople = useMemo(() => {
+    const allPeople = peopleData?.people || [];
+    return allPeople.filter((p) => !authors.some((a) => a.name === p.name));
+  }, [peopleData?.people, authors]);
+
+  const showCreateAuthorOption =
+    authorSearch.trim() &&
+    !filteredPeople.find(
+      (p) => p.name.toLowerCase() === authorSearch.toLowerCase(),
+    ) &&
+    !authors.find((a) => a.name.toLowerCase() === authorSearch.toLowerCase());
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -463,95 +470,87 @@ export function BookEditDialog({
                     </Button>
                   </div>
                 ))}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input
-                      onChange={(e) => setNewAuthor(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddAuthor();
-                        }
-                      }}
-                      placeholder="Add author..."
-                      value={newAuthor}
-                    />
-                  </div>
-                  <div className="w-36">
-                    <Select
-                      onValueChange={(value) =>
-                        setNewAuthorRole(value === "none" ? undefined : value)
-                      }
-                      value={newAuthorRole || "none"}
+                {/* Author Combobox for CBZ */}
+                <Popover modal onOpenChange={setAuthorOpen} open={authorOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      aria-expanded={authorOpen}
+                      className="w-full justify-between"
+                      role="combobox"
+                      variant="outline"
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No role</SelectItem>
-                        {AUTHOR_ROLES.map((role) => (
-                          <SelectItem key={role.value} value={role.value}>
-                            {role.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={handleAddAuthor}
-                    size="icon"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+                      Add author...
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-full p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        onValueChange={setAuthorSearch}
+                        placeholder="Search people..."
+                        value={authorSearch}
+                      />
+                      <CommandList>
+                        {isLoadingPeople && (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            Loading people...
+                          </div>
+                        )}
+                        {!isLoadingPeople &&
+                          filteredPeople.length === 0 &&
+                          !showCreateAuthorOption && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              {!debouncedAuthorSearch
+                                ? "No people in this library. Type to create one."
+                                : "No matching people."}
+                            </div>
+                          )}
+                        {!isLoadingPeople && (
+                          <CommandGroup>
+                            {filteredPeople.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                onSelect={() => handleSelectAuthor(p.name)}
+                                value={p.name}
+                              >
+                                <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
+                                <span className="truncate" title={p.name}>
+                                  {p.name}
+                                </span>
+                              </CommandItem>
+                            ))}
+                            {showCreateAuthorOption && (
+                              <CommandItem
+                                onSelect={handleCreateAuthor}
+                                value={`create-${authorSearch}`}
+                              >
+                                <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="truncate">
+                                  Create "{authorSearch}"
+                                </span>
+                              </CommandItem>
+                            )}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             ) : (
-              // Non-CBZ files: simple badge-based author list
-              <>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {authors.map((author, index) => (
-                    <Badge
-                      className="flex items-center gap-1 max-w-full"
-                      key={index}
-                      variant="secondary"
-                    >
-                      <span className="truncate" title={author.name}>
-                        {author.name}
-                      </span>
-                      <button
-                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={() => handleRemoveAuthor(index)}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    onBlur={handleAuthorBlur}
-                    onChange={(e) => setNewAuthor(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddAuthor();
-                      }
-                    }}
-                    placeholder="Add author..."
-                    value={newAuthor}
-                  />
-                  <Button
-                    onClick={handleAddAuthor}
-                    type="button"
-                    variant="outline"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
+              // Non-CBZ files: use MultiSelectCombobox for authors
+              <MultiSelectCombobox
+                isLoading={isLoadingPeople}
+                label="People"
+                onChange={(names) =>
+                  setAuthors(names.map((name) => ({ name })))
+                }
+                onSearch={setAuthorSearch}
+                options={peopleData?.people.map((p) => p.name) || []}
+                placeholder="Add author..."
+                searchValue={authorSearch}
+                values={authors.map((a) => a.name)}
+              />
             )}
           </div>
 

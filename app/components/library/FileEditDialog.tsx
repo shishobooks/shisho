@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
 import {
   Popover,
   PopoverContent,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
+import { usePeopleList } from "@/hooks/queries/people";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import {
@@ -95,7 +97,8 @@ export function FileEditDialog({
   const [narrators, setNarrators] = useState<string[]>(
     file.narrators?.map((n) => n.person?.name || "") || [],
   );
-  const [newNarrator, setNewNarrator] = useState("");
+  const [narratorSearch, setNarratorSearch] = useState("");
+  const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [coverCacheBuster, setCoverCacheBuster] = useState(Date.now());
 
   // Identifier state
@@ -146,10 +149,21 @@ export function FileEditDialog({
     { enabled: open },
   );
 
+  // Query for people in this library with server-side search (for narrators)
+  const { data: peopleData, isLoading: isLoadingPeople } = usePeopleList(
+    {
+      library_id: file.library_id,
+      limit: 50,
+      search: debouncedNarratorSearch || undefined,
+    },
+    { enabled: open },
+  );
+
   // Reset form when dialog opens with new file data
   useEffect(() => {
     if (open) {
       setNarrators(file.narrators?.map((n) => n.person?.name || "") || []);
+      setNarratorSearch("");
       setUrl(file.url || "");
       setPublisher(file.publisher?.name || "");
       setPublisherSearch("");
@@ -166,17 +180,6 @@ export function FileEditDialog({
       setShowDowngradeConfirm(false);
     }
   }, [open, file]);
-
-  const handleAddNarrator = () => {
-    if (newNarrator.trim() && !narrators.includes(newNarrator.trim())) {
-      setNarrators([...narrators, newNarrator.trim()]);
-      setNewNarrator("");
-    }
-  };
-
-  const handleRemoveNarrator = (index: number) => {
-    setNarrators(narrators.filter((_, i) => i !== index));
-  };
 
   const handleSelectPublisher = (name: string) => {
     setPublisher(name);
@@ -466,46 +469,16 @@ export function FileEditDialog({
               {file.file_type === "m4b" && (
                 <div className="space-y-2">
                   <Label>Narrators</Label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {narrators.map((narrator, index) => (
-                      <Badge
-                        className="flex items-center gap-1 max-w-full"
-                        key={index}
-                        variant="secondary"
-                      >
-                        <span className="truncate" title={narrator}>
-                          {narrator}
-                        </span>
-                        <button
-                          className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                          onClick={() => handleRemoveNarrator(index)}
-                          type="button"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      onChange={(e) => setNewNarrator(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddNarrator();
-                        }
-                      }}
-                      placeholder="Add narrator..."
-                      value={newNarrator}
-                    />
-                    <Button
-                      onClick={handleAddNarrator}
-                      type="button"
-                      variant="outline"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <MultiSelectCombobox
+                    isLoading={isLoadingPeople}
+                    label="People"
+                    onChange={setNarrators}
+                    onSearch={setNarratorSearch}
+                    options={peopleData?.people.map((p) => p.name) || []}
+                    placeholder="Add narrator..."
+                    searchValue={narratorSearch}
+                    values={narrators}
+                  />
                 </div>
               )}
 
