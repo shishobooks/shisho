@@ -7,6 +7,7 @@ import (
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/stretchr/testify/assert"
@@ -2409,4 +2410,146 @@ func TestProcessScanJob_M4BAuthorsNoRoles(t *testing.T) {
 	require.NotNil(t, book.Authors[0].Person)
 	assert.Equal(t, "M4B Artist", book.Authors[0].Person.Name)
 	assert.Nil(t, book.Authors[0].Role, "M4B authors should have no role")
+}
+
+// TestProcessScanJob_RescanNoChanges tests that rescanning a file with unchanged
+// metadata does not cause unnecessary database writes (idempotency).
+func TestProcessScanJob_RescanNoChanges(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create EPUB with metadata
+	bookDir := testgen.CreateSubDir(t, libraryPath, "My Book")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:    "Test Title",
+		Authors:  []string{"Test Author"},
+		HasCover: true,
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Get initial state
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	initialUpdatedAt := allBooks[0].UpdatedAt
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileInitialUpdatedAt := files[0].UpdatedAt
+
+	// Second scan (rescan)
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify no changes - UpdatedAt should be the same
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, initialUpdatedAt, allBooks[0].UpdatedAt, "book should not be updated when metadata unchanged")
+
+	files = tc.listFiles()
+	require.Len(t, files, 1)
+	assert.Equal(t, fileInitialUpdatedAt, files[0].UpdatedAt, "file should not be updated when metadata unchanged")
+}
+
+// TestProcessScanJob_RescanWithChangedMetadata tests that rescanning a file
+// where embedded metadata has changed results in the book being updated.
+func TestProcessScanJob_RescanWithChangedMetadata(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create EPUB with initial metadata
+	bookDir := testgen.CreateSubDir(t, libraryPath, "My Book")
+	epubPath := filepath.Join(bookDir, "book.epub")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Original Title",
+		Authors: []string{"Original Author"},
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Original Title", allBooks[0].Title)
+
+	// Remove the old EPUB and sidecar files, then create a new EPUB with different metadata.
+	// Sidecar files must be removed because they have higher priority than file metadata,
+	// and we want to test that the scan correctly picks up new file metadata.
+	os.Remove(epubPath)
+	os.Remove(filepath.Join(bookDir, "My Book.metadata.json"))   // Book sidecar
+	os.Remove(filepath.Join(bookDir, "book.epub.metadata.json")) // File sidecar
+	os.Remove(filepath.Join(bookDir, "book.epub.cover.png"))     // Cover file (will be re-extracted)
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Updated Title",
+		Authors: []string{"Updated Author"},
+	})
+
+	// Second scan (rescan)
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify metadata was updated
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Updated Title", allBooks[0].Title, "title should be updated on rescan")
+
+	require.Len(t, allBooks[0].Authors, 1)
+	require.NotNil(t, allBooks[0].Authors[0].Person)
+	assert.Equal(t, "Updated Author", allBooks[0].Authors[0].Person.Name, "author should be updated on rescan")
+}
+
+// TestProcessScanJob_RescanPreservesManualEdits tests that manual edits
+// (with source "manual") are preserved through rescan, even if file metadata differs.
+func TestProcessScanJob_RescanPreservesManualEdits(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create EPUB with metadata
+	bookDir := testgen.CreateSubDir(t, libraryPath, "My Book")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "File Title",
+		Authors: []string{"File Author"},
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "File Title", allBooks[0].Title)
+	assert.Equal(t, models.DataSourceEPUBMetadata, allBooks[0].TitleSource)
+
+	// Simulate manual edit by updating title with manual source
+	allBooks[0].Title = "Manual Title"
+	allBooks[0].TitleSource = models.DataSourceManual
+	err = tc.bookService.UpdateBook(tc.ctx, allBooks[0], books.UpdateBookOptions{
+		Columns: []string{"title", "title_source"},
+	})
+	require.NoError(t, err)
+
+	// Verify manual edit was applied
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Manual Title", allBooks[0].Title)
+	assert.Equal(t, models.DataSourceManual, allBooks[0].TitleSource)
+
+	// Second scan (rescan)
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify manual edit was preserved
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Manual Title", allBooks[0].Title, "manual title should be preserved")
+	assert.Equal(t, models.DataSourceManual, allBooks[0].TitleSource, "manual title source should be preserved")
 }

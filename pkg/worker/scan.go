@@ -344,12 +344,12 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		return errors.WithStack(err)
 	}
 	if existingFile != nil {
-		jobLog.Info("file already exists", logger.Data{"file_id": existingFile.ID})
+		jobLog.Info("file already exists, will check for metadata updates", logger.Data{"file_id": existingFile.ID})
 		// Check if cover is missing and recover it if needed
 		if err := w.recoverMissingCover(ctx, existingFile); err != nil {
 			jobLog.Warn("failed to recover missing cover", logger.Data{"file_id": existingFile.ID, "error": err.Error()})
 		}
-		return nil
+		// Continue to metadata extraction - we'll compare and update later
 	}
 
 	// Get the size of the file.
@@ -696,13 +696,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 
 		// Check to see if we need to update any of the metadata on the book.
 		// Important: We only update metadata if:
-		// 1. The new source has higher priority (lower number)
+		// 1. The new source has higher or equal priority (lower or equal number)
 		// 2. The new value is non-empty (we always prefer having some data over no data)
+		// 3. The new value differs from the existing value
 		updateOptions := books.UpdateBookOptions{Columns: make([]string, 0)}
 		metadataChanged := false
 
-		// Update title only if the new title is non-empty and from a higher priority source
-		if strings.TrimSpace(title) != "" && models.DataSourcePriority[titleSource] < models.DataSourcePriority[existingBook.TitleSource] && existingBook.Title != title {
+		// Update title only if the new title is non-empty and from a higher or equal priority source with different value
+		if shouldUpdateScalar(strings.TrimSpace(title), existingBook.Title, titleSource, existingBook.TitleSource) {
 			jobLog.Info("updating title", logger.Data{"new_title": title, "old_title": existingBook.Title})
 			existingBook.Title = title
 			existingBook.TitleSource = titleSource
@@ -710,25 +711,41 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			metadataChanged = true
 		}
 
-		// Update subtitle only if the new subtitle is non-empty and from a higher priority source
-		existingSubtitleSource := models.DataSourceFilepath
+		// Update subtitle only if the new subtitle is non-empty and from a higher or equal priority source with different value
+		existingSubtitleSource := ""
 		if existingBook.SubtitleSource != nil {
 			existingSubtitleSource = *existingBook.SubtitleSource
 		}
-		if subtitle != nil && *subtitle != "" && models.DataSourcePriority[subtitleSource] < models.DataSourcePriority[existingSubtitleSource] {
-			jobLog.Info("updating subtitle", logger.Data{"new_subtitle": *subtitle})
+		existingSubtitle := ""
+		if existingBook.Subtitle != nil {
+			existingSubtitle = *existingBook.Subtitle
+		}
+		newSubtitle := ""
+		if subtitle != nil {
+			newSubtitle = *subtitle
+		}
+		if shouldUpdateScalar(newSubtitle, existingSubtitle, subtitleSource, existingSubtitleSource) {
+			jobLog.Info("updating subtitle", logger.Data{"new_subtitle": newSubtitle})
 			existingBook.Subtitle = subtitle
 			existingBook.SubtitleSource = &subtitleSource
 			updateOptions.Columns = append(updateOptions.Columns, "subtitle", "subtitle_source")
 			metadataChanged = true
 		}
 
-		// Update description only if the new description is non-empty and from a higher priority source
-		existingDescriptionSource := models.DataSourceFilepath
+		// Update description only if the new description is non-empty and from a higher or equal priority source with different value
+		existingDescriptionSource := ""
 		if existingBook.DescriptionSource != nil {
 			existingDescriptionSource = *existingBook.DescriptionSource
 		}
-		if description != nil && *description != "" && models.DataSourcePriority[descriptionSource] < models.DataSourcePriority[existingDescriptionSource] {
+		existingDescription := ""
+		if existingBook.Description != nil {
+			existingDescription = *existingBook.Description
+		}
+		newDescription := ""
+		if description != nil {
+			newDescription = *description
+		}
+		if shouldUpdateScalar(newDescription, existingDescription, descriptionSource, existingDescriptionSource) {
 			jobLog.Info("updating description", nil)
 			existingBook.Description = description
 			existingBook.DescriptionSource = &descriptionSource
@@ -736,21 +753,41 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			metadataChanged = true
 		}
 
-		// Update authors only if we have authors and they're from a higher priority source
-		if len(authors) > 0 && models.DataSourcePriority[authorSource] < models.DataSourcePriority[existingBook.AuthorSource] {
+		// Update authors only if we have authors and they're from a higher or equal priority source with different values
+		existingAuthorNames := make([]string, len(existingBook.Authors))
+		for i, a := range existingBook.Authors {
+			if a.Person != nil {
+				existingAuthorNames[i] = a.Person.Name
+			}
+		}
+		newAuthorNames := make([]string, len(authors))
+		for i, a := range authors {
+			newAuthorNames[i] = a.Name
+		}
+		if shouldUpdateRelationship(newAuthorNames, existingAuthorNames, authorSource, existingBook.AuthorSource) {
 			jobLog.Info("updating authors", logger.Data{"new_author_count": len(authors), "old_author_count": len(existingBook.Authors)})
 			existingBook.AuthorSource = authorSource
 			updateOptions.UpdateAuthors = true
 			updateOptions.Authors = authors
 			metadataChanged = true
 		}
-		// Update series if we have a higher priority source
+		// Update series if we have a higher or equal priority source with different values
 		// Get existing series source for comparison
 		var existingSeriesSource string
 		if len(existingBook.BookSeries) > 0 && existingBook.BookSeries[0].Series != nil {
 			existingSeriesSource = existingBook.BookSeries[0].Series.NameSource
 		}
-		if len(seriesList) > 0 && (len(existingBook.BookSeries) == 0 || models.DataSourcePriority[seriesSource] < models.DataSourcePriority[existingSeriesSource]) {
+		existingSeriesNames := make([]string, len(existingBook.BookSeries))
+		for i, bs := range existingBook.BookSeries {
+			if bs.Series != nil {
+				existingSeriesNames[i] = bs.Series.Name
+			}
+		}
+		newSeriesNames := make([]string, len(seriesList))
+		for i, s := range seriesList {
+			newSeriesNames[i] = s.name
+		}
+		if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, seriesSource, existingSeriesSource) {
 			jobLog.Info("updating series", logger.Data{"new_series_count": len(seriesList), "old_series_count": len(existingBook.BookSeries)})
 			// Delete existing book series entries
 			err = w.bookService.DeleteBookSeries(ctx, existingBook.ID)
@@ -781,12 +818,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			}
 		}
 
-		// Update genres if we have a higher priority source
-		var existingGenreSource string
+		// Update genres if we have a higher or equal priority source with different values
+		existingGenreSource := ""
 		if existingBook.GenreSource != nil {
 			existingGenreSource = *existingBook.GenreSource
 		}
-		if len(genreNames) > 0 && (len(existingBook.BookGenres) == 0 || models.DataSourcePriority[genreSource] < models.DataSourcePriority[existingGenreSource]) {
+		existingGenreNames := make([]string, len(existingBook.BookGenres))
+		for i, bg := range existingBook.BookGenres {
+			if bg.Genre != nil {
+				existingGenreNames[i] = bg.Genre.Name
+			}
+		}
+		if shouldUpdateRelationship(genreNames, existingGenreNames, genreSource, existingGenreSource) {
 			jobLog.Info("updating genres", logger.Data{"new_genre_count": len(genreNames), "old_genre_count": len(existingBook.BookGenres)})
 			// Delete existing book genre entries
 			err = w.bookService.DeleteBookGenres(ctx, existingBook.ID)
@@ -813,12 +856,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			updateOptions.Columns = append(updateOptions.Columns, "genre_source")
 		}
 
-		// Update tags if we have a higher priority source
-		var existingTagSource string
+		// Update tags if we have a higher or equal priority source with different values
+		existingTagSource := ""
 		if existingBook.TagSource != nil {
 			existingTagSource = *existingBook.TagSource
 		}
-		if len(tagNames) > 0 && (len(existingBook.BookTags) == 0 || models.DataSourcePriority[tagSource] < models.DataSourcePriority[existingTagSource]) {
+		existingTagNames := make([]string, len(existingBook.BookTags))
+		for i, bt := range existingBook.BookTags {
+			if bt.Tag != nil {
+				existingTagNames[i] = bt.Tag.Name
+			}
+		}
+		if shouldUpdateRelationship(tagNames, existingTagNames, tagSource, existingTagSource) {
 			jobLog.Info("updating tags", logger.Data{"new_tag_count": len(tagNames), "old_tag_count": len(existingBook.BookTags)})
 			// Delete existing book tag entries
 			err = w.bookService.DeleteBookTags(ctx, existingBook.ID)
@@ -1201,6 +1250,220 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			file.ImprintID = &imprint.ID
 			file.ImprintSource = &imprintSource
 		}
+	}
+
+	// For existing files, update metadata and return (don't create duplicate)
+	if existingFile != nil {
+		// Reload existing file with full relations for metadata comparison
+		existingFile, err = w.bookService.RetrieveFileWithRelations(ctx, existingFile.ID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		fileUpdated := false
+		fileUpdateColumns := make([]string, 0)
+
+		// Update narrators
+		existingNarratorSource := ""
+		if existingFile.NarratorSource != nil {
+			existingNarratorSource = *existingFile.NarratorSource
+		}
+		existingNarratorNames := make([]string, len(existingFile.Narrators))
+		for i, n := range existingFile.Narrators {
+			if n.Person != nil {
+				existingNarratorNames[i] = n.Person.Name
+			}
+		}
+		if shouldUpdateRelationship(narratorNames, existingNarratorNames, narratorSource, existingNarratorSource) {
+			jobLog.Info("updating narrators", logger.Data{"new_count": len(narratorNames), "old_count": len(existingNarratorNames)})
+			// Delete existing narrators
+			if err := w.bookService.DeleteNarrators(ctx, existingFile.ID); err != nil {
+				return errors.WithStack(err)
+			}
+			// Create new narrators
+			for i, name := range narratorNames {
+				person, err := w.personService.FindOrCreatePerson(ctx, name, libraryID)
+				if err != nil {
+					jobLog.Error("failed to find/create narrator person", nil, logger.Data{"narrator": name, "error": err.Error()})
+					continue
+				}
+				narrator := &models.Narrator{
+					FileID:    existingFile.ID,
+					PersonID:  person.ID,
+					SortOrder: i + 1,
+				}
+				if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
+					jobLog.Error("failed to create narrator", nil, logger.Data{"file_id": existingFile.ID, "person_id": person.ID, "error": err.Error()})
+				}
+			}
+			existingFile.NarratorSource = &narratorSource
+			fileUpdateColumns = append(fileUpdateColumns, "narrator_source")
+			fileUpdated = true
+		}
+
+		// Update identifiers
+		existingIdentifierSource := ""
+		if existingFile.IdentifierSource != nil {
+			existingIdentifierSource = *existingFile.IdentifierSource
+		}
+		existingIdentifierValues := make([]string, len(existingFile.Identifiers))
+		for i, id := range existingFile.Identifiers {
+			existingIdentifierValues[i] = id.Type + ":" + id.Value
+		}
+		newIdentifierValues := make([]string, len(identifiers))
+		for i, id := range identifiers {
+			newIdentifierValues[i] = id.Type + ":" + id.Value
+		}
+		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource) {
+			jobLog.Info("updating identifiers", logger.Data{"new_count": len(identifiers), "old_count": len(existingFile.Identifiers)})
+			// Delete existing identifiers
+			if err := w.bookService.DeleteFileIdentifiers(ctx, existingFile.ID); err != nil {
+				return errors.WithStack(err)
+			}
+			// Create new identifiers
+			for _, id := range identifiers {
+				fileIdentifier := &models.FileIdentifier{
+					FileID: existingFile.ID,
+					Type:   id.Type,
+					Value:  id.Value,
+					Source: identifierSource,
+				}
+				if err := w.bookService.CreateFileIdentifier(ctx, fileIdentifier); err != nil {
+					jobLog.Error("failed to create identifier", nil, logger.Data{"file_id": existingFile.ID, "type": id.Type, "error": err.Error()})
+				}
+			}
+			existingFile.IdentifierSource = &identifierSource
+			fileUpdateColumns = append(fileUpdateColumns, "identifier_source")
+			fileUpdated = true
+		}
+
+		// Update URL
+		existingURLSource := ""
+		if existingFile.URLSource != nil {
+			existingURLSource = *existingFile.URLSource
+		}
+		existingURL := ""
+		if existingFile.URL != nil {
+			existingURL = *existingFile.URL
+		}
+		newURL := ""
+		if fileURL != nil {
+			newURL = *fileURL
+		}
+		if shouldUpdateScalar(newURL, existingURL, fileURLSource, existingURLSource) {
+			jobLog.Info("updating URL", logger.Data{"new_url": newURL})
+			existingFile.URL = fileURL
+			existingFile.URLSource = &fileURLSource
+			fileUpdateColumns = append(fileUpdateColumns, "url", "url_source")
+			fileUpdated = true
+		}
+
+		// Update publisher
+		existingPublisherSource := ""
+		if existingFile.PublisherSource != nil {
+			existingPublisherSource = *existingFile.PublisherSource
+		}
+		existingPublisherName := ""
+		if existingFile.Publisher != nil {
+			existingPublisherName = existingFile.Publisher.Name
+		}
+		newPublisherName := ""
+		if publisherName != nil {
+			newPublisherName = *publisherName
+		}
+		if shouldUpdateScalar(newPublisherName, existingPublisherName, publisherSource, existingPublisherSource) {
+			jobLog.Info("updating publisher", logger.Data{"new_publisher": newPublisherName})
+			if newPublisherName != "" {
+				publisher, err := w.publisherService.FindOrCreatePublisher(ctx, newPublisherName, libraryID)
+				if err != nil {
+					jobLog.Error("failed to find/create publisher", nil, logger.Data{"publisher": newPublisherName, "error": err.Error()})
+				} else {
+					existingFile.PublisherID = &publisher.ID
+					existingFile.PublisherSource = &publisherSource
+					fileUpdateColumns = append(fileUpdateColumns, "publisher_id", "publisher_source")
+					fileUpdated = true
+				}
+			} else {
+				existingFile.PublisherID = nil
+				existingFile.PublisherSource = &publisherSource
+				fileUpdateColumns = append(fileUpdateColumns, "publisher_id", "publisher_source")
+				fileUpdated = true
+			}
+		}
+
+		// Update imprint
+		existingImprintSource := ""
+		if existingFile.ImprintSource != nil {
+			existingImprintSource = *existingFile.ImprintSource
+		}
+		existingImprintName := ""
+		if existingFile.Imprint != nil {
+			existingImprintName = existingFile.Imprint.Name
+		}
+		newImprintName := ""
+		if imprintName != nil {
+			newImprintName = *imprintName
+		}
+		if shouldUpdateScalar(newImprintName, existingImprintName, imprintSource, existingImprintSource) {
+			jobLog.Info("updating imprint", logger.Data{"new_imprint": newImprintName})
+			if newImprintName != "" {
+				imprint, err := w.imprintService.FindOrCreateImprint(ctx, newImprintName, libraryID)
+				if err != nil {
+					jobLog.Error("failed to find/create imprint", nil, logger.Data{"imprint": newImprintName, "error": err.Error()})
+				} else {
+					existingFile.ImprintID = &imprint.ID
+					existingFile.ImprintSource = &imprintSource
+					fileUpdateColumns = append(fileUpdateColumns, "imprint_id", "imprint_source")
+					fileUpdated = true
+				}
+			} else {
+				existingFile.ImprintID = nil
+				existingFile.ImprintSource = &imprintSource
+				fileUpdateColumns = append(fileUpdateColumns, "imprint_id", "imprint_source")
+				fileUpdated = true
+			}
+		}
+
+		// Update release date
+		existingReleaseDateSource := ""
+		if existingFile.ReleaseDateSource != nil {
+			existingReleaseDateSource = *existingFile.ReleaseDateSource
+		}
+		existingReleaseDate := ""
+		if existingFile.ReleaseDate != nil {
+			existingReleaseDate = existingFile.ReleaseDate.Format(time.RFC3339)
+		}
+		newReleaseDate := ""
+		if releaseDate != nil {
+			newReleaseDate = releaseDate.Format(time.RFC3339)
+		}
+		if shouldUpdateScalar(newReleaseDate, existingReleaseDate, releaseDateSource, existingReleaseDateSource) {
+			jobLog.Info("updating release date", logger.Data{"new_release_date": newReleaseDate})
+			existingFile.ReleaseDate = releaseDate
+			existingFile.ReleaseDateSource = &releaseDateSource
+			fileUpdateColumns = append(fileUpdateColumns, "release_date", "release_date_source")
+			fileUpdated = true
+		}
+
+		// Update file size if changed (no source tracking, always update if different)
+		if existingFile.FilesizeBytes != size {
+			jobLog.Info("updating file size", logger.Data{"new_size": size, "old_size": existingFile.FilesizeBytes})
+			existingFile.FilesizeBytes = size
+			fileUpdateColumns = append(fileUpdateColumns, "filesize_bytes")
+			fileUpdated = true
+		}
+
+		// Apply file updates if any changes
+		if fileUpdated {
+			if err := w.bookService.UpdateFile(ctx, existingFile, books.UpdateFileOptions{Columns: fileUpdateColumns}); err != nil {
+				return errors.WithStack(err)
+			}
+			jobLog.Info("file metadata updated", logger.Data{"columns": fileUpdateColumns})
+		} else {
+			jobLog.Info("no file metadata changes detected", nil)
+		}
+
+		return nil
 	}
 
 	err = w.bookService.CreateFile(ctx, file)
