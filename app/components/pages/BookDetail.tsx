@@ -1,5 +1,13 @@
-import { ArrowLeft, Download, Edit, Loader2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Edit,
+  Loader2,
+  X,
+} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -128,6 +136,255 @@ const supportsKepub = (fileType: string): boolean => {
   return fileType === FileTypeEPUB || fileType === FileTypeCBZ;
 };
 
+interface FileRowProps {
+  file: File;
+  libraryId: string;
+  libraryDownloadPreference: string | undefined;
+  isExpanded: boolean;
+  hasExpandableMetadata: boolean;
+  onToggleExpand: () => void;
+  isDownloading: boolean;
+  onDownload: () => void;
+  onDownloadKepub: () => void;
+  onDownloadOriginal: () => void;
+  onDownloadWithEndpoint: (endpoint: string) => void;
+  onCancelDownload: () => void;
+  onEdit: () => void;
+  isSupplement?: boolean;
+}
+
+const FileRow = ({
+  file,
+  libraryId,
+  libraryDownloadPreference,
+  isExpanded,
+  hasExpandableMetadata,
+  onToggleExpand,
+  isDownloading,
+  onDownload,
+  onDownloadKepub,
+  onDownloadOriginal,
+  onDownloadWithEndpoint,
+  onCancelDownload,
+  onEdit,
+  isSupplement = false,
+}: FileRowProps) => {
+  const showChevron = hasExpandableMetadata && !isSupplement;
+
+  return (
+    <div className="py-2 space-y-1">
+      {/* Primary row */}
+      <div className="flex items-center gap-2">
+        {/* Clickable area for expand/collapse (chevron, badge, name) */}
+        <div
+          aria-expanded={showChevron ? isExpanded : undefined}
+          className={`flex items-center gap-2 min-w-0 flex-1 rounded-md -ml-1 pl-1 ${
+            showChevron ? "cursor-pointer hover:bg-muted/50" : ""
+          }`}
+          onClick={showChevron ? onToggleExpand : undefined}
+          onKeyDown={
+            showChevron
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onToggleExpand();
+                  }
+                }
+              : undefined
+          }
+          role={showChevron ? "button" : undefined}
+          tabIndex={showChevron ? 0 : undefined}
+        >
+          {/* Chevron indicator */}
+          {showChevron ? (
+            <div className="p-0.5">
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          ) : (
+            <div className="w-5" /> // Spacer for alignment when no chevron
+          )}
+
+          {/* File type badge */}
+          <Badge
+            className="uppercase text-xs flex-shrink-0"
+            variant={isSupplement ? "outline" : "secondary"}
+          >
+            {file.file_type}
+          </Badge>
+
+          {/* Name */}
+          <div className="flex flex-col min-w-0 flex-1">
+            <span
+              className={`truncate ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
+              title={file.name || getFilename(file.filepath)}
+            >
+              {file.name || getFilename(file.filepath)}
+            </span>
+          </div>
+        </div>
+
+        {/* Stats and actions */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
+          {/* M4B stats */}
+          {file.audiobook_duration_seconds && (
+            <span>{formatDuration(file.audiobook_duration_seconds)}</span>
+          )}
+          {file.audiobook_bitrate_bps && (
+            <span>{Math.round(file.audiobook_bitrate_bps / 1000)} kbps</span>
+          )}
+          {/* CBZ stats */}
+          {file.page_count && <span>{file.page_count} pages</span>}
+          {/* File size - always shown */}
+          <span>{formatFileSize(file.filesize_bytes)}</span>
+
+          {/* Download button/popover */}
+          {isSupplement ? (
+            <Button
+              onClick={onDownloadOriginal}
+              size="sm"
+              title="Download"
+              variant="ghost"
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+          ) : libraryDownloadPreference === DownloadFormatAsk &&
+            supportsKepub(file.file_type) ? (
+            <DownloadFormatPopover
+              disabled={isDownloading}
+              isLoading={isDownloading}
+              onCancel={onCancelDownload}
+              onDownloadKepub={onDownloadKepub}
+              onDownloadOriginal={() =>
+                onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+              }
+            />
+          ) : isDownloading ? (
+            <div className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <Button
+                className="h-6 w-6 p-0"
+                onClick={onCancelDownload}
+                size="sm"
+                title="Cancel download"
+                variant="ghost"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={onDownload}
+              size="sm"
+              title="Download"
+              variant="ghost"
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+          )}
+
+          {/* Edit button */}
+          <Button onClick={onEdit} size="sm" title="Edit" variant="ghost">
+            <Edit className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Filename row - only show when name differs from filename */}
+      {file.name && (
+        <div className="ml-5 pl-2">
+          <span
+            className="text-xs text-muted-foreground truncate block"
+            title={file.filepath}
+          >
+            {getFilename(file.filepath)}
+          </span>
+        </div>
+      )}
+
+      {/* Narrators row - M4B only, always visible when present */}
+      {file.narrators && file.narrators.length > 0 && (
+        <div className="ml-5 pl-2 flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-muted-foreground">Narrated by</span>
+          {file.narrators.map((narrator, index) => (
+            <span className="text-xs" key={narrator.id}>
+              <Link
+                className="hover:underline"
+                to={`/libraries/${libraryId}/people/${narrator.person_id}`}
+              >
+                {narrator.person?.name ?? "Unknown"}
+              </Link>
+              {index < file.narrators!.length - 1 ? "," : ""}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Expandable details section */}
+      {isExpanded && hasExpandableMetadata && (
+        <div className="ml-5 pl-2 mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
+          {/* Publisher, Imprint, Released, URL */}
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            {file.publisher && (
+              <>
+                <span className="text-muted-foreground">Publisher</span>
+                <span>{file.publisher.name}</span>
+              </>
+            )}
+            {file.imprint && (
+              <>
+                <span className="text-muted-foreground">Imprint</span>
+                <span>{file.imprint.name}</span>
+              </>
+            )}
+            {file.release_date && (
+              <>
+                <span className="text-muted-foreground">Released</span>
+                <span>{formatDate(file.release_date)}</span>
+              </>
+            )}
+            {file.url && (
+              <>
+                <span className="text-muted-foreground">URL</span>
+                <a
+                  className="text-primary hover:underline truncate"
+                  href={file.url}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                  title={file.url}
+                >
+                  {file.url.length > 60
+                    ? file.url.substring(0, 60) + "..."
+                    : file.url}
+                </a>
+              </>
+            )}
+          </div>
+
+          {/* Identifiers */}
+          {file.identifiers && file.identifiers.length > 0 && (
+            <div className="pt-2 border-t border-border/50">
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                {file.identifiers.map((id, idx) => (
+                  <React.Fragment key={idx}>
+                    <span className="text-muted-foreground">
+                      {formatIdentifierType(id.type)}
+                    </span>
+                    <span className="font-mono select-all">{id.value}</span>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
@@ -141,7 +398,32 @@ const BookDetail = () => {
     null,
   );
   const [coverError, setCoverError] = useState(false);
+  const [expandedFileIds, setExpandedFileIds] = useState<Set<number>>(
+    new Set(),
+  );
   const downloadAbortController = useRef<AbortController | null>(null);
+
+  const toggleFileExpanded = (fileId: number) => {
+    setExpandedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  };
+
+  const hasExpandableMetadata = (file: File): boolean => {
+    return !!(
+      file.publisher ||
+      file.imprint ||
+      file.release_date ||
+      file.url ||
+      (file.identifiers && file.identifiers.length > 0)
+    );
+  };
 
   useEffect(() => {
     setCoverError(false);
@@ -498,186 +780,28 @@ const BookDetail = () => {
                 <h3 className="font-semibold mb-3">
                   Files ({mainFiles.length})
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {mainFiles.map((file) => (
-                    <div
-                      className="border-l-4 border-l-primary dark:border-l-violet-300 pl-4 py-2 space-y-2"
+                    <FileRow
+                      file={file}
+                      hasExpandableMetadata={hasExpandableMetadata(file)}
+                      isDownloading={downloadingFileId === file.id}
+                      isExpanded={expandedFileIds.has(file.id)}
                       key={file.id}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Badge
-                            className="uppercase text-xs"
-                            variant="secondary"
-                          >
-                            {file.file_type}
-                          </Badge>
-                          <div className="flex flex-col min-w-0">
-                            <span
-                              className="font-medium text-sm truncate"
-                              title={file.name || getFilename(file.filepath)}
-                            >
-                              {file.name || getFilename(file.filepath)}
-                            </span>
-                            <span
-                              className="text-xs text-muted-foreground truncate"
-                              title={file.filepath}
-                            >
-                              {getFilename(file.filepath)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
-                          {file.audiobook_duration_seconds && (
-                            <span>
-                              {formatDuration(file.audiobook_duration_seconds)}
-                            </span>
-                          )}
-                          {file.audiobook_bitrate_bps && (
-                            <span>
-                              {Math.round(file.audiobook_bitrate_bps / 1000)}{" "}
-                              kbps
-                            </span>
-                          )}
-                          <span>{formatFileSize(file.filesize_bytes)}</span>
-                          {/* Show format popover for "ask" preference on EPUB/CBZ files */}
-                          {libraryQuery.data?.download_format_preference ===
-                            DownloadFormatAsk &&
-                          supportsKepub(file.file_type) ? (
-                            <DownloadFormatPopover
-                              disabled={downloadingFileId === file.id}
-                              isLoading={downloadingFileId === file.id}
-                              onCancel={handleCancelDownload}
-                              onDownloadKepub={() =>
-                                handleDownloadKepub(file.id)
-                              }
-                              onDownloadOriginal={() =>
-                                handleDownloadWithEndpoint(
-                                  file.id,
-                                  `/api/books/files/${file.id}/download`,
-                                )
-                              }
-                            />
-                          ) : downloadingFileId === file.id ? (
-                            <div className="flex items-center gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              <Button
-                                className="h-6 w-6 p-0"
-                                onClick={handleCancelDownload}
-                                size="sm"
-                                title="Cancel download"
-                                variant="ghost"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              onClick={() =>
-                                handleDownload(file.id, file.file_type)
-                              }
-                              size="sm"
-                              title="Download"
-                              variant="ghost"
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
-                          )}
-                          <Button
-                            onClick={() => setEditingFile(file)}
-                            size="sm"
-                            title="Edit"
-                            variant="ghost"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {file.narrators && file.narrators.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            Narrators:
-                          </span>
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {file.narrators.map((narrator, index) => (
-                              <Link
-                                className="text-xs hover:underline"
-                                key={narrator.id}
-                                to={`/libraries/${libraryId}/people/${narrator.person_id}`}
-                              >
-                                {narrator.person?.name ?? "Unknown"}
-                                {index < file.narrators!.length - 1 ? "," : ""}
-                              </Link>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* File metadata: publisher, imprint, release date, URL */}
-                      {(file.publisher ||
-                        file.imprint ||
-                        file.release_date ||
-                        file.url) && (
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          {file.publisher && (
-                            <span>
-                              <span className="font-medium">Publisher:</span>{" "}
-                              {file.publisher.name}
-                            </span>
-                          )}
-                          {file.imprint && (
-                            <span>
-                              <span className="font-medium">Imprint:</span>{" "}
-                              {file.imprint.name}
-                            </span>
-                          )}
-                          {file.release_date && (
-                            <span>
-                              <span className="font-medium">Released:</span>{" "}
-                              {formatDate(file.release_date)}
-                            </span>
-                          )}
-                          {file.url && (
-                            <span>
-                              <span className="font-medium">URL:</span>{" "}
-                              <a
-                                className="text-primary hover:underline"
-                                href={file.url}
-                                rel="noopener noreferrer"
-                                target="_blank"
-                              >
-                                {file.url.length > 50
-                                  ? file.url.substring(0, 50) + "..."
-                                  : file.url}
-                              </a>
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Identifiers */}
-                      {file.identifiers && file.identifiers.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {file.identifiers.map((id, idx) => (
-                            <Badge
-                              className="text-xs"
-                              key={idx}
-                              variant="outline"
-                            >
-                              <span className="font-medium">
-                                {formatIdentifierType(id.type)}
-                              </span>
-                              <span className="mx-1">:</span>
-                              <span className="font-mono select-all">
-                                {id.value}
-                              </span>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                      libraryDownloadPreference={
+                        libraryQuery.data?.download_format_preference
+                      }
+                      libraryId={libraryId!}
+                      onCancelDownload={handleCancelDownload}
+                      onDownload={() => handleDownload(file.id, file.file_type)}
+                      onDownloadKepub={() => handleDownloadKepub(file.id)}
+                      onDownloadOriginal={() => handleDownloadOriginal(file.id)}
+                      onDownloadWithEndpoint={(endpoint) =>
+                        handleDownloadWithEndpoint(file.id, endpoint)
+                      }
+                      onEdit={() => setEditingFile(file)}
+                      onToggleExpand={() => toggleFileExpanded(file.id)}
+                    />
                   ))}
                 </div>
               </div>
@@ -692,56 +816,31 @@ const BookDetail = () => {
                     </h3>
                     <div className="space-y-2">
                       {supplements.map((file) => (
-                        <div
-                          className="border-l-4 border-l-muted-foreground/30 pl-4 py-2"
+                        <FileRow
+                          file={file}
+                          hasExpandableMetadata={hasExpandableMetadata(file)}
+                          isDownloading={downloadingFileId === file.id}
+                          isExpanded={expandedFileIds.has(file.id)}
+                          isSupplement
                           key={file.id}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <Badge
-                                className="uppercase text-xs"
-                                variant="outline"
-                              >
-                                {file.file_type}
-                              </Badge>
-                              <div className="flex flex-col min-w-0">
-                                <span
-                                  className="text-sm truncate"
-                                  title={
-                                    file.name || getFilename(file.filepath)
-                                  }
-                                >
-                                  {file.name || getFilename(file.filepath)}
-                                </span>
-                                <span
-                                  className="text-xs text-muted-foreground truncate"
-                                  title={file.filepath}
-                                >
-                                  {getFilename(file.filepath)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
-                              <span>{formatFileSize(file.filesize_bytes)}</span>
-                              <Button
-                                onClick={() => handleDownloadOriginal(file.id)}
-                                size="sm"
-                                title="Download"
-                                variant="ghost"
-                              >
-                                <Download className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                onClick={() => setEditingFile(file)}
-                                size="sm"
-                                title="Edit"
-                                variant="ghost"
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
+                          libraryDownloadPreference={
+                            libraryQuery.data?.download_format_preference
+                          }
+                          libraryId={libraryId!}
+                          onCancelDownload={handleCancelDownload}
+                          onDownload={() =>
+                            handleDownload(file.id, file.file_type)
+                          }
+                          onDownloadKepub={() => handleDownloadKepub(file.id)}
+                          onDownloadOriginal={() =>
+                            handleDownloadOriginal(file.id)
+                          }
+                          onDownloadWithEndpoint={(endpoint) =>
+                            handleDownloadWithEndpoint(file.id, endpoint)
+                          }
+                          onEdit={() => setEditingFile(file)}
+                          onToggleExpand={() => toggleFileExpanded(file.id)}
+                        />
                       ))}
                     </div>
                   </div>
