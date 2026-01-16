@@ -2553,3 +2553,51 @@ func TestProcessScanJob_RescanPreservesManualEdits(t *testing.T) {
 	assert.Equal(t, "Manual Title", allBooks[0].Title, "manual title should be preserved")
 	assert.Equal(t, models.DataSourceManual, allBooks[0].TitleSource, "manual title source should be preserved")
 }
+
+// TestProcessScanJob_RescanUpdatesSortTitle tests that when title is updated on rescan,
+// the sort_title is regenerated from the new title (using priority check).
+func TestProcessScanJob_RescanUpdatesSortTitle(t *testing.T) {
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create EPUB with title that starts with "The" (sortname removes leading articles)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "My Book")
+	epubPath := filepath.Join(bookDir, "book.epub")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "The Great Book",
+		Authors: []string{"Author"},
+	})
+
+	// First scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "The Great Book", allBooks[0].Title)
+	assert.Equal(t, "Great Book, The", allBooks[0].SortTitle, "sort_title should move leading 'The' to end")
+	assert.Equal(t, models.DataSourceFilepath, allBooks[0].SortTitleSource, "initial sort_title comes from filepath")
+
+	// Remove the old EPUB and sidecar files, then create a new EPUB with different title
+	os.Remove(epubPath)
+	os.Remove(filepath.Join(bookDir, "My Book.metadata.json"))   // Book sidecar
+	os.Remove(filepath.Join(bookDir, "book.epub.metadata.json")) // File sidecar
+	os.Remove(filepath.Join(bookDir, "book.epub.cover.png"))     // Cover file
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "An Amazing Story",
+		Authors: []string{"Author"},
+	})
+
+	// Second scan (rescan)
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify both title and sort_title were updated
+	allBooks = tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "An Amazing Story", allBooks[0].Title, "title should be updated on rescan")
+	assert.Equal(t, "Amazing Story, An", allBooks[0].SortTitle, "sort_title should be regenerated from new title")
+	assert.Equal(t, models.DataSourceEPUBMetadata, allBooks[0].SortTitleSource, "sort_title_source should match title_source")
+}

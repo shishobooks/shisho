@@ -26,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
 var extensionsToScan = map[string]map[string]struct{}{
@@ -230,6 +231,23 @@ func discoverRootLevelSupplements(mainFilePath string, libraryPath string, exclu
 	}
 
 	return supplements, nil
+}
+
+// getDataSourceForFile returns the appropriate data source based on file extension.
+// File sidecars use the file's actual type to ensure they have the same priority
+// as the file's metadata.
+func getDataSourceForFile(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".epub":
+		return models.DataSourceEPUBMetadata
+	case ".cbz":
+		return models.DataSourceCBZMetadata
+	case ".m4b":
+		return models.DataSourceM4BMetadata
+	default:
+		return models.DataSourceFileMetadata
+	}
 }
 
 func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error {
@@ -651,7 +669,7 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
-	// Read sidecar files if they exist (sidecar has priority 1, higher than file metadata)
+	// Read sidecar files if they exist (same priority as file metadata)
 	var fileSidecarData *sidecar.FileSidecar
 	bookSidecarData, err := sidecar.ReadBookSidecar(bookPath)
 	if err != nil {
@@ -662,15 +680,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		jobLog.Warn("failed to read file sidecar", logger.Data{"error": err.Error()})
 	}
 
-	// Apply book sidecar data (higher priority than file metadata)
+	// Apply book sidecar data (same priority as file metadata)
 	if bookSidecarData != nil {
 		jobLog.Info("applying book sidecar data", nil)
-		if bookSidecarData.Title != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[titleSource] {
+		if bookSidecarData.Title != "" && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[titleSource] {
 			title = bookSidecarData.Title
-			titleSource = models.DataSourceSidecar
+			titleSource = models.DataSourceFileMetadata
 		}
-		if len(bookSidecarData.Authors) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[authorSource] {
-			authorSource = models.DataSourceSidecar
+		if len(bookSidecarData.Authors) > 0 && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[authorSource] {
+			authorSource = models.DataSourceFileMetadata
 			authors = make([]mediafile.ParsedAuthor, 0)
 			for _, a := range bookSidecarData.Authors {
 				role := ""
@@ -680,8 +698,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				authors = append(authors, mediafile.ParsedAuthor{Name: a.Name, Role: role})
 			}
 		}
-		if len(bookSidecarData.Series) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[seriesSource] {
-			seriesSource = models.DataSourceSidecar
+		if len(bookSidecarData.Series) > 0 && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[seriesSource] {
+			seriesSource = models.DataSourceFileMetadata
 			seriesList = make([]seriesData, 0, len(bookSidecarData.Series))
 			for _, s := range bookSidecarData.Series {
 				if s.Name != "" {
@@ -693,21 +711,21 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 				}
 			}
 		}
-		if len(bookSidecarData.Genres) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[genreSource] {
-			genreSource = models.DataSourceSidecar
+		if len(bookSidecarData.Genres) > 0 && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[genreSource] {
+			genreSource = models.DataSourceFileMetadata
 			genreNames = bookSidecarData.Genres
 		}
-		if len(bookSidecarData.Tags) > 0 && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[tagSource] {
-			tagSource = models.DataSourceSidecar
+		if len(bookSidecarData.Tags) > 0 && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[tagSource] {
+			tagSource = models.DataSourceFileMetadata
 			tagNames = bookSidecarData.Tags
 		}
-		if bookSidecarData.Subtitle != nil && *bookSidecarData.Subtitle != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[subtitleSource] {
+		if bookSidecarData.Subtitle != nil && *bookSidecarData.Subtitle != "" && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[subtitleSource] {
 			subtitle = bookSidecarData.Subtitle
-			subtitleSource = models.DataSourceSidecar
+			subtitleSource = models.DataSourceFileMetadata
 		}
-		if bookSidecarData.Description != nil && *bookSidecarData.Description != "" && models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[descriptionSource] {
+		if bookSidecarData.Description != nil && *bookSidecarData.Description != "" && models.DataSourcePriority[models.DataSourceFileMetadata] < models.DataSourcePriority[descriptionSource] {
 			description = bookSidecarData.Description
-			descriptionSource = models.DataSourceSidecar
+			descriptionSource = models.DataSourceFileMetadata
 		}
 	}
 
@@ -776,6 +794,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingBook.TitleSource = titleSource
 			updateOptions.Columns = append(updateOptions.Columns, "title", "title_source")
 			metadataChanged = true
+
+			// Regenerate sort_title from new title if the title source has sufficient priority
+			newSortTitle := sortname.ForTitle(title)
+			if shouldUpdateScalar(newSortTitle, existingBook.SortTitle, titleSource, existingBook.SortTitleSource) {
+				jobLog.Info("updating sort_title", logger.Data{"new_sort_title": newSortTitle, "old_sort_title": existingBook.SortTitle})
+				existingBook.SortTitle = newSortTitle
+				existingBook.SortTitleSource = titleSource
+				updateOptions.Columns = append(updateOptions.Columns, "sort_title", "sort_title_source")
+			}
 		}
 
 		// Update subtitle only if the new subtitle is non-empty and from a higher or equal priority source with different value
@@ -1215,11 +1242,14 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
-	// Apply file sidecar data for narrators (higher priority than file metadata)
+	// Determine the appropriate data source for file sidecar data
+	fileSidecarSource := getDataSourceForFile(path)
+
+	// Apply file sidecar data for narrators (same priority as file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Narrators) > 0 {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[narratorSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[narratorSource] {
 			jobLog.Info("applying file sidecar data for narrators", logger.Data{"narrator_count": len(fileSidecarData.Narrators)})
-			narratorSource = models.DataSourceSidecar
+			narratorSource = fileSidecarSource
 			narratorNames = make([]string, 0)
 			for _, n := range fileSidecarData.Narrators {
 				narratorNames = append(narratorNames, n.Name)
@@ -1227,11 +1257,11 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
-	// Apply file sidecar data for identifiers (higher priority than file metadata)
+	// Apply file sidecar data for identifiers (same priority as file metadata)
 	if fileSidecarData != nil && len(fileSidecarData.Identifiers) > 0 {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[identifierSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[identifierSource] {
 			jobLog.Info("applying file sidecar data for identifiers", logger.Data{"identifier_count": len(fileSidecarData.Identifiers)})
-			identifierSource = models.DataSourceSidecar
+			identifierSource = fileSidecarSource
 			identifiers = make([]mediafile.ParsedIdentifier, 0)
 			for _, id := range fileSidecarData.Identifiers {
 				identifiers = append(identifiers, mediafile.ParsedIdentifier{
@@ -1242,47 +1272,47 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
-	// Apply file sidecar data for URL (higher priority than file metadata)
+	// Apply file sidecar data for URL (same priority as file metadata)
 	if fileSidecarData != nil && fileSidecarData.URL != nil && *fileSidecarData.URL != "" {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[fileURLSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[fileURLSource] {
 			fileURL = fileSidecarData.URL
-			fileURLSource = models.DataSourceSidecar
+			fileURLSource = fileSidecarSource
 		}
 	}
 
-	// Apply file sidecar data for publisher (higher priority than file metadata)
+	// Apply file sidecar data for publisher (same priority as file metadata)
 	if fileSidecarData != nil && fileSidecarData.Publisher != nil && *fileSidecarData.Publisher != "" {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[publisherSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[publisherSource] {
 			publisherName = fileSidecarData.Publisher
-			publisherSource = models.DataSourceSidecar
+			publisherSource = fileSidecarSource
 		}
 	}
 
-	// Apply file sidecar data for imprint (higher priority than file metadata)
+	// Apply file sidecar data for imprint (same priority as file metadata)
 	if fileSidecarData != nil && fileSidecarData.Imprint != nil && *fileSidecarData.Imprint != "" {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[imprintSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[imprintSource] {
 			imprintName = fileSidecarData.Imprint
-			imprintSource = models.DataSourceSidecar
+			imprintSource = fileSidecarSource
 		}
 	}
 
-	// Apply file sidecar data for release date (higher priority than file metadata)
+	// Apply file sidecar data for release date (same priority as file metadata)
 	if fileSidecarData != nil && fileSidecarData.ReleaseDate != nil && *fileSidecarData.ReleaseDate != "" {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[releaseDateSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[releaseDateSource] {
 			// Parse the ISO 8601 date string from sidecar
 			if t, err := time.Parse("2006-01-02", *fileSidecarData.ReleaseDate); err == nil {
 				releaseDate = &t
-				releaseDateSource = models.DataSourceSidecar
+				releaseDateSource = fileSidecarSource
 			}
 		}
 	}
 
-	// Apply file sidecar data for name (higher priority than file metadata)
+	// Apply file sidecar data for name (same priority as file metadata)
 	if fileSidecarData != nil && fileSidecarData.Name != nil && *fileSidecarData.Name != "" {
-		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[fileNameSource] {
+		if models.DataSourcePriority[fileSidecarSource] < models.DataSourcePriority[fileNameSource] {
 			jobLog.Info("applying file sidecar data for name", logger.Data{"name": *fileSidecarData.Name})
 			fileName = fileSidecarData.Name
-			fileNameSource = models.DataSourceSidecar
+			fileNameSource = fileSidecarSource
 		}
 	}
 
