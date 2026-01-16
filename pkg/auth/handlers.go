@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -137,6 +138,15 @@ func (h *handler) status(c echo.Context) error {
 // setup creates the first admin user.
 func (h *handler) setup(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	// Check if setup is still allowed (defense-in-depth)
+	count, err := h.authService.CountUsers(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if count > 0 {
+		return errcodes.Forbidden("Setup has already been completed")
+	}
 
 	params := SetupPayload{}
 	if err := c.Bind(&params); err != nil {
