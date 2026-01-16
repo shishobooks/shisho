@@ -14,7 +14,12 @@
     "lint:prettier": "prettier --check .",
     "lint:types": "tsc -b --noEmit",
     "preview": "vite preview",
-    "start": "vite"
+    "start": "vite",
+    "test": "concurrently --kill-others-on-fail --group \"yarn:test:*\"",
+    "test:unit": "vitest run",
+    "test:e2e": "concurrently --kill-others-on-fail --group \"yarn:test:e2e:*\"",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:firefox": "playwright test --project=firefox"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -49,23 +54,29 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
-    "concurrently": "^9.1.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
+    "@playwright/test": "^1.57.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.1",
     "@types/lodash": "^4.17.16",
     "@types/node": "^22.13.10",
     "@types/qs": "^6.9.18",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react-swc": "^3.8.0",
+    "@vitest/coverage-v8": "^4.0.17",
+    "concurrently": "^9.1.2",
     "eslint": "^9.21.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
+    "jsdom": "^27.4.0",
     "prettier": "3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.0.17"
   }
 }

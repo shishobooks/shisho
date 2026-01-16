@@ -47,8 +47,17 @@ type Config struct {
 	// Authentication settings
 	JWTSecret string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
 
+	// Environment settings
+	// Set to "test" to enable test-only API endpoints (e.g., /test/users)
+	Environment string `koanf:"environment" json:"environment"`
+
 	// Internal settings (computed, not from config file)
 	Hostname string `koanf:"-" json:"-"`
+}
+
+// IsTestMode returns true if the server is running in test mode.
+func (c *Config) IsTestMode() bool {
+	return c.Environment == "test"
 }
 
 // defaults returns a Config with default values.

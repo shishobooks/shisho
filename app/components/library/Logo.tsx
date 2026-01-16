@@ -4,16 +4,32 @@ import { cn } from "@/libraries/utils";
 
 const ShelfIcon = ({ className }: { className?: string }) => (
   <svg
-    viewBox="0 0 48 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
     className={cn("text-primary dark:text-violet-300", className)}
+    fill="none"
+    viewBox="0 0 48 48"
+    xmlns="http://www.w3.org/2000/svg"
   >
-    <rect x="4" y="40" width="40" height="4" rx="1" fill="currentColor" />
-    <rect x="8" y="12" width="7" height="28" rx="1" fill="currentColor" />
-    <rect x="17" y="8" width="6" height="32" rx="1" fill="currentColor" opacity="0.7" />
-    <rect x="25" y="16" width="8" height="24" rx="1" fill="currentColor" />
-    <rect x="35" y="10" width="5" height="30" rx="1" fill="currentColor" opacity="0.7" />
+    <rect fill="currentColor" height="4" rx="1" width="40" x="4" y="40" />
+    <rect fill="currentColor" height="28" rx="1" width="7" x="8" y="12" />
+    <rect
+      fill="currentColor"
+      height="32"
+      opacity="0.7"
+      rx="1"
+      width="6"
+      x="17"
+      y="8"
+    />
+    <rect fill="currentColor" height="24" rx="1" width="8" x="25" y="16" />
+    <rect
+      fill="currentColor"
+      height="30"
+      opacity="0.7"
+      rx="1"
+      width="5"
+      x="35"
+      y="10"
+    />
   </svg>
 );
 

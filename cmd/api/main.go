@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -62,8 +65,23 @@ func main() {
 	graceful := signals.Setup()
 
 	go func() {
-		log.Info("server started", logger.Data{"port": cfg.ServerPort})
-		err := srv.ListenAndServe()
+		addr := fmt.Sprintf(":%d", cfg.ServerPort)
+		lc := net.ListenConfig{}
+		listener, err := lc.Listen(ctx, "tcp", addr)
+		if err != nil {
+			log.Err(err).Fatal("failed to bind port")
+		}
+
+		// Extract actual port (useful when ServerPort is 0)
+		actualPort := listener.Addr().(*net.TCPAddr).Port
+		log.Info("server started", logger.Data{"port": actualPort})
+
+		// Write port file for Vite to read
+		if err := writePortFile(actualPort); err != nil {
+			log.Err(err).Error("failed to write port file")
+		}
+
+		err = srv.Serve(listener)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Err(err).Fatal("server stopped")
 		}
@@ -112,4 +130,9 @@ func initDownloadCacheDir(dir string) error {
 	}
 
 	return nil
+}
+
+// writePortFile writes the server's actual port to tmp/api.port for frontend dev server.
+func writePortFile(port int) error {
+	return os.WriteFile("tmp/api.port", []byte(strconv.Itoa(port)), 0600)
 }

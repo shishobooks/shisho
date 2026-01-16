@@ -104,6 +104,70 @@ When displaying user-generated content that may be long (names, titles, etc.):
 </CommandItem>
 ```
 
+## Testing
+
+### Test Stack
+
+| Level | Framework | Purpose |
+|-------|-----------|---------|
+| Unit + Component | Vitest + React Testing Library | Fast, native Vite integration |
+| E2E | Playwright | Browser automation |
+
+### Running Tests
+
+```bash
+yarn test           # Run all tests (unit + E2E via concurrently)
+yarn test:unit      # Run Vitest unit/component tests with coverage
+yarn test:e2e       # Run Playwright E2E tests
+make test:js        # Run tests via Makefile (used in `make check`)
+```
+
+### Test File Locations
+
+- **Unit/Component tests**: Colocated with source files as `*.test.ts(x)`
+- **E2E tests**: Separate `e2e/` directory
+
+### Writing Unit Tests
+
+```typescript
+import { describe, expect, it } from "vitest";
+import { myFunction } from "./myFile";
+
+describe("myFunction", () => {
+  it("returns expected value", () => {
+    expect(myFunction("input")).toBe("output");
+  });
+});
+```
+
+### Writing Component Tests
+
+```typescript
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import MyComponent from "./MyComponent";
+
+describe("MyComponent", () => {
+  it("renders correctly", () => {
+    render(<MyComponent prop="value" />);
+    expect(screen.getByText("expected text")).toBeInTheDocument();
+  });
+});
+```
+
+### E2E Tests
+
+**See the `e2e-testing` skill for detailed E2E patterns**, including:
+- Test independence via `beforeAll` hooks
+- Test-only API endpoints (`ENVIRONMENT=test`)
+- Common pitfalls (shared database, toast assertions, redirect expectations)
+
+### Coverage
+
+- Collected automatically with unit tests (V8 provider)
+- Reports: text (console), lcov, HTML in `coverage/`
+- Not enforced, tracked for visibility
+
 ## Key Files
 
 | Purpose | Location |
@@ -114,3 +178,7 @@ When displaying user-generated content that may be long (names, titles, etc.):
 | Generated types | `app/types/generated/` |
 | Components | `app/components/` |
 | Pages | `app/components/pages/` |
+| Vitest config | `vitest.config.ts` |
+| Playwright config | `playwright.config.ts` |
+| Unit/component tests | `app/**/*.test.{ts,tsx}` |
+| E2E tests | `e2e/*.spec.ts` |

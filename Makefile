@@ -17,7 +17,7 @@ TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 
 .PHONY: check
 check:
-	$(MAKE) -j3 test lint lint\:js
+	$(MAKE) -j4 test test\:js lint lint\:js
 
 .PHONY: build
 build:
@@ -52,6 +52,10 @@ lint: $(BUILD_DIR)/golangci-lint
 lint\:js:
 	yarn lint
 
+.PHONY: test\:js
+test\:js:
+	yarn test
+
 $(BUILD_DIR)/golangci-lint:
 	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(BUILD_DIR) v2.7.2
 
@@ -70,6 +74,10 @@ start: $(BUILD_DIR)/hivemind
 .PHONY: start\:air
 start\:air: $(BUILD_DIR)/air
 	$(BUILD_DIR)/air
+
+.PHONY: start\:api
+start\:api:
+	go run ./cmd/api
 
 .PHONY: test
 test:

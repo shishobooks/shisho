@@ -30,6 +30,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/tags"
+	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/users"
 	"github.com/uptrace/bun"
 )
@@ -48,6 +49,12 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 	e.Use(middleware.CORS())
 
 	health.RegisterRoutes(e)
+
+	// Register test-only routes when in test mode
+	// These endpoints allow E2E tests to set up and tear down test data
+	if cfg.IsTestMode() {
+		testutils.RegisterRoutes(e, db)
+	}
 
 	// Register auth routes and get the auth service
 	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret)

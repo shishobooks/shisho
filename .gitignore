@@ -360,3 +360,8 @@ build/
 tmp/
 app/types/generated/*.ts
 .playwright-mcp
+
+# Playwright
+playwright-report/
+test-results/
+api
