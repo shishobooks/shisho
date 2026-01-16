@@ -570,4 +570,70 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "asin", meta.Identifiers[0].Type)
 		assert.Equal(t, "B08N5WRWNW", meta.Identifiers[0].Value)
 	})
+
+	t.Run("uses file.Name for title when available", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Original Title",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		name := "Custom Audiobook Title"
+		book := &models.Book{
+			Title: "Book Title",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Name:     &name,
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse and verify file.Name is used for title
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Custom Audiobook Title", meta.Title)
+	})
+
+	t.Run("uses book.Title when file.Name is empty", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Original Title",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		emptyName := ""
+		book := &models.Book{
+			Title: "Book Title",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Name:     &emptyName,
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse and verify book.Title is used when file.Name is empty
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Book Title", meta.Title)
+	})
 }

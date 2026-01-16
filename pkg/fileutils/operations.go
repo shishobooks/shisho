@@ -87,7 +87,31 @@ func OrganizeRootLevelFile(originalPath string, opts OrganizedNameOptions) (*Org
 }
 
 // RenameOrganizedFile renames an already organized file with new metadata.
+// Also renames associated cover images, file sidecar, AND the book sidecar.
+// Use this for BOOK-level changes (title, author changes) that should update the book sidecar.
+// For FILE-level changes (file name, narrator), use RenameOrganizedFileOnly.
 func RenameOrganizedFile(currentPath string, opts OrganizedNameOptions) (string, error) {
+	return renameOrganizedFileInternal(currentPath, opts, false)
+}
+
+// RenameOrganizedFileOnly renames a file with new metadata, but does NOT rename the book sidecar.
+// Renames the file and its associated cover images and file-specific sidecar.
+// Use this for FILE-level changes (file name, narrator) that should not affect the book sidecar.
+// The book sidecar should only be renamed when book-level metadata (title, author) changes.
+func RenameOrganizedFileOnly(currentPath string, opts OrganizedNameOptions) (string, error) {
+	return renameOrganizedFileInternal(currentPath, opts, true)
+}
+
+// RenameOrganizedFileForSupplement is an alias for RenameOrganizedFileOnly for backwards compatibility.
+//
+// Deprecated: Use RenameOrganizedFileOnly instead.
+func RenameOrganizedFileForSupplement(currentPath string, opts OrganizedNameOptions) (string, error) {
+	return RenameOrganizedFileOnly(currentPath, opts)
+}
+
+// renameOrganizedFileInternal is the internal implementation of file renaming.
+// skipBookSidecar controls whether to skip renaming the book sidecar file.
+func renameOrganizedFileInternal(currentPath string, opts OrganizedNameOptions, skipBookSidecar bool) (string, error) {
 	// Get the directory containing the current file
 	currentDir := filepath.Dir(currentPath)
 
@@ -112,7 +136,69 @@ func RenameOrganizedFile(currentPath string, opts OrganizedNameOptions) (string,
 		return currentPath, errors.WithStack(err)
 	}
 
+	// Rename associated cover images and sidecar files
+	// Ignore errors here - the main file has been renamed successfully
+	_, _ = renameAssociatedFiles(currentPath, newPath, skipBookSidecar)
+
 	return newPath, nil
+}
+
+// renameAssociatedFiles renames cover images and sidecar files when a file is renamed.
+// This handles same-directory renames (not moves between directories).
+// If skipBookSidecar is true, the book sidecar ({basename}.metadata.json) will not be renamed.
+// This should be true for supplement files to avoid incorrectly renaming the book's sidecar.
+func renameAssociatedFiles(originalPath, newPath string, skipBookSidecar bool) (int, error) {
+	dir := filepath.Dir(originalPath)
+	originalFilename := filepath.Base(originalPath)
+	newFilename := filepath.Base(newPath)
+
+	// Common image extensions for covers
+	imageExtensions := []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+	renamed := 0
+
+	// Rename individual covers: {filename}.cover.{ext}
+	for _, ext := range imageExtensions {
+		originalCoverName := originalFilename + ".cover" + ext
+		originalCoverPath := filepath.Join(dir, originalCoverName)
+
+		if _, err := os.Stat(originalCoverPath); err == nil {
+			newCoverName := newFilename + ".cover" + ext
+			newCoverPath := filepath.Join(dir, newCoverName)
+
+			if err := os.Rename(originalCoverPath, newCoverPath); err != nil {
+				return renamed, errors.WithStack(err)
+			}
+			renamed++
+		}
+	}
+
+	// Rename file sidecar: {filepath}.metadata.json
+	originalFileSidecar := originalPath + ".metadata.json"
+	if _, err := os.Stat(originalFileSidecar); err == nil {
+		newFileSidecar := newPath + ".metadata.json"
+		if err := os.Rename(originalFileSidecar, newFileSidecar); err != nil {
+			return renamed, errors.WithStack(err)
+		}
+	}
+
+	// Rename book sidecar if basename changed: {basename}.metadata.json
+	// Skip this for supplement files to avoid incorrectly renaming the book's sidecar.
+	if !skipBookSidecar {
+		originalBaseName := getBaseNameWithoutExt(originalPath)
+		newBaseName := getBaseNameWithoutExt(newPath)
+		if originalBaseName != newBaseName {
+			originalBookSidecar := filepath.Join(dir, originalBaseName+".metadata.json")
+			if _, err := os.Stat(originalBookSidecar); err == nil {
+				newBookSidecar := filepath.Join(dir, newBaseName+".metadata.json")
+				if err := os.Rename(originalBookSidecar, newBookSidecar); err != nil {
+					return renamed, errors.WithStack(err)
+				}
+			}
+		}
+	}
+
+	return renamed, nil
 }
 
 // RenameOrganizedFolder renames a folder containing organized files.
@@ -352,6 +438,17 @@ func getBaseNameWithoutExt(path string) string {
 	base := filepath.Base(path)
 	ext := filepath.Ext(base)
 	return strings.TrimSuffix(base, ext)
+}
+
+// ComputeNewCoverPath computes the new cover image path after a file has been renamed.
+// It preserves the cover's extension while updating the base filename to match the new file path.
+// Returns empty string if oldCoverPath is empty.
+func ComputeNewCoverPath(oldCoverPath, newFilePath string) string {
+	if oldCoverPath == "" {
+		return ""
+	}
+	coverExt := filepath.Ext(oldCoverPath)
+	return newFilePath + ".cover" + coverExt
 }
 
 // CoverImageExtensions contains all supported image extensions for cover files.

@@ -751,16 +751,25 @@ func (h *handler) updateFile(c echo.Context) error {
 				}
 			}
 
+			// Use file.Name for title if available, otherwise book.Title
+			title := book.Title
+			if file.Name != nil && *file.Name != "" {
+				title = *file.Name
+			}
+
 			// Generate organized name options
 			organizeOpts := fileutils.OrganizedNameOptions{
 				AuthorNames:   authorNames,
 				NarratorNames: narratorNames,
-				Title:         book.Title,
+				Title:         title,
 				FileType:      file.FileType,
 			}
 
 			// Rename the file
-			newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+			// Use RenameOrganizedFileForSupplement to avoid renaming the book sidecar.
+			// File-level changes (narrator, name) should not affect the book's sidecar -
+			// only book-level changes (title, author) should rename the book sidecar.
+			newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
 			if err != nil {
 				log.Error("failed to rename file with narrator", logger.Data{
 					"file_id": file.ID,
@@ -773,9 +782,99 @@ func (h *handler) updateFile(c echo.Context) error {
 					"old_path": file.Filepath,
 					"new_path": newPath,
 				})
+				// Update cover path if it exists (covers are renamed by rename function)
+				if file.CoverImagePath != nil {
+					// CoverImagePath stores just the filename, so extract Base from the computed path
+					newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
+					file.CoverImagePath = &newCoverPath
+					opts.Columns = append(opts.Columns, "cover_image_path")
+				}
 				file.Filepath = newPath
 				opts.Columns = append(opts.Columns, "filepath")
 			}
+		}
+	}
+
+	// Handle name update
+	nameChanged := false
+	if params.Name != nil {
+		currentName := ""
+		if file.Name != nil {
+			currentName = *file.Name
+		}
+		if *params.Name != currentName {
+			nameChanged = true
+			if *params.Name == "" {
+				file.Name = nil
+				file.NameSource = nil
+			} else {
+				file.Name = params.Name
+				file.NameSource = strPtr(models.DataSourceManual)
+			}
+			opts.Columns = append(opts.Columns, "name", "name_source")
+		}
+	}
+
+	// Reorganize file if name changed and library has OrganizeFileStructure enabled
+	if nameChanged && library.OrganizeFileStructure {
+		// Get author names from the book
+		authorNames := make([]string, 0, len(book.Authors))
+		for _, a := range book.Authors {
+			if a.Person != nil {
+				authorNames = append(authorNames, a.Person.Name)
+			}
+		}
+
+		// Get narrator names if M4B
+		narratorNames := make([]string, 0)
+		if file.FileType == models.FileTypeM4B {
+			for _, n := range file.Narrators {
+				if n.Person != nil {
+					narratorNames = append(narratorNames, n.Person.Name)
+				}
+			}
+		}
+
+		// Use file.Name for title if available, otherwise book.Title
+		title := book.Title
+		if file.Name != nil && *file.Name != "" {
+			title = *file.Name
+		}
+
+		// Generate organized name options
+		organizeOpts := fileutils.OrganizedNameOptions{
+			AuthorNames:   authorNames,
+			NarratorNames: narratorNames,
+			Title:         title,
+			FileType:      file.FileType,
+		}
+
+		// Rename the file
+		// Use RenameOrganizedFileForSupplement to avoid renaming the book sidecar.
+		// File-level changes (name) should not affect the book's sidecar -
+		// only book-level changes (title, author) should rename the book sidecar.
+		newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
+		if err != nil {
+			log.Error("failed to rename file after name change", logger.Data{
+				"file_id": file.ID,
+				"path":    file.Filepath,
+				"error":   err.Error(),
+			})
+		} else if newPath != file.Filepath {
+			log.Info("renamed file after name change", logger.Data{
+				"file_id":  file.ID,
+				"old_path": file.Filepath,
+				"new_path": newPath,
+			})
+			// Update cover path if it exists (covers are renamed by rename function)
+			if file.CoverImagePath != nil {
+				// CoverImagePath stores just the filename, so extract Base from the computed path
+				newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
+				file.CoverImagePath = &newCoverPath
+				opts.Columns = append(opts.Columns, "cover_image_path")
+			}
+			file.Filepath = newPath
+			opts.Columns = append(opts.Columns, "filepath")
 		}
 	}
 

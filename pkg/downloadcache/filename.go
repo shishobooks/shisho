@@ -41,8 +41,13 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
+	// Use file.Name if available, otherwise fall back to book.Title
+	titleSource := book.Title
+	if file.Name != nil && *file.Name != "" {
+		titleSource = *file.Name
+	}
 	// Pad volume numbers for lexicographic sorting, then sanitize
-	title := sanitizeFilename(padVolumeNumber(book.Title))
+	title := sanitizeFilename(padVolumeNumber(titleSource))
 	author := getFirstAuthorName(book)
 	series, number := getFirstSeries(book)
 	narrator := getFirstNarratorName(file)
@@ -56,7 +61,7 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 	}
 
 	// Add series and number if available, unless title already has a volume number
-	titleHasVolume := volumePattern.MatchString(book.Title)
+	titleHasVolume := volumePattern.MatchString(titleSource)
 	if series != "" && !titleHasVolume {
 		seriesPart := sanitizeFilename(series)
 		if number != nil {
@@ -190,9 +195,14 @@ func sanitizeKoboFilename(s string) string {
 // FormatKepubDownloadFilename generates a formatted filename for downloading a KePub file.
 // Uses Kobo-safe characters only to ensure compatibility with Kobo e-readers.
 // Format: Author - Series Number - Title.kepub.epub (no brackets, no hash symbols).
-func FormatKepubDownloadFilename(book *models.Book, _ *models.File) string {
+func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
+	// Use file.Name if available, otherwise fall back to book.Title
+	titleSource := book.Title
+	if file.Name != nil && *file.Name != "" {
+		titleSource = *file.Name
+	}
 	// Pad volume numbers for lexicographic sorting, then sanitize for Kobo
-	title := sanitizeKoboFilename(padVolumeNumber(book.Title))
+	title := sanitizeKoboFilename(padVolumeNumber(titleSource))
 	author := sanitizeKoboFilename(getFirstAuthorName(book))
 	series, number := getFirstSeries(book)
 
@@ -206,7 +216,7 @@ func FormatKepubDownloadFilename(book *models.Book, _ *models.File) string {
 
 	// Add series and number if available, unless title already has a volume number
 	// Use plain number format instead of # (Kobo doesn't like #)
-	titleHasVolume := volumePattern.MatchString(book.Title)
+	titleHasVolume := volumePattern.MatchString(titleSource)
 	if series != "" && !titleHasVolume {
 		seriesPart := sanitizeKoboFilename(series)
 		if number != nil {

@@ -56,9 +56,15 @@ func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 
 // buildMetadata constructs new Metadata from book/file models while preserving source metadata.
 func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *mp4.Metadata) *mp4.Metadata {
+	// Use file.Name for title if set, otherwise fall back to book.Title
+	title := book.Title
+	if file != nil && file.Name != nil && *file.Name != "" {
+		title = *file.Name
+	}
+
 	meta := &mp4.Metadata{
-		// From book model
-		Title:    book.Title,
+		// From book/file model
+		Title:    title,
 		Subtitle: "",
 
 		// Preserve from source (will be overwritten if we have new values)

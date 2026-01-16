@@ -536,6 +536,39 @@ func TestFingerprintEqual(t *testing.T) {
 	})
 }
 
+func TestComputeFingerprint_IncludesFileName(t *testing.T) {
+	name := "Custom Edition Name"
+	book := &models.Book{
+		Title: "Test Book",
+	}
+	file := &models.File{
+		Name: &name,
+	}
+
+	fp, err := ComputeFingerprint(book, file)
+
+	require.NoError(t, err)
+	assert.NotNil(t, fp.Name)
+	assert.Equal(t, "Custom Edition Name", *fp.Name)
+}
+
+func TestComputeFingerprint_DifferentNamesProduceDifferentHashes(t *testing.T) {
+	book := &models.Book{Title: "Test Book"}
+
+	name1 := "Edition A"
+	file1 := &models.File{Name: &name1}
+	fp1, _ := ComputeFingerprint(book, file1)
+
+	name2 := "Edition B"
+	file2 := &models.File{Name: &name2}
+	fp2, _ := ComputeFingerprint(book, file2)
+
+	hash1, _ := fp1.Hash()
+	hash2, _ := fp2.Hash()
+
+	assert.NotEqual(t, hash1, hash2, "Different names should produce different hashes")
+}
+
 func strPtr(s string) *string {
 	return &s
 }

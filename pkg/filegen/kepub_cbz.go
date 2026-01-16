@@ -28,9 +28,9 @@ func (g *KepubCBZGenerator) SupportedType() string {
 // Generate creates a KePub file at destPath from a CBZ source.
 // The CBZ is converted to a fixed-layout EPUB with KePub enhancements.
 // Images are copied byte-for-byte without modification (lossless).
-func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, _ *models.File) error {
+func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
 	// Build metadata from book model
-	metadata := buildCBZMetadata(book)
+	metadata := buildCBZMetadata(book, file)
 
 	if err := g.converter.ConvertCBZWithMetadata(ctx, srcPath, destPath, metadata); err != nil {
 		return NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format")
@@ -39,8 +39,8 @@ func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath stri
 	return nil
 }
 
-// buildCBZMetadata creates CBZMetadata from a book model.
-func buildCBZMetadata(book *models.Book) *kepub.CBZMetadata {
+// buildCBZMetadata creates CBZMetadata from a book and file model.
+func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 	if book == nil {
 		return nil
 	}
@@ -48,6 +48,11 @@ func buildCBZMetadata(book *models.Book) *kepub.CBZMetadata {
 	metadata := &kepub.CBZMetadata{
 		Title:    book.Title,
 		Subtitle: book.Subtitle,
+	}
+
+	// Set Name from file if available (takes precedence over Title in the converter)
+	if file != nil && file.Name != nil {
+		metadata.Name = file.Name
 	}
 
 	// Add authors with their roles and sort names

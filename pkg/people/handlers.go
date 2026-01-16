@@ -1,6 +1,7 @@
 package people
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -13,9 +14,26 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
+// FileOrganizer defines the interface for organizing files when person metadata changes.
+// This is used to break the import cycle between people and books packages.
+type FileOrganizer interface {
+	// OrganizeBookFiles reorganizes files for a book with the given ID.
+	// Returns error only for critical failures (database errors, etc.).
+	// File system errors are logged but don't cause failure.
+	OrganizeBookFiles(ctx context.Context, bookID int) error
+
+	// RenameNarratedFile renames an M4B file to include the updated narrator name.
+	// Returns the new path, or the original path if no rename was needed.
+	RenameNarratedFile(ctx context.Context, fileID int) (string, error)
+
+	// GetLibraryOrganizeSetting checks if a library has OrganizeFileStructure enabled.
+	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
+}
+
 type handler struct {
 	personService *Service
 	searchService *search.Service
+	fileOrganizer FileOrganizer // optional, can be nil if not configured
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -137,8 +155,10 @@ func (h *handler) update(c echo.Context) error {
 
 	// Keep track of what's been changed
 	opts := UpdatePersonOptions{Columns: []string{}}
+	nameChanged := false
 
 	if params.Name != nil && *params.Name != person.Name {
+		nameChanged = true
 		person.Name = *params.Name
 		// Regenerate sort name when name changes (unless sort_name_source is manual)
 		if person.SortNameSource != models.DataSourceManual {
@@ -180,6 +200,57 @@ func (h *handler) update(c echo.Context) error {
 	log := logger.FromContext(ctx)
 	if err := h.searchService.IndexPerson(ctx, person); err != nil {
 		log.Warn("failed to update search index for person", logger.Data{"person_id": person.ID, "error": err.Error()})
+	}
+
+	// If name changed and file organizer is configured, reorganize associated files
+	if nameChanged && h.fileOrganizer != nil {
+		// Check if library has OrganizeFileStructure enabled
+		organizeEnabled, err := h.fileOrganizer.GetLibraryOrganizeSetting(ctx, person.LibraryID)
+		if err != nil {
+			log.Warn("failed to check library organize setting", logger.Data{
+				"person_id":  person.ID,
+				"library_id": person.LibraryID,
+				"error":      err.Error(),
+			})
+		} else if organizeEnabled {
+			// Reorganize books where this person is an author
+			authoredBooks, err := h.personService.GetAuthoredBooks(ctx, id)
+			if err != nil {
+				log.Warn("failed to get authored books for reorganization", logger.Data{
+					"person_id": person.ID,
+					"error":     err.Error(),
+				})
+			} else {
+				for _, book := range authoredBooks {
+					if err := h.fileOrganizer.OrganizeBookFiles(ctx, book.ID); err != nil {
+						log.Warn("failed to reorganize book files after person name change", logger.Data{
+							"person_id": person.ID,
+							"book_id":   book.ID,
+							"error":     err.Error(),
+						})
+					}
+				}
+			}
+
+			// Rename M4B files where this person is a narrator
+			narratedFiles, err := h.personService.GetNarratedFiles(ctx, id)
+			if err != nil {
+				log.Warn("failed to get narrated files for reorganization", logger.Data{
+					"person_id": person.ID,
+					"error":     err.Error(),
+				})
+			} else {
+				for _, file := range narratedFiles {
+					if _, err := h.fileOrganizer.RenameNarratedFile(ctx, file.ID); err != nil {
+						log.Warn("failed to rename narrated file after person name change", logger.Data{
+							"person_id": person.ID,
+							"file_id":   file.ID,
+							"error":     err.Error(),
+						})
+					}
+				}
+			}
+		}
 	}
 
 	// Get counts

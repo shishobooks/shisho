@@ -114,7 +114,8 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	peopleGroup := e.Group("/people")
 	peopleGroup.Use(authMiddleware.Authenticate)
 	peopleGroup.Use(authMiddleware.RequirePermission(models.ResourcePeople, models.OperationRead))
-	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware)
+	fileOrganizer := NewFileOrganizer(db)
+	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware, fileOrganizer)
 
 	// Series routes
 	seriesGroup := e.Group("/series")

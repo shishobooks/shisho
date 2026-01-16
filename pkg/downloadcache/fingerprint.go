@@ -36,6 +36,7 @@ type Fingerprint struct {
 	Cover       *FingerprintCover       `json:"cover,omitempty"`
 	CoverPage   *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
 	Format      string                  `json:"format,omitempty"`     // Download format: original or kepub
+	Name        *string                 `json:"name,omitempty"`       // File name (edition name)
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -89,6 +90,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 	if file != nil {
 		fp.URL = file.URL
 		fp.ReleaseDate = file.ReleaseDate
+		fp.Name = file.Name
 		if file.Publisher != nil {
 			fp.Publisher = &file.Publisher.Name
 		}

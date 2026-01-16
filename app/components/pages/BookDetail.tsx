@@ -77,6 +77,11 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString();
 };
 
+// Helper to extract filename from filepath
+const getFilename = (filepath: string): string => {
+  return filepath.split("/").pop() || filepath;
+};
+
 function formatIdentifierType(type: string): string {
   switch (type) {
     case "isbn_10":
@@ -507,9 +512,20 @@ const BookDetail = () => {
                           >
                             {file.file_type}
                           </Badge>
-                          <span className="font-medium text-sm truncate">
-                            {file.filepath.split("/").pop()}
-                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span
+                              className="font-medium text-sm truncate"
+                              title={file.name || getFilename(file.filepath)}
+                            >
+                              {file.name || getFilename(file.filepath)}
+                            </span>
+                            <span
+                              className="text-xs text-muted-foreground truncate"
+                              title={file.filepath}
+                            >
+                              {getFilename(file.filepath)}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
@@ -688,9 +704,22 @@ const BookDetail = () => {
                               >
                                 {file.file_type}
                               </Badge>
-                              <span className="text-sm truncate">
-                                {file.filepath.split("/").pop()}
-                              </span>
+                              <div className="flex flex-col min-w-0">
+                                <span
+                                  className="text-sm truncate"
+                                  title={
+                                    file.name || getFilename(file.filepath)
+                                  }
+                                >
+                                  {file.name || getFilename(file.filepath)}
+                                </span>
+                                <span
+                                  className="text-xs text-muted-foreground truncate"
+                                  title={file.filepath}
+                                >
+                                  {getFilename(file.filepath)}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
                               <span>{formatFileSize(file.filesize_bytes)}</span>

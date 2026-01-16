@@ -442,7 +442,11 @@ func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) 
 		NewSelect().
 		Model(file).
 		Relation("Book").
-		Relation("Identifiers")
+		Relation("Identifiers").
+		Relation("Narrators", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("n.sort_order ASC")
+		}).
+		Relation("Narrators.Person")
 
 	if opts.ID != nil {
 		q = q.Where("f.id = ?", *opts.ID)
@@ -649,9 +653,10 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 	// Track path updates for database
 	var pathUpdates []struct {
-		fileID  int
-		oldPath string
-		newPath string
+		fileID         int
+		oldPath        string
+		newPath        string
+		coverImagePath *string // old cover image path (filename only), nil if none
 	}
 
 	// Check if this is a directory-based book or root-level files
@@ -714,8 +719,14 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				currentPath = strings.Replace(file.Filepath, filepath.Dir(file.Filepath), newFolderPath, 1)
 			}
 
-			// Set file type and narrator names for proper naming
+			// Set file type, title, and narrator names for proper naming
 			organizeOpts.FileType = file.FileType
+			// Use file.Name for title if available, otherwise book.Title
+			if file.Name != nil && *file.Name != "" {
+				organizeOpts.Title = *file.Name
+			} else {
+				organizeOpts.Title = book.Title
+			}
 			organizeOpts.NarratorNames = nil
 			for _, n := range file.Narrators {
 				if n.Person != nil {
@@ -734,10 +745,11 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				// If file rename failed but folder was renamed, still track the folder path change
 				if folderRenamed && currentPath != file.Filepath {
 					pathUpdates = append(pathUpdates, struct {
-						fileID  int
-						oldPath string
-						newPath string
-					}{file.ID, file.Filepath, currentPath})
+						fileID         int
+						oldPath        string
+						newPath        string
+						coverImagePath *string
+					}{file.ID, file.Filepath, currentPath, file.CoverImagePath})
 				}
 				continue
 			}
@@ -750,10 +762,11 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					"new_path": newPath,
 				})
 				pathUpdates = append(pathUpdates, struct {
-					fileID  int
-					oldPath string
-					newPath string
-				}{file.ID, file.Filepath, newPath})
+					fileID         int
+					oldPath        string
+					newPath        string
+					coverImagePath *string
+				}{file.ID, file.Filepath, newPath, file.CoverImagePath})
 			}
 		}
 	} else if isRootLevelBook {
@@ -791,10 +804,11 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				})
 
 				pathUpdates = append(pathUpdates, struct {
-					fileID  int
-					oldPath string
-					newPath string
-				}{file.ID, result.OriginalPath, result.NewPath})
+					fileID         int
+					oldPath        string
+					newPath        string
+					coverImagePath *string
+				}{file.ID, result.OriginalPath, result.NewPath, file.CoverImagePath})
 
 				// Track the new folder path (should be same for all files)
 				if newBookPath == "" {
@@ -825,6 +839,13 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
 
+			// Use file.Name for title if available, otherwise book.Title
+			if file.Name != nil && *file.Name != "" {
+				organizeOpts.Title = *file.Name
+			} else {
+				organizeOpts.Title = book.Title
+			}
+
 			// Populate narrator names from file's narrators for M4B files
 			organizeOpts.NarratorNames = nil
 			for _, n := range file.Narrators {
@@ -851,21 +872,29 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				})
 
 				pathUpdates = append(pathUpdates, struct {
-					fileID  int
-					oldPath string
-					newPath string
-				}{file.ID, file.Filepath, newPath})
+					fileID         int
+					oldPath        string
+					newPath        string
+					coverImagePath *string
+				}{file.ID, file.Filepath, newPath, file.CoverImagePath})
 			}
 		}
 	}
 
 	// Update file paths in database
 	for _, update := range pathUpdates {
-		_, err = svc.db.NewUpdate().
+		q := svc.db.NewUpdate().
 			Model((*models.File)(nil)).
 			Set("filepath = ?, updated_at = ?", update.newPath, now).
-			Where("id = ?", update.fileID).
-			Exec(ctx)
+			Where("id = ?", update.fileID)
+
+		// Also update cover image path if the file has a cover
+		if update.coverImagePath != nil {
+			newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*update.coverImagePath, update.newPath))
+			q = q.Set("cover_image_path = ?", newCoverPath)
+		}
+
+		_, err = q.Exec(ctx)
 		if err != nil {
 			log.Error("failed to update file path in database", logger.Data{
 				"file_id":  update.fileID,

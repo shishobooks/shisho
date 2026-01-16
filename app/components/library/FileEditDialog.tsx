@@ -110,6 +110,7 @@ export function FileEditDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New file metadata fields
+  const [name, setName] = useState(file.name || "");
   const [url, setUrl] = useState(file.url || "");
   const [publisher, setPublisher] = useState(file.publisher?.name || "");
   const [publisherOpen, setPublisherOpen] = useState(false);
@@ -164,6 +165,7 @@ export function FileEditDialog({
     if (open) {
       setNarrators(file.narrators?.map((n) => n.person?.name || "") || []);
       setNarratorSearch("");
+      setName(file.name || "");
       setUrl(file.url || "");
       setPublisher(file.publisher?.name || "");
       setPublisherSearch("");
@@ -281,6 +283,7 @@ export function FileEditDialog({
   const handleSubmit = async () => {
     const payload: {
       file_role?: string;
+      name?: string;
       narrators?: string[];
       url?: string;
       publisher?: string;
@@ -297,6 +300,13 @@ export function FileEditDialog({
         return;
       }
       payload.file_role = fileRole;
+    }
+
+    // Check if name changed
+    const originalName = file.name || "";
+    if (name !== originalName) {
+      // When cleared, set to null; otherwise use the trimmed value
+      payload.name = name.trim() || undefined;
     }
 
     // Check if narrators changed
@@ -380,6 +390,16 @@ export function FileEditDialog({
                 {file.filepath.split("/").pop()}
               </span>
             </div>
+          </div>
+
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              onChange={(e) => setName(e.target.value)}
+              value={name}
+            />
           </div>
 
           {/* File Role */}

@@ -57,6 +57,29 @@ Each domain (books, jobs, libraries) has:
 - Book model has `ResolveCoverImage()` method that finds covers dynamically
 - API endpoints: `/books/{id}/cover` (canonical) and `/files/{id}/cover` (individual)
 
+**CRITICAL - CoverImagePath stores FILENAME ONLY:**
+
+`file.CoverImagePath` stores just the filename (e.g., `MyBook.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime by joining the book directory with the filename.
+
+When updating `CoverImagePath` (e.g., after renaming a file), always use `filepath.Base()` to extract just the filename:
+
+```go
+// ❌ WRONG - stores full path, breaks cover serving
+newCoverPath := fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath)
+file.CoverImagePath = &newCoverPath
+
+// ✅ CORRECT - stores filename only
+newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
+file.CoverImagePath = &newCoverPath
+```
+
+**Why this matters:** The `bookCover` handler constructs the full path as:
+```go
+coverPath := filepath.Join(coverDir, *coverFile.CoverImagePath)
+```
+
+If `CoverImagePath` contains a full path, this results in an invalid doubled path like `/path/to/path/to/cover.jpg`.
+
 ### Data Source Priority System
 
 Metadata sources ranked (lower number = higher precedence):
@@ -133,8 +156,8 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 | `ComputeFingerprint()` | Narrators, Identifiers |
 
 **Use the right retrieval method:**
-- `RetrieveFile()` - Basic file with Book and Identifiers only. Use for simple lookups.
-- `RetrieveFileWithRelations()` - Complete file with all relations. **Use this for sidecar writing or fingerprinting.**
+- `RetrieveFile()` - File with Book, Identifiers, and Narrators. Use for most lookups.
+- `RetrieveFileWithRelations()` - Complete file with all relations (adds Publisher, Imprint). **Use this for sidecar writing or fingerprinting.**
 - Book queries (`RetrieveBook`) - Already include `Files.Identifiers`, `Files.Narrators`, etc.
 
 **Common mistake**: Retrieving a file with `RetrieveFile()` then passing it to `WriteFileSidecarFromModel()` or `ComputeFingerprint()`. The sidecar/fingerprint will be missing data because relations aren't loaded.
@@ -161,20 +184,69 @@ When adding or modifying book/file metadata fields, ensure these files are updat
 1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` or `FileSidecar` struct
 2. **Sidecar conversion** (`pkg/sidecar/sidecar.go`) - Update `BookSidecarFromModel()` or `FileSidecarFromModel()`
 3. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
-4. **File parsers** - Update to extract the new field:
+4. **Download filename** (`pkg/downloadcache/filename.go`) - If the field affects display names (like `file.Name`), update `FormatDownloadFilename()` and `FormatKepubDownloadFilename()` to use it
+5. **File parsers** - Update to extract the new field:
    - EPUB: `pkg/epub/opf.go`
    - CBZ: `pkg/cbz/cbz.go`
    - M4B: `pkg/mp4/metadata.go`
-5. **File generators** - Update to write the field back:
+6. **File generators** - Update to write the field back:
    - EPUB: `pkg/filegen/epub.go`
    - CBZ: `pkg/filegen/cbz.go`
    - M4B: `pkg/filegen/m4b.go`
    - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
-6. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
-7. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
-8. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
-9. **File retrieval** (`pkg/books/service.go`) - If the new field is a File relation used by sidecar or fingerprint, add it to `RetrieveFileWithRelations()` and consider adding to `RetrieveFile()` if lightweight
-10. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
+7. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
+8. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
+9. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
+10. **File retrieval** (`pkg/books/service.go`) - If the new field is a File relation used by sidecar or fingerprint, add it to `RetrieveFileWithRelations()` and consider adding to `RetrieveFile()` if lightweight
+11. **File reorganization** (`pkg/books/handlers.go`) - If the field affects file organization (like `Name`), trigger reorganization when the field changes via the edit endpoint
+12. **Organization options** (`pkg/books/service.go`, `pkg/books/handlers.go`) - If the field should be used for file organization, update all places that build `fileutils.OrganizedNameOptions` to use the new file-level field
+13. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
+
+## File-Level vs Book-Level Fields
+
+Some metadata exists at both the book level and file level (e.g., `book.Title` vs `file.Name`). When both exist:
+
+- **Download filenames**: Prefer file-level field (e.g., `file.Name` over `book.Title`)
+- **File organization**: Prefer file-level field for individual file naming
+- **Display**: Show file-level field in file-specific contexts, book-level in book contexts
+
+**Pattern for organization/download:**
+```go
+// Use file.Name for title if available, otherwise book.Title
+title := book.Title
+if file.Name != nil && *file.Name != "" {
+    title = *file.Name
+}
+```
+
+## Triggering File Reorganization
+
+When a metadata field that affects file paths is edited via API, trigger file reorganization if the library has `OrganizeFileStructure` enabled.
+
+**Fields that trigger reorganization:**
+- `file.Name` - affects the filename portion
+- `file.Narrators` - affects the filename for audiobooks
+- `book.Authors` - affects the directory structure
+- `book.Title` - affects the directory structure
+
+**Pattern in handlers:**
+```go
+// After updating the field
+if fieldChanged && library.OrganizeFileStructure {
+    // Build OrganizedNameOptions with current metadata
+    organizeOpts := fileutils.OrganizedNameOptions{
+        AuthorNames:   authorNames,
+        NarratorNames: narratorNames,
+        Title:         title,  // Use file.Name if available
+        FileType:      file.FileType,
+    }
+    newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+    if err != nil {
+        // Handle error
+    }
+    // Update file.Filepath in database
+}
+```
 
 ## Adding New Entity Types
 

@@ -231,8 +231,12 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo = *existing
 	}
 
-	// Update title
-	comicInfo.Title = book.Title
+	// Update title - prefer file.Name over book.Title
+	title := book.Title
+	if file != nil && file.Name != nil && *file.Name != "" {
+		title = *file.Name
+	}
+	comicInfo.Title = title
 
 	// Update series
 	if len(book.BookSeries) > 0 {

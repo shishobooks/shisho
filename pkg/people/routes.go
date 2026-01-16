@@ -9,13 +9,15 @@ import (
 )
 
 // RegisterRoutesWithGroup registers people routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+// fileOrganizer is optional and can be nil if file organization on person name change is not needed.
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, fileOrganizer FileOrganizer) {
 	personService := NewService(db)
 	searchService := search.NewService(db)
 
 	h := &handler{
 		personService: personService,
 		searchService: searchService,
+		fileOrganizer: fileOrganizer,
 	}
 
 	g.GET("", h.list)

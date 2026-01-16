@@ -168,6 +168,33 @@ describe("MyComponent", () => {
 - Reports: text (console), lcov, HTML in `coverage/`
 - Not enforced, tracked for visibility
 
+## Metadata Edit Dialogs
+
+### First-Class Metadata Fields
+
+All editable metadata fields should be treated as first-class citizens. Don't add confusing helper text that implies the field is secondary or derived.
+
+**Don't do this:**
+```tsx
+<Label htmlFor="name">Name</Label>
+<Input id="name" value={name} onChange={...} />
+<p className="text-muted-foreground">
+  Leave empty to use the title from file metadata.
+</p>
+```
+
+**Do this instead:**
+```tsx
+<Label htmlFor="name">Name</Label>
+<Input id="name" value={name} onChange={...} />
+```
+
+**Why:** Helper text like "Leave empty to use..." implies the field is optional or secondary. This confuses users about what the field does and what happens when they clear it. Metadata fields should be straightforward - what you enter is what you get.
+
+### Field Clearing Behavior
+
+When a user clears a metadata field, the cleared value should be saved (not revert to some default). The scanner will repopulate the field from the source file on the next scan if needed.
+
 ## Key Files
 
 | Purpose | Location |

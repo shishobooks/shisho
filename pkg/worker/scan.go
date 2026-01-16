@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,59 @@ var (
 	// Non-greedy regex to match only the first [Author] pattern, not from first [ to last ].
 	filepathAuthorRE   = regexp.MustCompile(`\[(.*?)]`)
 	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
+	// Regex to collapse multiple whitespace to single space.
+	multiSpaceRE = regexp.MustCompile(`\s+`)
 )
+
+// generateCBZFileName creates a clean file name for CBZ files.
+// Priority: 1) Title from ComicInfo (explicit metadata), 2) Series + Number (inferred), 3) Parse from filename.
+func generateCBZFileName(metadata *mediafile.ParsedMetadata, filename string) string {
+	// Strategy 1: Use Title if it doesn't look like a filename
+	// (i.e., doesn't contain brackets which suggest it's just the raw filename).
+	// Title is explicit metadata and should be preferred over inferred values.
+	if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
+		if !filepathAuthorRE.MatchString(trimmedTitle) {
+			return trimmedTitle
+		}
+	}
+
+	// Strategy 2: Use Series + Number if available (inferred name)
+	if metadata.Series != "" {
+		if metadata.SeriesNumber != nil {
+			return metadata.Series + " v" + formatSeriesNumber(*metadata.SeriesNumber)
+		}
+		return metadata.Series
+	}
+
+	// Strategy 3: Parse from filename - strip author brackets and extension
+	return cleanCBZFilename(filename)
+}
+
+// cleanCBZFilename removes author brackets and extension from a CBZ filename.
+// Example: "[Author Name] Comic Title v1.cbz" -> "Comic Title v1".
+func cleanCBZFilename(filename string) string {
+	// Remove extension
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Remove all bracketed sections (author/creator info)
+	name = filepathAuthorRE.ReplaceAllString(name, "")
+
+	// Clean up extra whitespace
+	name = strings.TrimSpace(name)
+	name = multiSpaceRE.ReplaceAllString(name, " ")
+
+	return name
+}
+
+// formatSeriesNumber formats a series number as a clean string.
+// Whole numbers are formatted without decimals (e.g., 1.0 -> "1").
+// Non-whole numbers keep their decimal (e.g., 1.5 -> "1.5").
+func formatSeriesNumber(num float64) string {
+	if num == float64(int(num)) {
+		return strconv.Itoa(int(num))
+	}
+	return strconv.FormatFloat(num, 'f', -1, 64)
+}
 
 // isMainFileExtension returns true if the extension is a main file type.
 func isMainFileExtension(ext string) bool {
@@ -435,6 +488,8 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	imprintSource := models.DataSourceFilepath
 	var releaseDate *time.Time
 	releaseDateSource := models.DataSourceFilepath
+	var fileName *string
+	fileNameSource := models.DataSourceFilepath
 
 	// Extract metadata from each file based on its file type.
 	var metadata *mediafile.ParsedMetadata
@@ -528,6 +583,18 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		if metadata.ReleaseDate != nil {
 			releaseDate = metadata.ReleaseDate
 			releaseDateSource = metadata.DataSource
+		}
+		// Populate file name from metadata
+		// For CBZ files, use special logic to generate a clean file name
+		if fileType == models.FileTypeCBZ {
+			cbzFileName := generateCBZFileName(metadata, filename)
+			if cbzFileName != "" {
+				fileName = &cbzFileName
+				fileNameSource = metadata.DataSource
+			}
+		} else if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
+			fileName = &trimmedTitle
+			fileNameSource = metadata.DataSource
 		}
 	}
 
@@ -1210,6 +1277,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		}
 	}
 
+	// Apply file sidecar data for name (higher priority than file metadata)
+	if fileSidecarData != nil && fileSidecarData.Name != nil && *fileSidecarData.Name != "" {
+		if models.DataSourcePriority[models.DataSourceSidecar] < models.DataSourcePriority[fileNameSource] {
+			jobLog.Info("applying file sidecar data for name", logger.Data{"name": *fileSidecarData.Name})
+			fileName = fileSidecarData.Name
+			fileNameSource = models.DataSourceSidecar
+		}
+	}
+
 	// Set narrator source on file if we have narrators
 	if len(narratorNames) > 0 {
 		file.NarratorSource = &narratorSource
@@ -1228,6 +1304,10 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 	if releaseDate != nil {
 		file.ReleaseDate = releaseDate
 		file.ReleaseDateSource = &releaseDateSource
+	}
+	if fileName != nil {
+		file.Name = fileName
+		file.NameSource = &fileNameSource
 	}
 
 	// Create publisher entity if we have a publisher name
@@ -1442,6 +1522,27 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			existingFile.ReleaseDate = releaseDate
 			existingFile.ReleaseDateSource = &releaseDateSource
 			fileUpdateColumns = append(fileUpdateColumns, "release_date", "release_date_source")
+			fileUpdated = true
+		}
+
+		// Update name
+		existingNameSource := ""
+		if existingFile.NameSource != nil {
+			existingNameSource = *existingFile.NameSource
+		}
+		existingName := ""
+		if existingFile.Name != nil {
+			existingName = *existingFile.Name
+		}
+		newName := ""
+		if fileName != nil {
+			newName = *fileName
+		}
+		if shouldUpdateScalar(newName, existingName, fileNameSource, existingNameSource) {
+			jobLog.Info("updating name", logger.Data{"from": existingName, "to": newName})
+			existingFile.Name = fileName
+			existingFile.NameSource = &fileNameSource
+			fileUpdateColumns = append(fileUpdateColumns, "name", "name_source")
 			fileUpdated = true
 		}
 

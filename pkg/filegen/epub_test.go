@@ -655,6 +655,104 @@ func readFileFromEPUB(t *testing.T, epubPath, fileName string) []byte {
 	return nil
 }
 
+func TestEPUBGenerator_UsesFileNameForTitle(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a simple test EPUB
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	createTestEPUB(t, srcPath, testEPUBOptions{
+		title:   "Original Title",
+		authors: []string{"Author"},
+	})
+
+	destPath := filepath.Join(tmpDir, "output.epub")
+
+	name := "Custom Edition Title"
+	book := &models.Book{
+		Title: "Book Title",
+		Authors: []*models.Author{
+			{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+		},
+	}
+	file := &models.File{
+		FileType: models.FileTypeEPUB,
+		Name:     &name,
+	}
+
+	generator := &EPUBGenerator{}
+	err := generator.Generate(context.Background(), srcPath, destPath, book, file)
+	require.NoError(t, err)
+
+	// Parse the output and verify title is set to file.Name, not book.Title
+	pkg := readOPFFromEPUB(t, destPath)
+	assert.Equal(t, "Custom Edition Title", pkg.Metadata.Titles[0].Text)
+}
+
+func TestEPUBGenerator_UsesBookTitleWhenFileNameEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a simple test EPUB
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	createTestEPUB(t, srcPath, testEPUBOptions{
+		title:   "Original Title",
+		authors: []string{"Author"},
+	})
+
+	destPath := filepath.Join(tmpDir, "output.epub")
+
+	emptyName := ""
+	book := &models.Book{
+		Title: "Book Title",
+		Authors: []*models.Author{
+			{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+		},
+	}
+	file := &models.File{
+		FileType: models.FileTypeEPUB,
+		Name:     &emptyName,
+	}
+
+	generator := &EPUBGenerator{}
+	err := generator.Generate(context.Background(), srcPath, destPath, book, file)
+	require.NoError(t, err)
+
+	// When file.Name is empty, should fall back to book.Title
+	pkg := readOPFFromEPUB(t, destPath)
+	assert.Equal(t, "Book Title", pkg.Metadata.Titles[0].Text)
+}
+
+func TestEPUBGenerator_UsesBookTitleWhenFileNameNil(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a simple test EPUB
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	createTestEPUB(t, srcPath, testEPUBOptions{
+		title:   "Original Title",
+		authors: []string{"Author"},
+	})
+
+	destPath := filepath.Join(tmpDir, "output.epub")
+
+	book := &models.Book{
+		Title: "Book Title",
+		Authors: []*models.Author{
+			{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+		},
+	}
+	file := &models.File{
+		FileType: models.FileTypeEPUB,
+		Name:     nil, // Nil name
+	}
+
+	generator := &EPUBGenerator{}
+	err := generator.Generate(context.Background(), srcPath, destPath, book, file)
+	require.NoError(t, err)
+
+	// When file.Name is nil, should fall back to book.Title
+	pkg := readOPFFromEPUB(t, destPath)
+	assert.Equal(t, "Book Title", pkg.Metadata.Titles[0].Text)
+}
+
 func TestGenerateEPUB_Identifiers(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -762,6 +762,88 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 	})
 }
 
+func TestConverter_ConvertCBZWithMetadata_UsesNameForTitle(t *testing.T) {
+	t.Run("uses Name for title when provided", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		name := "Custom File Name"
+		metadata := &CBZMetadata{
+			Title: "Book Title",
+			Name:  &name,
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		// Verify OPF uses Name, not Title
+		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfContent := string(opfData)
+		assert.Contains(t, opfContent, `<dc:title>Custom File Name</dc:title>`)
+		assert.NotContains(t, opfContent, `<dc:title>Book Title</dc:title>`)
+
+		// Verify NCX uses Name
+		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxContent := string(ncxData)
+		assert.Contains(t, ncxContent, `Custom File Name`)
+
+		// Verify nav.xhtml uses Name
+		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navContent := string(navData)
+		assert.Contains(t, navContent, `Custom File Name`)
+	})
+
+	t.Run("falls back to Title when Name is nil", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Book Title",
+			Name:  nil,
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfContent := string(opfData)
+		assert.Contains(t, opfContent, `<dc:title>Book Title</dc:title>`)
+	})
+
+	t.Run("falls back to Title when Name is empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		emptyName := ""
+		metadata := &CBZMetadata{
+			Title: "Book Title",
+			Name:  &emptyName,
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfContent := string(opfData)
+		assert.Contains(t, opfContent, `<dc:title>Book Title</dc:title>`)
+	})
+}
+
 func TestIsGrayscaleImage(t *testing.T) {
 	t.Run("detects grayscale image", func(t *testing.T) {
 		// Create a grayscale image (all pixels have R=G=B)

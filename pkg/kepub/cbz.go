@@ -25,6 +25,7 @@ import (
 // CBZMetadata holds metadata for CBZ to KePub conversion.
 type CBZMetadata struct {
 	Title       string
+	Name        *string // Name takes precedence over Title when non-empty
 	Subtitle    *string
 	Description *string
 	Authors     []CBZAuthor
@@ -301,15 +302,27 @@ func writeZipFile(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
+// getEffectiveTitle returns the title to use for the EPUB.
+// It prefers Name over Title when Name is non-nil and non-empty.
+func getEffectiveTitle(metadata *CBZMetadata) string {
+	if metadata == nil {
+		return "Comic Book"
+	}
+	if metadata.Name != nil && *metadata.Name != "" {
+		return *metadata.Name
+	}
+	if metadata.Title != "" {
+		return metadata.Title
+	}
+	return "Comic Book"
+}
+
 // generateFixedLayoutOPF generates the OPF file for a fixed-layout EPUB.
 func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
-	title := "Comic Book"
-	if metadata != nil && metadata.Title != "" {
-		title = metadata.Title
-	}
+	title := getEffectiveTitle(metadata)
 
 	buf.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
@@ -502,10 +515,7 @@ func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
-	title := "Comic Book"
-	if metadata != nil && metadata.Title != "" {
-		title = metadata.Title
-	}
+	title := getEffectiveTitle(metadata)
 
 	buf.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
@@ -602,10 +612,7 @@ func generateNavXHTML(metadata *CBZMetadata) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
-	title := "Comic Book"
-	if metadata != nil && metadata.Title != "" {
-		title = metadata.Title
-	}
+	title := getEffectiveTitle(metadata)
 
 	buf.WriteString(`<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>

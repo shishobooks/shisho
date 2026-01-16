@@ -231,11 +231,17 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 		return nil, err
 	}
 
+	// Determine title - prefer file.Name over book.Title
+	title := book.Title
+	if file != nil && file.Name != nil && *file.Name != "" {
+		title = *file.Name
+	}
+
 	// Update title
 	if len(pkg.Metadata.Titles) > 0 {
-		pkg.Metadata.Titles[0].Text = book.Title
+		pkg.Metadata.Titles[0].Text = title
 	} else {
-		pkg.Metadata.Titles = []opfTitle{{Text: book.Title}}
+		pkg.Metadata.Titles = []opfTitle{{Text: title}}
 	}
 
 	// Update subtitle if present (using a refinement meta tag)

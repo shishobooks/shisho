@@ -340,6 +340,56 @@ func TestFormatDownloadFilename(t *testing.T) {
 			file:     &models.File{FileType: "cbz"},
 			expected: "[Author] Story #1 - Chapter One.cbz",
 		},
+		{
+			name: "file.Name is preferred over book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub", Name: pointerutil.String("File Name Override")},
+			expected: "[Author] File Name Override.epub",
+		},
+		{
+			name: "file.Name with volume indicator skips series",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Series"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz", Name: pointerutil.String("Comic v1")},
+			expected: "[Author] Comic v001.cbz",
+		},
+		{
+			name: "empty file.Name falls back to book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub", Name: pointerutil.String("")},
+			expected: "[Author] Book Title.epub",
+		},
+		{
+			name: "nil file.Name falls back to book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "epub", Name: nil},
+			expected: "[Author] Book Title.epub",
+		},
 	}
 
 	for _, tt := range tests {
@@ -554,6 +604,56 @@ func TestFormatKepubDownloadFilename(t *testing.T) {
 			},
 			file:     &models.File{FileType: "epub"},
 			expected: "J.K. Rowling - Harry Potter 1 - Harry Potter and the Sorcerer's Stone.kepub.epub",
+		},
+		{
+			name: "file.Name is preferred over book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "cbz", Name: pointerutil.String("File Name Override")},
+			expected: "Author - File Name Override.kepub.epub",
+		},
+		{
+			name: "file.Name with volume indicator skips series",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), Series: &models.Series{Name: "Series"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz", Name: pointerutil.String("Comic v1")},
+			expected: "Author - Comic v001.kepub.epub",
+		},
+		{
+			name: "empty file.Name falls back to book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "cbz", Name: pointerutil.String("")},
+			expected: "Author - Book Title.kepub.epub",
+		},
+		{
+			name: "nil file.Name falls back to book.Title",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: nil,
+			},
+			file:     &models.File{FileType: "cbz", Name: nil},
+			expected: "Author - Book Title.kepub.epub",
 		},
 	}
 

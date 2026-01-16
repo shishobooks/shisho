@@ -654,6 +654,89 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		comicInfo := readComicInfoFromCBZ(t, destPath)
 		assert.Empty(t, comicInfo.GTIN)
 	})
+
+	t.Run("uses file.Name for title when available", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Original Title",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		name := "Custom Comic Title"
+		book := &models.Book{
+			Title: "Book Title",
+		}
+		file := &models.File{
+			FileType: models.FileTypeCBZ,
+			Name:     &name,
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse and verify title is set to file.Name, not book.Title
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Custom Comic Title", comicInfo.Title)
+	})
+
+	t.Run("uses book.Title when file.Name is empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Original Title",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		emptyName := ""
+		book := &models.Book{
+			Title: "Book Title",
+		}
+		file := &models.File{
+			FileType: models.FileTypeCBZ,
+			Name:     &emptyName,
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// When file.Name is empty, should fall back to book.Title
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Book Title", comicInfo.Title)
+	})
+
+	t.Run("uses book.Title when file.Name is nil", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Original Title",
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Book Title",
+		}
+		file := &models.File{
+			FileType: models.FileTypeCBZ,
+			Name:     nil, // Nil name
+		}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// When file.Name is nil, should fall back to book.Title
+		comicInfo := readComicInfoFromCBZ(t, destPath)
+		assert.Equal(t, "Book Title", comicInfo.Title)
+	})
 }
 
 // Helper types and functions for testing
