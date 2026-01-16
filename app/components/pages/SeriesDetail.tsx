@@ -194,6 +194,7 @@ const SeriesDetail = () => {
           onSave={handleEdit}
           open={editOpen}
           sortName={series.sort_name}
+          sortNameSource={series.sort_name_source}
         />
 
         <MetadataMergeDialog

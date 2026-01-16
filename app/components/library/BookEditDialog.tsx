@@ -1,6 +1,7 @@
 import { Check, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { SortNameInput } from "@/components/common/SortNameInput";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -391,16 +392,14 @@ export function BookEditDialog({
 
           {/* Sort Title */}
           <div className="space-y-2">
-            <Label htmlFor="sort_title">Sort Title</Label>
-            <Input
-              id="sort_title"
-              onChange={(e) => setSortTitle(e.target.value)}
-              placeholder="Leave empty to auto-generate from title"
-              value={sortTitle}
+            <Label>Sort Title</Label>
+            <SortNameInput
+              nameValue={title}
+              onChange={setSortTitle}
+              sortValue={book.sort_title}
+              source={book.sort_title_source}
+              type="title"
             />
-            <p className="text-xs text-muted-foreground">
-              Used for sorting. Clear to regenerate automatically.
-            </p>
           </div>
 
           {/* Subtitle */}

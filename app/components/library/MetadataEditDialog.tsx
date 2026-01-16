@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { SortNameInput } from "@/components/common/SortNameInput";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DataSourceManual, type DataSource } from "@/types";
 
 export type EntityType =
   | "person"
@@ -26,6 +28,7 @@ interface MetadataEditDialogProps {
   entityType: EntityType;
   entityName: string;
   sortName?: string;
+  sortNameSource?: DataSource;
   onSave: (data: { name: string; sort_name?: string }) => Promise<void>;
   isPending: boolean;
 }
@@ -45,6 +48,7 @@ export function MetadataEditDialog({
   entityType,
   entityName,
   sortName,
+  sortNameSource,
   onSave,
   isPending,
 }: MetadataEditDialogProps) {
@@ -90,16 +94,14 @@ export function MetadataEditDialog({
 
           {hasSortName && (
             <div className="space-y-2">
-              <Label htmlFor="sort_name">Sort Name</Label>
-              <Input
-                id="sort_name"
-                onChange={(e) => setEditSortName(e.target.value)}
-                placeholder="Leave empty to auto-generate"
-                value={editSortName}
+              <Label>Sort Name</Label>
+              <SortNameInput
+                nameValue={name}
+                onChange={setEditSortName}
+                sortValue={sortName || ""}
+                source={sortNameSource || DataSourceManual}
+                type={entityType === "person" ? "person" : "title"}
               />
-              <p className="text-xs text-muted-foreground">
-                Used for sorting. Clear to regenerate automatically.
-              </p>
             </div>
           )}
         </div>

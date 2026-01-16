@@ -240,6 +240,7 @@ const PersonDetail = () => {
         onSave={handleEdit}
         open={editOpen}
         sortName={person.sort_name}
+        sortNameSource={person.sort_name_source}
       />
 
       <MetadataMergeDialog

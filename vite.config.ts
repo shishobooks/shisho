@@ -43,6 +43,9 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     strictPort: false, // Allow Vite to auto-increment port if busy
+    watch: {
+      ignored: ["**/coverage/**"],
+    },
     proxy: {
       "/api": {
         target: `http://localhost:${getApiPort()}`,
