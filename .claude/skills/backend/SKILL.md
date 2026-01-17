@@ -104,6 +104,11 @@ Used to determine which metadata to keep when conflicts occur.
 - Authn and authz needs to be considered for all pieces of functionality
 - Both frontend and backend checks need to be made so that everything is protected on all fronts
 
+### API Conventions
+
+- **JSON field naming**: All JSON request and response payloads use `snake_case` for field names (e.g., `created_at`, `last_accessed_at`, not `createdAt`)
+- Go struct tags should use `json:"snake_case_name"` format
+
 ### Config
 
 - Self-hosted app with config file-based configuration
