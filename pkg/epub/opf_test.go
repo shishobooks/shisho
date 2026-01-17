@@ -21,14 +21,14 @@ func TestParseOPF_Identifiers(t *testing.T) {
   </metadata>
 </package>`
 
-	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
 	require.NoError(t, err)
 
-	assert.Len(t, opf.Identifiers, 4)
+	assert.Len(t, result.OPF.Identifiers, 4)
 
 	// Find each identifier by type
 	idByType := make(map[string]string)
-	for _, id := range opf.Identifiers {
+	for _, id := range result.OPF.Identifiers {
 		idByType[id.Type] = id.Value
 	}
 
@@ -48,13 +48,13 @@ func TestParseOPF_IdentifiersPatternMatch(t *testing.T) {
   </metadata>
 </package>`
 
-	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
 	require.NoError(t, err)
 
-	assert.Len(t, opf.Identifiers, 2)
+	assert.Len(t, result.OPF.Identifiers, 2)
 
 	idByType := make(map[string]string)
-	for _, id := range opf.Identifiers {
+	for _, id := range result.OPF.Identifiers {
 		idByType[id.Type] = id.Value
 	}
 
@@ -74,11 +74,11 @@ func TestParseOPF_Subtitle_TitleTypeProperty(t *testing.T) {
   </metadata>
 </package>`
 
-	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
 	require.NoError(t, err)
 
-	assert.Equal(t, "The Way of Kings", opf.Title)
-	assert.Equal(t, "Book One of the Stormlight Archive", opf.Subtitle)
+	assert.Equal(t, "The Way of Kings", result.OPF.Title)
+	assert.Equal(t, "Book One of the Stormlight Archive", result.OPF.Subtitle)
 }
 
 func TestParseOPF_Subtitle_ByID(t *testing.T) {
@@ -92,11 +92,11 @@ func TestParseOPF_Subtitle_ByID(t *testing.T) {
   </metadata>
 </package>`
 
-	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
 	require.NoError(t, err)
 
-	assert.Equal(t, "The Final Empire", opf.Title)
-	assert.Equal(t, "Mistborn Book One", opf.Subtitle)
+	assert.Equal(t, "The Final Empire", result.OPF.Title)
+	assert.Equal(t, "Mistborn Book One", result.OPF.Subtitle)
 }
 
 func TestParseOPF_Subtitle_SingleTitle(t *testing.T) {
@@ -108,9 +108,9 @@ func TestParseOPF_Subtitle_SingleTitle(t *testing.T) {
   </metadata>
 </package>`
 
-	opf, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
 	require.NoError(t, err)
 
-	assert.Equal(t, "Simple Book Title", opf.Title)
-	assert.Empty(t, opf.Subtitle)
+	assert.Equal(t, "Simple Book Title", result.OPF.Title)
+	assert.Empty(t, result.OPF.Subtitle)
 }

@@ -23,7 +23,7 @@ This skill documents backend patterns and conventions specific to Shisho.
 
 ### Core Services Pattern
 
-Each domain (books, jobs, libraries) has:
+Each domain (books, jobs, libraries, chapters) has:
 - `handlers.go` - HTTP request/response logic
 - `routes.go` - HTTP endpoint registration
 - `service.go` - Business logic and database operations
@@ -300,13 +300,74 @@ for _, id := range newGenreIDs {
 5. **Cover Generation**: Save individual covers + generate canonical covers
 6. **Priority Resolution**: Use data source priority to resolve metadata conflicts
 
+## Chapters System
+
+Chapters are file-level metadata extracted from CBZ, EPUB, and M4B files.
+
+### Database Model (`pkg/models/chapter.go`)
+
+```go
+type Chapter struct {
+    ID               int
+    FileID           int       // Foreign key to files table
+    ParentID         *int      // Self-referential for nested chapters (EPUB)
+    SortOrder        int       // Order within parent (0-indexed)
+    Title            string
+    StartPage        *int      // CBZ: 0-indexed page number
+    StartTimestampMs *int64    // M4B: milliseconds from start
+    Href             *string   // EPUB: content document href
+    Children         []*Chapter // Loaded via relation
+}
+```
+
+### Service Layer (`pkg/chapters/service.go`)
+
+```go
+// List chapters for a file, returns nested tree structure
+func (svc *Service) ListChapters(ctx, fileID) ([]*models.Chapter, error)
+
+// Replace all chapters for a file (transactional delete + insert)
+func (svc *Service) ReplaceChapters(ctx, fileID, []mediafile.ParsedChapter) error
+
+// Delete all chapters for a file
+func (svc *Service) DeleteChaptersForFile(ctx, fileID) error
+```
+
+### API Endpoints (`pkg/chapters/handlers.go`, `routes.go`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/books/files/:id/chapters` | List chapters (nested tree) |
+| PUT | `/books/files/:id/chapters` | Replace chapters (requires write permission) |
+
+### Worker Integration
+
+Chapters are synced during file scan in `pkg/worker/scan.go`:
+- After file metadata is saved, chapters from `ParsedMetadata.Chapters` are synced
+- Uses `chapterService.ReplaceChapters()` for atomic replacement
+- Errors are logged as warnings (non-fatal to scan)
+
+### Position Fields by File Type
+
+| File Type | Position Field | Example |
+|-----------|---------------|---------|
+| CBZ | `StartPage` | `0` (first page) |
+| M4B | `StartTimestampMs` | `3600000` (1 hour) |
+| EPUB | `Href` | `"chapter1.xhtml"` |
+
+### Validation
+
+PUT endpoint validates chapters against file constraints:
+- CBZ: `start_page` must be < `file.PageCount`
+- M4B: `start_timestamp_ms` must be <= `file.AudiobookDurationSeconds * 1000`
+
 ## Key Directories
 
 | Purpose | Location |
 |---------|----------|
 | Entry point | `cmd/api/main.go` |
 | Models | `pkg/models/` |
-| Domain services | `pkg/{domain}/` (books, jobs, libraries, etc.) |
+| Domain services | `pkg/{domain}/` (books, jobs, libraries, chapters, etc.) |
 | File parsers | `pkg/epub/`, `pkg/cbz/`, `pkg/mp4/` |
 | File generators | `pkg/filegen/` |
 | Scanner/Worker | `pkg/worker/` |

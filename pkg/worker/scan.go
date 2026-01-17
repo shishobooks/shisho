@@ -1594,6 +1594,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 			jobLog.Info("no file metadata changes detected", nil)
 		}
 
+		// Sync chapters from parsed metadata
+		if metadata != nil && len(metadata.Chapters) > 0 {
+			if err := w.chapterService.ReplaceChapters(ctx, existingFile.ID, metadata.Chapters); err != nil {
+				jobLog.Warn("failed to sync chapters", logger.Data{"file_id": existingFile.ID, "error": err.Error()})
+			} else {
+				jobLog.Info("synced chapters", logger.Data{"file_id": existingFile.ID, "count": len(metadata.Chapters)})
+			}
+		}
+
 		return nil
 	}
 
@@ -1631,6 +1640,15 @@ func (w *Worker) scanFile(ctx context.Context, path string, libraryID int, books
 		err = w.bookService.CreateFileIdentifier(ctx, fileID)
 		if err != nil {
 			jobLog.Error("failed to create file identifier", nil, logger.Data{"file_id": file.ID, "type": parsedID.Type, "error": err.Error()})
+		}
+	}
+
+	// Sync chapters from parsed metadata
+	if metadata != nil && len(metadata.Chapters) > 0 {
+		if err := w.chapterService.ReplaceChapters(ctx, file.ID, metadata.Chapters); err != nil {
+			jobLog.Warn("failed to sync chapters", logger.Data{"file_id": file.ID, "error": err.Error()})
+		} else {
+			jobLog.Info("synced chapters", logger.Data{"file_id": file.ID, "count": len(metadata.Chapters)})
 		}
 	}
 

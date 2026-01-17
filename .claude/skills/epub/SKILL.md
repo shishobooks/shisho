@@ -203,9 +203,104 @@ If EPUB metadata has no title, extracts from filename.
 - Non-author creators preserved during generation
 - Original genres preserved if book has none assigned
 
+## Chapter/Navigation Parsing
+
+EPUB files contain navigation documents that define the table of contents. Shisho extracts chapters from these documents.
+
+### Navigation Document Types
+
+**EPUB 3: Navigation Document** (`nav.xhtml`)
+- Uses HTML5 `<nav epub:type="toc">` element
+- Supports nested chapters via nested `<ol>` lists
+- Preferred source for chapter extraction
+
+**EPUB 2: NCX** (`toc.ncx`)
+- Uses `<navMap>` with `<navPoint>` elements
+- Supports nesting via child `<navPoint>` elements
+- Fallback when EPUB 3 nav not found
+
+### Parsing Strategy
+
+**Priority:**
+1. Try EPUB 3 nav document first (manifest item with `properties="nav"`)
+2. Fall back to NCX (referenced in spine `toc` attribute)
+3. If neither found, no chapters extracted
+
+### Key Functions (`pkg/epub/nav.go`)
+
+```go
+// Parse EPUB 3 navigation document
+func parseNavDocument(r io.Reader) ([]mediafile.ParsedChapter, error)
+
+// Parse EPUB 2 NCX file
+func parseNCX(r io.Reader) ([]mediafile.ParsedChapter, error)
+
+// Find nav document href from manifest
+func findNavDocumentHref(manifest []ManifestItem, basePath string) string
+
+// Find NCX href from spine toc attribute
+func findNCXHref(pkg *OPFPackage, basePath string) string
+```
+
+### Chapter Data Structure
+
+```go
+type ParsedChapter struct {
+    Title    string
+    Href     *string          // Content document href (e.g., "chapter1.xhtml")
+    Children []ParsedChapter  // Nested chapters (EPUB supports arbitrary nesting)
+}
+```
+
+### EPUB 3 Nav Document Structure
+
+```xml
+<nav epub:type="toc">
+  <ol>
+    <li><a href="chapter1.xhtml">Chapter 1</a></li>
+    <li>
+      <a href="part2.xhtml">Part 2</a>
+      <ol>
+        <li><a href="chapter2.xhtml">Chapter 2.1</a></li>
+        <li><a href="chapter3.xhtml">Chapter 2.2</a></li>
+      </ol>
+    </li>
+  </ol>
+</nav>
+```
+
+### EPUB 2 NCX Structure
+
+```xml
+<navMap>
+  <navPoint id="ch1" playOrder="1">
+    <navLabel><text>Chapter 1</text></navLabel>
+    <content src="chapter1.xhtml"/>
+  </navPoint>
+  <navPoint id="part2" playOrder="2">
+    <navLabel><text>Part 2</text></navLabel>
+    <content src="part2.xhtml"/>
+    <navPoint id="ch2" playOrder="3">
+      <navLabel><text>Chapter 2.1</text></navLabel>
+      <content src="chapter2.xhtml"/>
+    </navPoint>
+  </navPoint>
+</navMap>
+```
+
+### Integration
+
+- Chapters extracted during `Parse()` and included in `ParsedMetadata.Chapters`
+- Worker syncs chapters to database via `chapterService.ReplaceChapters()`
+- Nested structure preserved in database via `parent_id` foreign key
+- API: `GET /books/files/:id/chapters` returns nested chapter tree
+- API: `PUT /books/files/:id/chapters` allows manual chapter editing
+
 ## Related Files
 
 - `pkg/epub/opf.go` - OPF parsing and types
+- `pkg/epub/nav.go` - Navigation/chapter parsing
+- `pkg/epub/nav_test.go` - Navigation parsing tests
 - `pkg/epub/epub.go` - EPUB file handling
 - `pkg/filegen/epub.go` - EPUB generation
 - `pkg/filegen/epub_test.go` - EPUB generation tests

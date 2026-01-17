@@ -240,3 +240,16 @@ func parseSeriesFromGrouping(grouping string) seriesInfo {
 	// If no pattern matches, return empty
 	return seriesInfo{}
 }
+
+// convertChaptersToParsed converts mp4.Chapter slice to mediafile.ParsedChapter slice.
+func convertChaptersToParsed(chapters []Chapter) []mediafile.ParsedChapter {
+	parsed := make([]mediafile.ParsedChapter, 0, len(chapters))
+	for _, ch := range chapters {
+		ms := ch.Start.Milliseconds()
+		parsed = append(parsed, mediafile.ParsedChapter{
+			Title:            ch.Title,
+			StartTimestampMs: &ms,
+		})
+	}
+	return parsed
+}

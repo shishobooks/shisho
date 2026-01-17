@@ -102,8 +102,20 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	// Get sorted image files
+	imageFiles := getSortedImageFiles(zipReader)
+
+	// Extract image file paths for chapter detection
+	imagePaths := make([]string, len(imageFiles))
+	for i, f := range imageFiles {
+		imagePaths[i] = f.Name
+	}
+
+	// Detect chapters from image file paths
+	chapters := DetectChapters(imagePaths)
+
 	// Extract cover image, page index, and page count
-	coverData, coverMimeType, coverPage, pageCount, err := extractCoverImage(zipReader, comicInfo)
+	coverData, coverMimeType, coverPage, pageCount, err := extractCoverImage(imageFiles, comicInfo)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -253,6 +265,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		PageCount:     pageCount,
 		DataSource:    models.DataSourceCBZMetadata,
 		Identifiers:   identifiersList,
+		Chapters:      chapters,
 	}, nil
 }
 
@@ -273,10 +286,8 @@ func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {
 	return comicInfo, nil
 }
 
-// extractCoverImage extracts the cover image data and returns the page index and total page count.
-// Returns coverData, mimeType, pageIndex, pageCount, error.
-func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, string, *int, *int, error) {
-	// Create a sorted list of all image files
+// getSortedImageFiles returns a sorted list of image files from a zip reader.
+func getSortedImageFiles(zipReader *zip.Reader) []*zip.File {
 	var imageFiles []*zip.File
 	for _, file := range zipReader.File {
 		ext := strings.ToLower(filepath.Ext(file.Name))
@@ -290,6 +301,12 @@ func extractCoverImage(zipReader *zip.Reader, comicInfo *ComicInfo) ([]byte, str
 		return imageFiles[i].Name < imageFiles[j].Name
 	})
 
+	return imageFiles
+}
+
+// extractCoverImage extracts the cover image data and returns the page index and total page count.
+// Returns coverData, mimeType, pageIndex, pageCount, error.
+func extractCoverImage(imageFiles []*zip.File, comicInfo *ComicInfo) ([]byte, string, *int, *int, error) {
 	// Calculate page count from actual image files
 	pageCount := len(imageFiles)
 

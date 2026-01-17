@@ -33,6 +33,7 @@ type OPF struct {
 	CoverMimeType string
 	CoverData     []byte
 	Identifiers   []mediafile.ParsedIdentifier
+	Chapters      []mediafile.ParsedChapter
 }
 
 type Package struct {
@@ -86,10 +87,11 @@ type Package struct {
 	Manifest struct {
 		Text string `xml:",chardata"`
 		Item []struct {
-			Text      string `xml:",chardata"`
-			ID        string `xml:"id,attr"`
-			Href      string `xml:"href,attr"`
-			MediaType string `xml:"media-type,attr"`
+			Text       string `xml:",chardata"`
+			ID         string `xml:"id,attr"`
+			Href       string `xml:"href,attr"`
+			MediaType  string `xml:"media-type,attr"`
+			Properties string `xml:"properties,attr"`
 		} `xml:"item"`
 	} `xml:"manifest"`
 	Spine struct {
@@ -131,7 +133,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	}
 
 	// Go through all files in the existing archive save the page information.
-	var opf *OPF
+	var result *ParseOPFResult
 	for _, file := range zipReader.File {
 		ext := filepath.Ext(file.Name)
 		if ext == ".opf" {
@@ -139,7 +141,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
-			opf, err = ParseOPF(file.Name, r)
+			result, err = ParseOPF(file.Name, r)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
@@ -147,9 +149,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	if opf == nil {
+	if result == nil {
 		return nil, errors.New("no opf file found")
 	}
+
+	opf := result.OPF
 
 	if opf.CoverFilepath != "" {
 		for _, file := range zipReader.File {
@@ -163,6 +167,32 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 					return nil, errors.WithStack(err)
 				}
 				opf.CoverData = b
+			}
+		}
+	}
+
+	// Try to find and parse chapters from nav document or NCX
+	navHref := findNavDocumentHref(result.Package, result.BasePath)
+	ncxHref := findNCXHref(result.Package, result.BasePath)
+
+	for _, file := range zipReader.File {
+		if navHref != "" && file.Name == navHref {
+			r, err := file.Open()
+			if err == nil {
+				chapters, _ := parseNavDocument(r)
+				r.Close()
+				if len(chapters) > 0 {
+					opf.Chapters = chapters
+					break
+				}
+			}
+		}
+		if ncxHref != "" && file.Name == ncxHref && len(opf.Chapters) == 0 {
+			r, err := file.Open()
+			if err == nil {
+				chapters, _ := parseNCX(r)
+				r.Close()
+				opf.Chapters = chapters
 			}
 		}
 	}
@@ -184,10 +214,19 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverData:     opf.CoverData,
 		DataSource:    models.DataSourceEPUBMetadata,
 		Identifiers:   opf.Identifiers,
+		Chapters:      opf.Chapters,
 	}, nil
 }
 
-func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
+// ParseOPFResult contains the parsed OPF data along with the raw package and base path
+// needed for resolving relative paths to other files in the EPUB.
+type ParseOPFResult struct {
+	OPF      *OPF
+	Package  *Package
+	BasePath string
+}
+
+func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -373,21 +412,25 @@ func ParseOPF(filename string, r io.ReadCloser) (*OPF, error) {
 		})
 	}
 
-	return &OPF{
-		Title:         title,
-		Subtitle:      subtitle,
-		Authors:       authors,
-		Series:        series,
-		SeriesNumber:  seriesNumber,
-		Genres:        genres,
-		Tags:          tags,
-		Description:   description,
-		Publisher:     publisher,
-		Imprint:       imprint,
-		URL:           url,
-		ReleaseDate:   releaseDate,
-		CoverFilepath: coverFilepath,
-		CoverMimeType: coverMimeType,
-		Identifiers:   identifiersList,
+	return &ParseOPFResult{
+		OPF: &OPF{
+			Title:         title,
+			Subtitle:      subtitle,
+			Authors:       authors,
+			Series:        series,
+			SeriesNumber:  seriesNumber,
+			Genres:        genres,
+			Tags:          tags,
+			Description:   description,
+			Publisher:     publisher,
+			Imprint:       imprint,
+			URL:           url,
+			ReleaseDate:   releaseDate,
+			CoverFilepath: coverFilepath,
+			CoverMimeType: coverMimeType,
+			Identifiers:   identifiersList,
+		},
+		Package:  pkg,
+		BasePath: basePath,
 	}, nil
 }

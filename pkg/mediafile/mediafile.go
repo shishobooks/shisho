@@ -20,6 +20,16 @@ type ParsedIdentifier struct {
 	Value string // The identifier value
 }
 
+// ParsedChapter represents a chapter parsed from file metadata.
+// Position fields are mutually exclusive based on file type.
+type ParsedChapter struct {
+	Title            string
+	StartPage        *int            // CBZ: 0-indexed page number
+	StartTimestampMs *int64          // M4B: milliseconds from start
+	Href             *string         // EPUB: content document href
+	Children         []ParsedChapter // EPUB nesting only; CBZ/M4B always empty
+}
+
 type ParsedMetadata struct {
 	Title         string
 	Subtitle      string // from M4B freeform SUBTITLE atom
@@ -47,6 +57,8 @@ type ParsedMetadata struct {
 	PageCount *int
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata
 	Identifiers []ParsedIdentifier
+	// Chapters contains chapter information parsed from file metadata
+	Chapters []ParsedChapter
 }
 
 func (m *ParsedMetadata) String() string {

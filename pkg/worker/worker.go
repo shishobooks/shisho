@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -39,6 +40,7 @@ type Worker struct {
 	processFuncs map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error
 
 	bookService      *books.Service
+	chapterService   *chapters.Service
 	genreService     *genres.Service
 	imprintService   *imprints.Service
 	jobService       *jobs.Service
@@ -60,6 +62,7 @@ type Worker struct {
 
 func New(cfg *config.Config, db *bun.DB) *Worker {
 	bookService := books.NewService(db)
+	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
 	imprintService := imprints.NewService(db)
 	jobService := jobs.NewService(db)
@@ -76,6 +79,7 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		log:    logger.New(),
 
 		bookService:      bookService,
+		chapterService:   chapterService,
 		genreService:     genreService,
 		imprintService:   imprintService,
 		jobService:       jobService,

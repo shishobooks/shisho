@@ -287,9 +287,64 @@ CBZ files can be converted to fixed-layout KePub for Kobo devices. See `kepub.md
 - Generator creates new ComicInfo.xml with all metadata
 - Parser returns metadata from images only (page count, cover)
 
+## Chapter Detection
+
+CBZ files can have chapters detected from their structure. Chapters are stored in the database and accessible via API.
+
+### Detection Strategy (2-phase)
+
+**Phase 1: Folder-based Detection** (`pkg/cbz/chapters.go`)
+- Groups pages by their immediate parent directory
+- Each unique folder becomes a chapter
+- Chapter title = folder name
+- Chapter start page = first page in that folder
+- Only triggers if 2+ distinct folders exist
+
+**Phase 2: Filename Pattern Detection** (fallback)
+- Regex pattern: `(?i)ch(?:apter)?[\s_-]*(\d+)`
+- Matches: `ch01`, `chapter_02`, `Ch-3`, `CHAPTER 10`
+- Groups consecutive pages with same chapter number
+- Chapter title = "Chapter N"
+
+**Detection Priority:**
+1. Try folder-based detection first
+2. If no folders found (all pages in root), try filename patterns
+3. If neither works, no chapters detected
+
+### Key Functions
+
+```go
+// Detect chapters from CBZ file structure
+func DetectChapters(files []string) []mediafile.ParsedChapter
+
+// Internal: folder-based detection
+func detectChaptersFromFolders(files []string) []mediafile.ParsedChapter
+
+// Internal: filename pattern detection
+func detectChaptersFromFilenames(files []string) []mediafile.ParsedChapter
+```
+
+### Chapter Data Structure
+
+```go
+type ParsedChapter struct {
+    Title     string
+    StartPage *int  // 0-indexed page number for CBZ
+}
+```
+
+### Integration
+
+- Chapters extracted during `Parse()` and included in `ParsedMetadata.Chapters`
+- Worker syncs chapters to database via `chapterService.ReplaceChapters()`
+- API: `GET /books/files/:id/chapters` returns chapter list
+- API: `PUT /books/files/:id/chapters` allows manual chapter editing
+
 ## Related Files
 
 - `pkg/cbz/cbz.go` - CBZ parsing
+- `pkg/cbz/chapters.go` - Chapter detection logic
+- `pkg/cbz/chapters_test.go` - Chapter detection tests
 - `pkg/cbz/types.go` - ComicInfo types
 - `pkg/filegen/cbz.go` - CBZ generation
 - `pkg/filegen/cbz_test.go` - CBZ generation tests
