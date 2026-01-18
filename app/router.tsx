@@ -23,6 +23,7 @@ import PersonList from "@/components/pages/PersonList";
 import PublisherDetail from "@/components/pages/PublisherDetail";
 import PublishersList from "@/components/pages/PublishersList";
 import Root from "@/components/pages/Root";
+import SecuritySettings from "@/components/pages/SecuritySettings";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
@@ -150,6 +151,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <UserSettings />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "user/security",
+        element: (
+          <ProtectedRoute>
+            <SecuritySettings />
           </ProtectedRoute>
         ),
       },

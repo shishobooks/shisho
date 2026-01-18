@@ -70,3 +70,7 @@ packages:
     output_path: "app/types/generated/imprints.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/apikeys"
+    output_path: "app/types/generated/apikeys.ts"
+    include_files:
+      - model.go

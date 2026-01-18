@@ -54,6 +54,14 @@ export default defineConfig({
           "X-Forwarded-Prefix": "/api",
         },
       },
+      // eReader browser UI routes (API key auth for stock browser support)
+      "/ereader": {
+        target: `http://localhost:${getApiPort()}`,
+      },
+      // Short URL resolution for eReader setup
+      "/e": {
+        target: `http://localhost:${getApiPort()}`,
+      },
     },
   },
   resolve: {

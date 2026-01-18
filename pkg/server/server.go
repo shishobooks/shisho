@@ -11,11 +11,14 @@ import (
 	"github.com/robinjoseph08/golib/echo/v4/health"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/logger"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
+	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/ereader"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filesystem"
 	"github.com/shishobooks/shisho/pkg/genres"
@@ -65,12 +68,19 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 	users.RegisterRoutes(e, db, authMiddleware)
 	roles.RegisterRoutes(e, db, authMiddleware)
 
+	// API Keys routes
+	apikeys.RegisterRoutes(e, db, authMiddleware)
+
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
 	registerProtectedRoutes(e, db, cfg, authMiddleware)
 
 	// Register OPDS routes with Basic Auth
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
+
+	// Register eReader routes (API key auth for stock browser support)
+	downloadCache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
+	ereader.RegisterRoutes(e, db, downloadCache)
 
 	// Config routes (require authentication)
 	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)

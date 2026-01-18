@@ -98,6 +98,36 @@ Used to determine which metadata to keep when conflicts occur.
 - OPDS v1.2 server hosted in the application
 - As new functionality is added, keep the OPDS server up-to-date with the new features
 
+### eReader Browser UI (`pkg/ereader/`)
+
+Server-rendered HTML pages for stock eReader browsers (Kobo, Kindle) that can't use OPDS or the React frontend.
+
+**Key files:**
+- `handlers.go` - HTTP handlers mirroring OPDS structure
+- `templates.go` - Go string templates for HTML rendering
+- `middleware.go` - API key authentication from URL path
+- `routes.go` - Routes under `/ereader/key/:apiKey/*`
+
+**eReader Browser Limitations:**
+- No flexbox/modern CSS
+- Minimal JavaScript support
+- Cookies cleared on browser close (Kobo)
+- No Basic Auth support
+
+**Styling for Simple Browsers:**
+- Use inline styles instead of CSS attribute selectors (`input[type="text"]`)
+- Use `display: block` explicitly for links that should be block-level
+- Stack form elements vertically (input on one line, button on next)
+- Large tap targets: 12px+ padding on buttons/links
+- Explicit borders (2px solid #000) for visibility
+- Full-width elements (`width: 100%`) instead of percentages
+- Use `<input type="submit">` instead of `<button>` for better compatibility
+
+**Cover Images:**
+- eReader routes use API key auth, so covers need their own endpoint at `/ereader/key/:apiKey/cover/:bookId`
+- Cannot use `/api/books/{id}/cover` (requires session auth)
+- The `selectCoverFile()` function must fall back to any available cover type, not just the preferred aspect ratio
+
 ### Authentication
 
 - RBAC is used throughout the app

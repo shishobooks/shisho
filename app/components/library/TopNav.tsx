@@ -2,6 +2,7 @@ import {
   BookPlus,
   Check,
   ChevronDown,
+  KeyRound,
   Library,
   LogOut,
   Plus,
@@ -308,6 +309,12 @@ const TopNav = () => {
                   <Link to="/user/settings">
                     <UserCog className="h-4 w-4" />
                     User Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/user/security">
+                    <KeyRound className="h-4 w-4" />
+                    Security
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>

@@ -21,6 +21,21 @@
         reverse_proxy localhost:3689
     }
 
+    # eReader browser UI routes (API key auth for stock browser support)
+    handle /ereader/* {
+        reverse_proxy localhost:3689
+    }
+
+    # Short URL resolution for eReader setup
+    handle /e/* {
+        reverse_proxy localhost:3689
+    }
+
+    # OPDS feeds (proxy directly to backend)
+    handle /opds/* {
+        reverse_proxy localhost:3689
+    }
+
     # Serve static frontend files
     handle {
         root * /srv

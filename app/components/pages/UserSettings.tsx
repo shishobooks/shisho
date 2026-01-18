@@ -1,16 +1,9 @@
-import { ArrowLeft, Check, Moon, Sun } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Check, KeyRound, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { useResetPassword } from "@/hooks/queries/users";
-import { useAuth } from "@/hooks/useAuth";
 
 interface ThemeOptionProps {
   theme: Theme;
@@ -43,46 +36,7 @@ const ThemeOption = ({
 );
 
 const UserSettings = () => {
-  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
-  const resetPasswordMutation = useResetPassword();
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  const handleResetPassword = async () => {
-    if (!currentPassword) {
-      toast.error("Current password is required");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    try {
-      await resetPasswordMutation.mutateAsync({
-        id: String(user!.id),
-        payload: {
-          current_password: currentPassword,
-          new_password: newPassword,
-        },
-      });
-      toast.success("Password changed successfully");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch {
-      toast.error("Failed to change password");
-    }
-  };
 
   return (
     <div>
@@ -138,58 +92,21 @@ const UserSettings = () => {
             </div>
           </div>
 
-          <Separator />
-
-          {/* Password Change */}
-          <div className="border border-border rounded-md p-6">
-            <h2 className="text-lg font-semibold mb-4">Change Password</h2>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current-password">Current Password</Label>
-                <Input
-                  autoComplete="current-password"
-                  id="current-password"
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter your current password"
-                  type="password"
-                  value={currentPassword}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <Input
-                  autoComplete="new-password"
-                  id="new-password"
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter a new password"
-                  type="password"
-                  value={newPassword}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Password must be at least 8 characters
+          {/* Security Settings Link */}
+          <div className="rounded-md border border-border p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Security</h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage your password and API keys
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <Input
-                  autoComplete="new-password"
-                  id="confirm-password"
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your new password"
-                  type="password"
-                  value={confirmPassword}
-                />
-              </div>
-              <div className="flex justify-end pt-2">
-                <Button
-                  disabled={resetPasswordMutation.isPending}
-                  onClick={handleResetPassword}
-                >
-                  {resetPasswordMutation.isPending
-                    ? "Changing..."
-                    : "Change Password"}
-                </Button>
-              </div>
+              <Button asChild variant="outline">
+                <Link to="/user/security">
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Security Settings
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

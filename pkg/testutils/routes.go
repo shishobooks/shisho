@@ -15,4 +15,12 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB) {
 	test := e.Group("/test")
 	test.POST("/users", h.createUser)
 	test.DELETE("/users", h.deleteAllUsers)
+
+	// eReader test data endpoints
+	test.POST("/libraries", h.createLibrary)
+	test.POST("/books", h.createBook)
+	test.POST("/persons", h.createPerson)
+	test.POST("/series", h.createSeries)
+	test.POST("/api-keys", h.createAPIKey)
+	test.DELETE("/ereader", h.deleteAllEReaderData)
 }

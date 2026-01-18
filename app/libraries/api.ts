@@ -1,5 +1,7 @@
 import QueryString from "qs";
 
+import type { APIKey, APIKeyShortURL } from "@/types/generated/apikeys";
+
 export class ShishoAPIError extends Error {
   // The Shisho error code.
   public code: string;
@@ -63,6 +65,41 @@ class ShishoAPI {
       body,
       signal,
     }).then((response) => this.checkStatus(response));
+  }
+
+  // API Key methods
+  listApiKeys(): Promise<APIKey[]> {
+    return this.request("GET", "/user/api-keys");
+  }
+
+  createApiKey(name: string): Promise<APIKey> {
+    return this.request("POST", "/user/api-keys", { name });
+  }
+
+  updateApiKeyName(id: string, name: string): Promise<APIKey> {
+    return this.request("PATCH", `/user/api-keys/${id}`, { name });
+  }
+
+  deleteApiKey(id: string): Promise<void> {
+    return this.request("DELETE", `/user/api-keys/${id}`);
+  }
+
+  addApiKeyPermission(id: string, permission: string): Promise<APIKey> {
+    return this.request(
+      "POST",
+      `/user/api-keys/${id}/permissions/${permission}`,
+    );
+  }
+
+  removeApiKeyPermission(id: string, permission: string): Promise<APIKey> {
+    return this.request(
+      "DELETE",
+      `/user/api-keys/${id}/permissions/${permission}`,
+    );
+  }
+
+  generateApiKeyShortUrl(id: string): Promise<APIKeyShortURL> {
+    return this.request("POST", `/user/api-keys/${id}/short-url`);
   }
 }
 
