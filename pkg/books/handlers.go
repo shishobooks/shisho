@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -38,6 +39,7 @@ type handler struct {
 	publisherService *publishers.Service
 	imprintService   *imprints.Service
 	downloadCache    *downloadcache.Cache
+	pageCache        *cbzpages.Cache
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -1540,6 +1542,58 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 
 	// Set content disposition for download with the formatted filename
 	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+
+	return c.File(cachedPath)
+}
+
+func (h *handler) getPage(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	fileID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	pageNum, err := strconv.Atoi(c.Param("pageNum"))
+	if err != nil {
+		return errcodes.ValidationError("Invalid page number")
+	}
+
+	// Retrieve file with access check
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &fileID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Only CBZ files have pages
+	if file.FileType != models.FileTypeCBZ {
+		return errcodes.ValidationError("Only CBZ files have pages")
+	}
+
+	// Validate page number against page count
+	if file.PageCount != nil && pageNum >= *file.PageCount {
+		return errcodes.NotFound("Page")
+	}
+	if pageNum < 0 {
+		return errcodes.NotFound("Page")
+	}
+
+	// Get or extract the page
+	cachedPath, mimeType, err := h.pageCache.GetPage(file.Filepath, file.ID, pageNum)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Set cache headers (cache for 1 year since page content doesn't change)
+	c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	c.Response().Header().Set("Content-Type", mimeType)
 
 	return c.File(cachedPath)
 }

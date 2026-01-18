@@ -3,6 +3,7 @@ package books
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/genres"
@@ -27,6 +28,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
+	pageCache := cbzpages.NewCache(cfg.DownloadCacheDir)
 
 	h := &handler{
 		bookService:      bookService,
@@ -38,6 +40,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		publisherService: publisherService,
 		imprintService:   imprintService,
 		downloadCache:    cache,
+		pageCache:        pageCache,
 	}
 
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
@@ -52,4 +55,5 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/download/original", h.downloadOriginalFile)
 	g.GET("/files/:id/download/kepub", h.downloadKepubFile)
 	g.HEAD("/files/:id/download/kepub", h.downloadKepubFile)
+	g.GET("/files/:id/page/:pageNum", h.getPage)
 }

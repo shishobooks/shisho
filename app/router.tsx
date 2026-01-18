@@ -7,6 +7,7 @@ import AdminLibraries from "@/components/pages/AdminLibraries";
 import AdminSettings from "@/components/pages/AdminSettings";
 import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
+import CBZReader from "@/components/pages/CBZReader";
 import CreateLibrary from "@/components/pages/CreateLibrary";
 import CreateUser from "@/components/pages/CreateUser";
 import GenreDetail from "@/components/pages/GenreDetail";
@@ -196,6 +197,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute checkLibraryAccess>
             <BookDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/books/:bookId/files/:fileId/read",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <CBZReader />
           </ProtectedRoute>
         ),
       },

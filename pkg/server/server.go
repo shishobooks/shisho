@@ -33,6 +33,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/users"
@@ -87,6 +88,9 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 
 	// Filesystem routes (require authentication)
 	filesystem.RegisterRoutesWithAuth(e, authMiddleware)
+
+	// Settings routes (require authentication)
+	settings.RegisterRoutes(e, db, authMiddleware)
 
 	echo.NotFoundHandler = notFoundHandler
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle

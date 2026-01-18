@@ -100,7 +100,7 @@ func buildChapterTree(chapters []*models.Chapter) []*models.Chapter {
 	}
 
 	// Build tree
-	var roots []*models.Chapter
+	roots := make([]*models.Chapter, 0)
 	for _, ch := range chapters {
 		if ch.ParentID == nil {
 			roots = append(roots, ch)

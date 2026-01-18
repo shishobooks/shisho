@@ -286,6 +286,17 @@ const FileRow = ({
             </Button>
           )}
 
+          {/* Read button - CBZ only */}
+          {file.file_type === FileTypeCBZ && (
+            <Link
+              to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+            >
+              <Button size="sm" title="Read" variant="ghost">
+                Read
+              </Button>
+            </Link>
+          )}
+
           {/* Edit button */}
           <Button onClick={onEdit} size="sm" title="Edit" variant="ghost">
             <Edit className="h-3 w-3" />

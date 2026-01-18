@@ -14,3 +14,5 @@ export * from "./generated/genres";
 export * from "./generated/tags";
 export * from "./generated/publishers";
 export * from "./generated/imprints";
+
+export type { ViewerSettings } from "@/hooks/queries/settings";
