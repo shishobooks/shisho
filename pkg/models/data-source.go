@@ -1,8 +1,9 @@
 package models
 
 const (
-	//tygo:emit export type DataSource = typeof DataSourceManual | typeof DataSourceFileMetadata | typeof DataSourceExistingCover | typeof DataSourceEPUBMetadata | typeof DataSourceCBZMetadata | typeof DataSourceM4BMetadata | typeof DataSourceFilepath;
+	//tygo:emit export type DataSource = typeof DataSourceManual | typeof DataSourceSidecar | typeof DataSourceFileMetadata | typeof DataSourceExistingCover | typeof DataSourceEPUBMetadata | typeof DataSourceCBZMetadata | typeof DataSourceM4BMetadata | typeof DataSourceFilepath;
 	DataSourceManual        = "manual"
+	DataSourceSidecar       = "sidecar"
 	DataSourceFileMetadata  = "file_metadata"
 	DataSourceExistingCover = "existing_cover"
 	DataSourceEPUBMetadata  = "epub_metadata"
@@ -14,12 +15,14 @@ const (
 // Lower priority means that we respect it more than higher priority.
 const (
 	DataSourceManualPriority       = 0
-	DataSourceFileMetadataPriority = 1 // All file-derived sources share this
-	DataSourceFilepathPriority     = 2
+	DataSourceSidecarPriority      = 1 // Sidecar has higher priority than file metadata
+	DataSourceFileMetadataPriority = 2 // All file-derived sources share this
+	DataSourceFilepathPriority     = 3
 )
 
 var DataSourcePriority = map[string]int{
 	DataSourceManual:        DataSourceManualPriority,
+	DataSourceSidecar:       DataSourceSidecarPriority,
 	DataSourceFileMetadata:  DataSourceFileMetadataPriority,
 	DataSourceExistingCover: DataSourceFileMetadataPriority,
 	DataSourceEPUBMetadata:  DataSourceFileMetadataPriority,

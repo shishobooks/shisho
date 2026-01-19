@@ -1,5 +1,11 @@
 # Remove Sidecar Data Source Design
 
+> **⚠️ REVERTED:** This design was implemented and later reverted on 2026-01-19.
+> The original issue of sidecars preventing file metadata updates is solved by using
+> `forceRefresh` during scans. Sidecar priority has been restored to be higher than
+> file metadata (priority 1 vs 2), which better matches Jellyfin's behavior and
+> ensures sidecar-stored metadata takes precedence.
+
 ## Problem
 
 Currently, `sidecar` is a possible data source with priority 1 (second only to manual edits). This causes a problem when:

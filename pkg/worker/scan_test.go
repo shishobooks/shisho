@@ -1563,8 +1563,9 @@ func TestProcessScanJob_HigherPriorityEmptyAuthorDoesNotOverwrite(t *testing.T) 
 	require.Len(t, allBooks, 1)
 
 	book = allBooks[0]
-	// Title might be from either EPUB (both have same priority)
-	assert.Equal(t, models.DataSourceEPUBMetadata, book.TitleSource)
+	// Title might be from sidecar (written after first scan, higher priority than epub_metadata)
+	// or from the second EPUB if no sidecar exists
+	assert.Contains(t, []string{models.DataSourceEPUBMetadata, models.DataSourceSidecar}, book.TitleSource)
 	// Authors should STILL be from filepath - not cleared by the EPUB with no authors
 	require.Len(t, book.Authors, 1, "authors should not be cleared by higher priority source with empty value")
 	require.NotNil(t, book.Authors[0].Person)

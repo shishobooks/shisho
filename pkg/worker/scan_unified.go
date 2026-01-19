@@ -351,10 +351,10 @@ func (w *Worker) scanFileCore(
 	}
 
 	dataSource := metadata.DataSource
-	sidecarSource := models.DataSourceFileMetadata
+	sidecarSource := models.DataSourceSidecar
 
-	// Read sidecar files if they exist (same priority as file metadata)
-	// Sidecars can override filepath-sourced data but not file metadata or user data
+	// Read sidecar files if they exist (higher priority than file metadata)
+	// Sidecars can override file metadata but not manual user edits
 	bookSidecarData, err := sidecar.ReadBookSidecar(book.Filepath)
 	if err != nil {
 		log.Warn("failed to read book sidecar", logger.Data{"error": err.Error()})

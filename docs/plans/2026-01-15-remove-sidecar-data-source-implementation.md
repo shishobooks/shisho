@@ -1,5 +1,8 @@
 # Remove Sidecar Data Source Implementation Plan
 
+> **⚠️ REVERTED:** This implementation was completed and later reverted on 2026-01-19.
+> See the design document for details on why this was reverted.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Remove `DataSourceSidecar` as a concept so sidecars use the appropriate file type's data source instead of having their own higher priority.

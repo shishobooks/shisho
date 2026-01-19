@@ -2232,13 +2232,12 @@ func TestScanFileCore_SidecarReading_BookTitle(t *testing.T) {
 
 	// Book title should be updated from sidecar
 	assert.Equal(t, "Sidecar Title", result.Book.Title)
-	assert.Equal(t, models.DataSourceFileMetadata, result.Book.TitleSource)
+	assert.Equal(t, models.DataSourceSidecar, result.Book.TitleSource)
 }
 
-// TestScanFileCore_SidecarPriority_DoesNotOverrideEqualPriority verifies that sidecar
-// files do NOT override data from sources with equal priority (regression test for
-// sidecar priority logic - sidecars should only override STRICTLY lower priority).
-func TestScanFileCore_SidecarPriority_DoesNotOverrideEqualPriority(t *testing.T) {
+// TestScanFileCore_SidecarPriority_OverridesFileMetadata verifies that sidecar
+// files DO override data from file metadata sources (sidecar has higher priority).
+func TestScanFileCore_SidecarPriority_OverridesFileMetadata(t *testing.T) {
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -2248,7 +2247,7 @@ func TestScanFileCore_SidecarPriority_DoesNotOverrideEqualPriority(t *testing.T)
 	// Create a book directory
 	bookDir := testgen.CreateSubDir(t, libraryPath, "Test Book")
 
-	// Create a book with epub_metadata source (equal priority to sidecar/file_metadata)
+	// Create a book with epub_metadata source (lower priority than sidecar)
 	book := &models.Book{
 		LibraryID:    1,
 		Filepath:     bookDir,
@@ -2273,7 +2272,7 @@ func TestScanFileCore_SidecarPriority_DoesNotOverrideEqualPriority(t *testing.T)
 	require.NoError(t, err)
 
 	// Create book sidecar file with different title
-	// Sidecar (file_metadata) has same priority as epub_metadata
+	// Sidecar has higher priority than epub_metadata
 	bookSidecarPath := filepath.Join(bookDir, "Test Book.metadata.json")
 	sidecarContent := `{"version":1,"title":"Sidecar Title"}`
 	err = os.WriteFile(bookSidecarPath, []byte(sidecarContent), 0644)
@@ -2291,9 +2290,9 @@ func TestScanFileCore_SidecarPriority_DoesNotOverrideEqualPriority(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Book title should remain EPUB Title (sidecar should NOT override equal priority)
-	assert.Equal(t, "EPUB Title", result.Book.Title)
-	assert.Equal(t, models.DataSourceEPUBMetadata, result.Book.TitleSource)
+	// Book title should be updated from sidecar (sidecar overrides file metadata)
+	assert.Equal(t, "Sidecar Title", result.Book.Title)
+	assert.Equal(t, models.DataSourceSidecar, result.Book.TitleSource)
 }
 
 // TestScanFileCore_SidecarPriority_OverridesLowerPriority verifies that sidecar
@@ -2353,7 +2352,7 @@ func TestScanFileCore_SidecarPriority_OverridesLowerPriority(t *testing.T) {
 
 	// Book title should be updated from sidecar (sidecar overrides lower priority filepath)
 	assert.Equal(t, "Sidecar Title", result.Book.Title)
-	assert.Equal(t, models.DataSourceFileMetadata, result.Book.TitleSource)
+	assert.Equal(t, models.DataSourceSidecar, result.Book.TitleSource)
 }
 
 // TestScanFileByID_CoverRecovery verifies that missing cover files are re-extracted

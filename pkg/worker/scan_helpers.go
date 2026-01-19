@@ -78,8 +78,7 @@ func equalStringSlices(a, b []string) bool {
 }
 
 // shouldApplySidecarScalar determines if a sidecar scalar value should be applied.
-// Sidecars only override data from STRICTLY lower priority sources (not equal priority).
-// This prevents sidecars from overriding fresh file metadata from the same source level.
+// Sidecars have higher priority than file metadata and can override it.
 // When forceRefresh is true, sidecars are skipped entirely - the embedded file metadata wins.
 func shouldApplySidecarScalar(newValue, existingValue, existingSource string, forceRefresh bool) bool {
 	// Force refresh skips sidecars - embedded file metadata should win
@@ -102,15 +101,15 @@ func shouldApplySidecarScalar(newValue, existingValue, existingSource string, fo
 		existingSource = models.DataSourceFilepath
 	}
 
-	// Sidecar (file_metadata) only overrides STRICTLY lower priority sources
-	sidecarPriority := models.DataSourcePriority[models.DataSourceFileMetadata]
+	// Sidecar has its own priority level, higher than file metadata
+	sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
 	existingPriority := models.DataSourcePriority[existingSource]
 
 	return sidecarPriority < existingPriority
 }
 
 // shouldApplySidecarRelationship determines if a sidecar relationship should be applied.
-// Sidecars only override data from STRICTLY lower priority sources (not equal priority).
+// Sidecars have higher priority than file metadata and can override it.
 // When forceRefresh is true, sidecars are skipped entirely - the embedded file metadata wins.
 func shouldApplySidecarRelationship(newItems, existingItems []string, existingSource string, forceRefresh bool) bool {
 	// Force refresh skips sidecars - embedded file metadata should win
@@ -133,8 +132,8 @@ func shouldApplySidecarRelationship(newItems, existingItems []string, existingSo
 		existingSource = models.DataSourceFilepath
 	}
 
-	// Sidecar (file_metadata) only overrides STRICTLY lower priority sources
-	sidecarPriority := models.DataSourcePriority[models.DataSourceFileMetadata]
+	// Sidecar has its own priority level, higher than file metadata
+	sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
 	existingPriority := models.DataSourcePriority[existingSource]
 
 	return sidecarPriority < existingPriority
