@@ -1,9 +1,20 @@
 import { uniqBy } from "lodash";
+import { MoreVertical, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useResyncBook } from "@/hooks/queries/books";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -109,12 +120,72 @@ const BookItem = ({
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
   const [coverError, setCoverError] = useState(false);
+  const [showRefreshDialog, setShowRefreshDialog] = useState(false);
+  const resyncBookMutation = useResyncBook();
 
   // For placeholder variant: use same priority logic as backend's selectCoverFile
   const placeholderVariant = getCoverFileType(book.files, coverAspectRatio);
 
+  const handleScanMetadata = async () => {
+    try {
+      await resyncBookMutation.mutateAsync({
+        bookId: book.id,
+        payload: { refresh: false },
+      });
+      toast.success("Metadata scanned");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to scan metadata",
+      );
+    }
+  };
+
+  const handleRefreshMetadata = async () => {
+    try {
+      await resyncBookMutation.mutateAsync({
+        bookId: book.id,
+        payload: { refresh: true },
+      });
+      toast.success("Metadata refreshed");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh metadata",
+      );
+    }
+  };
+
   return (
-    <div className="w-32" key={book.id}>
+    <div className="w-32 group/card relative" key={book.id}>
+      {/* Context menu button - shows on hover */}
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/card:opacity-100 transition-opacity">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              className="h-7 w-7 bg-black/50 hover:bg-black/70"
+              size="icon"
+              variant="ghost"
+            >
+              <MoreVertical className="h-4 w-4 text-white" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            <DropdownMenuItem
+              disabled={resyncBookMutation.isPending}
+              onClick={handleScanMetadata}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Scan for new metadata
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh all metadata
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <Link
         className="group cursor-pointer"
         to={`/libraries/${libraryId}/books/${book.id}`}
@@ -188,6 +259,14 @@ const BookItem = ({
           </Badge>
         </div>
       )}
+      <ResyncConfirmDialog
+        entityName={book.title}
+        entityType="book"
+        isPending={resyncBookMutation.isPending}
+        onConfirm={handleRefreshMetadata}
+        onOpenChange={setShowRefreshDialog}
+        open={showRefreshDialog}
+      />
     </div>
   );
 };

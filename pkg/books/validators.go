@@ -51,3 +51,8 @@ type UpdateFilePayload struct {
 	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
 }
+
+// ResyncPayload contains the request parameters for resync operations.
+type ResyncPayload struct {
+	Refresh bool `json:"refresh"`
+}

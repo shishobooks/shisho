@@ -4,7 +4,28 @@ import * as React from "react";
 
 import { cn } from "@/libraries/utils";
 
-const Dialog = DialogPrimitive.Root;
+// Custom Dialog wrapper that fixes Radix pointer-events bug.
+// When a dialog triggered from a dropdown menu closes, Radix's DismissableLayer
+// incorrectly sets pointer-events: none on the body during unmount.
+// This wrapper cleans up pointer-events after the dialog closes.
+const Dialog = ({
+  open,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) => {
+  React.useEffect(() => {
+    if (open === false) {
+      const timeout = setTimeout(() => {
+        document.body.style.pointerEvents = "";
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [open]);
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} {...props} />
+  );
+};
 
 const DialogTrigger = DialogPrimitive.Trigger;
 

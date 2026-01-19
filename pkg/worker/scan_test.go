@@ -777,10 +777,13 @@ func TestProcessScanJob_MetadataUpdateOnRescan(t *testing.T) {
 	allBooks = tc.listBooks()
 	require.Len(t, allBooks, 1)
 
-	// Book should now have two files (the original record is still there,
-	// but a new file was added)
+	// Book should now have one file - the new one with updated metadata.
+	// The old file record was cleaned up by orphan cleanup since the physical file was deleted.
 	files := tc.listFiles()
-	require.Len(t, files, 2)
+	require.Len(t, files, 1)
+
+	// Verify the file is the new one with updated metadata
+	assert.Contains(t, files[0].Filepath, "book2.epub")
 }
 
 func TestProcessScanJob_RootLevelFileWithCover(t *testing.T) {
@@ -882,8 +885,8 @@ func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
 	// Original file should no longer exist at root
 	assert.False(t, testgen.FileExists(originalPath), "original file should be moved from root")
 
-	// File should exist in the organized folder
-	organizedFile := filepath.Join(organizedFolder, "[Test Author] Organized Book.epub")
+	// File should exist in the organized folder (without author prefix in filename)
+	organizedFile := filepath.Join(organizedFolder, "Organized Book.epub")
 	assert.True(t, testgen.FileExists(organizedFile), "file should exist in organized folder")
 
 	// Verify the book record has the updated path
@@ -953,8 +956,8 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T
 
 	// Folder should be renamed to match [Author] Title convention
 	expectedFolder := filepath.Join(libraryPath, "[Author Name] Book In Folder")
-	// File is also renamed to match [Author] Title convention
-	expectedFilePath := filepath.Join(expectedFolder, "[Author Name] Book In Folder.epub")
+	// File is named without author prefix (since it's already in the author-prefixed folder)
+	expectedFilePath := filepath.Join(expectedFolder, "Book In Folder.epub")
 	assert.True(t, testgen.FileExists(expectedFilePath), "file should be renamed in folder")
 	assert.False(t, testgen.FileExists(originalPath), "original file should no longer exist")
 
@@ -986,8 +989,8 @@ func TestProcessScanJob_OrganizeFileStructure_WithCover(t *testing.T) {
 	organizedFolder := filepath.Join(libraryPath, "[Cover Author] Book With Cover")
 	assert.True(t, testgen.FileExists(organizedFolder), "organized folder should be created")
 
-	// Cover should also be in the organized folder
-	coverPath := filepath.Join(organizedFolder, "[Cover Author] Book With Cover.epub.cover.png")
+	// Cover should also be in the organized folder (filename without author prefix)
+	coverPath := filepath.Join(organizedFolder, "Book With Cover.epub.cover.png")
 	assert.True(t, testgen.FileExists(coverPath), "cover should be moved to organized folder")
 
 	// No cover should remain at root
@@ -1317,9 +1320,9 @@ func TestProcessScanJob_VolumeNormalization_BareNumbers(t *testing.T) {
 	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder for v1 should exist")
 	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder for v2 should exist")
 
-	// Verify files are in the organized folders
-	organizedFile1 := filepath.Join(organizedFolder1, "[Author] Title v1.cbz")
-	organizedFile2 := filepath.Join(organizedFolder2, "[Author] Title v2.cbz")
+	// Verify files are in the organized folders (filenames without author prefix)
+	organizedFile1 := filepath.Join(organizedFolder1, "Title v1.cbz")
+	organizedFile2 := filepath.Join(organizedFolder2, "Title v2.cbz")
 
 	assert.True(t, testgen.FileExists(organizedFile1), "organized file v1 should exist")
 	assert.True(t, testgen.FileExists(organizedFile2), "organized file v2 should exist")
@@ -1447,10 +1450,10 @@ func TestProcessScanJob_OrganizeFileStructure_MultipleRootLevelFiles(t *testing.
 	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Two] Book Two.epub")))
 	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "[Author Three] Book Three.epub")))
 
-	// Files should be in their organized folders
-	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder1, "[Author One] Book One.epub")))
-	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder2, "[Author Two] Book Two.epub")))
-	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder3, "[Author Three] Book Three.epub")))
+	// Files should be in their organized folders (filenames without author prefix)
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder1, "Book One.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder2, "Book Two.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(organizedFolder3, "Book Three.epub")))
 }
 
 // TestProcessScanJob_OrganizeFileStructure_DeferredOrganization verifies that

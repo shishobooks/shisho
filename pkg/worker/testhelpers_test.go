@@ -9,12 +9,15 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/publishers"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
@@ -34,6 +37,7 @@ type testContext struct {
 	jobLogService  *joblogs.Service
 	personService  *people.Service
 	seriesService  *series.Service
+	searchService  *search.Service // may be nil if not initialized
 }
 
 // newTestContext creates a new test context with an in-memory SQLite database
@@ -64,6 +68,8 @@ func newTestContext(t *testing.T) *testContext {
 	seriesService := series.NewService(db)
 	genreService := genres.NewService(db)
 	tagService := tags.NewService(db)
+	publisherService := publishers.NewService(db)
+	imprintService := imprints.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -71,16 +77,18 @@ func newTestContext(t *testing.T) *testContext {
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 	}
 	w := &Worker{
-		config:         cfg,
-		log:            logger.New(),
-		bookService:    bookService,
-		libraryService: libraryService,
-		jobService:     jobService,
-		jobLogService:  jobLogService,
-		personService:  personService,
-		seriesService:  seriesService,
-		genreService:   genreService,
-		tagService:     tagService,
+		config:           cfg,
+		log:              logger.New(),
+		bookService:      bookService,
+		libraryService:   libraryService,
+		jobService:       jobService,
+		jobLogService:    jobLogService,
+		personService:    personService,
+		seriesService:    seriesService,
+		genreService:     genreService,
+		tagService:       tagService,
+		publisherService: publisherService,
+		imprintService:   imprintService,
 	}
 
 	// Create context with logger
@@ -191,4 +199,81 @@ func (tc *testContext) listSeries() []*models.Series {
 		tc.t.Fatalf("failed to list series: %v", err)
 	}
 	return allSeries
+}
+
+// newTestContextWithSearchService creates a test context with a real search service
+// for testing search index functionality.
+func newTestContextWithSearchService(t *testing.T) *testContext {
+	t.Helper()
+
+	// Create in-memory SQLite database
+	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open in-memory database: %v", err)
+	}
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	// Run migrations
+	_, err = migrations.BringUpToDate(context.Background(), db)
+	if err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Create services
+	bookService := books.NewService(db)
+	libraryService := libraries.NewService(db)
+	jobService := jobs.NewService(db)
+	jobLogService := joblogs.NewService(db)
+	personService := people.NewService(db)
+	seriesService := series.NewService(db)
+	genreService := genres.NewService(db)
+	tagService := tags.NewService(db)
+	searchService := search.NewService(db)
+	publisherService := publishers.NewService(db)
+	imprintService := imprints.NewService(db)
+
+	// Create worker with search service
+	cfg := &config.Config{
+		WorkerProcesses:           1,
+		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
+	}
+	w := &Worker{
+		config:           cfg,
+		log:              logger.New(),
+		bookService:      bookService,
+		libraryService:   libraryService,
+		jobService:       jobService,
+		jobLogService:    jobLogService,
+		personService:    personService,
+		seriesService:    seriesService,
+		genreService:     genreService,
+		tagService:       tagService,
+		searchService:    searchService,
+		publisherService: publisherService,
+		imprintService:   imprintService,
+	}
+
+	// Create context with logger
+	ctx := logger.New().WithContext(context.Background())
+
+	tc := &testContext{
+		t:              t,
+		ctx:            ctx,
+		db:             db,
+		worker:         w,
+		bookService:    bookService,
+		libraryService: libraryService,
+		jobService:     jobService,
+		jobLogService:  jobLogService,
+		personService:  personService,
+		seriesService:  seriesService,
+		searchService:  searchService,
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return tc
 }

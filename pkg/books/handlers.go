@@ -1,6 +1,7 @@
 package books
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,28 @@ import (
 	"github.com/shishobooks/shisho/pkg/tags"
 )
 
+// ScanOptions configures a scan operation.
+// Entry points are mutually exclusive - exactly one of FileID or BookID must be set.
+type ScanOptions struct {
+	FileID       int  // Single file resync: file already in DB
+	BookID       int  // Book resync: scan all files in book
+	ForceRefresh bool // Bypass priority checks, overwrite all metadata
+}
+
+// ScanResult contains the results of a scan operation.
+type ScanResult struct {
+	File        *models.File // The scanned/updated file (nil if deleted)
+	Book        *models.Book // The parent book (nil if deleted)
+	FileDeleted bool         // True if file was deleted (no longer on disk)
+	BookDeleted bool         // True if book was also deleted (was last file)
+}
+
+// Scanner defines the interface for scanning file and book metadata.
+// This interface is implemented by the worker package to avoid circular dependencies.
+type Scanner interface {
+	Scan(ctx context.Context, opts ScanOptions) (*ScanResult, error)
+}
+
 type handler struct {
 	bookService      *Service
 	libraryService   *libraries.Service
@@ -40,6 +63,7 @@ type handler struct {
 	imprintService   *imprints.Service
 	downloadCache    *downloadcache.Cache
 	pageCache        *cbzpages.Cache
+	scanner          Scanner
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -717,7 +741,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		opts.Columns = append(opts.Columns, "narrator_source")
 
 		// Delete existing narrator associations
-		if err := h.bookService.DeleteNarrators(ctx, file.ID); err != nil {
+		if _, err := h.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -1544,6 +1568,107 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
 
 	return c.File(cachedPath)
+}
+
+func (h *handler) resyncFile(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	// Bind params
+	params := ResyncPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Fetch the file to check library access
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Perform resync
+	result, err := h.scanner.Scan(ctx, ScanOptions{
+		FileID:       id,
+		ForceRefresh: params.Refresh,
+	})
+	if err != nil {
+		log.Error("failed to resync file", logger.Data{"file_id": id, "error": err.Error()})
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Handle deletion case
+	if result.FileDeleted {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"file_deleted": true,
+			"book_deleted": result.BookDeleted,
+		})
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, result.File))
+}
+
+func (h *handler) resyncBook(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Bind params
+	params := ResyncPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Fetch the book to check library access
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Perform resync
+	result, err := h.scanner.Scan(ctx, ScanOptions{
+		BookID:       id,
+		ForceRefresh: params.Refresh,
+	})
+	if err != nil {
+		log.Error("failed to resync book", logger.Data{"book_id": id, "error": err.Error()})
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Handle deletion case
+	if result.BookDeleted {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"book_deleted": true,
+		})
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, result.Book))
 }
 
 func (h *handler) getPage(c echo.Context) error {

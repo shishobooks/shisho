@@ -195,6 +195,21 @@ All editable metadata fields should be treated as first-class citizens. Don't ad
 
 When a user clears a metadata field, the cleared value should be saved (not revert to some default). The scanner will repopulate the field from the source file on the next scan if needed.
 
+## Known Radix UI Issues
+
+### Dialog + DropdownMenu pointer-events Bug
+
+**Problem:** When a Dialog is triggered from a DropdownMenu item, Radix's DismissableLayer incorrectly sets `pointer-events: none` on the body during unmount, leaving the page unclickable after the dialog closes.
+
+**Solution:** Already fixed globally in `app/components/ui/dialog.tsx`. The custom `Dialog` wrapper includes a cleanup effect that clears `pointer-events` after a 300ms delay, ensuring it runs after Radix's buggy unmount effects complete.
+
+**If you encounter similar issues:**
+1. Use browser DevTools to check if `pointer-events: none` is stuck on `<body>`
+2. Use a MutationObserver or setter trap to identify what's setting the style
+3. Add a delayed cleanup effect that runs after Radix's effects complete
+
+**Related:** DropdownMenu components that trigger dialogs should also have `onCloseAutoFocus={(e) => e.preventDefault()}` on `DropdownMenuContent` to prevent focus management conflicts.
+
 ## Key Files
 
 | Purpose | Location |

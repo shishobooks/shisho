@@ -5,6 +5,8 @@ import {
   Download,
   Edit,
   Loader2,
+  MoreVertical,
+  RefreshCw,
   X,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
@@ -16,6 +18,7 @@ import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,8 +30,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { useBook } from "@/hooks/queries/books";
+import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
   DownloadFormatAsk,
@@ -150,6 +160,9 @@ interface FileRowProps {
   onDownloadWithEndpoint: (endpoint: string) => void;
   onCancelDownload: () => void;
   onEdit: () => void;
+  onScanMetadata: () => void;
+  onRefreshMetadata: () => void;
+  isResyncing: boolean;
   isSupplement?: boolean;
 }
 
@@ -167,9 +180,13 @@ const FileRow = ({
   onDownloadWithEndpoint,
   onCancelDownload,
   onEdit,
+  onScanMetadata,
+  onRefreshMetadata,
+  isResyncing,
   isSupplement = false,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
+  const [showRefreshDialog, setShowRefreshDialog] = useState(false);
 
   return (
     <div className="py-2 space-y-1">
@@ -297,10 +314,37 @@ const FileRow = ({
             </Link>
           )}
 
-          {/* Edit button */}
-          <Button onClick={onEdit} size="sm" title="Edit" variant="ghost">
-            <Edit className="h-3 w-3" />
-          </Button>
+          {/* Actions dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                disabled={isResyncing}
+                size="sm"
+                title="More actions"
+                variant="ghost"
+              >
+                <MoreVertical className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DropdownMenuItem onClick={onEdit}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={isResyncing} onClick={onScanMetadata}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Scan for new metadata
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh all metadata
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -392,6 +436,14 @@ const FileRow = ({
           )}
         </div>
       )}
+      <ResyncConfirmDialog
+        entityName={file.name || getFilename(file.filepath)}
+        entityType="file"
+        isPending={isResyncing}
+        onConfirm={onRefreshMetadata}
+        onOpenChange={setShowRefreshDialog}
+        open={showRefreshDialog}
+      />
     </div>
   );
 };
@@ -400,7 +452,10 @@ const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
   const libraryQuery = useLibrary(libraryId);
+  const resyncFileMutation = useResyncFile();
+  const resyncBookMutation = useResyncBook();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [showBookRefreshDialog, setShowBookRefreshDialog] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const [downloadError, setDownloadError] = useState<DownloadError | null>(
     null,
@@ -408,6 +463,7 @@ const BookDetail = () => {
   const [downloadingFileId, setDownloadingFileId] = useState<number | null>(
     null,
   );
+  const [resyncingFileId, setResyncingFileId] = useState<number | null>(null);
   const [coverError, setCoverError] = useState(false);
   const [expandedFileIds, setExpandedFileIds] = useState<Set<number>>(
     new Set(),
@@ -533,6 +589,88 @@ const BookDetail = () => {
     setDownloadingFileId(null);
   };
 
+  const handleScanFileMetadata = async (fileId: number) => {
+    setResyncingFileId(fileId);
+    try {
+      const result = await resyncFileMutation.mutateAsync({
+        fileId,
+        payload: { refresh: false },
+      });
+      if ("file_deleted" in result && result.file_deleted) {
+        toast.success("File removed (no longer exists on disk)");
+      } else {
+        toast.success("Metadata scanned");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to scan metadata",
+      );
+    } finally {
+      setResyncingFileId(null);
+    }
+  };
+
+  const handleRefreshFileMetadata = async (fileId: number) => {
+    setResyncingFileId(fileId);
+    try {
+      const result = await resyncFileMutation.mutateAsync({
+        fileId,
+        payload: { refresh: true },
+      });
+      if ("file_deleted" in result && result.file_deleted) {
+        toast.success("File removed (no longer exists on disk)");
+      } else {
+        toast.success("Metadata refreshed");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh metadata",
+      );
+    } finally {
+      setResyncingFileId(null);
+    }
+  };
+
+  const handleScanBookMetadata = async () => {
+    if (!id) return;
+    try {
+      const result = await resyncBookMutation.mutateAsync({
+        bookId: parseInt(id),
+        payload: { refresh: false },
+      });
+      if ("book_deleted" in result && result.book_deleted) {
+        toast.success("Book removed (no files remain)");
+      } else {
+        toast.success("Book metadata scanned");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to scan book metadata",
+      );
+    }
+  };
+
+  const handleRefreshBookMetadata = async () => {
+    if (!id) return;
+    try {
+      const result = await resyncBookMutation.mutateAsync({
+        bookId: parseInt(id),
+        payload: { refresh: true },
+      });
+      if ("book_deleted" in result && result.book_deleted) {
+        toast.success("Book removed (no files remain)");
+      } else {
+        toast.success("Book metadata refreshed");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to refresh book metadata",
+      );
+    }
+  };
+
   if (bookQuery.isLoading) {
     return (
       <div>
@@ -632,6 +770,31 @@ const BookDetail = () => {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <DropdownMenuItem
+                      disabled={resyncBookMutation.isPending}
+                      onClick={handleScanBookMetadata}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Scan for new metadata
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowBookRefreshDialog(true)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh all metadata
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               {book.sort_title && book.sort_title !== book.title && (
                 <p className="text-sm text-muted-foreground italic">
@@ -798,6 +961,7 @@ const BookDetail = () => {
                       hasExpandableMetadata={hasExpandableMetadata(file)}
                       isDownloading={downloadingFileId === file.id}
                       isExpanded={expandedFileIds.has(file.id)}
+                      isResyncing={resyncingFileId === file.id}
                       key={file.id}
                       libraryDownloadPreference={
                         libraryQuery.data?.download_format_preference
@@ -811,6 +975,10 @@ const BookDetail = () => {
                         handleDownloadWithEndpoint(file.id, endpoint)
                       }
                       onEdit={() => setEditingFile(file)}
+                      onRefreshMetadata={() =>
+                        handleRefreshFileMetadata(file.id)
+                      }
+                      onScanMetadata={() => handleScanFileMetadata(file.id)}
                       onToggleExpand={() => toggleFileExpanded(file.id)}
                     />
                   ))}
@@ -832,6 +1000,7 @@ const BookDetail = () => {
                           hasExpandableMetadata={hasExpandableMetadata(file)}
                           isDownloading={downloadingFileId === file.id}
                           isExpanded={expandedFileIds.has(file.id)}
+                          isResyncing={resyncingFileId === file.id}
                           isSupplement
                           key={file.id}
                           libraryDownloadPreference={
@@ -850,6 +1019,10 @@ const BookDetail = () => {
                             handleDownloadWithEndpoint(file.id, endpoint)
                           }
                           onEdit={() => setEditingFile(file)}
+                          onRefreshMetadata={() =>
+                            handleRefreshFileMetadata(file.id)
+                          }
+                          onScanMetadata={() => handleScanFileMetadata(file.id)}
                           onToggleExpand={() => toggleFileExpanded(file.id)}
                         />
                       ))}
@@ -866,6 +1039,15 @@ const BookDetail = () => {
         book={book}
         onOpenChange={setEditDialogOpen}
         open={editDialogOpen}
+      />
+
+      <ResyncConfirmDialog
+        entityName={book.title}
+        entityType="book"
+        isPending={resyncBookMutation.isPending}
+        onConfirm={handleRefreshBookMetadata}
+        onOpenChange={setShowBookRefreshDialog}
+        open={showBookRefreshDialog}
       />
 
       {editingFile && (

@@ -18,7 +18,7 @@ import (
 )
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner) {
 	bookService := NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
@@ -41,11 +41,13 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		imprintService:   imprintService,
 		downloadCache:    cache,
 		pageCache:        pageCache,
+		scanner:          scanner,
 	}
 
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
 	g.GET("", h.list)
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.POST("/:id/resync", h.resyncBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("/:id/cover", h.bookCover)
 	g.GET("/files/:id/cover", h.fileCover)
 	g.POST("/files/:id", h.updateFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
@@ -56,4 +58,5 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/download/kepub", h.downloadKepubFile)
 	g.HEAD("/files/:id/download/kepub", h.downloadKepubFile)
 	g.GET("/files/:id/page/:pageNum", h.getPage)
+	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 }

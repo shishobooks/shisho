@@ -55,12 +55,12 @@ func main() {
 		log.Info("migrated to new group", logger.Data{"group_id": group.ID, "migration_names": group.Migrations.String()})
 	}
 
-	srv, err := server.New(cfg, db)
+	wrkr := worker.New(cfg, db)
+
+	srv, err := server.New(cfg, db, wrkr)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}
-
-	wrkr := worker.New(cfg, db)
 
 	graceful := signals.Setup()
 

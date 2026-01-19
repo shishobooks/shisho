@@ -938,16 +938,6 @@ func (svc *Service) DeleteAuthors(ctx context.Context, bookID int) error {
 	return errors.WithStack(err)
 }
 
-// DeleteNarrators deletes all narrator associations for a file.
-func (svc *Service) DeleteNarrators(ctx context.Context, fileID int) error {
-	_, err := svc.db.
-		NewDelete().
-		Model((*models.Narrator)(nil)).
-		Where("file_id = ?", fileID).
-		Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // CreateBookSeries creates a book-series association.
 func (svc *Service) CreateBookSeries(ctx context.Context, bookSeries *models.BookSeries) error {
 	_, err := svc.db.
@@ -1160,4 +1150,143 @@ func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (i
 	}
 	n, _ := result.RowsAffected()
 	return int(n), nil
+}
+
+// DeleteFile deletes a file and its associated records (narrators, identifiers).
+func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Delete narrators for this file
+		_, err := tx.NewDelete().
+			Model((*models.Narrator)(nil)).
+			Where("file_id = ?", fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete identifiers for this file
+		_, err = tx.NewDelete().
+			Model((*models.FileIdentifier)(nil)).
+			Where("file_id = ?", fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete the file record
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("id = ?", fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
+// ListFilesForLibrary returns all main files for a library.
+// Used for orphan cleanup during batch scans - only main files are tracked,
+// supplements don't need orphan cleanup.
+func (svc *Service) ListFilesForLibrary(ctx context.Context, libraryID int) ([]*models.File, error) {
+	var files []*models.File
+	err := svc.db.NewSelect().
+		Model(&files).
+		Where("library_id = ?", libraryID).
+		Where("file_role = ?", models.FileRoleMain).
+		Scan(ctx)
+	return files, errors.WithStack(err)
+}
+
+// DeleteBook deletes a book and all its associated records (files, authors, series, genres, tags).
+func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Get all file IDs for this book
+		var fileIDs []int
+		err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			Column("id").
+			Where("book_id = ?", bookID).
+			Scan(ctx, &fileIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete narrators for all files
+		if len(fileIDs) > 0 {
+			_, err = tx.NewDelete().
+				Model((*models.Narrator)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			// Delete identifiers for all files
+			_, err = tx.NewDelete().
+				Model((*models.FileIdentifier)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// Delete files
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete authors
+		_, err = tx.NewDelete().
+			Model((*models.Author)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book series associations
+		_, err = tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book genres
+		_, err = tx.NewDelete().
+			Model((*models.BookGenre)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book tags
+		_, err = tx.NewDelete().
+			Model((*models.BookTag)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete the book record
+		_, err = tx.NewDelete().
+			Model((*models.Book)(nil)).
+			Where("id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
 }

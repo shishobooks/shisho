@@ -208,8 +208,8 @@ func TestFileOrganizer_OrganizeBookFiles_AuthorNameChange(t *testing.T) {
 	assert.True(t, testgen.FileExists(expectedNewBookDir), "new book directory should exist")
 	assert.False(t, testgen.FileExists(originalBookPath), "original book directory should not exist")
 
-	// Verify the file was renamed
-	expectedNewFilePath := filepath.Join(expectedNewBookDir, "[New Author Name] Test Book.epub")
+	// Verify the file was renamed (filenames don't include author prefix)
+	expectedNewFilePath := filepath.Join(expectedNewBookDir, "Test Book.epub")
 	assert.True(t, testgen.FileExists(expectedNewFilePath), "new file should exist")
 	assert.False(t, testgen.FileExists(originalFilePath), "original file should not exist")
 
@@ -398,7 +398,8 @@ func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
 	// Verify cover was extracted
 	require.NotNil(t, file.CoverImagePath, "CoverImagePath should be set after scan")
 	originalCoverPath := *file.CoverImagePath
-	assert.Contains(t, originalCoverPath, "[Original Author]", "original cover path should contain original author name")
+	// Cover filename is based on file name, which doesn't include author prefix
+	assert.Contains(t, originalCoverPath, "Test Book With Cover", "original cover path should contain title")
 
 	// Verify the cover file exists on disk
 	originalCoverFullPath := filepath.Join(bookDir, originalCoverPath)
@@ -422,13 +423,13 @@ func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
 	err = tc.fileOrganizer.OrganizeBookFiles(tc.ctx, book.ID)
 	require.NoError(t, err)
 
-	// Verify the file was renamed
+	// Verify the file was renamed (filenames don't include author prefix)
 	expectedNewBookDir := filepath.Join(libraryPath, "[New Author Name] Test Book With Cover")
-	expectedNewFilePath := filepath.Join(expectedNewBookDir, "[New Author Name] Test Book With Cover.epub")
+	expectedNewFilePath := filepath.Join(expectedNewBookDir, "Test Book With Cover.epub")
 	assert.True(t, testgen.FileExists(expectedNewFilePath), "new file should exist at %s", expectedNewFilePath)
 
-	// Verify the cover file was renamed on disk
-	expectedNewCoverFilename := "[New Author Name] Test Book With Cover.epub.cover.png"
+	// Verify the cover file was renamed on disk (cover filename follows file name, without author prefix)
+	expectedNewCoverFilename := "Test Book With Cover.epub.cover.png"
 	expectedNewCoverFullPath := filepath.Join(expectedNewBookDir, expectedNewCoverFilename)
 	assert.True(t, testgen.FileExists(expectedNewCoverFullPath), "new cover file should exist at %s", expectedNewCoverFullPath)
 

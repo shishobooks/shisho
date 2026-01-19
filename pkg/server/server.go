@@ -37,10 +37,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/users"
+	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -74,7 +75,7 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, cfg, authMiddleware)
+	registerProtectedRoutes(e, db, cfg, authMiddleware, w)
 
 	// Register OPDS routes with Basic Auth
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
@@ -105,12 +106,12 @@ func New(cfg *config.Config, db *bun.DB) (*http.Server, error) {
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
+func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware)
+	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware)
 
 	// Libraries routes
