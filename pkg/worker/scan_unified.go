@@ -1451,9 +1451,11 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	// Determine if this is a root-level file (directly in library path)
 	tempBookPath := filepath.Dir(path)
 	isRootLevelFile := false
+	var containingLibraryPath string
 	for _, libraryPath := range library.LibraryPaths {
 		if tempBookPath == libraryPath.Filepath {
 			isRootLevelFile = true
+			containingLibraryPath = libraryPath.Filepath
 			break
 		}
 	}
@@ -1461,8 +1463,24 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	// Determine book path
 	var bookPath string
 	if isRootLevelFile {
-		// For root-level files, each file is its own book - use the full file path
-		bookPath = path
+		// For root-level files, compute the expected organized folder path so that
+		// multiple root-level files with the same title/author will share a book.
+		// This ensures "Wind and Truth.epub" and "Wind and Truth.m4b" become one book.
+		title := deriveInitialTitle(path, isRootLevelFile, metadata)
+		var authorNames []string
+		if metadata != nil && len(metadata.Authors) > 0 {
+			for _, author := range metadata.Authors {
+				authorNames = append(authorNames, author.Name)
+			}
+		} else {
+			authorNames = extractAuthorsFromFilepath(path, isRootLevelFile)
+		}
+		organizedFolderName := fileutils.GenerateOrganizedFolderName(fileutils.OrganizedNameOptions{
+			AuthorNames: authorNames,
+			Title:       title,
+			FileType:    fileType,
+		})
+		bookPath = filepath.Join(containingLibraryPath, organizedFolderName)
 	} else {
 		// For directory-based files, use the directory path
 		bookPath = tempBookPath

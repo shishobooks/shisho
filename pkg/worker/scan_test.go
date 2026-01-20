@@ -350,8 +350,10 @@ func TestProcessScanJob_RootLevelFile(t *testing.T) {
 
 	book := allBooks[0]
 	assert.Equal(t, "Root Level Book", book.Title)
-	// For root-level files, the book path should be the file path itself
-	assert.Contains(t, book.Filepath, "root-book.epub")
+	// For root-level files, the book path is the expected organized folder path
+	// (not the file path itself). This allows multiple root-level files with
+	// the same title/author to share a book.
+	assert.Contains(t, book.Filepath, "[Root Author] Root Level Book")
 }
 
 func TestProcessScanJob_DirectoryWithMultipleFiles(t *testing.T) {
@@ -927,11 +929,18 @@ func TestProcessScanJob_OrganizeFileStructure_Disabled(t *testing.T) {
 	organizedFolder := filepath.Join(libraryPath, "[Test Author] Unorganized Book")
 	assert.False(t, testgen.FileExists(organizedFolder), "organized folder should not be created")
 
-	// Verify the book record has the original path (the file path itself for root-level)
+	// Verify the book was created with the correct title
+	// Note: book.Filepath is the expected organized folder path (for book grouping),
+	// but the actual files are not moved when organize is disabled
 	allBooks := tc.listBooks()
 	require.Len(t, allBooks, 1)
 	assert.Equal(t, "Unorganized Book", allBooks[0].Title)
-	assert.Equal(t, originalPath, allBooks[0].Filepath)
+	assert.Equal(t, organizedFolder, allBooks[0].Filepath, "book filepath is the expected organized path")
+
+	// Verify the file is still at the original location
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	assert.Equal(t, originalPath, files[0].Filepath, "file should still be at original path")
 }
 
 func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T) {
@@ -1048,9 +1057,10 @@ func TestProcessScanJob_IsRootLevelFile_MultipleLibraryPaths(t *testing.T) {
 	require.NotNil(t, rootBook2)
 	require.NotNil(t, dirBook)
 
-	// Root-level books should have file path as book path
-	assert.Contains(t, rootBook1.Filepath, "root1.epub")
-	assert.Contains(t, rootBook2.Filepath, "root2.epub")
+	// Root-level books should have the expected organized folder path as book path
+	// (this allows multiple files with same title/author to share a book)
+	assert.Contains(t, rootBook1.Filepath, "[Author 1] Root Book 1")
+	assert.Contains(t, rootBook2.Filepath, "[Author 2] Root Book 2")
 
 	// Directory-based book should have directory as book path
 	assert.Equal(t, bookDir, dirBook.Filepath)
@@ -2604,4 +2614,69 @@ func TestProcessScanJob_RescanUpdatesSortTitle(t *testing.T) {
 	assert.Equal(t, "An Amazing Story", allBooks[0].Title, "title should be updated on rescan")
 	assert.Equal(t, "Amazing Story, An", allBooks[0].SortTitle, "sort_title should be regenerated from new title")
 	assert.Equal(t, models.DataSourceEPUBMetadata, allBooks[0].SortTitleSource, "sort_title_source should match title_source")
+}
+
+// TestProcessScanJob_OrganizeFileStructure_RootLevelMultiFormatSameBook tests that when
+// organize file structure is enabled and there are multiple root-level files that belong
+// to the same book (e.g., "Wind and Truth.epub" and "Wind and Truth.m4b"), they should be
+// merged into the same book and organized into the same book directory after the scan.
+func TestProcessScanJob_OrganizeFileStructure_RootLevelMultiFormatSameBook(t *testing.T) {
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	// Enable organize_file_structure
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create two root-level files with matching titles - they should become the same book
+	// This simulates having both an ebook and audiobook of the same title at the library root
+	testgen.GenerateEPUB(t, libraryPath, "Wind and Truth.epub", testgen.EPUBOptions{
+		Title:   "Wind and Truth",
+		Authors: []string{"Brandon Sanderson"},
+	})
+	testgen.GenerateM4B(t, libraryPath, "Wind and Truth.m4b", testgen.M4BOptions{
+		Title:  "Wind and Truth",
+		Artist: "Brandon Sanderson",
+	})
+
+	// Verify both files exist at root before scan
+	assert.True(t, testgen.FileExists(filepath.Join(libraryPath, "Wind and Truth.epub")))
+	assert.True(t, testgen.FileExists(filepath.Join(libraryPath, "Wind and Truth.m4b")))
+
+	err := tc.runScan()
+	require.NoError(t, err, "scan should complete without errors")
+
+	// Both files should be merged into a single book since they have the same title
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1, "both files should be merged into a single book")
+	assert.Equal(t, "Wind and Truth", allBooks[0].Title)
+
+	// Both files should belong to this single book
+	files := tc.listFiles()
+	require.Len(t, files, 2, "should have 2 files (epub and m4b)")
+	for _, file := range files {
+		assert.Equal(t, allBooks[0].ID, file.BookID, "file %s should belong to the same book", file.Filepath)
+	}
+
+	// With organize_file_structure enabled, both files should be in the same organized directory
+	organizedDir := filepath.Join(libraryPath, "[Brandon Sanderson] Wind and Truth")
+	assert.True(t, testgen.FileExists(organizedDir), "organized directory should exist at %s", organizedDir)
+
+	// Original files should no longer exist at root
+	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "Wind and Truth.epub")),
+		"original epub should be moved from root")
+	assert.False(t, testgen.FileExists(filepath.Join(libraryPath, "Wind and Truth.m4b")),
+		"original m4b should be moved from root")
+
+	// Both files should be in the organized directory
+	assert.True(t, testgen.FileExists(filepath.Join(organizedDir, "Wind and Truth.epub")),
+		"epub should be in organized directory")
+	assert.True(t, testgen.FileExists(filepath.Join(organizedDir, "Wind and Truth.m4b")),
+		"m4b should be in organized directory")
+
+	// Database paths should reflect the organized locations
+	for _, file := range files {
+		assert.Contains(t, file.Filepath, organizedDir, "file path should be in organized directory")
+	}
 }
