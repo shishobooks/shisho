@@ -45,6 +45,33 @@ func createTestUser(t *testing.T, db *bun.DB, username string) *models.User {
 	return user
 }
 
+func createTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
+	t.Helper()
+	library := &models.Library{
+		Name:                     name,
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(context.Background())
+	require.NoError(t, err)
+	return library
+}
+
+func createTestBook(t *testing.T, db *bun.DB, libraryID int, title string) *models.Book {
+	t.Helper()
+	book := &models.Book{
+		LibraryID:    libraryID,
+		Title:        title,
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    title,
+		AuthorSource: models.DataSourceFilepath,
+		Filepath:     "/test/" + title + ".epub",
+	}
+	_, err := db.NewInsert().Model(book).Exec(context.Background())
+	require.NoError(t, err)
+	return book
+}
+
 func TestService_CreateList(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)
@@ -450,5 +477,165 @@ func TestService_Shares(t *testing.T) {
 		sharesAfterDelete, err := svc.ListShares(ctx, list.ID)
 		require.NoError(t, err)
 		assert.Empty(t, sharesAfterDelete)
+	})
+}
+
+func TestService_SwitchListOrdering(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	user := createTestUser(t, db, "testuser")
+	library := createTestLibrary(t, db, "testlib")
+	book1 := createTestBook(t, db, library.ID, "Book A")
+	book2 := createTestBook(t, db, library.ID, "Book B")
+	book3 := createTestBook(t, db, library.ID, "Book C")
+
+	t.Run("switching from unordered to ordered populates sort_order", func(t *testing.T) {
+		// Create an unordered list
+		list, err := svc.CreateList(ctx, CreateListOptions{
+			UserID:    user.ID,
+			Name:      "Unordered To Ordered",
+			IsOrdered: false,
+		})
+		require.NoError(t, err)
+		assert.False(t, list.IsOrdered)
+		assert.Equal(t, models.ListSortAddedAtDesc, list.DefaultSort)
+
+		// Add books to the unordered list (sort_order should be NULL)
+		err = svc.AddBooks(ctx, AddBooksOptions{
+			ListID:        list.ID,
+			BookIDs:       []int{book1.ID, book2.ID, book3.ID},
+			AddedByUserID: user.ID,
+		})
+		require.NoError(t, err)
+
+		// Verify books have NULL sort_order
+		listBooks, err := svc.ListBooks(ctx, ListBooksOptions{ListID: list.ID, Sort: models.ListSortAddedAtDesc})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 3)
+		for _, lb := range listBooks {
+			assert.Nil(t, lb.SortOrder, "unordered list books should have nil sort_order")
+		}
+
+		// Switch list to ordered
+		list.IsOrdered = true
+		err = svc.UpdateList(ctx, list, UpdateListOptions{Columns: []string{"is_ordered"}})
+		require.NoError(t, err)
+
+		// Reload list
+		list, err = svc.RetrieveList(ctx, RetrieveListOptions{ID: &list.ID})
+		require.NoError(t, err)
+		assert.True(t, list.IsOrdered)
+
+		// Verify sort_order is now populated for all books
+		listBooks, err = svc.ListBooks(ctx, ListBooksOptions{ListID: list.ID, Sort: models.ListSortManual})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 3)
+
+		// Collect sort_order values (nil becomes 0 for testing)
+		allNonNil := true
+		sortOrders := make([]int, 0, 3)
+		for _, lb := range listBooks {
+			if lb.SortOrder == nil {
+				allNonNil = false
+				sortOrders = append(sortOrders, 0)
+			} else {
+				sortOrders = append(sortOrders, *lb.SortOrder)
+			}
+		}
+		assert.True(t, allNonNil, "ordered list books should have non-nil sort_order")
+		assert.Equal(t, []int{1, 2, 3}, sortOrders, "sort_order should be sequential starting from 1")
+	})
+
+	t.Run("switching from ordered to unordered clears sort_order", func(t *testing.T) {
+		// Create an ordered list
+		list, err := svc.CreateList(ctx, CreateListOptions{
+			UserID:    user.ID,
+			Name:      "Ordered To Unordered",
+			IsOrdered: true,
+		})
+		require.NoError(t, err)
+		assert.True(t, list.IsOrdered)
+		assert.Equal(t, models.ListSortManual, list.DefaultSort)
+
+		// Add books to the ordered list (sort_order should be populated)
+		err = svc.AddBooks(ctx, AddBooksOptions{
+			ListID:        list.ID,
+			BookIDs:       []int{book1.ID, book2.ID, book3.ID},
+			AddedByUserID: user.ID,
+		})
+		require.NoError(t, err)
+
+		// Verify books have non-NULL sort_order
+		listBooks, err := svc.ListBooks(ctx, ListBooksOptions{ListID: list.ID, Sort: models.ListSortManual})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 3)
+		for _, lb := range listBooks {
+			assert.NotNil(t, lb.SortOrder, "ordered list books should have non-nil sort_order")
+		}
+
+		// Switch list to unordered
+		list.IsOrdered = false
+		err = svc.UpdateList(ctx, list, UpdateListOptions{Columns: []string{"is_ordered"}})
+		require.NoError(t, err)
+
+		// Reload list
+		list, err = svc.RetrieveList(ctx, RetrieveListOptions{ID: &list.ID})
+		require.NoError(t, err)
+		assert.False(t, list.IsOrdered)
+
+		// Verify sort_order is now NULL for all books
+		listBooks, err = svc.ListBooks(ctx, ListBooksOptions{ListID: list.ID, Sort: models.ListSortAddedAtDesc})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 3)
+		for _, lb := range listBooks {
+			assert.Nil(t, lb.SortOrder, "unordered list books should have nil sort_order")
+		}
+	})
+
+	t.Run("switching to ordered auto-sets default_sort to manual", func(t *testing.T) {
+		// Create an unordered list with a specific sort
+		list, err := svc.CreateList(ctx, CreateListOptions{
+			UserID:      user.ID,
+			Name:        "Auto DefaultSort Ordered",
+			IsOrdered:   false,
+			DefaultSort: models.ListSortTitleAsc,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, models.ListSortTitleAsc, list.DefaultSort)
+
+		// Switch to ordered (only updating is_ordered)
+		list.IsOrdered = true
+		err = svc.UpdateList(ctx, list, UpdateListOptions{Columns: []string{"is_ordered"}})
+		require.NoError(t, err)
+
+		// Reload and verify default_sort was auto-set to manual
+		list, err = svc.RetrieveList(ctx, RetrieveListOptions{ID: &list.ID})
+		require.NoError(t, err)
+		assert.True(t, list.IsOrdered)
+		assert.Equal(t, models.ListSortManual, list.DefaultSort, "switching to ordered should auto-set default_sort to manual")
+	})
+
+	t.Run("switching to unordered auto-sets default_sort to added_at_desc", func(t *testing.T) {
+		// Create an ordered list
+		list, err := svc.CreateList(ctx, CreateListOptions{
+			UserID:    user.ID,
+			Name:      "Auto DefaultSort Unordered",
+			IsOrdered: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, models.ListSortManual, list.DefaultSort)
+
+		// Switch to unordered (only updating is_ordered)
+		list.IsOrdered = false
+		err = svc.UpdateList(ctx, list, UpdateListOptions{Columns: []string{"is_ordered"}})
+		require.NoError(t, err)
+
+		// Reload and verify default_sort was auto-set to added_at_desc
+		list, err = svc.RetrieveList(ctx, RetrieveListOptions{ID: &list.ID})
+		require.NoError(t, err)
+		assert.False(t, list.IsOrdered)
+		assert.Equal(t, models.ListSortAddedAtDesc, list.DefaultSort, "switching to unordered should auto-set default_sort to added_at_desc")
 	})
 }

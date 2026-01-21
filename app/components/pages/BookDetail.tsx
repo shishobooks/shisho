@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Download,
   Edit,
+  List,
   Loader2,
   MoreVertical,
   RefreshCw,
@@ -14,6 +15,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import AddToListPopover from "@/components/library/AddToListPopover";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
@@ -740,6 +742,15 @@ const BookDetail = () => {
             <div>
               <div className="flex items-start gap-3 mb-2">
                 <h1 className="text-3xl font-semibold flex-1">{book.title}</h1>
+                <AddToListPopover
+                  bookId={book.id}
+                  trigger={
+                    <Button size="sm" title="Add to list" variant="outline">
+                      <List className="h-4 w-4 mr-2" />
+                      Add to list
+                    </Button>
+                  }
+                />
                 <Button
                   onClick={() => setEditDialogOpen(true)}
                   size="sm"

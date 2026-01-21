@@ -146,22 +146,126 @@ func (svc *Service) UpdateList(ctx context.Context, list *models.List, opts Upda
 		return nil
 	}
 
-	list.UpdatedAt = time.Now()
-	columns := append(opts.Columns, "updated_at")
-
-	_, err := svc.db.
-		NewUpdate().
-		Model(list).
-		Column(columns...).
-		WherePK().
-		Exec(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return errcodes.NotFound("List")
+	// Check if is_ordered is being updated
+	isOrderedChanging := false
+	for _, col := range opts.Columns {
+		if col == "is_ordered" {
+			isOrderedChanging = true
+			break
 		}
+	}
+
+	// If is_ordered is changing, fetch the current state to detect transition direction
+	var wasOrdered bool
+	if isOrderedChanging {
+		currentList := &models.List{}
+		err := svc.db.NewSelect().Model(currentList).Where("id = ?", list.ID).Scan(ctx)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errcodes.NotFound("List")
+			}
+			return errors.WithStack(err)
+		}
+		wasOrdered = currentList.IsOrdered
+	}
+
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		list.UpdatedAt = time.Now()
+		columns := append(opts.Columns, "updated_at")
+
+		// Handle is_ordered transition
+		if isOrderedChanging && wasOrdered != list.IsOrdered {
+			if list.IsOrdered {
+				// Switching TO ordered: populate sort_order and set default_sort
+				if err := svc.populateSortOrderForList(ctx, tx, list.ID); err != nil {
+					return err
+				}
+				list.DefaultSort = models.ListSortManual
+				// Ensure default_sort is included in the update
+				hasDefaultSort := false
+				for _, col := range columns {
+					if col == "default_sort" {
+						hasDefaultSort = true
+						break
+					}
+				}
+				if !hasDefaultSort {
+					columns = append(columns, "default_sort")
+				}
+			} else {
+				// Switching TO unordered: clear sort_order and set default_sort
+				if err := svc.clearSortOrderForList(ctx, tx, list.ID); err != nil {
+					return err
+				}
+				list.DefaultSort = models.ListSortAddedAtDesc
+				// Ensure default_sort is included in the update
+				hasDefaultSort := false
+				for _, col := range columns {
+					if col == "default_sort" {
+						hasDefaultSort = true
+						break
+					}
+				}
+				if !hasDefaultSort {
+					columns = append(columns, "default_sort")
+				}
+			}
+		}
+
+		_, err := tx.
+			NewUpdate().
+			Model(list).
+			Column(columns...).
+			WherePK().
+			Exec(ctx)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errcodes.NotFound("List")
+			}
+			return errors.WithStack(err)
+		}
+		return nil
+	})
+}
+
+// populateSortOrderForList assigns sequential sort_order values to all books in a list
+// based on their added_at timestamp (oldest first).
+func (svc *Service) populateSortOrderForList(ctx context.Context, tx bun.Tx, listID int) error {
+	// Get all list_books ordered by added_at
+	var listBooks []*models.ListBook
+	err := tx.NewSelect().
+		Model(&listBooks).
+		Where("list_id = ?", listID).
+		Order("added_at ASC").
+		Scan(ctx)
+	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Update each with sequential sort_order
+	for i, lb := range listBooks {
+		sortOrder := i + 1
+		_, err := tx.NewUpdate().
+			Model((*models.ListBook)(nil)).
+			Set("sort_order = ?", sortOrder).
+			Where("id = ?", lb.ID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	return nil
+}
+
+// clearSortOrderForList sets sort_order to NULL for all books in a list.
+func (svc *Service) clearSortOrderForList(ctx context.Context, tx bun.Tx, listID int) error {
+	_, err := tx.NewUpdate().
+		Model((*models.ListBook)(nil)).
+		Set("sort_order = NULL").
+		Where("list_id = ?", listID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 func (svc *Service) DeleteList(ctx context.Context, listID int) error {

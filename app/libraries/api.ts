@@ -24,6 +24,16 @@ class ShishoAPI {
   }
 
   async checkStatus(response: Response) {
+    // Handle 204 No Content or empty responses
+    if (
+      response.status === 204 ||
+      response.headers.get("content-length") === "0"
+    ) {
+      if (response.status >= 200 && response.status < 300) {
+        return undefined;
+      }
+    }
+
     const resp = await response.json();
     if (response.status >= 200 && response.status < 300) {
       return resp;

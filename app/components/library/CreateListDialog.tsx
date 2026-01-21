@@ -117,6 +117,7 @@ export function CreateListDialog({
           <div className="flex items-start space-x-3">
             <Checkbox
               checked={isOrdered}
+              className="mt-1"
               id="list-ordered"
               onCheckedChange={(checked) => setIsOrdered(checked === true)}
             />

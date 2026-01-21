@@ -1,6 +1,8 @@
 import { List, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
+import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -11,29 +13,28 @@ import {
 import {
   useAddBooksToList,
   useBookLists,
+  useCreateList,
   useListLists,
   useRemoveBooksFromList,
   type ListWithCount,
 } from "@/hooks/queries/lists";
+import type { CreateListPayload } from "@/types";
 
 interface AddToListPopoverProps {
   bookId: number;
   trigger?: React.ReactNode;
-  onCreateList?: () => void;
 }
 
-const AddToListPopover = ({
-  bookId,
-  trigger,
-  onCreateList,
-}: AddToListPopoverProps) => {
+const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
   const [open, setOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [mutatingListId, setMutatingListId] = useState<number | null>(null);
 
   const listsQuery = useListLists();
   const bookListsQuery = useBookLists(bookId, { enabled: open });
   const addMutation = useAddBooksToList();
   const removeMutation = useRemoveBooksFromList();
+  const createListMutation = useCreateList();
 
   const lists = listsQuery.data?.lists ?? [];
   const bookListIds = new Set(
@@ -53,12 +54,18 @@ const AddToListPopover = ({
           listId: list.id,
           payload: { book_ids: [bookId] },
         });
+        toast.success(`Removed from "${list.name}"`);
       } else {
         await addMutation.mutateAsync({
           listId: list.id,
           payload: { book_ids: [bookId] },
         });
+        toast.success(`Added to "${list.name}"`);
       }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update list";
+      toast.error(message);
     } finally {
       setMutatingListId(null);
     }
@@ -66,7 +73,25 @@ const AddToListPopover = ({
 
   const handleCreateList = () => {
     setOpen(false);
-    onCreateList?.();
+    setCreateDialogOpen(true);
+  };
+
+  const handleCreate = async (payload: CreateListPayload) => {
+    try {
+      const newList = await createListMutation.mutateAsync(payload);
+      toast.success(`Created "${payload.name}" list`);
+      setCreateDialogOpen(false);
+      // Automatically add the book to the newly created list
+      await addMutation.mutateAsync({
+        listId: newList.id,
+        payload: { book_ids: [bookId] },
+      });
+      toast.success(`Added to "${payload.name}"`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create list";
+      toast.error(message);
+    }
   };
 
   return (
@@ -102,12 +127,20 @@ const AddToListPopover = ({
               const isMutating = mutatingListId === list.id;
 
               return (
-                <button
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm disabled:opacity-50"
-                  disabled={isMutating}
+                <div
+                  aria-checked={isInList}
+                  aria-disabled={isMutating}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
                   key={list.id}
-                  onClick={() => handleToggle(list)}
-                  type="button"
+                  onClick={() => !isMutating && handleToggle(list)}
+                  onKeyDown={(e) => {
+                    if (!isMutating && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      handleToggle(list);
+                    }
+                  }}
+                  role="menuitemcheckbox"
+                  tabIndex={0}
                 >
                   {isMutating ? (
                     <Loader2 className="h-4 w-4 animate-spin shrink-0" />
@@ -115,10 +148,11 @@ const AddToListPopover = ({
                     <Checkbox
                       checked={isInList}
                       className="pointer-events-none"
+                      tabIndex={-1}
                     />
                   )}
                   <span className="truncate">{list.name}</span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -139,6 +173,13 @@ const AddToListPopover = ({
           </>
         )}
       </PopoverContent>
+
+      <CreateListDialog
+        isPending={createListMutation.isPending}
+        onCreate={handleCreate}
+        onOpenChange={setCreateDialogOpen}
+        open={createDialogOpen}
+      />
     </Popover>
   );
 };
