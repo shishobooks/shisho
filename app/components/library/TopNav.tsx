@@ -1,4 +1,4 @@
-import { KeyRound, LogOut, Settings, User, UserCog } from "lucide-react";
+import { KeyRound, List, LogOut, Settings, User, UserCog } from "lucide-react";
 import { useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -206,15 +206,21 @@ const TopNav = () => {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/user/settings">
-                    <UserCog className="h-4 w-4" />
-                    User Settings
+                  <Link to="/lists">
+                    <List className="h-4 w-4" />
+                    Lists
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to="/user/security">
                     <KeyRound className="h-4 w-4" />
                     Security
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/user/settings">
+                    <UserCog className="h-4 w-4" />
+                    User Settings
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>
