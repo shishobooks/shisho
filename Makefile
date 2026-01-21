@@ -16,8 +16,8 @@ TYGO_INPUTS = $(shell yq '.packages[] | .path + "/" + (.include_files[] // "*.go
 TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 
 .PHONY: check
-check: tygo
-	$(MAKE) -j4 test test\:js lint lint\:js
+check: tygo lint
+	$(MAKE) -j3 test test\:js lint\:js
 
 .PHONY: build
 build:
