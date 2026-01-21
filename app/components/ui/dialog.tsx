@@ -7,12 +7,13 @@ import { cn } from "@/libraries/utils";
 // Custom Dialog wrapper that fixes Radix pointer-events bug.
 // When a dialog triggered from a dropdown menu closes, Radix's DismissableLayer
 // incorrectly sets pointer-events: none on the body during unmount.
-// This wrapper cleans up pointer-events after the dialog closes.
+// This wrapper cleans up pointer-events after the dialog closes or unmounts.
 const Dialog = ({
   open,
   onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) => {
+  // Clean up pointer-events when dialog closes
   React.useEffect(() => {
     if (open === false) {
       const timeout = setTimeout(() => {
@@ -21,6 +22,16 @@ const Dialog = ({
       return () => clearTimeout(timeout);
     }
   }, [open]);
+
+  // Also clean up on unmount (handles conditional rendering case)
+  React.useEffect(() => {
+    return () => {
+      // Use setTimeout to run after Radix's unmount effects
+      setTimeout(() => {
+        document.body.style.pointerEvents = "";
+      }, 300);
+    };
+  }, []);
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} {...props} />

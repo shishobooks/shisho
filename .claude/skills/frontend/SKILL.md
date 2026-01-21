@@ -201,7 +201,11 @@ When a user clears a metadata field, the cleared value should be saved (not reve
 
 **Problem:** When a Dialog is triggered from a DropdownMenu item, Radix's DismissableLayer incorrectly sets `pointer-events: none` on the body during unmount, leaving the page unclickable after the dialog closes.
 
-**Solution:** Already fixed globally in `app/components/ui/dialog.tsx`. The custom `Dialog` wrapper includes a cleanup effect that clears `pointer-events` after a 300ms delay, ensuring it runs after Radix's buggy unmount effects complete.
+**Solution:** Already fixed globally in `app/components/ui/dialog.tsx`. The custom `Dialog` wrapper includes:
+1. A cleanup effect that clears `pointer-events` when `open` changes to `false`
+2. An unmount cleanup effect for conditionally rendered dialogs
+
+The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complete.
 
 **If you encounter similar issues:**
 1. Use browser DevTools to check if `pointer-events: none` is stuck on `<body>`
