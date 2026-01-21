@@ -9,9 +9,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import Gallery from "@/components/library/Gallery";
+import LibraryLayout from "@/components/library/LibraryLayout";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
-import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -287,261 +287,256 @@ const HomeContent = () => {
   );
 
   return (
-    <div>
-      <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        {seriesQuery.data && seriesId && (
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold mb-1">
-              {seriesQuery.data.name}
-            </h1>
-            {seriesQuery.data.description && (
-              <p className="text-sm text-muted-foreground mb-2">
-                {seriesQuery.data.description}
-              </p>
-            )}
-          </div>
-        )}
+    <LibraryLayout>
+      {seriesQuery.data && seriesId && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-1">
+            {seriesQuery.data.name}
+          </h1>
+          {seriesQuery.data.description && (
+            <p className="text-sm text-muted-foreground mb-2">
+              {seriesQuery.data.description}
+            </p>
+          )}
+        </div>
+      )}
 
-        {/* Search and Filters */}
-        <div className="mb-6 flex flex-wrap items-center gap-4">
-          <Input
-            className="max-w-xs"
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search books..."
-            type="search"
-            value={searchInput}
-          />
-          {/* File Type Filter */}
-          <Popover
-            onOpenChange={setFileTypePopoverOpen}
-            open={fileTypePopoverOpen}
-          >
-            <PopoverTrigger asChild>
-              <Button
-                aria-expanded={fileTypePopoverOpen}
-                className="justify-between"
-                role="combobox"
-                variant="outline"
-              >
-                {selectedFileTypes.length > 0
-                  ? `${selectedFileTypes.length} file type${selectedFileTypes.length > 1 ? "s" : ""}`
-                  : "File types"}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0">
-              <Command>
-                <CommandList>
+      {/* Search and Filters */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <Input
+          className="max-w-xs"
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search books..."
+          type="search"
+          value={searchInput}
+        />
+        {/* File Type Filter */}
+        <Popover
+          onOpenChange={setFileTypePopoverOpen}
+          open={fileTypePopoverOpen}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              aria-expanded={fileTypePopoverOpen}
+              className="justify-between"
+              role="combobox"
+              variant="outline"
+            >
+              {selectedFileTypes.length > 0
+                ? `${selectedFileTypes.length} file type${selectedFileTypes.length > 1 ? "s" : ""}`
+                : "File types"}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-0">
+            <Command>
+              <CommandList>
+                <CommandGroup>
+                  {FILE_TYPE_OPTIONS.map((option) => (
+                    <CommandItem
+                      key={option.value}
+                      onSelect={() => toggleFileType(option.value)}
+                      value={option.value}
+                    >
+                      {selectedFileTypes.includes(option.value) ? (
+                        <SquareCheckBig className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Square className="mr-2 h-4 w-4" />
+                      )}
+                      {option.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+
+        {/* Genre Filter */}
+        <Popover onOpenChange={setGenrePopoverOpen} open={genrePopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              aria-expanded={genrePopoverOpen}
+              className="justify-between"
+              role="combobox"
+              variant="outline"
+            >
+              {selectedGenres.length > 0
+                ? `${selectedGenres.length} genre${selectedGenres.length > 1 ? "s" : ""}`
+                : "Genres"}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-0">
+            <Command shouldFilter={false}>
+              <CommandInput
+                onValueChange={setGenreSearchInput}
+                placeholder="Search genres..."
+                value={genreSearchInput}
+              />
+              <CommandList>
+                {genresQuery.isLoading ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground">
+                    Loading...
+                  </div>
+                ) : genresQuery.isError ? (
+                  <div className="py-6 text-center text-sm text-destructive">
+                    Error loading genres
+                  </div>
+                ) : genres.length === 0 ? (
+                  <CommandEmpty>No genres found.</CommandEmpty>
+                ) : (
                   <CommandGroup>
-                    {FILE_TYPE_OPTIONS.map((option) => (
+                    {genres.map((genre: Genre) => (
                       <CommandItem
-                        key={option.value}
-                        onSelect={() => toggleFileType(option.value)}
-                        value={option.value}
+                        key={genre.id}
+                        onSelect={() => toggleGenreFilter(genre.id)}
+                        value={genre.name}
                       >
-                        {selectedFileTypes.includes(option.value) ? (
+                        {selectedGenreIds.includes(genre.id) ? (
                           <SquareCheckBig className="mr-2 h-4 w-4" />
                         ) : (
                           <Square className="mr-2 h-4 w-4" />
                         )}
-                        {option.label}
+                        {genre.name}
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {genre.book_count}
+                        </span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
-          {/* Genre Filter */}
-          <Popover onOpenChange={setGenrePopoverOpen} open={genrePopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                aria-expanded={genrePopoverOpen}
-                className="justify-between"
-                role="combobox"
-                variant="outline"
-              >
-                {selectedGenres.length > 0
-                  ? `${selectedGenres.length} genre${selectedGenres.length > 1 ? "s" : ""}`
-                  : "Genres"}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0">
-              <Command shouldFilter={false}>
-                <CommandInput
-                  onValueChange={setGenreSearchInput}
-                  placeholder="Search genres..."
-                  value={genreSearchInput}
-                />
-                <CommandList>
-                  {genresQuery.isLoading ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      Loading...
-                    </div>
-                  ) : genresQuery.isError ? (
-                    <div className="py-6 text-center text-sm text-destructive">
-                      Error loading genres
-                    </div>
-                  ) : genres.length === 0 ? (
-                    <CommandEmpty>No genres found.</CommandEmpty>
-                  ) : (
-                    <CommandGroup>
-                      {genres.map((genre: Genre) => (
-                        <CommandItem
-                          key={genre.id}
-                          onSelect={() => toggleGenreFilter(genre.id)}
-                          value={genre.name}
-                        >
-                          {selectedGenreIds.includes(genre.id) ? (
-                            <SquareCheckBig className="mr-2 h-4 w-4" />
-                          ) : (
-                            <Square className="mr-2 h-4 w-4" />
-                          )}
-                          {genre.name}
-                          <span className="ml-auto text-xs text-muted-foreground">
-                            {genre.book_count}
-                          </span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  )}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-
-          {/* Tag Filter */}
-          <Popover onOpenChange={setTagPopoverOpen} open={tagPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                aria-expanded={tagPopoverOpen}
-                className="justify-between"
-                role="combobox"
-                variant="outline"
-              >
-                {selectedTags.length > 0
-                  ? `${selectedTags.length} tag${selectedTags.length > 1 ? "s" : ""}`
-                  : "Tags"}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0">
-              <Command shouldFilter={false}>
-                <CommandInput
-                  onValueChange={setTagSearchInput}
-                  placeholder="Search tags..."
-                  value={tagSearchInput}
-                />
-                <CommandList>
-                  {tagsQuery.isLoading ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      Loading...
-                    </div>
-                  ) : tagsQuery.isError ? (
-                    <div className="py-6 text-center text-sm text-destructive">
-                      Error loading tags
-                    </div>
-                  ) : tags.length === 0 ? (
-                    <CommandEmpty>No tags found.</CommandEmpty>
-                  ) : (
-                    <CommandGroup>
-                      {tags.map((tag: Tag) => (
-                        <CommandItem
-                          key={tag.id}
-                          onSelect={() => toggleTagFilter(tag.id)}
-                          value={tag.name}
-                        >
-                          {selectedTagIds.includes(tag.id) ? (
-                            <SquareCheckBig className="mr-2 h-4 w-4" />
-                          ) : (
-                            <Square className="mr-2 h-4 w-4" />
-                          )}
-                          {tag.name}
-                          <span className="ml-auto text-xs text-muted-foreground">
-                            {tag.book_count}
-                          </span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  )}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          {isSelectionMode ? (
-            <Button onClick={exitSelectionMode} variant="outline">
-              Cancel
+        {/* Tag Filter */}
+        <Popover onOpenChange={setTagPopoverOpen} open={tagPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              aria-expanded={tagPopoverOpen}
+              className="justify-between"
+              role="combobox"
+              variant="outline"
+            >
+              {selectedTags.length > 0
+                ? `${selectedTags.length} tag${selectedTags.length > 1 ? "s" : ""}`
+                : "Tags"}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
-          ) : (
-            <Button onClick={enterSelectionMode} variant="outline">
-              <CheckSquare className="h-4 w-4" />
-              Select
-            </Button>
-          )}
-        </div>
-
-        {/* Active Filters */}
-        {(selectedFileTypes.length > 0 ||
-          selectedGenres.length > 0 ||
-          selectedTags.length > 0) && (
-          <div className="mb-6 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">Filtering by:</span>
-            {selectedFileTypes.map((fileType) => {
-              const option = FILE_TYPE_OPTIONS.find(
-                (o) => o.value === fileType,
-              );
-              return (
-                <Badge
-                  className="cursor-pointer gap-1"
-                  key={fileType}
-                  onClick={() => toggleFileType(fileType)}
-                  variant="secondary"
-                >
-                  {option?.label ?? fileType}
-                  <X className="h-3 w-3" />
-                </Badge>
-              );
-            })}
-            {selectedGenres.map((genre) => (
-              <Badge
-                className="cursor-pointer gap-1"
-                key={genre.id}
-                onClick={() => toggleGenreFilter(genre.id)}
-                variant="secondary"
-              >
-                Genre: {genre.name}
-                <X className="h-3 w-3" />
-              </Badge>
-            ))}
-            {selectedTags.map((tag) => (
-              <Badge
-                className="cursor-pointer gap-1"
-                key={tag.id}
-                onClick={() => toggleTagFilter(tag.id)}
-                variant="secondary"
-              >
-                Tag: {tag.name}
-                <X className="h-3 w-3" />
-              </Badge>
-            ))}
-          </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-0">
+            <Command shouldFilter={false}>
+              <CommandInput
+                onValueChange={setTagSearchInput}
+                placeholder="Search tags..."
+                value={tagSearchInput}
+              />
+              <CommandList>
+                {tagsQuery.isLoading ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground">
+                    Loading...
+                  </div>
+                ) : tagsQuery.isError ? (
+                  <div className="py-6 text-center text-sm text-destructive">
+                    Error loading tags
+                  </div>
+                ) : tags.length === 0 ? (
+                  <CommandEmpty>No tags found.</CommandEmpty>
+                ) : (
+                  <CommandGroup>
+                    {tags.map((tag: Tag) => (
+                      <CommandItem
+                        key={tag.id}
+                        onSelect={() => toggleTagFilter(tag.id)}
+                        value={tag.name}
+                      >
+                        {selectedTagIds.includes(tag.id) ? (
+                          <SquareCheckBig className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Square className="mr-2 h-4 w-4" />
+                        )}
+                        {tag.name}
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {tag.book_count}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        {isSelectionMode ? (
+          <Button onClick={exitSelectionMode} variant="outline">
+            Cancel
+          </Button>
+        ) : (
+          <Button onClick={enterSelectionMode} variant="outline">
+            <CheckSquare className="h-4 w-4" />
+            Select
+          </Button>
         )}
-
-        <Gallery
-          isLoading={booksQuery.isLoading}
-          isSuccess={booksQuery.isSuccess}
-          itemLabel="books"
-          items={booksQuery.data?.books ?? []}
-          itemsPerPage={ITEMS_PER_PAGE}
-          renderItem={renderBookItem}
-          total={booksQuery.data?.total ?? 0}
-        />
       </div>
+
+      {/* Active Filters */}
+      {(selectedFileTypes.length > 0 ||
+        selectedGenres.length > 0 ||
+        selectedTags.length > 0) && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Filtering by:</span>
+          {selectedFileTypes.map((fileType) => {
+            const option = FILE_TYPE_OPTIONS.find((o) => o.value === fileType);
+            return (
+              <Badge
+                className="cursor-pointer gap-1"
+                key={fileType}
+                onClick={() => toggleFileType(fileType)}
+                variant="secondary"
+              >
+                {option?.label ?? fileType}
+                <X className="h-3 w-3" />
+              </Badge>
+            );
+          })}
+          {selectedGenres.map((genre) => (
+            <Badge
+              className="cursor-pointer gap-1"
+              key={genre.id}
+              onClick={() => toggleGenreFilter(genre.id)}
+              variant="secondary"
+            >
+              Genre: {genre.name}
+              <X className="h-3 w-3" />
+            </Badge>
+          ))}
+          {selectedTags.map((tag) => (
+            <Badge
+              className="cursor-pointer gap-1"
+              key={tag.id}
+              onClick={() => toggleTagFilter(tag.id)}
+              variant="secondary"
+            >
+              Tag: {tag.name}
+              <X className="h-3 w-3" />
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <Gallery
+        isLoading={booksQuery.isLoading}
+        isSuccess={booksQuery.isSuccess}
+        itemLabel="books"
+        items={booksQuery.data?.books ?? []}
+        itemsPerPage={ITEMS_PER_PAGE}
+        renderItem={renderBookItem}
+        total={booksQuery.data?.total ?? 0}
+      />
       <SelectionToolbar />
-    </div>
+    </LibraryLayout>
   );
 };
 

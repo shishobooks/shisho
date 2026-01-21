@@ -3,8 +3,8 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -101,207 +101,191 @@ const LibrarySettings = () => {
 
   if (libraryQuery.isLoading) {
     return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <LoadingSpinner />
-        </div>
-      </div>
+      <LibraryLayout>
+        <LoadingSpinner />
+      </LibraryLayout>
     );
   }
 
   if (!libraryQuery.isSuccess || !libraryQuery.data) {
     return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">Library Not Found</h1>
-            <p className="text-muted-foreground mb-6">
-              The library you're looking for doesn't exist or may have been
-              removed.
-            </p>
-            <Button asChild>
-              <Link to="/">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Link>
-            </Button>
-          </div>
+      <LibraryLayout>
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold mb-4">Library Not Found</h1>
+          <p className="text-muted-foreground mb-6">
+            The library you're looking for doesn't exist or may have been
+            removed.
+          </p>
+          <Button asChild>
+            <Link to="/">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Link>
+          </Button>
         </div>
-      </div>
+      </LibraryLayout>
     );
   }
 
   return (
-    <div>
-      <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-6">
-          <Button asChild variant="ghost">
-            <Link to={`/libraries/${libraryId}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Library
-            </Link>
+    <LibraryLayout>
+      <div className="mb-6">
+        <Button asChild variant="ghost">
+          <Link to={`/libraries/${libraryId}`}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Library
+          </Link>
+        </Button>
+      </div>
+
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
+        <p className="text-muted-foreground">
+          Manage library name, paths, and scanning behavior
+        </p>
+      </div>
+
+      <div className="max-w-2xl space-y-6 border border-border rounded-md p-6">
+        {/* Library Name */}
+        <div className="space-y-2">
+          <Label htmlFor="library-name">Library Name</Label>
+          <Input
+            id="library-name"
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter library name"
+            value={name}
+          />
+        </div>
+
+        <Separator />
+
+        {/* Library Paths */}
+        <div className="space-y-4">
+          <Label>Library Paths</Label>
+          <p className="text-sm text-muted-foreground">
+            Directories where Shisho will scan for books and media files
+          </p>
+          {libraryPaths.map((path, index) => (
+            <div className="flex items-center gap-2" key={index}>
+              <Input
+                className="flex-1"
+                onChange={(e) => handlePathChange(index, e.target.value)}
+                placeholder="Enter directory path"
+                value={path}
+              />
+              {libraryPaths.length > 1 && (
+                <Button
+                  onClick={() => handleRemovePath(index)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button onClick={handleAddPath} type="button" variant="outline">
+            Add Path
           </Button>
         </div>
 
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
-          <p className="text-muted-foreground">
-            Manage library name, paths, and scanning behavior
+        <Separator />
+
+        {/* Organize File Structure Setting */}
+        <div className="space-y-4 flex flex-col gap-0.5">
+          <Label>Scanning Options</Label>
+          <div className="flex flex-col leading-none">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                checked={organizeFileStructure}
+                id="organize-files"
+                onCheckedChange={(checked) =>
+                  setOrganizeFileStructure(checked as boolean)
+                }
+              />
+              <Label
+                className="text-sm font-normal cursor-pointer"
+                htmlFor="organize-files"
+              >
+                Organize file structure during scans
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When enabled, Shisho will reorganize files into a standardized
+              directory structure during scanning operations.
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Cover Aspect Ratio Setting */}
+        <div className="space-y-2">
+          <Label htmlFor="cover-aspect-ratio">Cover Display Aspect Ratio</Label>
+          <p className="text-sm text-muted-foreground">
+            How book and series covers should be displayed in gallery views
+          </p>
+          <Select onValueChange={setCoverAspectRatio} value={coverAspectRatio}>
+            <SelectTrigger className="w-full" id="cover-aspect-ratio">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="book">Book Cover (2:3)</SelectItem>
+              <SelectItem value="audiobook">Audiobook Cover (1:1)</SelectItem>
+              <SelectItem value="book_fallback_audiobook">
+                Book Cover (2:3), fallback to Audiobook (1:1)
+              </SelectItem>
+              <SelectItem value="audiobook_fallback_book">
+                Audiobook Cover (1:1), fallback to Book (2:3)
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Separator />
+
+        {/* Download Format Preference Setting */}
+        <div className="space-y-2">
+          <Label htmlFor="download-format">Download Format Preference</Label>
+          <p className="text-sm text-muted-foreground">
+            How EPUB and CBZ files should be downloaded for e-readers
+          </p>
+          <Select
+            onValueChange={setDownloadFormatPreference}
+            value={downloadFormatPreference}
+          >
+            <SelectTrigger className="w-full" id="download-format">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DownloadFormatOriginal}>
+                Original format
+              </SelectItem>
+              <SelectItem value={DownloadFormatKepub}>
+                KePub (Kobo-optimized)
+              </SelectItem>
+              <SelectItem value={DownloadFormatAsk}>Ask on download</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            KePub format improves reading statistics and page turning on Kobo
+            devices. Only affects EPUB and CBZ files.
           </p>
         </div>
 
-        <div className="max-w-2xl space-y-6 border border-border rounded-md p-6">
-          {/* Library Name */}
-          <div className="space-y-2">
-            <Label htmlFor="library-name">Library Name</Label>
-            <Input
-              id="library-name"
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter library name"
-              value={name}
-            />
-          </div>
+        <Separator />
 
-          <Separator />
-
-          {/* Library Paths */}
-          <div className="space-y-4">
-            <Label>Library Paths</Label>
-            <p className="text-sm text-muted-foreground">
-              Directories where Shisho will scan for books and media files
-            </p>
-            {libraryPaths.map((path, index) => (
-              <div className="flex items-center gap-2" key={index}>
-                <Input
-                  className="flex-1"
-                  onChange={(e) => handlePathChange(index, e.target.value)}
-                  placeholder="Enter directory path"
-                  value={path}
-                />
-                {libraryPaths.length > 1 && (
-                  <Button
-                    onClick={() => handleRemovePath(index)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-            <Button onClick={handleAddPath} type="button" variant="outline">
-              Add Path
-            </Button>
-          </div>
-
-          <Separator />
-
-          {/* Organize File Structure Setting */}
-          <div className="space-y-4 flex flex-col gap-0.5">
-            <Label>Scanning Options</Label>
-            <div className="flex flex-col leading-none">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  checked={organizeFileStructure}
-                  id="organize-files"
-                  onCheckedChange={(checked) =>
-                    setOrganizeFileStructure(checked as boolean)
-                  }
-                />
-                <Label
-                  className="text-sm font-normal cursor-pointer"
-                  htmlFor="organize-files"
-                >
-                  Organize file structure during scans
-                </Label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                When enabled, Shisho will reorganize files into a standardized
-                directory structure during scanning operations.
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Cover Aspect Ratio Setting */}
-          <div className="space-y-2">
-            <Label htmlFor="cover-aspect-ratio">
-              Cover Display Aspect Ratio
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              How book and series covers should be displayed in gallery views
-            </p>
-            <Select
-              onValueChange={setCoverAspectRatio}
-              value={coverAspectRatio}
-            >
-              <SelectTrigger className="w-full" id="cover-aspect-ratio">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="book">Book Cover (2:3)</SelectItem>
-                <SelectItem value="audiobook">Audiobook Cover (1:1)</SelectItem>
-                <SelectItem value="book_fallback_audiobook">
-                  Book Cover (2:3), fallback to Audiobook (1:1)
-                </SelectItem>
-                <SelectItem value="audiobook_fallback_book">
-                  Audiobook Cover (1:1), fallback to Book (2:3)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          {/* Download Format Preference Setting */}
-          <div className="space-y-2">
-            <Label htmlFor="download-format">Download Format Preference</Label>
-            <p className="text-sm text-muted-foreground">
-              How EPUB and CBZ files should be downloaded for e-readers
-            </p>
-            <Select
-              onValueChange={setDownloadFormatPreference}
-              value={downloadFormatPreference}
-            >
-              <SelectTrigger className="w-full" id="download-format">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DownloadFormatOriginal}>
-                  Original format
-                </SelectItem>
-                <SelectItem value={DownloadFormatKepub}>
-                  KePub (Kobo-optimized)
-                </SelectItem>
-                <SelectItem value={DownloadFormatAsk}>
-                  Ask on download
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              KePub format improves reading statistics and page turning on Kobo
-              devices. Only affects EPUB and CBZ files.
-            </p>
-          </div>
-
-          <Separator />
-
-          {/* Save Button */}
-          <div className="flex justify-end pt-4">
-            <Button
-              disabled={updateLibraryMutation.isPending}
-              onClick={handleSave}
-            >
-              {updateLibraryMutation.isPending ? "Saving..." : "Save Settings"}
-            </Button>
-          </div>
+        {/* Save Button */}
+        <div className="flex justify-end pt-4">
+          <Button
+            disabled={updateLibraryMutation.isPending}
+            onClick={handleSave}
+          >
+            {updateLibraryMutation.isPending ? "Saving..." : "Save Settings"}
+          </Button>
         </div>
       </div>
-    </div>
+    </LibraryLayout>
   );
 };
 

@@ -20,9 +20,9 @@ import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
-import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -653,35 +653,28 @@ const BookDetail = () => {
 
   if (bookQuery.isLoading) {
     return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <LoadingSpinner />
-        </div>
-      </div>
+      <LibraryLayout>
+        <LoadingSpinner />
+      </LibraryLayout>
     );
   }
 
   if (!bookQuery.isSuccess || !bookQuery.data) {
     return (
-      <div>
-        <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">Book Not Found</h1>
-            <p className="text-muted-foreground mb-6">
-              The book you're looking for doesn't exist or may have been
-              removed.
-            </p>
-            <Button asChild>
-              <Link to={`/libraries/${libraryId}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Link>
-            </Button>
-          </div>
+      <LibraryLayout>
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold mb-4">Book Not Found</h1>
+          <p className="text-muted-foreground mb-6">
+            The book you're looking for doesn't exist or may have been removed.
+          </p>
+          <Button asChild>
+            <Link to={`/libraries/${libraryId}`}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Link>
+          </Button>
         </div>
-      </div>
+      </LibraryLayout>
     );
   }
 
@@ -705,321 +698,314 @@ const BookDetail = () => {
   const coverCacheBuster = bookQuery.dataUpdatedAt;
 
   return (
-    <div>
-      <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-6">
-          <Button asChild variant="ghost">
-            <Link to={`/libraries/${libraryId}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Books
-            </Link>
-          </Button>
+    <LibraryLayout>
+      <div className="mb-6">
+        <Button asChild variant="ghost">
+          <Link to={`/libraries/${libraryId}`}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Books
+          </Link>
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Book Cover */}
+        <div className="lg:col-span-1">
+          <div className={`${coverAspectRatio} w-full`}>
+            {!coverError ? (
+              <img
+                alt={`${book.title} Cover`}
+                className="w-full h-full object-cover rounded-md border border-border"
+                onError={() => setCoverError(true)}
+                src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
+              />
+            ) : (
+              <CoverPlaceholder
+                className={`rounded-md border border-border ${coverAspectRatio}`}
+                variant={coverFileType}
+              />
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Book Cover */}
-          <div className="lg:col-span-1">
-            <div className={`${coverAspectRatio} w-full`}>
-              {!coverError ? (
-                <img
-                  alt={`${book.title} Cover`}
-                  className="w-full h-full object-cover rounded-md border border-border"
-                  onError={() => setCoverError(true)}
-                  src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
-                />
-              ) : (
-                <CoverPlaceholder
-                  className={`rounded-md border border-border ${coverAspectRatio}`}
-                  variant={coverFileType}
-                />
-              )}
+        {/* Book Details */}
+        <div className="lg:col-span-2 space-y-6">
+          <div>
+            <div className="flex items-start gap-3 mb-2">
+              <h1 className="text-3xl font-semibold flex-1">{book.title}</h1>
+              <AddToListPopover
+                bookId={book.id}
+                trigger={
+                  <Button size="sm" title="Add to list" variant="outline">
+                    <List className="h-4 w-4 mr-2" />
+                    Add to list
+                  </Button>
+                }
+              />
+              <Button
+                onClick={() => setEditDialogOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
+                  <DropdownMenuItem
+                    disabled={resyncBookMutation.isPending}
+                    onClick={handleScanBookMetadata}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Scan for new metadata
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setShowBookRefreshDialog(true)}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh all metadata
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+            {book.sort_title && book.sort_title !== book.title && (
+              <p className="text-sm text-muted-foreground italic">
+                Sort title: {book.sort_title}
+              </p>
+            )}
+            {book.subtitle && (
+              <p className="text-lg text-muted-foreground">{book.subtitle}</p>
+            )}
+            {book.description && (
+              <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap">
+                {book.description}
+              </p>
+            )}
           </div>
 
-          {/* Book Details */}
-          <div className="lg:col-span-2 space-y-6">
-            <div>
-              <div className="flex items-start gap-3 mb-2">
-                <h1 className="text-3xl font-semibold flex-1">{book.title}</h1>
-                <AddToListPopover
-                  bookId={book.id}
-                  trigger={
-                    <Button size="sm" title="Add to list" variant="outline">
-                      <List className="h-4 w-4 mr-2" />
-                      Add to list
-                    </Button>
-                  }
-                />
-                <Button
-                  onClick={() => setEditDialogOpen(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                  >
-                    <DropdownMenuItem
-                      disabled={resyncBookMutation.isPending}
-                      onClick={handleScanBookMetadata}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Scan for new metadata
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setShowBookRefreshDialog(true)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh all metadata
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              {book.sort_title && book.sort_title !== book.title && (
-                <p className="text-sm text-muted-foreground italic">
-                  Sort title: {book.sort_title}
-                </p>
-              )}
-              {book.subtitle && (
-                <p className="text-lg text-muted-foreground">{book.subtitle}</p>
-              )}
-              {book.description && (
-                <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap">
-                  {book.description}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-6">
-              {/* Authors */}
-              {book.authors &&
-                book.authors.length > 0 &&
-                (() => {
-                  const hasCBZFiles = book.files?.some(
-                    (f) => f.file_type === FileTypeCBZ,
-                  );
-                  return (
-                    <div>
-                      <h3 className="font-semibold mb-2">Authors</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {book.authors.map((author) => {
-                          const roleLabel = getRoleLabel(author.role);
-                          return (
-                            <Link
-                              key={author.id}
-                              to={`/libraries/${libraryId}/people/${author.person_id}`}
+          <div className="space-y-6">
+            {/* Authors */}
+            {book.authors &&
+              book.authors.length > 0 &&
+              (() => {
+                const hasCBZFiles = book.files?.some(
+                  (f) => f.file_type === FileTypeCBZ,
+                );
+                return (
+                  <div>
+                    <h3 className="font-semibold mb-2">Authors</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {book.authors.map((author) => {
+                        const roleLabel = getRoleLabel(author.role);
+                        return (
+                          <Link
+                            key={author.id}
+                            to={`/libraries/${libraryId}/people/${author.person_id}`}
+                          >
+                            <Badge
+                              className="cursor-pointer hover:bg-secondary/80"
+                              variant="secondary"
                             >
-                              <Badge
-                                className="cursor-pointer hover:bg-secondary/80"
-                                variant="secondary"
-                              >
-                                {author.person?.name ?? "Unknown"}
-                                {hasCBZFiles && roleLabel && (
-                                  <span className="text-muted-foreground ml-1">
-                                    ({roleLabel})
-                                  </span>
-                                )}
-                              </Badge>
-                            </Link>
-                          );
-                        })}
-                      </div>
+                              {author.person?.name ?? "Unknown"}
+                              {hasCBZFiles && roleLabel && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({roleLabel})
+                                </span>
+                              )}
+                            </Badge>
+                          </Link>
+                        );
+                      })}
                     </div>
-                  );
-                })()}
-
-              {/* Series */}
-              {book.book_series && book.book_series.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2">Series</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {book.book_series.map((bs) => (
-                      <div className="flex items-center gap-2" key={bs.id}>
-                        <Link
-                          className="text-sm font-medium text-primary hover:text-primary/80 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
-                          to={`/libraries/${libraryId}/series/${bs.series_id}`}
-                        >
-                          {bs.series?.name ?? "Unknown Series"}
-                        </Link>
-                        {bs.series_number && (
-                          <Badge className="text-xs" variant="outline">
-                            #{bs.series_number}
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Genres */}
-              {book.book_genres && book.book_genres.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2">Genres</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {book.book_genres.map((bg) => (
-                      <Link
-                        key={bg.id}
-                        to={`/libraries/${libraryId}?genre_ids=${bg.genre_id}`}
-                      >
-                        <Badge
-                          className="cursor-pointer hover:bg-secondary/80"
-                          variant="secondary"
-                        >
-                          {bg.genre?.name ?? "Unknown"}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Tags */}
-              {book.book_tags && book.book_tags.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {book.book_tags.map((bt) => (
-                      <Link
-                        key={bt.id}
-                        to={`/libraries/${libraryId}?tag_ids=${bt.tag_id}`}
-                      >
-                        <Badge
-                          className="cursor-pointer hover:bg-secondary/80"
-                          variant="secondary"
-                        >
-                          {bt.tag?.name ?? "Unknown"}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              {/* Metadata */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="font-semibold">Created</p>
-                  <p className="text-muted-foreground">
-                    {formatDate(book.created_at)}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold">Updated</p>
-                  <p className="text-muted-foreground">
-                    {formatDate(book.updated_at)}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold">Library</p>
-                  <p className="text-muted-foreground">
-                    {book.library?.name || `Library ${book.library_id}`}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold">File Path</p>
-                  <p className="text-muted-foreground break-all">
-                    {book.filepath}
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Files */}
+            {/* Series */}
+            {book.book_series && book.book_series.length > 0 && (
               <div>
-                <h3 className="font-semibold mb-3">
-                  Files ({mainFiles.length})
-                </h3>
-                <div className="space-y-2">
-                  {mainFiles.map((file) => (
-                    <FileRow
-                      file={file}
-                      hasExpandableMetadata={hasExpandableMetadata(file)}
-                      isDownloading={downloadingFileId === file.id}
-                      isExpanded={expandedFileIds.has(file.id)}
-                      isResyncing={resyncingFileId === file.id}
-                      key={file.id}
-                      libraryDownloadPreference={
-                        libraryQuery.data?.download_format_preference
-                      }
-                      libraryId={libraryId!}
-                      onCancelDownload={handleCancelDownload}
-                      onDownload={() => handleDownload(file.id, file.file_type)}
-                      onDownloadKepub={() => handleDownloadKepub(file.id)}
-                      onDownloadOriginal={() => handleDownloadOriginal(file.id)}
-                      onDownloadWithEndpoint={(endpoint) =>
-                        handleDownloadWithEndpoint(file.id, endpoint)
-                      }
-                      onEdit={() => setEditingFile(file)}
-                      onRefreshMetadata={() =>
-                        handleRefreshFileMetadata(file.id)
-                      }
-                      onScanMetadata={() => handleScanFileMetadata(file.id)}
-                      onToggleExpand={() => toggleFileExpanded(file.id)}
-                    />
+                <h3 className="font-semibold mb-2">Series</h3>
+                <div className="flex flex-wrap gap-3">
+                  {book.book_series.map((bs) => (
+                    <div className="flex items-center gap-2" key={bs.id}>
+                      <Link
+                        className="text-sm font-medium text-primary hover:text-primary/80 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
+                        to={`/libraries/${libraryId}/series/${bs.series_id}`}
+                      >
+                        {bs.series?.name ?? "Unknown Series"}
+                      </Link>
+                      {bs.series_number && (
+                        <Badge className="text-xs" variant="outline">
+                          #{bs.series_number}
+                        </Badge>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
+            )}
 
-              {/* Supplements */}
-              {supplements.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="font-semibold mb-3">
-                      Supplements ({supplements.length})
-                    </h3>
-                    <div className="space-y-2">
-                      {supplements.map((file) => (
-                        <FileRow
-                          file={file}
-                          hasExpandableMetadata={hasExpandableMetadata(file)}
-                          isDownloading={downloadingFileId === file.id}
-                          isExpanded={expandedFileIds.has(file.id)}
-                          isResyncing={resyncingFileId === file.id}
-                          isSupplement
-                          key={file.id}
-                          libraryDownloadPreference={
-                            libraryQuery.data?.download_format_preference
-                          }
-                          libraryId={libraryId!}
-                          onCancelDownload={handleCancelDownload}
-                          onDownload={() =>
-                            handleDownload(file.id, file.file_type)
-                          }
-                          onDownloadKepub={() => handleDownloadKepub(file.id)}
-                          onDownloadOriginal={() =>
-                            handleDownloadOriginal(file.id)
-                          }
-                          onDownloadWithEndpoint={(endpoint) =>
-                            handleDownloadWithEndpoint(file.id, endpoint)
-                          }
-                          onEdit={() => setEditingFile(file)}
-                          onRefreshMetadata={() =>
-                            handleRefreshFileMetadata(file.id)
-                          }
-                          onScanMetadata={() => handleScanFileMetadata(file.id)}
-                          onToggleExpand={() => toggleFileExpanded(file.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+            {/* Genres */}
+            {book.book_genres && book.book_genres.length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-2">Genres</h3>
+                <div className="flex flex-wrap gap-2">
+                  {book.book_genres.map((bg) => (
+                    <Link
+                      key={bg.id}
+                      to={`/libraries/${libraryId}?genre_ids=${bg.genre_id}`}
+                    >
+                      <Badge
+                        className="cursor-pointer hover:bg-secondary/80"
+                        variant="secondary"
+                      >
+                        {bg.genre?.name ?? "Unknown"}
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {book.book_tags && book.book_tags.length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-2">Tags</h3>
+                <div className="flex flex-wrap gap-2">
+                  {book.book_tags.map((bt) => (
+                    <Link
+                      key={bt.id}
+                      to={`/libraries/${libraryId}?tag_ids=${bt.tag_id}`}
+                    >
+                      <Badge
+                        className="cursor-pointer hover:bg-secondary/80"
+                        variant="secondary"
+                      >
+                        {bt.tag?.name ?? "Unknown"}
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Metadata */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-semibold">Created</p>
+                <p className="text-muted-foreground">
+                  {formatDate(book.created_at)}
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold">Updated</p>
+                <p className="text-muted-foreground">
+                  {formatDate(book.updated_at)}
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold">Library</p>
+                <p className="text-muted-foreground">
+                  {book.library?.name || `Library ${book.library_id}`}
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold">File Path</p>
+                <p className="text-muted-foreground break-all">
+                  {book.filepath}
+                </p>
+              </div>
             </div>
+
+            <Separator />
+
+            {/* Files */}
+            <div>
+              <h3 className="font-semibold mb-3">Files ({mainFiles.length})</h3>
+              <div className="space-y-2">
+                {mainFiles.map((file) => (
+                  <FileRow
+                    file={file}
+                    hasExpandableMetadata={hasExpandableMetadata(file)}
+                    isDownloading={downloadingFileId === file.id}
+                    isExpanded={expandedFileIds.has(file.id)}
+                    isResyncing={resyncingFileId === file.id}
+                    key={file.id}
+                    libraryDownloadPreference={
+                      libraryQuery.data?.download_format_preference
+                    }
+                    libraryId={libraryId!}
+                    onCancelDownload={handleCancelDownload}
+                    onDownload={() => handleDownload(file.id, file.file_type)}
+                    onDownloadKepub={() => handleDownloadKepub(file.id)}
+                    onDownloadOriginal={() => handleDownloadOriginal(file.id)}
+                    onDownloadWithEndpoint={(endpoint) =>
+                      handleDownloadWithEndpoint(file.id, endpoint)
+                    }
+                    onEdit={() => setEditingFile(file)}
+                    onRefreshMetadata={() => handleRefreshFileMetadata(file.id)}
+                    onScanMetadata={() => handleScanFileMetadata(file.id)}
+                    onToggleExpand={() => toggleFileExpanded(file.id)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Supplements */}
+            {supplements.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="font-semibold mb-3">
+                    Supplements ({supplements.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {supplements.map((file) => (
+                      <FileRow
+                        file={file}
+                        hasExpandableMetadata={hasExpandableMetadata(file)}
+                        isDownloading={downloadingFileId === file.id}
+                        isExpanded={expandedFileIds.has(file.id)}
+                        isResyncing={resyncingFileId === file.id}
+                        isSupplement
+                        key={file.id}
+                        libraryDownloadPreference={
+                          libraryQuery.data?.download_format_preference
+                        }
+                        libraryId={libraryId!}
+                        onCancelDownload={handleCancelDownload}
+                        onDownload={() =>
+                          handleDownload(file.id, file.file_type)
+                        }
+                        onDownloadKepub={() => handleDownloadKepub(file.id)}
+                        onDownloadOriginal={() =>
+                          handleDownloadOriginal(file.id)
+                        }
+                        onDownloadWithEndpoint={(endpoint) =>
+                          handleDownloadWithEndpoint(file.id, endpoint)
+                        }
+                        onEdit={() => setEditingFile(file)}
+                        onRefreshMetadata={() =>
+                          handleRefreshFileMetadata(file.id)
+                        }
+                        onScanMetadata={() => handleScanFileMetadata(file.id)}
+                        onToggleExpand={() => toggleFileExpanded(file.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1075,7 +1061,7 @@ const BookDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </LibraryLayout>
   );
 };
 

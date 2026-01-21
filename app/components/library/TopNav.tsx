@@ -1,6 +1,6 @@
 import { KeyRound, List, LogOut, Settings, User, UserCog } from "lucide-react";
 import { useCallback } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import GlobalSearch from "@/components/library/GlobalSearch";
@@ -26,7 +26,6 @@ import { useAuth } from "@/hooks/useAuth";
 
 const TopNav = () => {
   const { libraryId } = useParams();
-  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
 
@@ -49,30 +48,6 @@ const TopNav = () => {
     }
   }, [logout, navigate]);
 
-  const isBooksActive =
-    location.pathname === `/libraries/${libraryId}` ||
-    (location.pathname.startsWith(`/libraries/${libraryId}/books`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/series`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/people`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/genres`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/tags`) &&
-      !location.pathname.startsWith(`/libraries/${libraryId}/settings`));
-  const isSeriesActive = location.pathname.startsWith(
-    `/libraries/${libraryId}/series`,
-  );
-  const isPeopleActive = location.pathname.startsWith(
-    `/libraries/${libraryId}/people`,
-  );
-  const isGenresActive = location.pathname.startsWith(
-    `/libraries/${libraryId}/genres`,
-  );
-  const isTagsActive = location.pathname.startsWith(
-    `/libraries/${libraryId}/tags`,
-  );
-  const isLibrarySettingsActive = location.pathname.startsWith(
-    `/libraries/${libraryId}/settings`,
-  );
-
   return (
     <div className="border-b border-border bg-background dark:bg-neutral-900">
       <div className="max-w-7xl mx-auto px-6">
@@ -87,84 +62,6 @@ const TopNav = () => {
                 <ResyncButton libraryId={Number(libraryId)} />
               )}
             </div>
-            {/* Navigation buttons for current library */}
-            {libraryId && (
-              <nav className="flex gap-1">
-                <Button
-                  className={`h-9 cursor-pointer ${
-                    isBooksActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-primary dark:hover:text-violet-300"
-                  }`}
-                  onClick={() => {
-                    // Clear series filter when clicking Books
-                    navigate(`/libraries/${libraryId}`, { replace: true });
-                  }}
-                  variant={isBooksActive ? "default" : "ghost"}
-                >
-                  Books
-                </Button>
-                <Button
-                  asChild
-                  className={`h-9 ${
-                    isSeriesActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-primary dark:hover:text-violet-300"
-                  }`}
-                  variant={isSeriesActive ? "default" : "ghost"}
-                >
-                  <Link to={`/libraries/${libraryId}/series`}>Series</Link>
-                </Button>
-                <Button
-                  asChild
-                  className={`h-9 ${
-                    isPeopleActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-primary dark:hover:text-violet-300"
-                  }`}
-                  variant={isPeopleActive ? "default" : "ghost"}
-                >
-                  <Link to={`/libraries/${libraryId}/people`}>People</Link>
-                </Button>
-                <Button
-                  asChild
-                  className={`h-9 ${
-                    isGenresActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-primary dark:hover:text-violet-300"
-                  }`}
-                  variant={isGenresActive ? "default" : "ghost"}
-                >
-                  <Link to={`/libraries/${libraryId}/genres`}>Genres</Link>
-                </Button>
-                <Button
-                  asChild
-                  className={`h-9 ${
-                    isTagsActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                      : "hover:text-primary dark:hover:text-violet-300"
-                  }`}
-                  variant={isTagsActive ? "default" : "ghost"}
-                >
-                  <Link to={`/libraries/${libraryId}/tags`}>Tags</Link>
-                </Button>
-                {hasPermission("libraries", "write") && (
-                  <Button
-                    asChild
-                    className={`h-9 ${
-                      isLibrarySettingsActive
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                        : "hover:text-primary dark:hover:text-violet-300"
-                    }`}
-                    variant={isLibrarySettingsActive ? "default" : "ghost"}
-                  >
-                    <Link to={`/libraries/${libraryId}/settings`}>
-                      Settings
-                    </Link>
-                  </Button>
-                )}
-              </nav>
-            )}
           </div>
           <div className="flex items-center gap-4">
             <GlobalSearch />

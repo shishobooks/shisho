@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import Gallery from "@/components/library/Gallery";
-import TopNav from "@/components/library/TopNav";
+import LibraryLayout from "@/components/library/LibraryLayout";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -149,37 +149,34 @@ const SeriesList = () => {
   };
 
   return (
-    <div>
-      <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2">Series</h1>
-          <p className="text-muted-foreground">
-            Browse book series in your library
-          </p>
-        </div>
+    <LibraryLayout>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold mb-2">Series</h1>
+        <p className="text-muted-foreground">
+          Browse book series in your library
+        </p>
+      </div>
 
-        <div className="mb-6">
-          <Input
-            className="max-w-xs"
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search series..."
-            type="search"
-            value={searchInput}
-          />
-        </div>
-
-        <Gallery
-          isLoading={seriesQuery.isLoading}
-          isSuccess={seriesQuery.isSuccess}
-          itemLabel="series"
-          items={seriesQuery.data?.series ?? []}
-          itemsPerPage={ITEMS_PER_PAGE}
-          renderItem={renderSeriesItem}
-          total={seriesQuery.data?.total ?? 0}
+      <div className="mb-6">
+        <Input
+          className="max-w-xs"
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search series..."
+          type="search"
+          value={searchInput}
         />
       </div>
-    </div>
+
+      <Gallery
+        isLoading={seriesQuery.isLoading}
+        isSuccess={seriesQuery.isSuccess}
+        itemLabel="series"
+        items={seriesQuery.data?.series ?? []}
+        itemsPerPage={ITEMS_PER_PAGE}
+        renderItem={renderSeriesItem}
+        total={seriesQuery.data?.total ?? 0}
+      />
+    </LibraryLayout>
   );
 };
 
