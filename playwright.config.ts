@@ -128,7 +128,7 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
       env: {
         DATABASE_FILE_PATH: config.dbPath,
         SERVER_PORT: String(config.apiPort),
-        DOWNLOAD_CACHE_DIR: config.cacheDir,
+        CACHE_DIR: config.cacheDir,
         JWT_SECRET: `e2e-test-secret-${config.browser}`,
         ENVIRONMENT: "test", // Enables test-only API endpoints
       },

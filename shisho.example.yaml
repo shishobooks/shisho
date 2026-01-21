@@ -74,15 +74,16 @@ worker_processes: 2
 job_retention_days: 30
 
 # =============================================================================
-# DOWNLOAD CACHE SETTINGS
+# CACHE SETTINGS
 # =============================================================================
 
-# Directory for caching generated download files
-# When users download files, modified versions with embedded metadata are generated
-# and cached here to avoid regenerating on each download.
-# Env: DOWNLOAD_CACHE_DIR
-# Default: /config/cache/downloads
-download_cache_dir: /config/cache/downloads
+# Directory for caching generated files
+# This includes:
+#   - {cache_dir}/downloads/  Generated download files with embedded metadata
+#   - {cache_dir}/cbz/        Extracted CBZ page images for the comic viewer
+# Env: CACHE_DIR
+# Default: /config/cache
+cache_dir: /config/cache
 
 # Maximum size of the download cache in gigabytes
 # When the cache exceeds this size, older files are automatically removed (LRU).

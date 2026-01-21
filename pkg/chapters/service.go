@@ -10,6 +10,35 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// ShouldUpdateChapters determines if chapters should be updated based on priority rules.
+// Returns true if the new chapters should replace existing ones.
+func ShouldUpdateChapters(newChapters []mediafile.ParsedChapter, newSource string, existingSource *string, forceRefresh bool) bool {
+	// Never update with empty chapters
+	if len(newChapters) == 0 {
+		return false
+	}
+
+	// Force refresh bypasses priority checks
+	if forceRefresh {
+		return true
+	}
+
+	// Treat nil/empty existing source as filepath priority (lowest priority)
+	existingSourceValue := ""
+	if existingSource != nil {
+		existingSourceValue = *existingSource
+	}
+	if existingSourceValue == "" {
+		existingSourceValue = models.DataSourceFilepath
+	}
+
+	newPriority := models.DataSourcePriority[newSource]
+	existingPriority := models.DataSourcePriority[existingSourceValue]
+
+	// Higher or equal priority wins (lower number = higher priority)
+	return newPriority <= existingPriority
+}
+
 type Service struct {
 	db *bun.DB
 }

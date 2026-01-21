@@ -230,6 +230,41 @@ func TestComputeFingerprint(t *testing.T) {
 		assert.Empty(t, fp.Genres)
 		assert.Empty(t, fp.Tags)
 	})
+
+	t.Run("chapters sorted by sort_order for consistent fingerprinting", func(t *testing.T) {
+		book := &models.Book{Title: "Book with Chapters"}
+		file := &models.File{
+			Chapters: []*models.Chapter{
+				{Title: "Third Chapter", SortOrder: 2, StartTimestampMs: int64Ptr(120000)},
+				{Title: "First Chapter", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+				{Title: "Second Chapter", SortOrder: 1, StartTimestampMs: int64Ptr(60000)},
+			},
+		}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		// Chapters should be sorted by SortOrder (0, 1, 2)
+		require.Len(t, fp.Chapters, 3)
+		assert.Equal(t, "First Chapter", fp.Chapters[0].Title)
+		assert.Equal(t, 0, fp.Chapters[0].SortOrder)
+		assert.Equal(t, "Second Chapter", fp.Chapters[1].Title)
+		assert.Equal(t, 1, fp.Chapters[1].SortOrder)
+		assert.Equal(t, "Third Chapter", fp.Chapters[2].Title)
+		assert.Equal(t, 2, fp.Chapters[2].SortOrder)
+	})
+
+	t.Run("file with no chapters has empty chapters slice", func(t *testing.T) {
+		book := &models.Book{Title: "Book"}
+		file := &models.File{Chapters: nil}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		// Chapters should be an empty slice, not nil, for consistent JSON serialization
+		assert.NotNil(t, fp.Chapters)
+		assert.Empty(t, fp.Chapters)
+	})
 }
 
 func TestFingerprintHash(t *testing.T) {
@@ -496,6 +531,53 @@ func TestFingerprintHash(t *testing.T) {
 		assert.NotEqual(t, hash1, hash2)
 	})
 
+	t.Run("different chapters produce different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title: "Test",
+			Chapters: []FingerprintChapter{
+				{Title: "Chapter 1", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+			},
+		}
+		fp2 := &Fingerprint{
+			Title: "Test",
+			Chapters: []FingerprintChapter{
+				{Title: "Chapter A", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+			},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("chapter order affects hash", func(t *testing.T) {
+		// Same chapters but in different order should produce different hashes
+		fp1 := &Fingerprint{
+			Title: "Test",
+			Chapters: []FingerprintChapter{
+				{Title: "Chapter 1", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+				{Title: "Chapter 2", SortOrder: 1, StartTimestampMs: int64Ptr(60000)},
+			},
+		}
+		fp2 := &Fingerprint{
+			Title: "Test",
+			Chapters: []FingerprintChapter{
+				{Title: "Chapter 2", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+				{Title: "Chapter 1", SortOrder: 1, StartTimestampMs: int64Ptr(60000)},
+			},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
 	t.Run("hash is 64 characters (SHA256 hex)", func(t *testing.T) {
 		fp := &Fingerprint{Title: "Test"}
 		hash, err := fp.Hash()
@@ -569,6 +651,204 @@ func TestComputeFingerprint_DifferentNamesProduceDifferentHashes(t *testing.T) {
 	assert.NotEqual(t, hash1, hash2, "Different names should produce different hashes")
 }
 
+func TestComputeFingerprint_ChaptersAreIncluded(t *testing.T) {
+	book := &models.Book{
+		Title: "Test Book",
+	}
+	file := &models.File{
+		Chapters: []*models.Chapter{
+			{
+				Title:            "Chapter 1",
+				SortOrder:        0,
+				StartTimestampMs: int64Ptr(0),
+			},
+			{
+				Title:            "Chapter 2",
+				SortOrder:        1,
+				StartTimestampMs: int64Ptr(60000),
+			},
+			{
+				Title:            "Chapter 3",
+				SortOrder:        2,
+				StartTimestampMs: int64Ptr(120000),
+			},
+		},
+	}
+
+	fp, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+
+	// Verify chapters are included in fingerprint
+	require.Len(t, fp.Chapters, 3)
+
+	// Verify first chapter
+	assert.Equal(t, "Chapter 1", fp.Chapters[0].Title)
+	assert.Equal(t, 0, fp.Chapters[0].SortOrder)
+	require.NotNil(t, fp.Chapters[0].StartTimestampMs)
+	assert.Equal(t, int64(0), *fp.Chapters[0].StartTimestampMs)
+
+	// Verify second chapter
+	assert.Equal(t, "Chapter 2", fp.Chapters[1].Title)
+	assert.Equal(t, 1, fp.Chapters[1].SortOrder)
+	require.NotNil(t, fp.Chapters[1].StartTimestampMs)
+	assert.Equal(t, int64(60000), *fp.Chapters[1].StartTimestampMs)
+
+	// Verify third chapter
+	assert.Equal(t, "Chapter 3", fp.Chapters[2].Title)
+	assert.Equal(t, 2, fp.Chapters[2].SortOrder)
+	require.NotNil(t, fp.Chapters[2].StartTimestampMs)
+	assert.Equal(t, int64(120000), *fp.Chapters[2].StartTimestampMs)
+}
+
+func TestComputeFingerprint_ChaptersWithNilOptionalFieldsFingerprintCorrectly(t *testing.T) {
+	// This test ensures that chapters with nil optional fields (StartPage, StartTimestampMs, Href)
+	// don't cause panics during fingerprinting and compute successfully.
+	book := &models.Book{
+		Title: "Test Book with Minimal Chapters",
+	}
+	file := &models.File{
+		Chapters: []*models.Chapter{
+			{
+				Title:            "Chapter with all nil optional fields",
+				SortOrder:        0,
+				StartPage:        nil, // CBZ field - nil
+				StartTimestampMs: nil, // M4B field - nil
+				Href:             nil, // EPUB field - nil
+			},
+			{
+				Title:            "Another minimal chapter",
+				SortOrder:        1,
+				StartPage:        nil,
+				StartTimestampMs: nil,
+				Href:             nil,
+			},
+		},
+	}
+
+	// Should not panic and should compute without error
+	fp, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+
+	// Verify chapters are included in fingerprint
+	require.Len(t, fp.Chapters, 2)
+
+	// Verify first chapter has nil optional fields preserved (or omitempty behavior)
+	assert.Equal(t, "Chapter with all nil optional fields", fp.Chapters[0].Title)
+	assert.Equal(t, 0, fp.Chapters[0].SortOrder)
+	assert.Nil(t, fp.Chapters[0].StartPage)
+	assert.Nil(t, fp.Chapters[0].StartTimestampMs)
+	assert.Nil(t, fp.Chapters[0].Href)
+
+	// Verify second chapter
+	assert.Equal(t, "Another minimal chapter", fp.Chapters[1].Title)
+	assert.Equal(t, 1, fp.Chapters[1].SortOrder)
+	assert.Nil(t, fp.Chapters[1].StartPage)
+	assert.Nil(t, fp.Chapters[1].StartTimestampMs)
+	assert.Nil(t, fp.Chapters[1].Href)
+
+	// Verify hash can be computed without error (proves JSON serialization works with nil fields)
+	hash, err := fp.Hash()
+	require.NoError(t, err)
+	assert.Len(t, hash, 64) // SHA256 hex is 64 characters
+}
+
+func TestComputeFingerprint_NestedChaptersAreIncluded(t *testing.T) {
+	book := &models.Book{
+		Title: "Test Book with Nested Chapters",
+	}
+	// Create a parent chapter with nested children
+	file := &models.File{
+		Chapters: []*models.Chapter{
+			{
+				Title:            "Part 1",
+				SortOrder:        0,
+				StartTimestampMs: int64Ptr(0),
+				Children: []*models.Chapter{
+					{
+						Title:            "Chapter 1.1",
+						SortOrder:        0,
+						StartTimestampMs: int64Ptr(1000),
+						Children: []*models.Chapter{
+							{
+								Title:            "Section 1.1.1",
+								SortOrder:        0,
+								StartTimestampMs: int64Ptr(1100),
+							},
+							{
+								Title:            "Section 1.1.2",
+								SortOrder:        1,
+								StartTimestampMs: int64Ptr(1200),
+							},
+						},
+					},
+					{
+						Title:            "Chapter 1.2",
+						SortOrder:        1,
+						StartTimestampMs: int64Ptr(2000),
+					},
+				},
+			},
+			{
+				Title:            "Part 2",
+				SortOrder:        1,
+				StartTimestampMs: int64Ptr(60000),
+				Children: []*models.Chapter{
+					{
+						Title:            "Chapter 2.1",
+						SortOrder:        0,
+						StartTimestampMs: int64Ptr(61000),
+					},
+				},
+			},
+		},
+	}
+
+	fp, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+
+	// Verify top-level chapters
+	require.Len(t, fp.Chapters, 2)
+
+	// Verify Part 1
+	assert.Equal(t, "Part 1", fp.Chapters[0].Title)
+	assert.Equal(t, 0, fp.Chapters[0].SortOrder)
+	require.NotNil(t, fp.Chapters[0].StartTimestampMs)
+	assert.Equal(t, int64(0), *fp.Chapters[0].StartTimestampMs)
+
+	// Verify Part 1 has children
+	require.Len(t, fp.Chapters[0].Children, 2)
+
+	// Verify Chapter 1.1
+	assert.Equal(t, "Chapter 1.1", fp.Chapters[0].Children[0].Title)
+	assert.Equal(t, 0, fp.Chapters[0].Children[0].SortOrder)
+	require.NotNil(t, fp.Chapters[0].Children[0].StartTimestampMs)
+	assert.Equal(t, int64(1000), *fp.Chapters[0].Children[0].StartTimestampMs)
+
+	// Verify Chapter 1.1 has nested children (depth 3)
+	require.Len(t, fp.Chapters[0].Children[0].Children, 2)
+	assert.Equal(t, "Section 1.1.1", fp.Chapters[0].Children[0].Children[0].Title)
+	assert.Equal(t, 0, fp.Chapters[0].Children[0].Children[0].SortOrder)
+	assert.Equal(t, "Section 1.1.2", fp.Chapters[0].Children[0].Children[1].Title)
+	assert.Equal(t, 1, fp.Chapters[0].Children[0].Children[1].SortOrder)
+
+	// Verify Chapter 1.2
+	assert.Equal(t, "Chapter 1.2", fp.Chapters[0].Children[1].Title)
+	assert.Equal(t, 1, fp.Chapters[0].Children[1].SortOrder)
+
+	// Verify Part 2
+	assert.Equal(t, "Part 2", fp.Chapters[1].Title)
+	assert.Equal(t, 1, fp.Chapters[1].SortOrder)
+
+	// Verify Part 2 has children
+	require.Len(t, fp.Chapters[1].Children, 1)
+	assert.Equal(t, "Chapter 2.1", fp.Chapters[1].Children[0].Title)
+	assert.Equal(t, 0, fp.Chapters[1].Children[0].SortOrder)
+}
+
 func strPtr(s string) *string {
 	return &s
+}
+
+func int64Ptr(i int64) *int64 {
+	return &i
 }

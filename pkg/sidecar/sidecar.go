@@ -217,6 +217,11 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 		}
 	}
 
+	// Convert chapters if loaded
+	if len(file.Chapters) > 0 {
+		s.Chapters = ChaptersFromModels(file.Chapters)
+	}
+
 	return s
 }
 
@@ -230,4 +235,50 @@ func WriteBookSidecarFromModel(book *models.Book) error {
 func WriteFileSidecarFromModel(file *models.File) error {
 	s := FileSidecarFromModel(file)
 	return WriteFileSidecar(file.Filepath, s)
+}
+
+// WriteFileSidecarWithChapters writes a file sidecar from a File model and chapters.
+func WriteFileSidecarWithChapters(file *models.File, chapters []*models.Chapter) error {
+	s := FileSidecarFromModel(file)
+	s.Chapters = ChaptersFromModels(chapters)
+	return WriteFileSidecar(file.Filepath, s)
+}
+
+// ChaptersFromModels converts model chapters to ChapterMetadata slice.
+func ChaptersFromModels(chapters []*models.Chapter) []ChapterMetadata {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	result := make([]ChapterMetadata, len(chapters))
+	for i, ch := range chapters {
+		result[i] = ChapterMetadata{
+			Title:            ch.Title,
+			StartPage:        ch.StartPage,
+			StartTimestampMs: ch.StartTimestampMs,
+			Href:             ch.Href,
+			Children:         ChaptersFromModels(ch.Children),
+		}
+	}
+	return result
+}
+
+// ChaptersToModels converts ChapterMetadata slice to model chapters.
+// Note: This creates chapter models without IDs - they should be inserted fresh.
+func ChaptersToModels(chapters []ChapterMetadata) []*models.Chapter {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	result := make([]*models.Chapter, len(chapters))
+	for i, ch := range chapters {
+		result[i] = &models.Chapter{
+			Title:            ch.Title,
+			StartPage:        ch.StartPage,
+			StartTimestampMs: ch.StartTimestampMs,
+			Href:             ch.Href,
+			Children:         ChaptersToModels(ch.Children),
+		}
+	}
+	return result
 }

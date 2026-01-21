@@ -371,3 +371,111 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 - `cmd/scripts/debug/print-mp4-atoms/` - CLI tool to inspect M4B metadata and atoms
   - Run with: `go run ./cmd/scripts/debug/print-mp4-atoms <file.m4b>`
   - Shows all parsed metadata, freeform atoms, unknown atoms, and chapters
+
+## Browser Playback (Frontend Audio Preview)
+
+### Codec Compatibility Issue
+
+**Problem:** Some M4B files fail to play in the browser audio preview, getting stuck in a seeking state.
+
+**Root Cause:** The AAC codec profile determines browser compatibility:
+
+| Profile | Browser Support | Seeking Support |
+|---------|-----------------|-----------------|
+| **AAC-LC** (Low Complexity) | Full | Works |
+| **HE-AAC** (High Efficiency) | Full | Works |
+| **xHE-AAC** (Extended HE) | Partial | **Fails** |
+
+Browsers report `canPlayType('audio/mp4; codecs="mp4a.40.42"')` as "probably" for xHE-AAC, but actually fail when seeking to arbitrary positions. The audio gets stuck with:
+- `seeking: true` (never completes)
+- `readyState: 1` (HAVE_METADATA only)
+- `canplay` event never fires
+
+### Diagnosing Codec Issues
+
+Use `ffprobe` to check the AAC profile:
+
+```bash
+ffprobe -v error -show_streams <file.m4b> | grep profile
+```
+
+**Output comparison:**
+```
+# Working file
+profile=LC
+
+# Problematic file
+profile=xHE-AAC
+```
+
+### Frontend Fix Pattern
+
+When implementing audio preview for M4B files, use timeouts to handle codec incompatibility gracefully:
+
+```typescript
+const handleAudioPlay = (timestampMs: number) => {
+  const audio = audioRef.current;
+  audio.currentTime = timestampMs / 1000;
+
+  let playbackStarted = false;
+
+  const tryPlay = () => {
+    if (audio.readyState >= 3) {
+      playbackStarted = true;
+      audio.play();
+    } else {
+      // Wait for canplay, with timeout fallback
+      const onCanPlay = () => {
+        playbackStarted = true;
+        audio.removeEventListener("canplay", onCanPlay);
+        audio.play();
+      };
+      audio.addEventListener("canplay", onCanPlay);
+
+      // Timeout: codec may not be supported
+      setTimeout(() => {
+        if (!playbackStarted) {
+          audio.removeEventListener("canplay", onCanPlay);
+          setPlayingState(null);
+          toast.error("Unable to play audio preview", {
+            description: "The audio codec may not be supported by your browser.",
+          });
+        }
+      }, 5000);
+    }
+  };
+
+  // Also timeout if seeking never completes
+  if (audio.seeking) {
+    const onSeeked = () => {
+      audio.removeEventListener("seeked", onSeeked);
+      tryPlay();
+    };
+    audio.addEventListener("seeked", onSeeked);
+
+    setTimeout(() => {
+      if (!playbackStarted && audio.seeking) {
+        audio.removeEventListener("seeked", onSeeked);
+        setPlayingState(null);
+        toast.error("Unable to play audio preview", {
+          description: "The audio codec may not be supported by your browser.",
+        });
+      }
+    }, 5000);
+  } else {
+    tryPlay();
+  }
+};
+```
+
+**Key points:**
+1. Don't call `play()` until `readyState >= 3` (HAVE_FUTURE_DATA)
+2. Add timeout for both `seeked` and `canplay` events
+3. Show user-friendly error when timeout triggers
+4. Reset UI state so button doesn't stay in "playing" mode
+
+### Implementation Reference
+
+See `app/components/files/FileChaptersTab.tsx`:
+- `handleAudioPlay` - Playback with timeout handling
+- `handleAudioStop` - Cleanup and state reset

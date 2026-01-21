@@ -175,6 +175,122 @@ func TestCache_GetOrGenerate(t *testing.T) {
 	})
 }
 
+func TestCache_ChapterFingerprinting(t *testing.T) {
+	t.Run("chapter changes invalidate cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0755))
+
+		srcPath := filepath.Join(tmpDir, "source.epub")
+		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
+
+		cache := NewCache(cacheDir, 1024*1024*1024)
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Test Author"}},
+			},
+		}
+
+		// Create file with an initial chapter
+		startMs := int64(0)
+		file := &models.File{
+			ID:       1,
+			FileType: models.FileTypeEPUB,
+			Filepath: srcPath,
+			Chapters: []*models.Chapter{
+				{
+					Title:            "Original Title",
+					SortOrder:        0,
+					StartTimestampMs: &startMs,
+				},
+			},
+		}
+
+		// First call - generates the file
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		require.NoError(t, err)
+
+		// Get the original fingerprint hash
+		meta1, err := ReadMetadata(cacheDir, file.ID)
+		require.NoError(t, err)
+		originalHash := meta1.FingerprintHash
+
+		// Update chapter title directly in file.Chapters model
+		file.Chapters[0].Title = "Updated Title"
+
+		// Compute new fingerprint hash
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+		newHash, err := fp.Hash()
+		require.NoError(t, err)
+
+		// Verify hash differs from original (cache should be invalidated)
+		assert.NotEqual(t, originalHash, newHash, "Fingerprint hash should differ when chapter title changes")
+
+		// Wait for background cleanup goroutine to finish
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	t.Run("same chapters hit cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0755))
+
+		srcPath := filepath.Join(tmpDir, "source.epub")
+		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
+
+		cache := NewCache(cacheDir, 1024*1024*1024)
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Test Author"}},
+			},
+		}
+
+		// Create file with chapters
+		startMs := int64(0)
+		file := &models.File{
+			ID:       1,
+			FileType: models.FileTypeEPUB,
+			Filepath: srcPath,
+			Chapters: []*models.Chapter{
+				{
+					Title:            "Chapter One",
+					SortOrder:        0,
+					StartTimestampMs: &startMs,
+				},
+			},
+		}
+
+		// First call - generates the file
+		cachedPath1, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		require.NoError(t, err)
+
+		// Get the file's mod time to verify it wasn't regenerated
+		info1, err := os.Stat(cachedPath1)
+		require.NoError(t, err)
+		modTime1 := info1.ModTime()
+
+		// Second call without changing chapters
+		cachedPath2, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		require.NoError(t, err)
+
+		// Verify same cached path returned
+		assert.Equal(t, cachedPath1, cachedPath2, "Should return same cached path")
+
+		// File should not have been modified (cache hit)
+		info2, err := os.Stat(cachedPath2)
+		require.NoError(t, err)
+		assert.Equal(t, modTime1, info2.ModTime(), "File should not have been regenerated")
+
+		// Wait for background cleanup goroutine to finish
+		time.Sleep(50 * time.Millisecond)
+	})
+}
+
 func TestCache_Invalidate(t *testing.T) {
 	t.Run("removes cached file and metadata", func(t *testing.T) {
 		tmpDir := t.TempDir()

@@ -187,12 +187,12 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 
 | Function | Required Relations |
 |----------|-------------------|
-| `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Imprint |
+| `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Imprint, Chapters |
 | `ComputeFingerprint()` | Narrators, Identifiers |
 
 **Use the right retrieval method:**
 - `RetrieveFile()` - File with Book, Identifiers, and Narrators. Use for most lookups.
-- `RetrieveFileWithRelations()` - Complete file with all relations (adds Publisher, Imprint). **Use this for sidecar writing or fingerprinting.**
+- `RetrieveFileWithRelations()` - Complete file with all relations (adds Publisher, Imprint, Chapters). **Use this for sidecar writing or fingerprinting.**
 - Book queries (`RetrieveBook`) - Already include `Files.Identifiers`, `Files.Narrators`, etc.
 
 **Common mistake**: Retrieving a file with `RetrieveFile()` then passing it to `WriteFileSidecarFromModel()` or `ComputeFingerprint()`. The sidecar/fingerprint will be missing data because relations aren't loaded.

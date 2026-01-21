@@ -39,6 +39,12 @@ type CBZOptions struct {
 	ForceEmptyTitle bool   // if true, writes an empty <Title></Title> element (for testing empty title handling)
 }
 
+// M4BChapter represents a chapter for test M4B generation.
+type M4BChapter struct {
+	Title string
+	Start float64 // Start time in seconds
+}
+
 // M4BOptions configures the generated M4B file.
 type M4BOptions struct {
 	Title       string
@@ -52,6 +58,7 @@ type M4BOptions struct {
 	Date        string // Year/date (e.g., "2024")
 	AlbumArtist string // Album artist (different from artist)
 	Comment     string // Comment/description
+	Chapters    []M4BChapter
 }
 
 // TempDir creates a temporary directory for testing and registers cleanup.

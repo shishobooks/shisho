@@ -844,6 +844,272 @@ func TestConverter_ConvertCBZWithMetadata_UsesNameForTitle(t *testing.T) {
 	})
 }
 
+func TestGenerateNCX_WithChapters(t *testing.T) {
+	t.Run("includes chapter navPoints when chapters provided", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page3.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Chapter 1", StartPage: 0},
+				{Title: "Chapter 2", StartPage: 2},
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxContent := string(ncxData)
+
+		// Should have chapter navPoints
+		assert.Contains(t, ncxContent, `<text>Chapter 1</text>`)
+		assert.Contains(t, ncxContent, `<text>Chapter 2</text>`)
+		assert.Contains(t, ncxContent, `<content src="page0001.xhtml"/>`)
+		assert.Contains(t, ncxContent, `<content src="page0003.xhtml"/>`)
+		// Should NOT have "Page 1", "Page 2", "Page 3" labels
+		assert.NotContains(t, ncxContent, `<text>Page 1</text>`)
+		assert.NotContains(t, ncxContent, `<text>Page 2</text>`)
+		assert.NotContains(t, ncxContent, `<text>Page 3</text>`)
+	})
+
+	t.Run("uses page navPoints when no chapters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title:    "Test Comic",
+			Chapters: nil, // No chapters
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxContent := string(ncxData)
+
+		// Should have page-based navPoints
+		assert.Contains(t, ncxContent, `<text>Page 1</text>`)
+		assert.Contains(t, ncxContent, `<text>Page 2</text>`)
+	})
+
+	t.Run("escapes special characters in chapter titles", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Part 1 & <Beginning>", StartPage: 0},
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxContent := string(ncxData)
+
+		// Should be XML-escaped
+		assert.Contains(t, ncxContent, `Part 1 &amp; &lt;Beginning&gt;`)
+	})
+
+	t.Run("skips chapters beyond page count", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Chapter 1", StartPage: 0},
+				{Title: "Chapter 2", StartPage: 10}, // Beyond page count (only 2 pages)
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxContent := string(ncxData)
+
+		// Should only have Chapter 1
+		assert.Contains(t, ncxContent, `<text>Chapter 1</text>`)
+		assert.NotContains(t, ncxContent, `<text>Chapter 2</text>`)
+	})
+}
+
+func TestGenerateNavXHTML_WithChapters(t *testing.T) {
+	t.Run("includes chapter TOC when chapters provided", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page3.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Chapter 1", StartPage: 0},
+				{Title: "Chapter 2", StartPage: 2},
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navContent := string(navData)
+
+		// Should have chapter entries in the TOC
+		assert.Contains(t, navContent, `<a href="page0001.xhtml">Chapter 1</a>`)
+		assert.Contains(t, navContent, `<a href="page0003.xhtml">Chapter 2</a>`)
+	})
+
+	t.Run("uses title-only when no chapters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title:    "Test Comic",
+			Chapters: nil, // No chapters
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navContent := string(navData)
+
+		// Should have single title entry (current behavior)
+		assert.Contains(t, navContent, `<a href="page0001.xhtml">Test Comic</a>`)
+		// Should NOT have Chapter 1, Chapter 2 entries
+		assert.NotContains(t, navContent, `Chapter 1`)
+		assert.NotContains(t, navContent, `Chapter 2`)
+	})
+
+	t.Run("escapes special characters in chapter titles", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Part 1 & <Beginning>", StartPage: 0},
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navContent := string(navData)
+
+		// Should be XML-escaped
+		assert.Contains(t, navContent, `Part 1 &amp; &lt;Beginning&gt;`)
+	})
+
+	t.Run("skips chapters beyond page count", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "comic.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title: "Test Comic",
+			Chapters: []CBZChapter{
+				{Title: "Chapter 1", StartPage: 0},
+				{Title: "Chapter 2", StartPage: 10}, // Beyond page count (only 2 pages)
+			},
+		}
+
+		converter := NewConverter()
+		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navContent := string(navData)
+
+		// Should only have Chapter 1
+		assert.Contains(t, navContent, `>Chapter 1</a>`)
+		assert.NotContains(t, navContent, `>Chapter 2</a>`)
+	})
+}
+
 func TestIsGrayscaleImage(t *testing.T) {
 	t.Run("detects grayscale image", func(t *testing.T) {
 		// Create a grayscale image (all pixels have R=G=B)

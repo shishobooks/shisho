@@ -1,6 +1,8 @@
 package opds
 
 import (
+	"path/filepath"
+
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
@@ -13,7 +15,7 @@ import (
 func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware) {
 	opdsService := NewService(db)
 	bookService := books.NewService(db)
-	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
+	cache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
 		opdsService:   opdsService,

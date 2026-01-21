@@ -10,6 +10,7 @@ import BookDetail from "@/components/pages/BookDetail";
 import CBZReader from "@/components/pages/CBZReader";
 import CreateLibrary from "@/components/pages/CreateLibrary";
 import CreateUser from "@/components/pages/CreateUser";
+import FileDetail from "@/components/pages/FileDetail";
 import GenreDetail from "@/components/pages/GenreDetail";
 import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
@@ -197,6 +198,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute checkLibraryAccess>
             <BookDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "libraries/:libraryId/books/:bookId/files/:fileId/:tab?",
+        element: (
+          <ProtectedRoute checkLibraryAccess>
+            <FileDetail />
           </ProtectedRoute>
         ),
       },

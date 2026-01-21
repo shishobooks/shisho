@@ -29,6 +29,7 @@ type FileSidecar struct {
 	ReleaseDate *string              `json:"release_date,omitempty"` // ISO 8601 date string (YYYY-MM-DD)
 	Identifiers []IdentifierMetadata `json:"identifiers,omitempty"`
 	Name        *string              `json:"name,omitempty"`
+	Chapters    []ChapterMetadata    `json:"chapters,omitempty"`
 }
 
 // AuthorMetadata represents an author in the sidecar file.
@@ -58,4 +59,17 @@ type SeriesMetadata struct {
 	SortName  string   `json:"sort_name,omitempty"`
 	Number    *float64 `json:"number,omitempty"`
 	SortOrder int      `json:"sort_order,omitempty"`
+}
+
+// ChapterMetadata represents a chapter in the sidecar file.
+// Position fields are mutually exclusive based on file type:
+// - CBZ uses StartPage (0-indexed).
+// - M4B uses StartTimestampMs.
+// - EPUB uses Href.
+type ChapterMetadata struct {
+	Title            string            `json:"title"`
+	StartPage        *int              `json:"start_page,omitempty"`
+	StartTimestampMs *int64            `json:"start_timestamp_ms,omitempty"`
+	Href             *string           `json:"href,omitempty"`
+	Children         []ChapterMetadata `json:"children,omitempty"`
 }

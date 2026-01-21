@@ -28,11 +28,11 @@ func main() {
 		log.Err(err).Fatal("config error")
 	}
 
-	// Initialize download cache directory
-	if err := initDownloadCacheDir(cfg.DownloadCacheDir); err != nil {
-		log.Err(err).Fatal("download cache directory error")
+	// Initialize cache directories
+	if err := initCacheDir(cfg.CacheDir); err != nil {
+		log.Err(err).Fatal("cache directory error")
 	}
-	log.Info("download cache directory initialized", logger.Data{"path": cfg.DownloadCacheDir})
+	log.Info("cache directory initialized", logger.Data{"path": cfg.CacheDir})
 
 	db, err := database.New(cfg)
 	if err != nil {
@@ -110,18 +110,26 @@ func main() {
 	log.Info("database closed")
 }
 
-// initDownloadCacheDir creates the download cache directory and verifies write permissions.
-func initDownloadCacheDir(dir string) error {
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create download cache directory: %s", dir)
+// initCacheDir creates the cache directories and verifies write permissions.
+// Creates subdirectories: downloads (generated files), cbz (extracted page images).
+func initCacheDir(dir string) error {
+	// Create subdirectories
+	subdirs := []string{
+		filepath.Join(dir, "downloads"),
+		filepath.Join(dir, "cbz"),
+	}
+
+	for _, subdir := range subdirs {
+		if err := os.MkdirAll(subdir, 0755); err != nil {
+			return errors.Wrapf(err, "failed to create cache directory: %s", subdir)
+		}
 	}
 
 	// Verify write permissions by creating and removing a temp file
 	testFile := filepath.Join(dir, ".write_test")
 	f, err := os.Create(testFile)
 	if err != nil {
-		return errors.Wrapf(err, "download cache directory is not writable: %s", dir)
+		return errors.Wrapf(err, "cache directory is not writable: %s", dir)
 	}
 	f.Close()
 

@@ -36,6 +36,7 @@ type CBZMetadata struct {
 	Publisher   *string
 	Imprint     *string
 	ReleaseDate *time.Time
+	Chapters    []CBZChapter
 }
 
 // CBZAuthor represents an author/creator for CBZ metadata.
@@ -49,6 +50,12 @@ type CBZAuthor struct {
 type CBZSeries struct {
 	Name   string
 	Number *float64
+}
+
+// CBZChapter represents a chapter/section for CBZ metadata.
+type CBZChapter struct {
+	Title     string
+	StartPage int // 0-indexed page number
 }
 
 // pageInfo holds information about a page image.
@@ -243,7 +250,7 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 	}
 
 	// Generate nav.xhtml (required for EPUB3 and helps Kobo navigation)
-	nav := generateNavXHTML(metadata)
+	nav := generateNavXHTML(pages, metadata)
 	if err := writeZipFile(destZip, "OEBPS/nav.xhtml", nav); err != nil {
 		return errors.Wrap(err, "failed to write nav.xhtml")
 	}
@@ -511,6 +518,8 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 }
 
 // generateNCX generates the NCX navigation file.
+// If chapters are provided in metadata, uses chapter-based navigation.
+// Otherwise, falls back to page-based navigation.
 func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
 	var buf bytes.Buffer
 
@@ -539,16 +548,36 @@ func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
   <navMap>
 `)
 
-	// Add nav points for each page
-	for i := range pages {
-		pageNum := i + 1
-		buf.WriteString(fmt.Sprintf(`    <navPoint id="navpoint%d" playOrder="%d">
+	// Use chapter-based navPoints if chapters are provided
+	if metadata != nil && len(metadata.Chapters) > 0 {
+		playOrder := 1
+		for _, ch := range metadata.Chapters {
+			// Skip chapters beyond page count
+			if ch.StartPage >= len(pages) {
+				continue
+			}
+			pageNum := ch.StartPage + 1 // Convert 0-indexed to 1-indexed
+			buf.WriteString(fmt.Sprintf(`    <navPoint id="navpoint%d" playOrder="%d">
+      <navLabel>
+        <text>%s</text>
+      </navLabel>
+      <content src="page%04d.xhtml"/>
+    </navPoint>
+`, playOrder, playOrder, html.EscapeString(ch.Title), pageNum))
+			playOrder++
+		}
+	} else {
+		// Fall back to page-based nav points
+		for i := range pages {
+			pageNum := i + 1
+			buf.WriteString(fmt.Sprintf(`    <navPoint id="navpoint%d" playOrder="%d">
       <navLabel>
         <text>Page %d</text>
       </navLabel>
       <content src="page%04d.xhtml"/>
     </navPoint>
 `, pageNum, pageNum, pageNum, pageNum))
+		}
 	}
 
 	buf.WriteString(`  </navMap>
@@ -608,7 +637,9 @@ body { display: block; margin: 0; padding: 0; }
 
 // generateNavXHTML generates the EPUB3 navigation document.
 // This is required for EPUB3 and helps with Kobo navigation.
-func generateNavXHTML(metadata *CBZMetadata) []byte {
+// If chapters are provided in metadata, creates chapter-based TOC.
+// Otherwise, uses a single title entry (current behavior).
+func generateNavXHTML(pages []pageInfo, metadata *CBZMetadata) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -626,10 +657,28 @@ func generateNavXHTML(metadata *CBZMetadata) []byte {
 <body>
 <nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc" id="toc">
 <ol>
-<li><a href="page0001.xhtml">`)
-	buf.WriteString(html.EscapeString(title))
-	buf.WriteString(`</a></li>
-</ol>
+`)
+
+	// Use chapter-based TOC if chapters are provided
+	if metadata != nil && len(metadata.Chapters) > 0 {
+		for _, ch := range metadata.Chapters {
+			// Skip chapters beyond page count
+			if ch.StartPage >= len(pages) {
+				continue
+			}
+			pageNum := ch.StartPage + 1 // Convert 0-indexed to 1-indexed
+			buf.WriteString(fmt.Sprintf(`<li><a href="page%04d.xhtml">%s</a></li>
+`, pageNum, html.EscapeString(ch.Title)))
+		}
+	} else {
+		// Fall back to single title entry
+		buf.WriteString(`<li><a href="page0001.xhtml">`)
+		buf.WriteString(html.EscapeString(title))
+		buf.WriteString(`</a></li>
+`)
+	}
+
+	buf.WriteString(`</ol>
 </nav>
 <nav epub:type="page-list">
 <ol>

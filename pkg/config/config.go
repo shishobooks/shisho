@@ -37,8 +37,8 @@ type Config struct {
 	// Job retention settings
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
 
-	// Download cache settings
-	DownloadCacheDir       string `koanf:"download_cache_dir" json:"download_cache_dir"`
+	// Cache settings
+	CacheDir               string `koanf:"cache_dir" json:"cache_dir"`
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
 
 	// Supplement discovery settings
@@ -74,7 +74,7 @@ func defaults() *Config {
 		SyncIntervalMinutes:       60,
 		WorkerProcesses:           2,
 		JobRetentionDays:          30,
-		DownloadCacheDir:          "/config/cache/downloads",
+		CacheDir:                  "/config/cache",
 		DownloadCacheMaxSizeGB:    5,
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 		JWTSecret:                 "", // Must be set via config or env var
@@ -141,7 +141,7 @@ func NewForTest() *Config {
 	cfg.ServerPort = 0
 	cfg.Hostname = "test-host"
 	cfg.WorkerProcesses = 1
-	cfg.DownloadCacheDir = "" // Must be set by test
+	cfg.CacheDir = "" // Must be set by test
 	cfg.DownloadCacheMaxSizeGB = 1
 	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
 	cfg.JWTSecret = "test-secret-key-for-testing-only"

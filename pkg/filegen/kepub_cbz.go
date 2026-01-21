@@ -2,6 +2,7 @@ package filegen
 
 import (
 	"context"
+	"sort"
 
 	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -94,5 +95,37 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 		}
 	}
 
+	// Add chapters (top-level only, no children)
+	if file != nil && len(file.Chapters) > 0 {
+		metadata.Chapters = convertModelChaptersToCBZ(file.Chapters)
+	}
+
 	return metadata
+}
+
+// convertModelChaptersToCBZ converts model chapters to CBZ chapters.
+// Only top-level chapters are included (children are flattened/ignored).
+// Chapters are sorted by SortOrder.
+func convertModelChaptersToCBZ(chapters []*models.Chapter) []kepub.CBZChapter {
+	// Copy to avoid modifying the original slice
+	sorted := make([]*models.Chapter, len(chapters))
+	copy(sorted, chapters)
+
+	// Sort by SortOrder
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].SortOrder < sorted[j].SortOrder
+	})
+
+	result := make([]kepub.CBZChapter, 0, len(sorted))
+	for _, ch := range sorted {
+		startPage := 0
+		if ch.StartPage != nil {
+			startPage = *ch.StartPage
+		}
+		result = append(result, kepub.CBZChapter{
+			Title:     ch.Title,
+			StartPage: startPage,
+		})
+	}
+	return result
 }

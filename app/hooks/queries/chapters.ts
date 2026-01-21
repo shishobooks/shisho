@@ -1,7 +1,12 @@
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Chapter } from "@/types";
+import type { Chapter, ChapterInput } from "@/types";
 
 export enum QueryKey {
   FileChapters = "FileChapters",
@@ -31,6 +36,35 @@ export const useFileChapters = (
         signal,
       );
       return response.chapters;
+    },
+  });
+};
+
+interface UpdateFileChaptersMutationVariables {
+  chapters: ChapterInput[];
+}
+
+export const useUpdateFileChapters = (fileId: number) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Chapter[],
+    ShishoAPIError,
+    UpdateFileChaptersMutationVariables
+  >({
+    mutationFn: async ({ chapters }) => {
+      const response: ChaptersResponse = await API.request(
+        "PUT",
+        `/books/files/${fileId}/chapters`,
+        { chapters },
+        null,
+      );
+      return response.chapters;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.FileChapters, fileId],
+      });
     },
   });
 };

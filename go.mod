@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/DarthSim/hivemind v1.1.0
 	github.com/abema/go-mp4 v1.4.1
-	github.com/air-verse/air v1.64.0
+	github.com/air-verse/air v1.64.1
 	github.com/creasty/defaults v1.8.0
 	github.com/gabriel-vasile/mimetype v1.4.8
 	github.com/go-playground/mold/v4 v4.5.1
@@ -55,7 +55,7 @@ require (
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/joho/godotenv v1.4.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/labstack/gommon v0.4.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect

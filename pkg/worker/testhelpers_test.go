@@ -7,6 +7,7 @@ import (
 
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
@@ -32,6 +33,7 @@ type testContext struct {
 	db             *bun.DB
 	worker         *Worker
 	bookService    *books.Service
+	chapterService *chapters.Service
 	libraryService *libraries.Service
 	jobService     *jobs.Service
 	jobLogService  *joblogs.Service
@@ -61,6 +63,7 @@ func newTestContext(t *testing.T) *testContext {
 
 	// Create services
 	bookService := books.NewService(db)
+	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
 	jobLogService := joblogs.NewService(db)
@@ -80,6 +83,7 @@ func newTestContext(t *testing.T) *testContext {
 		config:           cfg,
 		log:              logger.New(),
 		bookService:      bookService,
+		chapterService:   chapterService,
 		libraryService:   libraryService,
 		jobService:       jobService,
 		jobLogService:    jobLogService,
@@ -100,6 +104,7 @@ func newTestContext(t *testing.T) *testContext {
 		db:             db,
 		worker:         w,
 		bookService:    bookService,
+		chapterService: chapterService,
 		libraryService: libraryService,
 		jobService:     jobService,
 		jobLogService:  jobLogService,
@@ -201,6 +206,17 @@ func (tc *testContext) listSeries() []*models.Series {
 	return allSeries
 }
 
+// listChapters returns all chapters for a file.
+func (tc *testContext) listChapters(fileID int) []*models.Chapter {
+	tc.t.Helper()
+
+	chapterList, err := tc.chapterService.ListChapters(tc.ctx, fileID)
+	if err != nil {
+		tc.t.Fatalf("failed to list chapters: %v", err)
+	}
+	return chapterList
+}
+
 // newTestContextWithSearchService creates a test context with a real search service
 // for testing search index functionality.
 func newTestContextWithSearchService(t *testing.T) *testContext {
@@ -222,6 +238,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 
 	// Create services
 	bookService := books.NewService(db)
+	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
 	jobLogService := joblogs.NewService(db)
@@ -242,6 +259,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		config:           cfg,
 		log:              logger.New(),
 		bookService:      bookService,
+		chapterService:   chapterService,
 		libraryService:   libraryService,
 		jobService:       jobService,
 		jobLogService:    jobLogService,
@@ -263,6 +281,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		db:             db,
 		worker:         w,
 		bookService:    bookService,
+		chapterService: chapterService,
 		libraryService: libraryService,
 		jobService:     jobService,
 		jobLogService:  jobLogService,

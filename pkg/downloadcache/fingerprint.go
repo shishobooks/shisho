@@ -35,8 +35,9 @@ type Fingerprint struct {
 	ReleaseDate *time.Time              `json:"release_date,omitempty"`
 	Cover       *FingerprintCover       `json:"cover,omitempty"`
 	CoverPage   *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
-	Format      string                  `json:"format,omitempty"`     // Download format: original or kepub
-	Name        *string                 `json:"name,omitempty"`       // File name (edition name)
+	Chapters    []FingerprintChapter    `json:"chapters,omitempty"`
+	Format      string                  `json:"format,omitempty"` // Download format: original or kepub
+	Name        *string                 `json:"name,omitempty"`   // File name (edition name)
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -65,11 +66,40 @@ type FingerprintIdentifier struct {
 	Value string `json:"value"`
 }
 
+// FingerprintChapter represents chapter information for fingerprinting.
+type FingerprintChapter struct {
+	Title            string               `json:"title"`
+	SortOrder        int                  `json:"sort_order"`
+	StartPage        *int                 `json:"start_page,omitempty"`
+	StartTimestampMs *int64               `json:"start_timestamp_ms,omitempty"`
+	Href             *string              `json:"href,omitempty"`
+	Children         []FingerprintChapter `json:"children,omitempty"`
+}
+
 // FingerprintCover represents cover image information for fingerprinting.
 type FingerprintCover struct {
 	Path     string    `json:"path"`
 	MimeType string    `json:"mime_type"`
 	ModTime  time.Time `json:"mod_time"`
+}
+
+// convertChaptersToFingerprint recursively converts model chapters to fingerprint format.
+func convertChaptersToFingerprint(chapters []*models.Chapter) []FingerprintChapter {
+	if len(chapters) == 0 {
+		return []FingerprintChapter{}
+	}
+	result := make([]FingerprintChapter, len(chapters))
+	for i, ch := range chapters {
+		result[i] = FingerprintChapter{
+			Title:            ch.Title,
+			SortOrder:        ch.SortOrder,
+			StartPage:        ch.StartPage,
+			StartTimestampMs: ch.StartTimestampMs,
+			Href:             ch.Href,
+			Children:         convertChaptersToFingerprint(ch.Children),
+		}
+	}
+	return result
 }
 
 // ComputeFingerprint creates a fingerprint from a book and file.
@@ -214,6 +244,18 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 	// Add cover page for CBZ files
 	if file.CoverPage != nil {
 		fp.CoverPage = file.CoverPage
+	}
+
+	// Add chapters (sorted by SortOrder for consistent fingerprinting)
+	if file != nil && len(file.Chapters) > 0 {
+		chapters := make([]*models.Chapter, len(file.Chapters))
+		copy(chapters, file.Chapters)
+		sort.Slice(chapters, func(i, j int) bool {
+			return chapters[i].SortOrder < chapters[j].SortOrder
+		})
+		fp.Chapters = convertChaptersToFingerprint(chapters)
+	} else {
+		fp.Chapters = []FingerprintChapter{}
 	}
 
 	return fp, nil

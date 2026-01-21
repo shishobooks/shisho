@@ -19,8 +19,9 @@ func NewHandler() *Handler {
 // Handle is an Echo error handler that uses HTTP errors accordingly, and any
 // generic error will be interpreted as an internal server error.
 func (h *Handler) Handle(err error, c echo.Context) {
+	// Silently ignore broken pipe errors - these are expected when clients
+	// disconnect during streaming (e.g., navigating away while audio plays)
 	if errutils.IsIgnorableErr(err) {
-		logger.FromEchoContext(c).Err(err).Warn("broken pipe")
 		return
 	}
 

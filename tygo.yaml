@@ -74,3 +74,7 @@ packages:
     output_path: "app/types/generated/apikeys.ts"
     include_files:
       - model.go
+  - path: "github.com/shishobooks/shisho/pkg/chapters"
+    output_path: "app/types/generated/chapters.ts"
+    include_files:
+      - validators.go

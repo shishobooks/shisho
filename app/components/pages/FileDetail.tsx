@@ -1,0 +1,241 @@
+import { ArrowLeft, Pencil } from "lucide-react";
+import { useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
+import FileChaptersTab, {
+  type ChaptersActionState,
+  type FileChaptersTabHandle,
+} from "@/components/files/FileChaptersTab";
+import FileDetailsTab from "@/components/files/FileDetailsTab";
+import { FileEditDialog } from "@/components/library/FileEditDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
+import TopNav from "@/components/library/TopNav";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useBook } from "@/hooks/queries/books";
+import { useLibrary } from "@/hooks/queries/libraries";
+import type { File } from "@/types";
+import { getFilename } from "@/utils/format";
+
+const validTabs = ["details", "chapters"] as const;
+type TabValue = (typeof validTabs)[number];
+
+const FileDetail = () => {
+  const { fileId, bookId, libraryId, tab } = useParams<{
+    fileId: string;
+    bookId: string;
+    libraryId: string;
+    tab?: string;
+  }>();
+  const navigate = useNavigate();
+
+  // Derive active tab from URL param, defaulting to "details"
+  const activeTab: TabValue = validTabs.includes(tab as TabValue)
+    ? (tab as TabValue)
+    : "details";
+
+  // Navigate to new tab URL
+  const handleTabChange = (value: string) => {
+    const basePath = `/libraries/${libraryId}/books/${bookId}/files/${fileId}`;
+    if (value === "details") {
+      navigate(basePath);
+    } else {
+      navigate(`${basePath}/${value}`);
+    }
+  };
+
+  // Edit states for each tab
+  const [editingFile, setEditingFile] = useState<File | null>(null);
+  const [isEditingChapters, setIsEditingChapters] = useState(false);
+
+  // Chapters tab ref and action state
+  const chaptersRef = useRef<FileChaptersTabHandle>(null);
+  const [chaptersActionState, setChaptersActionState] =
+    useState<ChaptersActionState>({ isSaving: false, canSave: false });
+
+  const bookQuery = useBook(bookId);
+  const libraryQuery = useLibrary(libraryId);
+
+  // Find file in book.files array
+  const file = bookQuery.data?.files?.find(
+    (f) => f.id === parseInt(fileId || "0"),
+  );
+
+  if (bookQuery.isLoading) {
+    return (
+      <div>
+        <TopNav />
+        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+          <LoadingSpinner />
+        </div>
+      </div>
+    );
+  }
+
+  if (!bookQuery.isSuccess || !bookQuery.data) {
+    return (
+      <div>
+        <TopNav />
+        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold mb-4">Book Not Found</h1>
+            <p className="text-muted-foreground mb-6">
+              The book you're looking for doesn't exist or may have been
+              removed.
+            </p>
+            <Button asChild>
+              <Link to={`/libraries/${libraryId}`}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Home
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!file) {
+    return (
+      <div>
+        <TopNav />
+        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold mb-4">File Not Found</h1>
+            <p className="text-muted-foreground mb-6">
+              The file you're looking for doesn't exist or may have been
+              removed.
+            </p>
+            <Button asChild>
+              <Link to={`/libraries/${libraryId}/books/${bookId}`}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Book
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const book = bookQuery.data;
+  const library = libraryQuery.data;
+  const filename = file.name || getFilename(file.filepath);
+
+  return (
+    <div>
+      <TopNav />
+      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        {/* Header with breadcrumbs and back button */}
+        <div className="mb-6">
+          <Button asChild variant="ghost">
+            <Link to={`/libraries/${libraryId}/books/${bookId}`}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Book
+            </Link>
+          </Button>
+        </div>
+
+        {/* Breadcrumbs */}
+        <nav className="mb-4 text-sm text-muted-foreground">
+          <ol className="flex items-center gap-2">
+            <li>
+              <Link
+                className="hover:text-foreground hover:underline"
+                to={`/libraries/${libraryId}`}
+              >
+                {library?.name || "Library"}
+              </Link>
+            </li>
+            <li aria-hidden="true">&gt;</li>
+            <li>
+              <Link
+                className="hover:text-foreground hover:underline"
+                to={`/libraries/${libraryId}/books/${bookId}`}
+              >
+                {book.title}
+              </Link>
+            </li>
+            <li aria-hidden="true">&gt;</li>
+            <li className="text-foreground">{filename}</li>
+          </ol>
+        </nav>
+
+        {/* File title with Edit/Save/Cancel buttons */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-semibold">{filename}</h1>
+          {activeTab === "chapters" && isEditingChapters ? (
+            <div className="flex gap-2">
+              <Button
+                disabled={
+                  !chaptersActionState.canSave || chaptersActionState.isSaving
+                }
+                onClick={() => chaptersRef.current?.save()}
+              >
+                {chaptersActionState.isSaving ? "Saving..." : "Save"}
+              </Button>
+              <Button
+                disabled={chaptersActionState.isSaving}
+                onClick={() => chaptersRef.current?.cancel()}
+                variant="outline"
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={() => {
+                if (activeTab === "details") {
+                  setEditingFile(file);
+                } else {
+                  setIsEditingChapters(true);
+                }
+              }}
+              variant="outline"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <Tabs onValueChange={handleTabChange} value={activeTab}>
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="chapters">Chapters</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details">
+            <FileDetailsTab file={file} />
+          </TabsContent>
+
+          <TabsContent value="chapters">
+            <FileChaptersTab
+              file={file}
+              isEditing={isEditingChapters}
+              onActionStateChange={setChaptersActionState}
+              onEditingChange={setIsEditingChapters}
+              ref={chaptersRef}
+            />
+          </TabsContent>
+        </Tabs>
+
+        {/* FileEditDialog for editing file details */}
+        {editingFile && (
+          <FileEditDialog
+            file={editingFile}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditingFile(null);
+              }
+            }}
+            open={!!editingFile}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default FileDetail;

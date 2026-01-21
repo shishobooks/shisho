@@ -1722,3 +1722,105 @@ func (h *handler) getPage(c echo.Context) error {
 
 	return c.File(cachedPath)
 }
+
+// streamFile streams an M4B audio file with support for Range headers (seeking).
+// This endpoint enables audio playback with seek functionality in the browser.
+func (h *handler) streamFile(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	fileID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("File")
+	}
+
+	// Retrieve file
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &fileID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Only M4B files can be streamed
+	if file.FileType != models.FileTypeM4B {
+		return errcodes.NotFound("File")
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Check if file exists on disk
+	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
+		return errcodes.NotFound("File not found on disk")
+	}
+
+	// Set Accept-Ranges header to indicate we support range requests
+	c.Response().Header().Set("Accept-Ranges", "bytes")
+	c.Response().Header().Set("Content-Type", "audio/mp4")
+
+	// Check for Range header
+	rangeHeader := c.Request().Header.Get("Range")
+	if rangeHeader == "" {
+		// No range requested - serve full file
+		return c.File(file.Filepath)
+	}
+
+	// Parse Range header (format: "bytes=start-end")
+	return h.serveRangeRequest(c, file.Filepath, rangeHeader)
+}
+
+// serveRangeRequest handles HTTP Range requests for partial content delivery.
+func (h *handler) serveRangeRequest(c echo.Context, filePath, rangeHeader string) error {
+	// Open the file
+	f, err := os.Open(filePath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer f.Close()
+
+	// Get file size
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fileSize := fileInfo.Size()
+
+	// Parse the range header (expecting format: "bytes=start-end")
+	var start, end int64
+	_, err = fmt.Sscanf(rangeHeader, "bytes=%d-%d", &start, &end)
+	if err != nil {
+		// Try parsing just start (e.g., "bytes=0-")
+		_, err = fmt.Sscanf(rangeHeader, "bytes=%d-", &start)
+		if err != nil {
+			return errcodes.ValidationError("Invalid Range header")
+		}
+		end = fileSize - 1
+	}
+
+	// Validate range
+	if start < 0 || start >= fileSize || end < start || end >= fileSize {
+		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
+		return c.NoContent(http.StatusRequestedRangeNotSatisfiable)
+	}
+
+	// Calculate content length
+	contentLength := end - start + 1
+
+	// Set response headers
+	c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+
+	// Seek to start position
+	_, err = f.Seek(start, io.SeekStart)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Create a limited reader for the requested range
+	limitedReader := io.LimitReader(f, contentLength)
+
+	// Stream the content with 206 Partial Content status
+	return c.Stream(http.StatusPartialContent, "audio/mp4", limitedReader)
+}

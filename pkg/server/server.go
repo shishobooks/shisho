@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -81,7 +82,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error)
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
 
 	// Register eReader routes (API key auth for stock browser support)
-	downloadCache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
+	downloadCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 	ereader.RegisterRoutes(e, db, downloadCache)
 
 	// Config routes (require authentication)

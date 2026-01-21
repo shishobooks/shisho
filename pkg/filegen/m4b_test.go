@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -635,5 +636,302 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		meta, err := mp4.ParseFull(destPath)
 		require.NoError(t, err)
 		assert.Equal(t, "Book Title", meta.Title)
+	})
+
+	t.Run("uses chapters from file model instead of source", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B (with no chapters in source)
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create file model with chapters - these should be used in the generated file
+		ts1 := int64(0)    // 0ms
+		ts2 := int64(3000) // 3000ms
+		ts3 := int64(7000) // 7000ms
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "DB Chapter 1", SortOrder: 0, StartTimestampMs: &ts1},
+				{Title: "DB Chapter 2", SortOrder: 1, StartTimestampMs: &ts2},
+				{Title: "DB Chapter 3", SortOrder: 2, StartTimestampMs: &ts3},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify chapters match file.Chapters
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		// Should have 3 chapters from file.Chapters, not source (which has none)
+		require.Len(t, meta.Chapters, 3, "expected 3 chapters from file model")
+		assert.Equal(t, "DB Chapter 1", meta.Chapters[0].Title)
+		assert.Equal(t, "DB Chapter 2", meta.Chapters[1].Title)
+		assert.Equal(t, "DB Chapter 3", meta.Chapters[2].Title)
+	})
+
+	t.Run("preserves source chapters when file has no chapters", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B with chapters
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
+			Chapters: []testgen.M4BChapter{
+				{Title: "Source Chapter 1", Start: 0.0},
+				{Title: "Source Chapter 2", Start: 3.0},
+				{Title: "Source Chapter 3", Start: 7.0},
+			},
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create book and file with no chapters (file.Chapters = nil)
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: nil, // No chapters in file model
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify source chapters are preserved
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		// Should have 3 chapters from source (since file.Chapters is nil)
+		require.Len(t, meta.Chapters, 3, "expected 3 chapters from source file")
+		assert.Equal(t, "Source Chapter 1", meta.Chapters[0].Title)
+		assert.Equal(t, "Source Chapter 2", meta.Chapters[1].Title)
+		assert.Equal(t, "Source Chapter 3", meta.Chapters[2].Title)
+	})
+
+	t.Run("chapter order in generated M4B matches SortOrder", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B (with no chapters in source)
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create file model with chapters in WRONG sort order (2, 0, 1)
+		// The generator should sort them by SortOrder before writing
+		ts1 := int64(0)    // 0ms for chapter with SortOrder 0
+		ts2 := int64(3000) // 3000ms for chapter with SortOrder 1
+		ts3 := int64(7000) // 7000ms for chapter with SortOrder 2
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				// Deliberately out of order: SortOrder 2, 0, 1
+				{Title: "Third Chapter", SortOrder: 2, StartTimestampMs: &ts3},
+				{Title: "First Chapter", SortOrder: 0, StartTimestampMs: &ts1},
+				{Title: "Second Chapter", SortOrder: 1, StartTimestampMs: &ts2},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify chapters are in sorted order (0, 1, 2)
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		// Should have 3 chapters sorted by SortOrder, not insertion order
+		require.Len(t, meta.Chapters, 3, "expected 3 chapters from file model")
+		assert.Equal(t, "First Chapter", meta.Chapters[0].Title, "chapter 0 should be 'First Chapter' (SortOrder 0)")
+		assert.Equal(t, "Second Chapter", meta.Chapters[1].Title, "chapter 1 should be 'Second Chapter' (SortOrder 1)")
+		assert.Equal(t, "Third Chapter", meta.Chapters[2].Title, "chapter 2 should be 'Third Chapter' (SortOrder 2)")
+	})
+
+	t.Run("chapters with missing StartTimestampMs use zero", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B (with no chapters in source)
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create file model with chapters - one with nil StartTimestampMs
+		// The chapter with nil timestamp should default to 0
+		ts2 := int64(5000) // 5000ms
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "Chapter With Missing Timestamp", SortOrder: 0, StartTimestampMs: nil}, // nil should default to 0
+				{Title: "Chapter With Timestamp", SortOrder: 1, StartTimestampMs: &ts2},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify chapter with nil timestamp has Start: 0
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		require.Len(t, meta.Chapters, 2, "expected 2 chapters from file model")
+		assert.Equal(t, "Chapter With Missing Timestamp", meta.Chapters[0].Title)
+		assert.Equal(t, time.Duration(0), meta.Chapters[0].Start, "chapter with nil StartTimestampMs should have Start: 0")
+		assert.Equal(t, "Chapter With Timestamp", meta.Chapters[1].Title)
+		assert.Equal(t, 5*time.Second, meta.Chapters[1].Start, "chapter with 5000ms timestamp should have Start: 5s")
+	})
+
+	t.Run("nested chapters use only top-level for M4B", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B (with no chapters in source)
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 15.0, // 15 seconds to accommodate chapter timestamps
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create file model with nested chapters (parent with Children)
+		// M4B format doesn't support nested chapters, so only top-level should appear
+		ts1 := int64(0)     // 0ms
+		ts2 := int64(5000)  // 5000ms
+		ts3 := int64(8000)  // 8000ms - child chapter timestamp
+		ts4 := int64(10000) // 10000ms
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "Part 1", SortOrder: 0, StartTimestampMs: &ts1},
+				{
+					Title:            "Part 2",
+					SortOrder:        1,
+					StartTimestampMs: &ts2,
+					// Nested child chapters - should be IGNORED in M4B
+					Children: []*models.Chapter{
+						{Title: "Part 2 - Section A", SortOrder: 0, StartTimestampMs: &ts3},
+					},
+				},
+				{Title: "Part 3", SortOrder: 2, StartTimestampMs: &ts4},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify ONLY top-level chapters appear (Children ignored)
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		// Should have exactly 3 top-level chapters, NOT 4 (child chapter should be ignored)
+		require.Len(t, meta.Chapters, 3, "expected only 3 top-level chapters, children should be ignored")
+		assert.Equal(t, "Part 1", meta.Chapters[0].Title)
+		assert.Equal(t, "Part 2", meta.Chapters[1].Title)
+		assert.Equal(t, "Part 3", meta.Chapters[2].Title)
+
+		// Verify none of the chapters are the child chapter
+		for _, ch := range meta.Chapters {
+			assert.NotEqual(t, "Part 2 - Section A", ch.Title, "child chapter should not appear in M4B")
+		}
+	})
+
+	t.Run("chapters with empty title are included", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Create source M4B (with no chapters in source)
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		// Create file model with chapters - one with empty title
+		// Empty titles should still be written to the M4B
+		ts1 := int64(0)    // 0ms
+		ts2 := int64(3000) // 3000ms
+		ts3 := int64(7000) // 7000ms
+
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "First Chapter", SortOrder: 0, StartTimestampMs: &ts1},
+				{Title: "", SortOrder: 1, StartTimestampMs: &ts2}, // Empty title
+				{Title: "Third Chapter", SortOrder: 2, StartTimestampMs: &ts3},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Parse result and verify all 3 chapters appear, including the one with empty title
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+
+		// Should have 3 chapters - empty title chapter should not be skipped
+		require.Len(t, meta.Chapters, 3, "expected 3 chapters, chapter with empty title should be included")
+		assert.Equal(t, "First Chapter", meta.Chapters[0].Title)
+		assert.Empty(t, meta.Chapters[1].Title, "chapter with empty title should be included")
+		assert.Equal(t, "Third Chapter", meta.Chapters[2].Title)
+
+		// Verify timestamps are correct
+		assert.Equal(t, time.Duration(0), meta.Chapters[0].Start)
+		assert.Equal(t, 3*time.Second, meta.Chapters[1].Start)
+		assert.Equal(t, 7*time.Second, meta.Chapters[2].Start)
 	})
 }

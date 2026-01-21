@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -89,6 +90,11 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 
 		// Preserve unknown atoms for complete tag preservation
 		UnknownAtoms: src.UnknownAtoms,
+	}
+
+	// Use database chapters if available, otherwise preserve source chapters
+	if file != nil && len(file.Chapters) > 0 {
+		meta.Chapters = convertModelChaptersToMP4(file.Chapters, src.Duration)
 	}
 
 	// Set description from book if available
@@ -237,4 +243,48 @@ func (g *M4BGenerator) loadCover(book *models.Book, file *models.File, meta *mp4
 	}
 
 	return nil
+}
+
+// convertModelChaptersToMP4 converts database chapters to MP4 format.
+// M4B doesn't support nested chapters, so only top-level chapters are used.
+// duration is the total file duration, used to calculate the End time of the last chapter.
+func convertModelChaptersToMP4(chapters []*models.Chapter, duration time.Duration) []mp4.Chapter {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	// Sort by SortOrder
+	sorted := make([]*models.Chapter, len(chapters))
+	copy(sorted, chapters)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].SortOrder < sorted[j].SortOrder
+	})
+
+	result := make([]mp4.Chapter, len(sorted))
+	for i, ch := range sorted {
+		// Handle nil StartTimestampMs - default to 0
+		start := time.Duration(0)
+		if ch.StartTimestampMs != nil {
+			start = time.Duration(*ch.StartTimestampMs) * time.Millisecond
+		}
+
+		// Calculate End: next chapter start or total duration
+		var end time.Duration
+		if i+1 < len(sorted) {
+			if sorted[i+1].StartTimestampMs != nil {
+				end = time.Duration(*sorted[i+1].StartTimestampMs) * time.Millisecond
+			} else {
+				end = duration
+			}
+		} else {
+			end = duration
+		}
+
+		result[i] = mp4.Chapter{
+			Title: ch.Title,
+			Start: start,
+			End:   end,
+		}
+	}
+	return result
 }

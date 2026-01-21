@@ -1,6 +1,8 @@
 package books
 
 import (
+	"path/filepath"
+
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
@@ -27,8 +29,8 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	tagService := tags.NewService(db)
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
-	cache := downloadcache.NewCache(cfg.DownloadCacheDir, cfg.DownloadCacheMaxSizeBytes())
-	pageCache := cbzpages.NewCache(cfg.DownloadCacheDir)
+	cache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
+	pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 	h := &handler{
 		bookService:      bookService,
@@ -58,5 +60,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/download/kepub", h.downloadKepubFile)
 	g.HEAD("/files/:id/download/kepub", h.downloadKepubFile)
 	g.GET("/files/:id/page/:pageNum", h.getPage)
+	g.GET("/files/:id/stream", h.streamFile)
 	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 }

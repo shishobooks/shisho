@@ -57,12 +57,13 @@ pkg/
 ### New Config Fields
 
 ```yaml
-# Path to cache directory for generated downloads
-# Env: DOWNLOAD_CACHE_DIR
-# Default: /config/cache/downloads
-download_cache_dir: /config/cache/downloads
+# Path to cache directory
+# Contains: downloads/ (generated files), cbz/ (extracted pages)
+# Env: CACHE_DIR
+# Default: /config/cache
+cache_dir: /config/cache
 
-# Maximum cache size in gigabytes
+# Maximum size of the download cache in gigabytes
 # Env: DOWNLOAD_CACHE_MAX_SIZE_GB
 # Default: 5
 download_cache_max_size_gb: 5

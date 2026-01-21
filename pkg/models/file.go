@@ -45,6 +45,7 @@ type File struct {
 	NarratorSource           *string           `json:"narrator_source" tstype:"DataSource"`
 	Identifiers              []*FileIdentifier `bun:"rel:has-many,join:id=file_id" json:"identifiers,omitempty" tstype:"FileIdentifier[]"`
 	IdentifierSource         *string           `json:"identifier_source" tstype:"DataSource"`
+	Chapters                 []*Chapter        `bun:"rel:has-many,join:id=file_id" json:"chapters,omitempty" tstype:"Chapter[]"`
 	URL                      *string           `json:"url"`
 	URLSource                *string           `json:"url_source" tstype:"DataSource"`
 	ReleaseDate              *time.Time        `json:"release_date"`
@@ -55,6 +56,7 @@ type File struct {
 	ImprintID                *int              `json:"imprint_id"`
 	ImprintSource            *string           `json:"imprint_source" tstype:"DataSource"`
 	Imprint                  *Imprint          `bun:"rel:belongs-to,join:imprint_id=id" json:"imprint,omitempty" tstype:"Imprint"`
+	ChapterSource            *string           `json:"chapter_source" tstype:"DataSource"`
 }
 
 func (f *File) CoverExtension() string {

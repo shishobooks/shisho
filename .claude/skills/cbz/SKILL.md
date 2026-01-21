@@ -333,6 +333,21 @@ type ParsedChapter struct {
 }
 ```
 
+## Frontend Display Conventions
+
+**Page numbers are 1-indexed in the UI.** While the backend and data layer use 0-indexed page numbers, all user-facing displays should show 1-indexed values:
+
+- "Page 1" instead of "Page 0"
+- Page input fields accept 1-indexed values and convert to 0-indexed for storage
+- Page picker shows 1-indexed labels on thumbnails
+- "Uncovered pages" warnings use 1-indexed ranges (e.g., "Pages 1-3" not "Pages 0-2")
+
+This applies to:
+- `ChapterRow.tsx` - page display and edit inputs
+- `CBZPagePicker.tsx` - page selection dialog
+- `CBZReader.tsx` - reader page counter
+- `FileChaptersTab.tsx` - uncovered pages warning
+
 ### Integration
 
 - Chapters extracted during `Parse()` and included in `ParsedMetadata.Chapters`

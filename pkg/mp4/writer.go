@@ -195,6 +195,7 @@ func rebuildUdta(udtaBox []byte, metadata *Metadata) []byte {
 	content := udtaBox[8:]
 	var newContent bytes.Buffer
 	offset := 0
+	foundChpl := false
 
 	for offset < len(content)-8 {
 		size := int(binary.BigEndian.Uint32(content[offset:]))
@@ -205,15 +206,30 @@ func rebuildUdta(udtaBox []byte, metadata *Metadata) []byte {
 
 		boxType := string(content[offset+4 : offset+8])
 
-		if boxType == "meta" {
+		switch boxType {
+		case "meta":
 			// Rebuild meta with new ilst
 			newMeta := rebuildMeta(content[offset:offset+size], metadata)
 			newContent.Write(newMeta)
-		} else {
+		case "chpl":
+			// Replace chpl (chapters) box if we have chapters to write
+			if len(metadata.Chapters) > 0 {
+				newChpl := buildChpl(metadata.Chapters)
+				newContent.Write(newChpl)
+			}
+			// If no chapters, omit the chpl box entirely
+			foundChpl = true
+		default:
 			newContent.Write(content[offset : offset+size])
 		}
 
 		offset += size
+	}
+
+	// Add chpl box if we have chapters and didn't find an existing one
+	if !foundChpl && len(metadata.Chapters) > 0 {
+		newChpl := buildChpl(metadata.Chapters)
+		newContent.Write(newChpl)
 	}
 
 	return buildBox("udta", newContent.Bytes())
@@ -363,6 +379,50 @@ func buildIlst(metadata *Metadata) []byte {
 	}
 
 	return buildBox("ilst", content.Bytes())
+}
+
+// buildChpl builds a Nero-format chapter list (chpl) box.
+// Format: [version 1 byte][flags 3 bytes][reserved 4 bytes (v0) or 1 byte (v1)]
+//
+//	[chapter count 4 bytes (v0) or 1 byte (v1)]
+//	For each chapter: [timestamp 8 bytes in 100ns units][title length 1 byte][title bytes]
+func buildChpl(chapters []Chapter) []byte {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	var content bytes.Buffer
+
+	// Version 0 format (more compatible)
+	content.WriteByte(0)              // version
+	content.Write([]byte{0, 0, 0})    // flags (3 bytes)
+	content.Write([]byte{0, 0, 0, 0}) // reserved (4 bytes for version 0)
+
+	// Chapter count (4 bytes for version 0)
+	// #nosec G115 -- chapter count is bounded by practical limits
+	chapterCount := uint32(len(chapters))
+	_ = binary.Write(&content, binary.BigEndian, chapterCount)
+
+	// Write each chapter
+	for _, ch := range chapters {
+		// Timestamp in 100-nanosecond units
+		// time.Duration is in nanoseconds, so divide by 100
+		// #nosec G115 -- nanoseconds/100 fits in uint64 for any practical duration
+		timestamp := uint64(ch.Start.Nanoseconds() / 100)
+		_ = binary.Write(&content, binary.BigEndian, timestamp)
+
+		// Title length (1 byte) and title
+		title := ch.Title
+		titleLen := len(title)
+		if titleLen > 255 {
+			title = title[:255]
+			titleLen = 255
+		}
+		content.WriteByte(byte(titleLen))
+		content.WriteString(title)
+	}
+
+	return buildBox("chpl", content.Bytes())
 }
 
 // buildItunesTextAtom builds a text-based iTunes atom.

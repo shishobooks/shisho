@@ -3470,3 +3470,409 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 	_, err = os.Stat(expectedNewPath)
 	require.NoError(t, err, "new file should exist at expected path")
 }
+
+// TestScanFileCore_Chapters_SavedFromMetadata verifies that chapters from file metadata
+// are saved to the database during scanning.
+func TestScanFileCore_Chapters_SavedFromMetadata(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file for the book (no chapter source yet)
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Metadata with chapters
+	href1 := "chapter1.xhtml"
+	href2 := "chapter2.xhtml"
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters: []mediafile.ParsedChapter{
+			{Title: "Chapter 1", Href: &href1},
+			{Title: "Chapter 2", Href: &href2},
+		},
+	}
+
+	// Call scanFileCore
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Chapters should be saved
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 2)
+	assert.Equal(t, "Chapter 1", chapters[0].Title)
+	assert.Equal(t, "Chapter 2", chapters[1].Title)
+
+	// File should have chapter source set
+	reloadedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, reloadedFile.ChapterSource)
+	assert.Equal(t, models.DataSourceEPUBMetadata, *reloadedFile.ChapterSource)
+}
+
+// TestScanFileCore_Chapters_HigherPriority verifies that chapters from higher priority
+// sources overwrite lower priority chapters.
+func TestScanFileCore_Chapters_HigherPriority(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file with existing chapters from filepath source (lower priority)
+	filepathSource := models.DataSourceFilepath
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+		ChapterSource: &filepathSource,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Create existing chapters
+	oldHref := "old.xhtml"
+	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+		{Title: "Old Chapter", Href: &oldHref},
+	})
+	require.NoError(t, err)
+
+	// Metadata with chapters from higher priority source (epub_metadata > filepath)
+	newHref := "new.xhtml"
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters: []mediafile.ParsedChapter{
+			{Title: "New Chapter 1", Href: &newHref},
+			{Title: "New Chapter 2", Href: &newHref},
+		},
+	}
+
+	// Call scanFileCore
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Chapters should be replaced with new ones
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 2)
+	assert.Equal(t, "New Chapter 1", chapters[0].Title)
+	assert.Equal(t, "New Chapter 2", chapters[1].Title)
+
+	// File should have updated chapter source
+	reloadedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, reloadedFile.ChapterSource)
+	assert.Equal(t, models.DataSourceEPUBMetadata, *reloadedFile.ChapterSource)
+}
+
+// TestScanFileCore_Chapters_LowerPriority_Skipped verifies that chapters from lower
+// priority sources do not overwrite higher priority chapters.
+func TestScanFileCore_Chapters_LowerPriority_Skipped(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file with existing chapters from manual source (highest priority)
+	manualSource := models.DataSourceManual
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+		ChapterSource: &manualSource,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Create existing chapters (from manual edit)
+	manualHref := "manual.xhtml"
+	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+		{Title: "Manual Chapter", Href: &manualHref},
+	})
+	require.NoError(t, err)
+
+	// Metadata with chapters from lower priority source (epub_metadata < manual)
+	newHref := "new.xhtml"
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters: []mediafile.ParsedChapter{
+			{Title: "New Chapter", Href: &newHref},
+		},
+	}
+
+	// Call scanFileCore without forceRefresh
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Chapters should remain unchanged
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Manual Chapter", chapters[0].Title)
+
+	// File should still have manual source
+	reloadedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, reloadedFile.ChapterSource)
+	assert.Equal(t, models.DataSourceManual, *reloadedFile.ChapterSource)
+}
+
+// TestScanFileCore_Chapters_ForceRefresh verifies that forceRefresh bypasses
+// priority checks and overwrites chapters.
+func TestScanFileCore_Chapters_ForceRefresh(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file with existing chapters from manual source (highest priority)
+	manualSource := models.DataSourceManual
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+		ChapterSource: &manualSource,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Create existing chapters (from manual edit)
+	manualHref := "manual.xhtml"
+	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+		{Title: "Manual Chapter", Href: &manualHref},
+	})
+	require.NoError(t, err)
+
+	// Metadata with chapters from lower priority source
+	newHref := "new.xhtml"
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters: []mediafile.ParsedChapter{
+			{Title: "Refreshed Chapter", Href: &newHref},
+		},
+	}
+
+	// Call scanFileCore WITH forceRefresh=true
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Chapters should be replaced despite manual source
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Refreshed Chapter", chapters[0].Title)
+
+	// File should have new chapter source
+	reloadedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, reloadedFile.ChapterSource)
+	assert.Equal(t, models.DataSourceEPUBMetadata, *reloadedFile.ChapterSource)
+}
+
+// TestScanFileCore_Chapters_NestedHierarchy verifies that nested chapters (EPUB)
+// are saved with proper parent-child relationships.
+func TestScanFileCore_Chapters_NestedHierarchy(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Metadata with nested chapters
+	href1 := "part1.xhtml"
+	href2 := "ch1.xhtml"
+	href3 := "ch2.xhtml"
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters: []mediafile.ParsedChapter{
+			{
+				Title: "Part 1",
+				Href:  &href1,
+				Children: []mediafile.ParsedChapter{
+					{Title: "Chapter 1", Href: &href2},
+					{Title: "Chapter 2", Href: &href3},
+				},
+			},
+		},
+	}
+
+	// Call scanFileCore
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Should have 1 root chapter
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Part 1", chapters[0].Title)
+
+	// Root chapter should have 2 children
+	require.Len(t, chapters[0].Children, 2)
+	assert.Equal(t, "Chapter 1", chapters[0].Children[0].Title)
+	assert.Equal(t, "Chapter 2", chapters[0].Children[1].Title)
+}
+
+// TestScanFileCore_Chapters_EmptyChapters_Skipped verifies that empty chapter lists
+// do not overwrite existing chapters.
+func TestScanFileCore_Chapters_EmptyChapters_Skipped(t *testing.T) {
+	tc := newTestContext(t)
+
+	// Setup: Create library and book in DB
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	err := tc.bookService.CreateBook(tc.ctx, book)
+	require.NoError(t, err)
+
+	// Create file with existing chapters
+	epubSource := models.DataSourceEPUBMetadata
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+		ChapterSource: &epubSource,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, file)
+	require.NoError(t, err)
+
+	// Create existing chapters
+	existingHref := "existing.xhtml"
+	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+		{Title: "Existing Chapter", Href: &existingHref},
+	})
+	require.NoError(t, err)
+
+	// Metadata with empty chapters list
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Test Book",
+		DataSource: models.DataSourceEPUBMetadata,
+		Chapters:   []mediafile.ParsedChapter{}, // Empty
+	}
+
+	// Call scanFileCore
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Existing chapters should remain
+	chapters := tc.listChapters(file.ID)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Existing Chapter", chapters[0].Title)
+}

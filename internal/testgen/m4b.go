@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,20 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 		hasCover = true
 	}
 
+	// Add chapters via ffmetadata file if requested
+	var hasChapters bool
+	if len(opts.Chapters) > 0 {
+		metadataPath := filepath.Join(dir, "ffmetadata.txt")
+		metadataContent := buildFFMetadata(opts.Chapters, duration)
+		if err := os.WriteFile(metadataPath, []byte(metadataContent), 0600); err != nil {
+			t.Fatalf("failed to write ffmetadata file: %v", err)
+		}
+		defer os.Remove(metadataPath)
+
+		args = append(args, "-i", metadataPath)
+		hasChapters = true
+	}
+
 	// Now add output options (after all inputs)
 	args = append(args, "-y") // Overwrite output file
 
@@ -93,14 +108,29 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 		args = append(args, "-metadata", "comment="+opts.Comment)
 	}
 
-	// Add mapping if we have cover
-	if hasCover {
-		args = append(args,
-			"-map", "0:a",
-			"-map", "1:v",
-			"-c:v", "png",
-			"-disposition:v:0", "attached_pic",
-		)
+	// Add mapping if we have cover or chapters
+	if hasCover || hasChapters {
+		// Map audio from input 0
+		args = append(args, "-map", "0:a")
+
+		// Map video (cover) if present
+		if hasCover {
+			coverInput := 1
+			args = append(args,
+				"-map", strconv.Itoa(coverInput)+":v",
+				"-c:v", "png",
+				"-disposition:v:0", "attached_pic",
+			)
+		}
+
+		// Map chapters metadata if present
+		if hasChapters {
+			chaptersInput := 1
+			if hasCover {
+				chaptersInput = 2
+			}
+			args = append(args, "-map_metadata", strconv.Itoa(chaptersInput))
+		}
 	}
 
 	// Output settings for M4B (AAC audio in MP4 container)
@@ -155,4 +185,40 @@ func GetM4BTags(t *testing.T, path string) map[string]string {
 		return make(map[string]string)
 	}
 	return result.Format.Tags
+}
+
+// buildFFMetadata creates an ffmetadata format string with chapters.
+// See https://ffmpeg.org/ffmpeg-formats.html#Metadata-1 for format specification.
+func buildFFMetadata(chapters []M4BChapter, totalDuration float64) string {
+	var content strings.Builder
+	content.WriteString(";FFMETADATA1\n")
+
+	for i, ch := range chapters {
+		// Calculate end time (next chapter start or total duration)
+		var end float64
+		if i+1 < len(chapters) {
+			end = chapters[i+1].Start
+		} else {
+			end = totalDuration
+		}
+
+		// Times are in milliseconds for ffmetadata TIMEBASE=1/1000
+		// Using nanoseconds (TIMEBASE=1/1000000000) gives more precision
+		startNs := int64(ch.Start * 1e9)
+		endNs := int64(end * 1e9)
+
+		content.WriteString("[CHAPTER]\n")
+		content.WriteString("TIMEBASE=1/1000000000\n")
+		content.WriteString("START=")
+		content.WriteString(strconv.FormatInt(startNs, 10))
+		content.WriteString("\n")
+		content.WriteString("END=")
+		content.WriteString(strconv.FormatInt(endNs, 10))
+		content.WriteString("\n")
+		content.WriteString("title=")
+		content.WriteString(ch.Title)
+		content.WriteString("\n")
+	}
+
+	return content.String()
 }

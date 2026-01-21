@@ -13,6 +13,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbz"
+	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
@@ -1376,6 +1377,50 @@ func (w *Worker) scanFileCore(
 	}
 
 	// ==========================================================================
+	// Update chapters (from metadata)
+	// ==========================================================================
+
+	if len(metadata.Chapters) > 0 {
+		existingChapterSource := file.ChapterSource
+
+		if chapters.ShouldUpdateChapters(metadata.Chapters, dataSource, existingChapterSource, forceRefresh) {
+			log.Info("updating chapters", logger.Data{"chapter_count": len(metadata.Chapters)})
+
+			// Replace all chapters with new ones from metadata
+			if err := w.chapterService.ReplaceChapters(ctx, file.ID, metadata.Chapters); err != nil {
+				return nil, errors.Wrap(err, "failed to replace chapters")
+			}
+
+			// Update chapter source on file
+			file.ChapterSource = &dataSource
+			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
+				return nil, errors.Wrap(err, "failed to update chapter source")
+			}
+		}
+	}
+
+	// Update chapters (from sidecar)
+	if fileSidecarData != nil && len(fileSidecarData.Chapters) > 0 {
+		// Convert sidecar chapters to ParsedChapter format
+		sidecarChapters := convertSidecarChapters(fileSidecarData.Chapters)
+
+		if chapters.ShouldUpdateChapters(sidecarChapters, sidecarSource, file.ChapterSource, forceRefresh) {
+			log.Info("updating chapters from sidecar", logger.Data{"chapter_count": len(sidecarChapters)})
+
+			// Replace all chapters with new ones from sidecar
+			if err := w.chapterService.ReplaceChapters(ctx, file.ID, sidecarChapters); err != nil {
+				return nil, errors.Wrap(err, "failed to replace chapters from sidecar")
+			}
+
+			// Update chapter source on file
+			file.ChapterSource = &sidecarSource
+			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
+				return nil, errors.Wrap(err, "failed to update chapter source")
+			}
+		}
+	}
+
+	// ==========================================================================
 	// Write sidecar files
 	// ==========================================================================
 
@@ -1971,6 +2016,25 @@ func parseFileMetadata(path, fileType string) (*mediafile.ParsedMetadata, error)
 	}
 
 	return metadata, nil
+}
+
+// convertSidecarChapters converts sidecar ChapterMetadata to mediafile ParsedChapter.
+func convertSidecarChapters(chapters []sidecar.ChapterMetadata) []mediafile.ParsedChapter {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	result := make([]mediafile.ParsedChapter, len(chapters))
+	for i, ch := range chapters {
+		result[i] = mediafile.ParsedChapter{
+			Title:            ch.Title,
+			StartPage:        ch.StartPage,
+			StartTimestampMs: ch.StartTimestampMs,
+			Href:             ch.Href,
+			Children:         convertSidecarChapters(ch.Children),
+		}
+	}
+	return result
 }
 
 // Scan implements the books.Scanner interface.

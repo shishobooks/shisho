@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
 type handler struct {
@@ -90,6 +91,13 @@ func (h *handler) replace(c echo.Context) error {
 	updatedChapters, err := h.chapterService.ListChapters(ctx, fileID)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Write sidecar file with updated chapters
+	fileWithRelations, err := h.bookService.RetrieveFileWithRelations(ctx, fileID)
+	if err == nil {
+		// Best effort - don't fail the request if sidecar write fails
+		_ = sidecar.WriteFileSidecarWithChapters(fileWithRelations, updatedChapters)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, map[string]any{

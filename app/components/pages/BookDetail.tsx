@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Download,
@@ -38,6 +39,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
@@ -47,6 +53,13 @@ import {
   FileTypeEPUB,
   type File,
 } from "@/types";
+import {
+  formatDate,
+  formatDuration,
+  formatFileSize,
+  formatIdentifierType,
+  getFilename,
+} from "@/utils/format";
 
 // Determines which file type would provide the cover based on library preference.
 // This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
@@ -74,52 +87,6 @@ const getCoverFileType = (
   }
   return "book";
 };
-
-const formatFileSize = (bytes: number): string => {
-  const sizes = ["B", "KB", "MB", "GB"];
-  if (bytes === 0) return "0 B";
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
-};
-
-const formatDuration = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-};
-
-const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString();
-};
-
-// Helper to extract filename from filepath
-const getFilename = (filepath: string): string => {
-  return filepath.split("/").pop() || filepath;
-};
-
-function formatIdentifierType(type: string): string {
-  switch (type) {
-    case "isbn_10":
-      return "ISBN-10";
-    case "isbn_13":
-      return "ISBN-13";
-    case "asin":
-      return "ASIN";
-    case "uuid":
-      return "UUID";
-    case "goodreads":
-      return "Goodreads";
-    case "google":
-      return "Google";
-    case "other":
-      return "Other";
-    default:
-      return type;
-  }
-}
 
 const getRoleLabel = (role: string | undefined): string | null => {
   if (!role) return null;
@@ -235,12 +202,14 @@ const FileRow = ({
 
           {/* Name */}
           <div className="flex flex-col min-w-0 flex-1">
-            <span
-              className={`truncate ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
+            <Link
+              className={`truncate hover:underline ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
+              onClick={(e) => e.stopPropagation()}
               title={file.name || getFilename(file.filepath)}
+              to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}`}
             >
               {file.name || getFilename(file.filepath)}
-            </span>
+            </Link>
           </div>
         </div>
 
@@ -260,14 +229,14 @@ const FileRow = ({
 
           {/* Download button/popover */}
           {isSupplement ? (
-            <Button
-              onClick={onDownloadOriginal}
-              size="sm"
-              title="Download"
-              variant="ghost"
-            >
-              <Download className="h-3 w-3" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
+                  <Download className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download</TooltipContent>
+            </Tooltip>
           ) : libraryDownloadPreference === DownloadFormatAsk &&
             supportsKepub(file.file_type) ? (
             <DownloadFormatPopover
@@ -282,50 +251,59 @@ const FileRow = ({
           ) : isDownloading ? (
             <div className="flex items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
-              <Button
-                className="h-6 w-6 p-0"
-                onClick={onCancelDownload}
-                size="sm"
-                title="Cancel download"
-                variant="ghost"
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="h-6 w-6 p-0"
+                    onClick={onCancelDownload}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Cancel download</TooltipContent>
+              </Tooltip>
             </div>
           ) : (
-            <Button
-              onClick={onDownload}
-              size="sm"
-              title="Download"
-              variant="ghost"
-            >
-              <Download className="h-3 w-3" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onDownload} size="sm" variant="ghost">
+                  <Download className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download</TooltipContent>
+            </Tooltip>
           )}
 
           {/* Read button - CBZ only */}
           {file.file_type === FileTypeCBZ && (
-            <Link
-              to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
-            >
-              <Button size="sm" title="Read" variant="ghost">
-                Read
-              </Button>
-            </Link>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                >
+                  <Button size="sm" variant="ghost">
+                    <BookOpen className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Read</TooltipContent>
+            </Tooltip>
           )}
 
           {/* Actions dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                disabled={isResyncing}
-                size="sm"
-                title="More actions"
-                variant="ghost"
-              >
-                <MoreVertical className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button disabled={isResyncing} size="sm" variant="ghost">
+                    <MoreVertical className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>More actions</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent
               align="end"
               onCloseAutoFocus={(e) => e.preventDefault()}
