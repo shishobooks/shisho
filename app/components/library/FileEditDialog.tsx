@@ -1,4 +1,12 @@
-import { Check, ChevronsUpDown, Loader2, Plus, Upload, X } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  GripVertical,
+  Loader2,
+  Plus,
+  Upload,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,7 +29,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
 import {
   Popover,
   PopoverContent,
@@ -34,6 +41,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  SortableList,
+  type DragHandleProps,
+} from "@/components/ui/SortableList";
 import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePeopleList } from "@/hooks/queries/people";
@@ -99,6 +110,7 @@ export function FileEditDialog({
   );
   const [narratorSearch, setNarratorSearch] = useState("");
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
+  const [narratorOpen, setNarratorOpen] = useState(false);
   const [coverCacheBuster, setCoverCacheBuster] = useState(Date.now());
 
   // Identifier state
@@ -217,6 +229,44 @@ export function FileEditDialog({
 
   const handleClearImprint = () => {
     setImprint("");
+  };
+
+  // Filter out already-selected narrators from the people list
+  const filteredPeople = useMemo(() => {
+    return peopleData?.people.filter((p) => !narrators.includes(p.name)) || [];
+  }, [peopleData?.people, narrators]);
+
+  // Show "create" option if search doesn't match existing people or already-selected narrators
+  const showCreateNarratorOption = useMemo(() => {
+    if (!narratorSearch.trim()) return false;
+    const searchLower = narratorSearch.trim().toLowerCase();
+    const matchesPeople = peopleData?.people.some(
+      (p) => p.name.toLowerCase() === searchLower,
+    );
+    const matchesSelected = narrators.some(
+      (n) => n.toLowerCase() === searchLower,
+    );
+    return !matchesPeople && !matchesSelected;
+  }, [narratorSearch, peopleData?.people, narrators]);
+
+  const handleSelectNarrator = (name: string) => {
+    if (!narrators.includes(name)) {
+      setNarrators([...narrators, name]);
+    }
+    setNarratorOpen(false);
+    setNarratorSearch("");
+  };
+
+  const handleCreateNarrator = () => {
+    if (narratorSearch.trim() && !narrators.includes(narratorSearch.trim())) {
+      setNarrators([...narrators, narratorSearch.trim()]);
+    }
+    setNarratorOpen(false);
+    setNarratorSearch("");
+  };
+
+  const handleRemoveNarrator = (index: number) => {
+    setNarrators(narrators.filter((_, i) => i !== index));
   };
 
   const handleAddIdentifier = () => {
@@ -489,16 +539,108 @@ export function FileEditDialog({
               {file.file_type === "m4b" && (
                 <div className="space-y-2">
                   <Label>Narrators</Label>
-                  <MultiSelectCombobox
-                    isLoading={isLoadingPeople}
-                    label="People"
-                    onChange={setNarrators}
-                    onSearch={setNarratorSearch}
-                    options={peopleData?.people.map((p) => p.name) || []}
-                    placeholder="Add narrator..."
-                    searchValue={narratorSearch}
-                    values={narrators}
+                  <SortableList
+                    getItemId={(name, index) => `${name}-${index}`}
+                    items={narrators}
+                    onReorder={setNarrators}
+                    renderItem={(
+                      name: string,
+                      index: number,
+                      dragHandleProps: DragHandleProps,
+                    ) => (
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+                          type="button"
+                          {...dragHandleProps.attributes}
+                          {...dragHandleProps.listeners}
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </button>
+                        <div className="flex-1">
+                          <Input disabled value={name} />
+                        </div>
+                        <Button
+                          onClick={() => handleRemoveNarrator(index)}
+                          size="icon"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   />
+                  {/* Narrator Combobox */}
+                  <Popover
+                    modal
+                    onOpenChange={setNarratorOpen}
+                    open={narratorOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        aria-expanded={narratorOpen}
+                        className="w-full justify-between"
+                        role="combobox"
+                        variant="outline"
+                      >
+                        Add narrator...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-full p-0">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          onValueChange={setNarratorSearch}
+                          placeholder="Search people..."
+                          value={narratorSearch}
+                        />
+                        <CommandList>
+                          {isLoadingPeople && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              Loading people...
+                            </div>
+                          )}
+                          {!isLoadingPeople &&
+                            filteredPeople.length === 0 &&
+                            !showCreateNarratorOption && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                {!debouncedNarratorSearch
+                                  ? "No people in this library. Type to create one."
+                                  : "No matching people."}
+                              </div>
+                            )}
+                          {!isLoadingPeople && (
+                            <CommandGroup>
+                              {filteredPeople.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  onSelect={() => handleSelectNarrator(p.name)}
+                                  value={p.name}
+                                >
+                                  <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
+                                  <span className="truncate" title={p.name}>
+                                    {p.name}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                              {showCreateNarratorOption && (
+                                <CommandItem
+                                  onSelect={handleCreateNarrator}
+                                  value={`create-${narratorSearch}`}
+                                >
+                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                  <span className="truncate">
+                                    Create "{narratorSearch}"
+                                  </span>
+                                </CommandItem>
+                              )}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               )}
 

@@ -1,4 +1,11 @@
-import { Check, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  GripVertical,
+  Loader2,
+  Plus,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
@@ -32,6 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  SortableList,
+  type DragHandleProps,
+} from "@/components/ui/SortableList";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
@@ -431,44 +442,61 @@ export function BookEditDialog({
             {hasCBZFiles ? (
               // CBZ files: show authors as rows with role selection
               <div className="space-y-2">
-                {authors.map((author, index) => (
-                  <div className="flex items-center gap-2" key={index}>
-                    <div className="flex-1">
-                      <Input disabled value={author.name} />
-                    </div>
-                    <div className="w-36">
-                      <Select
-                        onValueChange={(value) =>
-                          handleAuthorRoleChange(
-                            index,
-                            value === "none" ? undefined : value,
-                          )
-                        }
-                        value={author.role || "none"}
+                <SortableList
+                  getItemId={(author, index) => `${author.name}-${index}`}
+                  items={authors}
+                  onReorder={setAuthors}
+                  renderItem={(
+                    author: AuthorInput,
+                    index: number,
+                    dragHandleProps: DragHandleProps,
+                  ) => (
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+                        type="button"
+                        {...dragHandleProps.attributes}
+                        {...dragHandleProps.listeners}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No role</SelectItem>
-                          {AUTHOR_ROLES.map((role) => (
-                            <SelectItem key={role.value} value={role.value}>
-                              {role.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <GripVertical className="h-4 w-4" />
+                      </button>
+                      <div className="flex-1">
+                        <Input disabled value={author.name} />
+                      </div>
+                      <div className="w-36">
+                        <Select
+                          onValueChange={(value) =>
+                            handleAuthorRoleChange(
+                              index,
+                              value === "none" ? undefined : value,
+                            )
+                          }
+                          value={author.role || "none"}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No role</SelectItem>
+                            {AUTHOR_ROLES.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        onClick={() => handleRemoveAuthor(index)}
+                        size="icon"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      onClick={() => handleRemoveAuthor(index)}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                  )}
+                />
                 {/* Author Combobox for CBZ */}
                 <Popover modal onOpenChange={setAuthorOpen} open={authorOpen}>
                   <PopoverTrigger asChild>
@@ -537,28 +565,131 @@ export function BookEditDialog({
                 </Popover>
               </div>
             ) : (
-              // Non-CBZ files: use MultiSelectCombobox for authors
-              <MultiSelectCombobox
-                isLoading={isLoadingPeople}
-                label="People"
-                onChange={(names) =>
-                  setAuthors(names.map((name) => ({ name })))
-                }
-                onSearch={setAuthorSearch}
-                options={peopleData?.people.map((p) => p.name) || []}
-                placeholder="Add author..."
-                searchValue={authorSearch}
-                values={authors.map((a) => a.name)}
-              />
+              // Non-CBZ files: show authors as sortable rows
+              <div className="space-y-2">
+                <SortableList
+                  getItemId={(author, index) => `${author.name}-${index}`}
+                  items={authors}
+                  onReorder={setAuthors}
+                  renderItem={(
+                    author: AuthorInput,
+                    index: number,
+                    dragHandleProps: DragHandleProps,
+                  ) => (
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+                        type="button"
+                        {...dragHandleProps.attributes}
+                        {...dragHandleProps.listeners}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
+                      <div className="flex-1">
+                        <Input disabled value={author.name} />
+                      </div>
+                      <Button
+                        onClick={() => handleRemoveAuthor(index)}
+                        size="icon"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                />
+                {/* Author Combobox for non-CBZ */}
+                <Popover modal onOpenChange={setAuthorOpen} open={authorOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      aria-expanded={authorOpen}
+                      className="w-full justify-between"
+                      role="combobox"
+                      variant="outline"
+                    >
+                      Add author...
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-full p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        onValueChange={setAuthorSearch}
+                        placeholder="Search people..."
+                        value={authorSearch}
+                      />
+                      <CommandList>
+                        {isLoadingPeople && (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            Loading people...
+                          </div>
+                        )}
+                        {!isLoadingPeople &&
+                          filteredPeople.length === 0 &&
+                          !showCreateAuthorOption && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              {!debouncedAuthorSearch
+                                ? "No people in this library. Type to create one."
+                                : "No matching people."}
+                            </div>
+                          )}
+                        {!isLoadingPeople && (
+                          <CommandGroup>
+                            {filteredPeople.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                onSelect={() => handleSelectAuthor(p.name)}
+                                value={p.name}
+                              >
+                                <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
+                                <span className="truncate" title={p.name}>
+                                  {p.name}
+                                </span>
+                              </CommandItem>
+                            ))}
+                            {showCreateAuthorOption && (
+                              <CommandItem
+                                onSelect={handleCreateAuthor}
+                                value={`create-${authorSearch}`}
+                              >
+                                <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="truncate">
+                                  Create "{authorSearch}"
+                                </span>
+                              </CommandItem>
+                            )}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
             )}
           </div>
 
           {/* Series */}
           <div className="space-y-2">
             <Label>Series</Label>
-            <div className="space-y-2">
-              {seriesEntries.map((entry, index) => (
-                <div className="flex items-center gap-2" key={index}>
+            <SortableList
+              getItemId={(entry, index) => `${entry.name}-${index}`}
+              items={seriesEntries}
+              onReorder={setSeriesEntries}
+              renderItem={(
+                entry: SeriesEntry,
+                index: number,
+                dragHandleProps: DragHandleProps,
+              ) => (
+                <div className="flex items-center gap-2">
+                  <button
+                    className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+                    type="button"
+                    {...dragHandleProps.attributes}
+                    {...dragHandleProps.listeners}
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </button>
                   <div className="flex-1">
                     <Input disabled value={entry.name} />
                   </div>
@@ -581,8 +712,8 @@ export function BookEditDialog({
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-              ))}
-            </div>
+              )}
+            />
 
             {/* Series Combobox */}
             <Popover modal onOpenChange={setSeriesOpen} open={seriesOpen}>
