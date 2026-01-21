@@ -1967,7 +1967,9 @@ func (w *Worker) extractAndSaveCover(
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
 	if existingCoverPath != "" {
 		log.Info("cover already exists, using existing", logger.Data{"path": existingCoverPath})
-		return filepath.Base(existingCoverPath), "", true, nil
+		// Detect MIME type from file extension
+		existingMime := fileutils.MimeTypeFromExtension(filepath.Ext(existingCoverPath))
+		return filepath.Base(existingCoverPath), existingMime, true, nil
 	}
 
 	// Normalize the cover image

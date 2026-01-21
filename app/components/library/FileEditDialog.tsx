@@ -495,7 +495,7 @@ export function FileEditDialog({
                 <div className="space-y-2">
                   <Label>Cover Image</Label>
                   <div className="w-32 relative group">
-                    {file.cover_mime_type ? (
+                    {file.cover_mime_type || file.cover_image_path ? (
                       <img
                         alt="File cover"
                         className="w-full h-auto rounded border border-border"
@@ -529,7 +529,9 @@ export function FileEditDialog({
                         ) : (
                           <Upload className="h-4 w-4 mr-2" />
                         )}
-                        {file.cover_mime_type ? "Replace" : "Upload"}
+                        {file.cover_mime_type || file.cover_image_path
+                          ? "Replace"
+                          : "Upload"}
                       </Button>
                     </div>
                   </div>

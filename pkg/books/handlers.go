@@ -1124,9 +1124,14 @@ func (h *handler) fileCover(c echo.Context) error {
 		coverDir = file.Book.Filepath
 	}
 
-	// Cover filename is {filename}.cover.{ext}
-	filename := filepath.Base(file.Filepath)
-	coverPath := filepath.Join(coverDir, filename+".cover"+file.CoverExtension())
+	// Cover filename is stored in CoverImagePath, or fallback to {filename}.cover.{ext}
+	var coverPath string
+	if file.CoverImagePath != nil && *file.CoverImagePath != "" {
+		coverPath = filepath.Join(coverDir, *file.CoverImagePath)
+	} else {
+		filename := filepath.Base(file.Filepath)
+		coverPath = filepath.Join(coverDir, filename+".cover"+file.CoverExtension())
+	}
 
 	return errors.WithStack(c.File(coverPath))
 }

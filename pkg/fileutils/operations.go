@@ -454,6 +454,25 @@ func ComputeNewCoverPath(oldCoverPath, newFilePath string) string {
 // CoverImageExtensions contains all supported image extensions for cover files.
 var CoverImageExtensions = []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 
+// MimeTypeFromExtension returns the MIME type for a given file extension.
+// Returns empty string if the extension is not recognized.
+func MimeTypeFromExtension(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".bmp":
+		return "image/bmp"
+	default:
+		return ""
+	}
+}
+
 // CoverExistsWithBaseName checks if any cover file exists with the given base name,
 // regardless of image extension. This allows users to provide custom covers (e.g., cover.png)
 // that won't be overwritten even if the book would extract a different format (e.g., cover.jpg).
