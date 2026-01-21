@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import PermissionMatrix from "@/components/library/PermissionMatrix";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -192,42 +193,15 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog onOpenChange={setDeleteConfirmOpen} open={deleteConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Role</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the role "{role?.name}"? This
-              action cannot be undone. Users assigned to this role will need to
-              be reassigned.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              disabled={deleteRoleMutation.isPending}
-              onClick={() => setDeleteConfirmOpen(false)}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={deleteRoleMutation.isPending}
-              onClick={handleDelete}
-              variant="destructive"
-            >
-              {deleteRoleMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Role"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        confirmLabel="Delete"
+        description={`Are you sure you want to delete the role "${role?.name}"? This action cannot be undone. Users assigned to this role will need to be reassigned.`}
+        isPending={deleteRoleMutation.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteConfirmOpen}
+        open={deleteConfirmOpen}
+        title="Delete Role"
+      />
     </>
   );
 };

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -283,6 +284,7 @@ function CreateApiKeyDialog({
 
 function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const deleteApiKey = useDeleteApiKey();
   const addPermission = useAddApiKeyPermission();
   const removePermission = useRemoveApiKeyPermission();
@@ -310,14 +312,10 @@ function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
   };
 
   const handleDelete = async () => {
-    if (
-      !confirm(`Are you sure you want to delete the API key "${apiKey.name}"?`)
-    ) {
-      return;
-    }
     try {
       await deleteApiKey.mutateAsync(apiKey.id);
       toast.success("API key deleted");
+      setDeleteDialogOpen(false);
     } catch {
       toast.error("Failed to delete API key");
     }
@@ -329,52 +327,68 @@ function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
   };
 
   return (
-    <div className="rounded-md border border-border p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h3 className="font-medium">{apiKey.name}</h3>
-          <p className="text-xs text-muted-foreground">
-            Created {new Date(apiKey.createdAt).toLocaleDateString()}
-            {apiKey.lastAccessedAt &&
-              ` • Last used ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
-          </p>
+    <>
+      <div className="rounded-md border border-border p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="font-medium">{apiKey.name}</h3>
+            <p className="text-xs text-muted-foreground">
+              Created {new Date(apiKey.createdAt).toLocaleDateString()}
+              {apiKey.lastAccessedAt &&
+                ` • Last used ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <SetupDialog
+              apiKey={apiKey}
+              onOpenChange={setSetupDialogOpen}
+              open={setupDialogOpen}
+            />
+            <Button
+              onClick={() => setDeleteDialogOpen(true)}
+              size="sm"
+              variant="ghost"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <SetupDialog
-            apiKey={apiKey}
-            onOpenChange={setSetupDialogOpen}
-            open={setupDialogOpen}
-          />
-          <Button onClick={handleDelete} size="sm" variant="ghost">
-            <Trash2 className="h-4 w-4 text-destructive" />
+
+        <div className="mb-3 flex items-center gap-2">
+          <code className="flex-1 rounded bg-muted px-2 py-1 font-mono text-sm">
+            {apiKey.key.slice(0, 8)}...{apiKey.key.slice(-4)}
+          </code>
+          <Button onClick={handleCopyKey} size="sm" variant="outline">
+            <Copy className="h-4 w-4" />
           </Button>
         </div>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            checked={hasEReaderPermission}
+            disabled={addPermission.isPending || removePermission.isPending}
+            id={`ereader-${apiKey.id}`}
+            onCheckedChange={handleToggleEReader}
+          />
+          <Label
+            className="cursor-pointer text-sm"
+            htmlFor={`ereader-${apiKey.id}`}
+          >
+            eReader browser access
+          </Label>
+        </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
-        <code className="flex-1 rounded bg-muted px-2 py-1 font-mono text-sm">
-          {apiKey.key.slice(0, 8)}...{apiKey.key.slice(-4)}
-        </code>
-        <Button onClick={handleCopyKey} size="sm" variant="outline">
-          <Copy className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          checked={hasEReaderPermission}
-          disabled={addPermission.isPending || removePermission.isPending}
-          id={`ereader-${apiKey.id}`}
-          onCheckedChange={handleToggleEReader}
-        />
-        <Label
-          className="cursor-pointer text-sm"
-          htmlFor={`ereader-${apiKey.id}`}
-        >
-          eReader browser access
-        </Label>
-      </div>
-    </div>
+      <ConfirmDialog
+        confirmLabel="Delete"
+        description={`Are you sure you want to delete the API key "${apiKey.name}"?`}
+        isPending={deleteApiKey.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteDialogOpen}
+        open={deleteDialogOpen}
+        title="Delete API Key"
+      />
+    </>
   );
 }
 

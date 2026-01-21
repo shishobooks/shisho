@@ -18,6 +18,7 @@ import { ShareListDialog } from "@/components/library/ShareListDialog";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ const ListDetail = () => {
   const [sort, setSort] = useState<string | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
   const listBooksQuery = useListBooks(listId, { sort, limit, offset });
@@ -105,11 +107,6 @@ const ListDetail = () => {
 
   const handleDelete = async () => {
     if (!listId) return;
-
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this list? This action cannot be undone.",
-    );
-    if (!confirmed) return;
 
     try {
       await deleteListMutation.mutateAsync({ listId });
@@ -190,8 +187,7 @@ const ListDetail = () => {
               )}
               {isOwner && (
                 <Button
-                  disabled={deleteListMutation.isPending}
-                  onClick={handleDelete}
+                  onClick={() => setDeleteDialogOpen(true)}
                   size="sm"
                   variant="outline"
                 >
@@ -331,6 +327,16 @@ const ListDetail = () => {
         listName={list.name}
         onOpenChange={setShareDialogOpen}
         open={shareDialogOpen}
+      />
+
+      <ConfirmDialog
+        confirmLabel="Delete"
+        description="Are you sure you want to delete this list? This action cannot be undone."
+        isPending={deleteListMutation.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteDialogOpen}
+        open={deleteDialogOpen}
+        title="Delete List"
       />
     </div>
   );

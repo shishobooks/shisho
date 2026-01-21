@@ -18,7 +18,6 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import BookItem from "@/components/library/BookItem";
@@ -86,19 +85,6 @@ const DraggableBookItem = ({
       {...attributes}
       {...listeners}
     >
-      {/* Drag handle overlay - top left corner of the cover */}
-      <div
-        className={cn(
-          "absolute top-1 left-1 z-10 flex items-center justify-center",
-          "h-6 w-6 rounded-md",
-          "bg-black/40 backdrop-blur-sm",
-          "opacity-0 group-hover/drag:opacity-100",
-          "transition-opacity duration-150",
-          "pointer-events-none",
-        )}
-      >
-        <GripVertical className="h-3.5 w-3.5 text-white/90" />
-      </div>
       <BookItem
         addedByUsername={addedByUsername}
         book={listBook.book}
