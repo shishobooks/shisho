@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
@@ -12,8 +12,10 @@ import { useAuth } from "@/hooks/useAuth";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, needsSetup, isLoading: authLoading } = useAuth();
   const { login } = useAuth();
+  const redirectTo = searchParams.get("redirect") || "/";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +32,7 @@ const Login = () => {
     setIsLoading(true);
     try {
       await login(username, password);
-      navigate("/");
+      navigate(redirectTo);
     } catch (error) {
       let msg = "Login failed. Please check your credentials.";
       if (error instanceof Error) {
@@ -57,7 +59,7 @@ const Login = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    return <Navigate replace to="/" />;
+    return <Navigate replace to={redirectTo} />;
   }
 
   return (

@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
 
@@ -26,6 +26,7 @@ const ProtectedRoute = ({
     hasLibraryAccess,
   } = useAuth();
   const params = useParams();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -40,9 +41,15 @@ const ProtectedRoute = ({
     return <Navigate replace to="/setup" />;
   }
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated, preserving the intended destination
   if (!isAuthenticated) {
-    return <Navigate replace to="/login" />;
+    const redirectTo = location.pathname + location.search;
+    return (
+      <Navigate
+        replace
+        to={`/login?redirect=${encodeURIComponent(redirectTo)}`}
+      />
+    );
   }
 
   // Check permission if required
