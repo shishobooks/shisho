@@ -103,8 +103,8 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-2">
-        <p className="text-xs font-medium text-muted-foreground px-2 py-1">
+      <PopoverContent align="end" className="w-56 p-0">
+        <p className="text-xs font-medium text-muted-foreground px-3 py-2">
           Add to List
         </p>
 
@@ -115,13 +115,13 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
         )}
 
         {!isLoading && !hasLists && (
-          <p className="text-sm text-muted-foreground px-2 py-3 text-center">
+          <p className="text-sm text-muted-foreground px-3 py-3 text-center">
             No lists yet
           </p>
         )}
 
         {!isLoading && hasLists && (
-          <div className="flex flex-col gap-0.5 py-1">
+          <div className="flex flex-col gap-0.5 px-1 pb-1">
             {lists.map((list) => {
               const isInList = bookListIds.has(list.id);
               const isMutating = mutatingListId === list.id;
@@ -159,8 +159,7 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
         )}
 
         {!isLoading && (
-          <>
-            <div className="border-t my-1" />
+          <div className="border-t px-1 py-1">
             <Button
               className="w-full justify-start"
               onClick={handleCreateList}
@@ -170,7 +169,7 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
               <Plus className="h-4 w-4" />
               Create New List
             </Button>
-          </>
+          </div>
         )}
       </PopoverContent>
 

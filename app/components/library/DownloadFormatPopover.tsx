@@ -62,11 +62,11 @@ const DownloadFormatPopover = ({
           <Download className="h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-48 p-2">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">
-            Download format
-          </p>
+      <PopoverContent align="end" className="w-48 p-0">
+        <p className="text-xs font-medium text-muted-foreground px-3 py-2">
+          Download format
+        </p>
+        <div className="flex flex-col gap-0.5 px-1 pb-1">
           <Button
             className="justify-start"
             onClick={handleOriginal}
