@@ -40,8 +40,14 @@ const DraggableBookItem = ({
   isDragOverlay = false,
   insertPosition = null,
 }: DraggableBookItemProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: listBook.book_id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: listBook.book_id });
 
   const style = {
     transform: CSS.Transform.toString(transform),

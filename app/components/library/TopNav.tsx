@@ -1,21 +1,10 @@
-import {
-  BookPlus,
-  Check,
-  ChevronDown,
-  KeyRound,
-  Library,
-  List,
-  LogOut,
-  Plus,
-  Settings,
-  User,
-  UserCog,
-} from "lucide-react";
+import { KeyRound, LogOut, Settings, User, UserCog } from "lucide-react";
 import { useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import GlobalSearch from "@/components/library/GlobalSearch";
+import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
 import { Button } from "@/components/ui/button";
@@ -33,8 +22,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
-import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 
 const TopNav = () => {
@@ -42,8 +29,6 @@ const TopNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
-  const createLibraryMutation = useCreateLibrary();
-  const isDevelopment = import.meta.env.DEV;
 
   // Check if user has any admin permissions
   const canAccessAdmin =
@@ -52,17 +37,7 @@ const TopNav = () => {
     hasPermission("jobs", "read") ||
     hasPermission("libraries", "read");
 
-  const canCreateLibrary = hasPermission("libraries", "write");
   const canResync = hasPermission("jobs", "write");
-
-  // Load all libraries for the switcher
-  const librariesQuery = useLibraries({});
-  const libraries = librariesQuery.data?.libraries || [];
-
-  // Load lists for sidebar navigation
-  const listsQuery = useListLists();
-  const lists = listsQuery.data?.lists || [];
-  const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const handleLogout = useCallback(async () => {
     try {
@@ -73,36 +48,6 @@ const TopNav = () => {
       toast.error("Failed to sign out");
     }
   }, [logout, navigate]);
-
-  const handleCreateDefaultLibrary = useCallback(async () => {
-    try {
-      const library = await createLibraryMutation.mutateAsync({
-        payload: {
-          name: "Main",
-          cover_aspect_ratio: "book",
-          library_paths: [
-            "/Users/robinjoseph/code/personal/shisho/tmp/library",
-          ],
-        },
-      });
-      // Backend automatically triggers a scan after library creation
-      toast.success("Default library created! Scanning for media...");
-      navigate(`/libraries/${library.id}`);
-    } catch (e) {
-      let msg = "Something went wrong.";
-      if (e instanceof Error) {
-        msg = e.message;
-      }
-      toast.error(msg);
-    }
-  }, [createLibraryMutation, navigate]);
-
-  const handleLibrarySwitch = useCallback(
-    (newLibraryId: number) => {
-      navigate(`/libraries/${newLibraryId}`);
-    },
-    [navigate],
-  );
 
   const isBooksActive =
     location.pathname === `/libraries/${libraryId}` ||
@@ -134,86 +79,9 @@ const TopNav = () => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Logo asLink />
-            {/* Library Switcher and Resync */}
+            {/* Library/List Picker and Resync */}
             <div className="flex items-center gap-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="h-9 gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
-                    variant="ghost"
-                  >
-                    <Library className="h-4 w-4" />
-                    {currentLibrary?.name || "Select Library"}
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel>Libraries</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {libraries.map((library) => (
-                    <DropdownMenuItem
-                      key={library.id}
-                      onClick={() => handleLibrarySwitch(library.id)}
-                    >
-                      <span className="flex-1">{library.name}</span>
-                      {library.id === Number(libraryId) && (
-                        <Check className="h-4 w-4 text-primary" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                  {libraries.length === 0 && (
-                    <DropdownMenuItem disabled>
-                      <span className="text-muted-foreground">
-                        No libraries found
-                      </span>
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  {canCreateLibrary && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/libraries/create">
-                        <Plus className="h-4 w-4" />
-                        Create new library
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  {isDevelopment && (
-                    <DropdownMenuItem
-                      disabled={createLibraryMutation.isPending}
-                      onClick={handleCreateDefaultLibrary}
-                    >
-                      <BookPlus className="h-4 w-4" />
-                      Create default library (dev)
-                    </DropdownMenuItem>
-                  )}
-                  {lists.length > 0 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Lists</DropdownMenuLabel>
-                      {lists.slice(0, 5).map((list) => (
-                        <DropdownMenuItem asChild key={list.id}>
-                          <Link to={`/lists/${list.id}`}>
-                            <List className="h-4 w-4" />
-                            <span className="flex-1 truncate">{list.name}</span>
-                            <span className="text-xs text-muted-foreground ml-2">
-                              {list.book_count}
-                            </span>
-                          </Link>
-                        </DropdownMenuItem>
-                      ))}
-                      {lists.length > 5 && (
-                        <DropdownMenuItem asChild>
-                          <Link to="/lists">
-                            <span className="text-muted-foreground">
-                              View all {lists.length} lists...
-                            </span>
-                          </Link>
-                        </DropdownMenuItem>
-                      )}
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <LibraryListPicker />
               {/* Resync Button */}
               {libraryId && canResync && (
                 <ResyncButton libraryId={Number(libraryId)} />
@@ -299,22 +167,6 @@ const TopNav = () => {
             )}
           </div>
           <div className="flex items-center gap-4">
-            <Button
-              asChild
-              className={`h-9 gap-2 ${
-                location.pathname.startsWith("/lists")
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              variant={
-                location.pathname.startsWith("/lists") ? "default" : "ghost"
-              }
-            >
-              <Link to="/lists">
-                <List className="h-4 w-4" />
-                Lists
-              </Link>
-            </Button>
             <GlobalSearch />
             {canAccessAdmin && (
               <TooltipProvider>
