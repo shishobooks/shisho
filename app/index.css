@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "react-day-picker/src/style.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -85,6 +86,105 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 15%);
   --sidebar-ring: oklch(0.8 0.15 280);
+}
+
+/* React Day Picker theme customization */
+.rdp-root {
+  --rdp-accent-color: var(--primary);
+  --rdp-accent-background-color: var(--accent);
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-day_button-border-radius: var(--radius);
+  --rdp-selected-border: none;
+  --rdp-today-color: var(--primary);
+  --rdp-outside-opacity: 0.4;
+  --rdp-weekday-opacity: 0.6;
+  --rdp-nav-height: 2rem;
+  background-color: transparent;
+  color: var(--foreground);
+  padding: 0.75rem;
+}
+
+.rdp-month {
+  position: relative;
+}
+
+.rdp-month_caption {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: var(--rdp-nav-height);
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.rdp-nav {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--rdp-nav-height);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.rdp-button_previous,
+.rdp-button_next {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.rdp-button_previous:hover,
+.rdp-button_next:hover {
+  background-color: var(--accent);
+}
+
+.rdp-weekday {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.rdp-day_button {
+  border-radius: var(--radius);
+}
+
+.rdp-day_button:hover {
+  background-color: var(--accent);
+}
+
+.rdp-selected .rdp-day_button {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.rdp-selected .rdp-day_button:hover {
+  background-color: var(--primary);
+}
+
+.rdp-today:not(.rdp-selected) .rdp-day_button {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.rdp-outside .rdp-day_button {
+  color: var(--muted-foreground);
+}
+
+.rdp-chevron {
+  fill: var(--muted-foreground);
 }
 
 @theme inline {

@@ -20,6 +20,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -858,11 +859,10 @@ export function FileEditDialog({
 
               {/* Release Date */}
               <div className="space-y-2">
-                <Label htmlFor="releaseDate">Release Date</Label>
-                <Input
-                  id="releaseDate"
-                  onChange={(e) => setReleaseDate(e.target.value)}
-                  type="date"
+                <Label>Release Date</Label>
+                <DatePicker
+                  onChange={setReleaseDate}
+                  placeholder="Pick a date"
                   value={releaseDate}
                 />
               </div>
