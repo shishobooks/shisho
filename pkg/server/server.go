@@ -171,9 +171,10 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	imprintsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	imprints.RegisterRoutesWithGroup(imprintsGroup, db, authMiddleware)
 
-	// Search routes (requires read access to books, series, and people)
+	// Search routes (requires read access to books since search returns book data)
 	searchGroup := e.Group("/search")
 	searchGroup.Use(authMiddleware.Authenticate)
+	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	search.RegisterRoutesWithGroup(searchGroup, db)
 }
 

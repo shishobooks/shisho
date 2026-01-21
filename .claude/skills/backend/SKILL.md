@@ -128,11 +128,107 @@ Server-rendered HTML pages for stock eReader browsers (Kobo, Kindle) that can't 
 - Cannot use `/api/books/{id}/cover` (requires session auth)
 - The `selectCoverFile()` function must fall back to any available cover type, not just the preferred aspect ratio
 
-### Authentication
+### Authentication & Authorization
 
-- RBAC is used throughout the app
-- Authn and authz needs to be considered for all pieces of functionality
-- Both frontend and backend checks need to be made so that everything is protected on all fronts
+The app uses Role-Based Access Control (RBAC) with two layers:
+1. **Global permissions** - Role-based access to features
+2. **Library access** - User-specific library visibility
+
+#### Permission Resources (`pkg/models/role.go`)
+
+| Resource | Description | Used For |
+|----------|-------------|----------|
+| `libraries` | Library management | Create/update libraries, filesystem operations |
+| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers, imprints |
+| `people` | Author/narrator management | Create/update/delete/merge people |
+| `series` | Series management | Update/delete/merge series |
+| `users` | User administration | Create users, manage roles, reset passwords |
+| `jobs` | Background jobs | Trigger scans, view job status |
+| `config` | Application config | View app configuration |
+
+#### Permission Operations
+
+- `read` - View/retrieve data
+- `write` - Create/modify/delete data
+
+#### Predefined Roles
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | All 14 permissions (full access) |
+| `editor` | Read+write: libraries, books, series, people (8 permissions) |
+| `viewer` | Read-only: libraries, books, series, people (4 permissions) |
+
+#### Adding Permissions to Routes
+
+**Group-level permission (all routes in group):**
+```go
+booksGroup := e.Group("/books")
+booksGroup.Use(authMiddleware.Authenticate)
+booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+```
+
+**Individual route permission:**
+```go
+g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+```
+
+**Library access check (for routes with library ID param):**
+```go
+g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("id"))
+```
+
+#### Handler-Level Permission Checks
+
+For inline permission checks (e.g., when feature depends on multiple permissions):
+```go
+user, ok := c.Get("user").(*models.User)
+if !ok {
+    return errcodes.Unauthorized("User not found in context")
+}
+if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
+    return errcodes.Forbidden("You need users:read permission for this action")
+}
+```
+
+#### Handler-Level Library Access Checks
+
+When library ID comes from fetched data (not URL param):
+```go
+file, _ := h.bookService.RetrieveFile(ctx, opts)
+if user, ok := c.Get("user").(*models.User); ok {
+    if !user.HasLibraryAccess(file.LibraryID) {
+        return errcodes.Forbidden("You don't have access to this library")
+    }
+}
+```
+
+#### Best Practices
+
+1. **New routes MUST consider permissions** - Ask: what resource does this affect? What operation?
+2. **Routes returning book/file data need library access checks** - Either via middleware or inline
+3. **Search endpoints need explicit `books:read`** - Search returns book data, so require the permission
+4. **User-scoped resources don't need global permissions** - Lists, API keys, settings are user-scoped
+5. **Sharing features require `users:read`** - To share, users must see the user list
+6. **Both frontend and backend checks required** - Backend for security, frontend for UX
+
+#### Permission Check Flow
+
+```
+Request → Authenticate → RequirePermission → RequireLibraryAccess → Handler
+                             ↓                      ↓
+                        Role check            User library access
+```
+
+#### Adding a New Permission Resource
+
+1. Add constant to `pkg/models/role.go`:
+   ```go
+   const ResourceNewFeature = "newfeature"
+   ```
+2. Add to admin role in migration or update existing admin roles
+3. Update `app/components/library/PermissionMatrix.tsx` to display in UI
+4. Add permission checks to relevant routes/handlers
 
 ### API Conventions
 

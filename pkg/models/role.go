@@ -26,6 +26,7 @@ const (
 // Predefined role names.
 const (
 	RoleAdmin  = "admin"
+	RoleEditor = "editor"
 	RoleViewer = "viewer"
 )
 
