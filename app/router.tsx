@@ -19,6 +19,8 @@ import ImprintsList from "@/components/pages/ImprintsList";
 import JobDetail from "@/components/pages/JobDetail";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
+import ListDetail from "@/components/pages/ListDetail";
+import ListsIndex from "@/components/pages/ListsIndex";
 import Login from "@/components/pages/Login";
 import PersonDetail from "@/components/pages/PersonDetail";
 import PersonList from "@/components/pages/PersonList";
@@ -145,6 +147,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <LibraryRedirect />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "lists",
+        element: (
+          <ProtectedRoute>
+            <ListsIndex />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "lists/:id",
+        element: (
+          <ProtectedRoute>
+            <ListDetail />
           </ProtectedRoute>
         ),
       },

@@ -4,6 +4,7 @@ import {
   ChevronDown,
   KeyRound,
   Library,
+  List,
   LogOut,
   Plus,
   Settings,
@@ -267,6 +268,22 @@ const TopNav = () => {
             )}
           </div>
           <div className="flex items-center gap-4">
+            <Button
+              asChild
+              className={`h-9 gap-2 ${
+                location.pathname.startsWith("/lists")
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-violet-300 dark:text-neutral-900 dark:hover:bg-violet-400"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              variant={
+                location.pathname.startsWith("/lists") ? "default" : "ghost"
+              }
+            >
+              <Link to="/lists">
+                <List className="h-4 w-4" />
+                Lists
+              </Link>
+            </Button>
             <GlobalSearch />
             {canAccessAdmin && (
               <TooltipProvider>

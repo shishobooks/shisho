@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -29,6 +30,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	tagService := tags.NewService(db)
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
+	listsService := lists.NewService(db)
 	cache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
 
@@ -41,6 +43,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		tagService:       tagService,
 		publisherService: publisherService,
 		imprintService:   imprintService,
+		listsService:     listsService,
 		downloadCache:    cache,
 		pageCache:        pageCache,
 		scanner:          scanner,
@@ -51,6 +54,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/:id/resync", h.resyncBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("/:id/cover", h.bookCover)
+	g.GET("/:id/lists", h.bookLists)
 	g.GET("/files/:id/cover", h.fileCover)
 	g.POST("/files/:id", h.updateFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/files/:id/cover", h.uploadFileCover, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))

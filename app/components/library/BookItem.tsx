@@ -1,9 +1,10 @@
 import { uniqBy } from "lodash";
-import { MoreVertical, RefreshCw } from "lucide-react";
+import { List, MoreVertical, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import AddToListPopover from "@/components/library/AddToListPopover";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -156,8 +157,21 @@ const BookItem = ({
 
   return (
     <div className="w-32 group/card relative" key={book.id}>
-      {/* Context menu button - shows on hover */}
-      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/card:opacity-100 transition-opacity">
+      {/* Context menu buttons - shows on hover */}
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/card:opacity-100 transition-opacity flex gap-1">
+        <AddToListPopover
+          bookId={book.id}
+          trigger={
+            <Button
+              className="h-7 w-7 bg-black/50 hover:bg-black/70"
+              size="icon"
+              title="Add to list"
+              variant="ghost"
+            >
+              <List className="h-4 w-4 text-white" />
+            </Button>
+          }
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

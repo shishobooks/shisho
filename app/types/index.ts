@@ -15,5 +15,17 @@ export * from "./generated/tags";
 export * from "./generated/publishers";
 export * from "./generated/imprints";
 export * from "./generated/chapters";
+export {
+  type CreateListPayload,
+  type UpdateListPayload,
+  type AddBooksPayload,
+  type RemoveBooksPayload,
+  type ReorderBooksPayload,
+  type CreateSharePayload,
+  type UpdateSharePayload,
+  type UpdateBookListsPayload,
+  type ListListsQuery,
+  type ListBooksQuery as ListBooksInListQuery,
+} from "./generated/lists";
 
 export type { ViewerSettings } from "@/hooks/queries/settings";

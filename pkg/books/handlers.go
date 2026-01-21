@@ -21,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -61,6 +62,7 @@ type handler struct {
 	tagService       *tags.Service
 	publisherService *publishers.Service
 	imprintService   *imprints.Service
+	listsService     *lists.Service
 	downloadCache    *downloadcache.Cache
 	pageCache        *cbzpages.Cache
 	scanner          Scanner
@@ -1823,4 +1825,34 @@ func (h *handler) serveRangeRequest(c echo.Context, filePath, rangeHeader string
 
 	// Stream the content with 206 Partial Content status
 	return c.Stream(http.StatusPartialContent, "audio/mp4", limitedReader)
+}
+
+func (h *handler) bookLists(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+
+	// Verify book exists and user has library access
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.NotFound("Book")
+	}
+
+	bookLists, err := h.listsService.GetBookLists(ctx, id, user.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, bookLists))
 }

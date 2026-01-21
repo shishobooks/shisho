@@ -27,6 +27,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/opds"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -140,6 +141,11 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
 	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware)
+
+	// Lists routes
+	listsGroup := e.Group("/lists")
+	listsGroup.Use(authMiddleware.Authenticate)
+	lists.RegisterRoutesWithGroup(listsGroup, db, authMiddleware)
 
 	// Genres routes
 	genresGroup := e.Group("/genres")

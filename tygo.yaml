@@ -78,3 +78,7 @@ packages:
     output_path: "app/types/generated/chapters.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/lists"
+    output_path: "app/types/generated/lists.ts"
+    include_files:
+      - validators.go
