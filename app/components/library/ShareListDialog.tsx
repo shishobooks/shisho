@@ -21,10 +21,12 @@ import {
 import {
   useCreateShare,
   useDeleteShare,
+  useList,
   useListShares,
   useUpdateShare,
 } from "@/hooks/queries/lists";
 import { useUsers } from "@/hooks/queries/users";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ListPermissionEditor,
   ListPermissionManager,
@@ -65,6 +67,8 @@ export function ShareListDialog({
   const [selectedPermission, setSelectedPermission] =
     useState<string>(ListPermissionViewer);
 
+  const { user: currentUser } = useAuth();
+  const listQuery = useList(listId, { enabled: open });
   const sharesQuery = useListShares(listId, { enabled: open });
   const usersQuery = useUsers({}, { enabled: open });
 
@@ -74,10 +78,14 @@ export function ShareListDialog({
 
   const shares = sharesQuery.data ?? [];
   const users = usersQuery.data?.users ?? [];
+  const listOwnerId = listQuery.data?.list.user_id;
 
-  // Filter out users who already have shares
+  // Filter out users who already have access (shares, owner, or self)
   const availableUsers = users.filter(
-    (user) => !shares.some((share) => share.user_id === user.id),
+    (user) =>
+      !shares.some((share) => share.user_id === user.id) &&
+      user.id !== listOwnerId &&
+      user.id !== currentUser?.id,
   );
 
   const handleAddShare = async () => {

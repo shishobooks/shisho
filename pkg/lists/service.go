@@ -511,6 +511,180 @@ func (svc *Service) GetBookLists(ctx context.Context, bookID, userID int) ([]*mo
 	return lists, errors.WithStack(err)
 }
 
+// UpdateBookListMemberships replaces which lists a book belongs to.
+// Only modifies lists the user can edit.
+func (svc *Service) UpdateBookListMemberships(ctx context.Context, bookID, userID int, listIDs []int) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Get current lists for this book that user can edit
+		currentLists, err := svc.GetBookLists(ctx, bookID, userID)
+		if err != nil {
+			return err
+		}
+
+		// Build maps of current and desired list memberships
+		currentMap := make(map[int]bool)
+		for _, list := range currentLists {
+			// Only consider lists user can edit
+			canEdit, _ := svc.CanEdit(ctx, list.ID, userID)
+			if canEdit {
+				currentMap[list.ID] = true
+			}
+		}
+
+		desiredMap := make(map[int]bool)
+		for _, listID := range listIDs {
+			desiredMap[listID] = true
+		}
+
+		now := time.Now()
+
+		// Remove from lists no longer in the desired set
+		for listID := range currentMap {
+			if !desiredMap[listID] {
+				_, err := tx.NewDelete().
+					Model((*models.ListBook)(nil)).
+					Where("list_id = ? AND book_id = ?", listID, bookID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+				// Update list's updated_at
+				_, err = tx.NewUpdate().
+					Model((*models.List)(nil)).
+					Set("updated_at = ?", now).
+					Where("id = ?", listID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+
+		// Add to lists not currently in
+		for listID := range desiredMap {
+			if !currentMap[listID] {
+				// Verify user can edit this list
+				canEdit, _ := svc.CanEdit(ctx, listID, userID)
+				if !canEdit {
+					continue
+				}
+
+				// Get list to check if ordered
+				list := &models.List{}
+				err := tx.NewSelect().Model(list).Where("id = ?", listID).Scan(ctx)
+				if err != nil {
+					continue // Skip if list doesn't exist
+				}
+
+				// Get max sort_order if ordered list
+				var sortOrder *int
+				if list.IsOrdered {
+					var maxSortOrder int
+					err = tx.NewSelect().
+						Model((*models.ListBook)(nil)).
+						ColumnExpr("COALESCE(MAX(sort_order), 0)").
+						Where("list_id = ?", listID).
+						Scan(ctx, &maxSortOrder)
+					if err == nil {
+						so := maxSortOrder + 1
+						sortOrder = &so
+					}
+				}
+
+				lb := &models.ListBook{
+					ListID:        listID,
+					BookID:        bookID,
+					AddedAt:       now,
+					AddedByUserID: &userID,
+					SortOrder:     sortOrder,
+				}
+				_, err = tx.NewInsert().
+					Model(lb).
+					On("CONFLICT (list_id, book_id) DO NOTHING").
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				// Update list's updated_at
+				_, err = tx.NewUpdate().
+					Model((*models.List)(nil)).
+					Set("updated_at = ?", now).
+					Where("id = ?", listID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+
+		return nil
+	})
+}
+
+// MoveBookToPosition moves a book to a specific position within an ordered list.
+func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, position int) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Get all books in order
+		var listBooks []*models.ListBook
+		err := tx.NewSelect().
+			Model(&listBooks).
+			Where("list_id = ?", listID).
+			Order("sort_order ASC NULLS LAST", "added_at ASC").
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Find the current book
+		currentIndex := -1
+		for i, lb := range listBooks {
+			if lb.BookID == bookID {
+				currentIndex = i
+				break
+			}
+		}
+		if currentIndex == -1 {
+			return errcodes.NotFound("Book not in list")
+		}
+
+		// Validate position
+		if position < 1 || position > len(listBooks) {
+			return errcodes.ValidationError("Invalid position")
+		}
+
+		// Convert to 0-indexed
+		newIndex := position - 1
+
+		// Remove from current position and insert at new position
+		book := listBooks[currentIndex]
+		listBooks = append(listBooks[:currentIndex], listBooks[currentIndex+1:]...)
+		// Insert at new position
+		listBooks = append(listBooks[:newIndex], append([]*models.ListBook{book}, listBooks[newIndex:]...)...)
+
+		// Update all sort orders
+		for i, lb := range listBooks {
+			sortOrder := i + 1
+			_, err := tx.NewUpdate().
+				Model((*models.ListBook)(nil)).
+				Set("sort_order = ?", sortOrder).
+				Where("id = ?", lb.ID).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// Update list's updated_at
+		_, err = tx.NewUpdate().
+			Model((*models.List)(nil)).
+			Set("updated_at = ?", time.Now()).
+			Where("id = ?", listID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
 // Permission check helpers
 
 // getListOwnerID returns the owner ID for a list, or 0 and false if not found.
@@ -591,6 +765,15 @@ func (svc *Service) IsOwner(ctx context.Context, listID, userID int) (bool, erro
 		return false, err
 	}
 	return ownerID == userID, nil
+}
+
+// HasShare returns true if the user already has a share for the list.
+func (svc *Service) HasShare(ctx context.Context, listID, userID int) (bool, error) {
+	count, err := svc.db.NewSelect().
+		Model((*models.ListShare)(nil)).
+		Where("list_id = ? AND user_id = ?", listID, userID).
+		Count(ctx)
+	return count > 0, errors.WithStack(err)
 }
 
 // Sharing operations

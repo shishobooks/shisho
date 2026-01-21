@@ -483,6 +483,24 @@ func (h *handler) createShare(c echo.Context) error {
 		return errcodes.ValidationError("You cannot share a list with yourself")
 	}
 
+	// Can't share with the list owner
+	isOwner, err := h.listsService.IsOwner(ctx, id, params.UserID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if isOwner {
+		return errcodes.ValidationError("Cannot share with the list owner")
+	}
+
+	// Can't share with someone who already has a share
+	hasShare, err := h.listsService.HasShare(ctx, id, params.UserID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if hasShare {
+		return errcodes.ValidationError("User already has access to this list")
+	}
+
 	share, err := h.listsService.CreateShare(ctx, CreateShareOptions{
 		ListID:         id,
 		UserID:         params.UserID,
@@ -675,4 +693,53 @@ func (h *handler) templates(c echo.Context) error {
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, templates))
+}
+
+func (h *handler) moveBookPosition(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	listID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("List")
+	}
+
+	bookID, err := strconv.Atoi(c.Param("bookId"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	params := MoveBookPositionPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+
+	// Check edit permission
+	canEdit, err := h.listsService.CanEdit(ctx, listID, user.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !canEdit {
+		return errcodes.Forbidden("You don't have permission to reorder books in this list")
+	}
+
+	// Verify list is ordered
+	list, err := h.listsService.RetrieveList(ctx, RetrieveListOptions{ID: &listID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !list.IsOrdered {
+		return errcodes.ValidationError("Cannot move books in an unordered list")
+	}
+
+	err = h.listsService.MoveBookToPosition(ctx, listID, bookID, params.Position)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }
