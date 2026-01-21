@@ -1,9 +1,16 @@
-import { ChevronsUpDown, Square, SquareCheckBig, X } from "lucide-react";
+import {
+  CheckSquare,
+  ChevronsUpDown,
+  Square,
+  SquareCheckBig,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
-import BookItem from "@/components/library/BookItem";
 import Gallery from "@/components/library/Gallery";
+import { SelectableBookItem } from "@/components/library/SelectableBookItem";
+import { SelectionToolbar } from "@/components/library/SelectionToolbar";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,11 +28,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeries } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Book, Genre, Tag } from "@/types";
 
@@ -37,9 +46,11 @@ const FILE_TYPE_OPTIONS = [
   { value: "cbz", label: "CBZ" },
 ];
 
-const Home = () => {
+const HomeContent = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
+    useBulkSelection();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const seriesIdParam = searchParams.get("series_id");
   const searchQuery = searchParams.get("search") ?? "";
@@ -259,12 +270,18 @@ const Home = () => {
     enabled: Boolean(seriesId),
   });
 
+  const pageBookIds = useMemo(
+    () => booksQuery.data?.books?.map((b) => b.id) ?? [],
+    [booksQuery.data?.books],
+  );
+
   const renderBookItem = (book: Book) => (
-    <BookItem
+    <SelectableBookItem
       book={book}
       coverAspectRatio={coverAspectRatio}
       key={book.id}
       libraryId={libraryId!}
+      pageBookIds={pageBookIds}
       seriesId={seriesId}
     />
   );
@@ -454,6 +471,16 @@ const Home = () => {
               </Command>
             </PopoverContent>
           </Popover>
+          {isSelectionMode ? (
+            <Button onClick={exitSelectionMode} variant="outline">
+              Cancel
+            </Button>
+          ) : (
+            <Button onClick={enterSelectionMode} variant="outline">
+              <CheckSquare className="h-4 w-4" />
+              Select
+            </Button>
+          )}
         </div>
 
         {/* Active Filters */}
@@ -513,8 +540,15 @@ const Home = () => {
           total={booksQuery.data?.total ?? 0}
         />
       </div>
+      <SelectionToolbar />
     </div>
   );
 };
+
+const Home = () => (
+  <BulkSelectionProvider>
+    <HomeContent />
+  </BulkSelectionProvider>
+);
 
 export default Home;

@@ -1,5 +1,5 @@
 import { uniqBy } from "lodash";
-import { List, MoreVertical, RefreshCw } from "lucide-react";
+import { Check, List, MoreVertical, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -30,6 +30,11 @@ interface BookItemProps {
   libraryId: string;
   seriesId?: number;
   coverAspectRatio?: string;
+  addedByUsername?: string;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  onShiftSelect?: () => void;
 }
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
@@ -113,6 +118,11 @@ const BookItem = ({
   libraryId,
   seriesId,
   coverAspectRatio = "book",
+  addedByUsername,
+  isSelectionMode = false,
+  isSelected = false,
+  onSelect,
+  onShiftSelect,
 }: BookItemProps) => {
   // Find the series number for the specific series context (if provided)
   const seriesNumber = seriesId
@@ -155,53 +165,90 @@ const BookItem = ({
     }
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (isSelectionMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.shiftKey && onShiftSelect) {
+        onShiftSelect();
+      } else if (onSelect) {
+        onSelect();
+      }
+    }
+  };
+
   return (
-    <div className="w-32 group/card relative" key={book.id}>
-      {/* Context menu buttons - shows on hover */}
-      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/card:opacity-100 transition-opacity flex gap-1">
-        <AddToListPopover
-          bookId={book.id}
-          trigger={
-            <Button
-              className="h-7 w-7 bg-black/50 hover:bg-black/70"
-              size="icon"
-              title="Add to list"
-              variant="ghost"
+    <div
+      className={cn(
+        "w-32 group/card relative",
+        isSelectionMode && "cursor-pointer",
+      )}
+      key={book.id}
+      onClick={handleClick}
+    >
+      {/* Selection checkbox overlay */}
+      {isSelectionMode && (
+        <div
+          className={cn(
+            "absolute top-1 left-1 z-10 h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all",
+            isSelected
+              ? "bg-primary border-primary"
+              : "bg-black/50 border-white/50",
+          )}
+        >
+          {isSelected && <Check className="h-4 w-4 text-white" />}
+        </div>
+      )}
+      {/* Context menu buttons - shows on hover (hidden in selection mode) */}
+      {!isSelectionMode && (
+        <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/card:opacity-100 transition-opacity flex gap-1">
+          <AddToListPopover
+            bookId={book.id}
+            trigger={
+              <Button
+                className="h-7 w-7 bg-black/50 hover:bg-black/70"
+                size="icon"
+                title="Add to list"
+                variant="ghost"
+              >
+                <List className="h-4 w-4 text-white" />
+              </Button>
+            }
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                className="h-7 w-7 bg-black/50 hover:bg-black/70"
+                size="icon"
+                variant="ghost"
+              >
+                <MoreVertical className="h-4 w-4 text-white" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => e.preventDefault()}
             >
-              <List className="h-4 w-4 text-white" />
-            </Button>
-          }
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              className="h-7 w-7 bg-black/50 hover:bg-black/70"
-              size="icon"
-              variant="ghost"
-            >
-              <MoreVertical className="h-4 w-4 text-white" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <DropdownMenuItem
-              disabled={resyncBookMutation.isPending}
-              onClick={handleScanMetadata}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Scan for new metadata
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh all metadata
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              <DropdownMenuItem
+                disabled={resyncBookMutation.isPending}
+                onClick={handleScanMetadata}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Scan for new metadata
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh all metadata
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
       <Link
-        className="group cursor-pointer"
+        className={cn(
+          "group",
+          isSelectionMode ? "pointer-events-none" : "cursor-pointer",
+        )}
         to={`/libraries/${libraryId}/books/${book.id}`}
       >
         {!coverError ? (
@@ -210,6 +257,7 @@ const BookItem = ({
             className={cn(
               "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
               aspectClass,
+              isSelected && "ring-2 ring-primary ring-offset-1",
             )}
             onError={() => setCoverError(true)}
             src={`/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`}
@@ -219,6 +267,7 @@ const BookItem = ({
             className={cn(
               "rounded-sm border border-neutral-300 dark:border-neutral-600",
               aspectClass,
+              isSelected && "ring-2 ring-primary ring-offset-1",
             )}
             variant={placeholderVariant}
           />
@@ -271,6 +320,11 @@ const BookItem = ({
           <Badge className="text-xs" variant="outline">
             #{seriesNumber}
           </Badge>
+        </div>
+      )}
+      {addedByUsername && (
+        <div className="mt-1 text-xs text-muted-foreground">
+          Added by {addedByUsername}
         </div>
       )}
       <ResyncConfirmDialog

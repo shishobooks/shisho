@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
+import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 
 const TopNav = () => {
@@ -57,6 +58,10 @@ const TopNav = () => {
   // Load all libraries for the switcher
   const librariesQuery = useLibraries({});
   const libraries = librariesQuery.data?.libraries || [];
+
+  // Load lists for sidebar navigation
+  const listsQuery = useListLists();
+  const lists = listsQuery.data?.lists || [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const handleLogout = useCallback(async () => {
@@ -180,6 +185,32 @@ const TopNav = () => {
                       <BookPlus className="h-4 w-4" />
                       Create default library (dev)
                     </DropdownMenuItem>
+                  )}
+                  {lists.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Lists</DropdownMenuLabel>
+                      {lists.slice(0, 5).map((list) => (
+                        <DropdownMenuItem asChild key={list.id}>
+                          <Link to={`/lists/${list.id}`}>
+                            <List className="h-4 w-4" />
+                            <span className="flex-1 truncate">{list.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {list.book_count}
+                            </span>
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                      {lists.length > 5 && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/lists">
+                            <span className="text-muted-foreground">
+                              View all {lists.length} lists...
+                            </span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -355,3 +355,48 @@ export const useCreateListFromTemplate = () => {
     },
   });
 };
+
+export const useUpdateBookLists = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    List[],
+    ShishoAPIError,
+    { bookId: number; listIds: number[] }
+  >({
+    mutationFn: ({ bookId, listIds }) => {
+      return API.request("POST", `/books/${bookId}/lists`, {
+        list_ids: listIds,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.BookLists, variables.bookId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveList] });
+    },
+  });
+};
+
+export const useMoveBookToPosition = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    void,
+    ShishoAPIError,
+    { listId: number; bookId: number; position: number }
+  >({
+    mutationFn: ({ listId, bookId, position }) => {
+      return API.request("PATCH", `/lists/${listId}/books/${bookId}/position`, {
+        position,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.ListBooks, variables.listId],
+      });
+    },
+  });
+};

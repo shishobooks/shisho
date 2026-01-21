@@ -26,6 +26,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, _ *auth.Middleware) {
 	g.POST("/:id/books", h.addBooks)
 	g.DELETE("/:id/books", h.removeBooks)
 	g.PATCH("/:id/books/reorder", h.reorderBooks)
+	g.PATCH("/:id/books/:bookId/position", h.moveBookPosition)
 
 	// Sharing
 	g.GET("/:id/shares", h.listShares)

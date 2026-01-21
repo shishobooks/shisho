@@ -56,6 +56,10 @@ type CheckVisibilityQuery struct {
 	UserID int `query:"user_id" json:"user_id" validate:"required,min=1" tstype:"number"`
 }
 
+type MoveBookPositionPayload struct {
+	Position int `json:"position" validate:"required,min=1"`
+}
+
 type CreateFromTemplatePayload struct {
 	// No fields needed - template name comes from URL
 }

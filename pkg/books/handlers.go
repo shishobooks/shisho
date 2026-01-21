@@ -1856,3 +1856,46 @@ func (h *handler) bookLists(c echo.Context) error {
 
 	return errors.WithStack(c.JSON(http.StatusOK, bookLists))
 }
+
+func (h *handler) updateBookLists(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+
+	// Verify book exists and user has library access
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.NotFound("Book")
+	}
+
+	// Parse payload
+	params := lists.UpdateBookListsPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Update the book's list memberships
+	err = h.listsService.UpdateBookListMemberships(ctx, id, user.ID, params.ListIDs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Return updated lists
+	bookLists, err := h.listsService.GetBookLists(ctx, id, user.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, bookLists))
+}

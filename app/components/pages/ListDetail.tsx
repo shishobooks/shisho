@@ -1,10 +1,18 @@
-import { Edit, Share2, Trash2 } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { Edit, Save, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { toast } from "sonner";
 
 import BookItem from "@/components/library/BookItem";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import { DraggableBookList } from "@/components/library/DraggableBookList";
+import Gallery from "@/components/library/Gallery";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { ShareListDialog } from "@/components/library/ShareListDialog";
 import TopNav from "@/components/library/TopNav";
@@ -21,6 +29,7 @@ import {
   useDeleteList,
   useList,
   useListBooks,
+  useReorderListBooks,
   useUpdateList,
 } from "@/hooks/queries/lists";
 import {
@@ -30,8 +39,11 @@ import {
   ListSortAuthorDesc,
   ListSortTitleAsc,
   ListSortTitleDesc,
+  type ListBook,
   type UpdateListPayload,
 } from "@/types";
+
+const ITEMS_PER_PAGE = 24;
 
 const SORT_OPTIONS = [
   { value: ListSortAddedAtDesc, label: "Recently Added" },
@@ -45,16 +57,28 @@ const SORT_OPTIONS = [
 const ListDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const listId = id ? parseInt(id, 10) : undefined;
+
+  // Get current page from URL
+  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const limit = ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * limit;
 
   const [sort, setSort] = useState<string | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
-  const listBooksQuery = useListBooks(listId, { sort });
+  const listBooksQuery = useListBooks(listId, { sort, limit, offset });
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();
+  const reorderMutation = useReorderListBooks();
+
+  const handleReorder = (bookIds: number[]) => {
+    if (!listId) return;
+    reorderMutation.mutate({ listId, payload: { book_ids: bookIds } });
+  };
 
   // Permission helpers
   const permission = listQuery.data?.permission ?? "viewer";
@@ -180,12 +204,21 @@ const ListDetail = () => {
           {list.description && (
             <p className="text-muted-foreground mb-2">{list.description}</p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary">
               {bookCount} book{bookCount !== 1 ? "s" : ""}
             </Badge>
             {!isOwner && <Badge variant="outline">{permission}</Badge>}
+            {!isOwner && list.user && (
+              <Badge variant="outline">Shared by {list.user.username}</Badge>
+            )}
           </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Created {format(new Date(list.created_at), "MMM d, yyyy")} · Updated{" "}
+            {formatDistanceToNow(new Date(list.updated_at), {
+              addSuffix: true,
+            })}
+          </p>
         </div>
 
         {/* Sort dropdown for unordered lists */}
@@ -207,26 +240,72 @@ const ListDetail = () => {
                 ))}
               </SelectContent>
             </Select>
+            {canManage && sort && sort !== list.default_sort && (
+              <Button
+                disabled={updateListMutation.isPending}
+                onClick={() => handleUpdate({ default_sort: sort })}
+                size="sm"
+                title="Save as default sort"
+                variant="ghost"
+              >
+                <Save className="h-4 w-4 mr-1" />
+                Save as default
+              </Button>
+            )}
           </div>
         )}
 
         {/* Books in List */}
         {bookCount > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-semibold mb-4">Books</h2>
-            {listBooksQuery.isLoading && <LoadingSpinner />}
-            {listBooksQuery.isSuccess && (
-              <div className="flex flex-wrap gap-6">
-                {books.map((listBook) =>
+            <h2 className="text-xl font-semibold mb-4">
+              Books
+              {list.is_ordered &&
+                canEdit &&
+                currentPage === 1 &&
+                bookCount <= ITEMS_PER_PAGE && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    (drag to reorder)
+                  </span>
+                )}
+            </h2>
+            {/* Use DraggableBookList for ordered lists when on page 1 and all books fit */}
+            {list.is_ordered &&
+            canEdit &&
+            currentPage === 1 &&
+            bookCount <= ITEMS_PER_PAGE ? (
+              listBooksQuery.isLoading ? (
+                <LoadingSpinner />
+              ) : listBooksQuery.isSuccess ? (
+                <DraggableBookList
+                  books={books}
+                  isOwner={isOwner}
+                  onReorder={handleReorder}
+                />
+              ) : (
+                <div>Error loading books</div>
+              )
+            ) : (
+              <Gallery
+                isLoading={listBooksQuery.isLoading}
+                isSuccess={listBooksQuery.isSuccess}
+                itemLabel="books"
+                items={books}
+                itemsPerPage={ITEMS_PER_PAGE}
+                renderItem={(listBook: ListBook) =>
                   listBook.book ? (
                     <BookItem
+                      addedByUsername={
+                        !isOwner ? listBook.added_by_user?.username : undefined
+                      }
                       book={listBook.book}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}
                     />
-                  ) : null,
-                )}
-              </div>
+                  ) : null
+                }
+                total={listBooksQuery.data?.total ?? bookCount}
+              />
             )}
           </section>
         )}

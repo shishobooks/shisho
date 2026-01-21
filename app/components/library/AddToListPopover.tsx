@@ -1,7 +1,8 @@
-import { List, Loader2, Plus } from "lucide-react";
+import { List, Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AddToListDialog } from "@/components/library/AddToListDialog";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +29,7 @@ interface AddToListPopoverProps {
 const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
   const [open, setOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [mutatingListId, setMutatingListId] = useState<number | null>(null);
 
   const listsQuery = useListLists();
@@ -159,7 +161,7 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
         )}
 
         {!isLoading && (
-          <div className="border-t px-1 py-1">
+          <div className="border-t px-1 py-1 flex flex-col gap-0.5">
             <Button
               className="w-full justify-start"
               onClick={handleCreateList}
@@ -169,6 +171,20 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
               <Plus className="h-4 w-4" />
               Create New List
             </Button>
+            {lists.length > 5 && (
+              <Button
+                className="w-full justify-start text-muted-foreground"
+                onClick={() => {
+                  setOpen(false);
+                  setManageDialogOpen(true);
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                Manage Lists...
+              </Button>
+            )}
           </div>
         )}
       </PopoverContent>
@@ -178,6 +194,12 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
         onCreate={handleCreate}
         onOpenChange={setCreateDialogOpen}
         open={createDialogOpen}
+      />
+
+      <AddToListDialog
+        bookId={bookId}
+        onOpenChange={setManageDialogOpen}
+        open={manageDialogOpen}
       />
     </Popover>
   );
