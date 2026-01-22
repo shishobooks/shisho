@@ -1169,3 +1169,160 @@ func TestIsGrayscaleImage(t *testing.T) {
 		assert.False(t, isGrayscaleImage(img), "should not convert tiny images")
 	})
 }
+
+func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
+	t.Run("uses specified cover page for cover-image property", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create test CBZ with 3 pages
+		srcPath := filepath.Join(tmpDir, "test.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page3.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+
+		coverPage := 2 // Third page (0-indexed)
+		metadata := &CBZMetadata{
+			Title:     "Test Comic",
+			CoverPage: &coverPage,
+		}
+
+		c := NewConverter()
+		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		// Verify the OPF has cover-image on the correct page
+		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+
+		// Check that cover meta tag references the correct image (img0003 for page index 2)
+		assert.Contains(t, opfContent, `<meta name="cover" content="img0003"/>`)
+
+		// Check that cover-image property is on the third image (img0003)
+		// The manifest should have img0003 with properties="cover-image"
+		assert.Contains(t, opfContent, `id="img0003" href="images/page0003.jpg" media-type="image/jpeg" properties="cover-image"`)
+
+		// First and second images should NOT have cover-image property
+		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg"/>`)
+		assert.Contains(t, opfContent, `id="img0002" href="images/page0002.jpg" media-type="image/jpeg"/>`)
+	})
+
+	t.Run("defaults to first page when CoverPage is nil", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "test.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+
+		metadata := &CBZMetadata{
+			Title:     "Test Comic",
+			CoverPage: nil, // Not specified
+		}
+
+		c := NewConverter()
+		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+
+		// Should default to first page (img0001)
+		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
+		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg" properties="cover-image"`)
+	})
+
+	t.Run("defaults to first page when metadata is nil", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "test.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+
+		c := NewConverter()
+		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, nil)
+		require.NoError(t, err)
+
+		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+
+		// Should default to first page (img0001)
+		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
+		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg" properties="cover-image"`)
+	})
+
+	t.Run("clamps out-of-bounds cover page to first page", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "test.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+
+		// Cover page index 10 is out of bounds for a 2-page CBZ
+		coverPage := 10
+		metadata := &CBZMetadata{
+			Title:     "Test Comic",
+			CoverPage: &coverPage,
+		}
+
+		c := NewConverter()
+		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+
+		// Should clamp to first page (img0001) since index 10 exceeds page count
+		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
+		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg" properties="cover-image"`)
+	})
+
+	t.Run("clamps negative cover page to first page", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "test.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{
+			pages: []testPage{
+				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+
+		// Negative cover page index
+		coverPage := -1
+		metadata := &CBZMetadata{
+			Title:     "Test Comic",
+			CoverPage: &coverPage,
+		}
+
+		c := NewConverter()
+		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		require.NoError(t, err)
+
+		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+
+		// Should clamp to first page (img0001) since index -1 is invalid
+		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
+		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg" properties="cover-image"`)
+	})
+}

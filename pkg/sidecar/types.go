@@ -30,6 +30,7 @@ type FileSidecar struct {
 	Identifiers []IdentifierMetadata `json:"identifiers,omitempty"`
 	Name        *string              `json:"name,omitempty"`
 	Chapters    []ChapterMetadata    `json:"chapters,omitempty"`
+	CoverPage   *int                 `json:"cover_page,omitempty"` // 0-indexed page number for CBZ cover
 }
 
 // AuthorMetadata represents an author in the sidecar file.

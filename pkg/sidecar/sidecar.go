@@ -177,6 +177,7 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 		Publisher: nil,
 		Imprint:   nil,
 		Name:      file.Name,
+		CoverPage: file.CoverPage,
 	}
 
 	// Set publisher name if available

@@ -1,11 +1,13 @@
 package worker
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -1420,6 +1422,71 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Update cover page (from sidecar) for CBZ files
+	// This restores user-selected cover page from sidecar after library rescans
+	if fileSidecarData != nil && fileSidecarData.CoverPage != nil && file.FileType == models.FileTypeCBZ {
+		existingCoverSource := ""
+		if file.CoverSource != nil {
+			existingCoverSource = *file.CoverSource
+		}
+
+		// Check if we should apply sidecar (don't override manual selections)
+		// Sidecar has priority 1, manual has priority 0 (lower = higher priority)
+		sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
+		existingPriority := models.DataSourcePriority[existingCoverSource]
+		if existingCoverSource == "" {
+			existingPriority = models.DataSourcePriority[models.DataSourceFilepath]
+		}
+
+		// Only apply if sidecar has equal or higher priority than existing source
+		// and the cover page is different (or not set)
+		shouldApply := !forceRefresh && sidecarPriority <= existingPriority
+		isDifferent := file.CoverPage == nil || *file.CoverPage != *fileSidecarData.CoverPage
+
+		if shouldApply && isDifferent {
+			// Determine cover directory
+			var coverDir string
+			if file.Book != nil {
+				if info, statErr := os.Stat(file.Book.Filepath); statErr == nil && info.IsDir() {
+					coverDir = file.Book.Filepath
+				} else {
+					coverDir = filepath.Dir(file.Book.Filepath)
+				}
+			} else {
+				coverDir = filepath.Dir(file.Filepath)
+			}
+
+			// Generate cover filename
+			filename := filepath.Base(file.Filepath)
+			coverBaseName := filename + ".cover"
+
+			// Extract the cover page from CBZ
+			coverFilename, coverMimeType, err := extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
+			if err != nil {
+				log.Warn("failed to extract cover page from sidecar", logger.Data{
+					"error":      err.Error(),
+					"cover_page": *fileSidecarData.CoverPage,
+				})
+			} else {
+				log.Info("updating cover page from sidecar", logger.Data{
+					"from_page": file.CoverPage,
+					"to_page":   *fileSidecarData.CoverPage,
+				})
+
+				file.CoverPage = fileSidecarData.CoverPage
+				file.CoverImagePath = &coverFilename
+				file.CoverMimeType = &coverMimeType
+				file.CoverSource = &sidecarSource
+
+				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+					Columns: []string{"cover_page", "cover_image_path", "cover_mime_type", "cover_source"},
+				}); err != nil {
+					return nil, errors.Wrap(err, "failed to update cover page from sidecar")
+				}
+			}
+		}
+	}
+
 	// ==========================================================================
 	// Write sidecar files
 	// ==========================================================================
@@ -2156,4 +2223,105 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) err
 	}
 
 	return nil
+}
+
+// extractCBZPageCover extracts a specific page from a CBZ file and saves it as the cover.
+// Returns the cover filename (relative to coverDir), mime type, and any error.
+// pageNum is 0-indexed.
+func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+	f, err := os.Open(cbzPath)
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	defer f.Close()
+
+	stats, err := f.Stat()
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+
+	zipReader, err := zip.NewReader(f, stats.Size())
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+
+	// Get sorted image files
+	var imageFiles []*zip.File
+	for _, file := range zipReader.File {
+		ext := strings.ToLower(filepath.Ext(file.Name))
+		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
+			imageFiles = append(imageFiles, file)
+		}
+	}
+	sort.Slice(imageFiles, func(i, j int) bool {
+		return imageFiles[i].Name < imageFiles[j].Name
+	})
+
+	if pageNum < 0 || pageNum >= len(imageFiles) {
+		return "", "", errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
+	}
+
+	targetFile := imageFiles[pageNum]
+
+	// Determine extension and mime type
+	ext := strings.ToLower(filepath.Ext(targetFile.Name))
+	mimeType := ""
+	switch ext {
+	case ".jpg", ".jpeg":
+		mimeType = "image/jpeg"
+	case ".png":
+		mimeType = "image/png"
+	case ".gif":
+		mimeType = "image/gif"
+	case ".webp":
+		mimeType = "image/webp"
+	}
+
+	// Delete any existing cover with this base name (regardless of extension)
+	for _, existingExt := range fileutils.CoverImageExtensions {
+		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
+		if _, statErr := os.Stat(existingPath); statErr == nil {
+			_ = os.Remove(existingPath)
+		}
+	}
+
+	// Extract the page
+	coverFilePath := filepath.Join(coverDir, coverBaseName+ext)
+
+	r, err := targetFile.Open()
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	defer r.Close()
+
+	// Read the image data
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+
+	// Normalize the image
+	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(data, mimeType)
+	if normalizedMime != mimeType {
+		// Extension changed due to normalization
+		ext = ".png"
+		if normalizedMime == "image/jpeg" {
+			ext = ".jpg"
+		}
+		coverFilePath = filepath.Join(coverDir, coverBaseName+ext)
+		mimeType = normalizedMime
+	}
+
+	// Write the cover file
+	outFile, err := os.Create(coverFilePath)
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, bytes.NewReader(normalizedData)); err != nil {
+		return "", "", errors.WithStack(err)
+	}
+
+	return coverBaseName + ext, mimeType, nil
 }

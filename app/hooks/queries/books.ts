@@ -126,4 +126,29 @@ export const useUploadFileCover = () => {
   });
 };
 
+interface SetFileCoverPageVariables {
+  id: number;
+  page: number;
+}
+
+export const useSetFileCoverPage = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<File, ShishoAPIError, SetFileCoverPageVariables>({
+    mutationFn: ({ id, page }) => {
+      return API.request(
+        "PUT",
+        `/books/files/${id}/cover-page`,
+        { page },
+        null,
+      );
+    },
+    onSuccess: () => {
+      // Invalidate book queries to refresh file/cover data
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+    },
+  });
+};
+
 export * from "./resync";

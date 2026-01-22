@@ -17,6 +17,7 @@ export interface CBZPagePickerProps {
   onSelect: (page: number) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  title?: string; // Optional custom title, defaults to "Select Page"
 }
 
 /**
@@ -30,6 +31,7 @@ const CBZPagePicker = ({
   onSelect,
   open,
   onOpenChange,
+  title = "Select Page",
 }: CBZPagePickerProps) => {
   // Calculate initial range: current page +/-10, or 0-9 if no current page
   const initialRange = useMemo(() => {
@@ -90,7 +92,7 @@ const CBZPagePicker = ({
     <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader className="pr-8">
-          <DialogTitle>Select Page</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">

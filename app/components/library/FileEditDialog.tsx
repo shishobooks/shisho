@@ -2,14 +2,16 @@ import {
   Check,
   ChevronsUpDown,
   GripVertical,
+  Image,
   Loader2,
   Plus,
   Upload,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import CBZPagePicker from "@/components/files/CBZPagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,11 +48,16 @@ import {
   SortableList,
   type DragHandleProps,
 } from "@/components/ui/SortableList";
-import { useUpdateFile, useUploadFileCover } from "@/hooks/queries/books";
+import {
+  useSetFileCoverPage,
+  useUpdateFile,
+  useUploadFileCover,
+} from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
+import { cn } from "@/libraries/utils";
 import {
   FileRoleMain,
   FileRoleSupplement,
@@ -113,6 +120,14 @@ export function FileEditDialog({
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
   const [coverCacheBuster, setCoverCacheBuster] = useState(Date.now());
+  const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
+  const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
+  const [pendingCoverFile, setPendingCoverFile] =
+    useState<globalThis.File | null>(null);
+  const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(
+    null,
+  );
+  const pendingCoverPreviewRef = useRef<string | null>(null);
 
   // Identifier state
   const [identifiers, setIdentifiers] = useState<
@@ -141,6 +156,7 @@ export function FileEditDialog({
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
+  const setCoverPageMutation = useSetFileCoverPage();
 
   // Query for publishers in this library with server-side search
   const { data: publishersData, isLoading: isLoadingPublishers } =
@@ -173,6 +189,24 @@ export function FileEditDialog({
     { enabled: open },
   );
 
+  // Helper to set preview URL and handle cleanup of old URL
+  const updatePendingCoverPreview = useCallback((url: string | null) => {
+    if (pendingCoverPreviewRef.current) {
+      URL.revokeObjectURL(pendingCoverPreviewRef.current);
+    }
+    pendingCoverPreviewRef.current = url;
+    setPendingCoverPreview(url);
+  }, []);
+
+  // Cleanup pending cover preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingCoverPreviewRef.current) {
+        URL.revokeObjectURL(pendingCoverPreviewRef.current);
+      }
+    };
+  }, []);
+
   // Reset form when dialog opens with new file data
   useEffect(() => {
     if (open) {
@@ -193,8 +227,11 @@ export function FileEditDialog({
       setNewIdentifierValue("");
       setFileRole(file.file_role ?? FileRoleMain);
       setShowDowngradeConfirm(false);
+      setPendingCoverPage(null);
+      setPendingCoverFile(null);
+      updatePendingCoverPreview(null);
     }
-  }, [open, file]);
+  }, [open, file, updatePendingCoverPreview]);
 
   const handleSelectPublisher = (name: string) => {
     setPublisher(name);
@@ -311,24 +348,26 @@ export function FileEditDialog({
       (i) => i.name.toLowerCase() === imprintSearch.toLowerCase(),
     );
 
-  const handleCoverUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
 
-    await uploadCoverMutation.mutateAsync({
-      id: file.id,
-      file: uploadedFile,
-    });
+    // Store the file for upload on save
+    setPendingCoverFile(uploadedFile);
 
-    // Update cache buster to force image refresh
-    setCoverCacheBuster(Date.now());
+    // Create preview URL (helper handles cleanup of old URL)
+    updatePendingCoverPreview(URL.createObjectURL(uploadedFile));
 
     // Reset the file input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleCoverPageSelect = (page: number) => {
+    // Store the selected page for save
+    setPendingCoverPage(page);
+    setCoverPagePickerOpen(false);
   };
 
   const handleSubmit = async () => {
@@ -406,11 +445,30 @@ export function FileEditDialog({
       });
     }
 
+    // Apply pending cover changes
+    if (pendingCoverFile) {
+      await uploadCoverMutation.mutateAsync({
+        id: file.id,
+        file: pendingCoverFile,
+      });
+      setCoverCacheBuster(Date.now());
+    }
+
+    if (pendingCoverPage !== null && pendingCoverPage !== file.cover_page) {
+      await setCoverPageMutation.mutateAsync({
+        id: file.id,
+        page: pendingCoverPage,
+      });
+      setCoverCacheBuster(Date.now());
+    }
+
     onOpenChange(false);
   };
 
   const isLoading =
-    updateFileMutation.isPending || uploadCoverMutation.isPending;
+    updateFileMutation.isPending ||
+    uploadCoverMutation.isPending ||
+    setCoverPageMutation.isPending;
 
   const isSupplement = file.file_role === FileRoleSupplement;
 
@@ -490,52 +548,152 @@ export function FileEditDialog({
           {/* Main file only sections */}
           {!isSupplement && fileRole !== FileRoleSupplement && (
             <>
-              {/* Cover Upload (not available for CBZ - cover is page-based) */}
-              {file.file_type !== FileTypeCBZ && (
-                <div className="space-y-2">
-                  <Label>Cover Image</Label>
-                  <div className="w-32 relative group">
-                    {file.cover_mime_type || file.cover_image_path ? (
-                      <img
-                        alt="File cover"
-                        className="w-full h-auto rounded border border-border"
-                        src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
-                      />
-                    ) : (
-                      <CoverPlaceholder
-                        className="rounded border border-dashed border-border aspect-square"
-                        variant={
-                          file.file_type === "m4b" ? "audiobook" : "book"
-                        }
-                      />
+              {/* Cover Image Section - Unified for all file types */}
+              <div className="space-y-3">
+                <Label>Cover Image</Label>
+                <div className="flex items-start gap-4">
+                  {/* Cover thumbnail */}
+                  <div className="relative group w-28 shrink-0">
+                    <div
+                      className={cn(
+                        "rounded-lg overflow-hidden border border-border bg-muted",
+                        file.file_type === "m4b"
+                          ? "aspect-square"
+                          : "aspect-[2/3]",
+                      )}
+                    >
+                      {/* Non-CBZ: Show pending preview or current cover */}
+                      {file.file_type !== FileTypeCBZ && (
+                        <>
+                          {pendingCoverPreview ? (
+                            <img
+                              alt="Pending cover"
+                              className="w-full h-full object-cover"
+                              src={pendingCoverPreview}
+                            />
+                          ) : file.cover_mime_type || file.cover_image_path ? (
+                            <img
+                              alt="File cover"
+                              className="w-full h-full object-cover"
+                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                            />
+                          ) : (
+                            <CoverPlaceholder
+                              className="w-full h-full"
+                              variant={
+                                file.file_type === "m4b" ? "audiobook" : "book"
+                              }
+                            />
+                          )}
+                        </>
+                      )}
+                      {/* CBZ: Show pending page or current cover */}
+                      {file.file_type === FileTypeCBZ && (
+                        <>
+                          {pendingCoverPage !== null &&
+                          pendingCoverPage !== file.cover_page ? (
+                            <img
+                              alt="Pending cover page"
+                              className="w-full h-full object-cover"
+                              src={`/api/books/files/${file.id}/page/${pendingCoverPage}`}
+                            />
+                          ) : file.cover_mime_type || file.cover_image_path ? (
+                            <img
+                              alt="File cover"
+                              className="w-full h-full object-cover"
+                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                            />
+                          ) : (
+                            <CoverPlaceholder
+                              className="w-full h-full"
+                              variant="book"
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {/* Page number badge for CBZ */}
+                    {file.file_type === FileTypeCBZ &&
+                      (pendingCoverPage ?? file.cover_page) != null && (
+                        <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
+                          Page {(pendingCoverPage ?? file.cover_page)! + 1}
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Action buttons and status */}
+                  <div className="flex flex-col gap-2 pt-1">
+                    {/* Non-CBZ: Upload button */}
+                    {file.file_type !== FileTypeCBZ && (
+                      <>
+                        <input
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={handleCoverUpload}
+                          ref={fileInputRef}
+                          type="file"
+                        />
+                        <Button
+                          disabled={uploadCoverMutation.isPending}
+                          onClick={() => fileInputRef.current?.click()}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          {uploadCoverMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          {file.cover_mime_type ||
+                          file.cover_image_path ||
+                          pendingCoverFile
+                            ? "Replace cover"
+                            : "Upload cover"}
+                        </Button>
+                      </>
                     )}
-                    {/* Cover upload overlay */}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
-                      <input
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={handleCoverUpload}
-                        ref={fileInputRef}
-                        type="file"
-                      />
+                    {/* CBZ: Select page button */}
+                    {file.file_type === FileTypeCBZ && (
                       <Button
-                        disabled={uploadCoverMutation.isPending}
-                        onClick={() => fileInputRef.current?.click()}
+                        disabled={setCoverPageMutation.isPending}
+                        onClick={() => setCoverPagePickerOpen(true)}
                         size="sm"
-                        variant="secondary"
+                        type="button"
+                        variant="outline"
                       >
-                        {uploadCoverMutation.isPending ? (
+                        {setCoverPageMutation.isPending ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
-                          <Upload className="h-4 w-4 mr-2" />
+                          <Image className="h-4 w-4 mr-2" />
                         )}
-                        {file.cover_mime_type || file.cover_image_path
-                          ? "Replace"
-                          : "Upload"}
+                        Select page
                       </Button>
-                    </div>
+                    )}
+                    {/* Unsaved indicator */}
+                    {((file.file_type !== FileTypeCBZ && pendingCoverFile) ||
+                      (file.file_type === FileTypeCBZ &&
+                        pendingCoverPage !== null &&
+                        pendingCoverPage !== file.cover_page)) && (
+                      <span className="text-xs text-orange-500 font-medium">
+                        Unsaved changes
+                      </span>
+                    )}
                   </div>
                 </div>
+              </div>
+
+              {/* CBZ Page Picker Dialog */}
+              {file.file_type === FileTypeCBZ && file.page_count != null && (
+                <CBZPagePicker
+                  currentPage={pendingCoverPage ?? file.cover_page ?? null}
+                  fileId={file.id}
+                  onOpenChange={setCoverPagePickerOpen}
+                  onSelect={handleCoverPageSelect}
+                  open={coverPagePickerOpen}
+                  pageCount={file.page_count}
+                  title="Select Cover Page"
+                />
               )}
 
               {/* Narrators (only for M4B files) */}

@@ -100,6 +100,11 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 		metadata.Chapters = convertModelChaptersToCBZ(file.Chapters)
 	}
 
+	// Set cover page if available
+	if file != nil && file.CoverPage != nil {
+		metadata.CoverPage = file.CoverPage
+	}
+
 	return metadata
 }
 

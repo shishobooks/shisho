@@ -37,6 +37,7 @@ type CBZMetadata struct {
 	Imprint     *string
 	ReleaseDate *time.Time
 	Chapters    []CBZChapter
+	CoverPage   *int // 0-indexed page number for cover (nil = first page)
 }
 
 // CBZAuthor represents an author/creator for CBZ metadata.
@@ -464,13 +465,25 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 `)
 	}
 
+	// Calculate cover page index (default 0 if not set)
+	coverPageIdx := 0
+	if metadata != nil && metadata.CoverPage != nil {
+		coverPageIdx = *metadata.CoverPage
+		// Clamp to valid range
+		if coverPageIdx < 0 || coverPageIdx >= len(pages) {
+			coverPageIdx = 0
+		}
+	}
+
 	buf.WriteString(`    <meta property="dcterms:modified">`)
 	buf.WriteString(time.Now().UTC().Format("2006-01-02T15:04:05Z"))
 	buf.WriteString(`</meta>
     <meta property="rendition:layout">pre-paginated</meta>
     <meta property="rendition:spread">landscape</meta>
-    <meta name="cover" content="img0001"/>
-  </metadata>
+`)
+	buf.WriteString(fmt.Sprintf(`    <meta name="cover" content="img%04d"/>
+`, coverPageIdx+1))
+	buf.WriteString(`  </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
     <item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>
@@ -488,7 +501,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 
 		// Image item
 		buf.WriteString(fmt.Sprintf(`    <item id="%s" href="images/%s" media-type="%s"`, imgID, page.filename, page.mediaType))
-		if i == 0 {
+		if i == coverPageIdx {
 			buf.WriteString(` properties="cover-image"`)
 		}
 		buf.WriteString(`/>
