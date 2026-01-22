@@ -5,7 +5,8 @@ This document describes the architecture for Shisho's plugin system, enabling th
 ## Overview
 
 The plugin system allows users to install plugins that:
-- Parse new file formats (PDF, DJVU, etc.)
+- Convert unsupported file formats to supported ones (PDF → EPUB, MOBI → EPUB, etc.)
+- Parse new file formats for metadata extraction
 - Generate new output/download formats (MOBI, AZW3, etc.)
 - Enrich metadata from external sources (Goodreads, OpenLibrary, etc.)
 - Register custom identifier types
@@ -88,7 +89,8 @@ my-plugin/
 ### Capability Types
 
 **v1 (Priority):**
-- `fileParser` - Parse new file formats
+- `inputConverter` - Convert unsupported formats to supported ones during scan
+- `fileParser` - Parse new file formats for metadata extraction
 - `outputGenerator` - Generate download formats
 - `metadataEnricher` - Enrich metadata during sync
 - `identifierTypes` - Register custom identifier types
@@ -151,7 +153,59 @@ declare namespace shisho {
 
 ## Hook Interfaces
 
+### Input Converter
+
+Converts unsupported file formats to supported ones during library scan. The converted file is written alongside the original, and Shisho indexes both:
+- If the original format is supported (e.g., MOBI), both become main files
+- If the original format is unsupported (e.g., PDF), it becomes a supplemental file
+
+```typescript
+export const inputConverter: shisho.InputConverter = {
+  // Extensions this converter handles
+  sourceExtensions: ['.pdf', '.mobi', '.doc'],
+
+  // What it converts to (must be a Shisho-supported format)
+  targetExtension: '.epub',
+
+  async convert(context: ConvertContext): Promise<ConvertResult> {
+    const { sourcePath, targetDir } = context;
+
+    // Read source file
+    const data = await shisho.fs.readFile(sourcePath);
+
+    // Convert and write to target directory
+    const baseName = sourcePath.replace(/\.[^.]+$/, '');
+    const targetPath = `${targetDir}/${baseName}.epub`;
+
+    // ... conversion logic ...
+
+    await shisho.fs.writeFile(targetPath, convertedData);
+
+    return {
+      success: true,
+      targetPath: targetPath,
+    };
+  }
+};
+```
+
+**Manifest capability:**
+
+```json
+{
+  "capabilities": {
+    "inputConverter": {
+      "description": "Converts PDF and MOBI files to EPUB for indexing",
+      "sourceExtensions": [".pdf", ".mobi"],
+      "targetExtension": ".epub"
+    }
+  }
+}
+```
+
 ### File Parser
+
+Extracts metadata from file formats. Use this when you want Shisho to natively support a format (track it, display metadata, allow downloads) without converting it.
 
 ```typescript
 export const fileParser: shisho.FileParser = {
@@ -241,7 +295,8 @@ export const identifierTypes: shisho.IdentifierType[] = [
 A plugin can export multiple hooks:
 
 ```typescript
-// PDF plugin with parsing and generation
+// PDF plugin with conversion, parsing, and generation
+export const inputConverter: shisho.InputConverter = { /* ... */ };
 export const fileParser: shisho.FileParser = { /* ... */ };
 export const outputGenerator: shisho.OutputGenerator = { /* ... */ };
 export const identifierTypes: shisho.IdentifierType[] = [ /* ... */ ];
@@ -480,7 +535,7 @@ POST   /api/plugins/scan                      # Scan for manual installs
 - "Uninstall" button
 
 ### Plugin Ordering (`/settings/plugins/order`)
-- Tabs per hook type (Metadata Enrichers, File Parsers, Output Generators)
+- Tabs per hook type (Input Converters, Metadata Enrichers, File Parsers, Output Generators)
 - Drag-and-drop reordering
 - Only shows enabled plugins providing that hook
 
@@ -521,6 +576,7 @@ Only install plugins from sources you trust.
 
 | Error | Behavior |
 |-------|----------|
+| Converter exception | Log, skip conversion, original file not indexed |
 | Enricher exception | Log, continue to next enricher |
 | Parser exception | Log, skip file with error status |
 | Generator exception | Log, return 500 to request |
@@ -583,6 +639,7 @@ cp -r dist/main.js manifest.json /config/plugins/installed/local/my-plugin/
 - Configuration loading from database
 
 ### Phase 2: Hook Implementations
+- `inputConverter` integration in scan worker (convert before indexing)
 - `metadataEnricher` integration in scan worker
 - `fileParser` integration in file detection
 - `outputGenerator` integration in download system
