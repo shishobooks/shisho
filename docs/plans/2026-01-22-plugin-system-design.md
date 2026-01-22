@@ -17,7 +17,7 @@ Plugins are JavaScript files executed in an embedded interpreter (goja). Plugin 
 
 | Component | Choice | Rationale |
 |-----------|--------|-----------|
-| Runtime | goja (pure Go JS interpreter) | No CGO, good performance, ES5.1+ support |
+| Runtime | goja (pure Go JS interpreter) | No CGO, good performance, ES2020 support (async/await, Promises, no ES modules) |
 | Plugin language | JavaScript (TS bundled to JS) | Large developer pool, familiar tooling |
 | Manifest format | JSON with camelCase | Idiomatic for JS/TS developers |
 | Repository hosting | GitHub only | Security (no arbitrary domains), reliable CDN |
@@ -117,6 +117,8 @@ my-plugin/
 }
 ```
 
+**Config validation:** Constraints (`required`, `min`, `max`, `options`) are validated when the user saves config in the UI. The save is rejected if validation fails. At plugin load time, config is read from the database as-is. If required fields are unset (user hasn't configured yet), the plugin still loads but the UI shows a "Needs configuration" badge. Plugins must handle `undefined` from `config.get()` gracefully.
+
 ### Capability Types
 
 **v1 (Priority):**
@@ -153,20 +155,22 @@ Security rules:
 
 ### File Access Levels
 
-Without `fileAccess`, plugins can only access their own directory and temp dirs. The `fileAccess` capability grants access to library files:
+The `fileAccess` capability controls access to the `shisho.fs.*` API for **arbitrary** library file operations. Without it, `shisho.fs` calls are restricted to the plugin's own directory and temp dirs.
+
+Hook-provided paths (e.g., `sourcePath` in inputConverter, `filePath` in fileParser) are **always accessible** regardless of `fileAccess` — they're part of the hook contract. The host passes these paths directly to the plugin and grants implicit read access to them. A plugin only needs `fileAccess` if it wants to browse or modify library files beyond what the hook provides.
 
 ```json
 {
   "fileAccess": {
     "level": "read",
-    "description": "Reads source files for metadata extraction"
+    "description": "Reads related files in the same directory for metadata cross-referencing"
   }
 }
 ```
 
 Levels:
-- `"read"` - Read-only access to library files
-- `"readwrite"` - Read and write access to library files (write implies read)
+- `"read"` - Read-only access to library files via `shisho.fs`
+- `"readwrite"` - Read and write access to library files via `shisho.fs`
 
 The level is displayed to the user during installation so they understand what the plugin can do.
 
@@ -179,7 +183,8 @@ declare namespace shisho {
   // Logging
   function log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
 
-  // Configuration (plugin-specific settings)
+  // Configuration (plugin-specific settings, validated on save via UI)
+  // Returns undefined for unset keys. Plugins should handle missing config gracefully.
   namespace config {
     function get<T>(key: string): T | undefined;
     function getAll(): Record<string, unknown>;
@@ -210,7 +215,10 @@ declare namespace shisho {
     function listZipEntries(archivePath: string): Promise<string[]>;
   }
 
-  // XML/HTML parsing (supports namespaced selectors via namespace map)
+  // XML/HTML parsing
+  // Selector syntax uses CSS Namespaces Level 3 (pipe notation: 'dc|title').
+  // The namespaces map binds prefixes to URIs for the query.
+  // Implemented in Go using encoding/xml parsing + custom selector matching.
   namespace xml {
     function parse(content: string): XMLDocument;
     function querySelector(doc: XMLDocument, selector: string, namespaces?: Record<string, string>): XMLElement | null;
@@ -231,6 +239,12 @@ Converts file formats to other formats during library scan. The converter writes
 Converter success or failure does not affect how the original file is treated.
 
 When multiple converters handle the same source type, all run independently on the original file. For example, a PDF→EPUB converter and a PDF→MOBI converter both produce their own output from the same PDF. Ordering controls execution sequence, not exclusivity.
+
+**targetDir lifecycle:**
+- The host creates a temporary directory per conversion invocation and passes it as `targetDir`
+- On success, the host moves the output file to the library alongside the source file
+- On failure or exception, the host deletes the temp dir — no cleanup needed in plugin code
+- If the destination filename already exists in the library (e.g., another converter already produced the same file), the conversion is treated as a runtime error: logged, stored on the plugin, and skipped
 
 ```typescript
 export const inputConverter: shisho.InputConverter = {
@@ -282,8 +296,8 @@ Extracts metadata from file formats. Use this when you want Shisho to natively s
 
 ```typescript
 export const fileParser: shisho.FileParser = {
+  // File extensions this parser handles (e.g., 'pdf', 'djvu')
   types: ['pdf', 'djvu'],
-  mimeTypes: ['application/pdf'],
 
   async parse(context: FileParseContext): Promise<ParsedMetadata> {
     const { filePath } = context;
@@ -291,15 +305,32 @@ export const fileParser: shisho.FileParser = {
 
     return {
       title: '...',
-      authors: [{ name: 'Author Name', role: 'author' }],
-      description: '...',
-      identifiers: [],
-      coverData: null,
-      coverMimeType: null,
+      subtitle: null,                    // Optional
+      authors: [{ name: 'Author Name', role: '' }],  // role: '' for generic, or 'writer', 'penciller', etc.
+      narrators: [],                     // Audiobook narrators
+      series: null,                      // Series name
+      seriesNumber: null,                // e.g., 1.5
+      genres: [],                        // Genre names
+      tags: [],                          // Tag names
+      description: null,
+      publisher: null,
+      imprint: null,
+      url: null,
+      releaseDate: null,                 // ISO 8601 string, converted to time.Time by host
+      coverData: null,                   // Uint8Array of image bytes
+      coverMimeType: null,               // 'image/jpeg' or 'image/png'
+      coverPage: null,                   // 0-indexed page for comic formats
+      duration: null,                    // Seconds (float) for audio formats
+      bitrateBps: null,                  // Audio bitrate
+      pageCount: null,                   // Page count for comic/document formats
+      identifiers: [],                   // [{ type: 'isbn_13', value: '...' }]
+      chapters: [],                      // [{ title, startPage?, startTimestampMs?, href?, children? }]
     };
   }
 };
 ```
+
+All fields except `title` are optional — return only what your parser can extract. The Go host maps the JS object to the internal `ParsedMetadata` struct.
 
 ### Output Generator
 
@@ -316,13 +347,16 @@ export const outputGenerator: shisho.OutputGenerator = {
 };
 ```
 
+The `sourceTypes` array determines which files can be converted to this format. The download API validates at request time: if the file's type isn't in the generator's `sourceTypes`, the request returns 400. The UI uses this to show only applicable download format options per file.
+
 ### Metadata Enricher
+
+Enrichers run in user-defined order (configured via the plugin ordering UI). For each metadata field, the **first enricher to provide a non-empty value wins** — subsequent enrichers cannot overwrite it. This means users should order their most trusted/preferred enricher first. The source of each field is tracked as the specific plugin that set it (e.g., `"plugin:shisho/goodreads-metadata"`).
 
 ```typescript
 export const metadataEnricher: shisho.MetadataEnricher = {
   name: 'Goodreads Metadata',
   fileTypes: ['epub', 'cbz', 'm4b'],
-  priority: 50,
 
   async enrich(context: EnrichmentContext): Promise<EnrichmentResult> {
     const { book, file, parsedMetadata } = context;
@@ -352,16 +386,7 @@ export const metadataEnricher: shisho.MetadataEnricher = {
 
 ### Identifier Types
 
-```typescript
-export const identifierTypes: shisho.IdentifierType[] = [
-  {
-    id: 'goodreads',
-    name: 'Goodreads ID',
-    urlTemplate: 'https://www.goodreads.com/book/show/{value}',
-    pattern: '^[0-9]+$',
-  }
-];
-```
+Identifier types are purely declarative — they are read from `manifest.json` only (no code export needed). The Go host registers them at load time from the manifest's `capabilities.identifierTypes` array.
 
 ### Multiple Hooks
 
@@ -372,7 +397,7 @@ A plugin can export multiple hooks:
 export const inputConverter: shisho.InputConverter = { /* ... */ };
 export const fileParser: shisho.FileParser = { /* ... */ };
 export const outputGenerator: shisho.OutputGenerator = { /* ... */ };
-export const identifierTypes: shisho.IdentifierType[] = [ /* ... */ ];
+// identifierTypes are declarative — defined in manifest.json only, not exported from code
 ```
 
 ## Repository System
@@ -402,7 +427,7 @@ Repositories are GitHub-hosted JSON files listing available plugins:
           "sha256": "abc123..."
         }
       ],
-      "capabilities": ["metadataEnricher", "identifierTypes", "httpAccess"],
+      "capabilities": ["metadataEnricher", "identifierTypes", "httpAccess"],  // For pre-install display/filtering in plugin browser
       "iconUrl": "https://..../icon.png"
     }
   ]
@@ -546,8 +571,8 @@ Plugins execute at specific points during the library scan process:
    a. Read manifest.json
    b. Validate manifest version and minShishoVersion
    c. Create isolated goja runtime context
-   d. Execute main.js
-   e. Extract exported hooks, validate against declared capabilities
+   d. Execute main.js (IIFE assigns exports to `plugin` global)
+   e. Read hook implementations from `plugin` global, validate against declared capabilities
    f. Register hooks with plugin manager
    g. On error: log, store in plugins.load_error, continue
 5. Sort hooks by user-defined order
@@ -574,12 +599,15 @@ Plugins execute at specific points during the library scan process:
 ```
 1. Daily job fetches all repository manifests
 2. Compares installed versions to available versions
-3. Sets plugins.update_available_version for outdated plugins
-4. UI shows "Update available" badge
-5. User clicks update
-6. Download new version, replace files
-7. Hot-reload: new version loaded without restart
+3. Filters: only versions with a manifestVersion supported by this Shisho release are considered
+4. Sets plugins.update_available_version for the latest compatible version (if newer than installed)
+5. UI shows "Update available" badge
+6. User clicks update
+7. Download new version, verify SHA256, replace files
+8. Hot-reload: new version loaded without restart
 ```
+
+If a plugin's only newer versions require a manifestVersion that Shisho doesn't support, no update is shown. The user sees a note like "Newer versions available but require Shisho v2.0+" in the plugin details.
 
 ### Hot-Reload Mechanics
 
@@ -588,13 +616,16 @@ Plugins are loaded and unloaded without requiring an app restart:
 ```
 1. Create new goja runtime for the plugin
 2. Execute new main.js, extract and validate hooks
-3. Wait for any in-progress hook calls on old runtime to complete
-4. Atomically swap hook references in plugin manager
-5. Tear down old runtime
-6. Re-register identifier types (diff and update database)
+3. Acquire plugin's write lock (blocks until all in-progress hook calls complete)
+4. Swap hook references in plugin manager
+5. Release write lock
+6. Tear down old runtime
+7. Re-register identifier types (diff and update database)
 ```
 
-This works because plugins are stateless—configuration lives in the database, not in the runtime. In-progress operations (e.g., a scan midway through) complete using the old hooks; subsequent invocations use the new ones.
+**Concurrency mechanism:** Each plugin has a `sync.RWMutex`. Hook invocations acquire a read lock; hot-reload acquires a write lock. This means a reload blocks until all in-progress hooks finish (up to the hook's timeout), then subsequent invocations use the new runtime. A long-running conversion (up to 5 min) will delay the reload, which is acceptable since the user explicitly triggered the update.
+
+This works because plugins are stateless—configuration lives in the database, not in the runtime.
 
 ## API Endpoints
 
@@ -647,21 +678,27 @@ POST   /api/plugins/scan                      # Scan for manual installs
 - List with scope, URL, last sync, status
 - Official repo marked with star, cannot be removed
 - "Add Repository" form with scope confirmation
-- Duplicate scope prevention with error message
+- Duplicate scope prevention: if the suggested scope conflicts with an existing one, the user must choose a different scope before adding
 
 ### Security Warnings
 
-Displayed during installation and in repository management:
+Displayed during installation, tailored to the plugin's declared capabilities:
 
 ```
-⚠️ Security Warning
+⚠️ This plugin requests the following permissions:
 
-Plugins run code on your server with full access to:
-• Network requests (can contact external services)
-• File system (can read/write files)
-• Your library data (books, metadata, settings)
+• Network access to: goodreads.com, api.goodreads.com
+• Read access to library files
+• Metadata enrichment (can modify book metadata)
 
 Only install plugins from sources you trust.
+```
+
+The warning is generated from the plugin's manifest capabilities. Plugins without `httpAccess` show no network line; plugins without `fileAccess` show no filesystem line. A generic fallback is shown in repository management:
+
+```
+⚠️ Third-party plugins can request access to network, files,
+and library data. Review each plugin's permissions before installing.
 ```
 
 ## Error Handling
@@ -703,6 +740,8 @@ Execution timeouts per hook type:
 
 When a timeout is reached, the plugin receives a context cancellation and should clean up gracefully. The operation is treated as a runtime error (see table above).
 
+**Known v1 limitation:** There is no memory sandboxing. A misbehaving plugin could allocate unbounded memory within the host process. Timeouts protect against CPU exhaustion, but memory limits are deferred to a future version. Users can disable plugins that cause performance issues.
+
 ## Developer Experience
 
 ### Provided by Shisho
@@ -732,11 +771,14 @@ require('esbuild').build({
   entryPoints: ['src/main.ts'],
   bundle: true,
   outfile: 'dist/main.js',
-  format: 'esm',
+  format: 'iife',
+  globalName: 'plugin',
   platform: 'neutral',
   target: 'es2020',
 });
 ```
+
+This bundles the TypeScript source (which uses `export const`) into an IIFE that assigns all exports to `var plugin = { inputConverter: {...}, fileParser: {...}, ... }`. The Go host evaluates the script then reads hook implementations from the `plugin` global object in the goja runtime. Plugin developers write standard `export const` in TypeScript — the IIFE wrapping is transparent.
 
 ### Local Development
 
