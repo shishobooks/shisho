@@ -5,7 +5,7 @@ This document describes the architecture for Shisho's plugin system, enabling th
 ## Overview
 
 The plugin system allows users to install plugins that:
-- Convert unsupported file formats to supported ones (PDF → EPUB, MOBI → EPUB, etc.)
+- Convert file formats to other formats (PDF → EPUB, EPUB → MOBI, etc.)
 - Parse new file formats for metadata extraction
 - Generate new output/download formats (MOBI, AZW3, etc.)
 - Enrich metadata from external sources (Goodreads, OpenLibrary, etc.)
@@ -23,7 +23,17 @@ Plugins are JavaScript files executed in an embedded interpreter (goja). Plugin 
 | Repository hosting | GitHub only | Security (no arbitrary domains), reliable CDN |
 | Config storage | Database | UI-editable, survives plugin updates |
 | Processing order | User-defined | Deterministic, explicit control |
-| Load timing | App startup | Simpler state management, predictable |
+| Load timing | App startup + hot-reload | Initial load at startup; install/update/enable hot-reloads without restart |
+
+## Versioning Strategy
+
+Two version fields control plugin compatibility:
+
+- **`manifestVersion`** - The plugin API contract version. When Shisho makes breaking changes to plugin APIs, it introduces a new manifest version. Shisho declares which manifest versions it supports; plugins with unsupported versions receive a clear incompatibility error. This is the primary compatibility mechanism.
+
+- **`minShishoVersion`** - The minimum Shisho release required for a non-breaking feature dependency (e.g., "I need the archive API added in 1.3"). Does not imply breaking changes.
+
+This means plugin authors don't need to predict future breaking changes (no `maxShishoVersion`). Shisho controls the compatibility boundary through manifest versions.
 
 ## Plugin Structure
 
@@ -81,6 +91,27 @@ my-plugin/
       "type": "boolean",
       "label": "Include Reviews",
       "default": false
+    },
+    "timeout": {
+      "type": "number",
+      "label": "Request Timeout (seconds)",
+      "default": 30,
+      "min": 5,
+      "max": 120
+    },
+    "outputFormat": {
+      "type": "select",
+      "label": "Output Format",
+      "options": [
+        { "value": "epub", "label": "EPUB" },
+        { "value": "mobi", "label": "MOBI" }
+      ],
+      "default": "epub"
+    },
+    "customTemplate": {
+      "type": "textarea",
+      "label": "Custom Template",
+      "description": "Template for metadata formatting"
     }
   }
 }
@@ -89,18 +120,55 @@ my-plugin/
 ### Capability Types
 
 **v1 (Priority):**
-- `inputConverter` - Convert unsupported formats to supported ones during scan
+- `inputConverter` - Convert file formats during scan
 - `fileParser` - Parse new file formats for metadata extraction
 - `outputGenerator` - Generate download formats
 - `metadataEnricher` - Enrich metadata during sync
 - `identifierTypes` - Register custom identifier types
-- `httpAccess` - Make HTTP requests (with domain list)
-- `fileAccess` - Access files outside plugin directory
+- `httpAccess` - Make HTTP requests (with domain restrictions)
+- `fileAccess` - Access library files (read or read-write)
 
 **Future (v2+):**
 - `apiEndpoints` - Register custom API routes
 - `uiComponents` - Provide React components
 - `sidecarFields` - Add custom sidecar fields
+
+### HTTP Access Rules
+
+The `httpAccess` capability declares allowed domains:
+
+```json
+{
+  "httpAccess": {
+    "description": "Calls Goodreads API to fetch book data",
+    "domains": ["goodreads.com", "api.goodreads.com"]
+  }
+}
+```
+
+Security rules:
+- **Subdomains**: Must be listed explicitly. `goodreads.com` does not allow `api.goodreads.com`.
+- **Redirects**: Requests that redirect to an unlisted domain are blocked. The plugin receives an error.
+- **Ports**: Only standard ports (80/443) unless explicitly specified (e.g., `example.com:8080`).
+
+### File Access Levels
+
+Without `fileAccess`, plugins can only access their own directory and temp dirs. The `fileAccess` capability grants access to library files:
+
+```json
+{
+  "fileAccess": {
+    "level": "read",
+    "description": "Reads source files for metadata extraction"
+  }
+}
+```
+
+Levels:
+- `"read"` - Read-only access to library files
+- `"readwrite"` - Read and write access to library files (write implies read)
+
+The level is displayed to the user during installation so they understand what the plugin can do.
 
 ## Plugin APIs
 
@@ -134,7 +202,7 @@ declare namespace shisho {
     function tempDir(): string;
   }
 
-  // Archive utilities
+  // Archive utilities (ZIP-only for v1; namespace allows future format expansion)
   namespace archive {
     function extractZip(archivePath: string, destDir: string): Promise<void>;
     function createZip(srcDir: string, destPath: string): Promise<void>;
@@ -142,11 +210,12 @@ declare namespace shisho {
     function listZipEntries(archivePath: string): Promise<string[]>;
   }
 
-  // XML/HTML parsing
+  // XML/HTML parsing (supports namespaced selectors via namespace map)
   namespace xml {
     function parse(content: string): XMLDocument;
-    function querySelector(doc: XMLDocument, selector: string): XMLElement | null;
-    function querySelectorAll(doc: XMLDocument, selector: string): XMLElement[];
+    function querySelector(doc: XMLDocument, selector: string, namespaces?: Record<string, string>): XMLElement | null;
+    function querySelectorAll(doc: XMLDocument, selector: string, namespaces?: Record<string, string>): XMLElement[];
+    // Usage: querySelector(doc, 'dc|title', { dc: 'http://purl.org/dc/elements/1.1/' })
   }
 }
 ```
@@ -155,17 +224,21 @@ declare namespace shisho {
 
 ### Input Converter
 
-Converts unsupported file formats to supported ones during library scan. The converted file is written alongside the original, and Shisho indexes both:
-- If the original format is supported (e.g., MOBI), both become main files
-- If the original format is unsupported (e.g., PDF), it becomes a supplemental file
+Converts file formats to other formats during library scan. The converter writes a new file alongside the original. Both files are indexed independently based on parser availability:
+- If a parser exists for the original format (built-in or plugin), it's tracked as a main file
+- If no parser exists for the original format, it's tracked as a supplement file (visible in UI, downloadable, but no parsed metadata)
+
+Converter success or failure does not affect how the original file is treated.
+
+When multiple converters handle the same source type, all run independently on the original file. For example, a PDF→EPUB converter and a PDF→MOBI converter both produce their own output from the same PDF. Ordering controls execution sequence, not exclusivity.
 
 ```typescript
 export const inputConverter: shisho.InputConverter = {
-  // Extensions this converter handles
-  sourceExtensions: ['.pdf', '.mobi', '.doc'],
+  // Types this converter handles
+  sourceTypes: ['pdf', 'mobi', 'doc'],
 
-  // What it converts to (must be a Shisho-supported format)
-  targetExtension: '.epub',
+  // What it converts to
+  targetType: 'epub',
 
   async convert(context: ConvertContext): Promise<ConvertResult> {
     const { sourcePath, targetDir } = context;
@@ -173,9 +246,9 @@ export const inputConverter: shisho.InputConverter = {
     // Read source file
     const data = await shisho.fs.readFile(sourcePath);
 
-    // Convert and write to target directory
-    const baseName = sourcePath.replace(/\.[^.]+$/, '');
-    const targetPath = `${targetDir}/${baseName}.epub`;
+    // Plugin controls the output filename (useful for adding metadata like narrator)
+    const sourceBaseName = sourcePath.split('/').pop().replace(/\.[^.]+$/, '');
+    const targetPath = `${targetDir}/${sourceBaseName}.epub`;
 
     // ... conversion logic ...
 
@@ -196,8 +269,8 @@ export const inputConverter: shisho.InputConverter = {
   "capabilities": {
     "inputConverter": {
       "description": "Converts PDF and MOBI files to EPUB for indexing",
-      "sourceExtensions": [".pdf", ".mobi"],
-      "targetExtension": ".epub"
+      "sourceTypes": ["pdf", "mobi"],
+      "targetType": "epub"
     }
   }
 }
@@ -209,7 +282,7 @@ Extracts metadata from file formats. Use this when you want Shisho to natively s
 
 ```typescript
 export const fileParser: shisho.FileParser = {
-  extensions: ['.pdf', '.djvu'],
+  types: ['pdf', 'djvu'],
   mimeTypes: ['application/pdf'],
 
   async parse(context: FileParseContext): Promise<ParsedMetadata> {
@@ -447,6 +520,22 @@ CREATE TABLE plugin_order (
 
 ## Plugin Lifecycle
 
+### Hook Execution During Scan
+
+Plugins execute at specific points during the library scan process:
+
+```
+1. Discover files in library → initial file list
+2. Run inputConverters on discovered files
+   ├─ All matching converters run on each file (order = execution sequence, not exclusivity)
+   └─ Newly created files added back to scan list for full processing
+3. Detect file types (built-in + plugin fileParsers)
+4. Parse metadata from detected files
+   └─ Files with no parser tracked as supplement (visible, downloadable, no metadata)
+5. Run metadataEnrichers on parsed files
+6. Save to database
+```
+
 ### Startup Loading
 
 ```
@@ -477,7 +566,7 @@ CREATE TABLE plugin_order (
 7. User confirms
 8. Insert row into plugins table (enabled = false)
 9. User enables plugin
-10. Restart required to load
+10. Hot-reload: plugin loaded without restart
 ```
 
 ### Update Flow
@@ -489,8 +578,23 @@ CREATE TABLE plugin_order (
 4. UI shows "Update available" badge
 5. User clicks update
 6. Download new version, replace files
-7. Restart to load new version
+7. Hot-reload: new version loaded without restart
 ```
+
+### Hot-Reload Mechanics
+
+Plugins are loaded and unloaded without requiring an app restart:
+
+```
+1. Create new goja runtime for the plugin
+2. Execute new main.js, extract and validate hooks
+3. Wait for any in-progress hook calls on old runtime to complete
+4. Atomically swap hook references in plugin manager
+5. Tear down old runtime
+6. Re-register identifier types (diff and update database)
+```
+
+This works because plugins are stateless—configuration lives in the database, not in the runtime. In-progress operations (e.g., a scan midway through) complete using the old hooks; subsequent invocations use the new ones.
 
 ## API Endpoints
 
@@ -576,13 +680,28 @@ Only install plugins from sources you trust.
 
 | Error | Behavior |
 |-------|----------|
-| Converter exception | Log, skip conversion, original file not indexed |
+| Converter exception | Log, skip conversion. Original still indexed normally (main if parser exists, supplement if not). |
 | Enricher exception | Log, continue to next enricher |
 | Parser exception | Log, skip file with error status |
 | Generator exception | Log, return 500 to request |
 | HTTP timeout | Plugin receives error, handles it |
 
 Errors are logged and stored in `plugins.load_error` for display in UI.
+
+### Isolation and Timeouts
+
+Each plugin runs in its own goja runtime. A crash or panic in one plugin does not affect others or the host application.
+
+Execution timeouts per hook type:
+
+| Hook Type | Timeout |
+|-----------|---------|
+| inputConverter | 5 minutes |
+| outputGenerator | 5 minutes |
+| fileParser | 1 minute |
+| metadataEnricher | 1 minute |
+
+When a timeout is reached, the plugin receives a context cancellation and should clean up gracefully. The operation is treated as a runtime error (see table above).
 
 ## Developer Experience
 
@@ -626,7 +745,7 @@ cd my-plugin/
 npm install
 npm run build
 cp -r dist/main.js manifest.json /config/plugins/installed/local/my-plugin/
-# Restart Shisho to load
+# Run POST /api/plugins/scan to detect, then enable in UI (hot-reloads automatically)
 ```
 
 ## Implementation Phases
@@ -637,6 +756,7 @@ cp -r dist/main.js manifest.json /config/plugins/installed/local/my-plugin/
 - Database tables and migrations
 - Basic API endpoints (list, install, enable/disable)
 - Configuration loading from database
+- Hot-reload mechanics (load/unload without restart)
 
 ### Phase 2: Hook Implementations
 - `inputConverter` integration in scan worker (convert before indexing)
