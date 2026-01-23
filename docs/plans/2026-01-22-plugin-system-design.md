@@ -61,6 +61,11 @@ my-plugin/
   "minShishoVersion": "1.0.0",
 
   "capabilities": {
+    "inputConverter": {
+      "description": "Converts PDF files to EPUB for indexing",
+      "sourceTypes": ["pdf"],
+      "targetType": "epub"
+    },
     "metadataEnricher": {
       "description": "Fetches additional metadata from Goodreads API",
       "fileTypes": ["epub", "cbz", "m4b"]
@@ -119,6 +124,13 @@ my-plugin/
 
 **Config validation:** Constraints (`required`, `min`, `max`, `options`) are validated when the user saves config in the UI. The save is rejected if validation fails. At plugin load time, config is read from the database as-is. If required fields are unset (user hasn't configured yet), the plugin still loads but the UI shows a "Needs configuration" badge. Plugins must handle `undefined` from `config.get()` gracefully.
 
+**Secret handling:** Fields with `"secret": true` are stored as plain text in the database (SQLite is a local file; encryption at rest adds complexity without meaningful security for a self-hosted app). The `secret` flag affects only presentation: the UI renders a password input, and the GET API for plugin config returns `"***"` for secret fields (or `null` if unset) rather than the actual value. This prevents accidental exposure in the browser while keeping the implementation simple.
+
+**Config schema evolution:** Config values are stored independently of the schema — the schema is only used for UI rendering and validation. When a plugin update changes its configSchema:
+- Existing values for keys still in the schema are preserved.
+- Values for removed keys remain in the database but are invisible in the UI. `config.get()` still returns them if the plugin code reads them (useful for backwards-compatible migrations within plugin code).
+- New keys start as unset (`undefined` from `config.get()` until configured by the user).
+
 ### Capability Types
 
 **v1 (Priority):**
@@ -153,6 +165,8 @@ Security rules:
 - **Redirects**: Requests that redirect to an unlisted domain are blocked. The plugin receives an error.
 - **Ports**: Only standard ports (80/443) unless explicitly specified (e.g., `example.com:8080`).
 
+**Why this is enforceable:** goja is a bare JS interpreter with no built-in network I/O — there's no native `fetch`, `XMLHttpRequest`, `http` module, or WebSocket. The only way plugins can make network requests is through the host-provided `shisho.http.fetch`, which enforces domain restrictions. npm packages that attempt network calls will fail at runtime since the underlying primitives don't exist. The same applies to `shisho.fs` — there's no `fs` module or file API available outside of what the host provides.
+
 ### File Access Levels
 
 The `fileAccess` capability controls access to the `shisho.fs.*` API for **arbitrary** library file operations. Without it, `shisho.fs` calls are restricted to the plugin's own directory and temp dirs.
@@ -180,8 +194,14 @@ Plugins access Shisho functionality through a global `shisho` object:
 
 ```typescript
 declare namespace shisho {
-  // Logging
-  function log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
+  // Logging — logs go to the app logger with a structured `plugin` field (e.g., "shisho/goodreads-metadata").
+  // During scan jobs, also captured in job logs. Log level filtering follows app config.
+  namespace log {
+    function debug(message: string): void;
+    function info(message: string): void;
+    function warn(message: string): void;
+    function error(message: string): void;
+  }
 
   // Configuration (plugin-specific settings, validated on save via UI)
   // Returns undefined for unset keys. Plugins should handle missing config gracefully.
@@ -195,6 +215,22 @@ declare namespace shisho {
     function fetch(url: string, options?: RequestOptions): Promise<Response>;
   }
 
+  interface RequestOptions {
+    method?: string;       // GET, POST, PUT, DELETE, etc. Default: GET
+    headers?: Record<string, string>;
+    body?: string | Uint8Array;
+  }
+
+  interface Response {
+    ok: boolean;           // true if status 200-299
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    json(): Promise<any>;
+    text(): Promise<string>;
+    bytes(): Promise<Uint8Array>;
+  }
+
   // File operations (respects fileAccess capability)
   namespace fs {
     function readFile(path: string): Promise<Uint8Array>;
@@ -204,10 +240,15 @@ declare namespace shisho {
     function exists(path: string): Promise<boolean>;
     function mkdir(path: string): Promise<void>;
     function listDir(path: string): Promise<string[]>;
+    // Returns a per-invocation temp directory. Same path if called multiple times
+    // within one hook invocation. Cleaned up by the host after the hook completes
+    // (regardless of success/failure). For persistent storage, use fileAccess.
     function tempDir(): string;
   }
 
   // Archive utilities (ZIP-only for v1; namespace allows future format expansion)
+  // No separate capability required — follows the same path-level access rules as shisho.fs
+  // (hook-provided paths, temp dirs, and library files if fileAccess is declared).
   namespace archive {
     function extractZip(archivePath: string, destDir: string): Promise<void>;
     function createZip(srcDir: string, destPath: string): Promise<void>;
@@ -225,26 +266,68 @@ declare namespace shisho {
     function querySelectorAll(doc: XMLDocument, selector: string, namespaces?: Record<string, string>): XMLElement[];
     // Usage: querySelector(doc, 'dc|title', { dc: 'http://purl.org/dc/elements/1.1/' })
   }
+
+  interface XMLElement {
+    tag: string;              // Local name (e.g., "title")
+    namespace: string;        // Namespace URI (e.g., "http://purl.org/dc/elements/1.1/")
+    attributes: Record<string, string>;
+    text: string;             // Text content (concatenated text nodes)
+    children: XMLElement[];
+  }
+
+  type XMLDocument = XMLElement;  // Root element
 }
 ```
+
+**Hook context types:** The `book` and `file` objects passed to hooks are read-only snapshots — modifications do not affect the database.
+
+```typescript
+interface BookContext {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  authors: Array<{ name: string; role: string }>;
+  narrators: string[];
+  series: { name: string; number: number | null } | null;
+  description: string | null;
+  publisher: string | null;
+  imprint: string | null;
+  genres: string[];
+  tags: string[];
+}
+
+interface FileContext {
+  id: string;
+  name: string;
+  fileType: string;
+  identifiers: Array<{ type: string; value: string }>;
+  chapters: Array<{ title: string; startPage?: number; startTimestampMs?: number }>;
+  duration: number | null;          // Seconds (audio formats)
+  bitrateBps: number | null;        // Audio bitrate
+  pageCount: number | null;         // Comic/document formats
+  coverPage: number | null;         // 0-indexed (comic formats)
+}
+```
+
+**Error propagation:** All async `shisho.*` functions return rejected promises on error (e.g., access denied, domain not allowed, file not found). The rejection value is an `Error` with a descriptive message. Sync functions (like `tempDir()`) throw on error. Plugin authors can use standard try/catch or `.catch()` patterns.
 
 ## Hook Interfaces
 
 ### Input Converter
 
-Converts file formats to other formats during library scan. The converter writes a new file alongside the original. Both files are indexed independently based on parser availability:
-- If a parser exists for the original format (built-in or plugin), it's tracked as a main file
-- If no parser exists for the original format, it's tracked as a supplement file (visible in UI, downloadable, but no parsed metadata)
+Converts file formats to other formats during library scan. The converter writes a new file alongside the original. Both the source and target files are indexed independently based on parser availability:
+- If a parser exists for the file's format (built-in or plugin), it's tracked as a main file with parsed metadata
+- If no parser exists for the file's format, it's tracked as a supplement file (visible in UI, downloadable, but no parsed metadata)
 
-Converter success or failure does not affect how the original file is treated.
+This rule applies symmetrically — a converter's target file without a matching parser becomes a supplement, just like a source file without a parser. Converter success or failure does not affect how the original file is treated.
 
-When multiple converters handle the same source type, all run independently on the original file. For example, a PDF→EPUB converter and a PDF→MOBI converter both produce their own output from the same PDF. Ordering controls execution sequence, not exclusivity.
+Multiple converters can handle the same source type as long as they target different formats. For example, a PDF→EPUB converter and a PDF→MOBI converter both produce their own output from the same PDF. However, for a given source→target pair, only the first converter in the user-defined order runs — subsequent converters for the same pair are skipped (same pattern as file parsers). The ordering UI's "Input Converters" tab controls this priority.
 
 **targetDir lifecycle:**
 - The host creates a temporary directory per conversion invocation and passes it as `targetDir`
 - On success, the host moves the output file to the library alongside the source file
 - On failure or exception, the host deletes the temp dir — no cleanup needed in plugin code
-- If the destination filename already exists in the library (e.g., another converter already produced the same file), the conversion is treated as a runtime error: logged, stored on the plugin, and skipped
+- If the destination filename already exists in the library (e.g., a converter from a different source type already produced the same file), the conversion is treated as a runtime error: logged and skipped
 
 ```typescript
 export const inputConverter: shisho.InputConverter = {
@@ -332,6 +415,12 @@ export const fileParser: shisho.FileParser = {
 
 All fields except `title` are optional — return only what your parser can extract. The Go host maps the JS object to the internal `ParsedMetadata` struct.
 
+**Scan integration:** Plugin file parsers run after the built-in parser switch (EPUB/CBZ/M4B). When a plugin registers a fileParser with `types: ['pdf', 'djvu']`, those extensions are added to the set of scannable file types (alongside `.epub`, `.cbz`, `.m4b`). Files with plugin-registered extensions are discovered during library walks, stored with the plugin-registered `FileType` value (e.g., `"pdf"`), and parsed by the plugin. The `FileType` is derived from the extension string in the plugin's `types` array — the plugin effectively registers new file type constants.
+
+**Built-in extensions are reserved:** Plugin file parsers cannot override built-in parsers (epub, cbz, m4b). The built-in switch runs unconditionally for these extensions. If a plugin declares a built-in extension in its `types` array, that extension is ignored with a load-time warning. Plugins can only register parsers for extensions not claimed by built-in parsers.
+
+**Conflicting plugin parsers:** If multiple plugins register a fileParser for the same extension, the plugin ordering (configured via the "File Parsers" tab in the ordering UI) determines which one runs. Only the first enabled parser for a given extension is used — subsequent parsers for the same extension are skipped. The UI shows a warning when multiple parsers claim the same extension so users understand the ordering matters.
+
 ### Output Generator
 
 ```typescript
@@ -340,24 +429,49 @@ export const outputGenerator: shisho.OutputGenerator = {
   name: 'MOBI (Kindle)',
   sourceTypes: ['epub'],
 
+  // GenerateContext = { sourcePath: string, destPath: string, book: BookContext, file: FileContext }
   async generate(context: GenerateContext): Promise<void> {
     const { sourcePath, destPath, book, file } = context;
     // Convert source to output format, write to destPath
+  },
+
+  // Returns a string that changes when the output would differ.
+  // Used by the download cache to invalidate stale entries.
+  // FingerprintContext = { book: BookContext, file: FileContext }
+  // Include config values if they affect output (e.g., shisho.config.get('quality')).
+  fingerprint(context: FingerprintContext): string {
+    const { book, file } = context;
+    return `${file.id}:${book.title}:${shisho.config.get('quality')}`;
   }
 };
 ```
 
 The `sourceTypes` array determines which files can be converted to this format. The download API validates at request time: if the file's type isn't in the generator's `sourceTypes`, the request returns 400. The UI uses this to show only applicable download format options per file.
 
+**Download integration:** Plugin output generators integrate with the download system the same way KePub does — as an additional format option. Specifically:
+
+- When a library's `DownloadFormat` is set to `"ask"`, plugin-registered formats appear as options in the format selection UI alongside built-in formats (Original, KePub). Only formats whose `sourceTypes` include the file's type are shown.
+- Plugin formats are also available as a `DownloadFormat` setting value, so users can set a plugin format as their default.
+- OPDS feeds include plugin-generated formats as additional acquisition links (similar to how KePub links are added).
+- The download cache calls the plugin's `fingerprint()` function to determine cache validity. If the fingerprint changes, a new cached version is generated.
+- The download endpoint accepts the plugin generator's `id` as the format parameter (e.g., `/api/files/:id/download?format=mobi`).
+
 ### Metadata Enricher
 
-Enrichers run in user-defined order (configured via the plugin ordering UI). For each metadata field, the **first enricher to provide a non-empty value wins** — subsequent enrichers cannot overwrite it. This means users should order their most trusted/preferred enricher first. The source of each field is tracked as the specific plugin that set it (e.g., `"plugin:shisho/goodreads-metadata"`).
+Enrichers run in user-defined order (configured via the plugin ordering UI). Enrichment operates at the **field level** — each field is set independently by the first enricher to provide a non-empty value. If enricher A provides `description` and enricher B provides `genres`, both values are used. Once a field is set by an enricher, subsequent enrichers cannot overwrite it. Users should order their most trusted/preferred enricher first.
+
+**Empty value rules:** A value is considered "empty" (and thus does not claim the field) if it is `null`, `undefined`, or `""` (empty string). Values like `false`, `0`, and `[]` are considered non-empty and will claim the field.
+
+**Priority integration:** Enricher results use a new `DataSourcePlugin` priority level, which sits between file metadata and sidecar metadata in the existing priority system. The source is tracked as the specific plugin that set each field (e.g., `"plugin:shisho/goodreads-metadata"`), enabling the UI to show provenance per field. Manual user edits and sidecar metadata still take precedence over plugin-enriched values.
 
 ```typescript
 export const metadataEnricher: shisho.MetadataEnricher = {
   name: 'Goodreads Metadata',
   fileTypes: ['epub', 'cbz', 'm4b'],
 
+  // EnrichmentContext = { book: BookContext, file: FileContext, parsedMetadata: ParsedMetadata }
+  // parsedMetadata is the fresh file parser output (same shape as fileParser.parse() returns).
+  // book/file are the current DB state for comparison.
   async enrich(context: EnrichmentContext): Promise<EnrichmentResult> {
     const { book, file, parsedMetadata } = context;
 
@@ -383,6 +497,8 @@ export const metadataEnricher: shisho.MetadataEnricher = {
   }
 };
 ```
+
+**`modified` flag:** When `modified: false`, the host skips field inspection entirely and moves to the next enricher — this is an early-exit optimization for the common "nothing found" path. When `modified: true`, the host inspects each field in `metadata` individually, applying the "first non-empty wins" rule per field.
 
 ### Identifier Types
 
@@ -427,7 +543,7 @@ Repositories are GitHub-hosted JSON files listing available plugins:
           "sha256": "abc123..."
         }
       ],
-      "capabilities": ["metadataEnricher", "identifierTypes", "httpAccess"],  // For pre-install display/filtering in plugin browser
+      "hookTypes": ["metadataEnricher"],  // For plugin browser filtering (not security — that comes from actual manifest)
       "iconUrl": "https://..../icon.png"
     }
   ]
@@ -533,6 +649,8 @@ CREATE TABLE plugin_identifier_types (
 );
 
 -- Plugin processing order per hook type
+-- New plugins are appended to the end (MAX(position) + 1) for each hook type they provide.
+-- Users can reorder via the UI to change priority.
 CREATE TABLE plugin_order (
     hook_type TEXT NOT NULL,
     scope TEXT NOT NULL,
@@ -550,9 +668,10 @@ CREATE TABLE plugin_order (
 Plugins execute at specific points during the library scan process:
 
 ```
-1. Discover files in library → initial file list
+1. Discover files in library → initial file list (extensions from built-in + plugin fileParsers)
 2. Run inputConverters on discovered files
-   ├─ All matching converters run on each file (order = execution sequence, not exclusivity)
+   ├─ For each source→target pair, only the first converter in order runs
+   ├─ Different target types run independently (e.g., PDF→EPUB and PDF→MOBI both produce output)
    └─ Newly created files added back to scan list for full processing
 3. Detect file types (built-in + plugin fileParsers)
 4. Parse metadata from detected files
@@ -560,6 +679,8 @@ Plugins execute at specific points during the library scan process:
 5. Run metadataEnrichers on parsed files
 6. Save to database
 ```
+
+**Note:** `outputGenerator` hooks are **not** part of the scan flow. They run on-demand when a user requests a download in a plugin-registered format, using the same lazy-generation pattern as built-in formats (via the download cache).
 
 ### Startup Loading
 
@@ -586,13 +707,35 @@ Plugins execute at specific points during the library scan process:
 2. Download plugin zip from GitHub release URL
 3. Verify SHA256 checksum
 4. Extract to /config/plugins/installed/{scope}/{plugin-id}/
-5. Read manifest.json, validate structure
-6. Show capabilities and security warning to user
+5. Read manifest.json, validate structure and manifestVersion
+   └─ If manifestVersion is unsupported: fail with "Requires a newer version of Shisho"
+6. Show capabilities and security warning to user (generated from actual manifest.json)
 7. User confirms
-8. Insert row into plugins table (enabled = false)
-9. User enables plugin
-10. Hot-reload: plugin loaded without restart
+8. Insert row into plugins table (enabled = true)
+9. Hot-reload: create runtime, execute main.js, register hooks — plugin is active immediately
 ```
+
+If the user declines at step 7, the extracted files are cleaned up. The plugin browser UI only shows installable versions — plugins with no compatible version (all versions require an unsupported manifestVersion) are greyed out with a note like "Requires Shisho v2.0+".
+
+**New file type prompt:** If the installed plugin provides a `fileParser` hook, the UI shows a prompt after installation: "This plugin adds support for new file types (.pdf, .djvu). Run a library scan to index existing files?" with a "Scan Now" button. No automatic rescan — the user stays in control.
+
+### Uninstallation Flow
+
+```
+1. User clicks "Uninstall" in plugin management UI
+2. UI shows warning: "Files processed by this plugin will retain their current metadata."
+3. User confirms
+4. Acquire plugin write lock (wait for in-progress hooks to complete)
+5. Deregister hooks from plugin manager
+6. Delete plugin_identifier_types rows (file_identifiers preserved as unlinked)
+7. Delete plugin_order rows for this plugin
+8. Delete plugin_configs rows (CASCADE)
+9. Delete plugins row
+10. Remove plugin directory from /config/plugins/installed/{scope}/{plugin-id}/
+11. Release lock, tear down runtime
+```
+
+No data reprocessing occurs. Files parsed by the plugin retain their metadata and file type (but become un-reparseable until reinstalled). Enricher-sourced metadata fields are preserved. Converted files remain in the library.
 
 ### Update Flow
 
@@ -620,8 +763,15 @@ Plugins are loaded and unloaded without requiring an app restart:
 4. Swap hook references in plugin manager
 5. Release write lock
 6. Tear down old runtime
-7. Re-register identifier types (diff and update database)
+7. Re-register identifier types (diff and update database):
+   - New types: insert into plugin_identifier_types
+   - Removed types: delete from plugin_identifier_types (existing file_identifiers rows are preserved as unlinked — displayed as plain text without URL template or validation)
+8. Update hook ordering (diff old vs new hooks):
+   - New hook types: append to plugin_order (MAX(position) + 1)
+   - Removed hook types: delete from plugin_order, compact remaining positions (shift down to eliminate gaps)
 ```
+
+**Enable/disable:** Disabling a plugin performs a full unload — hooks are deregistered and the goja runtime is torn down (freeing memory). Enabling performs a full load — a fresh runtime is created, main.js is executed, and hooks are registered. The plugin's database row, config, and ordering position are preserved across disable/enable cycles.
 
 **Concurrency mechanism:** Each plugin has a `sync.RWMutex`. Hook invocations acquire a read lock; hot-reload acquires a write lock. This means a reload blocks until all in-progress hooks finish (up to the hook's timeout), then subsequent invocations use the new runtime. A long-running conversion (up to 5 min) will delay the reload, which is acceptable since the user explicitly triggered the update.
 
@@ -659,8 +809,8 @@ POST   /api/plugins/scan                      # Scan for manual installs
 
 ### Plugin Browser (`/settings/plugins/browse`)
 - Search/filter available plugins from all repos
-- Shows name, description, author, capabilities, install status
-- "Install" button with capabilities confirmation dialog
+- Shows name, description, author, hook types, install status
+- "Install" button (downloads, then shows capabilities confirmation from actual manifest)
 
 ### Installed Plugins (`/settings/plugins/installed`)
 - List with enable/disable toggles
@@ -668,6 +818,8 @@ POST   /api/plugins/scan                      # Scan for manual installs
 - "Configure" button for plugin settings
 - "Update available" badge
 - "Uninstall" button
+
+**Job logs integration:** The job logs UI gains a plugin filter dropdown, allowing users to view logs from a specific plugin. Plugin logs carry a structured `plugin` field (`"scope/id"`) for filtering.
 
 ### Plugin Ordering (`/settings/plugins/order`)
 - Tabs per hook type (Input Converters, Metadata Enrichers, File Parsers, Output Generators)
@@ -682,7 +834,7 @@ POST   /api/plugins/scan                      # Scan for manual installs
 
 ### Security Warnings
 
-Displayed during installation, tailored to the plugin's declared capabilities:
+Displayed during installation (after download, from the actual manifest.json), tailored to the plugin's declared capabilities:
 
 ```
 ⚠️ This plugin requests the following permissions:
@@ -720,10 +872,10 @@ and library data. Review each plugin's permissions before installing.
 | Converter exception | Log, skip conversion. Original still indexed normally (main if parser exists, supplement if not). |
 | Enricher exception | Log, continue to next enricher |
 | Parser exception | Log, skip file with error status |
-| Generator exception | Log, return 500 to request |
+| Generator exception | Log, return error to user (500 response with plugin name and error message) |
 | HTTP timeout | Plugin receives error, handles it |
 
-Errors are logged and stored in `plugins.load_error` for display in UI.
+Runtime errors are captured in job logs (since converters, enrichers, and parsers run during scan jobs). Generator errors are surfaced directly to the user in the API response. Load-time errors are stored in `plugins.load_error` for display in the plugin management UI.
 
 ### Isolation and Timeouts
 
@@ -789,6 +941,8 @@ npm run build
 cp -r dist/main.js manifest.json /config/plugins/installed/local/my-plugin/
 # Run POST /api/plugins/scan to detect, then enable in UI (hot-reloads automatically)
 ```
+
+**Manual scan behavior:** `POST /api/plugins/scan` walks `/config/plugins/installed/local/` for directories not already in the `plugins` table with scope `"local"`. For each new directory, it reads and validates `manifest.json`, inserts a row with `enabled = false`, and returns the list of newly discovered plugins. It only operates on the `local` scope — repo-installed plugins are managed through the install/update APIs. Local plugins use the `"local"` scope, so a `local/foo` plugin coexists with a `shisho/foo` plugin without conflict.
 
 ## Implementation Phases
 
