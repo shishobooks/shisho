@@ -24,6 +24,8 @@ Plugins are JavaScript files executed in an embedded interpreter (goja). Plugin 
 | Config storage | Database | UI-editable, survives plugin updates |
 | Processing order | User-defined | Deterministic, explicit control |
 | Load timing | App startup + hot-reload | Initial load at startup; install/update/enable hot-reloads without restart |
+| File matching | Extensions + optional MIME types | Extensions for fast discovery during dir walk; MIME types for content validation after discovery |
+| FFmpeg | Bundled binary, subprocess execution | LGPL-compatible with MIT app via process boundary; no CGO linking required |
 
 ## Versioning Strategy
 
@@ -64,6 +66,7 @@ my-plugin/
     "inputConverter": {
       "description": "Converts PDF files to EPUB for indexing",
       "sourceTypes": ["pdf"],
+      "mimeTypes": ["application/pdf"],
       "targetType": "epub"
     },
     "metadataEnricher": {
@@ -81,6 +84,9 @@ my-plugin/
     "httpAccess": {
       "description": "Calls Goodreads API to fetch book data",
       "domains": ["goodreads.com", "api.goodreads.com"]
+    },
+    "ffmpegAccess": {
+      "description": "Uses FFmpeg to transcode audio files"
     }
   },
 
@@ -141,11 +147,26 @@ my-plugin/
 - `identifierTypes` - Register custom identifier types
 - `httpAccess` - Make HTTP requests (with domain restrictions)
 - `fileAccess` - Access library files (read or read-write)
+- `ffmpegAccess` - Execute FFmpeg commands (subprocess)
 
 **Future (v2+):**
 - `apiEndpoints` - Register custom API routes
 - `uiComponents` - Provide React components
 - `sidecarFields` - Add custom sidecar fields
+
+### MIME Type Validation
+
+Plugins can optionally declare a `mimeTypes` array in their capabilities (`inputConverter`, `fileParser`). This provides a content-based validation layer on top of extension-based file discovery:
+
+1. **Discovery (extensions):** During directory walking, files are discovered based on their extension matching a plugin's declared types (e.g., `sourceTypes: ["pdf"]` or `types: ["m4a"]`). This is fast — no file reads required.
+
+2. **Validation (MIME types):** After discovery, if the plugin declares `mimeTypes`, the system reads the first 512 bytes of the file and detects the actual MIME type via magic byte signatures (using Go's `net/http.DetectContentType` or equivalent). If the detected type matches any entry in the `mimeTypes` array, the file is passed to the plugin. If not, the file is skipped with a debug log.
+
+3. **Omitted (no validation):** When `mimeTypes` is not declared, all files matching the extension are passed to the plugin without content validation. This is the default behavior and appropriate for most plugins.
+
+**When to use `mimeTypes`:** Useful when an extension is ambiguous (e.g., `.m4a` and `.m4b` are both MPEG-4 audio but serve different purposes) or when a plugin wants to guard against misnamed files. Not necessary for unambiguous formats like `.epub` or `.cbz`.
+
+**MIME type matching:** Matching is prefix-based — `audio/mp4` matches a detected type of `audio/mp4` or `audio/mp4; codecs=...`. The detected type is normalized to lowercase before comparison.
 
 ### HTTP Access Rules
 
@@ -165,7 +186,7 @@ Security rules:
 - **Redirects**: Requests that redirect to an unlisted domain are blocked. The plugin receives an error.
 - **Ports**: Only standard ports (80/443) unless explicitly specified (e.g., `example.com:8080`).
 
-**Why this is enforceable:** goja is a bare JS interpreter with no built-in network I/O — there's no native `fetch`, `XMLHttpRequest`, `http` module, or WebSocket. The only way plugins can make network requests is through the host-provided `shisho.http.fetch`, which enforces domain restrictions. npm packages that attempt network calls will fail at runtime since the underlying primitives don't exist. The same applies to `shisho.fs` — there's no `fs` module or file API available outside of what the host provides.
+**Why this is enforceable:** goja is a bare JS interpreter with no built-in network I/O — there's no native `fetch`, `XMLHttpRequest`, `http` module, or WebSocket. The only way plugins can make network requests is through the host-provided `shisho.http.fetch`, which enforces domain restrictions. npm packages that attempt network calls will fail at runtime since the underlying primitives don't exist. The same applies to `shisho.fs` — there's no `fs` module or file API available outside of what the host provides. FFmpeg (if `ffmpegAccess` is declared) has its network protocols disabled via `-protocol_whitelist file,pipe`, preventing it from being used as a network bypass.
 
 ### File Access Levels
 
@@ -187,6 +208,59 @@ Levels:
 - `"readwrite"` - Read and write access to library files via `shisho.fs`
 
 The level is displayed to the user during installation so they understand what the plugin can do.
+
+### FFmpeg Access
+
+The `ffmpegAccess` capability grants access to `shisho.ffmpeg.run()`, which executes the bundled FFmpeg binary as a subprocess. This enables CPU-intensive media operations (transcoding, remuxing, format conversion) that would be impractical in a JavaScript interpreter.
+
+```json
+{
+  "ffmpegAccess": {
+    "description": "Uses FFmpeg to convert M4A files to M4B format"
+  }
+}
+```
+
+**How it works:** The host spawns FFmpeg as a child process with the provided arguments array. The plugin receives stdout, stderr, and exit code when the process completes. The call is async — the plugin awaits the result while FFmpeg runs.
+
+**File path access:** Plugins should use paths they already have access to — hook-provided paths (`sourcePath`, `targetDir`), `shisho.fs.tempDir()`, or library paths (if `fileAccess` is declared). The host does not parse FFmpeg arguments to validate paths; the trust boundary is at the plugin installation level (the user reviewed and accepted the plugin's capabilities).
+
+**Network restrictions:** FFmpeg's network protocol support is disabled via `-protocol_whitelist file,pipe` prepended to the argument list by the host. This prevents plugins from using FFmpeg as a network bypass (e.g., downloading via http/rtmp/rtsp inputs). Only local file and pipe I/O is permitted.
+
+**Timeout:** FFmpeg invocations share the parent hook's timeout (e.g., 5 minutes for inputConverter). If the hook times out, the FFmpeg subprocess is killed via SIGTERM, then SIGKILL after 5 seconds.
+
+**Licensing:** FFmpeg is bundled in the Docker image as a separate binary (LGPL 2.1+, compiled without `--enable-gpl`). Calling it as a subprocess does not create a derivative work — Shisho's MIT license is unaffected. The Docker image includes FFmpeg's license text and a source code reference in `/usr/share/licenses/ffmpeg/`. The LGPL build includes AAC, MP3, Opus, FLAC, and other common codecs sufficient for audiobook and music processing without requiring GPL components.
+
+**Example usage (M4A → M4B converter):**
+
+```typescript
+export const inputConverter: shisho.InputConverter = {
+  sourceTypes: ['m4a'],
+  mimeTypes: ['audio/mp4', 'audio/x-m4a'],
+  targetType: 'm4b',
+
+  async convert(context: ConvertContext): Promise<ConvertResult> {
+    const { sourcePath, targetDir } = context;
+    const baseName = sourcePath.split('/').pop()!.replace(/\.[^.]+$/, '');
+    const targetPath = `${targetDir}/${baseName}.m4b`;
+
+    // Remux M4A to M4B (container change, no re-encoding)
+    const result = await shisho.ffmpeg.run([
+      '-i', sourcePath,
+      '-c', 'copy',        // Copy streams without re-encoding
+      '-f', 'mp4',         // Force MP4/M4B container
+      targetPath
+    ]);
+
+    if (result.exitCode !== 0) {
+      shisho.log.error(`FFmpeg failed: ${result.stderr}`);
+      return { success: false };
+    }
+
+    return { success: true, targetPath };
+  }
+};
+```
 
 ## Plugin APIs
 
@@ -254,6 +328,21 @@ declare namespace shisho {
     function createZip(srcDir: string, destPath: string): Promise<void>;
     function readZipEntry(archivePath: string, entryPath: string): Promise<Uint8Array>;
     function listZipEntries(archivePath: string): Promise<string[]>;
+  }
+
+  // FFmpeg subprocess execution (requires ffmpegAccess capability)
+  // Runs the bundled FFmpeg binary with the provided arguments.
+  // The plugin is responsible for using accessible paths (hook-provided paths, tempDir(), or
+  // library paths if fileAccess is declared). FFmpeg's network features (http/rtmp/etc. inputs)
+  // are disabled via -protocol_whitelist (only file and pipe protocols are allowed).
+  namespace ffmpeg {
+    function run(args: string[]): Promise<FFmpegResult>;
+  }
+
+  interface FFmpegResult {
+    exitCode: number;
+    stdout: string;
+    stderr: string;
   }
 
   // XML/HTML parsing
@@ -367,11 +456,14 @@ export const inputConverter: shisho.InputConverter = {
     "inputConverter": {
       "description": "Converts PDF and MOBI files to EPUB for indexing",
       "sourceTypes": ["pdf", "mobi"],
+      "mimeTypes": ["application/pdf", "application/x-mobipocket-ebook"],
       "targetType": "epub"
     }
   }
 }
 ```
+
+**MIME type validation:** The optional `mimeTypes` array provides content-based validation after extension-based file discovery. When present, the system reads the file's magic bytes to detect its MIME type. If the detected MIME type matches any entry in the array, the file is passed to the converter. If it does not match, the file is skipped with a debug log (e.g., "file.pdf: detected MIME type image/png does not match inputConverter sourceTypes, skipping"). When `mimeTypes` is omitted, all files matching the declared extensions in `sourceTypes` are passed to the converter without content validation.
 
 ### File Parser
 
@@ -414,6 +506,22 @@ export const fileParser: shisho.FileParser = {
 ```
 
 All fields except `title` are optional — return only what your parser can extract. The Go host maps the JS object to the internal `ParsedMetadata` struct.
+
+**Manifest capability:**
+
+```json
+{
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses PDF and DjVu files for metadata",
+      "types": ["pdf", "djvu"],
+      "mimeTypes": ["application/pdf", "image/vnd.djvu"]
+    }
+  }
+}
+```
+
+**MIME type validation:** The optional `mimeTypes` array works identically to inputConverter — after extension-based discovery, the system validates the file's detected MIME type against this list. If the detected type matches any entry, the file is parsed. If it does not match, the file is skipped with a debug log. When `mimeTypes` is omitted, all files matching the declared extensions are passed to the parser without content validation.
 
 **Scan integration:** Plugin file parsers run after the built-in parser switch (EPUB/CBZ/M4B). When a plugin registers a fileParser with `types: ['pdf', 'djvu']`, those extensions are added to the set of scannable file types (alongside `.epub`, `.cbz`, `.m4b`). Files with plugin-registered extensions are discovered during library walks, stored with the plugin-registered `FileType` value (e.g., `"pdf"`), and parsed by the plugin. The `FileType` is derived from the extension string in the plugin's `types` array — the plugin effectively registers new file type constants.
 
@@ -670,10 +778,16 @@ Plugins execute at specific points during the library scan process:
 ```
 1. Discover files in library → initial file list (extensions from built-in + plugin fileParsers)
 2. Run inputConverters on discovered files
+   ├─ MIME validation: if converter declares mimeTypes, detect file's MIME type via magic bytes
+   │   ├─ Match → proceed with conversion
+   │   └─ No match → skip with debug log, try next converter in order
    ├─ For each source→target pair, only the first converter in order runs
    ├─ Different target types run independently (e.g., PDF→EPUB and PDF→MOBI both produce output)
    └─ Newly created files added back to scan list for full processing
 3. Detect file types (built-in + plugin fileParsers)
+   └─ MIME validation: if parser declares mimeTypes, detect file's MIME type via magic bytes
+       ├─ Match → proceed with parsing
+       └─ No match → skip with debug log, try next parser in order
 4. Parse metadata from detected files
    └─ Files with no parser tracked as supplement (visible, downloadable, no metadata)
 5. Run metadataEnrichers on parsed files
@@ -841,6 +955,7 @@ Displayed during installation (after download, from the actual manifest.json), t
 
 • Network access to: goodreads.com, api.goodreads.com
 • Read access to library files
+• FFmpeg execution (can run audio/video processing commands)
 • Metadata enrichment (can modify book metadata)
 
 Only install plugins from sources you trust.
