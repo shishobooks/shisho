@@ -9,6 +9,7 @@ import (
 )
 
 func TestShouldUpdateScalar(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		newValue       string
@@ -128,6 +129,7 @@ func TestShouldUpdateScalar(t *testing.T) {
 }
 
 func TestShouldUpdateRelationship(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		newItems       []string
@@ -265,6 +267,7 @@ func TestShouldUpdateRelationship(t *testing.T) {
 }
 
 func TestGenerateCBZFileName(t *testing.T) {
+	t.Parallel()
 	floatPtr := func(f float64) *float64 { return &f }
 
 	tests := []struct {
@@ -364,6 +367,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 }
 
 func TestCleanCBZFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		filename string
@@ -415,6 +419,7 @@ func TestCleanCBZFilename(t *testing.T) {
 }
 
 func TestFormatSeriesNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		num  float64
@@ -437,6 +442,7 @@ func TestFormatSeriesNumber(t *testing.T) {
 }
 
 func TestShouldApplySidecarScalar(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		newValue       string
@@ -520,6 +526,7 @@ func TestShouldApplySidecarScalar(t *testing.T) {
 }
 
 func TestShouldApplySidecarRelationship(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		newItems       []string
