@@ -7,6 +7,7 @@ import (
 )
 
 func TestFileIdentifierFields(t *testing.T) {
+	t.Parallel()
 	fi := FileIdentifier{
 		FileID: 1,
 		Type:   "isbn_13",

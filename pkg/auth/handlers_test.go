@@ -102,6 +102,7 @@ func newTestContext(t *testing.T, payload, method, path string) (echo.Context, *
 }
 
 func TestHandler_Setup_RejectsWhenUsersExist(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db, "test-jwt-secret")
 	h := &handler{authService: svc}

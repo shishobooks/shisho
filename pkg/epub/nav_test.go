@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseNavDocument(t *testing.T) {
+	t.Parallel()
 	navXML := `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <body>
@@ -51,6 +52,7 @@ func TestParseNavDocument(t *testing.T) {
 }
 
 func TestParseNavDocument_SpanWithoutLink(t *testing.T) {
+	t.Parallel()
 	navXML := `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <body>
@@ -77,6 +79,7 @@ func TestParseNavDocument_SpanWithoutLink(t *testing.T) {
 }
 
 func TestParseNCX(t *testing.T) {
+	t.Parallel()
 	ncxXML := `<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
 <navMap>

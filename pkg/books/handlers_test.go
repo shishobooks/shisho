@@ -235,6 +235,7 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 }
 
 func TestStreamFile_M4B_ReturnsAudioMp4ContentType(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
@@ -251,6 +252,7 @@ func TestStreamFile_M4B_ReturnsAudioMp4ContentType(t *testing.T) {
 }
 
 func TestStreamFile_NonM4BFile_Returns404(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
@@ -266,6 +268,7 @@ func TestStreamFile_NonM4BFile_Returns404(t *testing.T) {
 }
 
 func TestStreamFile_NonExistentFile_Returns404(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, _ := setupTestLibraryAndBook(t, db)
 	user := setupTestUser(t, db, library.ID, true)
@@ -279,6 +282,7 @@ func TestStreamFile_NonExistentFile_Returns404(t *testing.T) {
 }
 
 func TestStreamFile_UnauthorizedLibraryAccess_Returns403(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
@@ -295,6 +299,7 @@ func TestStreamFile_UnauthorizedLibraryAccess_Returns403(t *testing.T) {
 }
 
 func TestStreamFile_WithoutRangeHeader_Returns200AndFullFile(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 1000
@@ -312,6 +317,7 @@ func TestStreamFile_WithoutRangeHeader_Returns200AndFullFile(t *testing.T) {
 }
 
 func TestStreamFile_WithRangeHeader_Returns206PartialContent(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 5000
@@ -336,6 +342,7 @@ func TestStreamFile_WithRangeHeader_Returns206PartialContent(t *testing.T) {
 }
 
 func TestStreamFile_RangeHeader_VerifyReturnedBytesMatchExpected(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 5000
@@ -363,6 +370,7 @@ func TestStreamFile_RangeHeader_VerifyReturnedBytesMatchExpected(t *testing.T) {
 }
 
 func TestStreamFile_AcceptRangesHeader_IsPresent(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
@@ -378,6 +386,7 @@ func TestStreamFile_AcceptRangesHeader_IsPresent(t *testing.T) {
 }
 
 func TestStreamFile_CBZFile_Returns404(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, book := setupTestLibraryAndBook(t, db)
 
@@ -399,6 +408,7 @@ func TestStreamFile_CBZFile_Returns404(t *testing.T) {
 }
 
 func TestStreamFile_InvalidFileID_Returns404(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	library, _ := setupTestLibraryAndBook(t, db)
 	user := setupTestUser(t, db, library.ID, true)

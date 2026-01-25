@@ -59,6 +59,7 @@ func createTestCBZWithPages(t *testing.T, path string, numPages int) {
 }
 
 func TestUpdateFileCoverPage(t *testing.T) {
+	t.Parallel()
 	t.Run("sets cover page and extracts cover image", func(t *testing.T) {
 		db := setupTestDB(t)
 		ctx := context.Background()

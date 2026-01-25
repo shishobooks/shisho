@@ -9,6 +9,7 @@ import (
 )
 
 func TestFormatDownloadFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		book     *models.Book
@@ -401,6 +402,7 @@ func TestFormatDownloadFilename(t *testing.T) {
 }
 
 func TestSanitizeFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -430,6 +432,7 @@ func TestSanitizeFilename(t *testing.T) {
 }
 
 func TestFormatSeriesNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    float64
 		expected string
@@ -452,6 +455,7 @@ func TestFormatSeriesNumber(t *testing.T) {
 }
 
 func TestSanitizeKoboFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -483,6 +487,7 @@ func TestSanitizeKoboFilename(t *testing.T) {
 }
 
 func TestFormatKepubDownloadFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		book     *models.Book

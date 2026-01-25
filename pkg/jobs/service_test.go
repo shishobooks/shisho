@@ -33,6 +33,7 @@ func newTestDB(t *testing.T) *bun.DB {
 }
 
 func TestHasActiveJob_NilLibraryID_NoJobs(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -43,6 +44,7 @@ func TestHasActiveJob_NilLibraryID_NoJobs(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_PendingJob(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -62,6 +64,7 @@ func TestHasActiveJob_NilLibraryID_PendingJob(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_InProgressJob(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -81,6 +84,7 @@ func TestHasActiveJob_NilLibraryID_InProgressJob(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_CompletedJob(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -100,6 +104,7 @@ func TestHasActiveJob_NilLibraryID_CompletedJob(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_DifferentType(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -125,6 +130,7 @@ func TestHasActiveJob_NilLibraryID_DifferentType(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_MultipleJobs(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -153,6 +159,7 @@ func TestHasActiveJob_NilLibraryID_MultipleJobs(t *testing.T) {
 }
 
 func TestHasActiveJob_WithLibraryID_NoJobs(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -164,6 +171,7 @@ func TestHasActiveJob_WithLibraryID_NoJobs(t *testing.T) {
 }
 
 func TestHasActiveJob_WithLibraryID_MatchingLibrary(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -184,6 +192,7 @@ func TestHasActiveJob_WithLibraryID_MatchingLibrary(t *testing.T) {
 }
 
 func TestHasActiveJob_WithLibraryID_DifferentLibrary(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -206,6 +215,7 @@ func TestHasActiveJob_WithLibraryID_DifferentLibrary(t *testing.T) {
 }
 
 func TestHasActiveJob_WithLibraryID_GlobalJobBlocks(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -228,6 +238,7 @@ func TestHasActiveJob_WithLibraryID_GlobalJobBlocks(t *testing.T) {
 }
 
 func TestHasActiveJob_NilLibraryID_ChecksAny(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -249,6 +260,7 @@ func TestHasActiveJob_NilLibraryID_ChecksAny(t *testing.T) {
 }
 
 func TestListJobs_FilterByType(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -279,6 +291,7 @@ func TestListJobs_FilterByType(t *testing.T) {
 }
 
 func TestListJobs_FilterByLibraryIDOrGlobal(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

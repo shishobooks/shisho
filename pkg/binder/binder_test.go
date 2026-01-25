@@ -23,6 +23,7 @@ var (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	b, err := New()
 	require.NoError(t, err)
 	assert.NotNil(t, b)

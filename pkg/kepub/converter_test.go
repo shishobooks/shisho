@@ -176,6 +176,7 @@ func listFilesInEPUB(t *testing.T, epubPath string) []string {
 }
 
 func TestConverter_ConvertEPUB(t *testing.T) {
+	t.Parallel()
 	t.Run("adds Kobo spans to content files", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -388,6 +389,7 @@ func TestConverter_ConvertEPUB(t *testing.T) {
 }
 
 func TestExtractManifestItems(t *testing.T) {
+	t.Parallel()
 	t.Run("extracts items from manifest", func(t *testing.T) {
 		opf := `<manifest>
 			<item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
@@ -410,6 +412,7 @@ func TestExtractManifestItems(t *testing.T) {
 }
 
 func TestExtractAttribute(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		tag      string
 		attr     string
@@ -430,6 +433,7 @@ func TestExtractAttribute(t *testing.T) {
 }
 
 func TestIsContentFile(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mediaType string
 		expected  bool

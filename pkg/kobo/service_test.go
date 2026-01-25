@@ -33,6 +33,7 @@ func setupTestDB(t *testing.T) *bun.DB {
 }
 
 func TestCreateSyncPoint(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -64,6 +65,7 @@ func TestCreateSyncPoint(t *testing.T) {
 }
 
 func TestCreateSyncPoint_Empty(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -78,6 +80,7 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 }
 
 func TestDetectChanges_FirstSync(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -106,6 +109,7 @@ func TestDetectChanges_FirstSync(t *testing.T) {
 }
 
 func TestDetectChanges_AddedBooks(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -136,6 +140,7 @@ func TestDetectChanges_AddedBooks(t *testing.T) {
 }
 
 func TestDetectChanges_RemovedBooks(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -166,6 +171,7 @@ func TestDetectChanges_RemovedBooks(t *testing.T) {
 }
 
 func TestDetectChanges_ChangedBooks(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -195,6 +201,7 @@ func TestDetectChanges_ChangedBooks(t *testing.T) {
 }
 
 func TestDetectChanges_MetadataChange(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
@@ -225,12 +232,14 @@ func TestDetectChanges_MetadataChange(t *testing.T) {
 }
 
 func TestShishoID(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "shisho-42", ShishoID(42))
 	assert.Equal(t, "shisho-1", ShishoID(1))
 	assert.Equal(t, "shisho-0", ShishoID(0))
 }
 
 func TestParseShishoID(t *testing.T) {
+	t.Parallel()
 	id, ok := ParseShishoID("shisho-42")
 	assert.True(t, ok)
 	assert.Equal(t, 42, id)
@@ -254,6 +263,7 @@ func TestParseShishoID(t *testing.T) {
 }
 
 func TestCleanupOldSyncPoints(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

@@ -36,6 +36,7 @@ func newTestDB(t *testing.T) *bun.DB {
 }
 
 func TestMiddleware_ApiKeyAuth(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	apiKeyService := apikeys.NewService(db)
 	mw := NewMiddleware(apiKeyService)
@@ -140,6 +141,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 }
 
 func TestGetAPIKeyFromContext_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	apiKey := GetAPIKeyFromContext(ctx)
 	assert.Nil(t, apiKey)

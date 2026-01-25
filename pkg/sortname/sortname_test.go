@@ -7,6 +7,7 @@ import (
 )
 
 func TestForTitle(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -107,6 +108,7 @@ func TestForTitle(t *testing.T) {
 }
 
 func TestForPerson(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -332,6 +334,7 @@ func TestForPerson(t *testing.T) {
 }
 
 func TestIsPrefix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		word     string
 		expected bool
@@ -356,6 +359,7 @@ func TestIsPrefix(t *testing.T) {
 }
 
 func TestIsGenerationalSuffix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		word     string
 		expected bool
@@ -385,6 +389,7 @@ func TestIsGenerationalSuffix(t *testing.T) {
 }
 
 func TestIsAcademicSuffix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		word     string
 		expected bool
@@ -412,6 +417,7 @@ func TestIsAcademicSuffix(t *testing.T) {
 }
 
 func TestIsParticle(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		word     string
 		expected bool

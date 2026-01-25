@@ -8,6 +8,7 @@ import (
 )
 
 func TestDetectChaptersFromFolders(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		files    []string
@@ -79,6 +80,7 @@ type expectedChapter struct {
 }
 
 func TestDetectChapters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		files    []string
@@ -128,6 +130,7 @@ func TestDetectChapters(t *testing.T) {
 }
 
 func TestDetectChaptersFromFilenames(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		files    []string

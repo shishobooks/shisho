@@ -10,6 +10,7 @@ import (
 )
 
 func TestTransformContent(t *testing.T) {
+	t.Parallel()
 	t.Run("adds wrapper divs to body content", func(t *testing.T) {
 		input := `<html><head></head><body><p>Hello</p></body></html>`
 		var buf bytes.Buffer
@@ -157,6 +158,7 @@ func TestTransformContent(t *testing.T) {
 }
 
 func TestSplitIntoSegments(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -218,6 +220,7 @@ func TestSplitIntoSegments(t *testing.T) {
 }
 
 func TestTransformContentBytes(t *testing.T) {
+	t.Parallel()
 	t.Run("transforms content correctly", func(t *testing.T) {
 		input := []byte(`<html><head></head><body><p>Test content</p></body></html>`)
 
@@ -230,6 +233,7 @@ func TestTransformContentBytes(t *testing.T) {
 }
 
 func TestSpanCounter(t *testing.T) {
+	t.Parallel()
 	t.Run("generates sequential IDs", func(t *testing.T) {
 		counter := NewSpanCounter()
 
@@ -279,6 +283,7 @@ func TestSpanCounter(t *testing.T) {
 }
 
 func TestTransformContentWithCounter(t *testing.T) {
+	t.Parallel()
 	t.Run("maintains counter across multiple calls", func(t *testing.T) {
 		counter := NewSpanCounter()
 

@@ -7,6 +7,7 @@ import (
 )
 
 func TestStripKoboPrefix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path     string
 		expected string
@@ -27,6 +28,7 @@ func TestStripKoboPrefix(t *testing.T) {
 }
 
 func TestParseShishoID_TableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		id       string
 		expected int
@@ -51,6 +53,7 @@ func TestParseShishoID_TableDriven(t *testing.T) {
 }
 
 func TestShishoID_TableDriven(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "shisho-1", ShishoID(1))
 	assert.Equal(t, "shisho-42", ShishoID(42))
 	assert.Equal(t, "shisho-0", ShishoID(0))

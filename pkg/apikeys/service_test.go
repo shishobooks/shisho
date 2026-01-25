@@ -34,6 +34,7 @@ func newTestDB(t *testing.T) *bun.DB {
 }
 
 func TestService_Create(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -55,6 +56,7 @@ func TestService_Create(t *testing.T) {
 }
 
 func TestService_List(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -79,6 +81,7 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_GetByKey(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -100,6 +103,7 @@ func TestService_GetByKey(t *testing.T) {
 }
 
 func TestService_GetByKey_NotFound(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -110,6 +114,7 @@ func TestService_GetByKey_NotFound(t *testing.T) {
 }
 
 func TestService_Delete(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -133,6 +138,7 @@ func TestService_Delete(t *testing.T) {
 }
 
 func TestService_Delete_WrongUser(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -151,6 +157,7 @@ func TestService_Delete_WrongUser(t *testing.T) {
 }
 
 func TestService_UpdateName(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -172,6 +179,7 @@ func TestService_UpdateName(t *testing.T) {
 }
 
 func TestService_AddPermission(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -192,6 +200,7 @@ func TestService_AddPermission(t *testing.T) {
 }
 
 func TestService_AddPermission_Duplicate(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -212,6 +221,7 @@ func TestService_AddPermission_Duplicate(t *testing.T) {
 }
 
 func TestService_RemovePermission(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -234,6 +244,7 @@ func TestService_RemovePermission(t *testing.T) {
 }
 
 func TestService_GenerateShortURL(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -259,6 +270,7 @@ func TestService_GenerateShortURL(t *testing.T) {
 }
 
 func TestService_ResolveShortCode(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -284,6 +296,7 @@ func TestService_ResolveShortCode(t *testing.T) {
 }
 
 func TestService_ResolveShortCode_Expired(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -314,6 +327,7 @@ func TestService_ResolveShortCode_Expired(t *testing.T) {
 }
 
 func TestService_TouchLastAccessed(t *testing.T) {
+	t.Parallel()
 	db := newTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

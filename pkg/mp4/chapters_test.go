@@ -8,6 +8,7 @@ import (
 )
 
 func TestConvertChaptersToParsed(t *testing.T) {
+	t.Parallel()
 	chapters := []Chapter{
 		{Title: "Chapter 1", Start: 0, End: 5 * time.Minute},
 		{Title: "Chapter 2", Start: 5 * time.Minute, End: 10 * time.Minute},

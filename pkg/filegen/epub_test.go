@@ -18,6 +18,7 @@ import (
 )
 
 func TestEPUBGenerator_Generate(t *testing.T) {
+	t.Parallel()
 	t.Run("modifies title and authors", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -493,6 +494,7 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 }
 
 func TestFormatFloat(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    float64
 		expected string
@@ -656,6 +658,7 @@ func readFileFromEPUB(t *testing.T, epubPath, fileName string) []byte {
 }
 
 func TestEPUBGenerator_UsesFileNameForTitle(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple test EPUB
@@ -689,6 +692,7 @@ func TestEPUBGenerator_UsesFileNameForTitle(t *testing.T) {
 }
 
 func TestEPUBGenerator_UsesBookTitleWhenFileNameEmpty(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple test EPUB
@@ -722,6 +726,7 @@ func TestEPUBGenerator_UsesBookTitleWhenFileNameEmpty(t *testing.T) {
 }
 
 func TestEPUBGenerator_UsesBookTitleWhenFileNameNil(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple test EPUB
@@ -754,6 +759,7 @@ func TestEPUBGenerator_UsesBookTitleWhenFileNameNil(t *testing.T) {
 }
 
 func TestGenerateEPUB_Identifiers(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a minimal source EPUB for generation

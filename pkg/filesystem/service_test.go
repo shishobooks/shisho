@@ -10,6 +10,7 @@ import (
 )
 
 func TestBrowse_EmptyDirectory(t *testing.T) {
+	t.Parallel()
 	// Create a temporary empty directory.
 	tempDir := t.TempDir()
 	emptyDir := filepath.Join(tempDir, "empty")
@@ -48,6 +49,7 @@ func TestBrowse_EmptyDirectory(t *testing.T) {
 }
 
 func TestBrowse_NonEmptyDirectory(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory with some files.
 	tempDir := t.TempDir()
 

@@ -33,6 +33,7 @@ func setupTestDB(t *testing.T) *bun.DB {
 }
 
 func TestGetAuthoredBooks_DeduplicatesMultipleRoles(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 
