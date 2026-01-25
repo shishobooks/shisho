@@ -62,10 +62,10 @@ func TestCoverExistsWithBaseName(t *testing.T) {
 			expectedResult: "book.epub.cover.png",
 		},
 		{
-			name:           "audiobook cover exists",
-			existingFiles:  []string{"audiobook_cover.jpg"},
-			baseName:       "audiobook_cover",
-			expectedResult: "audiobook_cover.jpg",
+			name:           "custom cover exists",
+			existingFiles:  []string{"custom_cover.jpg"},
+			baseName:       "custom_cover",
+			expectedResult: "custom_cover.jpg",
 		},
 		{
 			name:           "returns first match (jpg before png in extension list)",
@@ -458,4 +458,174 @@ func TestRenameOrganizedFile_SupplementDoesNotRenameBookSidecar(t *testing.T) {
 	wrongSidecar := filepath.Join(tempDir, "Supplement Name.metadata.json")
 	_, err = os.Stat(wrongSidecar)
 	assert.True(t, os.IsNotExist(err), "book sidecar should NOT have been renamed to supplement's basename")
+}
+
+func TestCleanupEmptyDirectory(t *testing.T) {
+	t.Parallel()
+	tempDir, err := os.MkdirTemp("", "cleanup-empty-dir-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(tempDir)
+	})
+
+	tests := []struct {
+		name          string
+		setup         func(dir string) string // returns the dir to test
+		expectRemoved bool
+		expectError   bool
+		expectDirGone bool
+	}{
+		{
+			name: "removes empty directory",
+			setup: func(dir string) string {
+				emptyDir := filepath.Join(dir, "empty")
+				os.MkdirAll(emptyDir, 0755)
+				return emptyDir
+			},
+			expectRemoved: true,
+			expectDirGone: true,
+		},
+		{
+			name: "does not remove non-empty directory",
+			setup: func(dir string) string {
+				nonEmptyDir := filepath.Join(dir, "nonempty")
+				os.MkdirAll(nonEmptyDir, 0755)
+				os.WriteFile(filepath.Join(nonEmptyDir, "file.txt"), []byte("content"), 0600)
+				return nonEmptyDir
+			},
+			expectRemoved: false,
+			expectDirGone: false,
+		},
+		{
+			name: "returns false for non-existent directory",
+			setup: func(dir string) string {
+				return filepath.Join(dir, "nonexistent")
+			},
+			expectRemoved: false,
+			expectError:   false,
+		},
+		{
+			name: "does not remove directory with subdirectory",
+			setup: func(dir string) string {
+				parentDir := filepath.Join(dir, "parent")
+				os.MkdirAll(filepath.Join(parentDir, "child"), 0755)
+				return parentDir
+			},
+			expectRemoved: false,
+			expectDirGone: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tempDir, tt.name)
+			os.MkdirAll(testDir, 0755)
+
+			targetDir := tt.setup(testDir)
+			removed, err := CleanupEmptyDirectory(targetDir)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("expected error but got nil")
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			assert.Equal(t, tt.expectRemoved, removed, "removed mismatch")
+
+			if tt.expectDirGone {
+				_, statErr := os.Stat(targetDir)
+				assert.True(t, os.IsNotExist(statErr), "directory should be gone")
+			} else if removed {
+				_, statErr := os.Stat(targetDir)
+				assert.True(t, os.IsNotExist(statErr), "directory should be gone after removal")
+			}
+		})
+	}
+}
+
+func TestCleanupEmptyParentDirectories(t *testing.T) {
+	t.Parallel()
+	tempDir, err := os.MkdirTemp("", "cleanup-parents-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(tempDir)
+	})
+
+	tests := []struct {
+		name            string
+		setup           func(dir string) (startPath, stopAt string)
+		expectDirsGone  []string // relative to tempDir
+		expectDirsExist []string // relative to tempDir
+	}{
+		{
+			name: "removes chain of empty directories",
+			setup: func(dir string) (string, string) {
+				// Create: dir/a/b/c (all empty)
+				os.MkdirAll(filepath.Join(dir, "a", "b", "c"), 0755)
+				return filepath.Join(dir, "a", "b", "c"), dir
+			},
+			expectDirsGone:  []string{"a/b/c", "a/b", "a"},
+			expectDirsExist: []string{},
+		},
+		{
+			name: "stops at non-empty directory",
+			setup: func(dir string) (string, string) {
+				// Create: dir/a/b/c with file in a
+				os.MkdirAll(filepath.Join(dir, "a", "b", "c"), 0755)
+				os.WriteFile(filepath.Join(dir, "a", "file.txt"), []byte("content"), 0600)
+				return filepath.Join(dir, "a", "b", "c"), dir
+			},
+			expectDirsGone:  []string{"a/b/c", "a/b"},
+			expectDirsExist: []string{"a"},
+		},
+		{
+			name: "stops at stopAt directory",
+			setup: func(dir string) (string, string) {
+				// Create: dir/a/b/c, stopAt = dir/a
+				os.MkdirAll(filepath.Join(dir, "a", "b", "c"), 0755)
+				return filepath.Join(dir, "a", "b", "c"), filepath.Join(dir, "a")
+			},
+			expectDirsGone:  []string{"a/b/c", "a/b"},
+			expectDirsExist: []string{"a"},
+		},
+		{
+			name: "handles non-existent start path",
+			setup: func(dir string) (string, string) {
+				return filepath.Join(dir, "nonexistent"), dir
+			},
+			expectDirsGone:  []string{},
+			expectDirsExist: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tempDir, tt.name)
+			os.MkdirAll(testDir, 0755)
+
+			startPath, stopAt := tt.setup(testDir)
+			err := CleanupEmptyParentDirectories(startPath, stopAt)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			for _, relPath := range tt.expectDirsGone {
+				fullPath := filepath.Join(testDir, relPath)
+				_, statErr := os.Stat(fullPath)
+				assert.True(t, os.IsNotExist(statErr), "directory should be gone: %s", relPath)
+			}
+
+			for _, relPath := range tt.expectDirsExist {
+				fullPath := filepath.Join(testDir, relPath)
+				_, statErr := os.Stat(fullPath)
+				assert.NoError(t, statErr, "directory should exist: %s", relPath)
+			}
+		})
+	}
 }

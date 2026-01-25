@@ -53,9 +53,8 @@ Each domain (books, jobs, libraries, chapters) has:
 ### Cover Image System
 
 - Individual file covers: `{filename}.cover.{ext}`
-- Canonical covers: `cover.{ext}` (book priority) or `audiobook_cover.{ext}` (fallback)
 - Book model has `ResolveCoverImage()` method that finds covers dynamically
-- API endpoints: `/books/{id}/cover` (canonical) and `/files/{id}/cover` (individual)
+- API endpoints: `/books/{id}/cover` and `/files/{id}/cover`
 
 **CRITICAL - CoverImagePath stores FILENAME ONLY:**
 

@@ -78,11 +78,21 @@ func OrganizeRootLevelFile(originalPath string, opts OrganizedNameOptions) (*Org
 	coversMoved, err := moveAssociatedCovers(originalPath, targetPath)
 	result.CoversMoved = coversMoved
 	if err != nil {
-		result.CoversError = err
-		// Don't fail the entire operation - the main file has been moved successfully
+		// Rollback: move file back, then remove folder if we created it
+		if moveBackErr := moveFile(targetPath, originalPath); moveBackErr == nil {
+			if result.FolderCreated {
+				os.RemoveAll(targetFolder)
+			}
+		}
+		return result, errors.WithStack(err)
 	}
 
 	result.Moved = true
+
+	// Clean up empty source directory
+	originalDir := filepath.Dir(originalPath)
+	_, _ = CleanupEmptyDirectory(originalDir)
+
 	return result, nil
 }
 
@@ -388,48 +398,6 @@ func moveAssociatedCovers(originalFilePath, newFilePath string) (int, error) {
 		}
 	}
 
-	// Also move canonical covers if they exist in the same directory
-	// Only move them if this is the only file in the directory
-	files, err := os.ReadDir(originalDir)
-	if err != nil {
-		return coversMoved, errors.WithStack(err)
-	}
-
-	// Count non-cover files in the directory
-	fileCount := 0
-	for _, file := range files {
-		if !file.IsDir() {
-			name := file.Name()
-			// Skip if it's a cover file
-			if strings.Contains(name, ".cover.") ||
-				strings.HasPrefix(name, "cover.") ||
-				strings.HasPrefix(name, "audiobook_cover.") {
-				continue
-			}
-			fileCount++
-		}
-	}
-
-	// Only move canonical covers if this was the only non-cover file in the directory
-	if fileCount <= 1 {
-		canonicalCovers := []string{"cover", "audiobook_cover"}
-		for _, coverBase := range canonicalCovers {
-			for _, ext := range imageExtensions {
-				coverName := coverBase + ext
-				originalCoverPath := filepath.Join(originalDir, coverName)
-
-				if _, err := os.Stat(originalCoverPath); err == nil {
-					newCoverPath := filepath.Join(newDir, coverName)
-					err := moveFile(originalCoverPath, newCoverPath)
-					if err != nil {
-						return coversMoved, errors.WithStack(err)
-					}
-					coversMoved++
-				}
-			}
-		}
-	}
-
 	return coversMoved, nil
 }
 
@@ -474,12 +442,12 @@ func MimeTypeFromExtension(ext string) string {
 }
 
 // CoverExistsWithBaseName checks if any cover file exists with the given base name,
-// regardless of image extension. This allows users to provide custom covers (e.g., cover.png)
-// that won't be overwritten even if the book would extract a different format (e.g., cover.jpg).
+// regardless of image extension. This allows users to provide custom covers
+// that won't be overwritten even if the book would extract a different format.
 //
 // Parameters:
 //   - dir: the directory to check
-//   - baseName: the cover base name without extension (e.g., "cover", "book_cover", "audiobook_cover")
+//   - baseName: the cover base name without extension (e.g., "mybook.epub.cover")
 //
 // Returns the path to the existing cover file if found, or empty string if no cover exists.
 func CoverExistsWithBaseName(dir, baseName string) string {
@@ -490,6 +458,50 @@ func CoverExistsWithBaseName(dir, baseName string) string {
 		}
 	}
 	return ""
+}
+
+// CleanupEmptyDirectory removes a directory if it's empty.
+// Returns true if the directory was removed, false if it wasn't empty or didn't exist.
+func CleanupEmptyDirectory(dirPath string) (bool, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.WithStack(err)
+	}
+
+	if len(entries) == 0 {
+		if err := os.Remove(dirPath); err != nil {
+			return false, errors.WithStack(err)
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// CleanupEmptyParentDirectories removes empty parent directories starting from startPath
+// up to (but not including) stopAt.
+func CleanupEmptyParentDirectories(startPath, stopAt string) error {
+	current := startPath
+	for current != stopAt && current != "." && current != "/" {
+		parent := filepath.Dir(current)
+		if parent == current {
+			break // Can't go up any further
+		}
+
+		removed, err := CleanupEmptyDirectory(current)
+		if err != nil {
+			return err
+		}
+		if !removed {
+			break // Directory not empty, stop climbing
+		}
+
+		current = parent
+	}
+	return nil
 }
 
 // NormalizeImage decodes and re-encodes an image to strip problematic metadata

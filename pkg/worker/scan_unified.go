@@ -185,6 +185,8 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 		}
 
 		bookDeleted := len(book.Files) == 1
+		fileDir := filepath.Dir(file.Filepath)
+		bookPath := book.Filepath
 
 		// Delete the file
 		if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
@@ -203,6 +205,27 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 				return nil, errors.Wrap(err, "failed to delete orphaned book")
 			}
 			log.Info("deleted orphaned book", logger.Data{"book_id": book.ID})
+
+			// Clean up empty directories up to library path
+			library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+				ID: &book.LibraryID,
+			})
+			if libErr == nil && library != nil {
+				// Find which library path contains this book
+				for _, libPath := range library.LibraryPaths {
+					if strings.HasPrefix(bookPath, libPath.Filepath) {
+						if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
+							log.Warn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+						}
+						break
+					}
+				}
+			}
+		} else if fileDir != bookPath {
+			// Clean up empty directories up to book folder
+			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
+				log.Warn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+			}
 		}
 
 		return &ScanResult{
@@ -271,6 +294,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 	// If book has no files, delete it
 	if len(book.Files) == 0 {
 		log.Info("book has no files, deleting", logger.Data{"book_id": book.ID})
+		bookPath := book.Filepath
 
 		// Delete from search index before deleting the book
 		if w.searchService != nil {
@@ -282,6 +306,22 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 		// Delete book
 		if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
 			return nil, errors.Wrap(err, "failed to delete empty book")
+		}
+
+		// Clean up empty directories up to library path
+		library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+			ID: &book.LibraryID,
+		})
+		if libErr == nil && library != nil {
+			// Find which library path contains this book
+			for _, libPath := range library.LibraryPaths {
+				if strings.HasPrefix(bookPath, libPath.Filepath) {
+					if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
+						log.Warn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+					}
+					break
+				}
+			}
 		}
 
 		return &ScanResult{BookDeleted: true}, nil

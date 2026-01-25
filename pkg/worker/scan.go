@@ -109,21 +109,12 @@ func isMainFileExtension(ext string) bool {
 // isShishoSpecialFile returns true if the filename is a shisho-specific file.
 func isShishoSpecialFile(filename string) bool {
 	lower := strings.ToLower(filename)
-	// Exclude cover files: *.cover.* pattern
+	// Exclude individual cover files: *.cover.* pattern
 	if strings.Contains(lower, ".cover.") {
 		return true
 	}
 	// Exclude metadata files: *.metadata.json
 	if strings.HasSuffix(lower, ".metadata.json") {
-		return true
-	}
-	// Exclude canonical cover files (cover.png, cover.jpg, etc.)
-	base := strings.TrimSuffix(lower, filepath.Ext(lower))
-	if base == "cover" {
-		return true
-	}
-	// Exclude user-provided cover files with common patterns (audiobook_cover.png, book_cover.jpg, etc.)
-	if strings.HasSuffix(base, "_cover") || strings.HasSuffix(base, "-cover") {
 		return true
 	}
 	return false
