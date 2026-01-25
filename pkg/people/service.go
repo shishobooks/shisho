@@ -237,6 +237,7 @@ func (svc *Service) GetAuthoredBooks(ctx context.Context, personID int) ([]*mode
 
 	err := svc.db.NewSelect().
 		Model(&books).
+		Distinct().
 		Join("INNER JOIN authors a ON a.book_id = b.id").
 		Where("a.person_id = ?", personID).
 		Order("b.title ASC").
