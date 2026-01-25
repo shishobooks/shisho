@@ -137,6 +137,10 @@ export const useMergeSeries = () => {
         queryKey: [QueryKey.RetrieveSeries, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
+      // Invalidate series books query since books moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.SeriesBooks, variables.targetId],
+      });
       // Invalidate book queries since they display series info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
