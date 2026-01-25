@@ -66,37 +66,8 @@ jobs:
       - name: Run lint
         run: yarn lint
 
-  test-js-unit:
-    name: JS Unit Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "yarn"
-
-      - name: Install yq
-        uses: mikefarah/yq@v4
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Generate TypeScript types
-        run: make tygo
-
-      - name: Run unit tests
-        run: yarn test:unit
-
-  test-js-e2e:
-    name: JS E2E Test
+  test-js:
+    name: JS Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -126,6 +97,9 @@ jobs:
 
       - name: Generate TypeScript types
         run: make tygo
+
+      - name: Run unit tests
+        run: yarn test:unit
 
       - name: Run E2E tests
         run: yarn test:e2e
