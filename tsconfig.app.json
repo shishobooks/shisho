@@ -6,7 +6,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["vite/client", "@testing-library/jest-dom"],
+    "types": ["vite/client"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -29,5 +29,6 @@
       "@/*": ["./app/*"]
     }
   },
-  "include": ["app"]
+  "include": ["app"],
+  "exclude": ["app/**/*.test.ts", "app/**/*.test.tsx"]
 }

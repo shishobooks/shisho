@@ -27,6 +27,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `yarn lint:types` - TypeScript type checking only
 - `yarn lint:prettier` - Prettier formatting check only
 
+**Dependency Structure:** The `dependencies` vs `devDependencies` split in `package.json` is optimized for Docker builds, not traditional Node.js semantics:
+- `dependencies`: Everything needed for `yarn build` (React, UI libs, vite, typescript, @types/*)
+- `devDependencies`: Only test/lint tools (eslint, prettier, vitest, playwright, testing-library)
+
+This allows the Dockerfile to use `yarn install --production` to skip installing test/lint tools, reducing build time and image layer size. When adding new packages, put build-time dependencies in `dependencies` and test/lint tools in `devDependencies`.
+
 ### Database
 - `make db:migrate` - Run all pending migrations
 - `make db:rollback` - Rollback last migration

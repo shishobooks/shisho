@@ -29,9 +29,9 @@ FROM node:22.14.0-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
+# Install production dependencies only (build tools, not test/lint tools)
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+RUN yarn install --production --frozen-lockfile
 
 # Copy frontend source
 COPY app/ ./app/
