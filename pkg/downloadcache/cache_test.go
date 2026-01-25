@@ -15,6 +15,7 @@ import (
 )
 
 func TestCache_GetOrGenerate(t *testing.T) {
+	t.Parallel()
 	t.Run("generates new file when cache is empty", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cacheDir := filepath.Join(tmpDir, "cache")
@@ -176,6 +177,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 }
 
 func TestCache_ChapterFingerprinting(t *testing.T) {
+	t.Parallel()
 	t.Run("chapter changes invalidate cache", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cacheDir := filepath.Join(tmpDir, "cache")
@@ -292,6 +294,7 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 }
 
 func TestCache_Invalidate(t *testing.T) {
+	t.Parallel()
 	t.Run("removes cached file and metadata", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cacheDir := filepath.Join(tmpDir, "cache")

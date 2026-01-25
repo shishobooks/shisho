@@ -13,6 +13,7 @@ import (
 )
 
 func TestScheduler_SkipsWhenNoLibraries(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Check for active job before - should be false
@@ -27,6 +28,7 @@ func TestScheduler_SkipsWhenNoLibraries(t *testing.T) {
 }
 
 func TestScheduler_SkipsWhenScanJobPending(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a library first
@@ -48,6 +50,7 @@ func TestScheduler_SkipsWhenScanJobPending(t *testing.T) {
 }
 
 func TestScheduler_SkipsWhenScanJobInProgress(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a library first
@@ -69,6 +72,7 @@ func TestScheduler_SkipsWhenScanJobInProgress(t *testing.T) {
 }
 
 func TestScheduler_CreatesJobWhenNoneActive(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a library first
@@ -104,6 +108,7 @@ func TestScheduler_CreatesJobWhenNoneActive(t *testing.T) {
 }
 
 func TestScheduler_StartWithZeroInterval(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Set SyncIntervalMinutes to 0 (disabled)
@@ -139,6 +144,7 @@ func TestScheduler_StartWithZeroInterval(t *testing.T) {
 }
 
 func TestScheduler_LibraryExistsCheck(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Initially no libraries

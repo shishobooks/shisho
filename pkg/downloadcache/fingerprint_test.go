@@ -13,6 +13,7 @@ import (
 )
 
 func TestComputeFingerprint(t *testing.T) {
+	t.Parallel()
 	t.Run("basic book with all fields", func(t *testing.T) {
 		book := &models.Book{
 			Title:    "Test Book",
@@ -268,6 +269,7 @@ func TestComputeFingerprint(t *testing.T) {
 }
 
 func TestFingerprintHash(t *testing.T) {
+	t.Parallel()
 	t.Run("same fingerprint produces same hash", func(t *testing.T) {
 		fp1 := &Fingerprint{
 			Title: "Test",
@@ -588,6 +590,7 @@ func TestFingerprintHash(t *testing.T) {
 }
 
 func TestFingerprintEqual(t *testing.T) {
+	t.Parallel()
 	t.Run("equal fingerprints", func(t *testing.T) {
 		fp1 := &Fingerprint{Title: "Test"}
 		fp2 := &Fingerprint{Title: "Test"}
@@ -619,6 +622,7 @@ func TestFingerprintEqual(t *testing.T) {
 }
 
 func TestComputeFingerprint_IncludesFileName(t *testing.T) {
+	t.Parallel()
 	name := "Custom Edition Name"
 	book := &models.Book{
 		Title: "Test Book",
@@ -635,6 +639,7 @@ func TestComputeFingerprint_IncludesFileName(t *testing.T) {
 }
 
 func TestComputeFingerprint_DifferentNamesProduceDifferentHashes(t *testing.T) {
+	t.Parallel()
 	book := &models.Book{Title: "Test Book"}
 
 	name1 := "Edition A"
@@ -652,6 +657,7 @@ func TestComputeFingerprint_DifferentNamesProduceDifferentHashes(t *testing.T) {
 }
 
 func TestComputeFingerprint_ChaptersAreIncluded(t *testing.T) {
+	t.Parallel()
 	book := &models.Book{
 		Title: "Test Book",
 	}
@@ -701,6 +707,7 @@ func TestComputeFingerprint_ChaptersAreIncluded(t *testing.T) {
 }
 
 func TestComputeFingerprint_ChaptersWithNilOptionalFieldsFingerprintCorrectly(t *testing.T) {
+	t.Parallel()
 	// This test ensures that chapters with nil optional fields (StartPage, StartTimestampMs, Href)
 	// don't cause panics during fingerprinting and compute successfully.
 	book := &models.Book{
@@ -753,6 +760,7 @@ func TestComputeFingerprint_ChaptersWithNilOptionalFieldsFingerprintCorrectly(t 
 }
 
 func TestComputeFingerprint_NestedChaptersAreIncluded(t *testing.T) {
+	t.Parallel()
 	book := &models.Book{
 		Title: "Test Book with Nested Chapters",
 	}

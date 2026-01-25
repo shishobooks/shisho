@@ -16,6 +16,7 @@ import (
 )
 
 func TestScan_ZeroEntryPoints(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with no entry points set (tests internal validation logic)
@@ -27,6 +28,7 @@ func TestScan_ZeroEntryPoints(t *testing.T) {
 }
 
 func TestScan_MultipleEntryPoints(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with multiple entry points set (tests internal validation logic)
@@ -41,6 +43,7 @@ func TestScan_MultipleEntryPoints(t *testing.T) {
 }
 
 func TestScan_SingleEntryPoint_FileID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with just FileID set (tests internal validation logic)
@@ -56,6 +59,7 @@ func TestScan_SingleEntryPoint_FileID(t *testing.T) {
 }
 
 func TestScan_SingleEntryPoint_BookID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with just BookID set (tests internal validation logic)
@@ -70,6 +74,7 @@ func TestScan_SingleEntryPoint_BookID(t *testing.T) {
 }
 
 func TestScan_SingleEntryPoint_FilePath(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with just FilePath set (tests internal validation logic)
@@ -85,6 +90,7 @@ func TestScan_SingleEntryPoint_FilePath(t *testing.T) {
 }
 
 func TestScan_MultipleEntryPoints_AllThree(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with all three entry points set (tests internal validation logic)
@@ -100,6 +106,7 @@ func TestScan_MultipleEntryPoints_AllThree(t *testing.T) {
 }
 
 func TestScan_MultipleEntryPoints_FilePathAndFileID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with FilePath and FileID set (tests internal validation logic)
@@ -114,6 +121,7 @@ func TestScan_MultipleEntryPoints_FilePathAndFileID(t *testing.T) {
 }
 
 func TestScan_MultipleEntryPoints_FilePathAndBookID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call scanInternal with FilePath and BookID set (tests internal validation logic)
@@ -132,6 +140,7 @@ func TestScan_MultipleEntryPoints_FilePathAndBookID(t *testing.T) {
 // =============================================================================
 
 func TestScanFileByID_MissingFile_DeletesFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -203,6 +212,7 @@ func TestScanFileByID_MissingFile_DeletesFile(t *testing.T) {
 }
 
 func TestScanFileByID_MissingFile_LastFile_DeletesBook(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -262,6 +272,7 @@ func TestScanFileByID_MissingFile_LastFile_DeletesBook(t *testing.T) {
 }
 
 func TestScanFileByID_NotFound(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call Scan with a non-existent FileID
@@ -275,6 +286,7 @@ func TestScanFileByID_NotFound(t *testing.T) {
 }
 
 func TestScanFileByID_UnreadableFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -316,6 +328,7 @@ func TestScanFileByID_UnreadableFile(t *testing.T) {
 }
 
 func TestScanFileByID_CorruptFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -372,6 +385,7 @@ func TestScanFileByID_CorruptFile(t *testing.T) {
 // =============================================================================
 
 func TestScanFileCore_BookTitle_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -420,6 +434,7 @@ func TestScanFileCore_BookTitle_HigherPriority(t *testing.T) {
 }
 
 func TestScanFileCore_BookTitle_LowerPriority_Skipped(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -468,6 +483,7 @@ func TestScanFileCore_BookTitle_LowerPriority_Skipped(t *testing.T) {
 }
 
 func TestScanFileCore_BookTitle_ForceRefresh(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -516,6 +532,7 @@ func TestScanFileCore_BookTitle_ForceRefresh(t *testing.T) {
 }
 
 func TestScanFileCore_BookSortTitle_Regenerated(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -565,6 +582,7 @@ func TestScanFileCore_BookSortTitle_Regenerated(t *testing.T) {
 }
 
 func TestScanFileCore_BookSubtitle_Updated(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -615,6 +633,7 @@ func TestScanFileCore_BookSubtitle_Updated(t *testing.T) {
 }
 
 func TestScanFileCore_BookDescription_Updated(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -665,6 +684,7 @@ func TestScanFileCore_BookDescription_Updated(t *testing.T) {
 }
 
 func TestScanFileCore_NilMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -706,6 +726,7 @@ func TestScanFileCore_NilMetadata(t *testing.T) {
 }
 
 func TestScanFileCore_Authors_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -780,6 +801,7 @@ func TestScanFileCore_Authors_HigherPriority(t *testing.T) {
 }
 
 func TestScanFileCore_Authors_LowerPriority_Skipped(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -854,6 +876,7 @@ func TestScanFileCore_Authors_LowerPriority_Skipped(t *testing.T) {
 }
 
 func TestScanFileCore_Authors_ForceRefresh(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -928,6 +951,7 @@ func TestScanFileCore_Authors_ForceRefresh(t *testing.T) {
 }
 
 func TestScanFileCore_Series_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1005,6 +1029,7 @@ func TestScanFileCore_Series_HigherPriority(t *testing.T) {
 }
 
 func TestScanFileCore_Genres_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1079,6 +1104,7 @@ func TestScanFileCore_Genres_HigherPriority(t *testing.T) {
 }
 
 func TestScanFileCore_Tags_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1157,6 +1183,7 @@ func TestScanFileCore_Tags_HigherPriority(t *testing.T) {
 // =============================================================================
 
 func TestScanFileCore_Narrators_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1232,6 +1259,7 @@ func TestScanFileCore_Narrators_HigherPriority(t *testing.T) {
 }
 
 func TestScanFileCore_FileName_CBZ(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1292,6 +1320,7 @@ func TestScanFileCore_FileName_CBZ(t *testing.T) {
 }
 
 func TestScanFileCore_FileName_CBZ_UsesSeriesWhenNoTitle(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -1348,6 +1377,7 @@ func TestScanFileCore_FileName_CBZ_UsesSeriesWhenNoTitle(t *testing.T) {
 }
 
 func TestScanFileCore_WritesSidecars(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -1403,6 +1433,7 @@ func TestScanFileCore_WritesSidecars(t *testing.T) {
 }
 
 func TestScanFileCore_UpdatesSearchIndex(t *testing.T) {
+	t.Parallel()
 	tc := newTestContextWithSearchService(t)
 
 	// Setup: Create library
@@ -1459,6 +1490,7 @@ func TestScanFileCore_UpdatesSearchIndex(t *testing.T) {
 // =============================================================================
 
 func TestScanFileByID_Integration_UpdatesMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1529,6 +1561,7 @@ func TestScanFileByID_Integration_UpdatesMetadata(t *testing.T) {
 // =============================================================================
 
 func TestScanBook_NoFiles_DeletesBook(t *testing.T) {
+	t.Parallel()
 	tc := newTestContextWithSearchService(t)
 
 	// Setup: Create library
@@ -1572,6 +1605,7 @@ func TestScanBook_NoFiles_DeletesBook(t *testing.T) {
 }
 
 func TestScanBook_NotFound(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call Scan with a non-existent BookID
@@ -1585,6 +1619,7 @@ func TestScanBook_NotFound(t *testing.T) {
 }
 
 func TestScanBook_MultipleFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1634,6 +1669,7 @@ func TestScanBook_MultipleFiles(t *testing.T) {
 }
 
 func TestScanBook_FileError_ContinuesWithOthers(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1698,6 +1734,7 @@ func TestScanBook_FileError_ContinuesWithOthers(t *testing.T) {
 // =============================================================================
 
 func TestScanFileByPath_FileNotOnDisk(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library
@@ -1716,6 +1753,7 @@ func TestScanFileByPath_FileNotOnDisk(t *testing.T) {
 }
 
 func TestScanFileByPath_MissingLibraryID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Call Scan with FilePath but no LibraryID
@@ -1730,6 +1768,7 @@ func TestScanFileByPath_MissingLibraryID(t *testing.T) {
 }
 
 func TestScanFileByPath_ExistingFile_DelegatesToScanFileByID(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1776,6 +1815,7 @@ func TestScanFileByPath_ExistingFile_DelegatesToScanFileByID(t *testing.T) {
 }
 
 func TestScanFileByPath_NewFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1818,6 +1858,7 @@ func TestScanFileByPath_NewFile(t *testing.T) {
 // TestScanFileByPath_CreatesBookAndFile tests that scanning a new file creates
 // both a book record and a file record with proper metadata extraction.
 func TestScanFileByPath_CreatesBookAndFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -1886,6 +1927,7 @@ func TestScanFileByPath_CreatesBookAndFile(t *testing.T) {
 // =============================================================================
 
 func TestProcessScanJob_CleansUpOrphanedFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContextWithSearchService(t)
 
 	// Setup: Create a library with temp directory
@@ -1940,6 +1982,7 @@ func TestProcessScanJob_CleansUpOrphanedFiles(t *testing.T) {
 }
 
 func TestProcessScanJob_CleansUpOrphanedFile_KeepsBookWithOtherFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContextWithSearchService(t)
 
 	// Setup: Create a library with temp directory
@@ -2010,6 +2053,7 @@ func TestProcessScanJob_CleansUpOrphanedFile_KeepsBookWithOtherFiles(t *testing.
 // TestScanFileCore_FileLevelFields_Publisher verifies that publisher metadata is extracted
 // from files and stored on the file record (regression test for file-level fields).
 func TestScanFileCore_FileLevelFields_Publisher(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2066,6 +2110,7 @@ func TestScanFileCore_FileLevelFields_Publisher(t *testing.T) {
 // TestScanFileCore_FileLevelFields_Imprint verifies that imprint metadata is extracted
 // from files and stored on the file record (regression test for file-level fields).
 func TestScanFileCore_FileLevelFields_Imprint(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2122,6 +2167,7 @@ func TestScanFileCore_FileLevelFields_Imprint(t *testing.T) {
 // TestScanFileCore_FileLevelFields_ReleaseDate verifies that release date metadata is extracted
 // from files and stored on the file record (regression test for file-level fields).
 func TestScanFileCore_FileLevelFields_ReleaseDate(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2179,6 +2225,7 @@ func TestScanFileCore_FileLevelFields_ReleaseDate(t *testing.T) {
 // TestScanFileCore_SidecarReading_BookTitle verifies that book sidecar files are read
 // and their values override filepath-sourced data (regression test for sidecar reading).
 func TestScanFileCore_SidecarReading_BookTitle(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -2238,6 +2285,7 @@ func TestScanFileCore_SidecarReading_BookTitle(t *testing.T) {
 // TestScanFileCore_SidecarPriority_OverridesFileMetadata verifies that sidecar
 // files DO override data from file metadata sources (sidecar has higher priority).
 func TestScanFileCore_SidecarPriority_OverridesFileMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -2299,6 +2347,7 @@ func TestScanFileCore_SidecarPriority_OverridesFileMetadata(t *testing.T) {
 // files DO override data from sources with lower priority (regression test for
 // sidecar priority logic).
 func TestScanFileCore_SidecarPriority_OverridesLowerPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -2358,6 +2407,7 @@ func TestScanFileCore_SidecarPriority_OverridesLowerPriority(t *testing.T) {
 // TestScanFileByID_CoverRecovery verifies that missing cover files are re-extracted
 // from the media file during resync (regression test for cover recovery logic).
 func TestScanFileByID_CoverRecovery(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create a library with temp directory
@@ -2412,6 +2462,7 @@ func TestScanFileByID_CoverRecovery(t *testing.T) {
 // are read and their values (publisher, imprint, release date) override filepath-sourced
 // data (regression test for sidecar reading of file-level fields).
 func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with a real temp directory
@@ -2487,6 +2538,7 @@ func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
 // TestScanFileCore_FileName_M4B verifies that M4B files get their file.name set
 // from the metadata title (regression test for file.name update from metadata).
 func TestScanFileCore_FileName_M4B(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2547,6 +2599,7 @@ func TestScanFileCore_FileName_M4B(t *testing.T) {
 // TestScanFileCore_FileName_EPUB verifies that EPUB files get their file.name set
 // from the metadata title (regression test for file.name update from metadata).
 func TestScanFileCore_FileName_EPUB(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2608,6 +2661,7 @@ func TestScanFileCore_FileName_EPUB(t *testing.T) {
 // causes file.name to be updated even if it already has a value from the same source
 // (regression test for forceRefresh behavior with file.name).
 func TestScanFileCore_FileName_ForceRefresh_OverridesExisting(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library
@@ -2675,6 +2729,7 @@ func TestScanFileCore_FileName_ForceRefresh_OverridesExisting(t *testing.T) {
 // changes during resync and the library has OrganizeFileStructure enabled, the actual
 // file on disk is renamed (regression test for file organization during resync).
 func TestScanFileCore_FileOrganization_RenamesFileOnDisk(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with OrganizeFileStructure enabled
@@ -2778,6 +2833,7 @@ func TestScanFileCore_FileOrganization_RenamesFileOnDisk(t *testing.T) {
 // OrganizeFileStructure is disabled, files are NOT renamed on disk even when file.name
 // changes (regression test for file organization opt-in behavior).
 func TestScanFileCore_FileOrganization_SkipsWhenOrganizeDisabled(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library WITHOUT OrganizeFileStructure (default is false)
@@ -2853,6 +2909,7 @@ func TestScanFileCore_FileOrganization_SkipsWhenOrganizeDisabled(t *testing.T) {
 // is updated from a sidecar file and the library has OrganizeFileStructure enabled,
 // the actual file on disk is renamed (regression test for sidecar-triggered file organization).
 func TestScanFileCore_FileOrganization_SidecarNameChange(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with OrganizeFileStructure enabled
@@ -2953,6 +3010,7 @@ func TestScanFileCore_FileOrganization_SidecarNameChange(t *testing.T) {
 // file.Name already matches the title, a resync will still strip the author prefix
 // from the filename on disk. This ensures existing files migrate to the new naming convention.
 func TestScanFileCore_FileOrganization_StripsAuthorPrefixOnResync(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with OrganizeFileStructure enabled
@@ -3061,6 +3119,7 @@ func TestScanFileCore_FileOrganization_StripsAuthorPrefixOnResync(t *testing.T) 
 // changes during resync (not full scan) and the library has OrganizeFileStructure enabled,
 // the book folder is renamed on disk (regression test for book organization during resync).
 func TestScanFileCore_BookOrganization_RenamesFolderOnDisk(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with OrganizeFileStructure enabled
@@ -3156,6 +3215,7 @@ func TestScanFileCore_BookOrganization_RenamesFolderOnDisk(t *testing.T) {
 // is skipped during full scans (when jobLog is not nil) to avoid renaming directories
 // while other files are still being discovered/processed.
 func TestScanFileCore_BookOrganization_SkippedDuringFullScan(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library with OrganizeFileStructure enabled
@@ -3245,6 +3305,7 @@ func TestScanFileCore_BookOrganization_SkippedDuringFullScan(t *testing.T) {
 // TestScanFileCore_Supplement_SetsFileNameFromFilename verifies that supplement files
 // (like PDFs) can be rescanned and get their file.Name set from the filename on disk.
 func TestScanFileCore_Supplement_SetsFileNameFromFilename(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 	tc.createLibrary([]string{"/library"})
 
@@ -3300,6 +3361,7 @@ func TestScanFileCore_Supplement_SetsFileNameFromFilename(t *testing.T) {
 // TestScanFileCore_Supplement_DoesNotUpdateBookMetadata verifies that supplements
 // don't update book-level metadata (title, authors, series).
 func TestScanFileCore_Supplement_DoesNotUpdateBookMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 	tc.createLibrary([]string{"/library"})
 
@@ -3379,6 +3441,7 @@ func TestScanFileCore_Supplement_DoesNotUpdateBookMetadata(t *testing.T) {
 // TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix verifies that supplements
 // are renamed WITHOUT the author prefix to avoid duplication like "[Author] [Author] name.pdf".
 func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a temp directory for the library
@@ -3474,6 +3537,7 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 // TestScanFileCore_Chapters_SavedFromMetadata verifies that chapters from file metadata
 // are saved to the database during scanning.
 func TestScanFileCore_Chapters_SavedFromMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -3538,6 +3602,7 @@ func TestScanFileCore_Chapters_SavedFromMetadata(t *testing.T) {
 // TestScanFileCore_Chapters_HigherPriority verifies that chapters from higher priority
 // sources overwrite lower priority chapters.
 func TestScanFileCore_Chapters_HigherPriority(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -3610,6 +3675,7 @@ func TestScanFileCore_Chapters_HigherPriority(t *testing.T) {
 // TestScanFileCore_Chapters_LowerPriority_Skipped verifies that chapters from lower
 // priority sources do not overwrite higher priority chapters.
 func TestScanFileCore_Chapters_LowerPriority_Skipped(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -3680,6 +3746,7 @@ func TestScanFileCore_Chapters_LowerPriority_Skipped(t *testing.T) {
 // TestScanFileCore_Chapters_ForceRefresh verifies that forceRefresh bypasses
 // priority checks and overwrites chapters.
 func TestScanFileCore_Chapters_ForceRefresh(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -3750,6 +3817,7 @@ func TestScanFileCore_Chapters_ForceRefresh(t *testing.T) {
 // TestScanFileCore_Chapters_NestedHierarchy verifies that nested chapters (EPUB)
 // are saved with proper parent-child relationships.
 func TestScanFileCore_Chapters_NestedHierarchy(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB
@@ -3819,6 +3887,7 @@ func TestScanFileCore_Chapters_NestedHierarchy(t *testing.T) {
 // TestScanFileCore_Chapters_EmptyChapters_Skipped verifies that empty chapter lists
 // do not overwrite existing chapters.
 func TestScanFileCore_Chapters_EmptyChapters_Skipped(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Setup: Create library and book in DB

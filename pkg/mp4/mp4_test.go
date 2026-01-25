@@ -16,6 +16,7 @@ import (
 // This test should FAIL with the current dhowden/tag implementation and PASS once
 // we implement the new go-mp4 based parser.
 func TestParse_DataType18Genre(t *testing.T) {
+	t.Parallel()
 	dir := testgen.TempDir(t, "mp4-type18-*")
 
 	// Generate a synthetic M4B with data type 18 genre
@@ -36,6 +37,7 @@ func TestParse_DataType18Genre(t *testing.T) {
 // TestParse_BasicMetadata tests basic metadata extraction using ffmpeg-generated M4B.
 // This test should pass with both the old and new implementations.
 func TestParse_BasicMetadata(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-basic-*")
 
@@ -59,6 +61,7 @@ func TestParse_BasicMetadata(t *testing.T) {
 
 // TestParse_WithCover tests that cover images are extracted correctly.
 func TestParse_WithCover(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-cover-*")
 
@@ -79,6 +82,7 @@ func TestParse_WithCover(t *testing.T) {
 
 // TestParse_SeriesExtraction tests series name and number parsing from album field.
 func TestParse_SeriesExtraction(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-series-*")
 
@@ -99,6 +103,7 @@ func TestParse_SeriesExtraction(t *testing.T) {
 
 // TestParseFull_Duration tests that duration is extracted correctly.
 func TestParseFull_Duration(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-duration-*")
 
@@ -117,6 +122,7 @@ func TestParseFull_Duration(t *testing.T) {
 
 // TestWrite_Roundtrip tests that writing metadata and re-reading produces the same values.
 func TestWrite_Roundtrip(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-write-*")
 
@@ -152,6 +158,7 @@ func TestWrite_Roundtrip(t *testing.T) {
 
 // TestWrite_Subtitle tests subtitle roundtrip through freeform atom.
 func TestWrite_Subtitle(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-subtitle-*")
 
@@ -177,6 +184,7 @@ func TestWrite_Subtitle(t *testing.T) {
 
 // TestWrite_NarratorAtoms tests that narrators are written to both ©nrt and ©cmp.
 func TestWrite_NarratorAtoms(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-narrator-*")
 
@@ -204,6 +212,7 @@ func TestWrite_NarratorAtoms(t *testing.T) {
 
 // TestWrite_SeriesFormatting tests album formatting from series info.
 func TestWrite_SeriesFormatting(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tests := []struct {
@@ -246,6 +255,7 @@ func TestWrite_SeriesFormatting(t *testing.T) {
 
 // TestWriteToFile_AtomicWrite tests that WriteToFile creates a new file atomically.
 func TestWriteToFile_AtomicWrite(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-writeto-*")
 
@@ -285,6 +295,7 @@ func TestWriteToFile_AtomicWrite(t *testing.T) {
 
 // TestWrite_PreservesMetadata tests that unmodified fields are preserved.
 func TestWrite_PreservesMetadata(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-preserve-*")
 
@@ -319,6 +330,7 @@ func TestWrite_PreservesMetadata(t *testing.T) {
 // This ensures tags like album_artist, copyright, date, etc. that we don't explicitly
 // handle are still preserved when writing files.
 func TestWrite_PreservesUnknownAtoms(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-unknown-atoms-*")
 
@@ -406,6 +418,7 @@ func TestWrite_PreservesUnknownAtoms(t *testing.T) {
 
 // TestWrite_PreservesCommentAndYear tests that comment and year fields are preserved.
 func TestWrite_PreservesCommentAndYear(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-comment-year-*")
 

@@ -16,11 +16,13 @@ import (
 )
 
 func TestM4BGenerator_SupportedType(t *testing.T) {
+	t.Parallel()
 	gen := &M4BGenerator{}
 	assert.Equal(t, models.FileTypeM4B, gen.SupportedType())
 }
 
 func TestM4BGenerator_Generate(t *testing.T) {
+	t.Parallel()
 	t.Run("modifies title and authors", func(t *testing.T) {
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")

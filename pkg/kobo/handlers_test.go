@@ -11,6 +11,7 @@ import (
 )
 
 func TestSyncToken_Encode(t *testing.T) {
+	t.Parallel()
 	token := SyncToken{LastSyncPointID: "test-id-123"}
 	tokenJSON, err := json.Marshal(token)
 	require.NoError(t, err)
@@ -27,6 +28,7 @@ func TestSyncToken_Encode(t *testing.T) {
 }
 
 func TestFitDimensions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		srcW, srcH       int
@@ -50,6 +52,7 @@ func TestFitDimensions(t *testing.T) {
 }
 
 func TestBuildBookMetadata(t *testing.T) {
+	t.Parallel()
 	// This tests that buildBookMetadata doesn't panic with minimal data
 	book := &models.Book{
 		ID:    1,
@@ -68,6 +71,7 @@ func TestBuildBookMetadata(t *testing.T) {
 }
 
 func TestBuildBookMetadata_WithRelations(t *testing.T) {
+	t.Parallel()
 	personName := "Test Author"
 	description := "A test description"
 	seriesNumber := 3.0

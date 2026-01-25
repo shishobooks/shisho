@@ -9,6 +9,7 @@ import (
 )
 
 func TestCoverExistsWithBaseName(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory for testing
 	tempDir, err := os.MkdirTemp("", "cover-test-*")
 	if err != nil {
@@ -119,6 +120,7 @@ func TestCoverExistsWithBaseName(t *testing.T) {
 }
 
 func TestComputeNewCoverPath(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		oldCoverPath string
@@ -193,6 +195,7 @@ func TestComputeNewCoverPath(t *testing.T) {
 }
 
 func TestRenameOrganizedFile_RenamesAssociatedFiles(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory for testing
 	tempDir, err := os.MkdirTemp("", "rename-test-*")
 	if err != nil {
@@ -389,6 +392,7 @@ func TestRenameOrganizedFile_RenamesAssociatedFiles(t *testing.T) {
 // basename. This is a regression test for a bug where renaming a supplement file with the
 // same basename as the main file would incorrectly rename the book's metadata sidecar.
 func TestRenameOrganizedFile_SupplementDoesNotRenameBookSidecar(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory for testing
 	tempDir, err := os.MkdirTemp("", "supplement-rename-test-*")
 	if err != nil {

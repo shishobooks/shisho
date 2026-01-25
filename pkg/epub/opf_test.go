@@ -10,6 +10,7 @@ import (
 )
 
 func TestParseOPF_Identifiers(t *testing.T) {
+	t.Parallel()
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
@@ -39,6 +40,7 @@ func TestParseOPF_Identifiers(t *testing.T) {
 }
 
 func TestParseOPF_IdentifiersPatternMatch(t *testing.T) {
+	t.Parallel()
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -63,6 +65,7 @@ func TestParseOPF_IdentifiersPatternMatch(t *testing.T) {
 }
 
 func TestParseOPF_Subtitle_TitleTypeProperty(t *testing.T) {
+	t.Parallel()
 	// EPUB3 style: subtitle identified by title-type="subtitle" property
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
@@ -82,6 +85,7 @@ func TestParseOPF_Subtitle_TitleTypeProperty(t *testing.T) {
 }
 
 func TestParseOPF_Subtitle_ByID(t *testing.T) {
+	t.Parallel()
 	// Simple ID-based: subtitle identified by id="subtitle"
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
@@ -100,6 +104,7 @@ func TestParseOPF_Subtitle_ByID(t *testing.T) {
 }
 
 func TestParseOPF_Subtitle_SingleTitle(t *testing.T) {
+	t.Parallel()
 	// Single title: no subtitle
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">

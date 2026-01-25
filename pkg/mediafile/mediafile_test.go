@@ -7,6 +7,7 @@ import (
 )
 
 func TestParsedIdentifier(t *testing.T) {
+	t.Parallel()
 	id := ParsedIdentifier{
 		Type:  "isbn_13",
 		Value: "9780316769488",
@@ -16,6 +17,7 @@ func TestParsedIdentifier(t *testing.T) {
 }
 
 func TestParsedMetadataIdentifiers(t *testing.T) {
+	t.Parallel()
 	m := ParsedMetadata{
 		Title: "Test Book",
 		Identifiers: []ParsedIdentifier{

@@ -17,6 +17,7 @@ import (
 )
 
 func TestCBZGenerator_Generate(t *testing.T) {
+	t.Parallel()
 	t.Run("modifies title and series", func(t *testing.T) {
 		tmpDir := t.TempDir()
 

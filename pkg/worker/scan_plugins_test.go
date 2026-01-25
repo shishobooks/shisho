@@ -56,6 +56,7 @@ func installTestPlugin(t *testing.T, tc *testContext, pluginDir, id, manifestJSO
 // TestScanWithPluginFileParser verifies that files with plugin-registered extensions
 // are discovered during scan and parsed by the plugin file parser.
 func TestScanWithPluginFileParser(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -133,6 +134,7 @@ func TestScanWithPluginFileParser(t *testing.T) {
 // TestScanWithPluginFileParser_MIMEValidation verifies that MIME type validation
 // is enforced when the plugin declares mimeTypes.
 func TestScanWithPluginFileParser_MIMEValidation(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -190,6 +192,7 @@ func TestScanWithPluginFileParser_MIMEValidation(t *testing.T) {
 // TestScanWithPluginFileParser_MIMEValidation_ValidFile verifies that files
 // with correct MIME types pass validation and get parsed.
 func TestScanWithPluginFileParser_MIMEValidation_ValidFile(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -259,6 +262,7 @@ func TestScanWithPluginFileParser_MIMEValidation_ValidFile(t *testing.T) {
 // TestScanWithPluginInputConverter verifies that input converters run during scan
 // and the converted files get parsed.
 func TestScanWithPluginInputConverter(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -333,6 +337,7 @@ func TestScanWithPluginInputConverter(t *testing.T) {
 // TestScanWithPluginInputConverter_MIMEValidation verifies that input converters
 // respect MIME type validation during scan.
 func TestScanWithPluginInputConverter_MIMEValidation(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -397,6 +402,7 @@ func TestScanWithPluginInputConverter_MIMEValidation(t *testing.T) {
 // TestScanWithPluginMetadataEnricher verifies that enrichers are called during scan
 // and their results are merged into file metadata.
 func TestScanWithPluginMetadataEnricher(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -504,6 +510,7 @@ func TestScanWithPluginMetadataEnricher(t *testing.T) {
 // TestScanWithPluginMetadataEnricher_FileTypeFiltering verifies that enrichers
 // only run for their declared file types.
 func TestScanWithPluginMetadataEnricher_FileTypeFiltering(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -595,6 +602,7 @@ func TestScanWithPluginMetadataEnricher_FileTypeFiltering(t *testing.T) {
 // TestScanWithPluginMetadataEnricher_Ordering verifies that enrichers respect
 // user-defined ordering (first enricher's values win).
 func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -725,6 +733,7 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
 // multiple enrichers provide different fields, each field's source accurately
 // reflects which enricher contributed it (per-field first-wins with correct sources).
 func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -883,6 +892,7 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
 // TestScanWithPluginFileParser_AllSourcesSet verifies that when a plugin file parser
 // returns all possible metadata fields, every corresponding source field is set correctly.
 func TestScanWithPluginFileParser_AllSourcesSet(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -1055,6 +1065,7 @@ func TestScanWithPluginFileParser_AllSourcesSet(t *testing.T) {
 // enricher provides all possible fields, every corresponding source field is set
 // to the enricher's plugin identity.
 func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -1233,6 +1244,7 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
 // TestScanWithPluginFileParser_ReservedExtensions verifies that plugins cannot
 // override built-in parsers for reserved extensions (epub, cbz, m4b).
 func TestScanWithPluginFileParser_ReservedExtensions(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 
@@ -1278,6 +1290,7 @@ func TestScanWithPluginFileParser_ReservedExtensions(t *testing.T) {
 // This ensures that when a file parser returns e.g. an ISBN and an enricher
 // returns a custom identifier type, both are preserved.
 func TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
 

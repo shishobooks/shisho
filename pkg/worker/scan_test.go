@@ -15,6 +15,7 @@ import (
 )
 
 func TestProcessScanJob_EPUBBasic(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a library with a temp directory
@@ -54,6 +55,7 @@ func TestProcessScanJob_EPUBBasic(t *testing.T) {
 }
 
 func TestProcessScanJob_SemicolonSeparatedAuthorsAndNarrators(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -98,6 +100,7 @@ func TestProcessScanJob_SemicolonSeparatedAuthorsAndNarrators(t *testing.T) {
 }
 
 func TestProcessScanJob_EPUBWithSeries(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -132,6 +135,7 @@ func TestProcessScanJob_EPUBWithSeries(t *testing.T) {
 }
 
 func TestProcessScanJob_CBZBasic(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -165,6 +169,7 @@ func TestProcessScanJob_CBZBasic(t *testing.T) {
 }
 
 func TestProcessScanJob_CBZWithMinimalComicInfo(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -195,6 +200,7 @@ func TestProcessScanJob_CBZWithMinimalComicInfo(t *testing.T) {
 }
 
 func TestProcessScanJob_M4BBasic(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -229,6 +235,7 @@ func TestProcessScanJob_M4BBasic(t *testing.T) {
 }
 
 func TestProcessScanJob_M4BDurationAndBitrate(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -263,6 +270,7 @@ func TestProcessScanJob_M4BDurationAndBitrate(t *testing.T) {
 }
 
 func TestProcessScanJob_UnsupportedExtension(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -281,6 +289,7 @@ func TestProcessScanJob_UnsupportedExtension(t *testing.T) {
 }
 
 func TestProcessScanJob_MimeMismatch(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -298,6 +307,7 @@ func TestProcessScanJob_MimeMismatch(t *testing.T) {
 }
 
 func TestProcessScanJob_ExistingFileSkipped(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -330,6 +340,7 @@ func TestProcessScanJob_ExistingFileSkipped(t *testing.T) {
 }
 
 func TestProcessScanJob_RootLevelFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -357,6 +368,7 @@ func TestProcessScanJob_RootLevelFile(t *testing.T) {
 }
 
 func TestProcessScanJob_DirectoryWithMultipleFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -390,6 +402,7 @@ func TestProcessScanJob_DirectoryWithMultipleFiles(t *testing.T) {
 }
 
 func TestProcessScanJob_CoverExtraction(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -417,6 +430,7 @@ func TestProcessScanJob_CoverExtraction(t *testing.T) {
 }
 
 func TestProcessScanJob_ExistingCoverNotOverwritten(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -449,6 +463,7 @@ func TestProcessScanJob_ExistingCoverNotOverwritten(t *testing.T) {
 }
 
 func TestProcessScanJob_ExistingCoverNotOverwritten_DifferentExtension(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -487,6 +502,7 @@ func TestProcessScanJob_ExistingCoverNotOverwritten_DifferentExtension(t *testin
 }
 
 func TestProcessScanJob_ExistingCanonicalCoverNotOverwritten(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -524,6 +540,7 @@ func TestProcessScanJob_ExistingCanonicalCoverNotOverwritten(t *testing.T) {
 }
 
 func TestProcessScanJob_ExistingAudiobookCoverNotOverwritten(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -560,6 +577,7 @@ func TestProcessScanJob_ExistingAudiobookCoverNotOverwritten(t *testing.T) {
 }
 
 func TestProcessScanJob_VolumeNormalization(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -587,6 +605,7 @@ func TestProcessScanJob_VolumeNormalization(t *testing.T) {
 }
 
 func TestProcessScanJob_AuthorFromFilename(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -617,6 +636,7 @@ func TestProcessScanJob_AuthorFromFilename(t *testing.T) {
 }
 
 func TestProcessScanJob_MultipleLibraryPaths(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath1 := testgen.TempLibraryDir(t)
@@ -648,6 +668,7 @@ func TestProcessScanJob_MultipleLibraryPaths(t *testing.T) {
 }
 
 func TestProcessScanJob_EmptyLibrary(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -661,6 +682,7 @@ func TestProcessScanJob_EmptyLibrary(t *testing.T) {
 }
 
 func TestProcessScanJob_NestedDirectories(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -683,6 +705,7 @@ func TestProcessScanJob_NestedDirectories(t *testing.T) {
 }
 
 func TestProcessScanJob_CBZInnerCover(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -706,6 +729,7 @@ func TestProcessScanJob_CBZInnerCover(t *testing.T) {
 }
 
 func TestProcessScanJob_EPUBWithJPEGCover(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -733,6 +757,7 @@ func TestProcessScanJob_EPUBWithJPEGCover(t *testing.T) {
 }
 
 func TestProcessScanJob_LibraryWalkError(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a path that doesn't exist
@@ -745,6 +770,7 @@ func TestProcessScanJob_LibraryWalkError(t *testing.T) {
 }
 
 func TestProcessScanJob_MetadataUpdateOnRescan(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -789,6 +815,7 @@ func TestProcessScanJob_MetadataUpdateOnRescan(t *testing.T) {
 }
 
 func TestProcessScanJob_RootLevelFileWithCover(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -823,6 +850,7 @@ func TestProcessScanJob_RootLevelFileWithCover(t *testing.T) {
 }
 
 func TestProcessScanJob_M4BWithCover(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -860,6 +888,7 @@ func TestProcessScanJob_M4BWithCover(t *testing.T) {
 }
 
 func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -904,6 +933,7 @@ func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
 }
 
 func TestProcessScanJob_OrganizeFileStructure_Disabled(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -944,6 +974,7 @@ func TestProcessScanJob_OrganizeFileStructure_Disabled(t *testing.T) {
 }
 
 func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -978,6 +1009,7 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryFile_Renamed(t *testing.T
 }
 
 func TestProcessScanJob_OrganizeFileStructure_WithCover(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1008,6 +1040,7 @@ func TestProcessScanJob_OrganizeFileStructure_WithCover(t *testing.T) {
 }
 
 func TestProcessScanJob_IsRootLevelFile_MultipleLibraryPaths(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create two library paths
@@ -1067,6 +1100,7 @@ func TestProcessScanJob_IsRootLevelFile_MultipleLibraryPaths(t *testing.T) {
 }
 
 func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1120,6 +1154,7 @@ func TestProcessScanJob_CleanupOrphanedSeries(t *testing.T) {
 }
 
 func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1154,6 +1189,7 @@ func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName(t *testing.T) {
 }
 
 func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1185,6 +1221,7 @@ func TestProcessScanJob_TitleFallbackWhenOnlyBracketsInDirName_WithNarrator(t *t
 }
 
 func TestProcessScanJob_NarratorInFilenameNotDirectory(t *testing.T) {
+	t.Parallel()
 	// Tests that narrator info in the actual filename is extracted when the directory
 	// name doesn't contain narrator info (e.g., "[Author] Title/{Stephen Fry}.m4b")
 	tc := newTestContext(t)
@@ -1221,6 +1258,7 @@ func TestProcessScanJob_NarratorInFilenameNotDirectory(t *testing.T) {
 }
 
 func TestProcessScanJob_TitleFallbackWhenCBZHasEmptyTitle(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1251,6 +1289,7 @@ func TestProcessScanJob_TitleFallbackWhenCBZHasEmptyTitle(t *testing.T) {
 }
 
 func TestProcessScanJob_TitleFallbackRootLevelWithMultipleBrackets(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1287,6 +1326,7 @@ func TestProcessScanJob_TitleFallbackRootLevelWithMultipleBrackets(t *testing.T)
 }
 
 func TestProcessScanJob_VolumeNormalization_BareNumbers(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1339,6 +1379,7 @@ func TestProcessScanJob_VolumeNormalization_BareNumbers(t *testing.T) {
 }
 
 func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -1404,6 +1445,7 @@ func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T)
 // This is a regression test for the bug where organization during scan would move files
 // before subsequent files in the scan were processed, causing file-not-found errors.
 func TestProcessScanJob_OrganizeFileStructure_MultipleRootLevelFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1471,6 +1513,7 @@ func TestProcessScanJob_OrganizeFileStructure_MultipleRootLevelFiles(t *testing.
 // This is verified by checking that the database file paths reflect the ORIGINAL
 // locations during scan, and only get updated to organized paths after scan completes.
 func TestProcessScanJob_OrganizeFileStructure_DeferredOrganization(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1529,6 +1572,7 @@ func TestProcessScanJob_OrganizeFileStructure_DeferredOrganization(t *testing.T)
 // is added with a higher priority source that has empty authors, it does not overwrite
 // existing authors from a lower priority source. We always prefer having some data over no data.
 func TestProcessScanJob_HigherPriorityEmptyAuthorDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1590,6 +1634,7 @@ func TestProcessScanJob_HigherPriorityEmptyAuthorDoesNotOverwrite(t *testing.T) 
 // is added with a higher priority source that has an empty title, it does not overwrite
 // the existing title from a lower priority source.
 func TestProcessScanJob_HigherPriorityEmptyTitleDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1650,6 +1695,7 @@ func TestProcessScanJob_HigherPriorityEmptyTitleDoesNotOverwrite(t *testing.T) {
 // created with empty authors from a high priority source, a subsequent file with authors
 // from a lower priority source will populate the empty field.
 func TestProcessScanJob_VolumeToSeriesInference(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1689,6 +1735,7 @@ func TestProcessScanJob_VolumeToSeriesInference(t *testing.T) {
 }
 
 func TestProcessScanJob_VolumeToSeriesInference_MultipleVolumes(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1732,6 +1779,7 @@ func TestProcessScanJob_VolumeToSeriesInference_MultipleVolumes(t *testing.T) {
 }
 
 func TestProcessScanJob_VolumeToSeriesInference_MetadataOverrides(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1772,6 +1820,7 @@ func TestProcessScanJob_VolumeToSeriesInference_MetadataOverrides(t *testing.T) 
 }
 
 func TestProcessScanJob_VolumeToSeriesInference_EPUBNotAffected(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1804,6 +1853,7 @@ func TestProcessScanJob_VolumeToSeriesInference_EPUBNotAffected(t *testing.T) {
 }
 
 func TestProcessScanJob_M4BSubtitleExtraction(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -1844,6 +1894,7 @@ func TestProcessScanJob_M4BSubtitleExtraction(t *testing.T) {
 }
 
 func TestProcessScanJob_M4BSubtitleNotOverwrittenByHigherPriorityEmpty(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -1895,6 +1946,7 @@ func TestProcessScanJob_M4BSubtitleNotOverwrittenByHigherPriorityEmpty(t *testin
 }
 
 func TestProcessScanJob_LowerPriorityPopulatesEmptyField(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -1949,6 +2001,7 @@ func TestProcessScanJob_LowerPriorityPopulatesEmptyField(t *testing.T) {
 // This is a regression test for the bug where organization during scan would rename
 // directories before subsequent files in that directory were processed.
 func TestProcessScanJob_OrganizeFileStructure_DirectoryRenameDoesNotBreakScan(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2019,6 +2072,7 @@ func TestProcessScanJob_OrganizeFileStructure_DirectoryRenameDoesNotBreakScan(t 
 // TestProcessScanJob_CBZWriterRole tests that the writer role is correctly parsed from
 // ComicInfo.xml and stored in the author's role field.
 func TestProcessScanJob_CBZWriterRole(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2052,6 +2106,7 @@ func TestProcessScanJob_CBZWriterRole(t *testing.T) {
 // TestProcessScanJob_CBZMultipleRoles tests that multiple author roles (writer, penciller,
 // colorist, etc.) are correctly parsed from ComicInfo.xml.
 func TestProcessScanJob_CBZMultipleRoles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2105,6 +2160,7 @@ func TestProcessScanJob_CBZMultipleRoles(t *testing.T) {
 // TestProcessScanJob_CBZCoverPageExtraction tests that the cover page index is correctly
 // extracted from ComicInfo.xml Pages section with FrontCover type.
 func TestProcessScanJob_CBZCoverPageExtraction(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2137,6 +2193,7 @@ func TestProcessScanJob_CBZCoverPageExtraction(t *testing.T) {
 // TestProcessScanJob_CBZCoverPageNonZeroIndex tests that cover page extraction works
 // when the cover is not on the first page.
 func TestProcessScanJob_CBZCoverPageNonZeroIndex(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2167,6 +2224,7 @@ func TestProcessScanJob_CBZCoverPageNonZeroIndex(t *testing.T) {
 // TestProcessScanJob_CBZNoCoverPageType tests that when no cover page type is specified
 // in ComicInfo.xml, CoverPage remains nil.
 func TestProcessScanJob_CBZNoCoverPageType(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2197,6 +2255,7 @@ func TestProcessScanJob_CBZNoCoverPageType(t *testing.T) {
 // TestProcessScanJob_CBZRolesPreservedOnRescan tests that author roles are preserved
 // when the same CBZ file is rescanned.
 func TestProcessScanJob_CBZRolesPreservedOnRescan(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2249,6 +2308,7 @@ func TestProcessScanJob_CBZRolesPreservedOnRescan(t *testing.T) {
 // TestProcessScanJob_CBZCoverPagePreservedOnRescan tests that cover page index is preserved
 // when the same CBZ file is rescanned.
 func TestProcessScanJob_CBZCoverPagePreservedOnRescan(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2286,6 +2346,7 @@ func TestProcessScanJob_CBZCoverPagePreservedOnRescan(t *testing.T) {
 // TestProcessScanJob_CBZNoComicInfoNoRoles tests that CBZ files without ComicInfo.xml
 // have authors without roles (from filepath).
 func TestProcessScanJob_CBZNoComicInfoNoRoles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2313,6 +2374,7 @@ func TestProcessScanJob_CBZNoComicInfoNoRoles(t *testing.T) {
 
 // TestProcessScanJob_CBZPageCount tests that page count is correctly extracted from CBZ files.
 func TestProcessScanJob_CBZPageCount(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2343,6 +2405,7 @@ func TestProcessScanJob_CBZPageCount(t *testing.T) {
 // TestProcessScanJob_CBZPageCountNoComicInfo tests that page count is correctly extracted
 // from CBZ files even without ComicInfo.xml (counts actual images in archive).
 func TestProcessScanJob_CBZPageCountNoComicInfo(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2371,6 +2434,7 @@ func TestProcessScanJob_CBZPageCountNoComicInfo(t *testing.T) {
 // TestProcessScanJob_EPUBAuthorsNoRoles tests that EPUB authors don't have roles
 // since EPUBs don't have the role concept like CBZ ComicInfo.xml.
 func TestProcessScanJob_EPUBAuthorsNoRoles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2400,6 +2464,7 @@ func TestProcessScanJob_EPUBAuthorsNoRoles(t *testing.T) {
 // TestProcessScanJob_M4BAuthorsNoRoles tests that M4B authors don't have roles
 // since M4B files use artist tags without role distinction.
 func TestProcessScanJob_M4BAuthorsNoRoles(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)
@@ -2429,6 +2494,7 @@ func TestProcessScanJob_M4BAuthorsNoRoles(t *testing.T) {
 // TestProcessScanJob_RescanNoChanges tests that rescanning a file with unchanged
 // metadata does not cause unnecessary database writes (idempotency).
 func TestProcessScanJob_RescanNoChanges(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2472,6 +2538,7 @@ func TestProcessScanJob_RescanNoChanges(t *testing.T) {
 // TestProcessScanJob_RescanWithChangedMetadata tests that rescanning a file
 // where embedded metadata has changed results in the book being updated.
 func TestProcessScanJob_RescanWithChangedMetadata(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2522,6 +2589,7 @@ func TestProcessScanJob_RescanWithChangedMetadata(t *testing.T) {
 // TestProcessScanJob_RescanPreservesManualEdits tests that manual edits
 // (with source "manual") are preserved through rescan, even if file metadata differs.
 func TestProcessScanJob_RescanPreservesManualEdits(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2571,6 +2639,7 @@ func TestProcessScanJob_RescanPreservesManualEdits(t *testing.T) {
 // TestProcessScanJob_RescanUpdatesSortTitle tests that when title is updated on rescan,
 // the sort_title is regenerated from the new title (using priority check).
 func TestProcessScanJob_RescanUpdatesSortTitle(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -2621,6 +2690,7 @@ func TestProcessScanJob_RescanUpdatesSortTitle(t *testing.T) {
 // to the same book (e.g., "Wind and Truth.epub" and "Wind and Truth.m4b"), they should be
 // merged into the same book and organized into the same book directory after the scan.
 func TestProcessScanJob_OrganizeFileStructure_RootLevelMultiFormatSameBook(t *testing.T) {
+	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tc := newTestContext(t)

@@ -17,9 +17,9 @@
     "start": "vite",
     "test": "concurrently --kill-others-on-fail --group \"yarn:test:*\"",
     "test:unit": "vitest run",
-    "test:e2e": "concurrently --kill-others-on-fail --group \"yarn:test:e2e:*\"",
-    "test:e2e:chromium": "playwright test --project=chromium",
-    "test:e2e:firefox": "playwright test --project=firefox"
+    "test:e2e": "mkdir -p ./tmp && concurrently --kill-others-on-fail --group \"yarn:e2e:*\"",
+    "e2e:chromium": "playwright test --project=chromium",
+    "e2e:firefox": "playwright test --project=firefox"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

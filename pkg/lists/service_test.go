@@ -73,6 +73,7 @@ func createTestBook(t *testing.T, db *bun.DB, libraryID int, title string) *mode
 }
 
 func TestService_CreateList(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -127,6 +128,7 @@ func TestService_CreateList(t *testing.T) {
 }
 
 func TestService_ListLists(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -173,6 +175,7 @@ func TestService_ListLists(t *testing.T) {
 }
 
 func TestService_Pagination(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -217,6 +220,7 @@ func TestService_Pagination(t *testing.T) {
 }
 
 func TestService_Permissions(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -338,6 +342,7 @@ func TestService_Permissions(t *testing.T) {
 }
 
 func TestService_RetrieveList(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -367,6 +372,7 @@ func TestService_RetrieveList(t *testing.T) {
 }
 
 func TestService_UpdateList(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -396,6 +402,7 @@ func TestService_UpdateList(t *testing.T) {
 }
 
 func TestService_DeleteList(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -418,6 +425,7 @@ func TestService_DeleteList(t *testing.T) {
 }
 
 func TestService_Shares(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -481,6 +489,7 @@ func TestService_Shares(t *testing.T) {
 }
 
 func TestService_SwitchListOrdering(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

@@ -12,6 +12,7 @@ import (
 )
 
 func TestProcessScanJob_SupplementsInDirectory(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -59,6 +60,7 @@ func TestProcessScanJob_SupplementsInDirectory(t *testing.T) {
 }
 
 func TestProcessScanJob_SupplementsExcludeHiddenFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -94,6 +96,7 @@ func TestProcessScanJob_SupplementsExcludeHiddenFiles(t *testing.T) {
 }
 
 func TestProcessScanJob_SupplementsExcludeShishoFiles(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -127,6 +130,7 @@ func TestProcessScanJob_SupplementsExcludeShishoFiles(t *testing.T) {
 }
 
 func TestProcessScanJob_SupplementsInSubdirectory(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)
@@ -157,6 +161,7 @@ func TestProcessScanJob_SupplementsInSubdirectory(t *testing.T) {
 }
 
 func TestProcessScanJob_RootLevelSupplements(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	libraryPath := testgen.TempLibraryDir(t)

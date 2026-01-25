@@ -10,6 +10,7 @@ import (
 )
 
 func TestTransformOPF(t *testing.T) {
+	t.Parallel()
 	t.Run("adds cover-image property when meta cover exists", func(t *testing.T) {
 		input := `<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
@@ -126,6 +127,7 @@ func TestTransformOPF(t *testing.T) {
 }
 
 func TestFindCoverID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -172,6 +174,7 @@ func TestFindCoverID(t *testing.T) {
 }
 
 func TestAddCoverImageProperty(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		content  string
@@ -207,6 +210,7 @@ func TestAddCoverImageProperty(t *testing.T) {
 }
 
 func TestTransformOPFBytes(t *testing.T) {
+	t.Parallel()
 	t.Run("transforms OPF correctly", func(t *testing.T) {
 		input := []byte(`<?xml version="1.0"?>
 <package>

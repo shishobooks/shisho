@@ -34,6 +34,7 @@ func (e *mockFieldError) Type() reflect.Type               { return reflect.Type
 func (e *mockFieldError) Translate(_ ut.Translator) string { return "" }
 
 func TestFormatValidationError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		tag   string
 		param string

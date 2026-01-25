@@ -74,6 +74,7 @@ func readOPFFromKepub(t *testing.T, kepubPath string) []byte {
 }
 
 func TestKepubCBZGenerator_Generate(t *testing.T) {
+	t.Parallel()
 	t.Run("uses file.Name for title when available", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -179,6 +180,7 @@ func TestKepubCBZGenerator_Generate(t *testing.T) {
 }
 
 func TestBuildCBZMetadata_Chapters(t *testing.T) {
+	t.Parallel()
 	t.Run("includes chapters from file", func(t *testing.T) {
 		startPage0 := 0
 		startPage5 := 5
@@ -287,6 +289,7 @@ func TestBuildCBZMetadata_Chapters(t *testing.T) {
 }
 
 func TestBuildCBZMetadata(t *testing.T) {
+	t.Parallel()
 	t.Run("sets Name from file when available", func(t *testing.T) {
 		name := "Custom Name"
 		book := &models.Book{
@@ -392,6 +395,7 @@ func readNavFromKepub(t *testing.T, kepubPath string) []byte {
 }
 
 func TestKepubCBZGenerator_Generate_WithChapters(t *testing.T) {
+	t.Parallel()
 	t.Run("generated KePub has chapter navigation", func(t *testing.T) {
 		tmpDir := t.TempDir()
 

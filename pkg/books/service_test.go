@@ -11,6 +11,7 @@ import (
 )
 
 func TestRetrieveBook_LoadsChaptersForEachFile(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -59,6 +60,7 @@ func TestRetrieveBook_LoadsChaptersForEachFile(t *testing.T) {
 }
 
 func TestRetrieveBook_LoadsNestedChaptersViaChildren(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -149,6 +151,7 @@ func TestRetrieveBook_LoadsNestedChaptersViaChildren(t *testing.T) {
 }
 
 func TestRetrieveBookByFilePath_LoadsChaptersForEachFile(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -198,6 +201,7 @@ func TestRetrieveBookByFilePath_LoadsChaptersForEachFile(t *testing.T) {
 }
 
 func TestRetrieveBookByFilePath_LoadsNestedChapters(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
 

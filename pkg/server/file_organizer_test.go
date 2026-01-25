@@ -151,6 +151,7 @@ func (tc *testContext) listFiles() []*models.File {
 }
 
 func TestFileOrganizer_OrganizeBookFiles_AuthorNameChange(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a temp library directory
@@ -224,6 +225,7 @@ func TestFileOrganizer_OrganizeBookFiles_AuthorNameChange(t *testing.T) {
 }
 
 func TestFileOrganizer_OrganizeBookFiles_DisabledLibrary(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a temp library directory with OrganizeFileStructure DISABLED
@@ -281,6 +283,7 @@ func TestFileOrganizer_OrganizeBookFiles_DisabledLibrary(t *testing.T) {
 }
 
 func TestFileOrganizer_RenameNarratedFile_NarratorNameChange(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a temp library directory
@@ -341,6 +344,7 @@ func TestFileOrganizer_RenameNarratedFile_NarratorNameChange(t *testing.T) {
 }
 
 func TestFileOrganizer_GetLibraryOrganizeSetting(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create library with OrganizeFileStructure enabled
@@ -369,6 +373,7 @@ func TestFileOrganizer_GetLibraryOrganizeSetting(t *testing.T) {
 }
 
 func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
+	t.Parallel()
 	tc := newTestContext(t)
 
 	// Create a temp library directory

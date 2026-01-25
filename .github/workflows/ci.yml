@@ -98,5 +98,8 @@ jobs:
       - name: Generate TypeScript types
         run: make tygo
 
-      - name: Run tests
-        run: yarn test
+      - name: Run unit tests
+        run: yarn test:unit
+
+      - name: Run E2E tests
+        run: yarn test:e2e

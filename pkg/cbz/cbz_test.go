@@ -11,6 +11,7 @@ import (
 )
 
 func TestParseCBZ_Identifiers(t *testing.T) {
+	t.Parallel()
 	// Create test CBZ with ComicInfo.xml containing GTIN
 	tmpDir := t.TempDir()
 	cbzPath := filepath.Join(tmpDir, "test.cbz")
@@ -50,6 +51,7 @@ func TestParseCBZ_Identifiers(t *testing.T) {
 }
 
 func TestParseCBZ_GTINAsOther(t *testing.T) {
+	t.Parallel()
 	// Create test CBZ with ComicInfo.xml containing unrecognized GTIN
 	tmpDir := t.TempDir()
 	cbzPath := filepath.Join(tmpDir, "test.cbz")
@@ -86,6 +88,7 @@ func TestParseCBZ_GTINAsOther(t *testing.T) {
 }
 
 func TestExtractSeriesNumberFromFilename(t *testing.T) {
+	t.Parallel()
 	floatPtr := func(f float64) *float64 { return &f }
 
 	tests := []struct {

@@ -12,16 +12,19 @@ import (
 )
 
 func TestPluginCachedFilename(t *testing.T) {
+	t.Parallel()
 	path := pluginCachedFilename("/cache", 42, "mobi")
 	assert.Equal(t, filepath.Join("/cache", "42.plugin.mobi"), path)
 }
 
 func TestPluginMetadataFilename(t *testing.T) {
+	t.Parallel()
 	path := pluginMetadataFilename("/cache", 42, "mobi")
 	assert.Equal(t, filepath.Join("/cache", "42.plugin.mobi.meta.json"), path)
 }
 
 func TestWriteAndReadPluginMetadata(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	now := time.Now().Truncate(time.Second)
@@ -53,6 +56,7 @@ func TestWriteAndReadPluginMetadata(t *testing.T) {
 }
 
 func TestReadPluginMetadata_NotFound(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	meta, err := ReadPluginMetadata(cacheDir, 999, "mobi")
@@ -61,6 +65,7 @@ func TestReadPluginMetadata_NotFound(t *testing.T) {
 }
 
 func TestUpdatePluginLastAccessed(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	past := time.Now().Add(-1 * time.Hour).Truncate(time.Second)
@@ -86,6 +91,7 @@ func TestUpdatePluginLastAccessed(t *testing.T) {
 }
 
 func TestUpdatePluginLastAccessed_NotFound(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	err := UpdatePluginLastAccessed(cacheDir, 999, "mobi")
@@ -94,6 +100,7 @@ func TestUpdatePluginLastAccessed_NotFound(t *testing.T) {
 }
 
 func TestGetPluginCachedFilePath(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	t.Run("returns path when cache is valid", func(t *testing.T) {
@@ -153,6 +160,7 @@ func TestGetPluginCachedFilePath(t *testing.T) {
 }
 
 func TestDeletePluginCachedFile(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	// Create cached file and metadata
@@ -185,6 +193,7 @@ func TestDeletePluginCachedFile(t *testing.T) {
 }
 
 func TestDeletePluginCachedFile_NotExist(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 
 	// Should not error when files don't exist
@@ -193,6 +202,7 @@ func TestDeletePluginCachedFile_NotExist(t *testing.T) {
 }
 
 func TestFormatPluginDownloadFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		book     *models.Book
@@ -244,6 +254,7 @@ func TestFormatPluginDownloadFilename(t *testing.T) {
 }
 
 func TestFingerprint_PluginFingerprint(t *testing.T) {
+	t.Parallel()
 	t.Run("plugin fingerprint affects hash", func(t *testing.T) {
 		fp1 := &Fingerprint{
 			Title:             "Test",
@@ -309,6 +320,7 @@ func TestFingerprint_PluginFingerprint(t *testing.T) {
 }
 
 func TestCache_InvalidatePlugin(t *testing.T) {
+	t.Parallel()
 	cacheDir := t.TempDir()
 	cache := NewCache(cacheDir, 1024*1024*1024)
 

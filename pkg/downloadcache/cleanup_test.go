@@ -11,6 +11,7 @@ import (
 )
 
 func TestRunCleanup(t *testing.T) {
+	t.Parallel()
 	t.Run("does nothing when under max size", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -96,6 +97,7 @@ func TestRunCleanup(t *testing.T) {
 }
 
 func TestRunCleanupWithStats(t *testing.T) {
+	t.Parallel()
 	t.Run("returns correct statistics", func(t *testing.T) {
 		tmpDir := t.TempDir()
 

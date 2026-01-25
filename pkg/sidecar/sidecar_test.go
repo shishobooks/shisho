@@ -11,6 +11,7 @@ import (
 )
 
 func TestFileSidecarFromModel_Name(t *testing.T) {
+	t.Parallel()
 	name := "Custom File Name"
 	file := &models.File{
 		Name: &name,
@@ -23,6 +24,7 @@ func TestFileSidecarFromModel_Name(t *testing.T) {
 }
 
 func TestFileSidecarFromModel_NilName(t *testing.T) {
+	t.Parallel()
 	file := &models.File{
 		Name: nil,
 	}
@@ -33,6 +35,7 @@ func TestFileSidecarFromModel_NilName(t *testing.T) {
 }
 
 func TestFileSidecarFromModel_WithChapters(t *testing.T) {
+	t.Parallel()
 	page1 := 0
 	page2 := 10
 	file := &models.File{
@@ -52,6 +55,7 @@ func TestFileSidecarFromModel_WithChapters(t *testing.T) {
 }
 
 func TestFileSidecarFromModel_WithNestedChapters(t *testing.T) {
+	t.Parallel()
 	href1 := "part1.xhtml"
 	href2 := "ch1.xhtml"
 	href3 := "ch2.xhtml"
@@ -78,6 +82,7 @@ func TestFileSidecarFromModel_WithNestedChapters(t *testing.T) {
 }
 
 func TestFileSidecarFromModel_NoChapters(t *testing.T) {
+	t.Parallel()
 	file := &models.File{
 		Chapters: nil,
 	}
@@ -88,6 +93,7 @@ func TestFileSidecarFromModel_NoChapters(t *testing.T) {
 }
 
 func TestChaptersFromModels_Empty(t *testing.T) {
+	t.Parallel()
 	result := ChaptersFromModels(nil)
 	assert.Nil(t, result)
 
@@ -96,6 +102,7 @@ func TestChaptersFromModels_Empty(t *testing.T) {
 }
 
 func TestChaptersFromModels_CBZ(t *testing.T) {
+	t.Parallel()
 	page1 := 0
 	page2 := 10
 	chapters := []*models.Chapter{
@@ -116,6 +123,7 @@ func TestChaptersFromModels_CBZ(t *testing.T) {
 }
 
 func TestChaptersFromModels_M4B(t *testing.T) {
+	t.Parallel()
 	ts1 := int64(0)
 	ts2 := int64(60000)
 	chapters := []*models.Chapter{
@@ -135,6 +143,7 @@ func TestChaptersFromModels_M4B(t *testing.T) {
 }
 
 func TestChaptersFromModels_EPUB(t *testing.T) {
+	t.Parallel()
 	href1 := "chapter1.xhtml"
 	href2 := "chapter2.xhtml"
 	chapters := []*models.Chapter{
@@ -152,6 +161,7 @@ func TestChaptersFromModels_EPUB(t *testing.T) {
 }
 
 func TestChaptersFromModels_Nested(t *testing.T) {
+	t.Parallel()
 	href1 := "part1.xhtml"
 	href2 := "chapter1.xhtml"
 	href3 := "chapter2.xhtml"
@@ -177,6 +187,7 @@ func TestChaptersFromModels_Nested(t *testing.T) {
 }
 
 func TestChaptersToModels_Empty(t *testing.T) {
+	t.Parallel()
 	result := ChaptersToModels(nil)
 	assert.Nil(t, result)
 
@@ -185,6 +196,7 @@ func TestChaptersToModels_Empty(t *testing.T) {
 }
 
 func TestChaptersToModels_CBZ(t *testing.T) {
+	t.Parallel()
 	page1 := 0
 	page2 := 10
 	chapters := []ChapterMetadata{
@@ -205,6 +217,7 @@ func TestChaptersToModels_CBZ(t *testing.T) {
 }
 
 func TestChaptersToModels_M4B(t *testing.T) {
+	t.Parallel()
 	ts1 := int64(0)
 	ts2 := int64(60000)
 	chapters := []ChapterMetadata{
@@ -223,6 +236,7 @@ func TestChaptersToModels_M4B(t *testing.T) {
 }
 
 func TestChaptersToModels_Nested(t *testing.T) {
+	t.Parallel()
 	href1 := "part1.xhtml"
 	href2 := "chapter1.xhtml"
 
@@ -246,6 +260,7 @@ func TestChaptersToModels_Nested(t *testing.T) {
 }
 
 func TestChaptersRoundTrip_CBZ(t *testing.T) {
+	t.Parallel()
 	page1 := 0
 	page2 := 15
 	original := []*models.Chapter{
@@ -265,6 +280,7 @@ func TestChaptersRoundTrip_CBZ(t *testing.T) {
 }
 
 func TestChaptersRoundTrip_M4B(t *testing.T) {
+	t.Parallel()
 	ts1 := int64(0)
 	ts2 := int64(120000)
 	original := []*models.Chapter{
@@ -284,6 +300,7 @@ func TestChaptersRoundTrip_M4B(t *testing.T) {
 }
 
 func TestChaptersRoundTrip_EPUB_Nested(t *testing.T) {
+	t.Parallel()
 	href1 := "part1.xhtml"
 	href2 := "ch1.xhtml"
 	href3 := "ch2.xhtml"
@@ -316,6 +333,7 @@ func TestChaptersRoundTrip_EPUB_Nested(t *testing.T) {
 // =============================================================================
 
 func TestWriteFileSidecar(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.cbz")
 
@@ -347,6 +365,7 @@ func TestWriteFileSidecar(t *testing.T) {
 }
 
 func TestWriteFileSidecarFromModel(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "audiobook.m4b")
 
@@ -383,6 +402,7 @@ func TestWriteFileSidecarFromModel(t *testing.T) {
 }
 
 func TestWriteFileSidecarFromModel_WithNestedChapters(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "book.epub")
 
@@ -419,6 +439,7 @@ func TestWriteFileSidecarFromModel_WithNestedChapters(t *testing.T) {
 }
 
 func TestWriteBookSidecar(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	bookPath := filepath.Join(tmpDir, "mybook.epub")
 
@@ -446,6 +467,7 @@ func TestWriteBookSidecar(t *testing.T) {
 }
 
 func TestWriteBookSidecarFromModel(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	bookPath := filepath.Join(tmpDir, "mybook.epub")
 
@@ -473,6 +495,7 @@ func TestWriteBookSidecarFromModel(t *testing.T) {
 }
 
 func TestWriteFileSidecar_SetsVersion(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.cbz")
 

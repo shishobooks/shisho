@@ -11,6 +11,7 @@ import (
 )
 
 func TestIsBusyError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -72,6 +73,7 @@ func TestIsBusyError(t *testing.T) {
 }
 
 func TestRetryWithBackoff(t *testing.T) {
+	t.Parallel()
 	t.Run("succeeds on first attempt", func(t *testing.T) {
 		attempts := 0
 		err := retryWithBackoff(context.Background(), 5, func() error {

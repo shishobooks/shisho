@@ -132,6 +132,7 @@ func listFilesInKepub(t *testing.T, kepubPath string) []string {
 }
 
 func TestConverter_ConvertCBZ(t *testing.T) {
+	t.Parallel()
 	t.Run("creates valid EPUB structure", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -497,6 +498,7 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 }
 
 func TestIsImageFile(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expected bool
@@ -522,6 +524,7 @@ func TestIsImageFile(t *testing.T) {
 }
 
 func TestImageMediaType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		ext      string
 		expected string
@@ -543,6 +546,7 @@ func TestImageMediaType(t *testing.T) {
 }
 
 func TestNaturalLess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		a, b     string
 		expected bool
@@ -563,6 +567,7 @@ func TestNaturalLess(t *testing.T) {
 }
 
 func TestExtractNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected int
@@ -584,6 +589,7 @@ func TestExtractNumber(t *testing.T) {
 }
 
 func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
+	t.Parallel()
 	t.Run("uses title from metadata", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -763,6 +769,7 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 }
 
 func TestConverter_ConvertCBZWithMetadata_UsesNameForTitle(t *testing.T) {
+	t.Parallel()
 	t.Run("uses Name for title when provided", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -845,6 +852,7 @@ func TestConverter_ConvertCBZWithMetadata_UsesNameForTitle(t *testing.T) {
 }
 
 func TestGenerateNCX_WithChapters(t *testing.T) {
+	t.Parallel()
 	t.Run("includes chapter navPoints when chapters provided", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -980,6 +988,7 @@ func TestGenerateNCX_WithChapters(t *testing.T) {
 }
 
 func TestGenerateNavXHTML_WithChapters(t *testing.T) {
+	t.Parallel()
 	t.Run("includes chapter TOC when chapters provided", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -1111,6 +1120,7 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 }
 
 func TestIsGrayscaleImage(t *testing.T) {
+	t.Parallel()
 	t.Run("detects grayscale image", func(t *testing.T) {
 		// Create a grayscale image (all pixels have R=G=B)
 		img := image.NewRGBA(image.Rect(0, 0, 100, 100))
@@ -1171,6 +1181,7 @@ func TestIsGrayscaleImage(t *testing.T) {
 }
 
 func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
+	t.Parallel()
 	t.Run("uses specified cover page for cover-image property", func(t *testing.T) {
 		tmpDir := t.TempDir()
 

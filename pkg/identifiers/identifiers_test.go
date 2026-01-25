@@ -8,6 +8,7 @@ import (
 )
 
 func TestDetectType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		value    string
@@ -55,6 +56,7 @@ func TestDetectType(t *testing.T) {
 }
 
 func TestValidateISBN10(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		value    string
 		expected bool
@@ -75,6 +77,7 @@ func TestValidateISBN10(t *testing.T) {
 }
 
 func TestValidateISBN13(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		value    string
 		expected bool
@@ -94,6 +97,7 @@ func TestValidateISBN13(t *testing.T) {
 }
 
 func TestNormalizeISBN(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		value    string
 		expected string

@@ -62,6 +62,7 @@ For detailed architecture information, see the skills:
 
 - Go tests use standard testing package with testify assertions
 - Tests should use `TZ=America/Chicago CI=true` environment
+- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests in `pkg/plugins` and `pkg/config` have shared global state and cannot be parallelized.
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.

@@ -50,6 +50,7 @@ func setUserInContext(c echo.Context, user *models.User) {
 }
 
 func TestHandler_List(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -82,6 +83,7 @@ func TestHandler_List(t *testing.T) {
 }
 
 func TestHandler_List_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	h, _, e := setupTestHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/user/api-keys", nil)
@@ -94,6 +96,7 @@ func TestHandler_List_Unauthenticated(t *testing.T) {
 }
 
 func TestHandler_Create(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -124,6 +127,7 @@ func TestHandler_Create(t *testing.T) {
 }
 
 func TestHandler_Create_EmptyName(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -146,6 +150,7 @@ func TestHandler_Create_EmptyName(t *testing.T) {
 }
 
 func TestHandler_UpdateName(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -182,6 +187,7 @@ func TestHandler_UpdateName(t *testing.T) {
 }
 
 func TestHandler_Delete(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -216,6 +222,7 @@ func TestHandler_Delete(t *testing.T) {
 }
 
 func TestHandler_AddPermission(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -250,6 +257,7 @@ func TestHandler_AddPermission(t *testing.T) {
 }
 
 func TestHandler_RemovePermission(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -286,6 +294,7 @@ func TestHandler_RemovePermission(t *testing.T) {
 }
 
 func TestHandler_GenerateShortURL(t *testing.T) {
+	t.Parallel()
 	h, db, e := setupTestHandler(t)
 	ctx := context.Background()
 
