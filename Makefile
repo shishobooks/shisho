@@ -102,6 +102,6 @@ $(TYGO_OUTPUTS): $(BUILD_DIR)/tygo tygo.yaml $(TYGO_INPUTS)
 .PHONY: release
 release:
 ifndef tag
-	$(error tag is required. Usage: make release tag=0.1.0)
+	$(error tag is required. Usage: make release tag=0.1.0 [dry-run=1])
 endif
-	./scripts/release.sh $(tag)
+	./scripts/release.sh $(tag) $(if $(dry-run),--dry-run,)
