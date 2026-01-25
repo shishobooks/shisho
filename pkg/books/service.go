@@ -1031,7 +1031,7 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		Scan(ctx)
 	if err == nil {
 		// Series exists, check if we should update the source
-		if models.DataSourcePriority[nameSource] < models.DataSourcePriority[series.NameSource] {
+		if models.GetDataSourcePriority(nameSource) < models.GetDataSourcePriority(series.NameSource) {
 			series.NameSource = nameSource
 			series.UpdatedAt = time.Now()
 			_, err = svc.db.

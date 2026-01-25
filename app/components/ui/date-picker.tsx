@@ -67,10 +67,14 @@ export function DatePicker({
             {selectedDate ? format(selectedDate, "MMM d, yyyy") : placeholder}
           </span>
           {value && (
-            <X
-              className="ml-2 h-4 w-4 shrink-0 opacity-50 hover:opacity-100"
+            <span
+              className="ml-2 shrink-0"
               onClick={handleClear}
-            />
+              onPointerDown={(e) => e.stopPropagation()}
+              role="button"
+            >
+              <X className="h-4 w-4 opacity-50 hover:opacity-100" />
+            </span>
           )}
         </Button>
       </PopoverTrigger>

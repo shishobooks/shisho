@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -51,16 +52,18 @@ type Worker struct {
 	searchService    *search.Service
 	seriesService    *series.Service
 	tagService       *tags.Service
+	pluginManager    *plugins.Manager
 
-	queue          chan *models.Job
-	shutdown       chan struct{}
-	doneFetching   chan struct{}
-	doneProcessing chan struct{}
-	doneScheduling chan struct{}
-	doneCleanup    chan struct{}
+	queue           chan *models.Job
+	shutdown        chan struct{}
+	doneFetching    chan struct{}
+	doneProcessing  chan struct{}
+	doneScheduling  chan struct{}
+	doneCleanup     chan struct{}
+	doneUpdateCheck chan struct{}
 }
 
-func New(cfg *config.Config, db *bun.DB) *Worker {
+func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
 	bookService := books.NewService(db)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
@@ -90,13 +93,15 @@ func New(cfg *config.Config, db *bun.DB) *Worker {
 		searchService:    searchService,
 		seriesService:    seriesService,
 		tagService:       tagService,
+		pluginManager:    pm,
 
-		queue:          make(chan *models.Job, cfg.WorkerProcesses),
-		shutdown:       make(chan struct{}),
-		doneFetching:   make(chan struct{}),
-		doneProcessing: make(chan struct{}, cfg.WorkerProcesses),
-		doneScheduling: make(chan struct{}),
-		doneCleanup:    make(chan struct{}),
+		queue:           make(chan *models.Job, cfg.WorkerProcesses),
+		shutdown:        make(chan struct{}),
+		doneFetching:    make(chan struct{}),
+		doneProcessing:  make(chan struct{}, cfg.WorkerProcesses),
+		doneScheduling:  make(chan struct{}),
+		doneCleanup:     make(chan struct{}),
+		doneUpdateCheck: make(chan struct{}),
 	}
 
 	w.processFuncs = map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error{
@@ -122,6 +127,7 @@ func (w *Worker) Start() {
 	if w.config.JobRetentionDays > 0 {
 		go w.cleanupOldJobs()
 	}
+	go w.checkPluginUpdates()
 }
 
 func (w *Worker) fetchJobs() {
@@ -316,6 +322,36 @@ func (w *Worker) cleanupOldJobs() {
 	}
 }
 
+func (w *Worker) checkPluginUpdates() {
+	if w.pluginManager == nil {
+		w.doneUpdateCheck <- struct{}{}
+		return
+	}
+
+	// Run update check every 24 hours
+	duration := 24 * time.Hour
+	timer := time.NewTimer(duration)
+
+	for {
+		select {
+		case <-w.shutdown:
+			timer.Stop()
+			w.doneUpdateCheck <- struct{}{}
+			return
+		case <-timer.C:
+			ctx := context.Background()
+			log := w.log.Root(logger.Data{"scheduler": "plugin-update-check"})
+
+			if err := w.pluginManager.CheckForUpdates(ctx); err != nil {
+				log.Err(err).Error("failed to check for plugin updates")
+			} else {
+				log.Debug("completed plugin update check")
+			}
+			timer.Reset(duration)
+		}
+	}
+}
+
 func (w *Worker) Shutdown() {
 	close(w.shutdown)
 
@@ -327,6 +363,7 @@ func (w *Worker) Shutdown() {
 	if w.config.JobRetentionDays > 0 {
 		<-w.doneCleanup
 	}
+	<-w.doneUpdateCheck
 }
 
 const letterBytes = "abcdef0123456789"

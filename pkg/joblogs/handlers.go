@@ -41,6 +41,8 @@ func (h *handler) listLogs(c echo.Context) error {
 		JobID:   jobID,
 		AfterID: params.AfterID,
 		Levels:  params.Level,
+		Search:  params.Search,
+		Plugin:  params.Plugin,
 	})
 	if err != nil {
 		return errors.WithStack(err)

@@ -114,6 +114,7 @@ func TestScheduler_StartWithZeroInterval(t *testing.T) {
 	tc.worker.doneFetching = make(chan struct{})
 	tc.worker.doneProcessing = make(chan struct{}, tc.worker.config.WorkerProcesses)
 	tc.worker.doneScheduling = make(chan struct{})
+	tc.worker.doneUpdateCheck = make(chan struct{})
 	tc.worker.queue = make(chan *models.Job, tc.worker.config.WorkerProcesses)
 
 	// Start the worker

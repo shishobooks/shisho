@@ -87,6 +87,8 @@ interface ListJobLogsData {
 interface UseJobLogsOptions {
   afterId?: number;
   level?: string[];
+  search?: string;
+  plugin?: string;
 }
 
 export const useJobLogs = (
@@ -111,6 +113,12 @@ export const useJobLogs = (
       }
       if (options.level && options.level.length > 0) {
         params.level = options.level;
+      }
+      if (options.search) {
+        params.search = options.search;
+      }
+      if (options.plugin) {
+        params.plugin = options.plugin;
       }
       return API.request("GET", `/jobs/${jobId}/logs`, null, params, signal);
     },

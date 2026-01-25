@@ -26,8 +26,8 @@ func shouldUpdateScalar(newValue, existingValue, newSource, existingSource strin
 		existingSource = models.DataSourceFilepath
 	}
 
-	newPriority := models.DataSourcePriority[newSource]
-	existingPriority := models.DataSourcePriority[existingSource]
+	newPriority := models.GetDataSourcePriority(newSource)
+	existingPriority := models.GetDataSourcePriority(existingSource)
 
 	// Higher or equal priority wins when new value is non-empty and different
 	return newPriority <= existingPriority
@@ -57,8 +57,8 @@ func shouldUpdateRelationship(newItems, existingItems []string, newSource, exist
 		existingSource = models.DataSourceFilepath
 	}
 
-	newPriority := models.DataSourcePriority[newSource]
-	existingPriority := models.DataSourcePriority[existingSource]
+	newPriority := models.GetDataSourcePriority(newSource)
+	existingPriority := models.GetDataSourcePriority(existingSource)
 
 	// Higher or equal priority wins when new items are non-empty and different
 	return newPriority <= existingPriority
@@ -102,8 +102,8 @@ func shouldApplySidecarScalar(newValue, existingValue, existingSource string, fo
 	}
 
 	// Sidecar has its own priority level, higher than file metadata
-	sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
-	existingPriority := models.DataSourcePriority[existingSource]
+	sidecarPriority := models.GetDataSourcePriority(models.DataSourceSidecar)
+	existingPriority := models.GetDataSourcePriority(existingSource)
 
 	return sidecarPriority < existingPriority
 }
@@ -133,8 +133,8 @@ func shouldApplySidecarRelationship(newItems, existingItems []string, existingSo
 	}
 
 	// Sidecar has its own priority level, higher than file metadata
-	sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
-	existingPriority := models.DataSourcePriority[existingSource]
+	sidecarPriority := models.GetDataSourcePriority(models.DataSourceSidecar)
+	existingPriority := models.GetDataSourcePriority(existingSource)
 
 	return sidecarPriority < existingPriority
 }

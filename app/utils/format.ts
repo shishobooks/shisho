@@ -62,7 +62,10 @@ export const formatTimestamp = (ms: number): string => {
  * Formats identifier type codes into human-readable labels.
  * @example formatIdentifierType("isbn_13") // "ISBN-13"
  */
-export function formatIdentifierType(type: string): string {
+export function formatIdentifierType(
+  type: string,
+  pluginTypes?: Array<{ id: string; name: string }>,
+): string {
   switch (type) {
     case "isbn_10":
       return "ISBN-10";
@@ -78,7 +81,12 @@ export function formatIdentifierType(type: string): string {
       return "Google";
     case "other":
       return "Other";
-    default:
+    default: {
+      const pluginType = pluginTypes?.find((pt) => pt.id === type);
+      if (pluginType) {
+        return pluginType.name;
+      }
       return type;
+    }
   }
 }

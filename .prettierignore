@@ -8,3 +8,4 @@ app/types/generated
 CLAUDE.md
 .cursor
 docs/
+pkg/plugins/testdata/

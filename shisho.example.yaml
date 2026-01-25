@@ -92,6 +92,15 @@ cache_dir: /config/cache
 download_cache_max_size_gb: 5
 
 # =============================================================================
+# PLUGIN SETTINGS
+# =============================================================================
+
+# Directory where installed plugins are stored
+# Env: PLUGIN_DIR
+# Default: /config/plugins/installed
+plugin_dir: /config/plugins/installed
+
+# =============================================================================
 # SUPPLEMENT DISCOVERY SETTINGS
 # =============================================================================
 

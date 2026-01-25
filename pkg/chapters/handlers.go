@@ -108,19 +108,15 @@ func (h *handler) replace(c echo.Context) error {
 // validateChapters validates chapter data against file constraints.
 func validateChapters(file *models.File, chapters []ChapterInput) error {
 	for _, ch := range chapters {
-		switch file.FileType {
-		case models.FileTypeCBZ:
-			if ch.StartPage != nil && file.PageCount != nil {
-				if *ch.StartPage >= *file.PageCount {
-					return errcodes.ValidationError("start_page must be less than page_count")
-				}
+		if ch.StartPage != nil && file.PageCount != nil {
+			if *ch.StartPage >= *file.PageCount {
+				return errcodes.ValidationError("start_page must be less than page_count")
 			}
-		case models.FileTypeM4B:
-			if ch.StartTimestampMs != nil && file.AudiobookDurationSeconds != nil {
-				maxMs := int64(*file.AudiobookDurationSeconds * 1000)
-				if *ch.StartTimestampMs > maxMs {
-					return errcodes.ValidationError("start_timestamp_ms exceeds file duration")
-				}
+		}
+		if ch.StartTimestampMs != nil && file.AudiobookDurationSeconds != nil {
+			maxMs := int64(*file.AudiobookDurationSeconds * 1000)
+			if *ch.StartTimestampMs > maxMs {
+				return errcodes.ValidationError("start_timestamp_ms exceeds file duration")
 			}
 		}
 

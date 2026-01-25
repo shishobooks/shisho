@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/server"
 	"github.com/shishobooks/shisho/pkg/worker"
 )
@@ -55,9 +56,16 @@ func main() {
 		log.Info("migrated to new group", logger.Data{"group_id": group.ID, "migration_names": group.Migrations.String()})
 	}
 
-	wrkr := worker.New(cfg, db)
+	// Plugin system
+	pluginService := plugins.NewService(db)
+	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir)
+	if err := pluginManager.LoadAll(ctx); err != nil {
+		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
+	}
 
-	srv, err := server.New(cfg, db, wrkr)
+	wrkr := worker.New(cfg, db, pluginManager)
+
+	srv, err := server.New(cfg, db, wrkr, pluginManager)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}

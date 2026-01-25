@@ -49,6 +49,12 @@ type ParsedMetadata struct {
 	CoverPage     *int // 0-indexed page number for CBZ cover, nil for other file types
 	// DataSource should be a value of books.DataSource
 	DataSource string
+	// FieldDataSources maps individual field names to the data source that provided them.
+	// Used when multiple enrichers contribute different fields (per-field first-wins tracking).
+	// Keys are field names: "title", "subtitle", "authors", "narrators", "series",
+	// "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate",
+	// "cover", "identifiers".
+	FieldDataSources map[string]string
 	// Duration is the length of the audiobook (M4B files only)
 	Duration time.Duration
 	// BitrateBps is the audio bitrate in bits per second (M4B files only)
@@ -71,6 +77,17 @@ func (m *ParsedMetadata) String() string {
 		}
 	}
 	return fmt.Sprintf("Title:           %s\nAuthor(s):       %v\nNarrator(s):     %v\nHas Cover Data:  %v\nCover Mime Type: %s\nData Source:     %s", m.Title, strings.Join(authorNames, ", "), m.Narrators, len(m.CoverData) > 0, m.CoverMimeType, m.DataSource)
+}
+
+// SourceForField returns the data source for a specific field.
+// If a per-field source is set, it returns that; otherwise falls back to DataSource.
+func (m *ParsedMetadata) SourceForField(field string) string {
+	if m.FieldDataSources != nil {
+		if src, ok := m.FieldDataSources[field]; ok {
+			return src
+		}
+	}
+	return m.DataSource
 }
 
 func (m *ParsedMetadata) CoverExtension() string {

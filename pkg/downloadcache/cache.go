@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 )
 
 // Cache manages the download cache for generated files.
@@ -179,6 +180,85 @@ func (c *Cache) Invalidate(fileID int, fileType string) error {
 // InvalidateKepub removes the cached KePub file for a given file ID.
 func (c *Cache) InvalidateKepub(fileID int) error {
 	return DeleteKepubCachedFile(c.dir, fileID)
+}
+
+// GetOrGeneratePlugin returns the path to a cached plugin-generated file.
+// The pluginGenerator handles both generation and fingerprinting.
+func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file *models.File, generator *plugins.PluginGenerator) (cachedPath string, downloadFilename string, err error) {
+	formatID := generator.SupportedType()
+
+	// Get the plugin's fingerprint for cache invalidation
+	pluginFP, err := generator.Fingerprint(book, file)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to compute plugin fingerprint")
+	}
+
+	// Compute a hash that includes both the standard fingerprint and the plugin fingerprint
+	fp, err := ComputeFingerprint(book, file)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to compute fingerprint")
+	}
+	fp.Format = "plugin:" + formatID
+	fp.PluginFingerprint = pluginFP
+
+	hash, err := fp.Hash()
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to hash fingerprint")
+	}
+
+	// Check if we have a valid cached file
+	existingPath, err := GetPluginCachedFilePath(c.dir, file.ID, formatID, hash)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to check plugin cache")
+	}
+
+	downloadFilename = FormatPluginDownloadFilename(book, file, formatID)
+
+	if existingPath != "" {
+		// Update last accessed time (non-fatal if it fails)
+		_ = UpdatePluginLastAccessed(c.dir, file.ID, formatID)
+		return existingPath, downloadFilename, nil
+	}
+
+	// Need to generate a new file
+	destPath := pluginCachedFilename(c.dir, file.ID, formatID)
+
+	// Generate the file
+	if err := generator.Generate(ctx, file.Filepath, destPath, book, file); err != nil {
+		return "", "", errors.Wrap(err, "failed to generate plugin file")
+	}
+
+	// Get the size of the generated file
+	info, err := os.Stat(destPath)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to stat generated plugin file")
+	}
+
+	// Write the metadata
+	now := time.Now()
+	meta := &CacheMetadata{
+		FileID:          file.ID,
+		Format:          "plugin:" + formatID,
+		FingerprintHash: hash,
+		GeneratedAt:     now,
+		LastAccessedAt:  now,
+		SizeBytes:       info.Size(),
+	}
+	if err := WritePluginMetadata(c.dir, file.ID, formatID, meta); err != nil {
+		// Clean up the generated file if we can't write metadata
+		os.Remove(destPath)
+		return "", "", errors.Wrap(err, "failed to write plugin cache metadata")
+	}
+
+	// Trigger cleanup in background
+	go c.TriggerCleanup()
+
+	return destPath, downloadFilename, nil
+}
+
+// InvalidatePlugin removes the cached plugin file for a given file ID and format.
+func (c *Cache) InvalidatePlugin(fileID int, formatID string) error {
+	return DeletePluginCachedFile(c.dir, fileID, formatID)
 }
 
 // GetCachedPath returns the path to a cached file if it exists and is valid.

@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "id": "hooks-enricher",
+  "name": "Test Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Test enricher",
+      "fileTypes": ["epub"]
+    }
+  }
+}

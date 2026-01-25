@@ -2,3 +2,4 @@ database_file_path: ./tmp/data.sqlite
 database_debug: true
 jwt_secret: dev-secret-key-do-not-use-in-production
 cache_dir: ./tmp/cache
+plugin_dir: ./tmp/plugins

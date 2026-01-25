@@ -84,3 +84,34 @@ func TestParseCBZ_GTINAsOther(t *testing.T) {
 	assert.Equal(t, "other", metadata.Identifiers[0].Type)
 	assert.Equal(t, "1234567890123", metadata.Identifiers[0].Value)
 }
+
+func TestExtractSeriesNumberFromFilename(t *testing.T) {
+	floatPtr := func(f float64) *float64 { return &f }
+
+	tests := []struct {
+		name     string
+		filename string
+		want     *float64
+	}{
+		{"v prefix", "Comic Title v2.cbz", floatPtr(2)},
+		{"v prefix with leading zeros", "Comic Title v02.cbz", floatPtr(2)},
+		{"hash prefix", "Comic Title #7.cbz", floatPtr(7)},
+		{"bare number", "Comic Title 3.cbz", floatPtr(3)},
+		{"decimal volume", "Comic Title v1.5.cbz", floatPtr(1.5)},
+		{"strips parenthesized metadata", "Comic Title v02 (2020) (Digital) (group).cbz", floatPtr(2)},
+		{"strips parens with hash", "Title #5 (HD) (Group).cbz", floatPtr(5)},
+		{"no volume number", "Comic Title.cbz", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSeriesNumberFromFilename(tt.filename)
+			if tt.want == nil {
+				assert.Nil(t, got)
+			} else {
+				require.NotNil(t, got)
+				assert.InDelta(t, *tt.want, *got, 0.001)
+			}
+		})
+	}
+}

@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
+import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -62,6 +63,7 @@ import {
   formatIdentifierType,
   getFilename,
 } from "@/utils/format";
+import { getIdentifierUrl } from "@/utils/identifiers";
 
 // Determines which file type would provide the cover based on library preference.
 // This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
@@ -156,6 +158,7 @@ const FileRow = ({
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
     <div className="py-2 space-y-1">
@@ -403,14 +406,32 @@ const FileRow = ({
           {file.identifiers && file.identifiers.length > 0 && (
             <div className="pt-2 border-t border-border/50">
               <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                {file.identifiers.map((id, idx) => (
-                  <React.Fragment key={idx}>
-                    <span className="text-muted-foreground">
-                      {formatIdentifierType(id.type)}
-                    </span>
-                    <span className="font-mono select-all">{id.value}</span>
-                  </React.Fragment>
-                ))}
+                {file.identifiers.map((id, idx) => {
+                  const url = getIdentifierUrl(
+                    id.type,
+                    id.value,
+                    pluginIdentifierTypes,
+                  );
+                  return (
+                    <React.Fragment key={idx}>
+                      <span className="text-muted-foreground">
+                        {formatIdentifierType(id.type, pluginIdentifierTypes)}
+                      </span>
+                      {url ? (
+                        <a
+                          className="font-mono select-all text-primary hover:underline"
+                          href={url}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {id.value}
+                        </a>
+                      ) : (
+                        <span className="font-mono select-all">{id.value}</span>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
           )}

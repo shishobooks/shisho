@@ -32,6 +32,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/opds"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -44,7 +45,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -78,7 +79,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error)
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, cfg, authMiddleware, w)
+	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm)
 
 	// Register OPDS routes with Basic Auth
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
@@ -112,7 +113,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error)
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker) {
+func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
@@ -125,6 +126,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	librariesGroup.Use(authMiddleware.Authenticate)
 	librariesGroup.Use(authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationRead))
 	libraries.RegisterRoutesWithGroup(librariesGroup, db, authMiddleware)
+	plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), authMiddleware)
 
 	// Jobs routes
 	jobsGroup := e.Group("/jobs")
@@ -180,6 +182,14 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	searchGroup.Use(authMiddleware.Authenticate)
 	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	search.RegisterRoutesWithGroup(searchGroup, db)
+
+	// Plugins routes (admin only)
+	pluginsGroup := e.Group("/plugins")
+	pluginsGroup.Use(authMiddleware.Authenticate)
+	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
+	pluginService := plugins.NewService(db)
+	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
+	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller)
 }
 
 func notFoundHandler(c echo.Context) error {

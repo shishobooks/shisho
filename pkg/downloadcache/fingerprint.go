@@ -20,24 +20,25 @@ const (
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
-	Title       string                  `json:"title"`
-	Subtitle    *string                 `json:"subtitle,omitempty"`
-	Description *string                 `json:"description,omitempty"`
-	Authors     []FingerprintAuthor     `json:"authors"`
-	Narrators   []FingerprintNarrator   `json:"narrators"`
-	Series      []FingerprintSeries     `json:"series"`
-	Genres      []string                `json:"genres"`
-	Tags        []string                `json:"tags"`
-	Identifiers []FingerprintIdentifier `json:"identifiers,omitempty"`
-	URL         *string                 `json:"url,omitempty"`
-	Publisher   *string                 `json:"publisher,omitempty"`
-	Imprint     *string                 `json:"imprint,omitempty"`
-	ReleaseDate *time.Time              `json:"release_date,omitempty"`
-	Cover       *FingerprintCover       `json:"cover,omitempty"`
-	CoverPage   *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
-	Chapters    []FingerprintChapter    `json:"chapters,omitempty"`
-	Format      string                  `json:"format,omitempty"` // Download format: original or kepub
-	Name        *string                 `json:"name,omitempty"`   // File name (edition name)
+	Title             string                  `json:"title"`
+	Subtitle          *string                 `json:"subtitle,omitempty"`
+	Description       *string                 `json:"description,omitempty"`
+	Authors           []FingerprintAuthor     `json:"authors"`
+	Narrators         []FingerprintNarrator   `json:"narrators"`
+	Series            []FingerprintSeries     `json:"series"`
+	Genres            []string                `json:"genres"`
+	Tags              []string                `json:"tags"`
+	Identifiers       []FingerprintIdentifier `json:"identifiers,omitempty"`
+	URL               *string                 `json:"url,omitempty"`
+	Publisher         *string                 `json:"publisher,omitempty"`
+	Imprint           *string                 `json:"imprint,omitempty"`
+	ReleaseDate       *time.Time              `json:"release_date,omitempty"`
+	Cover             *FingerprintCover       `json:"cover,omitempty"`
+	CoverPage         *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
+	Chapters          []FingerprintChapter    `json:"chapters,omitempty"`
+	Format            string                  `json:"format,omitempty"`             // Download format: original, kepub, or plugin:<id>
+	Name              *string                 `json:"name,omitempty"`               // File name (edition name)
+	PluginFingerprint string                  `json:"plugin_fingerprint,omitempty"` // Plugin-specific fingerprint for cache invalidation
 }
 
 // FingerprintAuthor represents author information for fingerprinting.

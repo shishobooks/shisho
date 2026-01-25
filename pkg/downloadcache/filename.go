@@ -192,6 +192,19 @@ func sanitizeKoboFilename(s string) string {
 	return result
 }
 
+// FormatPluginDownloadFilename generates a formatted filename for a plugin-generated download.
+// It replaces the file extension with the plugin's format ID.
+func FormatPluginDownloadFilename(book *models.Book, file *models.File, formatID string) string {
+	base := FormatDownloadFilename(book, file)
+	// Replace the original extension with the plugin format extension
+	ext := "." + file.FileType
+	if strings.HasSuffix(base, ext) {
+		return strings.TrimSuffix(base, ext) + "." + formatID
+	}
+	// Fallback: just append the format
+	return base + "." + formatID
+}
+
 // FormatKepubDownloadFilename generates a formatted filename for downloading a KePub file.
 // Uses Kobo-safe characters only to ensure compatibility with Kobo e-readers.
 // Format: Author - Series Number - Title.kepub.epub (no brackets, no hash symbols).

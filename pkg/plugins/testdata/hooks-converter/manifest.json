@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 1,
+  "id": "hooks-converter",
+  "name": "Test Converter",
+  "version": "1.0.0",
+  "capabilities": {
+    "inputConverter": {
+      "description": "Test converter",
+      "sourceTypes": ["pdf"],
+      "targetType": "epub"
+    }
+  }
+}

@@ -96,6 +96,16 @@ const AdminSettings = () => {
               label="Connection Retry Delay"
               value={formatDuration(config.database_connect_retry_delay)}
             />
+            <ConfigRow
+              description="How long to wait for a locked database before retrying"
+              label="Busy Timeout"
+              value={formatDuration(config.database_busy_timeout)}
+            />
+            <ConfigRow
+              description="Maximum retries for transient database errors"
+              label="Max Retries"
+              value={config.database_max_retries}
+            />
           </div>
         </div>
 
@@ -129,6 +139,43 @@ const AdminSettings = () => {
               description="Number of background worker processes"
               label="Worker Processes"
               value={config.worker_processes}
+            />
+            <ConfigRow
+              description="Number of days to retain completed job logs"
+              label="Job Retention"
+              value={`${config.job_retention_days} days`}
+            />
+            <ConfigRow
+              description="Application environment mode"
+              label="Environment"
+              value={config.environment || "production"}
+            />
+          </div>
+        </div>
+
+        {/* Storage Settings */}
+        <div className="border border-border rounded-md p-6">
+          <h2 className="text-lg font-semibold mb-4">Storage</h2>
+          <div className="space-y-0">
+            <ConfigRow
+              description="Directory for cached downloads and generated files"
+              label="Cache Directory"
+              value={config.cache_dir}
+            />
+            <ConfigRow
+              description="Maximum disk space for the download cache"
+              label="Download Cache Max Size"
+              value={`${config.download_cache_max_size_gb} GB`}
+            />
+            <ConfigRow
+              description="Directory where installed plugins are stored"
+              label="Plugin Directory"
+              value={config.plugin_dir}
+            />
+            <ConfigRow
+              description="File patterns excluded from supplement discovery"
+              label="Supplement Exclude Patterns"
+              value={config.supplement_exclude_patterns.join(", ")}
             />
           </div>
         </div>

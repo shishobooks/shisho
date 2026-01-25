@@ -1,6 +1,7 @@
 package binder
 
 import (
+	"net/url"
 	"regexp"
 
 	"github.com/go-playground/validator/v10"
@@ -21,4 +22,16 @@ func dateValidator(fl validator.FieldLevel) bool {
 		return true
 	}
 	return dateRE.MatchString(value)
+}
+
+// urlValidator ensures the value is a valid URL or the empty string. The empty
+// string is allowed so that this validator can be used to clear out values. If
+// you want to enforce a non-empty URL, add a `required` tag.
+func urlValidator(fl validator.FieldLevel) bool {
+	value := fl.Field().String()
+	if value == "" {
+		return true
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme != "" && u.Host != ""
 }

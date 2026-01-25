@@ -32,8 +32,8 @@ func ShouldUpdateChapters(newChapters []mediafile.ParsedChapter, newSource strin
 		existingSourceValue = models.DataSourceFilepath
 	}
 
-	newPriority := models.DataSourcePriority[newSource]
-	existingPriority := models.DataSourcePriority[existingSourceValue]
+	newPriority := models.GetDataSourcePriority(newSource)
+	existingPriority := models.GetDataSourcePriority(existingSourceValue)
 
 	// Higher or equal priority wins (lower number = higher priority)
 	return newPriority <= existingPriority

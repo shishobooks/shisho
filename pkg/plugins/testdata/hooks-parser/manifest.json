@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "id": "hooks-parser",
+  "name": "Test Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Test parser",
+      "types": ["pdf"]
+    }
+  }
+}

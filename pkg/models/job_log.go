@@ -22,6 +22,7 @@ type JobLog struct {
 	JobID      int       `bun:",nullzero" json:"job_id"`
 	Level      string    `bun:",nullzero" json:"level" tstype:"JobLogLevel"`
 	Message    string    `bun:",nullzero" json:"message"`
+	Plugin     *string   `json:"plugin,omitempty"`
 	Data       *string   `json:"data,omitempty"`
 	StackTrace *string   `json:"stack_trace,omitempty"`
 }

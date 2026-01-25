@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "multi-hook",
+  "name": "Multi Hook Plugin",
+  "version": "1.0.0",
+  "capabilities": {
+    "inputConverter": {
+      "description": "Converts PDFs",
+      "sourceTypes": ["pdf"],
+      "targetType": "epub"
+    },
+    "fileParser": {
+      "description": "Parses PDFs",
+      "types": ["pdf"]
+    }
+  }
+}

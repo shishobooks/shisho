@@ -230,6 +230,111 @@ func GetKepubCachedFilePath(cacheDir string, fileID int, currentHash string) (st
 	return cachedPath, nil
 }
 
+// pluginCachedFilename returns the cached file path for a plugin-generated file.
+func pluginCachedFilename(cacheDir string, fileID int, formatID string) string {
+	return filepath.Join(cacheDir, fmt.Sprintf("%d.plugin.%s", fileID, formatID))
+}
+
+// pluginMetadataFilename returns the metadata file path for a plugin cache entry.
+func pluginMetadataFilename(cacheDir string, fileID int, formatID string) string {
+	return filepath.Join(cacheDir, fmt.Sprintf("%d.plugin.%s.meta.json", fileID, formatID))
+}
+
+// ReadPluginMetadata reads the cache metadata for a plugin cache entry.
+// Returns nil if the metadata file doesn't exist.
+func ReadPluginMetadata(cacheDir string, fileID int, formatID string) (*CacheMetadata, error) {
+	path := pluginMetadataFilename(cacheDir, fileID, formatID)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, errors.Wrapf(err, "failed to read plugin cache metadata: %s", path)
+	}
+
+	var meta CacheMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse plugin cache metadata: %s", path)
+	}
+
+	return &meta, nil
+}
+
+// WritePluginMetadata writes the cache metadata for a plugin cache entry.
+func WritePluginMetadata(cacheDir string, fileID int, formatID string, meta *CacheMetadata) error {
+	path := pluginMetadataFilename(cacheDir, fileID, formatID)
+
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal plugin cache metadata")
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return errors.Wrapf(err, "failed to write plugin cache metadata: %s", path)
+	}
+
+	return nil
+}
+
+// UpdatePluginLastAccessed updates the last accessed time for a cached plugin file.
+func UpdatePluginLastAccessed(cacheDir string, fileID int, formatID string) error {
+	meta, err := ReadPluginMetadata(cacheDir, fileID, formatID)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return errors.New("plugin cache metadata not found")
+	}
+
+	meta.LastAccessedAt = time.Now()
+	return WritePluginMetadata(cacheDir, fileID, formatID, meta)
+}
+
+// GetPluginCachedFilePath returns the path to a cached plugin file if it exists and is valid.
+// Returns empty string if the cache is invalid or doesn't exist.
+func GetPluginCachedFilePath(cacheDir string, fileID int, formatID, currentHash string) (string, error) {
+	meta, err := ReadPluginMetadata(cacheDir, fileID, formatID)
+	if err != nil {
+		return "", err
+	}
+
+	// No metadata means no cached file
+	if meta == nil {
+		return "", nil
+	}
+
+	// Check if fingerprint matches
+	if meta.FingerprintHash != currentHash {
+		return "", nil
+	}
+
+	// Check if cached file exists
+	cachedPath := pluginCachedFilename(cacheDir, fileID, formatID)
+	if _, err := os.Stat(cachedPath); os.IsNotExist(err) {
+		return "", nil
+	}
+
+	return cachedPath, nil
+}
+
+// DeletePluginCachedFile removes both the cached plugin file and its metadata.
+func DeletePluginCachedFile(cacheDir string, fileID int, formatID string) error {
+	// Delete the cached file
+	cachedPath := pluginCachedFilename(cacheDir, fileID, formatID)
+	if err := os.Remove(cachedPath); err != nil && !os.IsNotExist(err) {
+		return errors.Wrapf(err, "failed to delete cached plugin file: %s", cachedPath)
+	}
+
+	// Delete the metadata file
+	metaPath := pluginMetadataFilename(cacheDir, fileID, formatID)
+	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
+		return errors.Wrapf(err, "failed to delete plugin cache metadata: %s", metaPath)
+	}
+
+	return nil
+}
+
 // ListCacheEntries returns all cache entries in the directory.
 func ListCacheEntries(cacheDir string) ([]*CacheMetadata, error) {
 	entries, err := os.ReadDir(cacheDir)

@@ -386,9 +386,16 @@ func splitCreators(creators string) []string {
 	return fileutils.SplitNames(creators)
 }
 
+// cbzParensRE matches parenthesized metadata sections like (2020), (Digital), (group).
+var cbzParensRE = regexp.MustCompile(`\([^)]*\)`)
+
 func extractSeriesNumberFromFilename(filename string) *float64 {
 	// Remove extension for processing
 	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Strip parenthesized metadata (year, quality, group) before matching volume
+	nameWithoutExt = cbzParensRE.ReplaceAllString(nameWithoutExt, "")
+	nameWithoutExt = strings.TrimSpace(nameWithoutExt)
 
 	// Try patterns: #7, v7, or just 7 at the end
 	patterns := []string{

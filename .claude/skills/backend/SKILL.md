@@ -45,10 +45,10 @@ Each domain (books, jobs, libraries, chapters) has:
 ### File Types
 
 - To learn more about all the file types that we support, refer to these skills:
-  - EPUB: `.claude/skills/epub.md`
-  - CBZ: `.claude/skills/cbz.md`
-  - M4B: `.claude/skills/m4b.md`
-  - KePub: `.claude/skills/kepub.md`
+  - EPUB: `.claude/skills/epub/SKILL.md`
+  - CBZ: `.claude/skills/cbz/SKILL.md`
+  - M4B: `.claude/skills/m4b/SKILL.md`
+  - KePub: `.claude/skills/kepub/SKILL.md`
 
 ### Cover Image System
 
@@ -234,12 +234,29 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
 
 - **JSON field naming**: All JSON request and response payloads use `snake_case` for field names (e.g., `created_at`, `last_accessed_at`, not `createdAt`)
 - Go struct tags should use `json:"snake_case_name"` format
+- **Request binding must use structs**: The custom binder (`pkg/binder/`) uses mold (conform) and validator, which only work with structs. Never bind directly to a slice/array — wrap it in a struct:
+
+```go
+// ❌ WRONG - mold can't process a slice, causes nil pointer error
+var entries []orderEntry
+if err := c.Bind(&entries); err != nil { ... }
+
+// ✅ CORRECT - wrap in a struct
+type setOrderPayload struct {
+    Order []orderEntry `json:"order" validate:"required"`
+}
+var payload setOrderPayload
+if err := c.Bind(&payload); err != nil { ... }
+```
 
 ### Config
 
 - Self-hosted app with config file-based configuration
 - Each config field is also configurable by environment variables
-- If a new field is added to `config.Config` in `pkg/config/config.go`, `shisho.example.yaml` should also be updated
+- **CRITICAL**: If a new field is added to `config.Config` in `pkg/config/config.go`:
+  - `shisho.example.yaml` **MUST** be updated with the new field, its env var name, default value, and a description. This file must always be a complete reference of all configurable fields.
+  - Exception: `environment` is a test-only internal field and should NOT be included in `shisho.example.yaml`.
+  - The Server Settings UI page (`app/components/pages/AdminSettings.tsx`) must be updated to display the new field (all non-secret config fields should be shown)
 
 ### Sidecars
 

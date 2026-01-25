@@ -55,6 +55,7 @@ import {
 } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePeopleList } from "@/hooks/queries/people";
+import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
@@ -67,6 +68,7 @@ import {
   type File,
   type FileRole,
 } from "@/types";
+import { formatIdentifierType } from "@/utils/format";
 import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
@@ -85,28 +87,6 @@ const formatDateForInput = (dateString: string | undefined): string => {
     return "";
   }
 };
-
-// Helper to format identifier types for display
-function formatIdentifierType(type: string): string {
-  switch (type) {
-    case "isbn_10":
-      return "ISBN-10";
-    case "isbn_13":
-      return "ISBN-13";
-    case "asin":
-      return "ASIN";
-    case "uuid":
-      return "UUID";
-    case "goodreads":
-      return "Goodreads";
-    case "google":
-      return "Google";
-    case "other":
-      return "Other";
-    default:
-      return type;
-  }
-}
 
 export function FileEditDialog({
   file,
@@ -188,6 +168,9 @@ export function FileEditDialog({
     },
     { enabled: open },
   );
+
+  // Query for plugin-defined identifier types
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
@@ -310,9 +293,13 @@ export function FileEditDialog({
   const handleAddIdentifier = () => {
     if (!newIdentifierValue.trim()) return;
 
+    const pluginType = pluginIdentifierTypes?.find(
+      (pt) => pt.id === newIdentifierType,
+    );
     const validation = validateIdentifier(
       newIdentifierType,
       newIdentifierValue.trim(),
+      pluginType?.pattern ?? undefined,
     );
     if (!validation.valid) {
       toast.error(validation.error);
@@ -427,7 +414,7 @@ export function FileEditDialog({
     // Check if release date changed
     const originalReleaseDate = formatDateForInput(file.release_date);
     if (releaseDate !== originalReleaseDate) {
-      payload.release_date = releaseDate || undefined;
+      payload.release_date = releaseDate;
     }
 
     // Check if identifiers changed
@@ -699,7 +686,18 @@ export function FileEditDialog({
               {/* Narrators (only for M4B files) */}
               {file.file_type === "m4b" && (
                 <div className="space-y-2">
-                  <Label>Narrators</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Narrators</Label>
+                    {narrators.length > 1 && (
+                      <button
+                        className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                        onClick={() => setNarrators([])}
+                        type="button"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
                   <SortableList
                     getItemId={(name, index) => `${name}-${index}`}
                     items={narrators}
@@ -1029,7 +1027,18 @@ export function FileEditDialog({
 
               {/* Identifiers */}
               <div className="space-y-2">
-                <Label>Identifiers</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Identifiers</Label>
+                  {identifiers.length > 1 && (
+                    <button
+                      className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                      onClick={() => setIdentifiers([])}
+                      type="button"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {identifiers.map((id, idx) => (
                     <Badge
@@ -1038,7 +1047,7 @@ export function FileEditDialog({
                       variant="secondary"
                     >
                       <span className="text-xs">
-                        {formatIdentifierType(id.type)}
+                        {formatIdentifierType(id.type, pluginIdentifierTypes)}
                       </span>
                       : {id.value}
                       <button
@@ -1071,6 +1080,24 @@ export function FileEditDialog({
                       <SelectItem value="goodreads">Goodreads</SelectItem>
                       <SelectItem value="google">Google</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
+                      {pluginIdentifierTypes
+                        ?.filter(
+                          (pt) =>
+                            ![
+                              "isbn_10",
+                              "isbn_13",
+                              "asin",
+                              "uuid",
+                              "goodreads",
+                              "google",
+                              "other",
+                            ].includes(pt.id),
+                        )
+                        .map((pt) => (
+                          <SelectItem key={pt.id} value={pt.id}>
+                            {pt.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <Input

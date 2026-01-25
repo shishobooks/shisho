@@ -438,7 +438,18 @@ export function BookEditDialog({
 
           {/* Authors */}
           <div className="space-y-2">
-            <Label>Authors</Label>
+            <div className="flex items-center justify-between">
+              <Label>Authors</Label>
+              {authors.length > 1 && (
+                <button
+                  className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                  onClick={() => setAuthors([])}
+                  type="button"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
             {hasCBZFiles ? (
               // CBZ files: show authors as rows with role selection
               <div className="space-y-2">
@@ -671,7 +682,18 @@ export function BookEditDialog({
 
           {/* Series */}
           <div className="space-y-2">
-            <Label>Series</Label>
+            <div className="flex items-center justify-between">
+              <Label>Series</Label>
+              {seriesEntries.length > 1 && (
+                <button
+                  className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                  onClick={() => setSeriesEntries([])}
+                  type="button"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
             <SortableList
               getItemId={(entry, index) => `${entry.name}-${index}`}
               items={seriesEntries}

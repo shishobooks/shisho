@@ -291,7 +291,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 				SeriesNumber: floatPtr(1),
 			},
 			filename: "[Koyoharu Gotouge] Demon Slayer v1.cbz",
-			want:     "Demon Slayer v1",
+			want:     "Demon Slayer v001",
 		},
 		{
 			name: "series+number used when title looks like filename with brackets",
@@ -301,7 +301,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 				SeriesNumber: floatPtr(1),
 			},
 			filename: "[Author] Comic Title v1.cbz",
-			want:     "Comic Title v1",
+			want:     "Comic Title v001",
 		},
 		{
 			name: "series only when no number",
@@ -321,7 +321,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 				SeriesNumber: floatPtr(1.5),
 			},
 			filename: "[Kishimoto] Naruto v1.5.cbz",
-			want:     "Naruto v1.5",
+			want:     "Naruto v001.5",
 		},
 		{
 			name: "parse from filename when no metadata",
@@ -331,7 +331,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 				SeriesNumber: nil,
 			},
 			filename: "[Author Name] Comic Title v1.cbz",
-			want:     "Comic Title v1",
+			want:     "Comic Title v001",
 		},
 		{
 			name: "parse from filename with multiple bracket sections",
@@ -351,7 +351,7 @@ func TestGenerateCBZFileName(t *testing.T) {
 				SeriesNumber: floatPtr(5),
 			},
 			filename: "whatever.cbz",
-			want:     "My Series v5",
+			want:     "My Series v005",
 		},
 	}
 
@@ -372,7 +372,7 @@ func TestCleanCBZFilename(t *testing.T) {
 		{
 			name:     "removes author brackets and extension",
 			filename: "[Author Name] Comic Title v1.cbz",
-			want:     "Comic Title v1",
+			want:     "Comic Title v001",
 		},
 		{
 			name:     "removes multiple bracket sections",
@@ -382,11 +382,26 @@ func TestCleanCBZFilename(t *testing.T) {
 		{
 			name:     "handles no brackets",
 			filename: "Comic Title v1.cbz",
-			want:     "Comic Title v1",
+			want:     "Comic Title v001",
 		},
 		{
 			name:     "collapses multiple spaces",
 			filename: "[Author]   Comic   Title.cbz",
+			want:     "Comic Title",
+		},
+		{
+			name:     "removes parenthesized metadata after volume",
+			filename: "Comic Title v02 (2020) (Digital) (group).cbz",
+			want:     "Comic Title v002",
+		},
+		{
+			name:     "removes parenthesized metadata with brackets",
+			filename: "[Author] Comic Title v01 (2023) (Digital).cbz",
+			want:     "Comic Title v001",
+		},
+		{
+			name:     "removes parenthesized metadata without volume",
+			filename: "Comic Title (2020) (Digital).cbz",
 			want:     "Comic Title",
 		},
 	}
@@ -405,11 +420,12 @@ func TestFormatSeriesNumber(t *testing.T) {
 		num  float64
 		want string
 	}{
-		{name: "whole number", num: 1, want: "1"},
-		{name: "whole number larger", num: 42, want: "42"},
-		{name: "decimal", num: 1.5, want: "1.5"},
-		{name: "decimal with trailing zeros", num: 2.50, want: "2.5"},
-		{name: "zero", num: 0, want: "0"},
+		{name: "whole number", num: 1, want: "001"},
+		{name: "whole number larger", num: 42, want: "042"},
+		{name: "three digits", num: 100, want: "100"},
+		{name: "decimal", num: 1.5, want: "001.5"},
+		{name: "decimal with trailing zeros", num: 2.50, want: "002.5"},
+		{name: "zero", num: 0, want: "000"},
 	}
 
 	for _, tt := range tests {

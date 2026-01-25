@@ -94,6 +94,15 @@ export function MultiSelectCombobox({
               </button>
             </Badge>
           ))}
+          {values.length > 1 && (
+            <button
+              className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+              onClick={() => onChange([])}
+              type="button"
+            >
+              Clear all
+            </button>
+          )}
         </div>
       )}
 

@@ -582,8 +582,8 @@ func TestProcessScanJob_VolumeNormalization(t *testing.T) {
 	require.Len(t, allBooks, 1)
 
 	book := allBooks[0]
-	// Title should be normalized from "My Comic #007" to "My Comic v7"
-	assert.Equal(t, "My Comic v7", book.Title)
+	// Title should be normalized from "My Comic #007" to "My Comic v007"
+	assert.Equal(t, "My Comic v007", book.Title)
 }
 
 func TestProcessScanJob_AuthorFromFilename(t *testing.T) {
@@ -1313,29 +1313,29 @@ func TestProcessScanJob_VolumeNormalization_BareNumbers(t *testing.T) {
 	var book1, book2 *models.Book
 	for _, book := range allBooks {
 		switch book.Title {
-		case "Title v1":
+		case "Title v001":
 			book1 = book
-		case "Title v2":
+		case "Title v002":
 			book2 = book
 		}
 	}
 
-	require.NotNil(t, book1, "should have book with title 'Title v1'")
-	require.NotNil(t, book2, "should have book with title 'Title v2'")
+	require.NotNil(t, book1, "should have book with title 'Title v001'")
+	require.NotNil(t, book2, "should have book with title 'Title v002'")
 
 	// Verify files were organized into proper folders
-	organizedFolder1 := filepath.Join(libraryPath, "[Author] Title v1")
-	organizedFolder2 := filepath.Join(libraryPath, "[Author] Title v2")
+	organizedFolder1 := filepath.Join(libraryPath, "[Author] Title v001")
+	organizedFolder2 := filepath.Join(libraryPath, "[Author] Title v002")
 
-	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder for v1 should exist")
-	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder for v2 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder1), "organized folder for v001 should exist")
+	assert.True(t, testgen.FileExists(organizedFolder2), "organized folder for v002 should exist")
 
 	// Verify files are in the organized folders (filenames without author prefix)
-	organizedFile1 := filepath.Join(organizedFolder1, "Title v1.cbz")
-	organizedFile2 := filepath.Join(organizedFolder2, "Title v2.cbz")
+	organizedFile1 := filepath.Join(organizedFolder1, "Title v001.cbz")
+	organizedFile2 := filepath.Join(organizedFolder2, "Title v002.cbz")
 
-	assert.True(t, testgen.FileExists(organizedFile1), "organized file v1 should exist")
-	assert.True(t, testgen.FileExists(organizedFile2), "organized file v2 should exist")
+	assert.True(t, testgen.FileExists(organizedFile1), "organized file v001 should exist")
+	assert.True(t, testgen.FileExists(organizedFile2), "organized file v002 should exist")
 }
 
 func TestProcessScanJob_SameNameDifferentExtensions_SeparateCovers(t *testing.T) {
@@ -1671,8 +1671,8 @@ func TestProcessScanJob_VolumeToSeriesInference(t *testing.T) {
 	require.Len(t, allBooks, 1)
 
 	book := allBooks[0]
-	// Title should be normalized from "Naruto #005" to "Naruto v5"
-	assert.Equal(t, "Naruto v5", book.Title)
+	// Title should be normalized from "Naruto #005" to "Naruto v005"
+	assert.Equal(t, "Naruto v005", book.Title)
 	assert.Equal(t, models.DataSourceFilepath, book.TitleSource)
 
 	// Series should be inferred from the base title
@@ -2592,7 +2592,7 @@ func TestProcessScanJob_RescanUpdatesSortTitle(t *testing.T) {
 	require.Len(t, allBooks, 1)
 	assert.Equal(t, "The Great Book", allBooks[0].Title)
 	assert.Equal(t, "Great Book, The", allBooks[0].SortTitle, "sort_title should move leading 'The' to end")
-	assert.Equal(t, models.DataSourceFilepath, allBooks[0].SortTitleSource, "initial sort_title comes from filepath")
+	assert.Equal(t, models.DataSourceEPUBMetadata, allBooks[0].SortTitleSource, "initial sort_title_source matches title_source")
 
 	// Remove the old EPUB and sidecar files, then create a new EPUB with different title
 	os.Remove(epubPath)

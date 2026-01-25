@@ -62,10 +62,23 @@ func (l *JobLogger) Fatal(msg string, err error, data logger.Data) {
 }
 
 func (l *JobLogger) persist(level, msg string, data logger.Data, stackTrace *string) {
+	// Extract "plugin" from data into dedicated column
+	var plugin *string
+	if len(data) > 0 {
+		if p, ok := data["plugin"]; ok {
+			if ps, ok := p.(string); ok && ps != "" {
+				plugin = &ps
+			}
+		}
+	}
+
 	var dataStr *string
 	if len(data) > 0 {
 		truncatedData := make(logger.Data)
 		for k, v := range data {
+			if k == "plugin" {
+				continue // stored in dedicated column
+			}
 			s, ok := v.(string)
 			if ok && len(s) > maxDataValueLen {
 				truncatedData[k] = truncateMiddle(s, maxDataValueLen)
@@ -73,10 +86,12 @@ func (l *JobLogger) persist(level, msg string, data logger.Data, stackTrace *str
 				truncatedData[k] = v
 			}
 		}
-		jsonBytes, err := json.Marshal(truncatedData)
-		if err == nil {
-			s := string(jsonBytes)
-			dataStr = &s
+		if len(truncatedData) > 0 {
+			jsonBytes, err := json.Marshal(truncatedData)
+			if err == nil {
+				s := string(jsonBytes)
+				dataStr = &s
+			}
 		}
 	}
 
@@ -84,6 +99,7 @@ func (l *JobLogger) persist(level, msg string, data logger.Data, stackTrace *str
 		JobID:      l.jobID,
 		Level:      level,
 		Message:    msg,
+		Plugin:     plugin,
 		Data:       dataStr,
 		StackTrace: stackTrace,
 	}

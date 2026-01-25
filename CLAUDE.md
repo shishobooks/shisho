@@ -45,8 +45,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Development**: Air for Go hot reload, Hivemind for process management
 
 For detailed architecture information, see the skills:
-- **Backend details**: `.claude/skills/backend.md`
-- **Frontend details**: `.claude/skills/frontend.md`
+- **Backend details**: `.claude/skills/backend/SKILL.md`
+- **Frontend details**: `.claude/skills/frontend/SKILL.md`
 
 ## Development Workflow
 
@@ -56,6 +56,7 @@ For detailed architecture information, see the skills:
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make check` before committing
 - If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
+- **If a new field is added to `pkg/config/config.go`**, `shisho.example.yaml` MUST be updated with the new field (env var, default, description). This file must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
 
 ## Testing Strategy
 

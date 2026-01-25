@@ -14,6 +14,8 @@ export default tseslint.config(
       "app/types/generated/*",
       "app/components/ui",
       "test-results",
+      "pkg/plugins/testdata/*",
+      "tmp",
     ],
   },
   {

@@ -610,10 +610,8 @@ func (h *handler) updateFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the file with its book
-	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
-		ID: &id,
-	})
+	// Fetch the file with all relations (including Publisher/Imprint for change detection)
+	file, err := h.bookService.RetrieveFileWithRelations(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -48,6 +48,7 @@ func New() (*Binder, error) {
 		return name
 	})
 	_ = validate.RegisterValidation("date", dateValidator)
+	_ = validate.RegisterValidation("url", urlValidator)
 
 	return &Binder{queryDecoder, formDecoder, conform, validate}, nil
 }

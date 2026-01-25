@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 1,
+  "id": "hooks-generator",
+  "name": "Test Generator",
+  "version": "1.0.0",
+  "capabilities": {
+    "outputGenerator": {
+      "description": "Test generator",
+      "id": "test-format",
+      "name": "Test Format",
+      "sourceTypes": ["epub"]
+    }
+  }
+}

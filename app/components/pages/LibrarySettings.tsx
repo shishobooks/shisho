@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
+import LibraryPluginsTab from "@/components/library/LibraryPluginsTab";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -271,6 +272,18 @@ const LibrarySettings = () => {
             KePub format improves reading statistics and page turning on Kobo
             devices. Only affects EPUB and CBZ files.
           </p>
+        </div>
+
+        <Separator />
+
+        {/* Per-Library Plugin Order */}
+        <div className="space-y-4">
+          <Label>Plugin Order</Label>
+          <p className="text-sm text-muted-foreground">
+            Customize which plugins run and in what order for this library. By
+            default, the global plugin order is used.
+          </p>
+          {libraryId && <LibraryPluginsTab libraryId={libraryId} />}
         </div>
 
         <Separator />

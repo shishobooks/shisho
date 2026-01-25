@@ -65,6 +65,47 @@ onSuccess: () => {
 - Components follow shadcn/ui patterns
 - Add new shadcn components using `npx shadcn@latest add`
 
+### Tabbed Navigation (Deep Linking Required)
+
+**All tabbed navigation MUST be deeply linked via URL parameters.** Tabs should never use local state alone (`defaultValue` / `useState`). Instead, sync tab state with the URL so tabs are bookmarkable and support browser back/forward.
+
+**Pattern:**
+1. Add `/:tab?` to the route in `app/router.tsx`
+2. Extract the tab param with `useParams()`
+3. Validate against allowed values, defaulting to the first tab
+4. Use `navigate()` in `onValueChange` to update the URL
+5. Pass controlled `value` and `onValueChange` to `<Tabs>`
+
+```tsx
+const validTabs = ["details", "settings"] as const;
+type TabValue = (typeof validTabs)[number];
+
+const MyPage = () => {
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+
+  const activeTab: TabValue = validTabs.includes(tab as TabValue)
+    ? (tab as TabValue)
+    : "details";
+
+  const handleTabChange = (value: string) => {
+    if (value === "details") {
+      navigate("/my-page"); // Clean URL for default tab
+    } else {
+      navigate(`/my-page/${value}`);
+    }
+  };
+
+  return (
+    <Tabs onValueChange={handleTabChange} value={activeTab}>
+      <TabsTrigger value="details">Details</TabsTrigger>
+      <TabsTrigger value="settings">Settings</TabsTrigger>
+      {/* ... */}
+    </Tabs>
+  );
+};
+```
+
 ## Handling Long Text in UI
 
 When displaying user-generated content that may be long (names, titles, etc.):

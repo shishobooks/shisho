@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
+import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import {
   FileRoleMain,
   FileRoleSupplement,
@@ -15,6 +16,7 @@ import {
   formatIdentifierType,
   getFilename,
 } from "@/utils/format";
+import { getIdentifierUrl } from "@/utils/identifiers";
 
 function formatFileRole(role: string): string {
   switch (role) {
@@ -33,6 +35,7 @@ interface FileDetailsTabProps {
 
 const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
   const { libraryId } = useParams<{ libraryId: string }>();
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
     <div className="py-4 space-y-6">
@@ -160,14 +163,32 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
         <div className="text-sm">
           <p className="font-semibold mb-2">Identifiers</p>
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            {file.identifiers.map((id, idx) => (
-              <div className="contents" key={idx}>
-                <span className="text-muted-foreground">
-                  {formatIdentifierType(id.type)}
-                </span>
-                <span className="font-mono select-all">{id.value}</span>
-              </div>
-            ))}
+            {file.identifiers.map((id, idx) => {
+              const url = getIdentifierUrl(
+                id.type,
+                id.value,
+                pluginIdentifierTypes,
+              );
+              return (
+                <div className="contents" key={idx}>
+                  <span className="text-muted-foreground">
+                    {formatIdentifierType(id.type, pluginIdentifierTypes)}
+                  </span>
+                  {url ? (
+                    <a
+                      className="font-mono select-all text-primary hover:underline"
+                      href={url}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {id.value}
+                    </a>
+                  ) : (
+                    <span className="font-mono select-all">{id.value}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -29,6 +32,8 @@ var (
 	// Non-greedy regex to match only the first [Author] pattern, not from first [ to last ].
 	filepathAuthorRE   = regexp.MustCompile(`\[(.*?)]`)
 	filepathNarratorRE = regexp.MustCompile(`\{(.*?)}`)
+	// Matches parenthesized metadata sections like (2020), (Digital), (group).
+	filepathParensRE = regexp.MustCompile(`\([^)]*\)`)
 	// Regex to collapse multiple whitespace to single space.
 	multiSpaceRE = regexp.MustCompile(`\s+`)
 )
@@ -57,8 +62,9 @@ func generateCBZFileName(metadata *mediafile.ParsedMetadata, filename string) st
 	return cleanCBZFilename(filename)
 }
 
-// cleanCBZFilename removes author brackets and extension from a CBZ filename.
-// Example: "[Author Name] Comic Title v1.cbz" -> "Comic Title v1".
+// cleanCBZFilename removes author brackets, parenthesized metadata, and extension from a CBZ filename,
+// then normalizes volume indicators (e.g., "v02" -> "v2").
+// Example: "[Author Name] Comic Title v01 (2020) (Digital).cbz" -> "Comic Title v1".
 func cleanCBZFilename(filename string) string {
 	// Remove extension
 	name := strings.TrimSuffix(filename, filepath.Ext(filename))
@@ -66,21 +72,31 @@ func cleanCBZFilename(filename string) string {
 	// Remove all bracketed sections (author/creator info)
 	name = filepathAuthorRE.ReplaceAllString(name, "")
 
+	// Remove all parenthesized sections (year, quality, group)
+	name = filepathParensRE.ReplaceAllString(name, "")
+
 	// Clean up extra whitespace
 	name = strings.TrimSpace(name)
 	name = multiSpaceRE.ReplaceAllString(name, " ")
 
+	// Normalize volume indicators (v02 -> v002)
+	if normalized, hasVolume := fileutils.NormalizeVolumeInTitle(name, models.FileTypeCBZ); hasVolume {
+		return normalized
+	}
+
 	return name
 }
 
-// formatSeriesNumber formats a series number as a clean string.
-// Whole numbers are formatted without decimals (e.g., 1.0 -> "1").
-// Non-whole numbers keep their decimal (e.g., 1.5 -> "1.5").
+// formatSeriesNumber formats a series number as a zero-padded string for
+// lexicographic sorting (e.g., 1 -> "001", 42 -> "042", 1.5 -> "001.5").
 func formatSeriesNumber(num float64) string {
 	if num == float64(int(num)) {
-		return strconv.Itoa(int(num))
+		return fmt.Sprintf("%03d", int(num))
 	}
-	return strconv.FormatFloat(num, 'f', -1, 64)
+	intPart := int(num)
+	fracStr := strconv.FormatFloat(num-float64(intPart), 'f', -1, 64)
+	// fracStr is like "0.5", strip the leading "0"
+	return fmt.Sprintf("%03d%s", intPart, fracStr[1:])
 }
 
 // isMainFileExtension returns true if the extension is a main file type.
@@ -261,9 +277,24 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					return nil
 				}
 				// TODO: support having cover.jpg and cover_audiobook.jpg
-				expectedMimeTypes, ok := extensionsToScan[filepath.Ext(path)]
+				ext := filepath.Ext(path)
+				expectedMimeTypes, ok := extensionsToScan[ext]
 				if !ok {
-					// We're only looking for certain files right now.
+					// Check plugin-registered extensions (file parsers and converter source types)
+					if w.pluginManager != nil {
+						extNoDot := strings.TrimPrefix(ext, ".")
+						pluginExts := w.pluginManager.RegisteredFileExtensions()
+						converterExts := w.pluginManager.RegisteredConverterExtensions()
+						if _, isParser := pluginExts[extNoDot]; isParser {
+							filesToScan = append(filesToScan, path)
+							return nil
+						}
+						if _, isConverter := converterExts[extNoDot]; isConverter {
+							filesToScan = append(filesToScan, path)
+							return nil
+						}
+					}
+					// Not a built-in or plugin-registered extension, skip.
 					return nil
 				}
 				mtype, err := mimetype.DetectFile(path)
@@ -290,6 +321,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			if err != nil {
 				return errors.WithStack(err)
 			}
+		}
+
+		// Run input converters on discovered files
+		if w.pluginManager != nil {
+			convertedFiles := w.runInputConverters(ctx, filesToScan, jobLog, library.ID)
+			filesToScan = append(filesToScan, convertedFiles...)
 		}
 
 		// Track books that need organization after scan completes.
@@ -403,4 +440,151 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 	jobLog.Info("finished scan job", nil)
 	return nil
+}
+
+// runInputConverters runs input converter plugins on discovered files.
+// It returns a list of newly converted files that should also be scanned.
+func (w *Worker) runInputConverters(ctx context.Context, filesToScan []string, jobLog *joblogs.JobLogger, libraryID int) []string {
+	runtimes, err := w.pluginManager.GetOrderedRuntimes(ctx, models.PluginHookInputConverter, libraryID)
+	if err != nil || len(runtimes) == 0 {
+		return nil
+	}
+
+	var convertedFiles []string
+	// Track which source+target pairs have been processed to avoid duplicate conversions
+	processedPairs := make(map[string]struct{})
+
+	for _, path := range filesToScan {
+		ext := strings.TrimPrefix(filepath.Ext(path), ".")
+
+		for _, rt := range runtimes {
+			converterCap := rt.Manifest().Capabilities.InputConverter
+			if converterCap == nil {
+				continue
+			}
+
+			// Check if this converter handles this extension
+			handles := false
+			for _, srcType := range converterCap.SourceTypes {
+				if srcType == ext {
+					handles = true
+					break
+				}
+			}
+			if !handles {
+				continue
+			}
+
+			// Check for duplicate source+target pair
+			pairKey := path + "\x00" + converterCap.TargetType
+			if _, done := processedPairs[pairKey]; done {
+				continue
+			}
+			processedPairs[pairKey] = struct{}{}
+
+			// MIME validation if mimeTypes declared
+			if len(converterCap.MIMETypes) > 0 {
+				mtype, mErr := mimetype.DetectFile(path)
+				if mErr != nil {
+					jobLog.Warn("converter: failed to detect MIME type", logger.Data{"path": path, "error": mErr.Error()})
+					continue
+				}
+				mimeMatch := false
+				for _, allowed := range converterCap.MIMETypes {
+					if mtype.String() == allowed {
+						mimeMatch = true
+						break
+					}
+				}
+				if !mimeMatch {
+					continue
+				}
+			}
+
+			// Create temp dir for conversion output
+			targetDir, tErr := os.MkdirTemp("", "shisho-convert-*")
+			if tErr != nil {
+				jobLog.Warn("converter: failed to create temp dir", logger.Data{"error": tErr.Error()})
+				continue
+			}
+
+			result, cErr := w.pluginManager.RunInputConverter(ctx, rt, path, targetDir)
+			if cErr != nil {
+				jobLog.Warn("converter failed", logger.Data{
+					"plugin": rt.Manifest().ID,
+					"path":   path,
+					"error":  cErr.Error(),
+				})
+				os.RemoveAll(targetDir)
+				continue
+			}
+
+			if !result.Success || result.TargetPath == "" {
+				os.RemoveAll(targetDir)
+				continue
+			}
+
+			// Move converted file to library alongside source
+			sourceDir := filepath.Dir(path)
+			destFilename := filepath.Base(result.TargetPath)
+			destPath := filepath.Join(sourceDir, destFilename)
+
+			if _, sErr := os.Stat(destPath); sErr == nil {
+				// Destination already exists, skip
+				jobLog.Info("converter output already exists, skipping", logger.Data{"dest": destPath})
+				os.RemoveAll(targetDir)
+				continue
+			}
+
+			if mErr := moveFile(result.TargetPath, destPath); mErr != nil {
+				jobLog.Warn("converter: failed to move output", logger.Data{
+					"source": result.TargetPath,
+					"dest":   destPath,
+					"error":  mErr.Error(),
+				})
+				os.RemoveAll(targetDir)
+				continue
+			}
+
+			os.RemoveAll(targetDir)
+			convertedFiles = append(convertedFiles, destPath)
+			jobLog.Info("converter produced file", logger.Data{"source": path, "dest": destPath})
+		}
+	}
+
+	return convertedFiles
+}
+
+// moveFile moves a file from src to dst. If os.Rename fails (e.g., cross-device),
+// it falls back to copy+remove.
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	// Fallback: copy + remove
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return errors.Wrap(err, "failed to open source")
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return errors.Wrap(err, "failed to create destination")
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		os.Remove(dst)
+		return errors.Wrap(err, "failed to copy file")
+	}
+
+	if err := dstFile.Close(); err != nil {
+		os.Remove(dst)
+		return errors.Wrap(err, "failed to close destination")
+	}
+
+	srcFile.Close()
+	return os.Remove(src)
 }

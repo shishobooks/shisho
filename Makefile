@@ -17,7 +17,7 @@ TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 
 .PHONY: check
 check: tygo lint
-	$(MAKE) -j3 test test\:js lint\:js
+	+$(MAKE) -j3 test test\:js lint\:js
 
 .PHONY: build
 build:

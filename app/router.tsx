@@ -4,6 +4,7 @@ import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminJobs from "@/components/pages/AdminJobs";
 import AdminLayout from "@/components/pages/AdminLayout";
 import AdminLibraries from "@/components/pages/AdminLibraries";
+import AdminPlugins from "@/components/pages/AdminPlugins";
 import AdminSettings from "@/components/pages/AdminSettings";
 import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
@@ -132,6 +133,16 @@ export const router = createBrowserRouter([
             requiredPermission={{ resource: "jobs", operation: "read" }}
           >
             <JobDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "plugins/:tab?",
+        element: (
+          <ProtectedRoute
+            requiredPermission={{ resource: "config", operation: "read" }}
+          >
+            <AdminPlugins />
           </ProtectedRoute>
         ),
       },

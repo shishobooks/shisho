@@ -41,6 +41,9 @@ type Config struct {
 	CacheDir               string `koanf:"cache_dir" json:"cache_dir"`
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
 
+	// Plugin settings
+	PluginDir string `koanf:"plugin_dir" json:"plugin_dir"`
+
 	// Supplement discovery settings
 	SupplementExcludePatterns []string `koanf:"supplement_exclude_patterns" json:"supplement_exclude_patterns"`
 
@@ -75,6 +78,7 @@ func defaults() *Config {
 		WorkerProcesses:           2,
 		JobRetentionDays:          30,
 		CacheDir:                  "/config/cache",
+		PluginDir:                 "/config/plugins/installed",
 		DownloadCacheMaxSizeGB:    5,
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 		JWTSecret:                 "", // Must be set via config or env var

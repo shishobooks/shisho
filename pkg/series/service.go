@@ -112,7 +112,7 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	})
 	if err == nil {
 		// Series exists, check if we should update the source
-		if models.DataSourcePriority[nameSource] < models.DataSourcePriority[series.NameSource] {
+		if models.GetDataSourcePriority(nameSource) < models.GetDataSourcePriority(series.NameSource) {
 			series.NameSource = nameSource
 			err = svc.UpdateSeries(ctx, series, UpdateSeriesOptions{
 				Columns: []string{"name_source"},

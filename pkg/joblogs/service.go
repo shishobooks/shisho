@@ -13,6 +13,8 @@ type ListJobLogsOptions struct {
 	JobID   int
 	AfterID *int
 	Levels  []string
+	Search  *string
+	Plugin  *string
 }
 
 type Service struct {
@@ -55,6 +57,15 @@ func (svc *Service) ListJobLogs(ctx context.Context, opts ListJobLogsOptions) ([
 
 	if len(opts.Levels) > 0 {
 		q = q.Where("jl.level IN (?)", bun.In(opts.Levels))
+	}
+
+	if opts.Search != nil && *opts.Search != "" {
+		searchPattern := "%" + *opts.Search + "%"
+		q = q.Where("(jl.message LIKE ? OR jl.data LIKE ?)", searchPattern, searchPattern)
+	}
+
+	if opts.Plugin != nil && *opts.Plugin != "" {
+		q = q.Where("jl.plugin = ?", *opts.Plugin)
 	}
 
 	err := q.Scan(ctx)

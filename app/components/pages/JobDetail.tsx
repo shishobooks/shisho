@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useJobLogs } from "@/hooks/queries/jobs";
 import {
   JobLogLevelError,
@@ -166,24 +173,49 @@ const JobDetail = () => {
   const { id } = useParams<{ id: string }>();
   const [searchTerm, setSearchTerm] = useState("");
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
+  const [pluginFilter, setPluginFilter] = useState<string>("");
   const [autoScroll, setAutoScroll] = useState(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const lastLogIdRef = useRef<number | undefined>(undefined);
 
   const { data, isLoading, error, refetch } = useJobLogs(id, {
     level: levelFilter.length > 0 ? levelFilter : undefined,
+    plugin: pluginFilter || undefined,
   });
 
   const job = data?.job;
-  const logs = data?.logs ?? [];
+  const logs = useMemo(() => data?.logs ?? [], [data?.logs]);
+
+  // Extract unique plugin names from log data
+  const pluginNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const log of logs) {
+      if (log.data) {
+        try {
+          const parsed = JSON.parse(log.data);
+          if (parsed.plugin) {
+            names.add(parsed.plugin);
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+      }
+    }
+    return Array.from(names).sort();
+  }, [logs]);
 
   // Filter logs by search term (client-side)
   const filteredLogs = logs.filter((log) => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    if (log.message.toLowerCase().includes(searchLower)) return true;
-    if (log.data?.toLowerCase().includes(searchLower)) return true;
-    return false;
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      if (
+        !log.message.toLowerCase().includes(searchLower) &&
+        !log.data?.toLowerCase().includes(searchLower)
+      ) {
+        return false;
+      }
+    }
+    return true;
   });
 
   // Polling for live updates
@@ -309,6 +341,26 @@ const JobDetail = () => {
             </Button>
           ))}
         </div>
+        {pluginNames.length > 0 && (
+          <Select
+            onValueChange={(value) =>
+              setPluginFilter(value === "all" ? "" : value)
+            }
+            value={pluginFilter || "all"}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Plugins" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plugins</SelectItem>
+              {pluginNames.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Log container */}

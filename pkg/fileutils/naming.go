@@ -164,12 +164,15 @@ func NormalizeVolumeInTitle(title string, fileType string) (string, bool) {
 			// Parse the volume number
 			volumeStr := matches[1]
 			if volume, err := strconv.ParseFloat(volumeStr, 64); err == nil {
-				// Create normalized title with v{number} format
+				// Create normalized title with v{zero-padded number} format for lexicographic sorting
 				var normalizedTitle string
 				if volume == float64(int(volume)) {
-					normalizedTitle = fmt.Sprintf("%s v%d", baseTitle, int(volume))
+					normalizedTitle = fmt.Sprintf("%s v%03d", baseTitle, int(volume))
 				} else {
-					normalizedTitle = fmt.Sprintf("%s v%.1f", baseTitle, volume)
+					intPart := int(volume)
+					fracStr := strconv.FormatFloat(volume-float64(intPart), 'f', -1, 64)
+					// fracStr is like "0.5", strip the leading "0"
+					normalizedTitle = fmt.Sprintf("%s v%03d%s", baseTitle, intPart, fracStr[1:])
 				}
 				return strings.TrimSpace(normalizedTitle), true
 			}

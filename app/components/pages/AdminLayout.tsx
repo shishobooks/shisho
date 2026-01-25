@@ -1,4 +1,4 @@
-import { Briefcase, Cog, Library, LogOut, Users } from "lucide-react";
+import { Briefcase, Cog, Library, LogOut, Puzzle, Users } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -105,6 +105,14 @@ const AdminLayout = () => {
                   isActive={location.pathname === "/settings/jobs"}
                   label="Jobs"
                   to="/settings/jobs"
+                />
+              )}
+              {canViewConfig && (
+                <NavItem
+                  icon={<Puzzle className="h-4 w-4" />}
+                  isActive={location.pathname === "/settings/plugins"}
+                  label="Plugins"
+                  to="/settings/plugins"
                 />
               )}
             </nav>

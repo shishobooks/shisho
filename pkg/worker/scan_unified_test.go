@@ -1342,9 +1342,9 @@ func TestScanFileCore_FileName_CBZ_UsesSeriesWhenNoTitle(t *testing.T) {
 	updatedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
 	require.NoError(t, err)
 
-	// File name should be "Series v1" (from generateCBZFileName fallback)
+	// File name should be "Series v001" (from generateCBZFileName fallback)
 	require.NotNil(t, updatedFile.Name)
-	assert.Equal(t, "Series v1", *updatedFile.Name)
+	assert.Equal(t, "Series v001", *updatedFile.Name)
 }
 
 func TestScanFileCore_WritesSidecars(t *testing.T) {

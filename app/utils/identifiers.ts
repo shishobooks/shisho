@@ -38,9 +38,29 @@ export function validateUUID(uuid: string): boolean {
   );
 }
 
+/**
+ * Returns a URL for an identifier value using the type's urlTemplate, or null if unavailable.
+ * Replaces {value} in the template with the actual identifier value.
+ */
+export function getIdentifierUrl(
+  type: string,
+  value: string,
+  pluginTypes?: Array<{ id: string; url_template?: string }>,
+): string | null {
+  const pluginType = pluginTypes?.find((pt) => pt.id === type);
+  if (pluginType?.url_template) {
+    return pluginType.url_template.replace(
+      "{value}",
+      encodeURIComponent(value),
+    );
+  }
+  return null;
+}
+
 export function validateIdentifier(
   type: string,
   value: string,
+  pattern?: string,
 ): { valid: boolean; error?: string } {
   switch (type) {
     case "isbn_10":
@@ -63,6 +83,15 @@ export function validateIdentifier(
         ? { valid: true }
         : { valid: false, error: "Invalid UUID format" };
     default:
+      if (pattern) {
+        const regex = new RegExp(pattern);
+        if (!regex.test(value)) {
+          return {
+            valid: false,
+            error: "Value does not match the required format",
+          };
+        }
+      }
       return { valid: true };
   }
 }

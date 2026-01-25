@@ -678,7 +678,7 @@ This prevents plugins from impersonating official sources.
 
 Pre-seeded on first run, cannot be removed:
 ```
-URL: https://raw.githubusercontent.com/shishobooks/plugins/main/repository.json
+URL: https://raw.githubusercontent.com/shishobooks/plugins/master/repository.json
 Scope: shisho
 Name: Official Shisho Plugins
 ```

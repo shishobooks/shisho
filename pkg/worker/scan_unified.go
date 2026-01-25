@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
@@ -234,7 +235,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 		}
 	} else {
 		var err error
-		metadata, err = parseFileMetadata(file.Filepath, file.FileType)
+		metadata, err = w.parseFileMetadata(ctx, file.Filepath, file.FileType)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to parse file metadata")
 		}
@@ -245,6 +246,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve parent book")
 	}
+
+	// Run metadata enrichers after parsing
+	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID)
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
 	// This is a resync (FileID mode), so pass isResync=true to enable book organization
@@ -353,7 +357,6 @@ func (w *Worker) scanFileCore(
 		return &ScanResult{File: file, Book: book}, nil
 	}
 
-	dataSource := metadata.DataSource
 	sidecarSource := models.DataSourceSidecar
 
 	// Read sidecar files if they exist (higher priority than file metadata)
@@ -383,18 +386,19 @@ func (w *Worker) scanFileCore(
 		if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, file.FileType); hasVolume {
 			title = normalizedTitle
 		}
-		if shouldUpdateScalar(title, book.Title, dataSource, book.TitleSource, forceRefresh) {
+		titleSource := metadata.SourceForField("title")
+		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
 			log.Info("updating book title", logger.Data{"from": book.Title, "to": title})
 			book.Title = title
-			book.TitleSource = dataSource
+			book.TitleSource = titleSource
 			bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "title", "title_source")
 			bookTitleChanged = true
 
 			// Regenerate sort title
 			newSortTitle := sortname.ForTitle(title)
-			if shouldUpdateScalar(newSortTitle, book.SortTitle, dataSource, book.SortTitleSource, forceRefresh) {
+			if shouldUpdateScalar(newSortTitle, book.SortTitle, titleSource, book.SortTitleSource, forceRefresh) {
 				book.SortTitle = newSortTitle
-				book.SortTitleSource = dataSource
+				book.SortTitleSource = titleSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "sort_title", "sort_title_source")
 			}
 		}
@@ -428,10 +432,11 @@ func (w *Worker) scanFileCore(
 			if book.SubtitleSource != nil {
 				existingSubtitleSource = *book.SubtitleSource
 			}
-			if shouldUpdateScalar(subtitle, existingSubtitle, dataSource, existingSubtitleSource, forceRefresh) {
+			subtitleSource := metadata.SourceForField("subtitle")
+			if shouldUpdateScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, forceRefresh) {
 				log.Info("updating book subtitle", logger.Data{"from": existingSubtitle, "to": subtitle})
 				book.Subtitle = &subtitle
-				book.SubtitleSource = &dataSource
+				book.SubtitleSource = &subtitleSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "subtitle", "subtitle_source")
 			}
 		}
@@ -464,10 +469,11 @@ func (w *Worker) scanFileCore(
 			if book.DescriptionSource != nil {
 				existingDescriptionSource = *book.DescriptionSource
 			}
-			if shouldUpdateScalar(description, existingDescription, dataSource, existingDescriptionSource, forceRefresh) {
+			descSource := metadata.SourceForField("description")
+			if shouldUpdateScalar(description, existingDescription, descSource, existingDescriptionSource, forceRefresh) {
 				log.Info("updating book description", nil)
 				book.Description = &description
-				book.DescriptionSource = &dataSource
+				book.DescriptionSource = &descSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "description", "description_source")
 			}
 		}
@@ -509,7 +515,8 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			if shouldUpdateRelationship(authorNames, existingAuthorNames, dataSource, book.AuthorSource, forceRefresh) {
+			authorSource := metadata.SourceForField("authors")
+			if shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
 				log.Info("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
 
 				// Delete existing authors
@@ -540,7 +547,7 @@ func (w *Worker) scanFileCore(
 				}
 
 				// Update author source
-				book.AuthorSource = dataSource
+				book.AuthorSource = authorSource
 				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"author_source"}}); err != nil {
 					return nil, errors.Wrap(err, "failed to update author source")
 				}
@@ -610,7 +617,8 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, dataSource, existingSeriesSource, forceRefresh) {
+			seriesSource := metadata.SourceForField("series")
+			if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, seriesSource, existingSeriesSource, forceRefresh) {
 				log.Info("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
 
 				// Delete existing series
@@ -619,7 +627,7 @@ func (w *Worker) scanFileCore(
 				}
 
 				// Create new series
-				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, metadata.Series, book.LibraryID, dataSource)
+				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, metadata.Series, book.LibraryID, seriesSource)
 				if err != nil {
 					log.Warn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
 				} else {
@@ -698,7 +706,8 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, dataSource, existingGenreSource, forceRefresh) {
+			genreSource := metadata.SourceForField("genres")
+			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
 				log.Info("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
 
 				// Delete existing genres
@@ -723,7 +732,7 @@ func (w *Worker) scanFileCore(
 				}
 
 				// Update genre source
-				book.GenreSource = &dataSource
+				book.GenreSource = &genreSource
 				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"genre_source"}}); err != nil {
 					return nil, errors.Wrap(err, "failed to update genre source")
 				}
@@ -787,7 +796,8 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			if shouldUpdateRelationship(metadata.Tags, existingTagNames, dataSource, existingTagSource, forceRefresh) {
+			tagSource := metadata.SourceForField("tags")
+			if shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
 				log.Info("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
 
 				// Delete existing tags
@@ -812,7 +822,7 @@ func (w *Worker) scanFileCore(
 				}
 
 				// Update tag source
-				book.TagSource = &dataSource
+				book.TagSource = &tagSource
 				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"tag_source"}}); err != nil {
 					return nil, errors.Wrap(err, "failed to update tag source")
 				}
@@ -920,10 +930,11 @@ func (w *Worker) scanFileCore(
 		if file.NameSource != nil {
 			existingNameSource = *file.NameSource
 		}
-		if shouldUpdateScalar(newFileName, existingName, dataSource, existingNameSource, forceRefresh) {
+		nameSource := metadata.SourceForField("title")
+		if shouldUpdateScalar(newFileName, existingName, nameSource, existingNameSource, forceRefresh) {
 			log.Info("updating file name", logger.Data{"from": existingName, "to": newFileName})
 			file.Name = &newFileName
-			file.NameSource = &dataSource
+			file.NameSource = &nameSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "name", "name_source")
 		}
 	}
@@ -955,10 +966,11 @@ func (w *Worker) scanFileCore(
 		if file.URLSource != nil {
 			existingURLSource = *file.URLSource
 		}
-		if shouldUpdateScalar(metadata.URL, existingURL, dataSource, existingURLSource, forceRefresh) {
+		urlSource := metadata.SourceForField("url")
+		if shouldUpdateScalar(metadata.URL, existingURL, urlSource, existingURLSource, forceRefresh) {
 			log.Info("updating file URL", logger.Data{"from": existingURL, "to": metadata.URL})
 			file.URL = &metadata.URL
-			file.URLSource = &dataSource
+			file.URLSource = &urlSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "url", "url_source")
 		}
 	}
@@ -992,10 +1004,11 @@ func (w *Worker) scanFileCore(
 		if file.ReleaseDate != nil {
 			existingDateStr = file.ReleaseDate.Format("2006-01-02")
 		}
-		if shouldUpdateScalar(newDateStr, existingDateStr, dataSource, existingReleaseDateSource, forceRefresh) {
+		releaseDateSource := metadata.SourceForField("releaseDate")
+		if shouldUpdateScalar(newDateStr, existingDateStr, releaseDateSource, existingReleaseDateSource, forceRefresh) {
 			log.Info("updating file release date", logger.Data{"from": existingDateStr, "to": newDateStr})
 			file.ReleaseDate = metadata.ReleaseDate
-			file.ReleaseDateSource = &dataSource
+			file.ReleaseDateSource = &releaseDateSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "release_date", "release_date_source")
 		}
 	}
@@ -1033,14 +1046,15 @@ func (w *Worker) scanFileCore(
 		if file.PublisherSource != nil {
 			existingPublisherSource = *file.PublisherSource
 		}
-		if shouldUpdateScalar(publisherName, existingPublisherName, dataSource, existingPublisherSource, forceRefresh) {
+		pubSource := metadata.SourceForField("publisher")
+		if shouldUpdateScalar(publisherName, existingPublisherName, pubSource, existingPublisherSource, forceRefresh) {
 			publisher, err := w.publisherService.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 			if err != nil {
 				log.Warn("failed to find/create publisher", logger.Data{"publisher": publisherName, "error": err.Error()})
 			} else {
 				log.Info("updating file publisher", logger.Data{"from": existingPublisherName, "to": publisherName})
 				file.PublisherID = &publisher.ID
-				file.PublisherSource = &dataSource
+				file.PublisherSource = &pubSource
 				fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "publisher_id", "publisher_source")
 			}
 		}
@@ -1079,14 +1093,15 @@ func (w *Worker) scanFileCore(
 		if file.ImprintSource != nil {
 			existingImprintSource = *file.ImprintSource
 		}
-		if shouldUpdateScalar(imprintName, existingImprintName, dataSource, existingImprintSource, forceRefresh) {
+		imprintSource := metadata.SourceForField("imprint")
+		if shouldUpdateScalar(imprintName, existingImprintName, imprintSource, existingImprintSource, forceRefresh) {
 			imprint, err := w.imprintService.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
 			if err != nil {
 				log.Warn("failed to find/create imprint", logger.Data{"imprint": imprintName, "error": err.Error()})
 			} else {
 				log.Info("updating file imprint", logger.Data{"from": existingImprintName, "to": imprintName})
 				file.ImprintID = &imprint.ID
-				file.ImprintSource = &dataSource
+				file.ImprintSource = &imprintSource
 				fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "imprint_id", "imprint_source")
 			}
 		}
@@ -1209,7 +1224,8 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, dataSource, existingNarratorSource, forceRefresh) {
+		narratorSource := metadata.SourceForField("narrators")
+		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, narratorSource, existingNarratorSource, forceRefresh) {
 			log.Info("updating narrators", logger.Data{"new_count": len(metadata.Narrators), "old_count": len(file.Narrators)})
 
 			// Delete existing narrators
@@ -1235,7 +1251,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			// Update narrator source
-			file.NarratorSource = &dataSource
+			file.NarratorSource = &narratorSource
 			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"narrator_source"}}); err != nil {
 				return nil, errors.Wrap(err, "failed to update narrator source")
 			}
@@ -1306,7 +1322,8 @@ func (w *Worker) scanFileCore(
 			newIdentifierValues = append(newIdentifierValues, id.Type+":"+id.Value)
 		}
 
-		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, dataSource, existingIdentifierSource, forceRefresh) {
+		identifierSource := metadata.SourceForField("identifiers")
+		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh) {
 			log.Info("updating identifiers", logger.Data{"new_count": len(metadata.Identifiers), "old_count": len(file.Identifiers)})
 
 			// Delete existing identifiers
@@ -1320,7 +1337,7 @@ func (w *Worker) scanFileCore(
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
-					Source: dataSource,
+					Source: identifierSource,
 				}
 				if err := w.bookService.CreateFileIdentifier(ctx, identifier); err != nil {
 					log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
@@ -1328,7 +1345,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			// Update identifier source
-			file.IdentifierSource = &dataSource
+			file.IdentifierSource = &identifierSource
 			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"identifier_source"}}); err != nil {
 				return nil, errors.Wrap(err, "failed to update identifier source")
 			}
@@ -1384,8 +1401,9 @@ func (w *Worker) scanFileCore(
 
 	if len(metadata.Chapters) > 0 {
 		existingChapterSource := file.ChapterSource
+		chapterSource := metadata.SourceForField("chapters")
 
-		if chapters.ShouldUpdateChapters(metadata.Chapters, dataSource, existingChapterSource, forceRefresh) {
+		if chapters.ShouldUpdateChapters(metadata.Chapters, chapterSource, existingChapterSource, forceRefresh) {
 			log.Info("updating chapters", logger.Data{"chapter_count": len(metadata.Chapters)})
 
 			// Replace all chapters with new ones from metadata
@@ -1394,7 +1412,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			// Update chapter source on file
-			file.ChapterSource = &dataSource
+			file.ChapterSource = &chapterSource
 			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
 				return nil, errors.Wrap(err, "failed to update chapter source")
 			}
@@ -1432,10 +1450,10 @@ func (w *Worker) scanFileCore(
 
 		// Check if we should apply sidecar (don't override manual selections)
 		// Sidecar has priority 1, manual has priority 0 (lower = higher priority)
-		sidecarPriority := models.DataSourcePriority[models.DataSourceSidecar]
-		existingPriority := models.DataSourcePriority[existingCoverSource]
+		sidecarPriority := models.GetDataSourcePriority(models.DataSourceSidecar)
+		existingPriority := models.GetDataSourcePriority(existingCoverSource)
 		if existingCoverSource == "" {
-			existingPriority = models.DataSourcePriority[models.DataSourceFilepath]
+			existingPriority = models.GetDataSourcePriority(models.DataSourceFilepath)
 		}
 
 		// Only apply if sidecar has equal or higher priority than existing source
@@ -1547,7 +1565,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
 	// Parse metadata from file
-	metadata, err := parseFileMetadata(path, fileType)
+	metadata, err := w.parseFileMetadata(ctx, path, fileType)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse file metadata")
 	}
@@ -1617,17 +1635,18 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		titleSource := models.DataSourceFilepath
 		if metadata != nil && strings.TrimSpace(metadata.Title) != "" {
-			titleSource = metadata.DataSource
+			titleSource = metadata.SourceForField("title")
 		}
 
 		log.Info("creating new book", logger.Data{"title": title, "path": bookPath})
 		book = &models.Book{
-			LibraryID:    opts.LibraryID,
-			Filepath:     bookPath,
-			Title:        title,
-			TitleSource:  titleSource,
-			SortTitle:    sortname.ForTitle(title),
-			AuthorSource: models.DataSourceFilepath,
+			LibraryID:       opts.LibraryID,
+			Filepath:        bookPath,
+			Title:           title,
+			TitleSource:     titleSource,
+			SortTitle:       sortname.ForTitle(title),
+			SortTitleSource: titleSource,
+			AuthorSource:    models.DataSourceFilepath,
 		}
 		if err := w.bookService.CreateBook(ctx, book); err != nil {
 			return nil, errors.Wrap(err, "failed to create book")
@@ -1693,7 +1712,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 				existingCoverSource := models.DataSourceExistingCover
 				coverSource = &existingCoverSource
 			} else {
-				coverSource = &metadata.DataSource
+				cs := metadata.SourceForField("cover")
+				coverSource = &cs
 			}
 		}
 		if metadata.CoverPage != nil {
@@ -1715,18 +1735,16 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		CoverPage:      coverPage,
 	}
 
-	// Set file-specific fields based on file type and metadata
+	// Set fields from metadata if provided (parsers only set what's relevant)
 	if metadata != nil {
-		if fileType == models.FileTypeM4B {
-			if metadata.Duration > 0 {
-				durationSeconds := metadata.Duration.Seconds()
-				file.AudiobookDurationSeconds = &durationSeconds
-			}
-			if metadata.BitrateBps > 0 {
-				file.AudiobookBitrateBps = &metadata.BitrateBps
-			}
+		if metadata.Duration > 0 {
+			durationSeconds := metadata.Duration.Seconds()
+			file.AudiobookDurationSeconds = &durationSeconds
 		}
-		if fileType == models.FileTypeCBZ && metadata.PageCount != nil {
+		if metadata.BitrateBps > 0 {
+			file.AudiobookBitrateBps = &metadata.BitrateBps
+		}
+		if metadata.PageCount != nil {
 			file.PageCount = metadata.PageCount
 		}
 	}
@@ -1772,6 +1790,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reload book")
 	}
+
+	// Run metadata enrichers after parsing
+	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID)
 
 	// Use scanFileCore to handle all metadata updates (authors, series, etc.)
 	// This is a batch scan (FilePath mode), so pass isResync=false to skip book organization
@@ -1911,7 +1932,8 @@ func (w *Worker) discoverAndCreateSupplements(
 }
 
 // deriveInitialTitle determines the initial title for a new book from the filepath or metadata.
-// For CBZ files, volume indicators like "#007" are normalized to "v7".
+// For CBZ files, volume indicators like "#007" are normalized to "v7", and parenthesized
+// metadata like "(2020) (Digital) (group)" is removed.
 func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) string {
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
@@ -1938,6 +1960,13 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 
 	// Strip author/narrator patterns from filename
 	title := strings.TrimSpace(filepathNarratorRE.ReplaceAllString(filepathAuthorRE.ReplaceAllString(filename, ""), ""))
+
+	// Strip parenthesized metadata from CBZ filenames (year, quality, group)
+	if fileType == models.FileTypeCBZ {
+		title = filepathParensRE.ReplaceAllString(title, "")
+		title = strings.TrimSpace(title)
+		title = multiSpaceRE.ReplaceAllString(title, " ")
+	}
 
 	// If title is empty after stripping, fall back to raw filename
 	if title == "" {
@@ -2065,7 +2094,9 @@ func (w *Worker) extractAndSaveCover(
 }
 
 // parseFileMetadata extracts metadata from a file based on its type.
-func parseFileMetadata(path, fileType string) (*mediafile.ParsedMetadata, error) {
+// For built-in types (epub, cbz, m4b), uses the native parsers.
+// For other types, falls back to plugin file parsers if available.
+func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (*mediafile.ParsedMetadata, error) {
 	var metadata *mediafile.ParsedMetadata
 	var err error
 
@@ -2077,6 +2108,32 @@ func parseFileMetadata(path, fileType string) (*mediafile.ParsedMetadata, error)
 	case models.FileTypeM4B:
 		metadata, err = mp4.Parse(path)
 	default:
+		// Check for plugin file parser
+		if w.pluginManager != nil {
+			rt := w.pluginManager.GetParserForType(fileType)
+			if rt != nil {
+				// MIME type validation if mimeTypes declared
+				declaredMIMEs := rt.Manifest().Capabilities.FileParser.MIMETypes
+				if len(declaredMIMEs) > 0 {
+					mtype, mErr := mimetype.DetectFile(path)
+					if mErr != nil {
+						return nil, errors.Wrap(mErr, "failed to detect MIME type")
+					}
+					detected := strings.ToLower(mtype.String())
+					mimeMatch := false
+					for _, allowed := range declaredMIMEs {
+						if strings.HasPrefix(detected, strings.ToLower(allowed)) {
+							mimeMatch = true
+							break
+						}
+					}
+					if !mimeMatch {
+						return nil, errors.Errorf("file %s: detected MIME type %s does not match parser mimeTypes %v, skipping", path, mtype.String(), declaredMIMEs)
+					}
+				}
+				return w.pluginManager.RunFileParser(ctx, rt, path, fileType)
+			}
+		}
 		return nil, errors.Errorf("unsupported file type: %s", fileType)
 	}
 
@@ -2085,6 +2142,346 @@ func parseFileMetadata(path, fileType string) (*mediafile.ParsedMetadata, error)
 	}
 
 	return metadata, nil
+}
+
+// runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
+// Each enricher is called in user-defined order; first non-empty value per field wins.
+func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int) *mediafile.ParsedMetadata {
+	if w.pluginManager == nil || metadata == nil {
+		return metadata
+	}
+
+	runtimes, err := w.pluginManager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, libraryID)
+	if err != nil || len(runtimes) == 0 {
+		return metadata
+	}
+
+	log := logger.FromContext(ctx)
+
+	// Build enrichment context
+	enrichCtx := map[string]interface{}{
+		"parsedMetadata": buildParsedMetadataContext(metadata),
+		"file":           buildFileContext(file),
+		"book":           buildBookContext(book, file),
+	}
+
+	enrichedMeta := *metadata // copy
+	modified := false
+
+	for _, rt := range runtimes {
+		// Check if enricher handles this file type
+		enricherCap := rt.Manifest().Capabilities.MetadataEnricher
+		if enricherCap == nil {
+			continue
+		}
+		handles := false
+		for _, ft := range enricherCap.FileTypes {
+			if ft == file.FileType {
+				handles = true
+				break
+			}
+		}
+		if !handles {
+			continue
+		}
+
+		result, eErr := w.pluginManager.RunMetadataEnricher(ctx, rt, enrichCtx)
+		if eErr != nil {
+			log.Warn("enricher failed", logger.Data{
+				"plugin": rt.Manifest().ID,
+				"error":  eErr.Error(),
+			})
+			continue
+		}
+		if !result.Modified || result.Metadata == nil {
+			continue
+		}
+
+		// Merge: first non-empty wins per field, tracking source per field
+		enricherSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
+		mergeEnrichedMetadata(&enrichedMeta, result.Metadata, enricherSource)
+		if !modified {
+			enrichedMeta.DataSource = enricherSource
+		}
+		modified = true
+	}
+
+	return &enrichedMeta
+}
+
+// mergeEnrichedMetadata applies fields from enrichment result to the target
+// only if the target field is currently empty/zero. Tracks which source
+// provided each field in target.FieldDataSources.
+func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source string) {
+	if target.FieldDataSources == nil {
+		target.FieldDataSources = make(map[string]string)
+	}
+	if target.Title == "" && enrichment.Title != "" {
+		target.Title = enrichment.Title
+		target.FieldDataSources["title"] = source
+	}
+	if target.Subtitle == "" && enrichment.Subtitle != "" {
+		target.Subtitle = enrichment.Subtitle
+		target.FieldDataSources["subtitle"] = source
+	}
+	if len(target.Authors) == 0 && len(enrichment.Authors) > 0 {
+		target.Authors = enrichment.Authors
+		target.FieldDataSources["authors"] = source
+	}
+	if len(target.Narrators) == 0 && len(enrichment.Narrators) > 0 {
+		target.Narrators = enrichment.Narrators
+		target.FieldDataSources["narrators"] = source
+	}
+	if target.Series == "" && enrichment.Series != "" {
+		target.Series = enrichment.Series
+		target.FieldDataSources["series"] = source
+	}
+	if target.SeriesNumber == nil && enrichment.SeriesNumber != nil {
+		target.SeriesNumber = enrichment.SeriesNumber
+		target.FieldDataSources["series"] = source
+	}
+	if len(target.Genres) == 0 && len(enrichment.Genres) > 0 {
+		target.Genres = enrichment.Genres
+		target.FieldDataSources["genres"] = source
+	}
+	if len(target.Tags) == 0 && len(enrichment.Tags) > 0 {
+		target.Tags = enrichment.Tags
+		target.FieldDataSources["tags"] = source
+	}
+	if target.Description == "" && enrichment.Description != "" {
+		target.Description = enrichment.Description
+		target.FieldDataSources["description"] = source
+	}
+	if target.Publisher == "" && enrichment.Publisher != "" {
+		target.Publisher = enrichment.Publisher
+		target.FieldDataSources["publisher"] = source
+	}
+	if target.Imprint == "" && enrichment.Imprint != "" {
+		target.Imprint = enrichment.Imprint
+		target.FieldDataSources["imprint"] = source
+	}
+	if target.URL == "" && enrichment.URL != "" {
+		target.URL = enrichment.URL
+		target.FieldDataSources["url"] = source
+	}
+	if target.ReleaseDate == nil && enrichment.ReleaseDate != nil {
+		target.ReleaseDate = enrichment.ReleaseDate
+		target.FieldDataSources["releaseDate"] = source
+	}
+	if len(target.CoverData) == 0 && len(enrichment.CoverData) > 0 {
+		target.CoverData = enrichment.CoverData
+		target.CoverMimeType = enrichment.CoverMimeType
+		target.FieldDataSources["cover"] = source
+	}
+	// Identifiers are multi-valued by type, so we append new types from the enricher
+	// rather than using "first non-empty wins" like other fields.
+	if len(enrichment.Identifiers) > 0 {
+		existingTypes := make(map[string]bool, len(target.Identifiers))
+		for _, id := range target.Identifiers {
+			existingTypes[id.Type] = true
+		}
+		for _, id := range enrichment.Identifiers {
+			if !existingTypes[id.Type] {
+				target.Identifiers = append(target.Identifiers, id)
+				target.FieldDataSources["identifiers"] = source
+			}
+		}
+	}
+}
+
+// buildParsedMetadataContext converts ParsedMetadata to a map for plugin enrichment context.
+func buildParsedMetadataContext(md *mediafile.ParsedMetadata) map[string]interface{} {
+	if md == nil {
+		return nil
+	}
+
+	ctx := map[string]interface{}{
+		"title":       md.Title,
+		"subtitle":    md.Subtitle,
+		"series":      md.Series,
+		"description": md.Description,
+		"publisher":   md.Publisher,
+		"imprint":     md.Imprint,
+		"url":         md.URL,
+		"dataSource":  md.DataSource,
+	}
+
+	if md.SeriesNumber != nil {
+		ctx["seriesNumber"] = *md.SeriesNumber
+	}
+
+	if len(md.Authors) > 0 {
+		authors := make([]map[string]interface{}, len(md.Authors))
+		for i, a := range md.Authors {
+			authors[i] = map[string]interface{}{
+				"name": a.Name,
+				"role": a.Role,
+			}
+		}
+		ctx["authors"] = authors
+	}
+
+	if len(md.Narrators) > 0 {
+		ctx["narrators"] = md.Narrators
+	}
+
+	if len(md.Genres) > 0 {
+		ctx["genres"] = md.Genres
+	}
+
+	if len(md.Tags) > 0 {
+		ctx["tags"] = md.Tags
+	}
+
+	if md.ReleaseDate != nil {
+		ctx["releaseDate"] = md.ReleaseDate.Format("2006-01-02")
+	}
+
+	if len(md.Identifiers) > 0 {
+		identifiers := make([]map[string]interface{}, len(md.Identifiers))
+		for i, id := range md.Identifiers {
+			identifiers[i] = map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			}
+		}
+		ctx["identifiers"] = identifiers
+	}
+
+	return ctx
+}
+
+// buildFileContext converts a File model to a map for plugin enrichment context.
+func buildFileContext(file *models.File) map[string]interface{} {
+	if file == nil {
+		return nil
+	}
+
+	ctx := map[string]interface{}{
+		"id":            file.ID,
+		"filepath":      file.Filepath,
+		"fileType":      file.FileType,
+		"fileRole":      file.FileRole,
+		"filesizeBytes": file.FilesizeBytes,
+	}
+
+	if file.Name != nil {
+		ctx["name"] = *file.Name
+	}
+
+	if file.URL != nil {
+		ctx["url"] = *file.URL
+	}
+
+	return ctx
+}
+
+// buildBookContext converts a Book model to a map for plugin enrichment context.
+// It provides the current DB state of the book, including manually-edited fields.
+// The file parameter is used to find the specific file's identifiers and publisher.
+func buildBookContext(book *models.Book, file *models.File) map[string]interface{} {
+	if book == nil {
+		return nil
+	}
+
+	ctx := map[string]interface{}{
+		"id":    book.ID,
+		"title": book.Title,
+	}
+
+	if book.Subtitle != nil {
+		ctx["subtitle"] = *book.Subtitle
+	}
+
+	if book.Description != nil {
+		ctx["description"] = *book.Description
+	}
+
+	// Series (from BookSeries relations)
+	if len(book.BookSeries) > 0 {
+		seriesList := make([]map[string]interface{}, 0, len(book.BookSeries))
+		for _, bs := range book.BookSeries {
+			if bs.Series == nil {
+				continue
+			}
+			entry := map[string]interface{}{
+				"name": bs.Series.Name,
+			}
+			if bs.SeriesNumber != nil {
+				entry["number"] = *bs.SeriesNumber
+			}
+			seriesList = append(seriesList, entry)
+		}
+		if len(seriesList) > 0 {
+			ctx["series"] = seriesList
+		}
+	}
+
+	// Authors
+	if len(book.Authors) > 0 {
+		authors := make([]map[string]interface{}, 0, len(book.Authors))
+		for _, a := range book.Authors {
+			if a.Person == nil {
+				continue
+			}
+			entry := map[string]interface{}{
+				"name": a.Person.Name,
+			}
+			if a.Role != nil {
+				entry["role"] = *a.Role
+			}
+			authors = append(authors, entry)
+		}
+		if len(authors) > 0 {
+			ctx["authors"] = authors
+		}
+	}
+
+	// Genres
+	if len(book.BookGenres) > 0 {
+		genres := make([]string, 0, len(book.BookGenres))
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				genres = append(genres, bg.Genre.Name)
+			}
+		}
+		if len(genres) > 0 {
+			ctx["genres"] = genres
+		}
+	}
+
+	// Tags
+	if len(book.BookTags) > 0 {
+		tags := make([]string, 0, len(book.BookTags))
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				tags = append(tags, bt.Tag.Name)
+			}
+		}
+		if len(tags) > 0 {
+			ctx["tags"] = tags
+		}
+	}
+
+	// File-level fields: identifiers and publisher from the specific file being enriched
+	if file != nil {
+		if len(file.Identifiers) > 0 {
+			identifiers := make([]map[string]interface{}, len(file.Identifiers))
+			for i, id := range file.Identifiers {
+				identifiers[i] = map[string]interface{}{
+					"type":  id.Type,
+					"value": id.Value,
+				}
+			}
+			ctx["identifiers"] = identifiers
+		}
+
+		if file.Publisher != nil {
+			ctx["publisher"] = file.Publisher.Name
+		}
+	}
+
+	return ctx
 }
 
 // convertSidecarChapters converts sidecar ChapterMetadata to mediafile ParsedChapter.
