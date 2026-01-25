@@ -64,6 +64,15 @@ For detailed architecture information, see the skills:
 - If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
 - **If a new field is added to `pkg/config/config.go`**, `shisho.example.yaml` MUST be updated with the new field (env var, default, description). This file must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
 
+## Node.js Version
+
+When updating the Node.js version, update **all** of these locations:
+- `.node-version` - Used by version managers (fnm, nodenv, etc.)
+- `Dockerfile` - The `node:X.X.X-alpine` image in the frontend-builder stage
+- `.github/workflows/ci.yml` - `node-version` in lint-js and test-js jobs
+- `.github/workflows/release.yml` - `node-version` in test and npm jobs
+- `package.json` - `@types/node` version (run `yarn install` after)
+
 ## Testing Strategy
 
 - Go tests use standard testing package with testify assertions

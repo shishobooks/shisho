@@ -25,7 +25,7 @@ RUN make SHELL=/bin/ash tygo
 # =============================================================================
 # Stage 2: Build Frontend
 # =============================================================================
-FROM node:22.14.0-alpine AS frontend-builder
+FROM node:24.13.0-alpine AS frontend-builder
 
 WORKDIR /app
 

@@ -43,7 +43,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.90.20",
     "@types/lodash": "^4.17.23",
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@types/qs": "^6.14.0",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
