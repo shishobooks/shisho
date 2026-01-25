@@ -511,6 +511,7 @@ const ChapterRow = (props: ChapterRowProps) => {
           <CBZPagePicker
             currentPage={currentPage}
             fileId={fileId}
+            key={fileId}
             onOpenChange={setPagePickerOpen}
             onSelect={handlePageSelect}
             open={pagePickerOpen}
