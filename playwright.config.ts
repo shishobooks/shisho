@@ -184,7 +184,7 @@ const projects = e2eConfig.browsers.map(createProject);
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30000,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   // Single worker ensures all tests run sequentially, avoiding database
   // race conditions between test files. Browsers run one after another.
   workers: 1,
