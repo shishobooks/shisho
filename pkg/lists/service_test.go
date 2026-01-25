@@ -648,3 +648,91 @@ func TestService_SwitchListOrdering(t *testing.T) {
 		assert.Equal(t, models.ListSortAddedAtDesc, list.DefaultSort, "switching to unordered should auto-set default_sort to added_at_desc")
 	})
 }
+
+func TestService_ListBooks_SortByAuthor(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	user := createTestUser(t, db, "testuser")
+	library := createTestLibrary(t, db, "testlib")
+
+	// Create two books
+	book1 := createTestBook(t, db, library.ID, "Book by Zebra")
+	book2 := createTestBook(t, db, library.ID, "Book by Alice")
+
+	// Create persons (authors)
+	person1 := &models.Person{
+		LibraryID:      library.ID,
+		Name:           "Zebra Author",
+		SortName:       "Author, Zebra",
+		SortNameSource: "file",
+	}
+	_, err := db.NewInsert().Model(person1).Exec(ctx)
+	require.NoError(t, err)
+
+	person2 := &models.Person{
+		LibraryID:      library.ID,
+		Name:           "Alice Author",
+		SortName:       "Author, Alice",
+		SortNameSource: "file",
+	}
+	_, err = db.NewInsert().Model(person2).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create author associations
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book1.ID).
+		Value("person_id", "?", person1.ID).
+		Value("sort_order", "?", 0).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book2.ID).
+		Value("person_id", "?", person2.ID).
+		Value("sort_order", "?", 0).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a list and add books
+	list, err := svc.CreateList(ctx, CreateListOptions{
+		UserID: user.ID,
+		Name:   "Author Sort Test",
+	})
+	require.NoError(t, err)
+
+	err = svc.AddBooks(ctx, AddBooksOptions{
+		ListID:        list.ID,
+		BookIDs:       []int{book1.ID, book2.ID},
+		AddedByUserID: user.ID,
+	})
+	require.NoError(t, err)
+
+	t.Run("sorts by author ascending", func(t *testing.T) {
+		listBooks, err := svc.ListBooks(ctx, ListBooksOptions{
+			ListID: list.ID,
+			Sort:   models.ListSortAuthorAsc,
+		})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 2)
+		// Alice should come before Zebra
+		assert.Equal(t, book2.ID, listBooks[0].BookID, "Alice's book should be first")
+		assert.Equal(t, book1.ID, listBooks[1].BookID, "Zebra's book should be second")
+	})
+
+	t.Run("sorts by author descending", func(t *testing.T) {
+		listBooks, err := svc.ListBooks(ctx, ListBooksOptions{
+			ListID: list.ID,
+			Sort:   models.ListSortAuthorDesc,
+		})
+		require.NoError(t, err)
+		require.Len(t, listBooks, 2)
+		// Zebra should come before Alice
+		assert.Equal(t, book1.ID, listBooks[0].BookID, "Zebra's book should be first")
+		assert.Equal(t, book2.ID, listBooks[1].BookID, "Alice's book should be second")
+	})
+}

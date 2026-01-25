@@ -345,9 +345,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	case models.ListSortTitleDesc:
 		q = q.OrderExpr("(SELECT sort_title FROM books WHERE id = lb.book_id) DESC")
 	case models.ListSortAuthorAsc:
-		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN people p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
+		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
 	case models.ListSortAuthorDesc:
-		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN people p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
+		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
 	default: // added_at_desc
 		q = q.Order("lb.added_at DESC")
 	}

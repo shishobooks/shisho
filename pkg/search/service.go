@@ -198,7 +198,7 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 	q := svc.db.NewSelect().
 		TableExpr("file_identifiers fi").
 		ColumnExpr("DISTINCT b.id, b.library_id, b.title, b.subtitle").
-		ColumnExpr("(SELECT GROUP_CONCAT(p.name, ', ') FROM authors a JOIN people p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
+		ColumnExpr("(SELECT GROUP_CONCAT(p.name, ', ') FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
 		Join("JOIN files f ON f.id = fi.file_id").
 		Join("JOIN books b ON b.id = f.book_id").
 		Where("fi.value = ?", query).

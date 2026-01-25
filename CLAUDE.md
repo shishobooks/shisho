@@ -132,6 +132,7 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - For deletion queries, ensure indexes exist on the WHERE clause columns
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
+- **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
 
 ## User Preferences
 
