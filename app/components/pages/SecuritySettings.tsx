@@ -18,19 +18,30 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   useAddApiKeyPermission,
   useApiKeys,
+  useClearKoboSync,
   useCreateApiKey,
   useDeleteApiKey,
   useGenerateShortUrl,
   useRemoveApiKeyPermission,
 } from "@/hooks/queries/apiKeys";
+import { useLibraries } from "@/hooks/queries/libraries";
+import { useListLists } from "@/hooks/queries/lists";
 import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import {
   PermissionEReaderBrowser,
+  PermissionKoboSync,
   type APIKey,
   type APIKeyShortURL,
 } from "@/types/generated/apikeys";
@@ -205,6 +216,7 @@ function CreateApiKeyDialog({
 }) {
   const [name, setName] = useState("");
   const [enableEReader, setEnableEReader] = useState(true);
+  const [enableKoboSync, setEnableKoboSync] = useState(false);
   const createApiKey = useCreateApiKey();
   const addPermission = useAddApiKeyPermission();
 
@@ -222,9 +234,16 @@ function CreateApiKeyDialog({
           permission: PermissionEReaderBrowser,
         });
       }
+      if (enableKoboSync) {
+        await addPermission.mutateAsync({
+          id: apiKey.id,
+          permission: PermissionKoboSync,
+        });
+      }
       toast.success("API key created");
       setName("");
       setEnableEReader(true);
+      setEnableKoboSync(false);
       onOpenChange(false);
     } catch {
       toast.error("Failed to create API key");
@@ -266,6 +285,16 @@ function CreateApiKeyDialog({
               Enable eReader browser access
             </Label>
           </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              checked={enableKoboSync}
+              id="enable-kobo-sync"
+              onCheckedChange={(checked) => setEnableKoboSync(checked === true)}
+            />
+            <Label className="cursor-pointer" htmlFor="enable-kobo-sync">
+              Enable Kobo wireless sync
+            </Label>
+          </div>
         </div>
         <DialogFooter>
           <Button
@@ -285,12 +314,16 @@ function CreateApiKeyDialog({
 function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [koboSetupDialogOpen, setKoboSetupDialogOpen] = useState(false);
   const deleteApiKey = useDeleteApiKey();
   const addPermission = useAddApiKeyPermission();
   const removePermission = useRemoveApiKeyPermission();
 
   const hasEReaderPermission = apiKey.permissions?.some(
     (p) => p?.permission === PermissionEReaderBrowser,
+  );
+  const hasKoboSyncPermission = apiKey.permissions?.some(
+    (p) => p?.permission === PermissionKoboSync,
   );
 
   const handleToggleEReader = async (checked: boolean) => {
@@ -304,6 +337,24 @@ function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
         await removePermission.mutateAsync({
           id: apiKey.id,
           permission: PermissionEReaderBrowser,
+        });
+      }
+    } catch {
+      toast.error("Failed to update permission");
+    }
+  };
+
+  const handleToggleKoboSync = async (checked: boolean) => {
+    try {
+      if (checked) {
+        await addPermission.mutateAsync({
+          id: apiKey.id,
+          permission: PermissionKoboSync,
+        });
+      } else {
+        await removePermission.mutateAsync({
+          id: apiKey.id,
+          permission: PermissionKoboSync,
         });
       }
     } catch {
@@ -344,6 +395,13 @@ function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
               onOpenChange={setSetupDialogOpen}
               open={setupDialogOpen}
             />
+            {hasKoboSyncPermission && (
+              <KoboSetupDialog
+                apiKey={apiKey}
+                onOpenChange={setKoboSetupDialogOpen}
+                open={koboSetupDialogOpen}
+              />
+            )}
             <Button
               onClick={() => setDeleteDialogOpen(true)}
               size="sm"
@@ -375,6 +433,20 @@ function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
             htmlFor={`ereader-${apiKey.id}`}
           >
             eReader browser access
+          </Label>
+        </div>
+        <div className="mt-2 flex items-center space-x-2">
+          <Checkbox
+            checked={hasKoboSyncPermission}
+            disabled={addPermission.isPending || removePermission.isPending}
+            id={`kobo-sync-${apiKey.id}`}
+            onCheckedChange={handleToggleKoboSync}
+          />
+          <Label
+            className="cursor-pointer text-sm"
+            htmlFor={`kobo-sync-${apiKey.id}`}
+          >
+            Kobo wireless sync
           </Label>
         </div>
       </div>
@@ -459,6 +531,207 @@ function SetupDialog({
             </p>
           </div>
         ) : null}
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)} variant="outline">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function KoboSetupDialog({
+  apiKey,
+  open,
+  onOpenChange,
+}: {
+  apiKey: APIKey;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [scopeType, setScopeType] = useState<"all" | "library" | "list">("all");
+  const [scopeId, setScopeId] = useState("");
+  const { data: librariesData } = useLibraries();
+  const { data: listsData } = useListLists();
+  const clearKoboSync = useClearKoboSync();
+
+  const handleResetSync = async () => {
+    try {
+      await clearKoboSync.mutateAsync(apiKey.id);
+      toast.success("Sync history cleared. Next sync will be a fresh sync.");
+    } catch {
+      toast.error("Failed to clear sync history");
+    }
+  };
+
+  const buildSyncURL = () => {
+    const origin = window.location.origin;
+    let scopePath: string;
+    switch (scopeType) {
+      case "library":
+        scopePath = `library/${scopeId}`;
+        break;
+      case "list":
+        scopePath = `list/${scopeId}`;
+        break;
+      default:
+        scopePath = "all";
+    }
+    return `${origin}/kobo/${apiKey.key}/${scopePath}`;
+  };
+
+  const syncURL = buildSyncURL();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(syncURL);
+    toast.success("Copied to clipboard");
+  };
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Kobo Setup
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Kobo Sync Setup</DialogTitle>
+          <DialogDescription>
+            Configure your Kobo device to sync books wirelessly from Shisho.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          {/* Scope Selection */}
+          <div className="space-y-3">
+            <Label>Sync Scope</Label>
+            <div className="flex rounded-md border border-input">
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
+                  scopeType === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+                onClick={() => {
+                  setScopeType("all");
+                  setScopeId("");
+                }}
+                type="button"
+              >
+                All Libraries
+              </button>
+              <button
+                className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors ${
+                  scopeType === "library"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+                onClick={() => {
+                  setScopeType("library");
+                  setScopeId("");
+                }}
+                type="button"
+              >
+                Library
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
+                  scopeType === "list"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+                onClick={() => {
+                  setScopeType("list");
+                  setScopeId("");
+                }}
+                type="button"
+              >
+                List
+              </button>
+            </div>
+            {scopeType === "library" && librariesData && (
+              <Select onValueChange={setScopeId} value={scopeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a library..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {librariesData.libraries.map((lib) => (
+                    <SelectItem key={lib.id} value={String(lib.id)}>
+                      {lib.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {scopeType === "list" && listsData && (
+              <Select onValueChange={setScopeId} value={scopeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a list..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {listsData.lists.map((list) => (
+                    <SelectItem key={list.id} value={String(list.id)}>
+                      {list.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {/* Generated URL */}
+          <div className="space-y-2">
+            <Label>API Endpoint URL</Label>
+            <div className="flex gap-2">
+              <Input className="font-mono text-xs" readOnly value={syncURL} />
+              <Button onClick={handleCopy} size="sm" variant="outline">
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Setup Instructions */}
+          <div className="space-y-2">
+            <Label>Setup Instructions</Label>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>Connect your Kobo via USB</li>
+              <li>
+                Navigate to{" "}
+                <code className="rounded bg-muted px-1">
+                  .kobo/Kobo/Kobo eReader.conf
+                </code>
+              </li>
+              <li>
+                Find{" "}
+                <code className="rounded bg-muted px-1">
+                  api_endpoint=https://storeapi.kobo.com
+                </code>
+              </li>
+              <li>Replace with the URL above</li>
+              <li>Eject the Kobo and sync</li>
+            </ol>
+          </div>
+
+          {/* Reset Sync */}
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Reset Sync</Label>
+              <p className="text-sm text-muted-foreground">
+                Clear sync history to force a fresh sync
+              </p>
+            </div>
+            <Button
+              disabled={clearKoboSync.isPending}
+              onClick={handleResetSync}
+              size="sm"
+              variant="outline"
+            >
+              {clearKoboSync.isPending ? "Resetting..." : "Reset"}
+            </Button>
+          </div>
+        </div>
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} variant="outline">
             Close

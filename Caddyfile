@@ -31,6 +31,11 @@
         reverse_proxy localhost:3689
     }
 
+    # Kobo sync routes (API key auth for Kobo device sync)
+    handle /kobo/* {
+        reverse_proxy localhost:3689
+    }
+
     # OPDS feeds (proxy directly to backend)
     handle /opds/* {
         reverse_proxy localhost:3689

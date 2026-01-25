@@ -21,4 +21,5 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
 	g.POST("/:id/permissions/:permission", h.AddPermission)
 	g.DELETE("/:id/permissions/:permission", h.RemovePermission)
 	g.POST("/:id/short-url", h.GenerateShortURL)
+	g.DELETE("/:id/kobo-sync", h.ClearKoboSync)
 }

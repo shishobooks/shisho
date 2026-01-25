@@ -26,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
+	"github.com/shishobooks/shisho/pkg/kobo"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -85,6 +86,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker) (*http.Server, error)
 	// Register eReader routes (API key auth for stock browser support)
 	downloadCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 	ereader.RegisterRoutes(e, db, downloadCache)
+
+	// Register Kobo sync routes (API key auth for Kobo device sync)
+	kobo.RegisterRoutes(e, db, downloadCache)
 
 	// Config routes (require authentication)
 	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)

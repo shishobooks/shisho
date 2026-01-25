@@ -326,3 +326,35 @@ func (s *Service) TouchLastAccessed(ctx context.Context, keyID string) error {
 		Exec(ctx)
 	return err
 }
+
+// koboSyncPoint mirrors the kobo.SyncPoint model for deletion purposes.
+// We define it here to avoid a circular dependency between apikeys and kobo packages.
+type koboSyncPoint struct {
+	bun.BaseModel `bun:"table:kobo_sync_points"`
+	ID            string `bun:"id,pk"`
+	APIKeyID      string `bun:"api_key_id"`
+}
+
+// ClearKoboSyncHistory deletes all Kobo sync points for an API key, forcing a fresh sync.
+func (s *Service) ClearKoboSyncHistory(ctx context.Context, userID int, keyID string) error {
+	// Verify ownership
+	var apiKey APIKey
+	err := s.db.NewSelect().
+		Model(&apiKey).
+		Where("id = ?", keyID).
+		Where("user_id = ?", userID).
+		Scan(ctx)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	// Delete all sync points for this API key
+	_, err = s.db.NewDelete().
+		Model((*koboSyncPoint)(nil)).
+		Where("api_key_id = ?", keyID).
+		Exec(ctx)
+	return err
+}

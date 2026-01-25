@@ -62,6 +62,28 @@ export default defineConfig({
       "/e": {
         target: `http://localhost:${getApiPort()}`,
       },
+      // Kobo sync routes (API key auth for Kobo device sync)
+      "/kobo": {
+        target: `http://localhost:${getApiPort()}`,
+        // Don't change the Host header - we want to preserve the original
+        changeOrigin: false,
+        configure: (proxy) => {
+          // Forward the original Host header to the backend so it can build correct URLs
+          // The proxyReq event fires when the proxy request is about to be sent
+          proxy.on("proxyReq", (proxyReq, req) => {
+            const host = req.headers.host;
+            if (host) {
+              proxyReq.setHeader("X-Forwarded-Host", host);
+            }
+            // Also send the port Vite is listening on - some clients (like Kobo)
+            // don't include the port in the Host header even for non-standard ports
+            const localPort = (req.socket as { localPort?: number }).localPort;
+            if (localPort) {
+              proxyReq.setHeader("X-Forwarded-Port", String(localPort));
+            }
+          });
+        },
+      },
     },
   },
   resolve: {

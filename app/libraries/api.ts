@@ -111,6 +111,10 @@ class ShishoAPI {
   generateApiKeyShortUrl(id: string): Promise<APIKeyShortURL> {
     return this.request("POST", `/user/api-keys/${id}/short-url`);
   }
+
+  clearKoboSync(id: string): Promise<void> {
+    return this.request("DELETE", `/user/api-keys/${id}/kobo-sync`);
+  }
 }
 
 export const API = new ShishoAPI();

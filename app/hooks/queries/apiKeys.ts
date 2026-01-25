@@ -78,3 +78,9 @@ export const useGenerateShortUrl = () => {
     mutationFn: (id) => API.generateApiKeyShortUrl(id),
   });
 };
+
+export const useClearKoboSync = () => {
+  return useMutation<void, ShishoAPIError, string>({
+    mutationFn: (id) => API.clearKoboSync(id),
+  });
+};

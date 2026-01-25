@@ -207,3 +207,26 @@ func (h *handler) GenerateShortURL(c echo.Context) error {
 
 	return c.JSON(http.StatusCreated, shortURL)
 }
+
+// ClearKoboSync clears Kobo sync history for an API key, forcing a fresh sync.
+func (h *handler) ClearKoboSync(c echo.Context) error {
+	user, err := getUserFromContext(c)
+	if err != nil {
+		return err
+	}
+
+	keyID := c.Param("id")
+	if keyID == "" {
+		return errcodes.ValidationError("Key ID required")
+	}
+
+	err = h.service.ClearKoboSyncHistory(c.Request().Context(), user.ID, keyID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return errcodes.NotFound("API key")
+		}
+		return pkgerrors.WithStack(err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}

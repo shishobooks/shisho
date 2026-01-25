@@ -47,6 +47,9 @@ type APIKeyShortURL struct {
 // PermissionEReaderBrowser is the permission for accessing the eReader browser UI.
 const PermissionEReaderBrowser = "ereader_browser"
 
+// PermissionKoboSync is the permission for Kobo sync API access.
+const PermissionKoboSync = "kobo_sync"
+
 // HasPermission checks if the API key has a specific permission.
 func (ak *APIKey) HasPermission(permission string) bool {
 	for _, p := range ak.Permissions {
