@@ -270,6 +270,80 @@ describe("ChapterRow - M4B Playback", () => {
       expect(screen.getByText("00:01:00.000")).toBeInTheDocument();
     });
   });
+
+  describe("edit mode timestamp buttons trigger reorder", () => {
+    it("calls onBlur after clicking decrement timestamp button", async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      const onStartTimestampChange = vi.fn();
+
+      const editChapter: Chapter = {
+        ...baseM4bChapter,
+        start_timestamp_ms: 60000, // 1 minute
+      };
+
+      renderWithRouter(
+        <ChapterRow
+          chapter={editChapter}
+          chapterIndex={0}
+          depth={0}
+          fileType={FileTypeM4B}
+          isEditing={true}
+          maxDurationMs={3600000}
+          onBlur={onBlur}
+          onDelete={vi.fn()}
+          onPlay={vi.fn()}
+          onStartTimestampChange={onStartTimestampChange}
+          onStop={vi.fn()}
+          onTitleChange={vi.fn()}
+          onValidationChange={vi.fn()}
+          playingChapterIndex={null}
+        />,
+      );
+
+      const minusButton = screen.getByTitle("Subtract 1 second");
+      await user.click(minusButton);
+
+      expect(onStartTimestampChange).toHaveBeenCalledWith(59000);
+      expect(onBlur).toHaveBeenCalled();
+    });
+
+    it("calls onBlur after clicking increment timestamp button", async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      const onStartTimestampChange = vi.fn();
+
+      const editChapter: Chapter = {
+        ...baseM4bChapter,
+        start_timestamp_ms: 60000, // 1 minute
+      };
+
+      renderWithRouter(
+        <ChapterRow
+          chapter={editChapter}
+          chapterIndex={0}
+          depth={0}
+          fileType={FileTypeM4B}
+          isEditing={true}
+          maxDurationMs={3600000}
+          onBlur={onBlur}
+          onDelete={vi.fn()}
+          onPlay={vi.fn()}
+          onStartTimestampChange={onStartTimestampChange}
+          onStop={vi.fn()}
+          onTitleChange={vi.fn()}
+          onValidationChange={vi.fn()}
+          playingChapterIndex={null}
+        />,
+      );
+
+      const plusButton = screen.getByTitle("Add 1 second");
+      await user.click(plusButton);
+
+      expect(onStartTimestampChange).toHaveBeenCalledWith(61000);
+      expect(onBlur).toHaveBeenCalled();
+    });
+  });
 });
 
 describe("ChapterRow - CBZ", () => {
@@ -331,5 +405,71 @@ describe("ChapterRow - CBZ", () => {
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("Chapter 1")).toBeInTheDocument();
+  });
+
+  describe("edit mode page arrows trigger reorder", () => {
+    it("calls onBlur after clicking decrement page button", async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      const onStartPageChange = vi.fn();
+
+      const editChapter: Chapter = {
+        ...baseCbzChapter,
+        start_page: 5,
+      };
+
+      renderWithRouter(
+        <ChapterRow
+          chapter={editChapter}
+          depth={0}
+          fileId={100}
+          fileType={FileTypeCBZ}
+          isEditing={true}
+          onBlur={onBlur}
+          onDelete={vi.fn()}
+          onStartPageChange={onStartPageChange}
+          onTitleChange={vi.fn()}
+          pageCount={20}
+        />,
+      );
+
+      const prevButton = screen.getByTitle("Previous page");
+      await user.click(prevButton);
+
+      expect(onStartPageChange).toHaveBeenCalledWith(4);
+      expect(onBlur).toHaveBeenCalled();
+    });
+
+    it("calls onBlur after clicking increment page button", async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      const onStartPageChange = vi.fn();
+
+      const editChapter: Chapter = {
+        ...baseCbzChapter,
+        start_page: 5,
+      };
+
+      renderWithRouter(
+        <ChapterRow
+          chapter={editChapter}
+          depth={0}
+          fileId={100}
+          fileType={FileTypeCBZ}
+          isEditing={true}
+          onBlur={onBlur}
+          onDelete={vi.fn()}
+          onStartPageChange={onStartPageChange}
+          onTitleChange={vi.fn()}
+          pageCount={20}
+        />,
+      );
+
+      const nextButton = screen.getByTitle("Next page");
+      await user.click(nextButton);
+
+      expect(onStartPageChange).toHaveBeenCalledWith(6);
+      expect(onBlur).toHaveBeenCalled();
+    });
   });
 });

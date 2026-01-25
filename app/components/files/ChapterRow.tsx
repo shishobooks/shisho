@@ -259,6 +259,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
     setHasPageError(false);
     props.onStartPageChange?.(newPage);
+    props.onBlur?.();
   };
 
   // CBZ handler: Increment page
@@ -267,6 +268,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
     setHasPageError(false);
     props.onStartPageChange?.(newPage);
+    props.onBlur?.();
   };
 
   // CBZ handler: Page selection from picker (receives 0-indexed page)
@@ -274,6 +276,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     setLocalPageValue(String(page + 1)); // Display is 1-indexed
     setHasPageError(false);
     props.onStartPageChange?.(page);
+    props.onBlur?.();
   };
 
   // M4B helpers
@@ -316,6 +319,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
+    props.onBlur?.();
   };
 
   // M4B handler: Increment timestamp by 1 second
@@ -325,6 +329,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
+    props.onBlur?.();
   };
 
   // EPUB edit mode
