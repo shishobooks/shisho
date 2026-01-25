@@ -67,7 +67,8 @@ export function MetadataEditDialog({
   const handleSubmit = async () => {
     const data: { name: string; sort_name?: string } = { name };
     if (hasSortName) {
-      data.sort_name = editSortName || undefined;
+      // Pass empty string through - backend interprets it as "regenerate sort name"
+      data.sort_name = editSortName;
     }
     await onSave(data);
   };
