@@ -89,6 +89,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Download Go modules
+        run: make install
+
       - name: Generate TypeScript types
         run: make tygo
 

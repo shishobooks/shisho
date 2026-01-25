@@ -63,6 +63,10 @@ $(BUILD_DIR)/golangci-lint:
 $(BUILD_DIR)/hivemind $(BUILD_DIR)/air $(BUILD_DIR)/tygo:
 	GOBIN=$$(pwd)/$(BUILD_DIR) go install $(GO_TOOLS)
 
+.PHONY: install
+install:
+	go mod download
+
 .PHONY: setup
 setup: $(BUILD_DIR)/golangci-lint tygo
 	yarn
