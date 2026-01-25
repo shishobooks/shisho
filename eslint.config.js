@@ -24,7 +24,10 @@ export default tseslint.config(
     languageOptions: {
       ...reactPlugin.configs.flat["jsx-runtime"].languageOptions,
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        __APP_VERSION__: "readonly",
+      },
     },
     plugins: {
       ...reactPlugin.configs.flat["jsx-runtime"].plugins,

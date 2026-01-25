@@ -2,6 +2,8 @@ SHELL := /bin/bash
 
 BUILD_DIR ?= ./build/api
 DOCKER_TAG ?= latest
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS = -ldflags '-w -s -X github.com/shishobooks/shisho/pkg/version.Version=$(VERSION)'
 
 GO_TOOLS = \
 	github.com/DarthSim/hivemind \
@@ -21,7 +23,7 @@ check: tygo lint
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -o $(BUILD_DIR)/api -installsuffix cgo -ldflags '-w -s' ./cmd/api
+	CGO_ENABLED=0 go build -o $(BUILD_DIR)/api -installsuffix cgo $(LDFLAGS) ./cmd/api
 
 .PHONY: build\:air
 build\:air:
@@ -100,9 +102,6 @@ $(TYGO_OUTPUTS): $(BUILD_DIR)/tygo tygo.yaml $(TYGO_INPUTS)
 .PHONY: release
 release:
 ifndef tag
-	$(error tag is required. Usage: make release tag=v1.0.0)
+	$(error tag is required. Usage: make release tag=0.1.0)
 endif
-	@echo "Creating release $(tag)..."
-	git tag -a $(tag) -m "Release $(tag)"
-	git push origin $(tag)
-	@echo "Release $(tag) created and pushed. GitHub Actions will handle the rest."
+	./scripts/release.sh $(tag)

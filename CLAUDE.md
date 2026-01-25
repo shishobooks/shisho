@@ -70,9 +70,40 @@ For detailed architecture information, see the skills:
 
 ## Git Conventions
 
-- Each commit should be in the format of `[{Category}] {Change description}`
-- Always develop in a git worktree and the squash the changes back into master
-- This repo currently doesn't utilize pull requests, so instead of creating a PR, it should create a squash commit back into master
+### Commit Message Format
+
+Each commit should be in the format of `[{Category}] {Change description}`
+
+**Categories** (used for changelog generation):
+- `[Frontend]`, `[Backend]`, `[Feature]`, `[Feat]` → Features section
+- `[Fix]` → Bug Fixes section
+- `[Docs]`, `[Doc]` → Documentation section
+- `[Test]`, `[E2E]` → Testing section
+- `[CI]`, `[CD]` → CI/CD section
+- Any other category → Other section
+
+**Examples:**
+```
+[Frontend] Add dark mode toggle to settings page
+[Backend] Add batch delete endpoint for books
+[Fix] Resolve race condition in job worker
+[E2E] Add tests for user authentication flow
+[CI] Add release automation with GitHub Actions
+```
+
+### Workflow
+
+- Always develop in a git worktree and squash the changes back into master
+- This repo currently doesn't utilize pull requests, so instead of creating a PR, create a squash commit back into master
+
+### Releases
+
+- Use `make release tag=0.2.0` to create a release
+- This runs `scripts/release.sh` which:
+  1. Generates changelog from commits since the last tag
+  2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-types/package.json`
+  3. Creates a commit `[Release] v0.2.0`
+  4. Tags and pushes to trigger GitHub Actions
 
 ## Worktree Setup
 

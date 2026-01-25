@@ -5,6 +5,12 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
 
+// Read version from package.json
+const packageJson = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
+);
+const appVersion = packageJson.version || "dev";
+
 /**
  * Gets the API port with the following priority:
  * 1. API_PORT environment variable
@@ -97,4 +103,7 @@ export default defineConfig({
   },
   clearScreen: false,
   plugins: [react(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
 });

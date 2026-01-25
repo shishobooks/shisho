@@ -48,6 +48,8 @@ RUN NODE_ENV=production yarn build
 # =============================================================================
 FROM golang:1.25.5-alpine AS backend-builder
 
+ARG VERSION=dev
+
 WORKDIR /app
 
 # Install build dependencies
@@ -62,8 +64,10 @@ COPY cmd/ ./cmd/
 COPY pkg/ ./pkg/
 COPY internal/ ./internal/
 
-# Build static binary
-RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo -ldflags '-w -s' ./cmd/api
+# Build static binary with version
+RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo \
+    -ldflags "-w -s -X github.com/shishobooks/shisho/pkg/version.Version=${VERSION}" \
+    ./cmd/api
 
 # =============================================================================
 # Stage 4: Final Production Image

@@ -138,11 +138,11 @@ const LibrarySidebar = () => {
   return (
     <aside
       className={cn(
-        "shrink-0 border-r border-border bg-muted/30 dark:bg-neutral-900/50 transition-all duration-200",
+        "shrink-0 border-r border-border bg-muted/30 dark:bg-neutral-900/50 transition-all duration-200 h-[calc(100vh-4rem)] sticky top-16 flex flex-col",
         collapsed ? "w-14" : "w-48",
       )}
     >
-      <div className="sticky top-0 flex flex-col">
+      <div className="flex-1">
         <nav className={cn("p-4 space-y-1", collapsed && "px-2")}>
           {navItems
             .filter((item) => item.show)
@@ -187,6 +187,23 @@ const LibrarySidebar = () => {
           </div>
         </div>
       </div>
+      {!collapsed && (
+        <div className="p-4 pt-0">
+          <a
+            className="group flex items-center justify-center gap-1.5 py-1.5 rounded border border-transparent hover:border-border/40 hover:bg-muted/30 transition-all duration-200"
+            href="https://github.com/shishobooks/shisho/releases"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors">
+              shisho
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+              {__APP_VERSION__}
+            </span>
+          </a>
+        </div>
+      )}
     </aside>
   );
 };

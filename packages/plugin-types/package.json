@@ -7,5 +7,10 @@
   "files": [
     "*.d.ts"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shishobooks/shisho.git",
+    "directory": "packages/plugin-types"
+  }
 }

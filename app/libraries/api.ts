@@ -54,6 +54,7 @@ class ShishoAPI {
   ): Promise<T> {
     const headers: Record<string, string> = {
       "content-type": "application/json; charset=utf-8",
+      "X-Version": __APP_VERSION__,
     };
 
     let body = undefined;

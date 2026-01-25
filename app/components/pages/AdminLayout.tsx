@@ -136,6 +136,19 @@ const AdminLayout = () => {
                 <LogOut className="h-4 w-4" />
                 Sign out
               </Button>
+              <a
+                className="group mt-4 mx-3 flex items-center justify-center gap-1.5 py-1.5 rounded border border-transparent hover:border-border/40 hover:bg-muted/30 transition-all duration-200"
+                href="https://github.com/shishobooks/shisho/releases"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors">
+                  shisho
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+                  {__APP_VERSION__}
+                </span>
+              </a>
             </div>
           </aside>
 
