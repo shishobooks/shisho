@@ -461,7 +461,9 @@ function KoboSyncSection() {
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {koboKeys?.map((key) => <KoboKeyRow apiKey={key} key={key.id} />)}
+          {koboKeys?.map((key) => (
+            <KoboKeyRow apiKey={key} key={key.id} />
+          ))}
         </div>
       )}
     </div>

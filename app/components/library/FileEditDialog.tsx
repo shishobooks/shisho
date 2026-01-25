@@ -99,7 +99,7 @@ export function FileEditDialog({
   const [narratorSearch, setNarratorSearch] = useState("");
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
-  const [coverCacheBuster, setCoverCacheBuster] = useState(Date.now());
+  const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
   const [pendingCoverFile, setPendingCoverFile] =
