@@ -1,11 +1,10 @@
-import { ArrowLeft, Copy, Key, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -33,7 +32,6 @@ import {
   useCreateApiKey,
   useDeleteApiKey,
   useGenerateShortUrl,
-  useRemoveApiKeyPermission,
 } from "@/hooks/queries/apiKeys";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
@@ -163,51 +161,65 @@ const SecuritySettings = () => {
 
           <Separator />
 
-          {/* API Keys */}
-          <ApiKeysSection />
+          {/* eReader Browser Access */}
+          <EReaderSection />
+
+          <Separator />
+
+          {/* Kobo Wireless Sync */}
+          <KoboSyncSection />
         </div>
       </div>
     </div>
   );
 };
 
-function ApiKeysSection() {
+function EReaderSection() {
   const { data: apiKeys, isLoading } = useApiKeys();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
+  const eReaderKeys = apiKeys?.filter((key) =>
+    key.permissions?.some((p) => p?.permission === PermissionEReaderBrowser),
+  );
+
   return (
     <div className="rounded-md border border-border p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold">API Keys</h2>
+          <h2 className="text-lg font-semibold">eReader Browser Access</h2>
           <p className="text-sm text-muted-foreground">
-            Use API keys to access your library from an eReader browser
+            Browse and download books from your eReader's web browser
           </p>
         </div>
-        <CreateApiKeyDialog
+        <CreateEReaderKeyDialog
           onOpenChange={setCreateDialogOpen}
           open={createDialogOpen}
         />
       </div>
 
       {isLoading ? (
-        <div className="py-4 text-muted-foreground">Loading...</div>
+        <div className="py-6 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : eReaderKeys?.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No devices configured. Add one to browse your library from an
+            eReader.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {apiKeys?.map((key) => <ApiKeyCard apiKey={key} key={key.id} />)}
-          {apiKeys?.length === 0 && (
-            <p className="py-4 text-muted-foreground">
-              No API keys yet. Create one to access your library from an
-              eReader.
-            </p>
-          )}
+        <div className="divide-y divide-border">
+          {eReaderKeys?.map((key) => (
+            <EReaderKeyRow apiKey={key} key={key.id} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function CreateApiKeyDialog({
+function CreateEReaderKeyDialog({
   open,
   onOpenChange,
 }: {
@@ -215,8 +227,6 @@ function CreateApiKeyDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
-  const [enableEReader, setEnableEReader] = useState(true);
-  const [enableKoboSync, setEnableKoboSync] = useState(false);
   const createApiKey = useCreateApiKey();
   const addPermission = useAddApiKeyPermission();
 
@@ -228,25 +238,15 @@ function CreateApiKeyDialog({
 
     try {
       const apiKey = await createApiKey.mutateAsync(name);
-      if (enableEReader) {
-        await addPermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionEReaderBrowser,
-        });
-      }
-      if (enableKoboSync) {
-        await addPermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionKoboSync,
-        });
-      }
-      toast.success("API key created");
+      await addPermission.mutateAsync({
+        id: apiKey.id,
+        permission: PermissionEReaderBrowser,
+      });
+      toast.success("Device added");
       setName("");
-      setEnableEReader(true);
-      setEnableKoboSync(false);
       onOpenChange(false);
     } catch {
-      toast.error("Failed to create API key");
+      toast.error("Failed to add device");
     }
   };
 
@@ -254,46 +254,29 @@ function CreateApiKeyDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogTrigger asChild>
         <Button size="sm">
-          <Key className="mr-2 h-4 w-4" />
-          Create API Key
+          <Plus className="mr-2 h-4 w-4" />
+          Add Device
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create API Key</DialogTitle>
+          <DialogTitle>Add eReader Device</DialogTitle>
           <DialogDescription>
-            Create a new API key to access your library from an eReader.
+            Give this device a name so you can identify it later.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="py-4">
           <div className="space-y-2">
-            <Label htmlFor="key-name">Name</Label>
+            <Label htmlFor="ereader-name">Device Name</Label>
             <Input
-              id="key-name"
+              id="ereader-name"
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., My Kobo"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+              placeholder="e.g., Bedroom Kindle"
               value={name}
             />
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              checked={enableEReader}
-              id="enable-ereader"
-              onCheckedChange={(checked) => setEnableEReader(checked === true)}
-            />
-            <Label className="cursor-pointer" htmlFor="enable-ereader">
-              Enable eReader browser access
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              checked={enableKoboSync}
-              id="enable-kobo-sync"
-              onCheckedChange={(checked) => setEnableKoboSync(checked === true)}
-            />
-            <Label className="cursor-pointer" htmlFor="enable-kobo-sync">
-              Enable Kobo wireless sync
-            </Label>
           </div>
         </div>
         <DialogFooter>
@@ -302,8 +285,8 @@ function CreateApiKeyDialog({
             onClick={handleCreate}
           >
             {createApiKey.isPending || addPermission.isPending
-              ? "Creating..."
-              : "Create"}
+              ? "Adding..."
+              : "Add Device"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -311,160 +294,69 @@ function CreateApiKeyDialog({
   );
 }
 
-function ApiKeyCard({ apiKey }: { apiKey: APIKey }) {
+function EReaderKeyRow({ apiKey }: { apiKey: APIKey }) {
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [koboSetupDialogOpen, setKoboSetupDialogOpen] = useState(false);
   const deleteApiKey = useDeleteApiKey();
-  const addPermission = useAddApiKeyPermission();
-  const removePermission = useRemoveApiKeyPermission();
-
-  const hasEReaderPermission = apiKey.permissions?.some(
-    (p) => p?.permission === PermissionEReaderBrowser,
-  );
-  const hasKoboSyncPermission = apiKey.permissions?.some(
-    (p) => p?.permission === PermissionKoboSync,
-  );
-
-  const handleToggleEReader = async (checked: boolean) => {
-    try {
-      if (checked) {
-        await addPermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionEReaderBrowser,
-        });
-      } else {
-        await removePermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionEReaderBrowser,
-        });
-      }
-    } catch {
-      toast.error("Failed to update permission");
-    }
-  };
-
-  const handleToggleKoboSync = async (checked: boolean) => {
-    try {
-      if (checked) {
-        await addPermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionKoboSync,
-        });
-      } else {
-        await removePermission.mutateAsync({
-          id: apiKey.id,
-          permission: PermissionKoboSync,
-        });
-      }
-    } catch {
-      toast.error("Failed to update permission");
-    }
-  };
 
   const handleDelete = async () => {
     try {
       await deleteApiKey.mutateAsync(apiKey.id);
-      toast.success("API key deleted");
+      toast.success("Device removed");
       setDeleteDialogOpen(false);
     } catch {
-      toast.error("Failed to delete API key");
+      toast.error("Failed to remove device");
     }
-  };
-
-  const handleCopyKey = () => {
-    navigator.clipboard.writeText(apiKey.key);
-    toast.success("API key copied to clipboard");
   };
 
   return (
     <>
-      <div className="rounded-md border border-border p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h3 className="font-medium">{apiKey.name}</h3>
-            <p className="text-xs text-muted-foreground">
-              Created {new Date(apiKey.createdAt).toLocaleDateString()}
-              {apiKey.lastAccessedAt &&
-                ` • Last used ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <SetupDialog
-              apiKey={apiKey}
-              onOpenChange={setSetupDialogOpen}
-              open={setupDialogOpen}
-            />
-            {hasKoboSyncPermission && (
-              <KoboSetupDialog
-                apiKey={apiKey}
-                onOpenChange={setKoboSetupDialogOpen}
-                open={koboSetupDialogOpen}
-              />
-            )}
-            <Button
-              onClick={() => setDeleteDialogOpen(true)}
-              size="sm"
-              variant="ghost"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
+      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{apiKey.name}</p>
+          <p className="text-xs text-muted-foreground">
+            Added {new Date(apiKey.createdAt).toLocaleDateString()}
+            {apiKey.lastAccessedAt &&
+              ` · Last used ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
+          </p>
         </div>
-
-        <div className="mb-3 flex items-center gap-2">
-          <code className="flex-1 rounded bg-muted px-2 py-1 font-mono text-sm">
-            {apiKey.key.slice(0, 8)}...{apiKey.key.slice(-4)}
-          </code>
-          <Button onClick={handleCopyKey} size="sm" variant="outline">
-            <Copy className="h-4 w-4" />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            onClick={() => setSetupDialogOpen(true)}
+            size="sm"
+            variant="outline"
+          >
+            Setup
           </Button>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            checked={hasEReaderPermission}
-            disabled={addPermission.isPending || removePermission.isPending}
-            id={`ereader-${apiKey.id}`}
-            onCheckedChange={handleToggleEReader}
-          />
-          <Label
-            className="cursor-pointer text-sm"
-            htmlFor={`ereader-${apiKey.id}`}
+          <Button
+            onClick={() => setDeleteDialogOpen(true)}
+            size="sm"
+            variant="ghost"
           >
-            eReader browser access
-          </Label>
-        </div>
-        <div className="mt-2 flex items-center space-x-2">
-          <Checkbox
-            checked={hasKoboSyncPermission}
-            disabled={addPermission.isPending || removePermission.isPending}
-            id={`kobo-sync-${apiKey.id}`}
-            onCheckedChange={handleToggleKoboSync}
-          />
-          <Label
-            className="cursor-pointer text-sm"
-            htmlFor={`kobo-sync-${apiKey.id}`}
-          >
-            Kobo wireless sync
-          </Label>
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
         </div>
       </div>
 
+      <EReaderSetupDialog
+        apiKey={apiKey}
+        onOpenChange={setSetupDialogOpen}
+        open={setupDialogOpen}
+      />
       <ConfirmDialog
-        confirmLabel="Delete"
-        description={`Are you sure you want to delete the API key "${apiKey.name}"?`}
+        confirmLabel="Remove"
+        description={`Are you sure you want to remove "${apiKey.name}"? You'll need to set it up again to use it.`}
         isPending={deleteApiKey.isPending}
         onConfirm={handleDelete}
         onOpenChange={setDeleteDialogOpen}
         open={deleteDialogOpen}
-        title="Delete API Key"
+        title="Remove Device"
       />
     </>
   );
 }
 
-function SetupDialog({
+function EReaderSetupDialog({
   apiKey,
   open,
   onOpenChange,
@@ -476,17 +368,15 @@ function SetupDialog({
   const generateShortUrl = useGenerateShortUrl();
   const [shortUrl, setShortUrl] = useState<APIKeyShortURL | null>(null);
 
-  const handleOpen = async (isOpen: boolean) => {
-    onOpenChange(isOpen);
-    if (isOpen && !shortUrl) {
-      try {
-        const result = await generateShortUrl.mutateAsync(apiKey.id);
-        setShortUrl(result);
-      } catch {
-        toast.error("Failed to generate setup URL");
-      }
+  useEffect(() => {
+    if (open && !shortUrl) {
+      generateShortUrl
+        .mutateAsync(apiKey.id)
+        .then(setShortUrl)
+        .catch(() => toast.error("Failed to generate setup URL"));
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleCopy = () => {
     if (shortUrl) {
@@ -497,12 +387,7 @@ function SetupDialog({
   };
 
   return (
-    <Dialog onOpenChange={handleOpen} open={open}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          Setup
-        </Button>
-      </DialogTrigger>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Setup on eReader</DialogTitle>
@@ -538,6 +423,185 @@ function SetupDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function KoboSyncSection() {
+  const { data: apiKeys, isLoading } = useApiKeys();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  const koboKeys = apiKeys?.filter((key) =>
+    key.permissions?.some((p) => p?.permission === PermissionKoboSync),
+  );
+
+  return (
+    <div className="rounded-md border border-border p-6">
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Kobo Wireless Sync</h2>
+          <p className="text-sm text-muted-foreground">
+            Sync books directly to your Kobo device over WiFi
+          </p>
+        </div>
+        <CreateKoboKeyDialog
+          onOpenChange={setCreateDialogOpen}
+          open={createDialogOpen}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="py-6 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : koboKeys?.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No Kobo devices configured. Add one to sync books wirelessly.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {koboKeys?.map((key) => <KoboKeyRow apiKey={key} key={key.id} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateKoboKeyDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [name, setName] = useState("");
+  const createApiKey = useCreateApiKey();
+  const addPermission = useAddApiKeyPermission();
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+
+    try {
+      const apiKey = await createApiKey.mutateAsync(name);
+      await addPermission.mutateAsync({
+        id: apiKey.id,
+        permission: PermissionKoboSync,
+      });
+      toast.success("Kobo device added");
+      setName("");
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to add device");
+    }
+  };
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Kobo
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Kobo Device</DialogTitle>
+          <DialogDescription>
+            Give this Kobo a name so you can identify it later.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <div className="space-y-2">
+            <Label htmlFor="kobo-name">Device Name</Label>
+            <Input
+              id="kobo-name"
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+              placeholder="e.g., Kobo Libra 2"
+              value={name}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={createApiKey.isPending || addPermission.isPending}
+            onClick={handleCreate}
+          >
+            {createApiKey.isPending || addPermission.isPending
+              ? "Adding..."
+              : "Add Kobo"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function KoboKeyRow({ apiKey }: { apiKey: APIKey }) {
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const deleteApiKey = useDeleteApiKey();
+
+  const handleDelete = async () => {
+    try {
+      await deleteApiKey.mutateAsync(apiKey.id);
+      toast.success("Kobo device removed");
+      setDeleteDialogOpen(false);
+    } catch {
+      toast.error("Failed to remove device");
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{apiKey.name}</p>
+          <p className="text-xs text-muted-foreground">
+            Added {new Date(apiKey.createdAt).toLocaleDateString()}
+            {apiKey.lastAccessedAt &&
+              ` · Last synced ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            onClick={() => setSetupDialogOpen(true)}
+            size="sm"
+            variant="outline"
+          >
+            Setup
+          </Button>
+          <Button
+            onClick={() => setDeleteDialogOpen(true)}
+            size="sm"
+            variant="ghost"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      </div>
+
+      <KoboSetupDialog
+        apiKey={apiKey}
+        onOpenChange={setSetupDialogOpen}
+        open={setupDialogOpen}
+      />
+      <ConfirmDialog
+        confirmLabel="Remove"
+        description={`Are you sure you want to remove "${apiKey.name}"? You'll need to reconfigure your Kobo to use it again.`}
+        isPending={deleteApiKey.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteDialogOpen}
+        open={deleteDialogOpen}
+        title="Remove Kobo Device"
+      />
+    </>
   );
 }
 
@@ -590,11 +654,6 @@ function KoboSetupDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          Kobo Setup
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Kobo Sync Setup</DialogTitle>
