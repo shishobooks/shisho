@@ -120,6 +120,14 @@ const PersonList = () => {
 
       {peopleQuery.isSuccess && (
         <>
+          {peopleQuery.data.total > 0 && (
+            <div className="mb-4 text-sm text-muted-foreground">
+              Showing {offset + 1}-
+              {Math.min(offset + limit, peopleQuery.data.total)} of{" "}
+              {peopleQuery.data.total} people
+            </div>
+          )}
+
           <div className="space-y-2 mb-6">
             {peopleQuery.data.people.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">

@@ -162,7 +162,7 @@ const CBZPagePicker = ({
             className={cn(
               "absolute left-2 top-1/2 -translate-y-1/2 z-10",
               "w-12 h-24 rounded-lg bg-black/40 hover:bg-black/60 backdrop-blur-sm",
-              "flex items-center justify-center transition-all duration-200",
+              "flex items-center justify-center transition-all duration-200 cursor-pointer",
               "text-white/70 hover:text-white",
               "disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-black/40",
             )}
@@ -177,7 +177,7 @@ const CBZPagePicker = ({
             className={cn(
               "absolute right-2 top-1/2 -translate-y-1/2 z-10",
               "w-12 h-24 rounded-lg bg-black/40 hover:bg-black/60 backdrop-blur-sm",
-              "flex items-center justify-center transition-all duration-200",
+              "flex items-center justify-center transition-all duration-200 cursor-pointer",
               "text-white/70 hover:text-white",
               "disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-black/40",
             )}
@@ -224,7 +224,7 @@ const CBZPagePicker = ({
                 {visibleThumbnails.map((page) => (
                   <button
                     className={cn(
-                      "relative shrink-0 rounded overflow-hidden transition-all duration-150",
+                      "relative shrink-0 rounded overflow-hidden transition-all duration-150 cursor-pointer",
                       "border-2 bg-muted",
                       "hover:border-primary/50 hover:scale-105",
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",

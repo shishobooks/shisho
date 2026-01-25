@@ -72,10 +72,12 @@ const Gallery = <T,>({
 
   return (
     <>
-      <div className="mb-4 text-sm text-muted-foreground">
-        Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-        {itemLabel}
-      </div>
+      {total > 0 && (
+        <div className="mb-4 text-sm text-muted-foreground">
+          Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
+          {itemLabel}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-4 mb-8">{items.map(renderItem)}</div>
 

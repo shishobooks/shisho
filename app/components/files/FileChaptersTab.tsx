@@ -669,7 +669,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
           <p className="text-muted-foreground">No chapters</p>
           {canAddChapters && (
             <button
-              className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
               onClick={handleAddChapterFromEmpty}
               type="button"
             >
@@ -816,7 +816,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         {/* CBZ uncovered pages warning (display uses 1-indexed page numbers) */}
         {hasUncoveredPages && (
           <button
-            className="w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left hover:bg-amber-500/20 transition-colors"
+            className="w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left hover:bg-amber-500/20 transition-colors cursor-pointer"
             onClick={handleAddChapterAtPageZero}
             type="button"
           >

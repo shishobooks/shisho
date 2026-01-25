@@ -83,7 +83,7 @@ export const SelectionToolbar = () => {
                 const isAdding = addingToListId === list.id;
                 return (
                   <button
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={isAdding}
                     key={list.id}
                     onClick={() => handleAddToList(list.id, list.name)}

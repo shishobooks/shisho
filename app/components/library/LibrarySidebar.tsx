@@ -164,7 +164,7 @@ const LibrarySidebar = () => {
                 <button
                   aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                   className={cn(
-                    "flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    "flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
                     "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50",
                     collapsed && "justify-center px-2",
                   )}

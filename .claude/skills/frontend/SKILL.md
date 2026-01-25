@@ -236,6 +236,179 @@ All editable metadata fields should be treated as first-class citizens. Don't ad
 
 When a user clears a metadata field, the cleared value should be saved (not revert to some default). The scanner will repopulate the field from the source file on the next scan if needed.
 
+## UI/UX Consistency Requirements
+
+### List Page Patterns
+
+All list pages (Books, Series, People, Genres, Tags) should follow consistent patterns:
+
+**Required Elements:**
+1. **Page header** with title and subtitle in `<div className="mb-6">`
+2. **Search input** with `max-w-xs` and appropriate placeholder
+3. **Item count display**: Show "Showing X-Y of Z [items]" above the list **only when total > 0** (hide when empty to avoid "Showing 1-0 of 0")
+4. **Loading state**: Use `<LoadingSpinner />` component, not raw text
+5. **Pagination**: Use shadcn/ui `Pagination` components, never raw `<button>` elements
+
+**Use the Gallery Component for Grid Layouts:**
+For pages displaying items in a grid (books, series), use the `Gallery` component which provides:
+- Consistent "Showing X-Y of Z" count
+- Pagination with proper shadcn/ui components
+- Loading state handling
+
+```tsx
+<Gallery
+  isLoading={query.isLoading}
+  isSuccess={query.isSuccess}
+  itemLabel="books"
+  items={query.data?.items ?? []}
+  itemsPerPage={24}
+  renderItem={renderItem}
+  total={query.data?.total ?? 0}
+/>
+```
+
+**For List-Based Pages (People, Genres, Tags):**
+Even though these pages don't use Gallery, they should still:
+- Show "Showing X-Y of Z [items]" count **only when total > 0**
+- Use `<LoadingSpinner />` for loading states
+- Use shadcn/ui Pagination components
+- Have consistent empty state messages that differentiate between "no results" and "no results matching search"
+
+**Item Count Pattern:**
+```tsx
+{total > 0 && (
+  <div className="mb-4 text-sm text-muted-foreground">
+    Showing {offset + 1}-{Math.min(offset + limit, total)} of {total} items
+  </div>
+)}
+```
+
+**Empty State Messages:**
+```tsx
+// With search context
+{searchQuery
+  ? "No people found matching your search."
+  : "No people in this library yet."}
+
+// Without search context (less ideal)
+"No genres found"
+```
+
+### Detail Page Patterns
+
+All metadata detail pages (Series, Person, Genre, Tag) follow a consistent structure:
+
+**Header Section:**
+```tsx
+<div className="mb-8">
+  <div className="flex items-start justify-between gap-4 mb-2">
+    <h1 className="text-3xl font-bold min-w-0 break-words">{name}</h1>
+    <div className="flex gap-2 shrink-0">
+      <Button onClick={() => setEditOpen(true)} size="sm" variant="outline">
+        <Edit className="h-4 w-4 mr-2" />
+        Edit
+      </Button>
+      <Button onClick={() => setMergeOpen(true)} size="sm" variant="outline">
+        <GitMerge className="h-4 w-4 mr-2" />
+        Merge
+      </Button>
+      {canDelete && (
+        <Button onClick={() => setDeleteOpen(true)} size="sm" variant="outline">
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete
+        </Button>
+      )}
+    </div>
+  </div>
+  {/* Optional: Sort name if different */}
+  {sortName !== name && (
+    <p className="text-muted-foreground mb-2">Sort name: {sortName}</p>
+  )}
+  <Badge variant="secondary">{count} book{count !== 1 ? "s" : ""}</Badge>
+</div>
+```
+
+**Content Sections:**
+```tsx
+<section className="mb-10">
+  <h2 className="text-xl font-semibold mb-4">Books in Series</h2>
+  {/* ... content ... */}
+</section>
+```
+
+**Empty States:**
+```tsx
+<div className="text-center py-8 text-muted-foreground">
+  This [entity] has no associated books.
+</div>
+```
+
+### Always Use Button Component
+
+**Never use raw `<button>` elements.** Always use the shadcn/ui `Button` component for:
+- Consistent styling across the app
+- Built-in cursor-pointer behavior
+- Proper disabled states
+- Accessibility features
+
+```tsx
+// Bad - raw button
+<button className="px-3 py-1 rounded-md border">Previous</button>
+
+// Good - Button component
+<Button variant="outline" size="sm">Previous</Button>
+```
+
+### Cursor Styles for Interactive Elements
+
+**All clickable elements MUST have `cursor-pointer`**. This is a fundamental UX requirement that signals interactivity to users.
+
+**Components that need `cursor-pointer`:**
+- Buttons (already in base `buttonVariants`)
+- Checkboxes
+- Select triggers and items
+- Tab triggers
+- Command items (in dropdowns/comboboxes)
+- Dropdown menu items (including checkbox/radio items and sub-triggers)
+- Dialog close buttons
+- Pagination links
+- Any custom clickable element (raw `<button>` or clickable `<div>`)
+
+**Pattern for shadcn/ui components:**
+When adding or modifying UI components, ensure `cursor-pointer` is in the base className:
+
+```tsx
+// Good - cursor-pointer included
+className={cn(
+  "flex items-center justify-center cursor-pointer",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+  className,
+)}
+
+// Bad - missing cursor-pointer
+className={cn(
+  "flex items-center justify-center",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+  className,
+)}
+```
+
+**Pattern for raw buttons:**
+When using raw `<button>` elements outside of the Button component, always add `cursor-pointer`:
+
+```tsx
+// Good
+<button className="px-4 py-2 rounded-md cursor-pointer" onClick={...}>
+
+// Bad
+<button className="px-4 py-2 rounded-md" onClick={...}>
+```
+
+**Why this matters:**
+- Users rely on cursor changes to understand what's clickable
+- Missing cursor-pointer feels broken/unresponsive
+- Consistency across the UI is essential for professional UX
+
 ## Known Radix UI Issues
 
 ### Dialog + DropdownMenu pointer-events Bug

@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Tag } from "@/types";
@@ -94,40 +103,79 @@ const TagsList = () => {
         />
       </div>
 
-      {tagsQuery.isLoading && (
-        <div className="text-muted-foreground">Loading...</div>
-      )}
+      {tagsQuery.isLoading && <LoadingSpinner />}
 
-      {tagsQuery.isSuccess && tagsQuery.data.tags.length === 0 && (
-        <div className="text-muted-foreground">No tags found</div>
-      )}
+      {tagsQuery.isSuccess && (
+        <>
+          {total > 0 && (
+            <div className="mb-4 text-sm text-muted-foreground">
+              Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
+              tags
+            </div>
+          )}
 
-      {tagsQuery.isSuccess && tagsQuery.data.tags.length > 0 && (
-        <div className="space-y-1">
-          {tagsQuery.data.tags.map(renderTagItem)}
-        </div>
-      )}
+          {tagsQuery.data.tags.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchQuery
+                ? "No tags found matching your search."
+                : "No tags in this library yet."}
+            </div>
+          ) : (
+            <div className="space-y-1 mb-6">
+              {tagsQuery.data.tags.map(renderTagItem)}
+            </div>
+          )}
 
-      {totalPages > 1 && (
-        <div className="mt-6 flex justify-center gap-2">
-          <button
-            className="px-3 py-1 rounded-md border disabled:opacity-50"
-            disabled={currentPage <= 1}
-            onClick={() => handlePageChange(currentPage - 1)}
-          >
-            Previous
-          </button>
-          <span className="px-3 py-1">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            className="px-3 py-1 rounded-md border disabled:opacity-50"
-            disabled={currentPage >= totalPages}
-            onClick={() => handlePageChange(currentPage + 1)}
-          >
-            Next
-          </button>
-        </div>
+          {totalPages > 1 && (
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    className={
+                      currentPage <= 1
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                    onClick={() => handlePageChange(currentPage - 1)}
+                  />
+                </PaginationItem>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        className="cursor-pointer"
+                        isActive={pageNum === currentPage}
+                        onClick={() => handlePageChange(pageNum)}
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+                <PaginationItem>
+                  <PaginationNext
+                    className={
+                      currentPage >= totalPages
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                    onClick={() => handlePageChange(currentPage + 1)}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
+        </>
       )}
     </LibraryLayout>
   );

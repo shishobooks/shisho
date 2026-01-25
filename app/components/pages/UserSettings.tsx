@@ -21,7 +21,7 @@ const ThemeOption = ({
   onSelect,
 }: ThemeOptionProps) => (
   <button
-    className={`flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full ${
+    className={`flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full cursor-pointer ${
       currentTheme === theme
         ? "border-primary bg-primary/5 text-primary"
         : "border-border hover:bg-muted"

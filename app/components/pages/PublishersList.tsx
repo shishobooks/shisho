@@ -115,7 +115,7 @@ const PublishersList = () => {
       {totalPages > 1 && (
         <div className="mt-6 flex justify-center gap-2">
           <button
-            className="px-3 py-1 rounded-md border disabled:opacity-50"
+            className="px-3 py-1 rounded-md border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage <= 1}
             onClick={() => handlePageChange(currentPage - 1)}
           >
@@ -125,7 +125,7 @@ const PublishersList = () => {
             Page {currentPage} of {totalPages}
           </span>
           <button
-            className="px-3 py-1 rounded-md border disabled:opacity-50"
+            className="px-3 py-1 rounded-md border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage >= totalPages}
             onClick={() => handlePageChange(currentPage + 1)}
           >

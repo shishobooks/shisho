@@ -42,7 +42,7 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 
   return (
     <button
-      className="w-full flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors text-left"
+      className="w-full flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors text-left cursor-pointer"
       onClick={onClick}
       type="button"
     >

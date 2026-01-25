@@ -69,7 +69,7 @@ const PlayButton = ({ isPlaying, onPlay, onStop }: PlayButtonProps) => {
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          className="relative p-1.5 rounded hover:bg-muted text-muted-foreground"
+          className="relative p-1.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
           onClick={isPlaying ? onStop : onPlay}
           type="button"
         >
@@ -346,7 +346,7 @@ const ChapterRow = (props: ChapterRowProps) => {
           {/* Expand/collapse toggle for chapters with children */}
           {hasChildren ? (
             <button
-              className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+              className="p-0.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
               onClick={() => setExpanded(!expanded)}
               type="button"
             >
@@ -613,7 +613,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         {/* EPUB: Expand/collapse toggle for chapters with children */}
         {isEpub && hasChildren ? (
           <button
-            className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+            className="p-0.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
             onClick={() => setExpanded(!expanded)}
             type="button"
           >

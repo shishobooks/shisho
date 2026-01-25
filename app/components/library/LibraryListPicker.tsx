@@ -74,7 +74,7 @@ const LibraryListPicker = () => {
               return (
                 <button
                   className={`
-                    group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors
+                    group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer
                     ${
                       isActive
                         ? "bg-primary/10 text-primary dark:bg-primary/15 dark:text-violet-300"
