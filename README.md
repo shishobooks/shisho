@@ -34,19 +34,25 @@ services:
     container_name: shisho
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "5173:8080"
     volumes:
       # Persistent data (database)
       - ./data:/data
       # Configuration
       - ./config:/config
       # Mount your media library (adjust path as needed)
-      - /path/to/your/books:/media:ro
+      - /path/to/your/books:/media
     environment:
       - PUID=1000
       - PGID=1000
       - DATABASE_FILE_PATH=/data/shisho.db
       - JWT_SECRET=your-secret-key-here-change-me
+```
+
+To generate a random string to use as your `JWT_SECRET`, you can use:
+
+```sh
+openssl rand -hex 32
 ```
 
 2. Start the container:
@@ -55,7 +61,7 @@ services:
 docker compose up -d
 ```
 
-3. Access Shisho at `http://localhost:8080` and create a library pointing to `/media` (or wherever you mounted your books).
+3. Access Shisho at `http://localhost:5173` and create a library pointing to `/media` (or wherever you mounted your books).
 
 ### File Permissions (PUID/PGID)
 
