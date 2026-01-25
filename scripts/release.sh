@@ -174,17 +174,19 @@ fi
 echo "Updating CHANGELOG.md..."
 CHANGELOG_FILE="CHANGELOG.md"
 
-# Find the [Unreleased] section and insert new version after it
-# Using awk for cross-platform compatibility (BSD sed behaves differently)
-awk -v section="$CHANGELOG_SECTION" '
-    /^## \[Unreleased\]/ {
-        print
-        print ""
-        print section
-        next
-    }
-    { print }
-' "$CHANGELOG_FILE" > "$CHANGELOG_FILE.tmp" && mv "$CHANGELOG_FILE.tmp" "$CHANGELOG_FILE"
+# Insert new version after [Unreleased] section using pure bash
+# (awk -v doesn't handle multi-line strings, and BSD sed differs from GNU sed)
+{
+    found=false
+    while IFS= read -r line; do
+        echo "$line"
+        if [[ "$line" =~ ^##\ \[Unreleased\] ]] && [[ "$found" == "false" ]]; then
+            echo ""
+            echo "$CHANGELOG_SECTION"
+            found=true
+        fi
+    done < "$CHANGELOG_FILE"
+} > "$CHANGELOG_FILE.tmp" && mv "$CHANGELOG_FILE.tmp" "$CHANGELOG_FILE"
 
 # Update package versions
 echo "Updating package.json..."
