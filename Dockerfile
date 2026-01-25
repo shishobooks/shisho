@@ -30,8 +30,10 @@ FROM node:24.13.0-alpine AS frontend-builder
 WORKDIR /app
 
 # Install production dependencies only (build tools, not test/lint tools)
+# Note: Extended timeout for arm64 builds which run through slow QEMU emulation
 COPY package.json yarn.lock ./
-RUN yarn install --production --frozen-lockfile
+RUN yarn config set network-timeout 600000 && \
+    yarn install --production --frozen-lockfile
 
 # Copy frontend source
 COPY app/ ./app/
