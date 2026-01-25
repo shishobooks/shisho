@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/shishobooks/shisho/releases"><img src="https://img.shields.io/badge/version-v0.0.0-green.svg" alt="Version"></a>
+  <a href="https://github.com/shishobooks/shisho/releases"><img src="https://img.shields.io/github/v/release/shishobooks/shisho?color=green&label=version" alt="Version"></a>
   <a href="https://github.com/shishobooks/shisho/actions/workflows/ci.yml"><img src="https://github.com/shishobooks/shisho/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
@@ -82,8 +82,8 @@ Set these values in your `docker-compose.yml`:
 
 ```yaml
 environment:
-  - PUID=1000  # Replace with your UID
-  - PGID=1000  # Replace with your GID
+  - PUID=1000 # Replace with your UID
+  - PGID=1000 # Replace with your GID
 ```
 
 ## Directory Structure
@@ -121,14 +121,14 @@ Shisho can be configured via a YAML config file or environment variables. Enviro
 
 ### Notable Settings
 
-| Setting | Env Variable | Default | Description |
-|---------|--------------|---------|-------------|
-| `database_file_path` | `DATABASE_FILE_PATH` | - | **Required.** Path to the SQLite database |
-| `jwt_secret` | `JWT_SECRET` | - | **Required.** Secret key for authentication tokens |
-| `server_port` | `SERVER_PORT` | `3689` | Port the server listens on |
-| `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60` | How often to scan libraries for changes |
-| `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background worker processes |
-| `cache_dir` | `CACHE_DIR` | `/config/cache` | Directory for cached files |
+| Setting                 | Env Variable            | Default         | Description                                        |
+| ----------------------- | ----------------------- | --------------- | -------------------------------------------------- |
+| `database_file_path`    | `DATABASE_FILE_PATH`    | -               | **Required.** Path to the SQLite database          |
+| `jwt_secret`            | `JWT_SECRET`            | -               | **Required.** Secret key for authentication tokens |
+| `server_port`           | `SERVER_PORT`           | `3689`          | Port the server listens on                         |
+| `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60`            | How often to scan libraries for changes            |
+| `worker_processes`      | `WORKER_PROCESSES`      | `2`             | Number of background worker processes              |
+| `cache_dir`             | `CACHE_DIR`             | `/config/cache` | Directory for cached files                         |
 
 For a complete reference of all configuration options, see [`shisho.example.yaml`](shisho.example.yaml).
 

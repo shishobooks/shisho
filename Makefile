@@ -96,3 +96,13 @@ tygo: $(TYGO_OUTPUTS)
 
 $(TYGO_OUTPUTS): $(BUILD_DIR)/tygo tygo.yaml $(TYGO_INPUTS)
 	$(BUILD_DIR)/tygo generate
+
+.PHONY: release
+release:
+ifndef tag
+	$(error tag is required. Usage: make release tag=v1.0.0)
+endif
+	@echo "Creating release $(tag)..."
+	git tag -a $(tag) -m "Release $(tag)"
+	git push origin $(tag)
+	@echo "Release $(tag) created and pushed. GitHub Actions will handle the rest."

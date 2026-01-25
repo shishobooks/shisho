@@ -1,0 +1,46 @@
+version: 2
+project_name: shisho
+
+builds:
+  - skip: true
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - typo
+      - merge conflict
+  groups:
+    - title: "Features"
+      regexp: '^.*?\[(?:Frontend|Backend|Feature|Feat)\].*$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?\[Fix\].*$'
+      order: 1
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: shishobooks
+    name: shisho
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Shisho {{ .Tag }}
+
+    Docker image: `ghcr.io/shishobooks/shisho:{{ .Tag }}`
+
+    ```bash
+    docker pull ghcr.io/shishobooks/shisho:{{ .Tag }}
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/shishobooks/shisho/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **npm package**: `npm install @shisho/plugin-types@{{ trimprefix .Tag "v" }}`
