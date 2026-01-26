@@ -31,16 +31,14 @@ if [ "$(id -u)" = "0" ]; then
     PUID=${PUID:-1000}
     PGID=${PGID:-1000}
 
-    # Update shisho group if PGID differs from default
-    if [ "$PGID" != "1000" ]; then
-        delgroup shisho 2>/dev/null || true
-        addgroup -g "$PGID" shisho
-        # Re-add user to new group
+    # Update shisho user/group if PUID or PGID differs from default
+    if [ "$PGID" != "1000" ] || [ "$PUID" != "1000" ]; then
+        # Must delete user first (before group), since user is a member of the group
         deluser shisho 2>/dev/null || true
-        adduser -u "$PUID" -G shisho -s /bin/sh -D shisho
-    elif [ "$PUID" != "1000" ]; then
-        # Only PUID differs
-        deluser shisho 2>/dev/null || true
+        if [ "$PGID" != "1000" ]; then
+            delgroup shisho 2>/dev/null || true
+            addgroup -g "$PGID" shisho
+        fi
         adduser -u "$PUID" -G shisho -s /bin/sh -D shisho
     fi
 
@@ -98,9 +96,11 @@ SHISHO_PID=$!
 
 # Wait for backend to be ready
 log_info "Waiting for backend to start"
+BACKEND_READY=0
 for i in $(seq 1 30); do
     if wget -q --spider http://localhost:3689/health 2>/dev/null; then
         log_info "Backend is ready"
+        BACKEND_READY=1
         break
     fi
     if ! kill -0 $SHISHO_PID 2>/dev/null; then
@@ -109,6 +109,12 @@ for i in $(seq 1 30); do
     fi
     sleep 1
 done
+
+if [ "$BACKEND_READY" = "0" ]; then
+    log_error "Backend failed to start within 30 seconds"
+    kill -TERM $SHISHO_PID 2>/dev/null || true
+    exit 1
+fi
 
 # Start Caddy in the background (so we can manage both processes)
 caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
