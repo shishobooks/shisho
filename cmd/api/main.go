@@ -149,6 +149,10 @@ func initCacheDir(dir string) error {
 }
 
 // writePortFile writes the server's actual port to tmp/api.port for frontend dev server.
+// Skips silently if tmp/ directory doesn't exist (e.g., in Docker).
 func writePortFile(port int) error {
+	if _, err := os.Stat("tmp"); os.IsNotExist(err) {
+		return nil
+	}
 	return os.WriteFile("tmp/api.port", []byte(strconv.Itoa(port)), 0600)
 }
