@@ -364,7 +364,6 @@ app/types/generated/*.ts
 # Playwright
 playwright-report/
 test-results/
-api
 
 # Auto Claude data directory
 .auto-claude/
