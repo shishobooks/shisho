@@ -6,7 +6,8 @@ import {
   DragOverlay,
   DragStartEvent,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -55,10 +56,10 @@ const DraggableBookItem = ({
 
   if (!listBook.book) return null;
 
-  // For the drag overlay, render a clean lifted version
+  // For the drag overlay, render a clean lifted version with explicit width
   if (isDragOverlay) {
     return (
-      <div className="opacity-95 rotate-1 scale-[1.02] drop-shadow-2xl">
+      <div className="w-[calc(50vw-1.5rem)] sm:w-32 opacity-95 rotate-1 scale-[1.02] drop-shadow-2xl [&>*]:w-full [&>*]:sm:w-full">
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
@@ -71,7 +72,7 @@ const DraggableBookItem = ({
   return (
     <div
       className={cn(
-        "group/drag relative cursor-grab active:cursor-grabbing",
+        "w-[calc(50%-0.5rem)] sm:w-32 group/drag relative cursor-grab active:cursor-grabbing touch-pan-y [&>*]:w-full [&>*]:sm:w-full",
         isDragging && "opacity-30",
         // Show indicator on left when inserting before this item
         insertPosition === "before" &&
@@ -125,9 +126,15 @@ export const DraggableBookList = ({
   }, [books, items]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 25,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -206,7 +213,7 @@ export const DraggableBookList = ({
         items={items.map((item) => item.book_id)}
         strategy={rectSortingStrategy}
       >
-        <div className="flex flex-wrap gap-6">
+        <div className="flex flex-wrap gap-4">
           {items.map((listBook) => (
             <DraggableBookItem
               addedByUsername={

@@ -24,6 +24,7 @@ import {
   type Book,
   type File,
 } from "@/types";
+import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 interface BookItemProps {
   book: Book;
@@ -130,12 +131,19 @@ const BookItem = ({
     : undefined;
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
+  const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
+  const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const resyncBookMutation = useResyncBook();
 
   // For placeholder variant: use same priority logic as backend's selectCoverFile
   const placeholderVariant = getCoverFileType(book.files, coverAspectRatio);
+
+  const handleCoverLoad = () => {
+    markCoverLoaded(coverUrl);
+    setCoverLoaded(true);
+  };
 
   const handleScanMetadata = async () => {
     try {
@@ -180,7 +188,7 @@ const BookItem = ({
   return (
     <div
       className={cn(
-        "w-32 group/card relative",
+        "w-[calc(50%-0.5rem)] sm:w-32 group/card relative",
         isSelectionMode && "cursor-pointer",
       )}
       key={book.id}
@@ -249,30 +257,40 @@ const BookItem = ({
           "group",
           isSelectionMode ? "pointer-events-none" : "cursor-pointer",
         )}
+        onClick={(e) => {
+          if (isSelectionMode) {
+            e.preventDefault();
+          }
+        }}
         to={`/libraries/${libraryId}/books/${book.id}`}
       >
-        {!coverError ? (
-          <img
-            alt={`${book.title} Cover`}
-            className={cn(
-              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
-              aspectClass,
-              isSelected && "ring-2 ring-primary ring-offset-1",
-            )}
-            onError={() => setCoverError(true)}
-            src={`/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`}
-          />
-        ) : (
-          <CoverPlaceholder
-            className={cn(
-              "rounded-sm border border-neutral-300 dark:border-neutral-600",
-              aspectClass,
-              isSelected && "ring-2 ring-primary ring-offset-1",
-            )}
-            variant={placeholderVariant}
-          />
-        )}
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
+        <div className={cn("relative", aspectClass)}>
+          {/* Placeholder shown until image loads or on error */}
+          {(!coverLoaded || coverError) && (
+            <CoverPlaceholder
+              className={cn(
+                "absolute inset-0 rounded-sm border border-neutral-300 dark:border-neutral-600",
+                isSelected && "ring-2 ring-primary ring-offset-1",
+              )}
+              variant={placeholderVariant}
+            />
+          )}
+          {/* Image hidden until loaded, removed on error */}
+          {!coverError && (
+            <img
+              alt={`${book.title} Cover`}
+              className={cn(
+                "w-full h-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+                !coverLoaded && "opacity-0",
+                isSelected && "ring-2 ring-primary ring-offset-1",
+              )}
+              onError={() => setCoverError(true)}
+              onLoad={handleCoverLoad}
+              src={coverUrl}
+            />
+          )}
+        </div>
+        <div className="mt-2 group-hover:underline font-bold line-clamp-2">
           {book.title}
         </div>
       </Link>

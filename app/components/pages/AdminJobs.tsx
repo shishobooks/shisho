@@ -60,17 +60,19 @@ interface JobRowProps {
 
 const JobRow = ({ job }: JobRowProps) => (
   <Link
-    className="flex items-center justify-between py-4 border-b border-border last:border-b-0 hover:bg-muted/50 -mx-6 px-6 transition-colors"
+    className="flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors"
     to={`/settings/jobs/${job.id}`}
   >
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3">
-        <span className="font-medium text-foreground">{job.type}</span>
+      <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+        <span className="font-medium text-foreground text-sm md:text-base">
+          {job.type}
+        </span>
         <Badge className={getStatusColor(job.status)} variant="secondary">
           {job.status === JobStatusInProgress ? "running" : job.status}
         </Badge>
       </div>
-      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1 text-xs md:text-sm text-muted-foreground">
         <span>Started {formatDistanceToNow(new Date(job.created_at))} ago</span>
         {job.status === JobStatusInProgress && job.created_at && (
           <span>Running for {formatDuration(job.created_at)}</span>
@@ -154,16 +156,19 @@ const AdminJobs = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-2xl font-semibold mb-2">Background Jobs</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+            Background Jobs
+          </h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             View and manage background processing tasks.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button onClick={() => refetch()} size="sm" variant="outline">
-            Refresh
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           {canCreateJobs && (
             <Button
@@ -172,9 +177,9 @@ const AdminJobs = () => {
               size="sm"
             >
               <RefreshCw
-                className={`h-4 w-4 mr-2 ${createJobMutation.isPending ? "animate-spin" : ""}`}
+                className={`h-4 w-4 sm:mr-2 ${createJobMutation.isPending ? "animate-spin" : ""}`}
               />
-              Trigger Scan
+              <span className="hidden sm:inline">Trigger Scan</span>
             </Button>
           )}
         </div>
@@ -192,11 +197,9 @@ const AdminJobs = () => {
           </div>
 
           <div className="border border-border rounded-md divide-y divide-border">
-            <div className="px-6">
-              {jobs.map((job) => (
-                <JobRow job={job} key={job.id} />
-              ))}
-            </div>
+            {jobs.map((job) => (
+              <JobRow job={job} key={job.id} />
+            ))}
           </div>
 
           {totalPages > 1 && (

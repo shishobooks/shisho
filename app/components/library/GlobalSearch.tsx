@@ -13,6 +13,7 @@ import {
 } from "@/hooks/queries/search";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
+import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 const getSearchThumbnailClasses = (coverAspectRatio: string): string => {
   // For search thumbnails, we use a fixed width and vary the aspect ratio
@@ -42,30 +43,49 @@ const SearchResultCover = ({
   variant,
   cacheBuster,
 }: SearchResultCoverProps) => {
+  const coverUrl = `/api/${type === "book" ? "books" : "series"}/${id}/cover?t=${cacheBuster}`;
+  const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
+
+  const handleCoverLoad = () => {
+    markCoverLoaded(coverUrl);
+    setCoverLoaded(true);
+  };
 
   return (
     <div
       className={cn(
-        "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden",
+        "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden relative",
         thumbnailClasses,
       )}
     >
-      {!coverError ? (
+      {/* Placeholder shown until image loads or on error */}
+      {(!coverLoaded || coverError) && (
+        <CoverPlaceholder className="absolute inset-0" variant={variant} />
+      )}
+      {/* Image hidden until loaded, removed on error */}
+      {!coverError && (
         <img
           alt=""
-          className="w-full h-full object-cover"
+          className={cn(
+            "w-full h-full object-cover",
+            !coverLoaded && "opacity-0",
+          )}
           onError={() => setCoverError(true)}
-          src={`/api/${type === "book" ? "books" : "series"}/${id}/cover?t=${cacheBuster}`}
+          onLoad={handleCoverLoad}
+          src={coverUrl}
         />
-      ) : (
-        <CoverPlaceholder variant={variant} />
       )}
     </div>
   );
 };
 
-const GlobalSearch = () => {
+interface GlobalSearchProps {
+  fullWidth?: boolean;
+  onClose?: () => void;
+}
+
+const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const { libraryId } = useParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -128,7 +148,8 @@ const GlobalSearch = () => {
   const handleResultClick = useCallback(() => {
     setIsOpen(false);
     setQuery("");
-  }, []);
+    onClose?.();
+  }, [onClose]);
 
   // Get the URL of the first visible result
   // If there's exactly 1 result, go to the detail page
@@ -174,76 +195,98 @@ const GlobalSearch = () => {
           event.preventDefault();
           setIsOpen(false);
           setQuery("");
+          onClose?.();
           navigate(firstResultUrl);
         }
       }
     },
-    [getFirstResultUrl, navigate],
+    [getFirstResultUrl, navigate, onClose],
   );
 
-  const renderBookResult = (book: BookSearchResult) => (
-    <Link
-      className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
-      key={`book-${book.id}`}
-      onClick={handleResultClick}
-      title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
-      to={`/libraries/${libraryId}/books/${book.id}`}
-    >
-      <SearchResultCover
-        cacheBuster={searchQuery.dataUpdatedAt}
-        id={book.id}
-        thumbnailClasses={thumbnailClasses}
-        type="book"
-        variant={isAudiobook ? "audiobook" : "book"}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{book.title}</div>
-        {book.authors && (
-          <div className="text-sm text-muted-foreground truncate">
-            {book.authors}
-          </div>
-        )}
-      </div>
-    </Link>
-  );
-
-  const renderSeriesResult = (series: SeriesSearchResult) => (
-    <Link
-      className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
-      key={`series-${series.id}`}
-      onClick={handleResultClick}
-      title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
-      to={`/libraries/${libraryId}/series/${series.id}`}
-    >
-      <SearchResultCover
-        cacheBuster={searchQuery.dataUpdatedAt}
-        id={series.id}
-        thumbnailClasses={thumbnailClasses}
-        type="series"
-        variant={isAudiobook ? "audiobook" : "book"}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{series.name}</div>
-        <div className="text-sm text-muted-foreground">
-          {series.book_count} book{series.book_count !== 1 ? "s" : ""}
+  const renderBookResult = useCallback(
+    (book: BookSearchResult) => (
+      <Link
+        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        key={`book-${book.id}`}
+        onClick={handleResultClick}
+        title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
+        to={`/libraries/${libraryId}/books/${book.id}`}
+      >
+        <SearchResultCover
+          cacheBuster={searchQuery.dataUpdatedAt}
+          id={book.id}
+          thumbnailClasses={thumbnailClasses}
+          type="book"
+          variant={isAudiobook ? "audiobook" : "book"}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{book.title}</div>
+          {book.authors && (
+            <div className="text-sm text-muted-foreground truncate">
+              {book.authors}
+            </div>
+          )}
         </div>
-      </div>
-    </Link>
+      </Link>
+    ),
+    [
+      handleResultClick,
+      libraryId,
+      searchQuery.dataUpdatedAt,
+      thumbnailClasses,
+      isAudiobook,
+    ],
   );
 
-  const renderPersonResult = (person: PersonSearchResult) => (
-    <Link
-      className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
-      key={`person-${person.id}`}
-      onClick={handleResultClick}
-      title={person.name}
-      to={`/libraries/${libraryId}/people/${person.id}`}
-    >
-      <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{person.name}</div>
-      </div>
-    </Link>
+  const renderSeriesResult = useCallback(
+    (series: SeriesSearchResult) => (
+      <Link
+        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        key={`series-${series.id}`}
+        onClick={handleResultClick}
+        title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
+        to={`/libraries/${libraryId}/series/${series.id}`}
+      >
+        <SearchResultCover
+          cacheBuster={searchQuery.dataUpdatedAt}
+          id={series.id}
+          thumbnailClasses={thumbnailClasses}
+          type="series"
+          variant={isAudiobook ? "audiobook" : "book"}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{series.name}</div>
+          <div className="text-sm text-muted-foreground">
+            {series.book_count} book{series.book_count !== 1 ? "s" : ""}
+          </div>
+        </div>
+      </Link>
+    ),
+    [
+      handleResultClick,
+      libraryId,
+      searchQuery.dataUpdatedAt,
+      thumbnailClasses,
+      isAudiobook,
+    ],
+  );
+
+  const renderPersonResult = useCallback(
+    (person: PersonSearchResult) => (
+      <Link
+        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        key={`person-${person.id}`}
+        onClick={handleResultClick}
+        title={person.name}
+        to={`/libraries/${libraryId}/people/${person.id}`}
+      >
+        <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{person.name}</div>
+        </div>
+      </Link>
+    ),
+    [handleResultClick, libraryId],
   );
 
   if (!libraryId) {
@@ -255,7 +298,12 @@ const GlobalSearch = () => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          className="w-64 pl-9 pr-8"
+          className={cn(
+            "pl-9",
+            fullWidth
+              ? "w-full pr-3 focus-visible:ring-0 focus-visible:border-border"
+              : "w-64 pr-8",
+          )}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -267,7 +315,7 @@ const GlobalSearch = () => {
           type="search"
           value={query}
         />
-        {query && (
+        {query && !fullWidth && (
           <button
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => {
@@ -283,7 +331,12 @@ const GlobalSearch = () => {
 
       {isOpen && debouncedQuery && (
         <div
-          className="absolute top-full left-0 mt-2 w-80 bg-background border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+          className={cn(
+            "bg-background border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto",
+            fullWidth
+              ? "fixed left-4 right-4 top-28"
+              : "absolute top-full mt-2 left-0 w-80",
+          )}
           ref={dropdownRef}
         >
           {searchQuery.isLoading && (

@@ -799,20 +799,30 @@ const AdminPlugins = () => {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Plugins</h1>
-        <p className="text-muted-foreground">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+          Plugins
+        </h1>
+        <p className="text-sm md:text-base text-muted-foreground">
           Manage installed plugins, browse available plugins, configure
           execution order, and manage repositories.
         </p>
       </div>
 
       <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="installed">Installed</TabsTrigger>
-          <TabsTrigger value="browse">Browse</TabsTrigger>
-          <TabsTrigger value="order">Order</TabsTrigger>
-          <TabsTrigger value="repositories">Repositories</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger className="text-xs sm:text-sm" value="installed">
+            Installed
+          </TabsTrigger>
+          <TabsTrigger className="text-xs sm:text-sm" value="browse">
+            Browse
+          </TabsTrigger>
+          <TabsTrigger className="text-xs sm:text-sm" value="order">
+            Order
+          </TabsTrigger>
+          <TabsTrigger className="text-xs sm:text-sm" value="repositories">
+            Repos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="installed">

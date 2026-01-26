@@ -145,6 +145,230 @@ When displaying user-generated content that may be long (names, titles, etc.):
 </CommandItem>
 ```
 
+## Mobile Responsiveness
+
+### Breakpoints
+
+Tailwind breakpoints used in Shisho:
+- `sm:` (640px) - Small tablets, large phones in landscape
+- `md:` (768px) - Tablets, where desktop sidebar appears
+- `lg:` (1024px) - Desktop
+
+### Page Headers with Actions
+
+**Never put title and action buttons on the same row.** On mobile, long titles wrap while buttons stay at top, creating awkward layouts.
+
+```tsx
+// Good - stacked layout
+<div className="flex flex-col gap-3 mb-6">
+  <h1 className="text-2xl md:text-3xl font-semibold">{title}</h1>
+  <div className="flex items-center gap-2">
+    <Button size="sm" variant="outline">
+      <Edit className="h-4 w-4 sm:mr-2" />
+      <span className="hidden sm:inline">Edit</span>
+    </Button>
+  </div>
+</div>
+
+// Bad - side-by-side causes layout issues
+<div className="flex items-start justify-between">
+  <h1 className="text-3xl">{title}</h1>
+  <Button>Edit</Button>
+</div>
+```
+
+### Admin Page Headers
+
+For settings/admin pages with title, description, and action buttons:
+
+```tsx
+<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
+  <div>
+    <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+      Page Title
+    </h1>
+    <p className="text-sm md:text-base text-muted-foreground">
+      Description text here.
+    </p>
+  </div>
+  <div className="flex items-center gap-2 shrink-0">
+    <Button size="sm">
+      <Plus className="h-4 w-4 sm:mr-2" />
+      <span className="hidden sm:inline">Add Item</span>
+    </Button>
+  </div>
+</div>
+```
+
+### Icon-Only Buttons on Mobile
+
+Use `hidden sm:inline` pattern for button text:
+
+```tsx
+<Button size="sm" variant="outline">
+  <Edit className="h-4 w-4 sm:mr-2" />
+  <span className="hidden sm:inline">Edit</span>
+</Button>
+```
+
+### List Row Items
+
+For rows with multiple pieces of info (stats, actions), stack on mobile:
+
+```tsx
+// File/item row with stats
+<div className="py-2 space-y-1">
+  {/* Primary row - always horizontal */}
+  <div className="flex items-center gap-2">
+    <Badge>{type}</Badge>
+    <span className="truncate min-w-0 flex-1">{name}</span>
+  </div>
+
+  {/* Stats row - separate line gives name room to breathe */}
+  <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+    <span>8h 44m</span>
+    <span className="text-muted-foreground/50">·</span>
+    <span>64 kbps</span>
+    <span className="text-muted-foreground/50">·</span>
+    <span>244.8 MB</span>
+    {/* Action buttons */}
+  </div>
+</div>
+```
+
+### Dot Separators for Stats
+
+Use middle dots (·) with faded styling to separate inline stats:
+
+```tsx
+<span>{duration}</span>
+<span className="text-muted-foreground/50">·</span>
+<span>{bitrate}</span>
+<span className="text-muted-foreground/50">·</span>
+<span>{fileSize}</span>
+```
+
+### Cover Images
+
+Center and constrain cover images on mobile:
+
+```tsx
+<div className="w-48 sm:w-64 lg:w-full mx-auto lg:mx-0">
+  <img className="w-full h-full object-cover" src={cover} />
+</div>
+```
+
+### Breadcrumbs
+
+Make breadcrumbs responsive with truncation:
+
+```tsx
+<nav className="text-xs sm:text-sm text-muted-foreground">
+  <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+    <li className="shrink-0">
+      <Link to="/">Home</Link>
+    </li>
+    <li className="shrink-0">›</li>
+    <li className="truncate max-w-[120px] sm:max-w-none">
+      <Link to="/book">{longBookTitle}</Link>
+    </li>
+    <li className="shrink-0">›</li>
+    <li className="truncate">{currentPage}</li>
+  </ol>
+</nav>
+```
+
+### Card/Section Padding
+
+Reduce padding on mobile:
+
+```tsx
+<div className="border rounded-md p-4 md:p-6">
+  <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+    Section Title
+  </h2>
+</div>
+```
+
+### Config/Settings Rows
+
+Stack label and value on mobile for long values:
+
+```tsx
+<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
+  <span className="text-sm font-medium">{label}</span>
+  <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-normal">
+    {value}
+  </span>
+</div>
+```
+
+### Mobile Navigation
+
+- Sidebar is hidden on mobile (`hidden md:block`)
+- Use `MobileDrawer` component with hamburger menu in header
+- Drawer slides in from left with backdrop blur
+- `MobileNavContext` provides `isOpen`, `open`, `close`, `toggle`
+
+### Form Inputs on Mobile
+
+Remove focus ring glow for cleaner mobile appearance:
+
+```tsx
+<Input
+  className={cn(
+    fullWidth && "focus-visible:ring-0 focus-visible:border-border"
+  )}
+/>
+```
+
+### Fixed Position Dropdowns
+
+When a dropdown is inside an `overflow-hidden` container (like collapsible sections), use fixed positioning:
+
+```tsx
+<div
+  className={cn(
+    "bg-background border rounded-lg shadow-lg z-50",
+    isMobile
+      ? "fixed left-4 right-4 top-28"
+      : "absolute top-full mt-2 left-0 w-80"
+  )}
+>
+```
+
+### Tabs on Mobile
+
+Make tabs scrollable and use smaller text:
+
+```tsx
+<TabsList className="w-full justify-start overflow-x-auto">
+  <TabsTrigger className="text-xs sm:text-sm" value="tab1">
+    Tab 1
+  </TabsTrigger>
+  <TabsTrigger className="text-xs sm:text-sm" value="tab2">
+    Longer Tab Name
+  </TabsTrigger>
+</TabsList>
+```
+
+### Spacing Patterns
+
+Use responsive spacing throughout:
+
+```tsx
+// Margins
+className="mb-6 md:mb-8"
+className="mb-1 md:mb-2"
+
+// Gaps
+className="gap-4 md:gap-8"
+className="space-y-4 md:space-y-6"
+
+// Padding
+className="py-3 md:py-4 px-4 md:px-6"
+```
+
 ## Testing
 
 ### Test Stack

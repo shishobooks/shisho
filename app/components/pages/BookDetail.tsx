@@ -11,7 +11,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -56,6 +56,7 @@ import {
   FileTypeEPUB,
   type File,
 } from "@/types";
+import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import {
   formatDate,
   formatDuration,
@@ -164,176 +165,168 @@ const FileRow = ({
     <div className="py-2 space-y-1">
       {/* Primary row */}
       <div className="flex items-center gap-2">
-        {/* Clickable area for expand/collapse (chevron, badge, name) */}
-        <div
-          aria-expanded={showChevron ? isExpanded : undefined}
-          className={`flex items-center gap-2 min-w-0 flex-1 rounded-md -ml-1 pl-1 ${
-            showChevron ? "cursor-pointer hover:bg-muted/50" : ""
-          }`}
-          onClick={showChevron ? onToggleExpand : undefined}
-          onKeyDown={
-            showChevron
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onToggleExpand();
-                  }
-                }
-              : undefined
-          }
-          role={showChevron ? "button" : undefined}
-          tabIndex={showChevron ? 0 : undefined}
-        >
-          {/* Chevron indicator */}
-          {showChevron ? (
-            <div className="p-0.5">
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-            </div>
-          ) : (
-            <div className="w-5" /> // Spacer for alignment when no chevron
-          )}
-
-          {/* File type badge */}
-          <Badge
-            className="uppercase text-xs flex-shrink-0"
-            variant={isSupplement ? "outline" : "secondary"}
+        {/* Chevron indicator */}
+        {showChevron ? (
+          <button
+            aria-expanded={isExpanded}
+            className="p-0.5 rounded hover:bg-muted/50 shrink-0"
+            onClick={onToggleExpand}
+            type="button"
           >
-            {file.file_type}
-          </Badge>
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        ) : (
+          <div className="w-5 shrink-0" /> // Spacer for alignment when no chevron
+        )}
 
-          {/* Name */}
-          <div className="flex flex-col min-w-0 flex-1">
-            <Link
-              className={`truncate hover:underline ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
-              onClick={(e) => e.stopPropagation()}
-              title={file.name || getFilename(file.filepath)}
-              to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}`}
-            >
-              {file.name || getFilename(file.filepath)}
-            </Link>
-          </div>
-        </div>
+        {/* File type badge */}
+        <Badge
+          className="uppercase text-xs shrink-0"
+          variant={isSupplement ? "outline" : "secondary"}
+        >
+          {file.file_type}
+        </Badge>
 
-        {/* Stats and actions */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
-          {/* M4B stats */}
-          {file.audiobook_duration_seconds && (
+        {/* Name */}
+        <Link
+          className={`truncate hover:underline min-w-0 flex-1 ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
+          title={file.name || getFilename(file.filepath)}
+          to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}`}
+        >
+          {file.name || getFilename(file.filepath)}
+        </Link>
+      </div>
+
+      {/* Stats and actions row */}
+      <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground pl-6">
+        {/* M4B stats */}
+        {file.audiobook_duration_seconds && (
+          <>
             <span>{formatDuration(file.audiobook_duration_seconds)}</span>
-          )}
-          {file.audiobook_bitrate_bps && (
+            <span className="text-muted-foreground/50">·</span>
+          </>
+        )}
+        {file.audiobook_bitrate_bps && (
+          <>
             <span>{Math.round(file.audiobook_bitrate_bps / 1000)} kbps</span>
-          )}
-          {/* CBZ stats */}
-          {file.page_count && <span>{file.page_count} pages</span>}
-          {/* File size - always shown */}
-          <span>{formatFileSize(file.filesize_bytes)}</span>
+            <span className="text-muted-foreground/50">·</span>
+          </>
+        )}
+        {/* CBZ stats */}
+        {file.page_count && (
+          <>
+            <span>{file.page_count} pages</span>
+            <span className="text-muted-foreground/50">·</span>
+          </>
+        )}
+        {/* File size - always shown */}
+        <span>{formatFileSize(file.filesize_bytes)}</span>
 
-          {/* Download button/popover */}
-          {isSupplement ? (
+        {/* Download button/popover */}
+        {isSupplement ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
+                <Download className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Download</TooltipContent>
+          </Tooltip>
+        ) : libraryDownloadPreference === DownloadFormatAsk &&
+          supportsKepub(file.file_type) ? (
+          <DownloadFormatPopover
+            disabled={isDownloading}
+            isLoading={isDownloading}
+            onCancel={onCancelDownload}
+            onDownloadKepub={onDownloadKepub}
+            onDownloadOriginal={() =>
+              onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+            }
+          />
+        ) : isDownloading ? (
+          <div className="flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
-                  <Download className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Download</TooltipContent>
-            </Tooltip>
-          ) : libraryDownloadPreference === DownloadFormatAsk &&
-            supportsKepub(file.file_type) ? (
-            <DownloadFormatPopover
-              disabled={isDownloading}
-              isLoading={isDownloading}
-              onCancel={onCancelDownload}
-              onDownloadKepub={onDownloadKepub}
-              onDownloadOriginal={() =>
-                onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
-              }
-            />
-          ) : isDownloading ? (
-            <div className="flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    className="h-6 w-6 p-0"
-                    onClick={onCancelDownload}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Cancel download</TooltipContent>
-              </Tooltip>
-            </div>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={onDownload} size="sm" variant="ghost">
-                  <Download className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Download</TooltipContent>
-            </Tooltip>
-          )}
-
-          {/* Read button - CBZ only */}
-          {file.file_type === FileTypeCBZ && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                <Button
+                  className="h-6 w-6 p-0"
+                  onClick={onCancelDownload}
+                  size="sm"
+                  variant="ghost"
                 >
-                  <Button size="sm" variant="ghost">
-                    <BookOpen className="h-3 w-3" />
-                  </Button>
-                </Link>
+                  <X className="h-3 w-3" />
+                </Button>
               </TooltipTrigger>
-              <TooltipContent>Read</TooltipContent>
+              <TooltipContent>Cancel download</TooltipContent>
             </Tooltip>
-          )}
+          </div>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onDownload} size="sm" variant="ghost">
+                <Download className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Download</TooltipContent>
+          </Tooltip>
+        )}
 
-          {/* Actions dropdown */}
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button disabled={isResyncing} size="sm" variant="ghost">
-                    <MoreVertical className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>More actions</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={isResyncing} onClick={onScanMetadata}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Scan for new metadata
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh all metadata
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        {/* Read button - CBZ only */}
+        {file.file_type === FileTypeCBZ && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+              >
+                <Button size="sm" variant="ghost">
+                  <BookOpen className="h-3 w-3" />
+                </Button>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>Read</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Actions dropdown */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={isResyncing} size="sm" variant="ghost">
+                  <MoreVertical className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>More actions</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            <DropdownMenuItem onClick={onEdit}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={isResyncing} onClick={onScanMetadata}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Scan for new metadata
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh all metadata
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Filename row - only show when name differs from filename */}
       {file.name && (
-        <div className="ml-5 pl-2">
+        <div className="pl-6">
           <span
             className="text-xs text-muted-foreground truncate block"
             title={file.filepath}
@@ -345,7 +338,7 @@ const FileRow = ({
 
       {/* Narrators row - M4B only, always visible when present */}
       {file.narrators && file.narrators.length > 0 && (
-        <div className="ml-5 pl-2 flex items-center gap-1 flex-wrap">
+        <div className="pl-6 flex items-center gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground">Narrated by</span>
           {file.narrators.map((narrator, index) => (
             <span className="text-xs" key={narrator.id}>
@@ -363,7 +356,7 @@ const FileRow = ({
 
       {/* Expandable details section */}
       {isExpanded && hasExpandableMetadata && (
-        <div className="ml-5 pl-2 mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
+        <div className="pl-6 mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
           {/* Publisher, Imprint, Released, URL */}
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
             {file.publisher && (
@@ -465,6 +458,7 @@ const BookDetail = () => {
     null,
   );
   const [resyncingFileId, setResyncingFileId] = useState<number | null>(null);
+  const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
   const [expandedFileIds, setExpandedFileIds] = useState<Set<number>>(
     new Set(),
@@ -496,6 +490,20 @@ const BookDetail = () => {
   useEffect(() => {
     setCoverError(false);
   }, [bookQuery.data?.id]);
+
+  // Cache-busting parameter for cover images - computed early for hook ordering
+  const coverCacheBuster = bookQuery.dataUpdatedAt;
+  const coverUrl = bookQuery.data?.id
+    ? `/api/books/${bookQuery.data.id}/cover?t=${coverCacheBuster}`
+    : null;
+
+  // Check cache synchronously before paint to avoid placeholder flash
+  // Must be called before early returns to maintain hook ordering
+  useLayoutEffect(() => {
+    if (coverUrl && isCoverLoaded(coverUrl)) {
+      setCoverLoaded(true);
+    }
+  }, [coverUrl]);
 
   const handleDownloadWithEndpoint = async (
     fileId: number,
@@ -715,8 +723,12 @@ const BookDetail = () => {
   const isAudiobook = coverFileType === "audiobook";
   const coverAspectRatio = isAudiobook ? "aspect-square" : "aspect-[2/3]";
 
-  // Cache-busting parameter for cover images
-  const coverCacheBuster = bookQuery.dataUpdatedAt;
+  const handleCoverLoad = () => {
+    if (coverUrl) {
+      markCoverLoaded(coverUrl);
+    }
+    setCoverLoaded(true);
+  };
 
   return (
     <LibraryLayout>
@@ -729,73 +741,83 @@ const BookDetail = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Book Cover */}
         <div className="lg:col-span-1">
-          <div className={`${coverAspectRatio} w-full`}>
-            {!coverError ? (
+          <div
+            className={`${coverAspectRatio} w-48 sm:w-64 lg:w-full mx-auto lg:mx-0 relative`}
+          >
+            {/* Placeholder shown until image loads or on error */}
+            {(!coverLoaded || coverError) && (
+              <CoverPlaceholder
+                className={`absolute inset-0 rounded-md border border-border`}
+                variant={coverFileType}
+              />
+            )}
+            {/* Image hidden until loaded, removed on error */}
+            {!coverError && (
               <img
                 alt={`${book.title} Cover`}
-                className="w-full h-full object-cover rounded-md border border-border"
+                className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
                 onError={() => setCoverError(true)}
-                src={`/api/books/${book.id}/cover?t=${coverCacheBuster}`}
-              />
-            ) : (
-              <CoverPlaceholder
-                className={`rounded-md border border-border ${coverAspectRatio}`}
-                variant={coverFileType}
+                onLoad={handleCoverLoad}
+                src={coverUrl!}
               />
             )}
           </div>
         </div>
 
         {/* Book Details */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div>
-            <div className="flex items-start gap-3 mb-2">
-              <h1 className="text-3xl font-semibold flex-1">{book.title}</h1>
-              <AddToListPopover
-                bookId={book.id}
-                trigger={
-                  <Button size="sm" title="Add to list" variant="outline">
-                    <List className="h-4 w-4 mr-2" />
-                    Add to list
-                  </Button>
-                }
-              />
-              <Button
-                onClick={() => setEditDialogOpen(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  onCloseAutoFocus={(e) => e.preventDefault()}
+            <div className="flex flex-col gap-3 mb-2">
+              <h1 className="text-2xl md:text-3xl font-semibold">
+                {book.title}
+              </h1>
+              <div className="flex items-center gap-2">
+                <AddToListPopover
+                  bookId={book.id}
+                  trigger={
+                    <Button size="sm" title="Add to list" variant="outline">
+                      <List className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Add to list</span>
+                    </Button>
+                  }
+                />
+                <Button
+                  onClick={() => setEditDialogOpen(true)}
+                  size="sm"
+                  variant="outline"
                 >
-                  <DropdownMenuItem
-                    disabled={resyncBookMutation.isPending}
-                    onClick={handleScanBookMetadata}
+                  <Edit className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Edit</span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
                   >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Scan for new metadata
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setShowBookRefreshDialog(true)}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh all metadata
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuItem
+                      disabled={resyncBookMutation.isPending}
+                      onClick={handleScanBookMetadata}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Scan for new metadata
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowBookRefreshDialog(true)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh all metadata
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
             {book.sort_title && book.sort_title !== book.title && (
               <p className="text-sm text-muted-foreground italic">
@@ -812,7 +834,7 @@ const BookDetail = () => {
             )}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             {/* Authors */}
             {book.authors &&
               book.authors.length > 0 &&
@@ -942,8 +964,18 @@ const BookDetail = () => {
               </div>
               <div>
                 <p className="font-semibold">File Path</p>
-                <p className="text-muted-foreground break-all">
-                  {book.filepath}
+                <p className="text-muted-foreground">
+                  {book.filepath.split("/").map((segment, i, arr) => (
+                    <React.Fragment key={i}>
+                      {segment}
+                      {i < arr.length - 1 && (
+                        <>
+                          /
+                          <wbr />
+                        </>
+                      )}
+                    </React.Fragment>
+                  ))}
                 </p>
               </div>
             </div>

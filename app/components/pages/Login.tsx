@@ -46,7 +46,7 @@ const Login = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -63,9 +63,9 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-dvh flex items-center justify-center bg-background px-4 py-8">
       <Toaster richColors />
-      <div className="w-full max-w-md p-8">
+      <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <Logo className="mb-2" size="lg" />
           <p className="text-muted-foreground text-center">

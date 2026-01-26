@@ -10,6 +10,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
+import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -58,13 +58,28 @@ const HomeContent = () => {
   const genreIdsParam = searchParams.get("genre_ids") ?? "";
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
 
-  const [searchInput, setSearchInput] = useState(searchQuery);
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
-  // Sync searchInput with URL when searchQuery changes (e.g., when clicking nav links)
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
+  // Callback for SearchInput - memoized to prevent unnecessary re-renders
+  const handleDebouncedSearchChange = useMemo(
+    () => (value: string) => {
+      setDebouncedSearch(value);
+      // Sync to URL when debounced value changes
+      if (value !== searchQuery) {
+        setSearchParams((prev) => {
+          const newParams = new URLSearchParams(prev);
+          if (value) {
+            newParams.set("search", value);
+          } else {
+            newParams.delete("search");
+          }
+          newParams.set("page", "1");
+          return newParams;
+        });
+      }
+    },
+    [searchQuery, setSearchParams],
+  );
 
   // Parse file types from URL
   const selectedFileTypes = fileTypesParam
@@ -159,46 +174,21 @@ const HomeContent = () => {
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
 
-  // Update URL when debounced search changes
-  const updateSearchParams = (
-    newSearch: string,
-    newFileTypes: string[],
-    resetPage: boolean = true,
-  ) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (newSearch) {
-      newParams.set("search", newSearch);
-    } else {
-      newParams.delete("search");
-    }
-    if (newFileTypes.length > 0) {
-      newParams.set("file_types", newFileTypes.join(","));
-    } else {
-      newParams.delete("file_types");
-    }
-    if (resetPage) {
-      newParams.set("page", "1");
-    }
-    setSearchParams(newParams);
-  };
-
-  // Handle search input change
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    // Update URL after debounce
-    setTimeout(() => {
-      if (value !== searchQuery) {
-        updateSearchParams(value, selectedFileTypes);
-      }
-    }, 300);
-  };
-
   // Toggle file type filter
   const toggleFileType = (fileType: string) => {
     const newFileTypes = selectedFileTypes.includes(fileType)
       ? selectedFileTypes.filter((ft) => ft !== fileType)
       : [...selectedFileTypes, fileType];
-    updateSearchParams(searchInput, newFileTypes);
+    setSearchParams((prev) => {
+      const newParams = new URLSearchParams(prev);
+      if (newFileTypes.length > 0) {
+        newParams.set("file_types", newFileTypes.join(","));
+      } else {
+        newParams.delete("file_types");
+      }
+      newParams.set("page", "1");
+      return newParams;
+    });
   };
 
   // Toggle genre filter
@@ -263,6 +253,45 @@ const HomeContent = () => {
 
   const booksQuery = useBooks(booksQueryParams);
 
+  // Track the filter state that produced the currently displayed data
+  // We use a stringified version of all filter params for comparison
+  const currentFilterKey = JSON.stringify({
+    search: debouncedSearch,
+    fileTypes: selectedFileTypes,
+    genreIds: selectedGenreIds,
+    tagIds: selectedTagIds,
+  });
+  const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
+    null,
+  );
+
+  // Track whether the confirmed query had any filters applied
+  const [confirmedHasFilters, setConfirmedHasFilters] = useState(false);
+
+  useEffect(() => {
+    if (booksQuery.isSuccess && !booksQuery.isFetching) {
+      setConfirmedFilterKey(currentFilterKey);
+      setConfirmedHasFilters(
+        debouncedSearch !== "" ||
+          selectedFileTypes.length > 0 ||
+          selectedGenreIds.length > 0 ||
+          selectedTagIds.length > 0,
+      );
+    }
+  }, [
+    booksQuery.isSuccess,
+    booksQuery.isFetching,
+    currentFilterKey,
+    debouncedSearch,
+    selectedFileTypes.length,
+    selectedGenreIds.length,
+    selectedTagIds.length,
+  ]);
+
+  // Data is stale if filters changed but query hasn't completed yet
+  const isStaleData =
+    confirmedFilterKey !== null && currentFilterKey !== confirmedFilterKey;
+
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
@@ -303,12 +332,10 @@ const HomeContent = () => {
 
       {/* Search and Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
-        <Input
-          className="max-w-xs"
-          onChange={(e) => handleSearchChange(e.target.value)}
+        <SearchInput
+          initialValue={searchQuery}
+          onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search books..."
-          type="search"
-          value={searchInput}
         />
         {/* File Type Filter */}
         <Popover
@@ -527,8 +554,15 @@ const HomeContent = () => {
       )}
 
       <Gallery
-        isLoading={booksQuery.isLoading}
-        isSuccess={booksQuery.isSuccess}
+        emptyMessage={
+          confirmedHasFilters
+            ? "No books found matching your search or filters."
+            : "No books in this library yet."
+        }
+        isLoading={booksQuery.isLoading || booksQuery.isFetching || isStaleData}
+        isSuccess={
+          booksQuery.isSuccess && !booksQuery.isFetching && !isStaleData
+        }
         itemLabel="books"
         items={booksQuery.data?.books ?? []}
         itemsPerPage={ITEMS_PER_PAGE}

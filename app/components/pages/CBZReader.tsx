@@ -252,10 +252,25 @@ export default function CBZReader() {
 
       {/* Page Display */}
       <main
-        className={`flex-1 flex items-center justify-center bg-black ${
+        className={`flex-1 flex items-center justify-center bg-black relative ${
           fitMode === "original" ? "overflow-auto" : "overflow-hidden"
         }`}
       >
+        {/* Tap zones for mobile navigation */}
+        <button
+          aria-label="Previous page"
+          className="absolute left-0 top-0 w-1/3 h-full z-10 cursor-pointer opacity-0"
+          disabled={currentPage === 0}
+          onClick={() => goToPage(currentPage - 1)}
+          type="button"
+        />
+        <button
+          aria-label="Next page"
+          className="absolute right-0 top-0 w-1/3 h-full z-10 cursor-pointer opacity-0"
+          onClick={() => goToPage(currentPage + 1)}
+          type="button"
+        />
+
         <img
           alt={`Page ${currentPage + 1}`}
           className={

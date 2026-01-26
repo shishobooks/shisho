@@ -162,7 +162,7 @@ const SeriesDetail = () => {
           <h2 className="text-xl font-semibold mb-4">Books in Series</h2>
           {seriesBooksQuery.isLoading && <LoadingSpinner />}
           {seriesBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-wrap gap-4">
               {seriesBooksQuery.data.map((book) => (
                 <BookItem book={book} key={book.id} libraryId={libraryId!} />
               ))}

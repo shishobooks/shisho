@@ -174,7 +174,7 @@ const PersonDetail = () => {
           <h2 className="text-xl font-semibold mb-4">Books Authored</h2>
           {authoredBooksQuery.isLoading && <LoadingSpinner />}
           {authoredBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-wrap gap-4">
               {authoredBooksQuery.data.map((book) => (
                 <BookItem book={book} key={book.id} libraryId={libraryId!} />
               ))}

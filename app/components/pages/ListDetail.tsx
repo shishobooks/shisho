@@ -123,7 +123,7 @@ const ListDetail = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
           <LoadingSpinner />
         </div>
       </div>
@@ -134,9 +134,11 @@ const ListDetail = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-6 py-8">
+        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
           <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">List Not Found</h1>
+            <h1 className="text-xl md:text-2xl font-semibold mb-4">
+              List Not Found
+            </h1>
             <p className="text-muted-foreground mb-6">
               The list you're looking for doesn't exist or may have been
               removed.
@@ -157,22 +159,22 @@ const ListDetail = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+      <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
         {/* List Header */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4 mb-2">
-            <h1 className="text-3xl font-bold min-w-0 break-words">
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col gap-3 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold min-w-0 break-words">
               {list.name}
             </h1>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-2">
               {canEdit && (
                 <Button
                   onClick={() => setEditDialogOpen(true)}
                   size="sm"
                   variant="outline"
                 >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
+                  <Edit className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Edit</span>
                 </Button>
               )}
               {canManage && (
@@ -181,8 +183,8 @@ const ListDetail = () => {
                   size="sm"
                   variant="outline"
                 >
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
+                  <Share2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Share</span>
                 </Button>
               )}
               {isOwner && (
@@ -191,14 +193,16 @@ const ListDetail = () => {
                   size="sm"
                   variant="outline"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  <Trash2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Delete</span>
                 </Button>
               )}
             </div>
           </div>
           {list.description && (
-            <p className="text-muted-foreground mb-2">{list.description}</p>
+            <p className="text-sm md:text-base text-muted-foreground mb-2">
+              {list.description}
+            </p>
           )}
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary">

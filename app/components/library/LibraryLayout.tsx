@@ -17,8 +17,13 @@ const LibraryLayout = ({
     <div className="flex flex-col min-h-screen">
       <TopNav />
       <div className="flex flex-1">
-        <LibrarySidebar />
-        <main className={`flex-1 w-full mx-auto px-6 py-8 ${maxWidth}`}>
+        {/* Desktop sidebar - hidden on mobile */}
+        <div className="hidden md:block">
+          <LibrarySidebar />
+        </div>
+        <main
+          className={`flex-1 w-full mx-auto px-4 py-4 md:px-6 md:py-8 ${maxWidth}`}
+        >
           {children}
         </main>
       </div>

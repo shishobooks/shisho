@@ -138,7 +138,7 @@ const LibrarySidebar = () => {
   return (
     <aside
       className={cn(
-        "shrink-0 border-r border-border bg-muted/30 dark:bg-neutral-900/50 transition-all duration-200 h-[calc(100vh-4rem)] sticky top-16 flex flex-col",
+        "shrink-0 border-r border-border bg-muted/30 dark:bg-neutral-900/50 transition-all duration-200 h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] sticky top-14 md:top-16 flex flex-col",
         collapsed ? "w-14" : "w-48",
       )}
     >

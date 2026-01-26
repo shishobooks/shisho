@@ -149,7 +149,7 @@ const TagDetail = () => {
           <h2 className="text-xl font-semibold mb-4">Books</h2>
           {tagBooksQuery.isLoading && <LoadingSpinner />}
           {tagBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-wrap gap-4">
               {tagBooksQuery.data.map((book) => (
                 <BookItem book={book} key={book.id} libraryId={libraryId!} />
               ))}

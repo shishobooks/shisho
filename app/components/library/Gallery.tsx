@@ -20,6 +20,7 @@ interface GalleryProps<T> {
   itemsPerPage?: number;
   renderItem: (item: T) => ReactNode;
   itemLabel: string;
+  emptyMessage?: string;
 }
 
 const Gallery = <T,>({
@@ -30,6 +31,7 @@ const Gallery = <T,>({
   itemsPerPage = 20,
   renderItem,
   itemLabel,
+  emptyMessage,
 }: GalleryProps<T>) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
@@ -79,7 +81,15 @@ const Gallery = <T,>({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-4 mb-8">{items.map(renderItem)}</div>
+      {total === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          {emptyMessage ?? `No ${itemLabel} found.`}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-4 sm:gap-4 mb-6 md:mb-8">
+        {items.map(renderItem)}
+      </div>
 
       {totalPages > 1 && (
         <Pagination className="mb-8">

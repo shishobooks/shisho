@@ -1,5 +1,15 @@
-import { KeyRound, List, LogOut, Settings, User, UserCog } from "lucide-react";
-import { useCallback } from "react";
+import {
+  KeyRound,
+  List,
+  LogOut,
+  Menu,
+  Search,
+  Settings,
+  User,
+  UserCog,
+  X,
+} from "lucide-react";
+import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -22,12 +32,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useMobileNav } from "@/contexts/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/libraries/utils";
 
 const TopNav = () => {
   const { libraryId } = useParams();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
+  const { toggle } = useMobileNav();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // Check if user has any admin permissions
   const canAccessAdmin =
@@ -49,22 +63,63 @@ const TopNav = () => {
   }, [logout, navigate]);
 
   return (
-    <div className="border-b border-border bg-background dark:bg-neutral-900">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-8">
-            <Logo asLink />
-            {/* Library/List Picker and Resync */}
-            <div className="flex items-center gap-1">
+    <div className="border-b border-border bg-background dark:bg-neutral-900 sticky top-0 z-30">
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="flex items-center justify-between h-14 md:h-16">
+          {/* Left section */}
+          <div className="flex items-center gap-2 md:gap-8">
+            {/* Mobile hamburger menu */}
+            <Button
+              aria-label="Open navigation menu"
+              className="md:hidden h-9 w-9 -ml-1"
+              onClick={toggle}
+              size="icon"
+              variant="ghost"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            {/* Logo - hidden on mobile when search is open */}
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                mobileSearchOpen && "hidden sm:block",
+              )}
+            >
+              <Logo asLink />
+            </div>
+
+            {/* Library/List Picker - hidden on mobile, shown on tablet+ */}
+            <div className="hidden sm:flex items-center gap-1">
               <LibraryListPicker />
-              {/* Resync Button */}
               {libraryId && canResync && (
                 <ResyncButton libraryId={Number(libraryId)} />
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <GlobalSearch />
+
+          {/* Right section */}
+          <div className="flex items-center gap-1 md:gap-4">
+            {/* Mobile search toggle */}
+            <Button
+              aria-label={mobileSearchOpen ? "Close search" : "Open search"}
+              className="md:hidden h-9 w-9"
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              size="icon"
+              variant="ghost"
+            >
+              {mobileSearchOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Search className="h-5 w-5" />
+              )}
+            </Button>
+
+            {/* Desktop search */}
+            <div className="hidden md:block">
+              <GlobalSearch />
+            </div>
+
             {canAccessAdmin && (
               <TooltipProvider>
                 <Tooltip>
@@ -127,6 +182,16 @@ const TopNav = () => {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+        </div>
+
+        {/* Mobile search bar - expandable */}
+        <div
+          className={cn(
+            "md:hidden overflow-hidden transition-all duration-200 ease-out",
+            mobileSearchOpen ? "max-h-16 pb-3" : "max-h-0",
+          )}
+        >
+          <GlobalSearch fullWidth onClose={() => setMobileSearchOpen(false)} />
         </div>
       </div>
     </div>

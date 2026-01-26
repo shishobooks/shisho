@@ -16,17 +16,21 @@ interface UserRowProps {
 
 const UserRow = ({ user }: UserRowProps) => (
   <Link
-    className="flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors"
+    className="flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors"
     to={`/settings/users/${user.id}`}
   >
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3">
-        <span className="font-medium text-foreground">{user.username}</span>
+      <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+        <span className="font-medium text-foreground text-sm md:text-base">
+          {user.username}
+        </span>
         {user.role && <Badge variant="secondary">{user.role.name}</Badge>}
         {!user.is_active && <Badge variant="destructive">Inactive</Badge>}
       </div>
       {user.email && (
-        <p className="text-sm text-muted-foreground mt-1">{user.email}</p>
+        <p className="text-xs md:text-sm text-muted-foreground mt-1 truncate">
+          {user.email}
+        </p>
       )}
     </div>
   </Link>
@@ -42,16 +46,18 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 
   return (
     <button
-      className="w-full flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors text-left cursor-pointer"
+      className="w-full flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors text-left cursor-pointer gap-3"
       onClick={onClick}
       type="button"
     >
-      <div className="flex items-center gap-3">
-        <Shield className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium text-foreground">{role.name}</span>
+      <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+        <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="font-medium text-foreground text-sm md:text-base">
+          {role.name}
+        </span>
         {role.is_system && <Badge variant="outline">System</Badge>}
       </div>
-      <span className="text-sm text-muted-foreground">
+      <span className="text-xs md:text-sm text-muted-foreground shrink-0">
         {permissionCount} permission{permissionCount !== 1 ? "s" : ""}
       </span>
     </button>
@@ -118,20 +124,24 @@ const AdminUsers = () => {
     <div className="space-y-12">
       {/* Users Section */}
       <div>
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-2xl font-semibold mb-2">Users</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+              Users
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
               Manage user accounts and permissions.
             </p>
           </div>
           {canCreateUsers && (
-            <Button asChild size="sm">
-              <Link to="/settings/users/create">
-                <Plus className="h-4 w-4 mr-2" />
-                Add User
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button asChild size="sm">
+                <Link to="/settings/users/create">
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add User</span>
+                </Link>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -150,18 +160,22 @@ const AdminUsers = () => {
 
       {/* Roles Section */}
       <div>
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h2 className="text-2xl font-semibold mb-2">Roles</h2>
-            <p className="text-muted-foreground">
+            <h2 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+              Roles
+            </h2>
+            <p className="text-sm md:text-base text-muted-foreground">
               Define roles with custom permissions.
             </p>
           </div>
           {canManageRoles && (
-            <Button onClick={() => handleOpenRoleDialog()} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Role
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button onClick={() => handleOpenRoleDialog()} size="sm">
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Role</span>
+              </Button>
+            </div>
           )}
         </div>
 

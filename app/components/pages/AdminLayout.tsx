@@ -1,10 +1,20 @@
-import { Briefcase, Cog, Library, LogOut, Puzzle, Users } from "lucide-react";
+import {
+  Briefcase,
+  Cog,
+  Library,
+  LogOut,
+  Menu,
+  Puzzle,
+  Users,
+} from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
+import MobileDrawer from "@/components/library/MobileDrawer";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { MobileNavProvider, useMobileNav } from "@/contexts/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
 
 interface NavItemProps {
@@ -28,7 +38,81 @@ const NavItem = ({ to, icon, label, isActive }: NavItemProps) => (
   </Link>
 );
 
-const AdminLayout = () => {
+const AdminHeader = () => {
+  const { toggle } = useMobileNav();
+
+  return (
+    <div className="border-b border-border bg-background dark:bg-neutral-900 sticky top-0 z-30">
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="flex items-center justify-between h-14 md:h-16">
+          <div className="flex items-center gap-2 md:gap-8">
+            {/* Mobile hamburger menu */}
+            <Button
+              aria-label="Open navigation menu"
+              className="md:hidden h-9 w-9 -ml-1"
+              onClick={toggle}
+              size="icon"
+              variant="ghost"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <Logo asLink />
+            <span className="hidden sm:inline text-sm text-muted-foreground">
+              Settings
+            </span>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4">
+            <Button asChild size="sm" variant="ghost">
+              <Link className="hidden sm:flex" to="/">
+                ← Back to Library
+              </Link>
+            </Button>
+            <Button asChild className="sm:hidden" size="icon" variant="ghost">
+              <Link to="/">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface MobileNavItemProps {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  isActive: boolean;
+}
+
+const MobileNavItem = ({ to, icon, label, isActive }: MobileNavItemProps) => (
+  <Link
+    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+      isActive
+        ? "bg-primary/10 text-primary dark:bg-violet-900/30 dark:text-violet-300"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    }`}
+    to={to}
+  >
+    {icon}
+    {label}
+  </Link>
+);
+
+const AdminLayoutContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
@@ -48,29 +132,70 @@ const AdminLayout = () => {
   const canViewJobs = hasPermission("jobs", "read");
   const canViewConfig = hasPermission("config", "read");
 
+  const mobileNavItems = [
+    {
+      to: "/settings/server",
+      icon: <Cog className="h-4 w-4" />,
+      label: "Server",
+      isActive:
+        location.pathname === "/settings/server" ||
+        location.pathname === "/settings",
+      show: canViewConfig,
+    },
+    {
+      to: "/settings/libraries",
+      icon: <Library className="h-4 w-4" />,
+      label: "Libraries",
+      isActive: location.pathname.startsWith("/settings/libraries"),
+      show: canViewLibraries,
+    },
+    {
+      to: "/settings/users",
+      icon: <Users className="h-4 w-4" />,
+      label: "Users",
+      isActive: location.pathname.startsWith("/settings/users"),
+      show: canViewUsers,
+    },
+    {
+      to: "/settings/jobs",
+      icon: <Briefcase className="h-4 w-4" />,
+      label: "Jobs",
+      isActive: location.pathname === "/settings/jobs",
+      show: canViewJobs,
+    },
+    {
+      to: "/settings/plugins",
+      icon: <Puzzle className="h-4 w-4" />,
+      label: "Plugins",
+      isActive: location.pathname === "/settings/plugins",
+      show: canViewConfig,
+    },
+  ].filter((item) => item.show);
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Top bar */}
-      <div className="border-b border-border bg-background dark:bg-neutral-900">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-8">
-              <Logo asLink />
-              <span className="text-sm text-muted-foreground">Settings</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button asChild size="sm" variant="ghost">
-                <Link to="/">← Back to Library</Link>
-              </Button>
-            </div>
-          </div>
+      <AdminHeader />
+      <MobileDrawer />
+
+      {/* Mobile horizontal nav - visible only on mobile */}
+      <div className="md:hidden border-b border-border bg-background overflow-x-auto">
+        <div className="flex gap-1 px-4 py-2">
+          {mobileNavItems.map((item) => (
+            <MobileNavItem
+              icon={item.icon}
+              isActive={item.isActive}
+              key={item.to}
+              label={item.label}
+              to={item.to}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-8">
         <div className="flex gap-8">
-          {/* Sidebar */}
-          <aside className="w-56 flex-shrink-0">
+          {/* Desktop Sidebar - hidden on mobile */}
+          <aside className="hidden md:block w-56 flex-shrink-0">
             <nav className="space-y-1">
               {canViewConfig && (
                 <NavItem
@@ -160,6 +285,14 @@ const AdminLayout = () => {
       </div>
       <Toaster richColors />
     </div>
+  );
+};
+
+const AdminLayout = () => {
+  return (
+    <MobileNavProvider>
+      <AdminLayoutContent />
+    </MobileNavProvider>
   );
 };
 

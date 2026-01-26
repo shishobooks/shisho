@@ -188,6 +188,22 @@ const CBZPagePicker = ({
             <ChevronRight className="w-8 h-8" />
           </button>
 
+          {/* Tap zones for mobile navigation */}
+          <button
+            aria-label="Previous page"
+            className="absolute left-0 top-0 w-1/3 h-full z-20 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            disabled={!canGoPrevious}
+            onClick={goToPrevious}
+            type="button"
+          />
+          <button
+            aria-label="Next page"
+            className="absolute right-0 top-0 w-1/3 h-full z-20 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            disabled={!canGoNext}
+            onClick={goToNext}
+            type="button"
+          />
+
           {/* Main image container */}
           <div className="w-full h-full flex items-center justify-center p-4 px-16">
             {isInitialLoad && (

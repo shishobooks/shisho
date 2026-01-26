@@ -14,26 +14,24 @@ interface LibraryRowProps {
 }
 
 const LibraryRow = ({ library }: LibraryRowProps) => (
-  <div className="flex items-center justify-between py-4 px-6 hover:bg-muted/50 transition-colors">
+  <div className="flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors gap-3">
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3">
-        <Link
-          className="font-medium text-foreground hover:underline"
-          to={`/libraries/${library.id}`}
-        >
-          {library.name}
-        </Link>
-      </div>
-      <p className="text-sm text-muted-foreground mt-1">
+      <Link
+        className="font-medium text-foreground hover:underline truncate block"
+        to={`/libraries/${library.id}`}
+      >
+        {library.name}
+      </Link>
+      <p className="text-sm text-muted-foreground mt-0.5 md:mt-1">
         {library.library_paths?.length || 0} path
-        {library.library_paths?.length !== 1 ? "s" : ""} configured
+        {library.library_paths?.length !== 1 ? "s" : ""}
       </p>
     </div>
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 shrink-0">
       <Button asChild size="sm" variant="ghost">
         <Link to={`/libraries/${library.id}/settings`}>
-          <Settings className="h-4 w-4 mr-2" />
-          Settings
+          <Settings className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Settings</span>
         </Link>
       </Button>
     </div>
@@ -88,14 +86,16 @@ const AdminLibraries = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-2xl font-semibold mb-2">Libraries</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+            Libraries
+          </h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Manage your media libraries and their settings.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {isDevelopment && (
             <Button
               disabled={createLibraryMutation.isPending}
@@ -103,15 +103,17 @@ const AdminLibraries = () => {
               size="sm"
               variant="outline"
             >
-              <BookPlus className="h-4 w-4 mr-2" />
-              Create default library (dev)
+              <BookPlus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">
+                Create default library (dev)
+              </span>
             </Button>
           )}
           {canCreateLibraries && (
             <Button asChild size="sm">
               <Link to="/libraries/create">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Library
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Library</span>
               </Link>
             </Button>
           )}

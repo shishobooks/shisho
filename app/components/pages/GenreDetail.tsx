@@ -151,7 +151,7 @@ const GenreDetail = () => {
           <h2 className="text-xl font-semibold mb-4">Books</h2>
           {genreBooksQuery.isLoading && <LoadingSpinner />}
           {genreBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-wrap gap-4">
               {genreBooksQuery.data.map((book) => (
                 <BookItem book={book} key={book.id} libraryId={libraryId!} />
               ))}

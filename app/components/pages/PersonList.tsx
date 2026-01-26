@@ -3,8 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -14,7 +14,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
-import { useDebounce } from "@/hooks/useDebounce";
 
 const ITEMS_PER_PAGE = 24;
 
@@ -23,34 +22,26 @@ const PersonList = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const searchQuery = searchParams.get("search") ?? "";
-  const [searchInput, setSearchInput] = useState(searchQuery);
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
-  // Sync searchInput with URL when searchQuery changes (e.g., when clicking nav links)
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
-
-  const limit = ITEMS_PER_PAGE;
-  const offset = (currentPage - 1) * limit;
-
-  // Handle search input change with debounce
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    // Update URL after debounce
-    setTimeout(() => {
-      if (value !== searchQuery) {
-        const newParams = new URLSearchParams(searchParams);
+  const handleDebouncedSearchChange = (value: string) => {
+    setDebouncedSearch(value);
+    if (value !== searchQuery) {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
         if (value) {
           newParams.set("search", value);
         } else {
           newParams.delete("search");
         }
         newParams.set("page", "1");
-        setSearchParams(newParams);
-      }
-    }, 300);
+        return newParams;
+      });
+    }
   };
+
+  const limit = ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * limit;
 
   const peopleQuery = usePeopleList({
     limit,
@@ -58,6 +49,19 @@ const PersonList = () => {
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
+
+  // Track the search value that produced the currently displayed data
+  const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (peopleQuery.isSuccess && !peopleQuery.isFetching) {
+      setConfirmedSearch(debouncedSearch);
+    }
+  }, [peopleQuery.isSuccess, peopleQuery.isFetching, debouncedSearch]);
+
+  // Data is stale if search changed but query hasn't completed yet
+  const isStaleData =
+    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
   const totalPages = Math.ceil((peopleQuery.data?.total ?? 0) / ITEMS_PER_PAGE);
 
@@ -107,18 +111,19 @@ const PersonList = () => {
       </div>
 
       <div className="mb-6">
-        <Input
+        <SearchInput
           className="max-w-md"
-          onChange={(e) => handleSearchChange(e.target.value)}
+          initialValue={searchQuery}
+          onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search by name..."
-          type="search"
-          value={searchInput}
         />
       </div>
 
-      {peopleQuery.isLoading && <LoadingSpinner />}
+      {(peopleQuery.isLoading || peopleQuery.isFetching || isStaleData) && (
+        <LoadingSpinner />
+      )}
 
-      {peopleQuery.isSuccess && (
+      {peopleQuery.isSuccess && !peopleQuery.isFetching && !isStaleData && (
         <>
           {peopleQuery.data.total > 0 && (
             <div className="mb-4 text-sm text-muted-foreground">
@@ -131,7 +136,7 @@ const PersonList = () => {
           <div className="space-y-2 mb-6">
             {peopleQuery.data.people.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                {searchQuery
+                {confirmedSearch
                   ? "No people found matching your search."
                   : "No people in this library yet."}
               </div>

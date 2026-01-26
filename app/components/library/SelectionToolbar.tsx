@@ -50,17 +50,16 @@ export const SelectionToolbar = () => {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-4 py-2 flex items-center gap-4">
-      <span className="text-sm font-medium">
-        {selectedBookIds.length} book{selectedBookIds.length !== 1 ? "s" : ""}{" "}
-        selected
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3">
+      <span className="text-sm font-medium whitespace-nowrap tabular-nums">
+        {selectedBookIds.length} selected
       </span>
 
       <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
         <PopoverTrigger asChild>
           <Button size="sm" variant="default">
             <List className="h-4 w-4" />
-            Add to List
+            Add
           </Button>
         </PopoverTrigger>
         <PopoverContent align="center" className="w-56 p-0" side="top">
@@ -107,7 +106,12 @@ export const SelectionToolbar = () => {
         Clear
       </Button>
 
-      <Button onClick={exitSelectionMode} size="sm" variant="ghost">
+      <Button
+        className="h-8 w-8"
+        onClick={exitSelectionMode}
+        size="icon"
+        variant="ghost"
+      >
         <X className="h-4 w-4" />
       </Button>
     </div>

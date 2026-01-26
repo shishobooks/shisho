@@ -4,13 +4,13 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
+import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
-import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 import type { Series } from "@/types";
+import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 // For series, we don't have access to the underlying files, so we use the
 // library's cover_aspect_ratio preference to determine aspect ratio.
@@ -42,40 +42,52 @@ const SeriesCard = ({
   aspectClass,
   isAudiobook,
 }: SeriesCardProps) => {
+  const coverUrl = `/api/series/${seriesItem.id}/cover?t=${new Date(seriesItem.updated_at).getTime()}`;
+  const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const bookCount = seriesItem.book_count ?? 0;
   const showSortName =
     seriesItem.sort_name && seriesItem.sort_name !== seriesItem.name;
 
+  const handleCoverLoad = () => {
+    markCoverLoaded(coverUrl);
+    setCoverLoaded(true);
+  };
+
   return (
     <div
-      className="w-32"
+      className="w-[calc(50%-0.5rem)] sm:w-32"
       title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
     >
       <Link
         className="group cursor-pointer"
         to={`/libraries/${libraryId}/series/${seriesItem.id}`}
       >
-        {!coverError ? (
-          <img
-            alt={`${seriesItem.name} Cover`}
-            className={cn(
-              "w-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
-              aspectClass,
-            )}
-            onError={() => setCoverError(true)}
-            src={`/api/series/${seriesItem.id}/cover?t=${new Date(seriesItem.updated_at).getTime()}`}
-          />
-        ) : (
-          <CoverPlaceholder
-            className={cn(
-              "rounded-sm border border-neutral-300 dark:border-neutral-600",
-              aspectClass,
-            )}
-            variant={isAudiobook ? "audiobook" : "book"}
-          />
-        )}
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2 w-32">
+        <div className={cn("relative", aspectClass)}>
+          {/* Placeholder shown until image loads or on error */}
+          {(!coverLoaded || coverError) && (
+            <CoverPlaceholder
+              className={cn(
+                "absolute inset-0 rounded-sm border border-neutral-300 dark:border-neutral-600",
+              )}
+              variant={isAudiobook ? "audiobook" : "book"}
+            />
+          )}
+          {/* Image hidden until loaded, removed on error */}
+          {!coverError && (
+            <img
+              alt={`${seriesItem.name} Cover`}
+              className={cn(
+                "w-full h-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+                !coverLoaded && "opacity-0",
+              )}
+              onError={() => setCoverError(true)}
+              onLoad={handleCoverLoad}
+              src={coverUrl}
+            />
+          )}
+        </div>
+        <div className="mt-2 group-hover:underline font-bold line-clamp-2">
           {seriesItem.name}
         </div>
       </Link>
@@ -94,13 +106,23 @@ const SeriesList = () => {
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const searchQuery = searchParams.get("search") ?? "";
 
-  const [searchInput, setSearchInput] = useState(searchQuery);
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
-  // Sync searchInput with URL when searchQuery changes (e.g., when clicking nav links)
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
+  const handleDebouncedSearchChange = (value: string) => {
+    setDebouncedSearch(value);
+    if (value !== searchQuery) {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        if (value) {
+          newParams.set("search", value);
+        } else {
+          newParams.delete("search");
+        }
+        newParams.set("page", "1");
+        return newParams;
+      });
+    }
+  };
 
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;
@@ -108,30 +130,25 @@ const SeriesList = () => {
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
-  // Handle search input change
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    // Update URL after debounce
-    setTimeout(() => {
-      if (value !== searchQuery) {
-        const newParams = new URLSearchParams(searchParams);
-        if (value) {
-          newParams.set("search", value);
-        } else {
-          newParams.delete("search");
-        }
-        newParams.set("page", "1");
-        setSearchParams(newParams);
-      }
-    }, 300);
-  };
-
   const seriesQuery = useSeriesList({
     limit,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
+
+  // Track the search value that produced the currently displayed data
+  const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (seriesQuery.isSuccess && !seriesQuery.isFetching) {
+      setConfirmedSearch(debouncedSearch);
+    }
+  }, [seriesQuery.isSuccess, seriesQuery.isFetching, debouncedSearch]);
+
+  // Data is stale if search changed but query hasn't completed yet
+  const isStaleData =
+    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
   const renderSeriesItem = (seriesItem: Series) => {
     const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
@@ -158,18 +175,25 @@ const SeriesList = () => {
       </div>
 
       <div className="mb-6">
-        <Input
-          className="max-w-xs"
-          onChange={(e) => handleSearchChange(e.target.value)}
+        <SearchInput
+          initialValue={searchQuery}
+          onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search series..."
-          type="search"
-          value={searchInput}
         />
       </div>
 
       <Gallery
-        isLoading={seriesQuery.isLoading}
-        isSuccess={seriesQuery.isSuccess}
+        emptyMessage={
+          confirmedSearch
+            ? "No series found matching your search."
+            : "No series in this library yet."
+        }
+        isLoading={
+          seriesQuery.isLoading || seriesQuery.isFetching || isStaleData
+        }
+        isSuccess={
+          seriesQuery.isSuccess && !seriesQuery.isFetching && !isStaleData
+        }
         itemLabel="series"
         items={seriesQuery.data?.series ?? []}
         itemsPerPage={ITEMS_PER_PAGE}

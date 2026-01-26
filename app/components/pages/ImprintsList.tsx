@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
+import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { useImprintsList } from "@/hooks/queries/imprints";
-import { useDebounce } from "@/hooks/useDebounce";
 import type { Imprint } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
@@ -16,33 +15,26 @@ const ImprintsList = () => {
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const searchQuery = searchParams.get("search") ?? "";
 
-  const [searchInput, setSearchInput] = useState(searchQuery);
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
-  // Sync searchInput with URL when searchQuery changes
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
-
-  const limit = ITEMS_PER_PAGE;
-  const offset = (currentPage - 1) * limit;
-
-  // Handle search input change
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    setTimeout(() => {
-      if (value !== searchQuery) {
-        const newParams = new URLSearchParams(searchParams);
+  const handleDebouncedSearchChange = (value: string) => {
+    setDebouncedSearch(value);
+    if (value !== searchQuery) {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
         if (value) {
           newParams.set("search", value);
         } else {
           newParams.delete("search");
         }
         newParams.set("page", "1");
-        setSearchParams(newParams);
-      }
-    }, 300);
+        return newParams;
+      });
+    }
   };
+
+  const limit = ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * limit;
 
   const imprintsQuery = useImprintsList({
     limit,
@@ -50,6 +42,19 @@ const ImprintsList = () => {
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
+
+  // Track the search value that produced the currently displayed data
+  const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (imprintsQuery.isSuccess && !imprintsQuery.isFetching) {
+      setConfirmedSearch(debouncedSearch);
+    }
+  }, [imprintsQuery.isSuccess, imprintsQuery.isFetching, debouncedSearch]);
+
+  // Data is stale if search changed but query hasn't completed yet
+  const isStaleData =
+    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
   const total = imprintsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
@@ -85,28 +90,36 @@ const ImprintsList = () => {
       </div>
 
       <div className="mb-6">
-        <Input
-          className="max-w-xs"
-          onChange={(e) => handleSearchChange(e.target.value)}
+        <SearchInput
+          initialValue={searchQuery}
+          onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search imprints..."
-          type="search"
-          value={searchInput}
         />
       </div>
 
-      {imprintsQuery.isLoading && (
+      {(imprintsQuery.isLoading || imprintsQuery.isFetching || isStaleData) && (
         <div className="text-muted-foreground">Loading...</div>
       )}
 
-      {imprintsQuery.isSuccess && imprintsQuery.data.imprints.length === 0 && (
-        <div className="text-muted-foreground">No imprints found</div>
-      )}
+      {imprintsQuery.isSuccess &&
+        !imprintsQuery.isFetching &&
+        !isStaleData &&
+        imprintsQuery.data.imprints.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            {confirmedSearch
+              ? "No imprints found matching your search."
+              : "No imprints in this library yet."}
+          </div>
+        )}
 
-      {imprintsQuery.isSuccess && imprintsQuery.data.imprints.length > 0 && (
-        <div className="space-y-1">
-          {imprintsQuery.data.imprints.map(renderImprintItem)}
-        </div>
-      )}
+      {imprintsQuery.isSuccess &&
+        !imprintsQuery.isFetching &&
+        !isStaleData &&
+        imprintsQuery.data.imprints.length > 0 && (
+          <div className="space-y-1">
+            {imprintsQuery.data.imprints.map(renderImprintItem)}
+          </div>
+        )}
 
       {totalPages > 1 && (
         <div className="mt-6 flex justify-center gap-2">

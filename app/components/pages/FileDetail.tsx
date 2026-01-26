@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, BookOpen, Pencil } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
-import type { File } from "@/types";
+import { FileTypeCBZ, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 
 const validTabs = ["details", "chapters"] as const;
@@ -124,9 +124,9 @@ const FileDetail = () => {
       </div>
 
       {/* Breadcrumbs */}
-      <nav className="mb-4 text-sm text-muted-foreground">
-        <ol className="flex items-center gap-2">
-          <li>
+      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
+        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <li className="shrink-0">
             <Link
               className="hover:text-foreground hover:underline"
               to={`/libraries/${libraryId}`}
@@ -134,8 +134,10 @@ const FileDetail = () => {
               {library?.name || "Library"}
             </Link>
           </li>
-          <li aria-hidden="true">&gt;</li>
-          <li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="truncate max-w-[120px] sm:max-w-none">
             <Link
               className="hover:text-foreground hover:underline"
               to={`/libraries/${libraryId}/books/${bookId}`}
@@ -143,47 +145,66 @@ const FileDetail = () => {
               {book.title}
             </Link>
           </li>
-          <li aria-hidden="true">&gt;</li>
-          <li className="text-foreground">{filename}</li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="text-foreground truncate">{filename}</li>
         </ol>
       </nav>
 
       {/* File title with Edit/Save/Cancel buttons */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-semibold">{filename}</h1>
-        {activeTab === "chapters" && isEditingChapters ? (
-          <div className="flex gap-2">
-            <Button
-              disabled={
-                !chaptersActionState.canSave || chaptersActionState.isSaving
-              }
-              onClick={() => chaptersRef.current?.save()}
-            >
-              {chaptersActionState.isSaving ? "Saving..." : "Save"}
+      <div className="flex flex-col gap-3 mb-6">
+        <h1 className="text-2xl md:text-3xl font-semibold">{filename}</h1>
+        <div className="flex items-center gap-2">
+          {/* Read button for CBZ files */}
+          {file.file_type === FileTypeCBZ && (
+            <Button asChild size="sm">
+              <Link
+                to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}
+              >
+                <BookOpen className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Read</span>
+              </Link>
             </Button>
+          )}
+
+          {activeTab === "chapters" && isEditingChapters ? (
+            <>
+              <Button
+                disabled={
+                  !chaptersActionState.canSave || chaptersActionState.isSaving
+                }
+                onClick={() => chaptersRef.current?.save()}
+                size="sm"
+              >
+                {chaptersActionState.isSaving ? "Saving..." : "Save"}
+              </Button>
+              <Button
+                disabled={chaptersActionState.isSaving}
+                onClick={() => chaptersRef.current?.cancel()}
+                size="sm"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
             <Button
-              disabled={chaptersActionState.isSaving}
-              onClick={() => chaptersRef.current?.cancel()}
+              onClick={() => {
+                if (activeTab === "details") {
+                  setEditingFile(file);
+                } else {
+                  setIsEditingChapters(true);
+                }
+              }}
+              size="sm"
               variant="outline"
             >
-              Cancel
+              <Pencil className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Edit</span>
             </Button>
-          </div>
-        ) : (
-          <Button
-            onClick={() => {
-              if (activeTab === "details") {
-                setEditingFile(file);
-              } else {
-                setIsEditingChapters(true);
-              }
-            }}
-            variant="outline"
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

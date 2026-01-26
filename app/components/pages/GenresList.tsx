@@ -3,8 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -14,7 +14,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useGenresList } from "@/hooks/queries/genres";
-import { useDebounce } from "@/hooks/useDebounce";
 import type { Genre } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
@@ -25,33 +24,26 @@ const GenresList = () => {
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
   const searchQuery = searchParams.get("search") ?? "";
 
-  const [searchInput, setSearchInput] = useState(searchQuery);
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
-  // Sync searchInput with URL when searchQuery changes
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
-
-  const limit = ITEMS_PER_PAGE;
-  const offset = (currentPage - 1) * limit;
-
-  // Handle search input change
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    setTimeout(() => {
-      if (value !== searchQuery) {
-        const newParams = new URLSearchParams(searchParams);
+  const handleDebouncedSearchChange = (value: string) => {
+    setDebouncedSearch(value);
+    if (value !== searchQuery) {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
         if (value) {
           newParams.set("search", value);
         } else {
           newParams.delete("search");
         }
         newParams.set("page", "1");
-        setSearchParams(newParams);
-      }
-    }, 300);
+        return newParams;
+      });
+    }
   };
+
+  const limit = ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * limit;
 
   const genresQuery = useGenresList({
     limit,
@@ -59,6 +51,19 @@ const GenresList = () => {
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: debouncedSearch || undefined,
   });
+
+  // Track the search value that produced the currently displayed data
+  const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (genresQuery.isSuccess && !genresQuery.isFetching) {
+      setConfirmedSearch(debouncedSearch);
+    }
+  }, [genresQuery.isSuccess, genresQuery.isFetching, debouncedSearch]);
+
+  // Data is stale if search changed but query hasn't completed yet
+  const isStaleData =
+    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
   const total = genresQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
@@ -94,18 +99,18 @@ const GenresList = () => {
       </div>
 
       <div className="mb-6">
-        <Input
-          className="max-w-xs"
-          onChange={(e) => handleSearchChange(e.target.value)}
+        <SearchInput
+          initialValue={searchQuery}
+          onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search genres..."
-          type="search"
-          value={searchInput}
         />
       </div>
 
-      {genresQuery.isLoading && <LoadingSpinner />}
+      {(genresQuery.isLoading || genresQuery.isFetching || isStaleData) && (
+        <LoadingSpinner />
+      )}
 
-      {genresQuery.isSuccess && (
+      {genresQuery.isSuccess && !genresQuery.isFetching && !isStaleData && (
         <>
           {total > 0 && (
             <div className="mb-4 text-sm text-muted-foreground">
@@ -116,7 +121,7 @@ const GenresList = () => {
 
           {genresQuery.data.genres.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery
+              {confirmedSearch
                 ? "No genres found matching your search."
                 : "No genres in this library yet."}
             </div>

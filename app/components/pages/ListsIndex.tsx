@@ -63,19 +63,19 @@ const ListsIndex = () => {
 
     return (
       <Link
-        className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-lg border bg-card hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
         key={list.id}
         to={`/lists/${list.id}`}
       >
-        <div className="flex flex-col gap-1">
-          <span className="font-medium">{list.name}</span>
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="font-medium text-sm md:text-base">{list.name}</span>
           {list.description && (
-            <span className="text-sm text-muted-foreground line-clamp-1">
+            <span className="text-xs md:text-sm text-muted-foreground line-clamp-1">
               {list.description}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {list.permission !== "owner" && (
             <Badge variant="outline">{list.permission}</Badge>
           )}
@@ -107,18 +107,22 @@ const ListsIndex = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-3xl w-full mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="max-w-3xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-2xl font-semibold mb-2">Lists</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+              Lists
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
               Organize your books into custom collections
             </p>
           </div>
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Create List
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Create List</span>
+            </Button>
+          </div>
         </div>
 
         {listsQuery.isLoading && (

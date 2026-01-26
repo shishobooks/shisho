@@ -26,9 +26,9 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
 
   return (
     <div className="flex flex-col py-3 border-b border-border last:border-b-0">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
         <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className="text-sm text-muted-foreground font-mono">
+        <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-normal sm:text-right">
           {displayValue}
         </span>
       </div>
@@ -63,9 +63,11 @@ const AdminSettings = () => {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Server Settings</h1>
-        <p className="text-muted-foreground">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+          Server Settings
+        </h1>
+        <p className="text-sm md:text-base text-muted-foreground">
           Current system configuration. Settings can be changed via the config
           file or environment variables.
         </p>
@@ -73,8 +75,10 @@ const AdminSettings = () => {
 
       <div className="grid gap-6 max-w-2xl">
         {/* Database Settings */}
-        <div className="border border-border rounded-md p-6">
-          <h2 className="text-lg font-semibold mb-4">Database</h2>
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Database
+          </h2>
           <div className="space-y-0">
             <ConfigRow
               description="Path to the SQLite database file"
@@ -110,8 +114,10 @@ const AdminSettings = () => {
         </div>
 
         {/* Server Settings */}
-        <div className="border border-border rounded-md p-6">
-          <h2 className="text-lg font-semibold mb-4">Server</h2>
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Server
+          </h2>
           <div className="space-y-0">
             <ConfigRow
               description="Address the server is bound to"
@@ -127,8 +133,10 @@ const AdminSettings = () => {
         </div>
 
         {/* Application Settings */}
-        <div className="border border-border rounded-md p-6">
-          <h2 className="text-lg font-semibold mb-4">Application</h2>
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Application
+          </h2>
           <div className="space-y-0">
             <ConfigRow
               description="How often libraries are scanned for new content"
@@ -154,8 +162,10 @@ const AdminSettings = () => {
         </div>
 
         {/* Storage Settings */}
-        <div className="border border-border rounded-md p-6">
-          <h2 className="text-lg font-semibold mb-4">Storage</h2>
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Storage
+          </h2>
           <div className="space-y-0">
             <ConfigRow
               description="Directory for cached downloads and generated files"
