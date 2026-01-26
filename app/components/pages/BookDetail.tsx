@@ -162,7 +162,7 @@ const FileRow = ({
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
-    <div className="py-2 space-y-1">
+    <div className="py-2 space-y-1 md:space-y-0">
       {/* Primary row */}
       <div className="flex items-center gap-2">
         {/* Chevron indicator */}
@@ -199,10 +199,133 @@ const FileRow = ({
         >
           {file.name || getFilename(file.filepath)}
         </Link>
+
+        {/* Stats and actions - desktop only (inline) */}
+        <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+          {/* M4B stats */}
+          {file.audiobook_duration_seconds && (
+            <>
+              <span>{formatDuration(file.audiobook_duration_seconds)}</span>
+              <span className="text-muted-foreground/50">·</span>
+            </>
+          )}
+          {file.audiobook_bitrate_bps && (
+            <>
+              <span>{Math.round(file.audiobook_bitrate_bps / 1000)} kbps</span>
+              <span className="text-muted-foreground/50">·</span>
+            </>
+          )}
+          {/* CBZ stats */}
+          {file.page_count && (
+            <>
+              <span>{file.page_count} pages</span>
+              <span className="text-muted-foreground/50">·</span>
+            </>
+          )}
+          {/* File size - always shown */}
+          <span>{formatFileSize(file.filesize_bytes)}</span>
+
+          {/* Download button/popover */}
+          {isSupplement ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
+                  <Download className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download</TooltipContent>
+            </Tooltip>
+          ) : libraryDownloadPreference === DownloadFormatAsk &&
+            supportsKepub(file.file_type) ? (
+            <DownloadFormatPopover
+              disabled={isDownloading}
+              isLoading={isDownloading}
+              onCancel={onCancelDownload}
+              onDownloadKepub={onDownloadKepub}
+              onDownloadOriginal={() =>
+                onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+              }
+            />
+          ) : isDownloading ? (
+            <div className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="h-6 w-6 p-0"
+                    onClick={onCancelDownload}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Cancel download</TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onDownload} size="sm" variant="ghost">
+                  <Download className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download</TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Read button - CBZ only */}
+          {file.file_type === FileTypeCBZ && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                >
+                  <Button size="sm" variant="ghost">
+                    <BookOpen className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Read</TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Actions dropdown */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button disabled={isResyncing} size="sm" variant="ghost">
+                    <MoreVertical className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>More actions</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DropdownMenuItem onClick={onEdit}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={isResyncing} onClick={onScanMetadata}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Scan for new metadata
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh all metadata
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* Stats and actions row */}
-      <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground pl-6">
+      {/* Stats and actions - mobile only (separate row) */}
+      <div className="flex md:hidden items-center gap-2 text-xs text-muted-foreground pl-6">
         {/* M4B stats */}
         {file.audiobook_duration_seconds && (
           <>
@@ -770,11 +893,11 @@ const BookDetail = () => {
         {/* Book Details */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div>
-            <div className="flex flex-col gap-3 mb-2">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
               <h1 className="text-2xl md:text-3xl font-semibold">
                 {book.title}
               </h1>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <AddToListPopover
                   bookId={book.id}
                   trigger={

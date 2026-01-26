@@ -153,9 +153,9 @@ const FileDetail = () => {
       </nav>
 
       {/* File title with Edit/Save/Cancel buttons */}
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <h1 className="text-2xl md:text-3xl font-semibold">{filename}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Read button for CBZ files */}
           {file.file_type === FileTypeCBZ && (
             <Button asChild size="sm">
