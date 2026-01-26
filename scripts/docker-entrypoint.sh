@@ -35,15 +35,31 @@ if [ "$(id -u)" = "0" ]; then
     if [ "$PGID" != "1000" ] || [ "$PUID" != "1000" ]; then
         # Must delete user first (before group), since user is a member of the group
         deluser shisho 2>/dev/null || true
-        if [ "$PGID" != "1000" ]; then
-            delgroup shisho 2>/dev/null || true
-            addgroup -g "$PGID" shisho
+
+        # Determine which group to use
+        if [ "$PGID" = "1000" ]; then
+            # Use existing shisho group
+            TARGET_GROUP="shisho"
+        else
+            # Check if a group with the desired GID already exists
+            EXISTING_GROUP=$(getent group "$PGID" | cut -d: -f1)
+            if [ -n "$EXISTING_GROUP" ]; then
+                # Reuse the existing group (e.g., "users" for GID 100)
+                TARGET_GROUP="$EXISTING_GROUP"
+                delgroup shisho 2>/dev/null || true
+            else
+                # Create new shisho group with desired GID
+                delgroup shisho 2>/dev/null || true
+                addgroup -g "$PGID" shisho
+                TARGET_GROUP="shisho"
+            fi
         fi
-        adduser -u "$PUID" -G shisho -s /bin/sh -D shisho
+
+        adduser -u "$PUID" -G "$TARGET_GROUP" -s /bin/sh -D shisho
     fi
 
-    # Fix ownership of config directory
-    chown -R shisho:shisho /config
+    # Fix ownership of config directory (use numeric IDs in case group name differs)
+    chown -R "$PUID:$PGID" /config
 
     log_info "Starting as shisho (UID=$PUID, GID=$PGID)"
 
