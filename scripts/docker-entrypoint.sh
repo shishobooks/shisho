@@ -111,9 +111,11 @@ trap cleanup TERM INT
 SHISHO_PID=$!
 
 # Wait for backend to be ready
-log_info "Waiting for backend to start"
+# STARTUP_TIMEOUT_SECONDS can be increased for slow storage (e.g., NAS devices)
+STARTUP_TIMEOUT=${STARTUP_TIMEOUT_SECONDS:-120}
+log_info "Waiting for backend to start (timeout: ${STARTUP_TIMEOUT}s)"
 BACKEND_READY=0
-for i in $(seq 1 30); do
+for i in $(seq 1 "$STARTUP_TIMEOUT"); do
     if wget -q --spider http://localhost:3689/health 2>/dev/null; then
         log_info "Backend is ready"
         BACKEND_READY=1
@@ -127,7 +129,7 @@ for i in $(seq 1 30); do
 done
 
 if [ "$BACKEND_READY" = "0" ]; then
-    log_error "Backend failed to start within 30 seconds"
+    log_error "Backend failed to start within ${STARTUP_TIMEOUT} seconds (set STARTUP_TIMEOUT_SECONDS to increase)"
     kill -TERM $SHISHO_PID 2>/dev/null || true
     exit 1
 fi

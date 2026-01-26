@@ -105,11 +105,14 @@ ENV LOG_FORMAT=json
 ENV PUID=1000
 ENV PGID=1000
 
+# Startup timeout for backend health check (increase for slow storage like NAS)
+ENV STARTUP_TIMEOUT_SECONDS=120
+
 # Expose HTTP port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check (start-period allows time for initial migrations on slow storage)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=120s --retries=3 \
     CMD wget -q --spider http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
