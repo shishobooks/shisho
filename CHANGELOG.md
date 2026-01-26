@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-01-25
+
+### Bug Fixes
+- Book sidecar written to wrong location for root-level files with OrganizeFileStructure enabled
+
+
 ## [0.0.5] - 2026-01-25
 
 ### Bug Fixes

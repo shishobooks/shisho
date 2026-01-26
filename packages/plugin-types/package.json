@@ -1,6 +1,6 @@
 {
   "name": "@shisho/plugin-types",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "TypeScript type definitions for Shisho plugin development",
   "homepage": "https://github.com/shishobooks/shisho/blob/master/packages/plugin-types/README.md",
   "types": "index.d.ts",
