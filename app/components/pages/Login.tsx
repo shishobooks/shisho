@@ -9,8 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const Login = () => {
+  usePageTitle("Sign In");
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAuthenticated, needsSetup, isLoading: authLoading } = useAuth();

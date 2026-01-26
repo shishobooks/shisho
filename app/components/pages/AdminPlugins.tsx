@@ -55,6 +55,7 @@ import {
   type PluginOrder,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // --- Installed Tab ---
 
@@ -782,6 +783,8 @@ const validTabs = ["installed", "browse", "order", "repositories"] as const;
 type TabValue = (typeof validTabs)[number];
 
 const AdminPlugins = () => {
+  usePageTitle("Plugins");
+
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
 

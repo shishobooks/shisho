@@ -19,6 +19,7 @@ import {
   useUpdateSeries,
 } from "@/hooks/queries/series";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -26,6 +27,8 @@ const SeriesDetail = () => {
   const seriesId = id ? parseInt(id, 10) : undefined;
 
   const seriesQuery = useSeries(seriesId);
+
+  usePageTitle(seriesQuery.data?.name ?? "Series");
   const seriesBooksQuery = useSeriesBooks(seriesId);
 
   const [editOpen, setEditOpen] = useState(false);

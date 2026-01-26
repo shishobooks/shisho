@@ -18,6 +18,7 @@ import {
   useUpdatePublisher,
 } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { File } from "@/types";
 
 const PublisherDetail = () => {
@@ -26,6 +27,8 @@ const PublisherDetail = () => {
   const publisherId = id ? parseInt(id, 10) : undefined;
 
   const publisherQuery = usePublisher(publisherId);
+
+  usePageTitle(publisherQuery.data?.name ?? "Publisher");
   const publisherFilesQuery = usePublisherFiles(publisherId);
 
   const [editOpen, setEditOpen] = useState(false);

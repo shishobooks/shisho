@@ -36,6 +36,7 @@ import { useSeries } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Book, Genre, Tag } from "@/types";
 
 const ITEMS_PER_PAGE = 24;
@@ -49,6 +50,9 @@ const FILE_TYPE_OPTIONS = [
 const HomeContent = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const libraryQuery = useLibrary(libraryId);
+
+  usePageTitle(libraryQuery.data?.name ?? "Books");
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
     useBulkSelection();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
@@ -292,7 +296,6 @@ const HomeContent = () => {
   const isStaleData =
     confirmedFilterKey !== null && currentFilterKey !== confirmedFilterKey;
 
-  const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
   const seriesQuery = useSeries(seriesId, {

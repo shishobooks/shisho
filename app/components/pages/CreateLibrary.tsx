@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useCreateLibrary } from "@/hooks/queries/libraries";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -25,6 +26,8 @@ import {
 } from "@/types/generated/models";
 
 const CreateLibrary = () => {
+  usePageTitle("Create Library");
+
   const navigate = useNavigate();
   const createLibraryMutation = useCreateLibrary();
 

@@ -19,6 +19,7 @@ import {
   useUpdateGenre,
 } from "@/hooks/queries/genres";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const GenreDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -26,6 +27,8 @@ const GenreDetail = () => {
   const genreId = id ? parseInt(id, 10) : undefined;
 
   const genreQuery = useGenre(genreId);
+
+  usePageTitle(genreQuery.data?.name ?? "Genre");
   const genreBooksQuery = useGenreBooks(genreId);
 
   const [editOpen, setEditOpen] = useState(false);

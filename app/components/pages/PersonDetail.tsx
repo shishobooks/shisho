@@ -20,6 +20,7 @@ import {
   useUpdatePerson,
 } from "@/hooks/queries/people";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const PersonDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -28,6 +29,8 @@ const PersonDetail = () => {
   const navigate = useNavigate();
 
   const personQuery = usePerson(personId);
+
+  usePageTitle(personQuery.data?.name ?? "Person");
   const authoredBooksQuery = usePersonAuthoredBooks(personId);
   const narratedFilesQuery = usePersonNarratedFiles(personId);
 

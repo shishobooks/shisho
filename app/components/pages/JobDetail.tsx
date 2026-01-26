@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useJobLogs } from "@/hooks/queries/jobs";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   JobLogLevelError,
   JobLogLevelFatal,
@@ -171,6 +172,9 @@ const LogEntry = ({ log, searchTerm }: LogEntryProps) => {
 
 const JobDetail = () => {
   const { id } = useParams<{ id: string }>();
+
+  usePageTitle(id ? `Job #${id}` : "Job Details");
+
   const [searchTerm, setSearchTerm] = useState("");
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
   const [pluginFilter, setPluginFilter] = useState<string>("");

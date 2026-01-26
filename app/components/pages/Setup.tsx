@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { API } from "@/libraries/api";
 
 interface SetupResponse {
@@ -21,6 +22,8 @@ interface SetupResponse {
 }
 
 const Setup = () => {
+  usePageTitle("Setup");
+
   const navigate = useNavigate();
   const { needsSetup, isLoading: authLoading, setAuthUser } = useAuth();
 

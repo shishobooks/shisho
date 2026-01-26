@@ -5,11 +5,14 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { usePublishersList } from "@/hooks/queries/publishers";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Publisher } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
 const PublishersList = () => {
+  usePageTitle("Publishers");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);

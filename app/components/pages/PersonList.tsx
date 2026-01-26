@@ -14,10 +14,13 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const ITEMS_PER_PAGE = 24;
 
 const PersonList = () => {
+  usePageTitle("People");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);

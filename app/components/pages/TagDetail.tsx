@@ -19,6 +19,7 @@ import {
   useUpdateTag,
 } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const TagDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -26,6 +27,8 @@ const TagDetail = () => {
   const tagId = id ? parseInt(id, 10) : undefined;
 
   const tagQuery = useTag(tagId);
+
+  usePageTitle(tagQuery.data?.name ?? "Tag");
   const tagBooksQuery = useTagBooks(tagId);
 
   const [editOpen, setEditOpen] = useState(false);

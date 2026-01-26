@@ -10,8 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useCreateUser, useRoles } from "@/hooks/queries/users";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const CreateUser = () => {
+  usePageTitle("Create User");
+
   const navigate = useNavigate();
   const createUserMutation = useCreateUser();
   const { data: rolesData } = useRoles();

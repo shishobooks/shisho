@@ -14,11 +14,14 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useTagsList } from "@/hooks/queries/tags";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Tag } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
 const TagsList = () => {
+  usePageTitle("Tags");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);

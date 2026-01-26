@@ -21,6 +21,7 @@ import {
   useUpdateViewerSettings,
   useViewerSettings,
 } from "@/hooks/queries/settings";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Chapter } from "@/types";
 
 // Flatten chapters for progress bar (CBZ chapters don't nest)
@@ -52,6 +53,8 @@ export default function CBZReader() {
 
   // Fetch book data for page count
   const { data: book, isLoading: bookLoading } = useBook(bookId);
+
+  usePageTitle(book?.title ? `Reading: ${book.title}` : "Reader");
   const file = book?.files?.find((f) => f.id === Number(fileId));
   const pageCount = file?.page_count || 0;
 

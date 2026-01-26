@@ -14,11 +14,14 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useGenresList } from "@/hooks/queries/genres";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Genre } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
 const GenresList = () => {
+  usePageTitle("Genres");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);

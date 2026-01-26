@@ -37,6 +37,7 @@ import { useLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   PermissionEReaderBrowser,
   PermissionKoboSync,
@@ -45,6 +46,8 @@ import {
 } from "@/types/generated/apikeys";
 
 const SecuritySettings = () => {
+  usePageTitle("Security Settings");
+
   const { user } = useAuth();
   const resetPasswordMutation = useResetPassword();
 

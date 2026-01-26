@@ -15,9 +15,12 @@ import {
   type ListTemplate,
   type ListWithCount,
 } from "@/hooks/queries/lists";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { CreateListPayload } from "@/types";
 
 const ListsIndex = () => {
+  usePageTitle("Lists");
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const listsQuery = useListLists();

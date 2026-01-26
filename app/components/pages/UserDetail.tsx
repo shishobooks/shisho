@@ -26,6 +26,7 @@ import {
   useUser,
 } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const UserDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +34,8 @@ const UserDetail = () => {
   const { user: currentUser, hasPermission } = useAuth();
 
   const { data: user, isLoading, error } = useUser(id);
+
+  usePageTitle(user?.username ? `${user.username}` : "User Details");
   const { data: rolesData } = useRoles();
   const { data: librariesData } = useLibraries();
   const updateUserMutation = useUpdateUser();

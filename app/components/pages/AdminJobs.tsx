@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/pagination";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 
 const JOBS_PER_PAGE = 20;
@@ -88,6 +89,8 @@ const JobRow = ({ job }: JobRowProps) => (
 );
 
 const AdminJobs = () => {
+  usePageTitle("Background Jobs");
+
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
 

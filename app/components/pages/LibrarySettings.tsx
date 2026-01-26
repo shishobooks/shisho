@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -29,6 +30,12 @@ const LibrarySettings = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const libraryQuery = useLibrary(libraryId);
   const updateLibraryMutation = useUpdateLibrary();
+
+  usePageTitle(
+    libraryQuery.data?.name
+      ? `${libraryQuery.data.name} Settings`
+      : "Library Settings",
+  );
 
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { FileTypeCBZ, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 
@@ -55,6 +56,16 @@ const FileDetail = () => {
 
   const bookQuery = useBook(bookId);
   const libraryQuery = useLibrary(libraryId);
+
+  // Find file for page title
+  const fileForTitle = bookQuery.data?.files?.find(
+    (f) => f.id === parseInt(fileId || "0"),
+  );
+  usePageTitle(
+    fileForTitle?.name ||
+      getFilename(fileForTitle?.filepath ?? "") ||
+      "File Details",
+  );
 
   // Find file in book.files array
   const file = bookQuery.data?.files?.find(

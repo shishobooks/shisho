@@ -1,5 +1,6 @@
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { useConfig } from "@/hooks/queries/config";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const formatDuration = (nanoseconds: number): string => {
   const seconds = nanoseconds / 1_000_000_000;
@@ -40,6 +41,8 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
 };
 
 const AdminSettings = () => {
+  usePageTitle("Server Settings");
+
   const { data: config, isLoading, error } = useConfig();
 
   if (isLoading) {

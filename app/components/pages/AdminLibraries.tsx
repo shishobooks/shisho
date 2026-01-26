@@ -7,6 +7,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Library } from "@/types";
 
 interface LibraryRowProps {
@@ -39,6 +40,8 @@ const LibraryRow = ({ library }: LibraryRowProps) => (
 );
 
 const AdminLibraries = () => {
+  usePageTitle("Libraries");
+
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { data, isLoading, error } = useLibraries({});

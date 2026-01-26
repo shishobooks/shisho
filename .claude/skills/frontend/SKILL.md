@@ -106,6 +106,38 @@ const MyPage = () => {
 };
 ```
 
+### Page Titles
+
+**All pages MUST set a browser title** using the `usePageTitle` hook. This improves UX by showing meaningful titles in browser tabs and history.
+
+**Hook:** `app/hooks/usePageTitle.ts`
+
+```tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
+
+// Static title for list pages
+const GenresList = () => {
+  usePageTitle("Genres");
+  // ...
+};
+
+// Dynamic title for detail pages
+const BookDetail = () => {
+  const { data: book } = useBook(id);
+  usePageTitle(book?.title);
+  // ...
+};
+```
+
+**Title Format:** `{Page Title} - Shisho` (e.g., "The Great Gatsby - Shisho")
+
+**Guidelines:**
+- List pages: Use plural noun (e.g., "Genres", "Tags", "Users & Roles")
+- Detail pages: Use entity name/title from data (e.g., book title, username, series name)
+- Settings pages: Use descriptive name (e.g., "User Settings", "Server Settings")
+- Call hook early in component, before any early returns if using static title
+- For dynamic titles, pass `undefined` while loading - hook handles this gracefully
+
 ## Handling Long Text in UI
 
 When displaying user-generated content that may be long (names, titles, etc.):
@@ -659,6 +691,7 @@ The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complet
 | Router | `app/router.tsx` |
 | API client | `app/libraries/api.ts` |
 | Query hooks | `app/hooks/queries/` |
+| Page title hook | `app/hooks/usePageTitle.ts` |
 | Generated types | `app/types/generated/` |
 | Components | `app/components/` |
 | Pages | `app/components/pages/` |

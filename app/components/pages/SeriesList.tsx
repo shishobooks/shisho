@@ -8,6 +8,7 @@ import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type { Series } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -101,6 +102,8 @@ const SeriesCard = ({
 };
 
 const SeriesList = () => {
+  usePageTitle("Series");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);

@@ -18,6 +18,7 @@ import {
   useUpdateImprint,
 } from "@/hooks/queries/imprints";
 import { useDebounce } from "@/hooks/useDebounce";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { File } from "@/types";
 
 const ImprintDetail = () => {
@@ -26,6 +27,8 @@ const ImprintDetail = () => {
   const imprintId = id ? parseInt(id, 10) : undefined;
 
   const imprintQuery = useImprint(imprintId);
+
+  usePageTitle(imprintQuery.data?.name ?? "Imprint");
   const imprintFilesQuery = useImprintFiles(imprintId);
 
   const [editOpen, setEditOpen] = useState(false);

@@ -49,6 +49,7 @@ import {
 import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -569,6 +570,8 @@ const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
   const libraryQuery = useLibrary(libraryId);
+
+  usePageTitle(bookQuery.data?.title ?? "Book Details");
   const resyncFileMutation = useResyncFile();
   const resyncBookMutation = useResyncBook();
   const [editDialogOpen, setEditDialogOpen] = useState(false);

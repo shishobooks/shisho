@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Role, User } from "@/types";
 
 interface UserRowProps {
@@ -65,6 +66,8 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 };
 
 const AdminUsers = () => {
+  usePageTitle("Users & Roles");
+
   const { hasPermission } = useAuth();
   const {
     data: usersData,

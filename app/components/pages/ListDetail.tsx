@@ -33,6 +33,7 @@ import {
   useReorderListBooks,
   useUpdateList,
 } from "@/hooks/queries/lists";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -72,6 +73,8 @@ const ListDetail = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
+
+  usePageTitle(listQuery.data?.list?.name ?? "List");
   const listBooksQuery = useListBooks(listId, { sort, limit, offset });
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();

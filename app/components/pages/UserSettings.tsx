@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 interface ThemeOptionProps {
   theme: Theme;
@@ -36,6 +37,8 @@ const ThemeOption = ({
 );
 
 const UserSettings = () => {
+  usePageTitle("User Settings");
+
   const { theme, setTheme } = useTheme();
 
   return (

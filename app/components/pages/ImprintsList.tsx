@@ -5,11 +5,14 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { useImprintsList } from "@/hooks/queries/imprints";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Imprint } from "@/types";
 
 const ITEMS_PER_PAGE = 50;
 
 const ImprintsList = () => {
+  usePageTitle("Imprints");
+
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
