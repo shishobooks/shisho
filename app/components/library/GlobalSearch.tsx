@@ -1,5 +1,5 @@
 import { Search, User, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
@@ -85,14 +85,21 @@ interface GlobalSearchProps {
   onClose?: () => void;
 }
 
+type ResultItem =
+  | { type: "book"; data: BookSearchResult }
+  | { type: "series"; data: SeriesSearchResult }
+  | { type: "person"; data: PersonSearchResult };
+
 const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const { libraryId } = useParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const debouncedQuery = useDebounce(query, 300);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
 
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
@@ -114,6 +121,55 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     ((searchQuery.data.books?.length ?? 0) > 0 ||
       (searchQuery.data.series?.length ?? 0) > 0 ||
       (searchQuery.data.people?.length ?? 0) > 0);
+
+  // Build a flat list of all results for keyboard navigation
+  const allResults = useMemo(() => {
+    const results: ResultItem[] = [];
+    if (searchQuery.data?.books) {
+      for (const book of searchQuery.data.books) {
+        results.push({ type: "book", data: book });
+      }
+    }
+    if (searchQuery.data?.series) {
+      for (const series of searchQuery.data.series) {
+        results.push({ type: "series", data: series });
+      }
+    }
+    if (searchQuery.data?.people) {
+      for (const person of searchQuery.data.people) {
+        results.push({ type: "person", data: person });
+      }
+    }
+    return results;
+  }, [searchQuery.data]);
+
+  // Reset selected index when results change
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [searchQuery.data]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (selectedIndex >= 0 && resultRefs.current[selectedIndex]) {
+      resultRefs.current[selectedIndex]?.scrollIntoView({
+        block: "nearest",
+      });
+    }
+  }, [selectedIndex]);
+
+  const getResultUrl = useCallback(
+    (result: ResultItem): string => {
+      switch (result.type) {
+        case "book":
+          return `/libraries/${libraryId}/books/${result.data.id}`;
+        case "series":
+          return `/libraries/${libraryId}/series/${result.data.id}`;
+        case "person":
+          return `/libraries/${libraryId}/people/${result.data.id}`;
+      }
+    },
+    [libraryId],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -186,29 +242,64 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     return null;
   }, [searchQuery.data, libraryId, debouncedQuery]);
 
-  // Handle Enter key to navigate to first result
+  // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        const firstResultUrl = getFirstResultUrl();
-        if (firstResultUrl) {
-          event.preventDefault();
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (allResults.length > 0) {
+          setSelectedIndex((prev) =>
+            prev < allResults.length - 1 ? prev + 1 : prev,
+          );
+        }
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        // If an item is selected, navigate to it
+        if (selectedIndex >= 0 && selectedIndex < allResults.length) {
+          const url = getResultUrl(allResults[selectedIndex]);
           setIsOpen(false);
           setQuery("");
           onClose?.();
-          navigate(firstResultUrl);
+          navigate(url);
+        } else {
+          // Fall back to first result behavior
+          const firstResultUrl = getFirstResultUrl();
+          if (firstResultUrl) {
+            setIsOpen(false);
+            setQuery("");
+            onClose?.();
+            navigate(firstResultUrl);
+          }
         }
       }
     },
-    [getFirstResultUrl, navigate, onClose],
+    [
+      allResults,
+      selectedIndex,
+      getResultUrl,
+      getFirstResultUrl,
+      navigate,
+      onClose,
+    ],
   );
 
   const renderBookResult = useCallback(
-    (book: BookSearchResult) => (
+    (book: BookSearchResult, index: number) => (
       <Link
-        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        className={cn(
+          "flex items-center gap-3 px-3 py-2 rounded-md",
+          selectedIndex === index
+            ? "bg-neutral-100 dark:bg-neutral-800"
+            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+        )}
         key={`book-${book.id}`}
         onClick={handleResultClick}
+        ref={(el) => {
+          resultRefs.current[index] = el;
+        }}
         title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
         to={`/libraries/${libraryId}/books/${book.id}`}
       >
@@ -235,15 +326,24 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       searchQuery.dataUpdatedAt,
       thumbnailClasses,
       isAudiobook,
+      selectedIndex,
     ],
   );
 
   const renderSeriesResult = useCallback(
-    (series: SeriesSearchResult) => (
+    (series: SeriesSearchResult, index: number) => (
       <Link
-        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        className={cn(
+          "flex items-center gap-3 px-3 py-2 rounded-md",
+          selectedIndex === index
+            ? "bg-neutral-100 dark:bg-neutral-800"
+            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+        )}
         key={`series-${series.id}`}
         onClick={handleResultClick}
+        ref={(el) => {
+          resultRefs.current[index] = el;
+        }}
         title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
         to={`/libraries/${libraryId}/series/${series.id}`}
       >
@@ -268,15 +368,24 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       searchQuery.dataUpdatedAt,
       thumbnailClasses,
       isAudiobook,
+      selectedIndex,
     ],
   );
 
   const renderPersonResult = useCallback(
-    (person: PersonSearchResult) => (
+    (person: PersonSearchResult, index: number) => (
       <Link
-        className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md"
+        className={cn(
+          "flex items-center gap-3 px-3 py-2 rounded-md",
+          selectedIndex === index
+            ? "bg-neutral-100 dark:bg-neutral-800"
+            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+        )}
         key={`person-${person.id}`}
         onClick={handleResultClick}
+        ref={(el) => {
+          resultRefs.current[index] = el;
+        }}
         title={person.name}
         to={`/libraries/${libraryId}/people/${person.id}`}
       >
@@ -286,7 +395,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         </div>
       </Link>
     ),
-    [handleResultClick, libraryId],
+    [handleResultClick, libraryId, selectedIndex],
   );
 
   if (!libraryId) {
@@ -299,7 +408,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           className={cn(
-            "pl-9",
+            "pl-9 [&::-webkit-search-cancel-button]:hidden",
             fullWidth
               ? "w-full pr-3 focus-visible:ring-0 focus-visible:border-border"
               : "w-64 pr-8",
@@ -358,7 +467,9 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
                   <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
                     Books
                   </div>
-                  {searchQuery.data.books?.map(renderBookResult)}
+                  {searchQuery.data.books?.map((book, i) =>
+                    renderBookResult(book, i),
+                  )}
                 </div>
               )}
 
@@ -367,7 +478,12 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
                   <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
                     Series
                   </div>
-                  {searchQuery.data.series?.map(renderSeriesResult)}
+                  {searchQuery.data.series?.map((series, i) =>
+                    renderSeriesResult(
+                      series,
+                      (searchQuery.data.books?.length ?? 0) + i,
+                    ),
+                  )}
                 </div>
               )}
 
@@ -376,7 +492,14 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
                   <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
                     People
                   </div>
-                  {searchQuery.data.people?.map(renderPersonResult)}
+                  {searchQuery.data.people?.map((person, i) =>
+                    renderPersonResult(
+                      person,
+                      (searchQuery.data.books?.length ?? 0) +
+                        (searchQuery.data.series?.length ?? 0) +
+                        i,
+                    ),
+                  )}
                 </div>
               )}
             </div>
