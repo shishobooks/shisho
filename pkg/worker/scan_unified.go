@@ -20,6 +20,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -517,8 +518,9 @@ func (w *Worker) scanFileCore(
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "description", "description_source")
 			}
 		}
-		// Description (from sidecar)
+		// Description (from sidecar, strip HTML for clean display)
 		if bookSidecarData != nil && bookSidecarData.Description != nil && *bookSidecarData.Description != "" {
+			sanitizedDesc := htmlutil.StripTags(*bookSidecarData.Description)
 			existingDescription := ""
 			existingDescriptionSource := ""
 			if book.Description != nil {
@@ -527,9 +529,9 @@ func (w *Worker) scanFileCore(
 			if book.DescriptionSource != nil {
 				existingDescriptionSource = *book.DescriptionSource
 			}
-			if shouldApplySidecarScalar(*bookSidecarData.Description, existingDescription, existingDescriptionSource, forceRefresh) {
+			if sanitizedDesc != "" && shouldApplySidecarScalar(sanitizedDesc, existingDescription, existingDescriptionSource, forceRefresh) {
 				log.Info("updating book description from sidecar", nil)
-				book.Description = bookSidecarData.Description
+				book.Description = &sanitizedDesc
 				book.DescriptionSource = &sidecarSource
 				bookUpdateOpts.Columns = appendIfMissing(bookUpdateOpts.Columns, "description", "description_source")
 			}
@@ -2318,7 +2320,7 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.FieldDataSources["tags"] = source
 	}
 	if target.Description == "" && enrichment.Description != "" {
-		target.Description = enrichment.Description
+		target.Description = htmlutil.StripTags(enrichment.Description)
 		target.FieldDataSources["description"] = source
 	}
 	if target.Publisher == "" && enrichment.Publisher != "" {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -341,8 +342,8 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 		}
 	}
 
-	// Extract description
-	description := pkg.Metadata.Description
+	// Extract description (strip HTML tags for clean display)
+	description := htmlutil.StripTags(pkg.Metadata.Description)
 
 	// Extract publisher
 	publisher := pkg.Metadata.Publisher

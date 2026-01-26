@@ -14,6 +14,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -178,10 +179,10 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// Extract description from Summary
+	// Extract description from Summary (strip HTML tags for clean display)
 	var description string
 	if comicInfo != nil && comicInfo.Summary != "" {
-		description = comicInfo.Summary
+		description = htmlutil.StripTags(comicInfo.Summary)
 	}
 
 	// Extract URL from Web

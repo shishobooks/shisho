@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
@@ -228,16 +229,17 @@ func (h *handler) update(c echo.Context) error {
 
 	// Update description
 	if params.Description != nil {
-		// Check if description actually changed
+		// Check if description actually changed (strip HTML for clean display)
+		sanitizedDescription := htmlutil.StripTags(*params.Description)
 		currentDescription := ""
 		if book.Description != nil {
 			currentDescription = *book.Description
 		}
-		if *params.Description != currentDescription {
-			if *params.Description == "" {
+		if sanitizedDescription != currentDescription {
+			if sanitizedDescription == "" {
 				book.Description = nil
 			} else {
-				book.Description = params.Description
+				book.Description = &sanitizedDescription
 			}
 			book.DescriptionSource = strPtr(models.DataSourceManual)
 			opts.Columns = append(opts.Columns, "description", "description_source")

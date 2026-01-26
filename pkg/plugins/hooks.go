@@ -8,6 +8,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -327,7 +328,7 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 	md.Title = getStringField(obj, "title")
 	md.Subtitle = getStringField(obj, "subtitle")
 	md.Series = getStringField(obj, "series")
-	md.Description = getStringField(obj, "description")
+	md.Description = htmlutil.StripTags(getStringField(obj, "description")) // strip HTML for clean display
 	md.Publisher = getStringField(obj, "publisher")
 	md.Imprint = getStringField(obj, "imprint")
 	md.URL = getStringField(obj, "url")

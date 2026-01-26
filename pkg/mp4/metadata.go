@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 )
 
@@ -66,7 +67,7 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		Title:         raw.title,
 		Album:         raw.album,
 		Genre:         raw.genre,
-		Description:   raw.description,
+		Description:   htmlutil.StripTags(raw.description), // strip HTML for clean display
 		Comment:       raw.comment,
 		Year:          raw.year,
 		Copyright:     raw.copyright,
