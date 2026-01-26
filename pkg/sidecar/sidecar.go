@@ -16,23 +16,34 @@ const SidecarSuffix = ".metadata.json"
 // For directory-based books: {bookdir}/{dirname}.metadata.json.
 // For root-level books: {dir}/{filename_without_ext}.metadata.json.
 func BookSidecarPath(bookPath string) string {
-	info, err := os.Stat(bookPath)
+	// Clean the path to normalize trailing slashes
+	cleanPath := filepath.Clean(bookPath)
+
+	info, err := os.Stat(cleanPath)
 	if err != nil {
-		// If we can't stat, assume it's a file path
-		dir := filepath.Dir(bookPath)
-		base := strings.TrimSuffix(filepath.Base(bookPath), filepath.Ext(bookPath))
+		// Path doesn't exist yet - determine intent from path structure
+		ext := filepath.Ext(cleanPath)
+		if ext == "" {
+			// No extension = intended to be a directory
+			// Return sidecar path INSIDE the future directory
+			dirName := filepath.Base(cleanPath)
+			return filepath.Join(cleanPath, dirName+SidecarSuffix)
+		}
+		// Has extension = intended to be a file
+		dir := filepath.Dir(cleanPath)
+		base := strings.TrimSuffix(filepath.Base(cleanPath), ext)
 		return filepath.Join(dir, base+SidecarSuffix)
 	}
 
 	if info.IsDir() {
 		// Directory-based book: use directory name
-		dirName := filepath.Base(bookPath)
-		return filepath.Join(bookPath, dirName+SidecarSuffix)
+		dirName := filepath.Base(cleanPath)
+		return filepath.Join(cleanPath, dirName+SidecarSuffix)
 	}
 
 	// Root-level book (single file): use filename without extension
-	dir := filepath.Dir(bookPath)
-	base := strings.TrimSuffix(filepath.Base(bookPath), filepath.Ext(bookPath))
+	dir := filepath.Dir(cleanPath)
+	base := strings.TrimSuffix(filepath.Base(cleanPath), filepath.Ext(cleanPath))
 	return filepath.Join(dir, base+SidecarSuffix)
 }
 
@@ -97,6 +108,9 @@ func ReadFileSidecar(filePath string) (*FileSidecar, error) {
 }
 
 // WriteBookSidecar writes a book sidecar file.
+// Note: The caller is responsible for ensuring the parent directory exists.
+// For root-level files with OrganizeFileStructure enabled, the directory
+// should be created before calling this function.
 func WriteBookSidecar(bookPath string, s *BookSidecar) error {
 	sidecarPath := BookSidecarPath(bookPath)
 

@@ -516,3 +516,102 @@ func TestWriteFileSidecar_SetsVersion(t *testing.T) {
 func strPtr(s string) *string {
 	return &s
 }
+
+// =============================================================================
+// BookSidecarPath Tests
+// =============================================================================
+
+func TestBookSidecarPath_ExistingDirectory(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	bookDir := filepath.Join(tmpDir, "MyBook")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	// For an existing directory, sidecar should be inside the directory
+	result := BookSidecarPath(bookDir)
+
+	assert.Equal(t, filepath.Join(bookDir, "MyBook.metadata.json"), result)
+}
+
+func TestBookSidecarPath_ExistingFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "MyBook.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("test"), 0644))
+
+	// For an existing file, sidecar should be alongside it without the .epub extension
+	result := BookSidecarPath(filePath)
+
+	assert.Equal(t, filepath.Join(tmpDir, "MyBook.metadata.json"), result)
+}
+
+func TestBookSidecarPath_NonExistentDirectoryPath(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// This is the key bug case: a path that represents a FUTURE directory (not yet created)
+	// The path ends with a directory name (no extension), simulating what happens during
+	// scanning when book.Filepath is set to the expected organized folder before it exists.
+	futureBookDir := filepath.Join(tmpDir, "MyBook")
+
+	// The sidecar should be inside the future directory, not alongside it
+	result := BookSidecarPath(futureBookDir)
+
+	// BUG: Currently returns /tmp/xxx/MyBook.metadata.json (sibling)
+	// EXPECTED: /tmp/xxx/MyBook/MyBook.metadata.json (inside the directory)
+	assert.Equal(t, filepath.Join(futureBookDir, "MyBook.metadata.json"), result)
+}
+
+func TestBookSidecarPath_NonExistentDirectoryPath_WithTrailingSlash(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// Path with trailing slash clearly indicates it's meant to be a directory
+	futureBookDir := filepath.Join(tmpDir, "MyBook") + string(filepath.Separator)
+
+	result := BookSidecarPath(futureBookDir)
+
+	// Should be inside the directory
+	assert.Equal(t, filepath.Join(tmpDir, "MyBook", "MyBook.metadata.json"), result)
+}
+
+func TestWriteBookSidecar_DirectoryCreatedBeforeWrite(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// This simulates the scan scenario with OrganizeFileStructure enabled:
+	// The caller creates the directory before writing the sidecar
+	bookDir := filepath.Join(tmpDir, "MyBook")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	s := &BookSidecar{
+		Title: "My Book",
+	}
+
+	err := WriteBookSidecar(bookDir, s)
+	require.NoError(t, err)
+
+	// Verify the sidecar was written to the correct location INSIDE the directory
+	expectedPath := filepath.Join(bookDir, "MyBook.metadata.json")
+	_, err = os.Stat(expectedPath)
+	require.NoError(t, err, "sidecar should exist at %s", expectedPath)
+
+	// Read it back and verify
+	readBack, err := ReadBookSidecar(bookDir)
+	require.NoError(t, err)
+	require.NotNil(t, readBack)
+	assert.Equal(t, "My Book", readBack.Title)
+}
+
+func TestWriteBookSidecar_NonExistentDirectory_FailsGracefully(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// When the directory doesn't exist and caller doesn't create it,
+	// the write should fail (caller's responsibility to create dir)
+	futureBookDir := filepath.Join(tmpDir, "NonExistentBook")
+
+	s := &BookSidecar{
+		Title: "My Book",
+	}
+
+	// Writing should fail because the directory doesn't exist
+	err := WriteBookSidecar(futureBookDir, s)
+	require.Error(t, err, "write should fail when directory doesn't exist")
+}

@@ -1554,8 +1554,37 @@ func (w *Worker) scanFileCore(
 	if err != nil {
 		log.Warn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
 	} else {
-		if err := sidecar.WriteBookSidecarFromModel(reloadedBook); err != nil {
-			log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+		// Check if the book directory exists. For root-level files with OrganizeFileStructure
+		// enabled, we need to create the directory before writing the sidecar.
+		// If the directory doesn't exist and org is disabled, we skip writing the book sidecar
+		// since the files haven't been organized yet.
+		bookDirExists := false
+		if info, statErr := os.Stat(reloadedBook.Filepath); statErr == nil && info.IsDir() {
+			bookDirExists = true
+		}
+
+		if !bookDirExists {
+			// Check if the library has OrganizeFileStructure enabled
+			lib, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+				ID: &reloadedBook.LibraryID,
+			})
+			if libErr != nil {
+				log.Warn("failed to retrieve library for sidecar", logger.Data{"error": libErr.Error()})
+			} else if lib.OrganizeFileStructure {
+				// Create the directory for root-level files that will be organized
+				if mkdirErr := os.MkdirAll(reloadedBook.Filepath, 0755); mkdirErr != nil {
+					log.Warn("failed to create book directory for sidecar", logger.Data{"error": mkdirErr.Error()})
+				} else {
+					bookDirExists = true
+				}
+			}
+			// If org is disabled, skip writing book sidecar (files are at root level)
+		}
+
+		if bookDirExists {
+			if err := sidecar.WriteBookSidecarFromModel(reloadedBook); err != nil {
+				log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+			}
 		}
 		book = reloadedBook
 	}

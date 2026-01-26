@@ -855,6 +855,18 @@ func TestProcessScanJob_OrganizeFileStructure_RootLevelFile(t *testing.T) {
 	files := tc.listFiles()
 	require.Len(t, files, 1)
 	assert.Equal(t, organizedFile, files[0].Filepath)
+
+	// Verify book sidecar is INSIDE the organized folder (not as a sibling)
+	bookSidecarPath := filepath.Join(organizedFolder, "[Test Author] Organized Book.metadata.json")
+	assert.True(t, testgen.FileExists(bookSidecarPath), "book sidecar should be inside organized folder")
+
+	// Verify sidecar is NOT at the sibling location (the bug would place it here)
+	wrongSidecarPath := filepath.Join(libraryPath, "[Test Author] Organized Book.metadata.json")
+	assert.False(t, testgen.FileExists(wrongSidecarPath), "book sidecar should NOT be a sibling to the folder")
+
+	// Verify file sidecar is also inside the folder
+	fileSidecarPath := filepath.Join(organizedFolder, "Organized Book.epub.metadata.json")
+	assert.True(t, testgen.FileExists(fileSidecarPath), "file sidecar should be inside organized folder")
 }
 
 func TestProcessScanJob_OrganizeFileStructure_Disabled(t *testing.T) {
