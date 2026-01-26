@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-01-25
+
+### Bug Fixes
+- Remove 'api' from gitignore
+- Skip writing port file when tmp directory doesn't exist
+
+
 ## [0.0.4] - 2026-01-25
 
 
