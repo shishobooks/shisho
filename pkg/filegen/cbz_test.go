@@ -2,8 +2,13 @@ package filegen
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/xml"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -185,7 +190,7 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Action", comicInfo.Genre)
 	})
 
-	t.Run("preserves all page images unchanged", func(t *testing.T) {
+	t.Run("includes all page images in output", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		srcPath := filepath.Join(tmpDir, "source.cbz")
@@ -205,7 +210,9 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
-		// Verify all page images are preserved
+		// Verify all page images exist in output
+		// Note: Test images are invalid PNG files (just headers) so they pass through unchanged
+		// Valid images would be processed (resized/converted) by ProcessImageForEreader
 		for i := 0; i < 3; i++ {
 			var imageName string
 			switch i {
@@ -219,6 +226,106 @@ func TestCBZGenerator_Generate(t *testing.T) {
 			data := readFileFromCBZ(t, destPath, imageName)
 			assert.NotEmpty(t, data, "page %d image should exist", i)
 		}
+	})
+
+	t.Run("resizes large images to fit e-reader screen", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		// Create image larger than Kobo screen (1264x1680)
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+			pages: []testPage{
+				{filename: "page1.jpg", width: 2000, height: 3000, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{Title: "Test Comic"}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Read the resized image
+		imgData := readFileFromCBZ(t, destPath, "page1.jpg")
+
+		// Decode and check dimensions
+		img, _, err := image.DecodeConfig(bytes.NewReader(imgData))
+		require.NoError(t, err)
+
+		// Should fit within Kobo screen dimensions (1264x1680)
+		// Height ratio: 1680/3000 = 0.56, Width ratio: 1264/2000 = 0.632
+		// Use smaller ratio (0.56) to fit: 2000*0.56=1120, 3000*0.56=1680
+		assert.Equal(t, 1680, img.Height, "image height should fit Kobo screen")
+		assert.Equal(t, 1120, img.Width, "image width should be proportionally scaled")
+	})
+
+	t.Run("converts PNG to JPEG for smaller file size", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		// Create a PNG image
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+			pages: []testPage{
+				{filename: "page1.png", width: 800, height: 1200, format: "png"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{Title: "Test Comic"}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// The PNG should be converted to JPEG
+		// Original filename was page1.png, should now be page1.jpg
+		jpgData := readFileFromCBZ(t, destPath, "page1.jpg")
+		assert.NotEmpty(t, jpgData, "converted JPEG should exist")
+
+		// Verify it's a valid JPEG by decoding
+		_, format, err := image.DecodeConfig(bytes.NewReader(jpgData))
+		require.NoError(t, err)
+		assert.Equal(t, "jpeg", format, "image should be JPEG format")
+	})
+
+	t.Run("preserves small JPEG images unchanged", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		// Create image smaller than Kobo screen (1264x1680)
+		createTestCBZ(t, srcPath, testCBZOptions{
+			title: "Test Comic",
+			pages: []testPage{
+				{filename: "page1.jpg", width: 800, height: 1200, format: "jpeg"},
+			},
+		})
+
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{Title: "Test Comic"}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		// Read the image
+		imgData := readFileFromCBZ(t, destPath, "page1.jpg")
+
+		// Decode and check dimensions
+		img, _, err := image.DecodeConfig(bytes.NewReader(imgData))
+		require.NoError(t, err)
+
+		// Dimensions should be unchanged since image fits within Kobo screen
+		assert.Equal(t, 800, img.Width, "image width should be unchanged")
+		assert.Equal(t, 1200, img.Height, "image height should be unchanged")
 	})
 
 	t.Run("handles CBZ without existing ComicInfo.xml", func(t *testing.T) {
@@ -742,6 +849,14 @@ func TestCBZGenerator_Generate(t *testing.T) {
 
 // Helper types and functions for testing
 
+// testPage defines a page image for CBZ test creation.
+type testPage struct {
+	filename string
+	width    int
+	height   int
+	format   string // "jpeg" or "png"
+}
+
 type testCBZOptions struct {
 	title         string
 	series        string
@@ -759,6 +874,7 @@ type testCBZOptions struct {
 	tags          string
 	pageCount     int
 	skipComicInfo bool
+	pages         []testPage // If specified, creates real images instead of dummy headers
 }
 
 func createTestCBZ(t *testing.T, path string, opts testCBZOptions) {
@@ -833,31 +949,65 @@ func createTestCBZ(t *testing.T, path string, opts testCBZOptions) {
 		require.NoError(t, err)
 	}
 
-	// Add dummy page images (PNG headers)
-	pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-	for i := 0; i < pageCount; i++ {
-		var pageName string
-		switch {
-		case i == 0:
-			pageName = "000.png"
-		case i == 1:
-			pageName = "001.png"
-		case i == 2:
-			pageName = "002.png"
-		case i < 10:
-			pageName = "00" + string(rune('0'+i)) + ".png"
-		case i < 100:
-			pageName = "0" + string(rune('0'+i/10)) + string(rune('0'+i%10)) + ".png"
-		default:
-			pageName = string(rune('0'+i/100)) + string(rune('0'+(i/10)%10)) + string(rune('0'+i%10)) + ".png"
+	// Add page images
+	if len(opts.pages) > 0 {
+		// Use specified pages with real images
+		for _, page := range opts.pages {
+			imgData := createTestImage(page.width, page.height, page.format)
+			pageWriter, err := w.Create(page.filename)
+			require.NoError(t, err)
+			_, err = pageWriter.Write(imgData)
+			require.NoError(t, err)
 		}
-		pageWriter, err := w.Create(pageName)
-		require.NoError(t, err)
-		_, err = pageWriter.Write(pngHeader)
-		require.NoError(t, err)
+	} else {
+		// Add dummy page images (PNG headers) - legacy behavior
+		pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+		for i := 0; i < pageCount; i++ {
+			var pageName string
+			switch {
+			case i == 0:
+				pageName = "000.png"
+			case i == 1:
+				pageName = "001.png"
+			case i == 2:
+				pageName = "002.png"
+			case i < 10:
+				pageName = "00" + string(rune('0'+i)) + ".png"
+			case i < 100:
+				pageName = "0" + string(rune('0'+i/10)) + string(rune('0'+i%10)) + ".png"
+			default:
+				pageName = string(rune('0'+i/100)) + string(rune('0'+(i/10)%10)) + string(rune('0'+i%10)) + ".png"
+			}
+			pageWriter, err := w.Create(pageName)
+			require.NoError(t, err)
+			_, err = pageWriter.Write(pngHeader)
+			require.NoError(t, err)
+		}
 	}
 
 	require.NoError(t, w.Close())
+}
+
+// createTestImage creates a test image with the specified dimensions.
+func createTestImage(width, height int, format string) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	// Fill with a solid color
+	c := color.RGBA{R: 100, G: 150, B: 200, A: 255}
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, c)
+		}
+	}
+
+	var buf bytes.Buffer
+	switch format {
+	case "png":
+		_ = png.Encode(&buf, img)
+	default: // jpeg
+		_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
+	}
+	return buf.Bytes()
 }
 
 func readComicInfoFromCBZ(t *testing.T, path string) *cbzComicInfo {

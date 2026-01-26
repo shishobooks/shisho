@@ -99,7 +99,7 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 	// Collect image files
 	var imageFiles []*zip.File
 	for _, f := range srcZip.File {
-		if isImageFile(f.Name) && !strings.HasPrefix(filepath.Base(f.Name), ".") {
+		if IsImageFile(f.Name) && !strings.HasPrefix(filepath.Base(f.Name), ".") {
 			imageFiles = append(imageFiles, f)
 		}
 	}
@@ -185,14 +185,14 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 
 				// Process image: resize if too tall, convert PNG to JPEG
 				ext := strings.ToLower(filepath.Ext(imgFile.Name))
-				processed := processImageForKobo(data, ext)
+				processed := ProcessImageForEreader(data, ext)
 
 				pages[i] = pageInfo{
-					filename:  fmt.Sprintf("page%04d%s", i+1, processed.ext),
-					width:     processed.width,
-					height:    processed.height,
-					mediaType: processed.mediaType,
-					data:      processed.data,
+					filename:  fmt.Sprintf("page%04d%s", i+1, processed.Ext),
+					width:     processed.Width,
+					height:    processed.Height,
+					mediaType: processed.MediaType,
+					data:      processed.Data,
 				}
 			}
 		}()
@@ -274,8 +274,8 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 	return nil
 }
 
-// isImageFile returns true if the file extension indicates an image.
-func isImageFile(name string) bool {
+// IsImageFile returns true if the file extension indicates an image.
+func IsImageFile(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
@@ -758,21 +758,21 @@ var Palette16 = []uint8{
 	0xcc, 0xdd, 0xee, 0xff,
 }
 
-// processedImage holds the result of image processing.
-type processedImage struct {
-	data      []byte
-	width     int
-	height    int
-	ext       string
-	mediaType string
+// ProcessedImage holds the result of image processing.
+type ProcessedImage struct {
+	Data      []byte
+	Width     int
+	Height    int
+	Ext       string
+	MediaType string
 }
 
-// processImageForKobo resizes images to fit Kobo screen dimensions.
-// - All JPEG/PNG images are resized to fit within Kobo Libra Color resolution (1196x1680)
+// ProcessImageForEreader resizes images to fit e-reader screen dimensions.
+// - All JPEG/PNG images are resized to fit within Kobo Libra Color resolution (1264x1680)
 // - Grayscale images (like manga) are converted to grayscale JPEG for faster rendering
 // - PNG images are converted to JPEG for smaller file size
 // - Other formats (GIF, WebP) are passed through unchanged.
-func processImageForKobo(data []byte, origExt string) *processedImage {
+func ProcessImageForEreader(data []byte, origExt string) *ProcessedImage {
 	ext := strings.ToLower(origExt)
 
 	// Only process JPEG and PNG
@@ -782,12 +782,12 @@ func processImageForKobo(data []byte, origExt string) *processedImage {
 		if err != nil {
 			cfg = image.Config{Width: koboWidth, Height: koboHeight}
 		}
-		return &processedImage{
-			data:      data,
-			width:     cfg.Width,
-			height:    cfg.Height,
-			ext:       ext,
-			mediaType: imageMediaType(ext),
+		return &ProcessedImage{
+			Data:      data,
+			Width:     cfg.Width,
+			Height:    cfg.Height,
+			Ext:       ext,
+			MediaType: imageMediaType(ext),
 		}
 	}
 
@@ -799,12 +799,12 @@ func processImageForKobo(data []byte, origExt string) *processedImage {
 		if cfgErr != nil {
 			cfg = image.Config{Width: koboWidth, Height: koboHeight}
 		}
-		return &processedImage{
-			data:      data,
-			width:     cfg.Width,
-			height:    cfg.Height,
-			ext:       ext,
-			mediaType: imageMediaType(ext),
+		return &ProcessedImage{
+			Data:      data,
+			Width:     cfg.Width,
+			Height:    cfg.Height,
+			Ext:       ext,
+			MediaType: imageMediaType(ext),
 		}
 	}
 
@@ -829,12 +829,12 @@ func processImageForKobo(data []byte, origExt string) *processedImage {
 
 	if !needsResize && !needsConvert && !isGray {
 		// No processing needed, return original
-		return &processedImage{
-			data:      data,
-			width:     origWidth,
-			height:    origHeight,
-			ext:       ext,
-			mediaType: imageMediaType(ext),
+		return &ProcessedImage{
+			Data:      data,
+			Width:     origWidth,
+			Height:    origHeight,
+			Ext:       ext,
+			MediaType: imageMediaType(ext),
 		}
 	}
 
@@ -873,21 +873,21 @@ func processImageForKobo(data []byte, origExt string) *processedImage {
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, outputImg, &jpeg.Options{Quality: 85}); err != nil {
 		// Fall back to original on encoding error
-		return &processedImage{
-			data:      data,
-			width:     origWidth,
-			height:    origHeight,
-			ext:       ext,
-			mediaType: imageMediaType(ext),
+		return &ProcessedImage{
+			Data:      data,
+			Width:     origWidth,
+			Height:    origHeight,
+			Ext:       ext,
+			MediaType: imageMediaType(ext),
 		}
 	}
 
-	return &processedImage{
-		data:      buf.Bytes(),
-		width:     newWidth,
-		height:    newHeight,
-		ext:       ".jpg",
-		mediaType: "image/jpeg",
+	return &ProcessedImage{
+		Data:      buf.Bytes(),
+		Width:     newWidth,
+		Height:    newHeight,
+		Ext:       ".jpg",
+		MediaType: "image/jpeg",
 	}
 }
 

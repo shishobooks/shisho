@@ -133,9 +133,14 @@ If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, or ` 7` a
 
 When generating CBZ files, Shisho:
 
-1. Preserves all original page images unchanged (byte-for-byte)
+1. Processes images for e-reader optimization (same as KePub conversion):
+   - Resizes images larger than Kobo Libra Color screen (1264×1680) while preserving aspect ratio
+   - Converts PNG images to JPEG for smaller file size
+   - Applies grayscale optimization for manga pages (16-level palette quantization)
+   - Images that can't be decoded are passed through unchanged
 2. Creates/updates ComicInfo.xml with metadata from book model
 3. Uses atomic write pattern (temp file + rename)
+4. Processes images in parallel for better performance
 
 **Metadata Written Back:**
 
@@ -175,6 +180,8 @@ When generating CBZ files, Shisho:
 - Untracked fields in original ComicInfo.xml are preserved
 - If book has no genres, original genres preserved
 - If book has no tags, original tags preserved
+- Non-image files are preserved unchanged
+- Invalid/undecodable images are passed through unchanged
 
 ### Key Types
 
