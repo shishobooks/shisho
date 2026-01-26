@@ -37,6 +37,7 @@ RUN yarn config set network-timeout 600000 && \
 
 # Copy frontend source
 COPY app/ ./app/
+COPY public/ ./public/
 COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts tailwind.config.js components.json ./
 
 # Copy generated TypeScript types from typegen stage
