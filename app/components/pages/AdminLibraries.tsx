@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
+import { useConfig } from "@/hooks/queries/config";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -45,20 +46,24 @@ const AdminLibraries = () => {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { data, isLoading, error } = useLibraries({});
+  const { data: config } = useConfig();
   const createLibraryMutation = useCreateLibrary();
   const isDevelopment = import.meta.env.DEV;
+  const devLibraryPath = config?.dev_library_path;
 
   const canCreateLibraries = hasPermission("libraries", "write");
 
   const handleCreateDefaultLibrary = useCallback(async () => {
+    if (!devLibraryPath) {
+      toast.error("Dev library path not available");
+      return;
+    }
     try {
       const library = await createLibraryMutation.mutateAsync({
         payload: {
           name: "Main",
           cover_aspect_ratio: "book",
-          library_paths: [
-            "/Users/robinjoseph/code/personal/shisho/tmp/library",
-          ],
+          library_paths: [devLibraryPath],
         },
       });
       toast.success("Default library created! Scanning for media...");
@@ -70,7 +75,7 @@ const AdminLibraries = () => {
       }
       toast.error(msg);
     }
-  }, [createLibraryMutation, navigate]);
+  }, [createLibraryMutation, navigate, devLibraryPath]);
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -99,7 +104,7 @@ const AdminLibraries = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {isDevelopment && (
+          {isDevelopment && devLibraryPath && (
             <Button
               disabled={createLibraryMutation.isPending}
               onClick={handleCreateDefaultLibrary}

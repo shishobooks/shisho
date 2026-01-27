@@ -1,8 +1,11 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,6 +59,11 @@ type Config struct {
 
 	// Internal settings (computed, not from config file)
 	Hostname string `koanf:"-" json:"-"`
+
+	// DevLibraryPath is the computed path to tmp/library in the main git repo.
+	// Used by the frontend to create a default dev library.
+	// Computed at startup, not from config file. Only set in development.
+	DevLibraryPath string `koanf:"-" json:"dev_library_path,omitempty"`
 }
 
 // IsTestMode returns true if the server is running in test mode.
@@ -125,6 +133,11 @@ func New() (*Config, error) {
 		return nil, errors.Wrap(err, "failed to get hostname")
 	}
 	cfg.Hostname = hostname
+
+	// Compute dev library path only in development (when using shisho.dev.yaml)
+	if strings.Contains(configPath, "dev") {
+		cfg.DevLibraryPath = computeDevLibraryPath()
+	}
 
 	// Validate required fields
 	if err := validateConfig(cfg); err != nil {
@@ -209,4 +222,52 @@ func toSnakeCase(s string) string {
 		result.WriteRune(r)
 	}
 	return strings.ToLower(result.String())
+}
+
+// computeDevLibraryPath computes the path to tmp/library in the main git repo.
+// This handles git worktrees by finding the main worktree location.
+// Returns empty string if not in a git repository or on error.
+func computeDevLibraryPath() string {
+	// Get the git toplevel directory
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	gitRoot := strings.TrimSpace(string(output))
+	if gitRoot == "" {
+		return ""
+	}
+
+	// Check if we're in a worktree by looking at .git
+	gitPath := filepath.Join(gitRoot, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return ""
+	}
+
+	var mainRepoRoot string
+	if info.IsDir() {
+		// Regular git repo, .git is a directory
+		mainRepoRoot = gitRoot
+	} else {
+		// Worktree, .git is a file containing "gitdir: /path/to/main/.git/worktrees/<name>"
+		content, err := os.ReadFile(gitPath)
+		if err != nil {
+			return ""
+		}
+		// Parse "gitdir: /path/to/main/.git/worktrees/<name>"
+		gitdirLine := strings.TrimSpace(string(content))
+		if !strings.HasPrefix(gitdirLine, "gitdir: ") {
+			return ""
+		}
+		worktreeGitDir := strings.TrimPrefix(gitdirLine, "gitdir: ")
+		// Go from /path/to/main/.git/worktrees/<name> to /path/to/main
+		// The worktree gitdir is always <main>/.git/worktrees/<name>
+		mainRepoRoot = filepath.Dir(filepath.Dir(filepath.Dir(worktreeGitDir)))
+	}
+
+	return filepath.Join(mainRepoRoot, "tmp", "library")
 }
