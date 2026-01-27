@@ -294,8 +294,8 @@ func computeMetadataHash(file *models.File) string {
 	}
 
 	// Cover path.
-	if file.CoverImagePath != nil {
-		parts = append(parts, *file.CoverImagePath)
+	if file.CoverImageFilename != nil {
+		parts = append(parts, *file.CoverImageFilename)
 	}
 
 	data := strings.Join(parts, "\x00")

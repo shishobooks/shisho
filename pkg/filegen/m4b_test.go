@@ -229,9 +229,9 @@ func TestM4BGenerator_Generate(t *testing.T) {
 			},
 		}
 		file := &models.File{
-			FileType:       models.FileTypeM4B,
-			CoverImagePath: &coverFilename,
-			CoverMimeType:  &mimeType,
+			FileType:           models.FileTypeM4B,
+			CoverImageFilename: &coverFilename,
+			CoverMimeType:      &mimeType,
 		}
 
 		gen := &M4BGenerator{}
@@ -332,9 +332,9 @@ func TestM4BGenerator_Generate(t *testing.T) {
 			},
 		}
 		file := &models.File{
-			FileType:       models.FileTypeM4B,
-			CoverImagePath: &coverPath,
-			CoverMimeType:  &mimeType,
+			FileType:           models.FileTypeM4B,
+			CoverImageFilename: &coverPath,
+			CoverMimeType:      &mimeType,
 		}
 
 		gen := &M4BGenerator{}

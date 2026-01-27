@@ -10,6 +10,10 @@ import type {
   Book,
   File,
   ListBooksQuery,
+  MergeBooksPayload,
+  MergeBooksResponse,
+  MoveFilesPayload,
+  MoveFilesResponse,
   UpdateBookPayload,
   UpdateFilePayload,
 } from "@/types";
@@ -145,6 +149,51 @@ export const useSetFileCoverPage = () => {
     },
     onSuccess: () => {
       // Invalidate book queries to refresh file/cover data
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+    },
+  });
+};
+
+interface MoveFilesMutationVariables {
+  bookId: number;
+  payload: MoveFilesPayload;
+}
+
+export const useMoveFiles = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    MoveFilesResponse,
+    ShishoAPIError,
+    MoveFilesMutationVariables
+  >({
+    mutationFn: ({ bookId, payload }) => {
+      return API.request("POST", `/books/${bookId}/move-files`, payload, null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+    },
+  });
+};
+
+interface MergeBooksMutationVariables {
+  payload: MergeBooksPayload;
+}
+
+export const useMergeBooks = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    MergeBooksResponse,
+    ShishoAPIError,
+    MergeBooksMutationVariables
+  >({
+    mutationFn: ({ payload }) => {
+      return API.request("POST", "/books/merge", payload, null);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
     },

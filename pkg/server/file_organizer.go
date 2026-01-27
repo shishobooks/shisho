@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -159,11 +158,11 @@ func (fo *fileOrganizer) RenameNarratedFile(ctx context.Context, fileID int) (st
 		}
 
 		// Update cover path if it exists
-		if file.CoverImagePath != nil {
-			newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
+		if file.CoverImageFilename != nil {
+			newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
 			_, err = fo.db.NewUpdate().
 				Model((*models.File)(nil)).
-				Set("cover_image_path = ?", newCoverPath).
+				Set("cover_image_filename = ?", newCoverPath).
 				Where("id = ?", file.ID).
 				Exec(ctx)
 			if err != nil {

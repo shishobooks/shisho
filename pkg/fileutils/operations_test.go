@@ -119,7 +119,7 @@ func TestCoverExistsWithBaseName(t *testing.T) {
 	}
 }
 
-func TestComputeNewCoverPath(t *testing.T) {
+func TestComputeNewCoverFilename(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name         string
@@ -128,28 +128,28 @@ func TestComputeNewCoverPath(t *testing.T) {
 		want         string
 	}{
 		{
-			name:         "computes new cover path with jpg extension",
+			name:         "returns relative filename with jpg extension",
 			oldCoverPath: "/path/to/Old Title.epub.cover.jpg",
 			newFilePath:  "/path/to/New Title.epub",
-			want:         "/path/to/New Title.epub.cover.jpg",
+			want:         "New Title.epub.cover.jpg",
 		},
 		{
-			name:         "computes new cover path with png extension",
+			name:         "returns relative filename with png extension",
 			oldCoverPath: "/path/to/Old Book.cbz.cover.png",
 			newFilePath:  "/path/to/New Book.cbz",
-			want:         "/path/to/New Book.cbz.cover.png",
+			want:         "New Book.cbz.cover.png",
 		},
 		{
 			name:         "preserves jpeg extension",
 			oldCoverPath: "/lib/book.m4b.cover.jpeg",
 			newFilePath:  "/lib/audiobook.m4b",
-			want:         "/lib/audiobook.m4b.cover.jpeg",
+			want:         "audiobook.m4b.cover.jpeg",
 		},
 		{
 			name:         "handles webp extension",
 			oldCoverPath: "/lib/old.epub.cover.webp",
 			newFilePath:  "/lib/new.epub",
-			want:         "/lib/new.epub.cover.webp",
+			want:         "new.epub.cover.webp",
 		},
 		{
 			name:         "returns empty string for empty cover path",
@@ -161,34 +161,33 @@ func TestComputeNewCoverPath(t *testing.T) {
 			name:         "handles path with spaces",
 			oldCoverPath: "/path/to/My Book.epub.cover.jpg",
 			newFilePath:  "/path/to/My New Book.epub",
-			want:         "/path/to/My New Book.epub.cover.jpg",
+			want:         "My New Book.epub.cover.jpg",
 		},
 		{
 			name:         "handles path with brackets",
 			oldCoverPath: "/lib/[Author] Old Title.epub.cover.png",
 			newFilePath:  "/lib/[Author] New Title.epub",
-			want:         "/lib/[Author] New Title.epub.cover.png",
+			want:         "[Author] New Title.epub.cover.png",
 		},
 		{
 			name:         "handles audiobook with narrator braces",
 			oldCoverPath: "/lib/Book {Old Narrator}.m4b.cover.jpg",
 			newFilePath:  "/lib/Book {New Narrator}.m4b",
-			want:         "/lib/Book {New Narrator}.m4b.cover.jpg",
+			want:         "Book {New Narrator}.m4b.cover.jpg",
 		},
 		{
-			// Real-world usage: CoverImagePath stores just the filename, not the full path.
-			// The function returns a full path, so callers must use filepath.Base() if they
-			// need just the filename (e.g., for database storage).
-			name:         "filename-only input returns full path (caller must use Base)",
+			// Real-world usage: CoverImageFilename stores just the filename, not the full path.
+			// The function returns just the filename to match how it's stored in the database.
+			name:         "filename-only input returns filename",
 			oldCoverPath: "OldBook.cbz.cover.jpg",
 			newFilePath:  "/path/to/NewBook.cbz",
-			want:         "/path/to/NewBook.cbz.cover.jpg",
+			want:         "NewBook.cbz.cover.jpg",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ComputeNewCoverPath(tt.oldCoverPath, tt.newFilePath)
+			got := ComputeNewCoverFilename(tt.oldCoverPath, tt.newFilePath)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -625,6 +624,263 @@ func TestCleanupEmptyParentDirectories(t *testing.T) {
 				fullPath := filepath.Join(testDir, relPath)
 				_, statErr := os.Stat(fullPath)
 				assert.NoError(t, statErr, "directory should exist: %s", relPath)
+			}
+		})
+	}
+}
+
+func TestCleanupEmptyDirectory_WithIgnoredPatterns(t *testing.T) {
+	t.Parallel()
+	tempDir, err := os.MkdirTemp("", "cleanup-ignored-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(tempDir)
+	})
+
+	tests := []struct {
+		name            string
+		files           []string // files to create in the directory
+		ignoredPatterns []string // patterns to ignore
+		expectRemoved   bool     // whether dir should be removed
+		expectFilesGone []string // files that should be deleted
+	}{
+		{
+			name:            "removes directory with only .DS_Store",
+			files:           []string{".DS_Store"},
+			ignoredPatterns: []string{".DS_Store"},
+			expectRemoved:   true,
+			expectFilesGone: []string{".DS_Store"},
+		},
+		{
+			name:            "removes directory with only dotfiles using .* pattern",
+			files:           []string{".DS_Store", ".hidden"},
+			ignoredPatterns: []string{".*"},
+			expectRemoved:   true,
+			expectFilesGone: []string{".DS_Store", ".hidden"},
+		},
+		{
+			name:            "does not remove directory with non-ignored file",
+			files:           []string{".DS_Store", "important.txt"},
+			ignoredPatterns: []string{".DS_Store"},
+			expectRemoved:   false,
+			expectFilesGone: []string{},
+		},
+		{
+			name:            "removes directory with multiple ignored patterns",
+			files:           []string{".DS_Store", "Thumbs.db", "desktop.ini"},
+			ignoredPatterns: []string{".DS_Store", "Thumbs.db", "desktop.ini"},
+			expectRemoved:   true,
+			expectFilesGone: []string{".DS_Store", "Thumbs.db", "desktop.ini"},
+		},
+		{
+			name:            "glob pattern *.tmp removes temp files",
+			files:           []string{"file.tmp", "other.tmp"},
+			ignoredPatterns: []string{"*.tmp"},
+			expectRemoved:   true,
+			expectFilesGone: []string{"file.tmp", "other.tmp"},
+		},
+		{
+			name:            "no ignored patterns means normal behavior",
+			files:           []string{".DS_Store"},
+			ignoredPatterns: []string{},
+			expectRemoved:   false,
+			expectFilesGone: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tempDir, tt.name)
+			os.MkdirAll(testDir, 0755)
+
+			// Create test files
+			for _, file := range tt.files {
+				err := os.WriteFile(filepath.Join(testDir, file), []byte("content"), 0600)
+				if err != nil {
+					t.Fatalf("failed to create test file %s: %v", file, err)
+				}
+			}
+
+			removed, err := CleanupEmptyDirectory(testDir, tt.ignoredPatterns...)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			assert.Equal(t, tt.expectRemoved, removed, "removed mismatch")
+
+			if tt.expectRemoved {
+				_, statErr := os.Stat(testDir)
+				assert.True(t, os.IsNotExist(statErr), "directory should be gone")
+			} else {
+				_, statErr := os.Stat(testDir)
+				if statErr != nil {
+					t.Errorf("directory should still exist: %v", statErr)
+				}
+			}
+
+			// Check that files that should be gone are gone (for non-removed directories)
+			for _, file := range tt.expectFilesGone {
+				_, statErr := os.Stat(filepath.Join(testDir, file))
+				assert.True(t, os.IsNotExist(statErr), "file should be gone: %s", file)
+			}
+		})
+	}
+}
+
+func TestMoveFileWithAssociatedFiles(t *testing.T) {
+	t.Parallel()
+	tempDir, err := os.MkdirTemp("", "move-associated-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(tempDir)
+	})
+
+	tests := []struct {
+		name            string
+		originalFile    string
+		associatedFiles []string // files to create alongside the main file
+		expectMoved     []string // files that should exist in destination
+		expectGone      []string // files that should no longer exist in source
+	}{
+		{
+			name:         "moves file with cover and sidecar",
+			originalFile: "Book.m4b",
+			associatedFiles: []string{
+				"Book.m4b.cover.jpg",
+				"Book.m4b.metadata.json",
+			},
+			expectMoved: []string{
+				"Book.m4b",
+				"Book.m4b.cover.jpg",
+				"Book.m4b.metadata.json",
+			},
+			expectGone: []string{
+				"Book.m4b",
+				"Book.m4b.cover.jpg",
+				"Book.m4b.metadata.json",
+			},
+		},
+		{
+			name:         "moves file with multiple cover formats",
+			originalFile: "Comic.cbz",
+			associatedFiles: []string{
+				"Comic.cbz.cover.jpg",
+				"Comic.cbz.cover.png",
+			},
+			expectMoved: []string{
+				"Comic.cbz",
+				"Comic.cbz.cover.jpg",
+				"Comic.cbz.cover.png",
+			},
+			expectGone: []string{
+				"Comic.cbz",
+				"Comic.cbz.cover.jpg",
+				"Comic.cbz.cover.png",
+			},
+		},
+		{
+			name:            "moves file without associated files",
+			originalFile:    "Simple.epub",
+			associatedFiles: []string{},
+			expectMoved: []string{
+				"Simple.epub",
+			},
+			expectGone: []string{
+				"Simple.epub",
+			},
+		},
+		{
+			name:         "does not move book sidecar (only file-specific)",
+			originalFile: "MyBook.epub",
+			associatedFiles: []string{
+				"MyBook.epub.cover.jpg",
+				"MyBook.epub.metadata.json",
+				"MyBook.metadata.json", // book sidecar - should NOT be moved
+			},
+			expectMoved: []string{
+				"MyBook.epub",
+				"MyBook.epub.cover.jpg",
+				"MyBook.epub.metadata.json",
+				// MyBook.metadata.json should NOT be here
+			},
+			expectGone: []string{
+				"MyBook.epub",
+				"MyBook.epub.cover.jpg",
+				"MyBook.epub.metadata.json",
+				// MyBook.metadata.json should still exist in source
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create source and destination directories
+			sourceDir := filepath.Join(tempDir, tt.name, "source")
+			destDir := filepath.Join(tempDir, tt.name, "dest")
+			err := os.MkdirAll(sourceDir, 0755)
+			if err != nil {
+				t.Fatalf("failed to create source dir: %v", err)
+			}
+			err = os.MkdirAll(destDir, 0755)
+			if err != nil {
+				t.Fatalf("failed to create dest dir: %v", err)
+			}
+
+			// Create the main file
+			originalPath := filepath.Join(sourceDir, tt.originalFile)
+			err = os.WriteFile(originalPath, []byte("main file content"), 0600)
+			if err != nil {
+				t.Fatalf("failed to create main file: %v", err)
+			}
+
+			// Create associated files
+			for _, assoc := range tt.associatedFiles {
+				assocPath := filepath.Join(sourceDir, assoc)
+				err = os.WriteFile(assocPath, []byte("associated content"), 0600)
+				if err != nil {
+					t.Fatalf("failed to create associated file %s: %v", assoc, err)
+				}
+			}
+
+			// Move the file with associated files
+			newPath := filepath.Join(destDir, tt.originalFile)
+			_, err = MoveFileWithAssociatedFiles(originalPath, newPath)
+			if err != nil {
+				t.Fatalf("MoveFileWithAssociatedFiles failed: %v", err)
+			}
+
+			// Verify expected files exist in destination
+			for _, expected := range tt.expectMoved {
+				movedPath := filepath.Join(destDir, expected)
+				_, statErr := os.Stat(movedPath)
+				if statErr != nil {
+					t.Errorf("file should exist in destination: %s, error: %v", expected, statErr)
+				}
+			}
+
+			// Verify expected files are gone from source
+			for _, expected := range tt.expectGone {
+				gonePath := filepath.Join(sourceDir, expected)
+				_, statErr := os.Stat(gonePath)
+				assert.True(t, os.IsNotExist(statErr), "file should be gone from source: %s", expected)
+			}
+
+			// Special check: book sidecar should remain in source for the last test case
+			if tt.name == "does not move book sidecar (only file-specific)" {
+				bookSidecar := filepath.Join(sourceDir, "MyBook.metadata.json")
+				_, statErr := os.Stat(bookSidecar)
+				if statErr != nil {
+					t.Errorf("book sidecar should remain in source: %v", statErr)
+				}
+
+				// And should NOT be in destination
+				bookSidecarDest := filepath.Join(destDir, "MyBook.metadata.json")
+				_, statErr = os.Stat(bookSidecarDest)
+				assert.True(t, os.IsNotExist(statErr), "book sidecar should NOT be in destination")
 			}
 		})
 	}

@@ -558,7 +558,8 @@ export function FileEditDialog({
                               className="w-full h-full object-cover"
                               src={pendingCoverPreview}
                             />
-                          ) : file.cover_mime_type || file.cover_image_path ? (
+                          ) : file.cover_mime_type ||
+                            file.cover_image_filename ? (
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
@@ -584,7 +585,8 @@ export function FileEditDialog({
                               className="w-full h-full object-cover"
                               src={`/api/books/files/${file.id}/page/${pendingCoverPage}`}
                             />
-                          ) : file.cover_mime_type || file.cover_image_path ? (
+                          ) : file.cover_mime_type ||
+                            file.cover_image_filename ? (
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
@@ -633,7 +635,7 @@ export function FileEditDialog({
                             <Upload className="h-4 w-4 mr-2" />
                           )}
                           {file.cover_mime_type ||
-                          file.cover_image_path ||
+                          file.cover_image_filename ||
                           pendingCoverFile
                             ? "Replace cover"
                             : "Upload cover"}

@@ -1,5 +1,7 @@
 package books
 
+import "github.com/shishobooks/shisho/pkg/models"
+
 type ListBooksQuery struct {
 	Limit     int      `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
 	Offset    int      `query:"offset" json:"offset,omitempty" validate:"min=0"`
@@ -55,4 +57,30 @@ type UpdateFilePayload struct {
 // ResyncPayload contains the request parameters for resync operations.
 type ResyncPayload struct {
 	Refresh bool `json:"refresh"`
+}
+
+// MoveFilesPayload is the payload for moving files to another book.
+type MoveFilesPayload struct {
+	FileIDs      []int `json:"file_ids" validate:"required,min=1,dive,min=1"`
+	TargetBookID *int  `json:"target_book_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
+}
+
+// MoveFilesResponse is the response from a move files operation.
+type MoveFilesResponse struct {
+	TargetBook        *models.Book `json:"target_book"`
+	FilesMoved        int          `json:"files_moved"`
+	SourceBookDeleted bool         `json:"source_book_deleted"`
+}
+
+// MergeBooksPayload is the payload for merging multiple books.
+type MergeBooksPayload struct {
+	SourceBookIDs []int `json:"source_book_ids" validate:"required,min=1,dive,min=1"`
+	TargetBookID  int   `json:"target_book_id" validate:"required,min=1"`
+}
+
+// MergeBooksResponse is the response from a merge books operation.
+type MergeBooksResponse struct {
+	TargetBook   *models.Book `json:"target_book"`
+	FilesMoved   int          `json:"files_moved"`
+	BooksDeleted int          `json:"books_deleted"`
 }

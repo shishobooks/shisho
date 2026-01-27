@@ -267,7 +267,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 
 	// Select the appropriate file based on the library's cover aspect ratio setting
 	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImagePath == nil || *coverFile.CoverImagePath == "" {
+	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
 		return errcodes.NotFound("Series cover")
 	}
 
@@ -285,7 +285,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverImagePath := filepath.Join(coverDir, *coverFile.CoverImagePath)
+	coverImagePath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
 
 	// Set appropriate headers
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
@@ -298,7 +298,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
-		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}
 		switch f.FileType {

@@ -35,6 +35,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 	h := &handler{
+		config:           cfg,
 		bookService:      bookService,
 		libraryService:   libraryService,
 		personService:    personService,
@@ -49,10 +50,15 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		scanner:          scanner,
 	}
 
+	// Merge books - must be before /:id routes
+	g.POST("/merge", h.mergeBooks, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
 	g.GET("", h.list)
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/:id/resync", h.resyncBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	// Move files between books
+	g.POST("/:id/move-files", h.moveFiles, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("/:id/cover", h.bookCover)
 	g.GET("/:id/lists", h.bookLists)
 	g.POST("/:id/lists", h.updateBookLists)

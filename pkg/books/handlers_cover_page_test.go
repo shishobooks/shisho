@@ -142,10 +142,10 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		assert.NotNil(t, updatedFile.CoverMimeType)
 		assert.NotNil(t, updatedFile.CoverSource)
 		assert.Equal(t, models.DataSourceManual, *updatedFile.CoverSource)
-		assert.NotNil(t, updatedFile.CoverImagePath)
+		assert.NotNil(t, updatedFile.CoverImageFilename)
 
 		// Verify cover file was created
-		coverPath := filepath.Join(bookDir, *updatedFile.CoverImagePath)
+		coverPath := filepath.Join(bookDir, *updatedFile.CoverImageFilename)
 		_, err = os.Stat(coverPath)
 		assert.NoError(t, err, "Cover file should exist at %s", coverPath)
 	})

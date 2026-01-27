@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
+	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -55,6 +56,7 @@ type Scanner interface {
 }
 
 type handler struct {
+	config           *config.Config
 	bookService      *Service
 	libraryService   *libraries.Service
 	personService    *people.Service
@@ -664,18 +666,18 @@ func (h *handler) updateFile(c echo.Context) error {
 		// When downgrading from main to supplement, clear all main-file-only metadata
 		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
 			// Delete cover image file if it exists
-			if file.CoverImagePath != nil {
-				if err := os.Remove(*file.CoverImagePath); err != nil && !os.IsNotExist(err) {
-					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": *file.CoverImagePath})
+			if file.CoverImageFilename != nil {
+				if err := os.Remove(*file.CoverImageFilename); err != nil && !os.IsNotExist(err) {
+					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": *file.CoverImageFilename})
 				}
 			}
 
 			// Clear cover fields
-			file.CoverImagePath = nil
+			file.CoverImageFilename = nil
 			file.CoverMimeType = nil
 			file.CoverSource = nil
 			file.CoverPage = nil
-			opts.Columns = append(opts.Columns, "cover_image_path", "cover_mime_type", "cover_source", "cover_page")
+			opts.Columns = append(opts.Columns, "cover_image_filename", "cover_mime_type", "cover_source", "cover_page")
 
 			// Clear audiobook fields
 			file.AudiobookDurationSeconds = nil
@@ -811,11 +813,10 @@ func (h *handler) updateFile(c echo.Context) error {
 					"new_path": newPath,
 				})
 				// Update cover path if it exists (covers are renamed by rename function)
-				if file.CoverImagePath != nil {
-					// CoverImagePath stores just the filename, so extract Base from the computed path
-					newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
-					file.CoverImagePath = &newCoverPath
-					opts.Columns = append(opts.Columns, "cover_image_path")
+				if file.CoverImageFilename != nil {
+					newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
+					file.CoverImageFilename = &newCoverPath
+					opts.Columns = append(opts.Columns, "cover_image_filename")
 				}
 				file.Filepath = newPath
 				opts.Columns = append(opts.Columns, "filepath")
@@ -895,11 +896,10 @@ func (h *handler) updateFile(c echo.Context) error {
 				"new_path": newPath,
 			})
 			// Update cover path if it exists (covers are renamed by rename function)
-			if file.CoverImagePath != nil {
-				// CoverImagePath stores just the filename, so extract Base from the computed path
-				newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
-				file.CoverImagePath = &newCoverPath
-				opts.Columns = append(opts.Columns, "cover_image_path")
+			if file.CoverImageFilename != nil {
+				newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
+				file.CoverImageFilename = &newCoverPath
+				opts.Columns = append(opts.Columns, "cover_image_filename")
 			}
 			file.Filepath = newPath
 			opts.Columns = append(opts.Columns, "filepath")
@@ -1124,10 +1124,10 @@ func (h *handler) fileCover(c echo.Context) error {
 		coverDir = file.Book.Filepath
 	}
 
-	// Cover filename is stored in CoverImagePath, or fallback to {filename}.cover.{ext}
+	// Cover filename is stored in CoverImageFilename, or fallback to {filename}.cover.{ext}
 	var coverPath string
-	if file.CoverImagePath != nil && *file.CoverImagePath != "" {
-		coverPath = filepath.Join(coverDir, *file.CoverImagePath)
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath = filepath.Join(coverDir, *file.CoverImageFilename)
 	} else {
 		filename := filepath.Base(file.Filepath)
 		coverPath = filepath.Join(coverDir, filename+".cover"+file.CoverExtension())
@@ -1261,11 +1261,11 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Update the file's cover_image_path
+	// Update the file's cover_image_filename
 	coverFilename := coverBaseName + finalExt
-	file.CoverImagePath = &coverFilename
+	file.CoverImageFilename = &coverFilename
 	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_image_path"},
+		Columns: []string{"cover_image_filename"},
 	}); err != nil {
 		return errors.WithStack(err)
 	}
@@ -1335,7 +1335,7 @@ func (h *handler) bookCover(c echo.Context) error {
 
 	// Select the appropriate file based on the library's cover aspect ratio setting
 	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImagePath == nil || *coverFile.CoverImagePath == "" {
+	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
 		return errcodes.NotFound("Cover")
 	}
 
@@ -1355,7 +1355,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverPath := filepath.Join(coverDir, *coverFile.CoverImagePath)
+	coverPath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
 	return errors.WithStack(c.File(coverPath))
 }
 
@@ -1364,7 +1364,7 @@ func (h *handler) bookCover(c echo.Context) error {
 func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
-		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}
 		switch f.FileType {
@@ -1903,4 +1903,199 @@ func (h *handler) updateBookLists(c echo.Context) error {
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, bookLists))
+}
+
+// moveFiles moves files from this book to another book (or a new book).
+func (h *handler) moveFiles(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Parse book ID from URL param
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Get source book to determine library
+	sourceBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	user, ok := c.Get("user").(*models.User)
+	if ok && !user.HasLibraryAccess(sourceBook.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Bind payload
+	params := MoveFilesPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Validate files belong to this book
+	for _, fileID := range params.FileIDs {
+		found := false
+		for _, file := range sourceBook.Files {
+			if file.ID == fileID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errcodes.ValidationError("File does not belong to this book")
+		}
+	}
+
+	// If target book specified, verify it exists and is in same library
+	if params.TargetBookID != nil {
+		targetBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+			ID: params.TargetBookID,
+		})
+		if err != nil {
+			return errcodes.NotFound("Target book")
+		}
+		if targetBook.LibraryID != sourceBook.LibraryID {
+			return errcodes.ValidationError("Target book must be in the same library")
+		}
+	}
+
+	// Call service method
+	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:         params.FileIDs,
+		TargetBookID:    params.TargetBookID,
+		LibraryID:       sourceBook.LibraryID,
+		IgnoredPatterns: h.config.SupplementExcludePatterns,
+	})
+	if err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Update search indexes: IndexBook for target
+	if result.TargetBook != nil {
+		if err := h.searchService.IndexBook(ctx, result.TargetBook); err != nil {
+			log.Warn("failed to update search index for target book", logger.Data{"book_id": result.TargetBook.ID, "error": err.Error()})
+		}
+	}
+
+	// Update search indexes: IndexBook for source (if still exists)
+	if !result.SourceBookDeleted {
+		// Reload source book to get fresh data
+		updatedSourceBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+			ID: &id,
+		})
+		if err == nil {
+			if err := h.searchService.IndexBook(ctx, updatedSourceBook); err != nil {
+				log.Warn("failed to update search index for source book", logger.Data{"book_id": id, "error": err.Error()})
+			}
+		}
+	}
+
+	// DeleteFromBookIndex for deleted books
+	for _, deletedBookID := range result.DeletedBookIDs {
+		if err := h.searchService.DeleteFromBookIndex(ctx, deletedBookID); err != nil {
+			log.Warn("failed to delete book from search index", logger.Data{"book_id": deletedBookID, "error": err.Error()})
+		}
+	}
+
+	// Return MoveFilesResponse
+	return c.JSON(http.StatusOK, MoveFilesResponse{
+		TargetBook:        result.TargetBook,
+		FilesMoved:        result.FilesMoved,
+		SourceBookDeleted: result.SourceBookDeleted,
+	})
+}
+
+// mergeBooks merges multiple books into a single target book.
+func (h *handler) mergeBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Bind payload
+	params := MergeBooksPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Get target book to determine library
+	targetBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &params.TargetBookID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	user, ok := c.Get("user").(*models.User)
+	if ok && !user.HasLibraryAccess(targetBook.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Validate source books exist and are in same library, collect all file IDs
+	var allFileIDs []int
+	for _, sourceBookID := range params.SourceBookIDs {
+		// Skip if target book is in sources
+		if sourceBookID == params.TargetBookID {
+			continue
+		}
+
+		sourceBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+			ID: &sourceBookID,
+		})
+		if err != nil {
+			return errcodes.NotFound("Source book")
+		}
+		if sourceBook.LibraryID != targetBook.LibraryID {
+			return errcodes.ValidationError("All source books must be in the same library as target book")
+		}
+
+		// Collect file IDs from this source book
+		for _, file := range sourceBook.Files {
+			allFileIDs = append(allFileIDs, file.ID)
+		}
+	}
+
+	// If no files to move (e.g., target was the only source), return early
+	if len(allFileIDs) == 0 {
+		return c.JSON(http.StatusOK, MergeBooksResponse{
+			TargetBook:   targetBook,
+			FilesMoved:   0,
+			BooksDeleted: 0,
+		})
+	}
+
+	// Call service method to move all files to target book
+	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:         allFileIDs,
+		TargetBookID:    &params.TargetBookID,
+		LibraryID:       targetBook.LibraryID,
+		IgnoredPatterns: h.config.SupplementExcludePatterns,
+	})
+	if err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Update search indexes: IndexBook for target
+	if result.TargetBook != nil {
+		if err := h.searchService.IndexBook(ctx, result.TargetBook); err != nil {
+			log.Warn("failed to update search index for target book", logger.Data{"book_id": result.TargetBook.ID, "error": err.Error()})
+		}
+	}
+
+	// DeleteFromBookIndex for deleted books
+	for _, deletedBookID := range result.DeletedBookIDs {
+		if err := h.searchService.DeleteFromBookIndex(ctx, deletedBookID); err != nil {
+			log.Warn("failed to delete book from search index", logger.Data{"book_id": deletedBookID, "error": err.Error()})
+		}
+	}
+
+	// Return MergeBooksResponse
+	return c.JSON(http.StatusOK, MergeBooksResponse{
+		TargetBook:   result.TargetBook,
+		FilesMoved:   result.FilesMoved,
+		BooksDeleted: len(result.DeletedBookIDs),
+	})
 }

@@ -372,7 +372,7 @@ func TestFileOrganizer_GetLibraryOrganizeSetting(t *testing.T) {
 	assert.False(t, enabled2)
 }
 
-func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
+func TestFileOrganizer_OrganizeBookFiles_CoverImageFilenameUpdated(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
 
@@ -401,8 +401,8 @@ func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
 	file := files[0]
 
 	// Verify cover was extracted
-	require.NotNil(t, file.CoverImagePath, "CoverImagePath should be set after scan")
-	originalCoverPath := *file.CoverImagePath
+	require.NotNil(t, file.CoverImageFilename, "CoverImageFilename should be set after scan")
+	originalCoverPath := *file.CoverImageFilename
 	// Cover filename is based on file name, which doesn't include author prefix
 	assert.Contains(t, originalCoverPath, "Test Book With Cover", "original cover path should contain title")
 
@@ -438,11 +438,11 @@ func TestFileOrganizer_OrganizeBookFiles_CoverImagePathUpdated(t *testing.T) {
 	expectedNewCoverFullPath := filepath.Join(expectedNewBookDir, expectedNewCoverFilename)
 	assert.True(t, testgen.FileExists(expectedNewCoverFullPath), "new cover file should exist at %s", expectedNewCoverFullPath)
 
-	// THIS IS THE BUG: CoverImagePath in database should be updated to match the new filename
+	// THIS IS THE BUG: CoverImageFilename in database should be updated to match the new filename
 	updatedFile, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &file.ID})
 	require.NoError(t, err)
 
-	require.NotNil(t, updatedFile.CoverImagePath, "CoverImagePath should still be set")
-	assert.Equal(t, expectedNewCoverFilename, *updatedFile.CoverImagePath,
-		"CoverImagePath should be updated to match the new filename")
+	require.NotNil(t, updatedFile.CoverImageFilename, "CoverImageFilename should still be set")
+	assert.Equal(t, expectedNewCoverFilename, *updatedFile.CoverImageFilename,
+		"CoverImageFilename should be updated to match the new filename")
 }

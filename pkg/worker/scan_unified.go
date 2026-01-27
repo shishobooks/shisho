@@ -1237,10 +1237,10 @@ func (w *Worker) scanFileCore(
 				})
 				// Update cover path if it exists (covers are renamed by rename function)
 				fileRenameOpts := books.UpdateFileOptions{Columns: []string{"filepath"}}
-				if file.CoverImagePath != nil {
-					newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
-					file.CoverImagePath = &newCoverPath
-					fileRenameOpts.Columns = append(fileRenameOpts.Columns, "cover_image_path")
+				if file.CoverImageFilename != nil {
+					newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
+					file.CoverImageFilename = &newCoverPath
+					fileRenameOpts.Columns = append(fileRenameOpts.Columns, "cover_image_filename")
 				}
 				file.Filepath = newPath
 				if err := w.bookService.UpdateFile(ctx, file, fileRenameOpts); err != nil {
@@ -1534,12 +1534,12 @@ func (w *Worker) scanFileCore(
 				})
 
 				file.CoverPage = fileSidecarData.CoverPage
-				file.CoverImagePath = &coverFilename
+				file.CoverImageFilename = &coverFilename
 				file.CoverMimeType = &coverMimeType
 				file.CoverSource = &sidecarSource
 
 				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-					Columns: []string{"cover_page", "cover_image_path", "cover_mime_type", "cover_source"},
+					Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
 				}); err != nil {
 					return nil, errors.Wrap(err, "failed to update cover page from sidecar")
 				}
@@ -1795,15 +1795,15 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	// Create file record
 	log.Info("creating file", logger.Data{"path": path, "filesize": size})
 	file := &models.File{
-		LibraryID:      opts.LibraryID,
-		BookID:         book.ID,
-		Filepath:       path,
-		FileType:       fileType,
-		FilesizeBytes:  size,
-		CoverImagePath: coverImagePath,
-		CoverMimeType:  coverMimeType,
-		CoverSource:    coverSource,
-		CoverPage:      coverPage,
+		LibraryID:          opts.LibraryID,
+		BookID:             book.ID,
+		Filepath:           path,
+		FileType:           fileType,
+		FilesizeBytes:      size,
+		CoverImageFilename: coverImagePath,
+		CoverMimeType:      coverMimeType,
+		CoverSource:        coverSource,
+		CoverPage:          coverPage,
 	}
 
 	// Set fields from metadata if provided (parsers only set what's relevant)

@@ -408,15 +408,17 @@ func getBaseNameWithoutExt(path string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
-// ComputeNewCoverPath computes the new cover image path after a file has been renamed.
+// ComputeNewCoverFilename computes the new cover filename after a file has been renamed.
 // It preserves the cover's extension while updating the base filename to match the new file path.
-// Returns empty string if oldCoverPath is empty.
-func ComputeNewCoverPath(oldCoverPath, newFilePath string) string {
-	if oldCoverPath == "" {
+// Returns just the filename (e.g., "book.epub.cover.jpg"), not a full path.
+// Returns empty string if oldCoverFilename is empty.
+func ComputeNewCoverFilename(oldCoverFilename, newFilePath string) string {
+	if oldCoverFilename == "" {
 		return ""
 	}
-	coverExt := filepath.Ext(oldCoverPath)
-	return newFilePath + ".cover" + coverExt
+	coverExt := filepath.Ext(oldCoverFilename)
+	newFilename := filepath.Base(newFilePath)
+	return newFilename + ".cover" + coverExt
 }
 
 // CoverImageExtensions contains all supported image extensions for cover files.
@@ -460,9 +462,10 @@ func CoverExistsWithBaseName(dir, baseName string) string {
 	return ""
 }
 
-// CleanupEmptyDirectory removes a directory if it's empty.
+// CleanupEmptyDirectory removes a directory if it's empty or only contains ignored files.
+// ignoredPatterns can include glob patterns like ".*" (dotfiles), ".DS_Store", "Thumbs.db", etc.
 // Returns true if the directory was removed, false if it wasn't empty or didn't exist.
-func CleanupEmptyDirectory(dirPath string) (bool, error) {
+func CleanupEmptyDirectory(dirPath string, ignoredPatterns ...string) (bool, error) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -471,19 +474,57 @@ func CleanupEmptyDirectory(dirPath string) (bool, error) {
 		return false, errors.WithStack(err)
 	}
 
-	if len(entries) == 0 {
-		if err := os.Remove(dirPath); err != nil {
-			return false, errors.WithStack(err)
+	// Check if all entries are ignorable
+	var filesToRemove []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Has a subdirectory - not empty
+			return false, nil
 		}
-		return true, nil
+		name := entry.Name()
+		if !matchesIgnoredPattern(name, ignoredPatterns) {
+			// Has a non-ignored file - not empty
+			return false, nil
+		}
+		filesToRemove = append(filesToRemove, filepath.Join(dirPath, name))
 	}
 
-	return false, nil
+	// Remove all ignored files first
+	for _, f := range filesToRemove {
+		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+			return false, errors.WithStack(err)
+		}
+	}
+
+	// Now remove the empty directory
+	if err := os.Remove(dirPath); err != nil {
+		return false, errors.WithStack(err)
+	}
+	return true, nil
+}
+
+// matchesIgnoredPattern checks if filename matches any ignored pattern.
+func matchesIgnoredPattern(filename string, patterns []string) bool {
+	for _, pattern := range patterns {
+		// Simple prefix match for patterns starting with "." (matches all dotfiles)
+		if pattern == ".*" && strings.HasPrefix(filename, ".") {
+			return true
+		}
+		// Exact match
+		if filename == pattern {
+			return true
+		}
+		// Glob match for more complex patterns
+		if matched, _ := filepath.Match(pattern, filename); matched {
+			return true
+		}
+	}
+	return false
 }
 
 // CleanupEmptyParentDirectories removes empty parent directories starting from startPath
-// up to (but not including) stopAt.
-func CleanupEmptyParentDirectories(startPath, stopAt string) error {
+// up to (but not including) stopAt. ignoredPatterns are passed to CleanupEmptyDirectory.
+func CleanupEmptyParentDirectories(startPath, stopAt string, ignoredPatterns ...string) error {
 	current := startPath
 	for current != stopAt && current != "." && current != "/" {
 		parent := filepath.Dir(current)
@@ -491,7 +532,7 @@ func CleanupEmptyParentDirectories(startPath, stopAt string) error {
 			break // Can't go up any further
 		}
 
-		removed, err := CleanupEmptyDirectory(current)
+		removed, err := CleanupEmptyDirectory(current, ignoredPatterns...)
 		if err != nil {
 			return err
 		}
@@ -533,4 +574,80 @@ func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
 	}
 
 	return buf.Bytes(), "image/png", nil
+}
+
+// GenerateUniqueFilepathIfExists returns a unique filepath if the path exists, otherwise returns the original.
+func GenerateUniqueFilepathIfExists(path string) string {
+	return generateUniqueFilepath(path)
+}
+
+// MoveFile safely moves a file from source to destination. Returns error if move fails.
+func MoveFile(src, dst string) error {
+	return moveFile(src, dst)
+}
+
+// MoveFileWithAssociatedFiles moves a file and its associated files (covers, file sidecar).
+// This does NOT move book sidecars - only file-specific associated files.
+// Returns the number of associated files moved.
+func MoveFileWithAssociatedFiles(originalFilePath, newFilePath string) (int, error) {
+	// First move the main file
+	if err := moveFile(originalFilePath, newFilePath); err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	// Move associated files (covers and file sidecar, but NOT book sidecar)
+	associatedMoved, err := moveFileAssociatedFiles(originalFilePath, newFilePath)
+	if err != nil {
+		// Try to rollback the main file move
+		_ = moveFile(newFilePath, originalFilePath)
+		return 0, errors.WithStack(err)
+	}
+
+	return associatedMoved, nil
+}
+
+// moveFileAssociatedFiles moves only file-specific associated files (covers and file sidecar).
+// This does NOT move book sidecars - use moveAssociatedCovers for that.
+func moveFileAssociatedFiles(originalFilePath, newFilePath string) (int, error) {
+	originalDir := filepath.Dir(originalFilePath)
+	newDir := filepath.Dir(newFilePath)
+
+	// Get the full filename (including extension) for cover naming
+	originalFilename := filepath.Base(originalFilePath)
+	newFilename := filepath.Base(newFilePath)
+
+	moved := 0
+
+	// Look for individual covers: {filename}.cover.{ext}
+	// e.g., mybook.m4b.cover.jpg for mybook.m4b
+	for _, ext := range CoverImageExtensions {
+		originalCoverName := originalFilename + ".cover" + ext
+		originalCoverPath := filepath.Join(originalDir, originalCoverName)
+
+		// Check if this cover exists
+		if _, err := os.Stat(originalCoverPath); err == nil {
+			// Generate the new cover name
+			newCoverName := newFilename + ".cover" + ext
+			newCoverPath := filepath.Join(newDir, newCoverName)
+
+			// Move the cover
+			err := moveFile(originalCoverPath, newCoverPath)
+			if err != nil {
+				return moved, errors.WithStack(err)
+			}
+			moved++
+		}
+	}
+
+	// Move file sidecar: {filename}.metadata.json
+	originalFileSidecar := originalFilePath + ".metadata.json"
+	if _, err := os.Stat(originalFileSidecar); err == nil {
+		newFileSidecar := newFilePath + ".metadata.json"
+		if err := moveFile(originalFileSidecar, newFileSidecar); err != nil {
+			return moved, errors.WithStack(err)
+		}
+		moved++
+	}
+
+	return moved, nil
 }

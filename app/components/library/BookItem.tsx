@@ -39,7 +39,7 @@ interface BookItemProps {
 }
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
-// This mirrors the backend's selectCoverFile logic (requires cover_image_path)
+// This mirrors the backend's selectCoverFile logic (requires cover_image_filename)
 const selectCoverFile = (
   files: File[] | undefined,
   coverAspectRatio: string,
@@ -48,10 +48,11 @@ const selectCoverFile = (
 
   const bookFiles = files.filter(
     (f) =>
-      (f.file_type === "epub" || f.file_type === "cbz") && f.cover_image_path,
+      (f.file_type === "epub" || f.file_type === "cbz") &&
+      f.cover_image_filename,
   );
   const audiobookFiles = files.filter(
-    (f) => f.file_type === "m4b" && f.cover_image_path,
+    (f) => f.file_type === "m4b" && f.cover_image_filename,
   );
 
   switch (coverAspectRatio) {
@@ -68,7 +69,7 @@ const selectCoverFile = (
 };
 
 // Determines which file type would provide the cover based on library preference.
-// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
+// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
 // Used for placeholder variant selection when there's no cover image.
 const getCoverFileType = (
   files: File[] | undefined,

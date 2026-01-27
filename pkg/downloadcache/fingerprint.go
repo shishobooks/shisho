@@ -222,8 +222,8 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 	}
 
 	// Add cover information if present
-	if file.CoverImagePath != nil && *file.CoverImagePath != "" {
-		coverPath := *file.CoverImagePath
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath := *file.CoverImageFilename
 		mimeType := ""
 		if file.CoverMimeType != nil {
 			mimeType = *file.CoverMimeType

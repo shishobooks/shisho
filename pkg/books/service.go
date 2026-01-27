@@ -767,7 +767,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 						oldPath        string
 						newPath        string
 						coverImagePath *string
-					}{file.ID, file.Filepath, currentPath, file.CoverImagePath})
+					}{file.ID, file.Filepath, currentPath, file.CoverImageFilename})
 				}
 				continue
 			}
@@ -784,7 +784,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					oldPath        string
 					newPath        string
 					coverImagePath *string
-				}{file.ID, file.Filepath, newPath, file.CoverImagePath})
+				}{file.ID, file.Filepath, newPath, file.CoverImageFilename})
 			}
 		}
 	} else if isRootLevelBook {
@@ -826,7 +826,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					oldPath        string
 					newPath        string
 					coverImagePath *string
-				}{file.ID, result.OriginalPath, result.NewPath, file.CoverImagePath})
+				}{file.ID, result.OriginalPath, result.NewPath, file.CoverImageFilename})
 
 				// Track the new folder path (should be same for all files)
 				if newBookPath == "" {
@@ -894,7 +894,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					oldPath        string
 					newPath        string
 					coverImagePath *string
-				}{file.ID, file.Filepath, newPath, file.CoverImagePath})
+				}{file.ID, file.Filepath, newPath, file.CoverImageFilename})
 			}
 		}
 	}
@@ -908,8 +908,8 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 		// Also update cover image path if the file has a cover
 		if update.coverImagePath != nil {
-			newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*update.coverImagePath, update.newPath))
-			q = q.Set("cover_image_path = ?", newCoverPath)
+			newCoverPath := fileutils.ComputeNewCoverFilename(*update.coverImagePath, update.newPath)
+			q = q.Set("cover_image_filename = ?", newCoverPath)
 		}
 
 		_, err = q.Exec(ctx)

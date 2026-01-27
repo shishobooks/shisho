@@ -27,8 +27,8 @@ func TestComputeFingerprint(t *testing.T) {
 			},
 		}
 		file := &models.File{
-			CoverImagePath: nil,
-			CoverMimeType:  nil,
+			CoverImageFilename: nil,
+			CoverMimeType:      nil,
 		}
 
 		fp, err := ComputeFingerprint(book, file)
@@ -150,8 +150,8 @@ func TestComputeFingerprint(t *testing.T) {
 
 		book := &models.Book{Title: "Book with Cover"}
 		file := &models.File{
-			CoverImagePath: strPtr(coverPath),
-			CoverMimeType:  strPtr("image/jpeg"),
+			CoverImageFilename: strPtr(coverPath),
+			CoverMimeType:      strPtr("image/jpeg"),
 		}
 
 		fp, err := ComputeFingerprint(book, file)
@@ -166,8 +166,8 @@ func TestComputeFingerprint(t *testing.T) {
 	t.Run("cover with non-existent path uses zero time", func(t *testing.T) {
 		book := &models.Book{Title: "Book"}
 		file := &models.File{
-			CoverImagePath: strPtr("/nonexistent/cover.jpg"),
-			CoverMimeType:  strPtr("image/jpeg"),
+			CoverImageFilename: strPtr("/nonexistent/cover.jpg"),
+			CoverMimeType:      strPtr("image/jpeg"),
 		}
 
 		fp, err := ComputeFingerprint(book, file)

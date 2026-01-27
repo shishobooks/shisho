@@ -121,10 +121,10 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 	file.CoverPage = &payload.Page
 	file.CoverMimeType = &mimeType
 	file.CoverSource = strPtr(models.DataSourceManual)
-	file.CoverImagePath = &coverFilename
+	file.CoverImageFilename = &coverFilename
 
 	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_page", "cover_mime_type", "cover_source", "cover_image_path"},
+		Columns: []string{"cover_page", "cover_mime_type", "cover_source", "cover_image_filename"},
 	}); err != nil {
 		return errors.WithStack(err)
 	}

@@ -1,7 +1,8 @@
-import { List, Loader2, X } from "lucide-react";
+import { GitMerge, List, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -10,12 +11,18 @@ import {
 } from "@/components/ui/popover";
 import { useAddBooksToList, useListLists } from "@/hooks/queries/lists";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
+import type { Library } from "@/types";
 
-export const SelectionToolbar = () => {
+interface SelectionToolbarProps {
+  library?: Library;
+}
+
+export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const listsQuery = useListLists();
   const addToListMutation = useAddBooksToList();
@@ -102,6 +109,17 @@ export const SelectionToolbar = () => {
         </PopoverContent>
       </Popover>
 
+      {selectedBookIds.length >= 2 && library && (
+        <Button
+          onClick={() => setShowMergeDialog(true)}
+          size="sm"
+          variant="default"
+        >
+          <GitMerge className="h-4 w-4" />
+          Merge
+        </Button>
+      )}
+
       <Button onClick={clearSelection} size="sm" variant="ghost">
         Clear
       </Button>
@@ -114,6 +132,19 @@ export const SelectionToolbar = () => {
       >
         <X className="h-4 w-4" />
       </Button>
+
+      {showMergeDialog && library && (
+        <MergeBooksDialog
+          bookIds={selectedBookIds}
+          library={library}
+          onOpenChange={setShowMergeDialog}
+          onSuccess={() => {
+            exitSelectionMode();
+            setShowMergeDialog(false);
+          }}
+          open={showMergeDialog}
+        />
+      )}
     </div>
   );
 };

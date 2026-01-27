@@ -235,7 +235,7 @@ func (h *handler) handleCover(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if file.CoverImagePath == nil || *file.CoverImagePath == "" {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return errcodes.NotFound("Cover")
 	}
 
@@ -253,7 +253,7 @@ func (h *handler) handleCover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverPath := filepath.Join(coverDir, *file.CoverImagePath)
+	coverPath := filepath.Join(coverDir, *file.CoverImageFilename)
 
 	// Parse requested dimensions
 	widthStr := c.Param("w")

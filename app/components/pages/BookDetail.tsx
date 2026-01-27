@@ -1,10 +1,13 @@
 import {
   ArrowLeft,
+  ArrowRightLeft,
   BookOpen,
+  Check,
   ChevronDown,
   ChevronRight,
   Download,
   Edit,
+  GitMerge,
   List,
   Loader2,
   MoreVertical,
@@ -12,16 +15,20 @@ import {
   X,
 } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import AddToListPopover from "@/components/library/AddToListPopover";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
+import CoverGalleryTabs from "@/components/library/CoverGalleryTabs";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
+import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
+import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
 import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +57,7 @@ import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { cn } from "@/libraries/utils";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -68,7 +76,7 @@ import {
 import { getIdentifierUrl } from "@/utils/identifiers";
 
 // Determines which file type would provide the cover based on library preference.
-// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_path.
+// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
 // Used for placeholder variant selection when there's no cover image.
 const getCoverFileType = (
   files: File[] | undefined,
@@ -137,6 +145,10 @@ interface FileRowProps {
   onRefreshMetadata: () => void;
   isResyncing: boolean;
   isSupplement?: boolean;
+  isSelectMode?: boolean;
+  isFileSelected?: boolean;
+  onToggleSelect?: () => void;
+  onMoveFile?: () => void;
 }
 
 const FileRow = ({
@@ -157,52 +169,226 @@ const FileRow = ({
   onRefreshMetadata,
   isResyncing,
   isSupplement = false,
+  isSelectMode = false,
+  isFileSelected = false,
+  onToggleSelect,
+  onMoveFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
-    <div className="py-2 space-y-1 md:space-y-0">
-      {/* Primary row */}
-      <div className="flex items-center gap-2">
-        {/* Chevron indicator */}
-        {showChevron ? (
-          <button
-            aria-expanded={isExpanded}
-            className="p-0.5 rounded hover:bg-muted/50 shrink-0"
-            onClick={onToggleExpand}
-            type="button"
+    <div className="py-3 flex gap-3">
+      {/* Selection checkbox */}
+      {isSelectMode && (
+        <button
+          className={cn(
+            "shrink-0 h-5 w-5 rounded border flex items-center justify-center self-start mt-1 cursor-pointer",
+            isFileSelected
+              ? "bg-primary border-primary"
+              : "border-muted-foreground/50 hover:border-primary/50",
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.();
+          }}
+          type="button"
+        >
+          {isFileSelected && <Check className="h-3 w-3 text-white" />}
+        </button>
+      )}
+
+      {/* Chevron indicator - aligned to top */}
+      {showChevron ? (
+        <button
+          aria-expanded={isExpanded}
+          className="p-0.5 rounded hover:bg-muted/50 shrink-0 cursor-pointer self-start mt-1"
+          onClick={onToggleExpand}
+          type="button"
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+      ) : (
+        <div className="w-5 shrink-0" /> // Spacer for alignment when no chevron
+      )}
+
+      {/* File cover thumbnail - constrained height, natural aspect ratio */}
+      {!isSupplement && (
+        <div className="shrink-0 self-start">
+          <FileCoverThumbnail className="h-14" file={file} />
+        </div>
+      )}
+
+      {/* Content area */}
+      <div className="flex-1 min-w-0 space-y-1">
+        {/* Primary row: badge, name, stats, actions */}
+        <div className="flex items-center gap-2">
+          {/* File type badge */}
+          <Badge
+            className="uppercase text-xs shrink-0"
+            variant={isSupplement ? "outline" : "secondary"}
           >
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            {file.file_type}
+          </Badge>
+
+          {/* Name */}
+          <Link
+            className={`truncate hover:underline min-w-0 flex-1 ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
+            title={file.name || getFilename(file.filepath)}
+            to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}`}
+          >
+            {file.name || getFilename(file.filepath)}
+          </Link>
+
+          {/* Stats and actions - desktop only (inline) */}
+          <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+            {/* M4B stats */}
+            {file.audiobook_duration_seconds && (
+              <>
+                <span>{formatDuration(file.audiobook_duration_seconds)}</span>
+                <span className="text-muted-foreground/50">·</span>
+              </>
             )}
-          </button>
-        ) : (
-          <div className="w-5 shrink-0" /> // Spacer for alignment when no chevron
-        )}
+            {file.audiobook_bitrate_bps && (
+              <>
+                <span>
+                  {Math.round(file.audiobook_bitrate_bps / 1000)} kbps
+                </span>
+                <span className="text-muted-foreground/50">·</span>
+              </>
+            )}
+            {/* CBZ stats */}
+            {file.page_count && (
+              <>
+                <span>{file.page_count} pages</span>
+                <span className="text-muted-foreground/50">·</span>
+              </>
+            )}
+            {/* File size - always shown */}
+            <span>{formatFileSize(file.filesize_bytes)}</span>
 
-        {/* File type badge */}
-        <Badge
-          className="uppercase text-xs shrink-0"
-          variant={isSupplement ? "outline" : "secondary"}
-        >
-          {file.file_type}
-        </Badge>
+            {/* Download button/popover */}
+            {isSupplement ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={onDownloadOriginal}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Download className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download</TooltipContent>
+              </Tooltip>
+            ) : libraryDownloadPreference === DownloadFormatAsk &&
+              supportsKepub(file.file_type) ? (
+              <DownloadFormatPopover
+                disabled={isDownloading}
+                isLoading={isDownloading}
+                onCancel={onCancelDownload}
+                onDownloadKepub={onDownloadKepub}
+                onDownloadOriginal={() =>
+                  onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+                }
+              />
+            ) : isDownloading ? (
+              <div className="flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="h-6 w-6 p-0"
+                      onClick={onCancelDownload}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Cancel download</TooltipContent>
+                </Tooltip>
+              </div>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={onDownload} size="sm" variant="ghost">
+                    <Download className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download</TooltipContent>
+              </Tooltip>
+            )}
 
-        {/* Name */}
-        <Link
-          className={`truncate hover:underline min-w-0 flex-1 ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
-          title={file.name || getFilename(file.filepath)}
-          to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}`}
-        >
-          {file.name || getFilename(file.filepath)}
-        </Link>
+            {/* Read button - CBZ only */}
+            {file.file_type === FileTypeCBZ && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                  >
+                    <Button size="sm" variant="ghost">
+                      <BookOpen className="h-3 w-3" />
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Read</TooltipContent>
+              </Tooltip>
+            )}
 
-        {/* Stats and actions - desktop only (inline) */}
-        <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+            {/* Actions dropdown */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button disabled={isResyncing} size="sm" variant="ghost">
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>More actions</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+              >
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={isResyncing}
+                  onClick={onScanMetadata}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Scan for new metadata
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh all metadata
+                </DropdownMenuItem>
+                {onMoveFile && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onMoveFile}>
+                      <ArrowRightLeft className="h-4 w-4 mr-2" />
+                      Move to another book
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Stats and actions - mobile only (separate row) */}
+        <div className="flex md:hidden items-center gap-2 text-xs text-muted-foreground">
           {/* M4B stats */}
           {file.audiobook_duration_seconds && (
             <>
@@ -323,237 +509,117 @@ const FileRow = ({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
 
-      {/* Stats and actions - mobile only (separate row) */}
-      <div className="flex md:hidden items-center gap-2 text-xs text-muted-foreground pl-6">
-        {/* M4B stats */}
-        {file.audiobook_duration_seconds && (
-          <>
-            <span>{formatDuration(file.audiobook_duration_seconds)}</span>
-            <span className="text-muted-foreground/50">·</span>
-          </>
-        )}
-        {file.audiobook_bitrate_bps && (
-          <>
-            <span>{Math.round(file.audiobook_bitrate_bps / 1000)} kbps</span>
-            <span className="text-muted-foreground/50">·</span>
-          </>
-        )}
-        {/* CBZ stats */}
-        {file.page_count && (
-          <>
-            <span>{file.page_count} pages</span>
-            <span className="text-muted-foreground/50">·</span>
-          </>
-        )}
-        {/* File size - always shown */}
-        <span>{formatFileSize(file.filesize_bytes)}</span>
-
-        {/* Download button/popover */}
-        {isSupplement ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
-                <Download className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Download</TooltipContent>
-          </Tooltip>
-        ) : libraryDownloadPreference === DownloadFormatAsk &&
-          supportsKepub(file.file_type) ? (
-          <DownloadFormatPopover
-            disabled={isDownloading}
-            isLoading={isDownloading}
-            onCancel={onCancelDownload}
-            onDownloadKepub={onDownloadKepub}
-            onDownloadOriginal={() =>
-              onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
-            }
-          />
-        ) : isDownloading ? (
-          <div className="flex items-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  className="h-6 w-6 p-0"
-                  onClick={onCancelDownload}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Cancel download</TooltipContent>
-            </Tooltip>
-          </div>
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onDownload} size="sm" variant="ghost">
-                <Download className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Download</TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Read button - CBZ only */}
-        {file.file_type === FileTypeCBZ && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
-              >
-                <Button size="sm" variant="ghost">
-                  <BookOpen className="h-3 w-3" />
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>Read</TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Actions dropdown */}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button disabled={isResyncing} size="sm" variant="ghost">
-                  <MoreVertical className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>More actions</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent
-            align="end"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <DropdownMenuItem onClick={onEdit}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={isResyncing} onClick={onScanMetadata}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Scan for new metadata
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh all metadata
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Filename row - only show when name differs from filename */}
-      {file.name && (
-        <div className="pl-6">
-          <span
-            className="text-xs text-muted-foreground truncate block"
-            title={file.filepath}
-          >
-            {getFilename(file.filepath)}
-          </span>
-        </div>
-      )}
-
-      {/* Narrators row - M4B only, always visible when present */}
-      {file.narrators && file.narrators.length > 0 && (
-        <div className="pl-6 flex items-center gap-1 flex-wrap">
-          <span className="text-xs text-muted-foreground">Narrated by</span>
-          {file.narrators.map((narrator, index) => (
-            <span className="text-xs" key={narrator.id}>
-              <Link
-                className="hover:underline"
-                to={`/libraries/${libraryId}/people/${narrator.person_id}`}
-              >
-                {narrator.person?.name ?? "Unknown"}
-              </Link>
-              {index < file.narrators!.length - 1 ? "," : ""}
+        {/* Filename row - only show when name differs from filename */}
+        {file.name && (
+          <div>
+            <span
+              className="text-xs text-muted-foreground truncate block"
+              title={file.filepath}
+            >
+              {getFilename(file.filepath)}
             </span>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Expandable details section */}
-      {isExpanded && hasExpandableMetadata && (
-        <div className="pl-6 mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
-          {/* Publisher, Imprint, Released, URL */}
-          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            {file.publisher && (
-              <>
-                <span className="text-muted-foreground">Publisher</span>
-                <span>{file.publisher.name}</span>
-              </>
-            )}
-            {file.imprint && (
-              <>
-                <span className="text-muted-foreground">Imprint</span>
-                <span>{file.imprint.name}</span>
-              </>
-            )}
-            {file.release_date && (
-              <>
-                <span className="text-muted-foreground">Released</span>
-                <span>{formatDate(file.release_date)}</span>
-              </>
-            )}
-            {file.url && (
-              <>
-                <span className="text-muted-foreground">URL</span>
-                <a
-                  className="text-primary hover:underline truncate"
-                  href={file.url}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                  title={file.url}
+        {/* Narrators row - M4B only, always visible when present */}
+        {file.narrators && file.narrators.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-xs text-muted-foreground">Narrated by</span>
+            {file.narrators.map((narrator, index) => (
+              <span className="text-xs" key={narrator.id}>
+                <Link
+                  className="hover:underline"
+                  to={`/libraries/${libraryId}/people/${narrator.person_id}`}
                 >
-                  {file.url.length > 60
-                    ? file.url.substring(0, 60) + "..."
-                    : file.url}
-                </a>
-              </>
+                  {narrator.person?.name ?? "Unknown"}
+                </Link>
+                {index < file.narrators!.length - 1 ? "," : ""}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Expandable details section */}
+        {isExpanded && hasExpandableMetadata && (
+          <div className="mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
+            {/* Publisher, Imprint, Released, URL */}
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+              {file.publisher && (
+                <>
+                  <span className="text-muted-foreground">Publisher</span>
+                  <span>{file.publisher.name}</span>
+                </>
+              )}
+              {file.imprint && (
+                <>
+                  <span className="text-muted-foreground">Imprint</span>
+                  <span>{file.imprint.name}</span>
+                </>
+              )}
+              {file.release_date && (
+                <>
+                  <span className="text-muted-foreground">Released</span>
+                  <span>{formatDate(file.release_date)}</span>
+                </>
+              )}
+              {file.url && (
+                <>
+                  <span className="text-muted-foreground">URL</span>
+                  <a
+                    className="text-primary hover:underline truncate"
+                    href={file.url}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    title={file.url}
+                  >
+                    {file.url.length > 60
+                      ? file.url.substring(0, 60) + "..."
+                      : file.url}
+                  </a>
+                </>
+              )}
+            </div>
+
+            {/* Identifiers */}
+            {file.identifiers && file.identifiers.length > 0 && (
+              <div className="pt-2 border-t border-border/50">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                  {file.identifiers.map((id, idx) => {
+                    const url = getIdentifierUrl(
+                      id.type,
+                      id.value,
+                      pluginIdentifierTypes,
+                    );
+                    return (
+                      <React.Fragment key={idx}>
+                        <span className="text-muted-foreground">
+                          {formatIdentifierType(id.type, pluginIdentifierTypes)}
+                        </span>
+                        {url ? (
+                          <a
+                            className="font-mono select-all text-primary hover:underline"
+                            href={url}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                          >
+                            {id.value}
+                          </a>
+                        ) : (
+                          <span className="font-mono select-all">
+                            {id.value}
+                          </span>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* Identifiers */}
-          {file.identifiers && file.identifiers.length > 0 && (
-            <div className="pt-2 border-t border-border/50">
-              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                {file.identifiers.map((id, idx) => {
-                  const url = getIdentifierUrl(
-                    id.type,
-                    id.value,
-                    pluginIdentifierTypes,
-                  );
-                  return (
-                    <React.Fragment key={idx}>
-                      <span className="text-muted-foreground">
-                        {formatIdentifierType(id.type, pluginIdentifierTypes)}
-                      </span>
-                      {url ? (
-                        <a
-                          className="font-mono select-all text-primary hover:underline"
-                          href={url}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          {id.value}
-                        </a>
-                      ) : (
-                        <span className="font-mono select-all">{id.value}</span>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       <ResyncConfirmDialog
         entityName={file.name || getFilename(file.filepath)}
         entityType="file"
@@ -568,6 +634,7 @@ const FileRow = ({
 
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
+  const navigate = useNavigate();
   const bookQuery = useBook(id);
   const libraryQuery = useLibrary(libraryId);
 
@@ -576,6 +643,7 @@ const BookDetail = () => {
   const resyncBookMutation = useResyncBook();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [showBookRefreshDialog, setShowBookRefreshDialog] = useState(false);
+  const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const [downloadError, setDownloadError] = useState<DownloadError | null>(
     null,
@@ -590,6 +658,31 @@ const BookDetail = () => {
     new Set(),
   );
   const downloadAbortController = useRef<AbortController | null>(null);
+
+  // File selection state for split/move
+  const [isFileSelectMode, setIsFileSelectMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [showMoveFilesDialog, setShowMoveFilesDialog] = useState(false);
+  const [singleFileMoveId, setSingleFileMoveId] = useState<number | null>(null);
+
+  const toggleFileSelection = (fileId: number) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  };
+
+  const exitFileSelectMode = () => {
+    setIsFileSelectMode(false);
+    setSelectedFileIds(new Set());
+  };
 
   const toggleFileExpanded = (fileId: number) => {
     setExpandedFileIds((prev) => {
@@ -870,27 +963,33 @@ const BookDetail = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Book Cover */}
         <div className="lg:col-span-1">
-          <div
-            className={`${coverAspectRatio} w-48 sm:w-64 lg:w-full mx-auto lg:mx-0 relative`}
-          >
-            {/* Placeholder shown until image loads or on error */}
-            {(!coverLoaded || coverError) && (
-              <CoverPlaceholder
-                className={`absolute inset-0 rounded-md border border-border`}
-                variant={coverFileType}
-              />
-            )}
-            {/* Image hidden until loaded, removed on error */}
-            {!coverError && (
-              <img
-                alt={`${book.title} Cover`}
-                className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
-                onError={() => setCoverError(true)}
-                onLoad={handleCoverLoad}
-                src={coverUrl!}
-              />
-            )}
-          </div>
+          {mainFiles.length > 1 ? (
+            /* Multiple files - show cover gallery with tabs */
+            <CoverGalleryTabs files={mainFiles} />
+          ) : (
+            /* Single file - show book cover directly */
+            <div
+              className={`${coverAspectRatio} w-48 sm:w-64 lg:w-full mx-auto lg:mx-0 relative`}
+            >
+              {/* Placeholder shown until image loads or on error */}
+              {(!coverLoaded || coverError) && (
+                <CoverPlaceholder
+                  className={`absolute inset-0 rounded-md border border-border`}
+                  variant={coverFileType}
+                />
+              )}
+              {/* Image hidden until loaded, removed on error */}
+              {!coverError && (
+                <img
+                  alt={`${book.title} Cover`}
+                  className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
+                  onError={() => setCoverError(true)}
+                  onLoad={handleCoverLoad}
+                  src={coverUrl!}
+                />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Book Details */}
@@ -940,6 +1039,13 @@ const BookDetail = () => {
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh all metadata
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowMergeIntoDialog(true)}
+                    >
+                      <GitMerge className="h-4 w-4 mr-2" />
+                      Merge into another book
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1110,7 +1216,24 @@ const BookDetail = () => {
 
             {/* Files */}
             <div>
-              <h3 className="font-semibold mb-3">Files ({mainFiles.length})</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold">Files ({mainFiles.length})</h3>
+                {mainFiles.length > 1 && (
+                  <Button
+                    onClick={() => {
+                      if (isFileSelectMode) {
+                        exitFileSelectMode();
+                      } else {
+                        setIsFileSelectMode(true);
+                      }
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {isFileSelectMode ? "Cancel" : "Select"}
+                  </Button>
+                )}
+              </div>
               <div className="space-y-2">
                 {mainFiles.map((file) => (
                   <FileRow
@@ -1118,7 +1241,9 @@ const BookDetail = () => {
                     hasExpandableMetadata={hasExpandableMetadata(file)}
                     isDownloading={downloadingFileId === file.id}
                     isExpanded={expandedFileIds.has(file.id)}
+                    isFileSelected={selectedFileIds.has(file.id)}
                     isResyncing={resyncingFileId === file.id}
+                    isSelectMode={isFileSelectMode}
                     key={file.id}
                     libraryDownloadPreference={
                       libraryQuery.data?.download_format_preference
@@ -1132,9 +1257,11 @@ const BookDetail = () => {
                       handleDownloadWithEndpoint(file.id, endpoint)
                     }
                     onEdit={() => setEditingFile(file)}
+                    onMoveFile={() => setSingleFileMoveId(file.id)}
                     onRefreshMetadata={() => handleRefreshFileMetadata(file.id)}
                     onScanMetadata={() => handleScanFileMetadata(file.id)}
                     onToggleExpand={() => toggleFileExpanded(file.id)}
+                    onToggleSelect={() => toggleFileSelection(file.id)}
                   />
                 ))}
               </div>
@@ -1240,6 +1367,76 @@ const BookDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {libraryQuery.data && (
+        <MergeIntoDialog
+          library={libraryQuery.data}
+          onOpenChange={setShowMergeIntoDialog}
+          onSuccess={(targetBook) => {
+            navigate(`/libraries/${libraryId}/books/${targetBook.id}`);
+          }}
+          open={showMergeIntoDialog}
+          sourceBook={book}
+        />
+      )}
+
+      {/* File selection action bar */}
+      {selectedFileIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-3 z-50">
+          <span className="text-sm text-muted-foreground">
+            {selectedFileIds.size} file
+            {selectedFileIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            onClick={() => {
+              if (selectedFileIds.size === mainFiles.length) {
+                setSelectedFileIds(new Set());
+              } else {
+                setSelectedFileIds(new Set(mainFiles.map((f) => f.id)));
+              }
+            }}
+            size="sm"
+            variant="outline"
+          >
+            {selectedFileIds.size === mainFiles.length
+              ? "Deselect All"
+              : "Select All"}
+          </Button>
+          <Button onClick={() => setShowMoveFilesDialog(true)} size="sm">
+            Move to...
+          </Button>
+        </div>
+      )}
+
+      {/* Move files dialog - handles both selection mode and single file move */}
+      {libraryQuery.data && (
+        <MoveFilesDialog
+          library={libraryQuery.data}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowMoveFilesDialog(false);
+              setSingleFileMoveId(null);
+            }
+          }}
+          onSuccess={(targetBook) => {
+            const movedFileCount =
+              singleFileMoveId !== null ? 1 : selectedFileIds.size;
+            exitFileSelectMode();
+            setSingleFileMoveId(null);
+            // Navigate to target book if current book was deleted (all files moved)
+            if (movedFileCount === mainFiles.length) {
+              navigate(`/libraries/${libraryId}/books/${targetBook.id}`);
+            }
+          }}
+          open={showMoveFilesDialog || singleFileMoveId !== null}
+          selectedFiles={
+            singleFileMoveId !== null
+              ? mainFiles.filter((f) => f.id === singleFileMoveId)
+              : mainFiles.filter((f) => selectedFileIds.has(f.id))
+          }
+          sourceBook={book}
+        />
+      )}
     </LibraryLayout>
   );
 };

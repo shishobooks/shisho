@@ -746,8 +746,8 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 
 	// Cover image link - select appropriate file based on cover aspect ratio
 	coverFile := selectCoverFile(book.Files, coverAspectRatio)
-	if coverFile != nil && coverFile.CoverImagePath != nil && *coverFile.CoverImagePath != "" {
-		ext := filepath.Ext(*coverFile.CoverImagePath)
+	if coverFile != nil && coverFile.CoverImageFilename != nil && *coverFile.CoverImageFilename != "" {
+		ext := filepath.Ext(*coverFile.CoverImageFilename)
 		mimeType := CoverMimeType(ext)
 		coverURL := fmt.Sprintf("%s/books/%d/cover", apiBase, book.ID)
 		entry.AddImageLink(coverURL, mimeType)
@@ -787,7 +787,7 @@ func supportsKepub(fileType string) bool {
 func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
-		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}
 		switch f.FileType {

@@ -79,9 +79,9 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	// Determine if we need to replace the cover
 	var newCoverData []byte
 	var newCoverMimeType string
-	if file.CoverImagePath != nil && *file.CoverImagePath != "" {
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
 		// Resolve the full cover path from the book's directory
-		// CoverImagePath is just a filename, we need to find the cover directory
+		// CoverImageFilename is just a filename, we need to find the cover directory
 		coverPath := resolveCoverPath(book, file)
 		if coverPath != "" {
 			newCoverData, err = os.ReadFile(coverPath)
@@ -504,10 +504,10 @@ func formatFloat(f float64) string {
 }
 
 // resolveCoverPath resolves the full path to a file's cover image.
-// CoverImagePath in the model is just a filename, so we need to determine
+// CoverImageFilename in the model is just a filename, so we need to determine
 // the cover directory from the book's filepath.
 func resolveCoverPath(book *models.Book, file *models.File) string {
-	if file.CoverImagePath == nil || *file.CoverImagePath == "" {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return ""
 	}
 
@@ -525,7 +525,7 @@ func resolveCoverPath(book *models.Book, file *models.File) string {
 		coverDir = book.Filepath
 	}
 
-	return filepath.Join(coverDir, *file.CoverImagePath)
+	return filepath.Join(coverDir, *file.CoverImageFilename)
 }
 
 // identifierTypeToScheme converts an identifier type to an OPF scheme attribute.

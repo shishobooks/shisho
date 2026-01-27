@@ -716,7 +716,7 @@ func (h *handler) Cover(c echo.Context) error {
 
 	// Select the appropriate file based on the library's cover aspect ratio setting
 	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImagePath == nil || *coverFile.CoverImagePath == "" {
+	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
 		return errcodes.NotFound("Cover")
 	}
 
@@ -734,7 +734,7 @@ func (h *handler) Cover(c echo.Context) error {
 		coverDir = book.Filepath
 	}
 
-	coverPath := filepath.Join(coverDir, *coverFile.CoverImagePath)
+	coverPath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
 	return errors.WithStack(c.File(coverPath))
 }
 
@@ -903,7 +903,7 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
-		if f.CoverImagePath == nil || *f.CoverImagePath == "" {
+		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}
 		switch f.FileType {
@@ -1047,7 +1047,7 @@ func getBookCoverURL(baseURL string, book *models.Book) string {
 // hasBookCover checks if a book has any file with a cover image.
 func hasBookCover(book *models.Book) bool {
 	for _, f := range book.Files {
-		if f.CoverImagePath != nil && *f.CoverImagePath != "" {
+		if f.CoverImageFilename != nil && *f.CoverImageFilename != "" {
 			return true
 		}
 	}
