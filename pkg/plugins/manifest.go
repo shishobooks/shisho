@@ -32,6 +32,7 @@ type Capabilities struct {
 	HTTPAccess       *HTTPAccessCap       `json:"httpAccess"`
 	FileAccess       *FileAccessCap       `json:"fileAccess"`
 	FFmpegAccess     *FFmpegAccessCap     `json:"ffmpegAccess"`
+	ShellAccess      *ShellAccessCap      `json:"shellAccess"`
 }
 
 type InputConverterCap struct {
@@ -78,6 +79,11 @@ type FileAccessCap struct {
 
 type FFmpegAccessCap struct {
 	Description string `json:"description"`
+}
+
+type ShellAccessCap struct {
+	Description string   `json:"description"`
+	Commands    []string `json:"commands"`
 }
 
 type ConfigSchema map[string]ConfigField

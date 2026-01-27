@@ -62,6 +62,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 		return err
 	}
 
+	// Set up shell namespace
+	if err := injectShellNamespace(vm, shishoObj, rt); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -123,8 +123,8 @@ func TestInjectHostAPIs_FFmpegRequiresCapability(t *testing.T) {
 	err := InjectHostAPIs(rt, cfg)
 	require.NoError(t, err)
 
-	// Without ffmpegAccess capability, run should throw an error
-	_, err = rt.vm.RunString(`shisho.ffmpeg.run(["-version"])`)
+	// Without ffmpegAccess capability, transcode should throw an error
+	_, err = rt.vm.RunString(`shisho.ffmpeg.transcode(["-version"])`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "plugin does not declare ffmpegAccess capability")
 }

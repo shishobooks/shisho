@@ -67,6 +67,13 @@ export interface FFmpegAccessCap {
   description?: string;
 }
 
+/** Shell access capability declaration. */
+export interface ShellAccessCap {
+  description?: string;
+  /** Allowed commands (e.g., ["convert", "magick", "identify"]). */
+  commands: string[];
+}
+
 /** All plugin capabilities. */
 export interface Capabilities {
   inputConverter?: InputConverterCap;
@@ -77,6 +84,7 @@ export interface Capabilities {
   httpAccess?: HTTPAccessCap;
   fileAccess?: FileAccessCap;
   ffmpegAccess?: FFmpegAccessCap;
+  shellAccess?: ShellAccessCap;
 }
 
 /** Option for select-type config fields. */
