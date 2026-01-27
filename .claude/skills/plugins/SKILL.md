@@ -20,7 +20,8 @@ pkg/plugins/
   hostapi_http.go   - HTTP with domain whitelisting
   hostapi_archive.go - ZIP operations
   hostapi_xml.go    - XML parsing
-  hostapi_ffmpeg.go - FFmpeg probe
+  hostapi_ffmpeg.go - FFmpeg transcode/probe/version
+  hostapi_shell.go  - Shell exec with command allowlist
   generator.go      - PluginGenerator (filegen.Generator interface)
   installer.go      - Download, verify, extract
   repository.go     - Repository manifest fetching
@@ -77,7 +78,8 @@ shisho/goodreads-metadata/
     "identifierTypes": [{ "id": "goodreads", "name": "Goodreads", "urlTemplate": "https://goodreads.com/book/show/{value}", "pattern": "^\\d+$" }],
     "httpAccess": { "description": "", "domains": ["api.goodreads.com"] },
     "fileAccess": { "level": "read", "description": "" },
-    "ffmpegAccess": { "description": "" }
+    "ffmpegAccess": { "description": "" },
+    "shellAccess": { "description": "", "commands": ["calibre-debug", "kindlegen"] }
   },
   "configSchema": {
     "apiKey": { "type": "string", "label": "API Key", "description": "", "required": true, "secret": true },
@@ -298,8 +300,36 @@ node.children     // XMLElement[]
 ### shisho.ffmpeg
 
 ```javascript
-var result = shisho.ffmpeg.run(["-i", filePath, "-f", "null", "-"]);
 // Requires ffmpegAccess capability declared in manifest
+
+// Transcode files with FFmpeg
+var result = shisho.ffmpeg.transcode(["-i", input, "-c:a", "aac", output]);
+result.exitCode   // number — 0 = success
+result.stdout     // string
+result.stderr     // string
+
+// Probe file metadata with ffprobe (returns parsed JSON)
+var probe = shisho.ffmpeg.probe([filePath]);
+probe.format      // { filename, duration, bit_rate, tags, ... }
+probe.streams     // [{ codec_name, codec_type, sample_rate, channels, ... }]
+probe.chapters    // [{ id, start_time, end_time, tags, ... }]
+probe.stderr      // string — for debugging
+probe.parseError  // string — empty if JSON parsed successfully
+
+// Get FFmpeg version and configuration
+var ver = shisho.ffmpeg.version();
+ver.version       // string — e.g., "7.0"
+ver.configuration // string[] — e.g., ["--enable-libx264", "--enable-gpl"]
+ver.libraries     // { libavcodec: "60.31.102", ... }
+```
+
+### shisho.shell
+
+```javascript
+// Requires shellAccess capability with command in allowlist
+var result = shisho.shell.exec("calibre-debug", ["-c", "print('hello')"]);
+// Command must be declared in manifest shellAccess.commands
+// Uses exec directly (no shell) to prevent injection
 
 result.exitCode   // number — 0 = success
 result.stdout     // string
