@@ -33,6 +33,7 @@ type rawMetadata struct {
 	timescale    uint32            // from mvhd - units per second
 	duration     uint64            // from mvhd - in timescale units
 	avgBitrate   uint32            // from esds - average bitrate in bps
+	codec        string            // from esds - audio codec name with profile (e.g., "AAC-LC", "xHE-AAC")
 	freeform     map[string]string // freeform (----) atoms like com.apple.iTunes:ASIN
 	chapters     []Chapter         // chapter list
 	unknownAtoms []RawAtom         // unrecognized atoms to preserve
@@ -101,8 +102,23 @@ func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 			return h.Expand()
 
 		case BoxTypeEsds:
-			// Read esds for bitrate info
+			// Read esds for bitrate and codec info (AAC)
 			return processEsds(h, meta)
+
+		case BoxTypeEc3:
+			// E-AC-3 (Dolby Digital Plus) audio
+			meta.codec = "EAC3"
+			return processAudioSampleEntry(h, meta)
+
+		case BoxTypeAc3:
+			// AC-3 (Dolby Digital) audio
+			meta.codec = "AC3"
+			return processAudioSampleEntry(h, meta)
+
+		case BoxTypeAlac:
+			// Apple Lossless audio
+			meta.codec = "ALAC"
+			return nil, nil
 
 		case BoxTypeUdta:
 			// Descend into udta
@@ -134,27 +150,224 @@ func readMetadataFromReader(r io.ReadSeeker) (*rawMetadata, error) {
 	return meta, nil
 }
 
-// processEsds reads the elementary stream descriptor for bitrate info.
+// processEsds reads the elementary stream descriptor for bitrate and codec info.
 func processEsds(h *gomp4.ReadHandle, meta *rawMetadata) (interface{}, error) {
-	payload, _, err := h.ReadPayload()
-	if err != nil {
+	// Read raw data to extract both bitrate and codec info
+	var buf bytes.Buffer
+	if _, err := h.ReadData(&buf); err != nil {
 		return nil, errors.WithStack(err)
 	}
+	rawData := buf.Bytes()
 
-	esds, ok := payload.(*gomp4.Esds)
-	if !ok {
-		return nil, nil
+	// Parse codec from raw esds data (AudioSpecificConfig)
+	meta.codec = parseCodecFromEsds(rawData)
+
+	// Parse bitrate from raw esds data (DecoderConfigDescriptor)
+	meta.avgBitrate = parseBitrateFromEsds(rawData)
+
+	return nil, nil
+}
+
+// parseBitrateFromEsds extracts the average bitrate from raw esds box data.
+// The bitrate is in the DecoderConfigDescriptor (tag 0x04).
+func parseBitrateFromEsds(data []byte) uint32 {
+	// Find tag 0x04 (DecoderConfigDescriptor)
+	for i := 0; i < len(data)-15; i++ {
+		if data[i] == 0x04 { // DecoderConfigDescriptor tag
+			// Skip variable-length size
+			sizeOffset := i + 1
+			for sizeOffset < len(data) && (data[sizeOffset]&0x80) != 0 {
+				sizeOffset++
+			}
+			sizeOffset++ // Past the last size byte
+
+			// DecoderConfigDescriptor structure:
+			// - objectTypeIndication (1 byte)
+			// - streamType (6 bits) | upStream (1 bit) | reserved (1 bit)
+			// - bufferSizeDB (3 bytes)
+			// - maxBitrate (4 bytes)
+			// - avgBitrate (4 bytes)
+			if sizeOffset+13 <= len(data) {
+				// avgBitrate is at offset +9 from objectTypeIndication (big-endian)
+				avgOffset := sizeOffset + 9
+				return uint32(data[avgOffset])<<24 |
+					uint32(data[avgOffset+1])<<16 |
+					uint32(data[avgOffset+2])<<8 |
+					uint32(data[avgOffset+3])
+			}
+		}
 	}
+	return 0
+}
 
-	// Extract average bitrate from the descriptor
-	for _, desc := range esds.Descriptors {
-		if desc.DecoderConfigDescriptor != nil {
-			meta.avgBitrate = desc.DecoderConfigDescriptor.AvgBitrate
-			break
+// parseCodecFromEsds extracts the codec name from raw esds box data.
+// It parses the DecoderSpecificInfo (tag 0x05) to get the AudioSpecificConfig
+// and determines the audio object type (AAC-LC, HE-AAC, xHE-AAC, etc.).
+func parseCodecFromEsds(data []byte) string {
+	// Find ObjectTypeIndication in DecoderConfigDescriptor (tag 0x04)
+	objectType := byte(0)
+	for i := 0; i < len(data)-2; i++ {
+		if data[i] == 0x04 { // DecoderConfigDescriptor tag
+			// Skip tag and size (variable length)
+			sizeOffset := i + 1
+			for sizeOffset < len(data) && (data[sizeOffset]&0x80) != 0 {
+				sizeOffset++
+			}
+			sizeOffset++ // Past the last size byte
+			if sizeOffset < len(data) {
+				objectType = data[sizeOffset]
+				break
+			}
 		}
 	}
 
+	// ObjectTypeIndication values (ISO 14496-1):
+	// 0x40 = MPEG-4 Audio (AAC variants)
+	// 0x66 = MPEG-2 AAC Main
+	// 0x67 = MPEG-2 AAC LC
+	// 0x68 = MPEG-2 AAC SSR
+	// 0x69, 0x6B = MP3
+	switch objectType {
+	case 0x66:
+		return "MPEG-2 AAC Main"
+	case 0x67:
+		return "MPEG-2 AAC-LC"
+	case 0x68:
+		return "MPEG-2 AAC SSR"
+	case 0x69, 0x6B:
+		return "MP3"
+	case 0x40:
+		// MPEG-4 Audio - need to check AudioSpecificConfig for profile
+		return parseAACProfile(data)
+	default:
+		if objectType != 0 {
+			return "Unknown"
+		}
+		return ""
+	}
+}
+
+// parseAACProfile extracts the AAC profile from AudioSpecificConfig in esds data.
+// It properly parses the nested descriptor structure to find DecoderSpecificInfo (tag 0x05).
+func parseAACProfile(data []byte) string {
+	// First find the DecoderConfigDescriptor (tag 0x04)
+	// Then look for DecoderSpecificInfo (tag 0x05) inside it
+	for i := 0; i < len(data)-15; i++ {
+		if data[i] == 0x04 { // DecoderConfigDescriptor tag
+			// Skip the tag and variable-length size
+			descStart := skipDescriptorHeader(data, i)
+			if descStart < 0 || descStart+13 >= len(data) {
+				continue
+			}
+
+			// DecoderConfigDescriptor structure (13 bytes before DecoderSpecificInfo):
+			// - objectTypeIndication (1 byte)
+			// - streamType (6 bits) | upStream (1 bit) | reserved (1 bit)
+			// - bufferSizeDB (3 bytes)
+			// - maxBitrate (4 bytes)
+			// - avgBitrate (4 bytes)
+			// Then comes DecoderSpecificInfo (tag 0x05)
+			specInfoStart := descStart + 13
+
+			// Look for tag 0x05 at or after specInfoStart
+			if specInfoStart < len(data) && data[specInfoStart] == 0x05 {
+				configStart := skipDescriptorHeader(data, specInfoStart)
+				if configStart >= 0 && configStart < len(data) {
+					configData := data[configStart:]
+
+					// Parse AudioSpecificConfig (ISO 14496-3)
+					// First 5 bits = audioObjectType
+					audioObjectType := (configData[0] >> 3) & 0x1f
+					if audioObjectType == 31 && len(configData) > 1 {
+						// Extended audioObjectType: next 6 bits + 32
+						audioObjectType = ((configData[0] & 0x07) << 3) | (configData[1] >> 5) + 32
+					}
+
+					return audioObjectTypeToCodec(int(audioObjectType))
+				}
+			}
+		}
+	}
+	// Fallback if we can't parse the profile
+	return "AAC"
+}
+
+// skipDescriptorHeader returns the offset to the data after a descriptor's tag and size.
+// Returns -1 if the structure is invalid.
+func skipDescriptorHeader(data []byte, tagOffset int) int {
+	if tagOffset+1 >= len(data) {
+		return -1
+	}
+	// Skip the tag byte
+	offset := tagOffset + 1
+	// Skip variable-length size (ISO 14496-1 expandable class)
+	// Each byte's high bit indicates continuation
+	for offset < len(data) && (data[offset]&0x80) != 0 {
+		offset++
+	}
+	if offset >= len(data) {
+		return -1
+	}
+	offset++ // Past the last size byte
+	return offset
+}
+
+// audioObjectTypeToCodec converts an ISO 14496-3 audioObjectType to a codec string.
+func audioObjectTypeToCodec(aot int) string {
+	switch aot {
+	case 1:
+		return "AAC Main"
+	case 2:
+		return "AAC-LC"
+	case 3:
+		return "AAC SSR"
+	case 4:
+		return "AAC LTP"
+	case 5:
+		return "HE-AAC" // SBR
+	case 6:
+		return "AAC Scalable"
+	case 29:
+		return "HE-AACv2" // PS
+	case 42:
+		return "xHE-AAC" // USAC
+	default:
+		return "AAC"
+	}
+}
+
+// processAudioSampleEntry extracts bitrate from audio sample entries (ec-3, ac-3, etc.)
+// by looking for the embedded btrt (bitrate) box.
+func processAudioSampleEntry(h *gomp4.ReadHandle, meta *rawMetadata) (interface{}, error) {
+	var buf bytes.Buffer
+	if _, err := h.ReadData(&buf); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	data := buf.Bytes()
+
+	meta.avgBitrate = parseBitrateFromBtrt(data)
+
 	return nil, nil
+}
+
+// parseBitrateFromBtrt extracts the average bitrate from raw audio sample entry data
+// by searching for the embedded btrt (bitrate) box.
+// btrt structure: [4 bytes size][4 bytes "btrt"][4 bytes bufferSizeDB][4 bytes maxBitrate][4 bytes avgBitrate].
+func parseBitrateFromBtrt(data []byte) uint32 {
+	for i := 0; i+20 <= len(data); i++ {
+		if data[i+4] == 'b' && data[i+5] == 't' && data[i+6] == 'r' && data[i+7] == 't' {
+			// Found btrt box, extract avgBitrate (last 4 bytes of the 12-byte payload)
+			avgOffset := i + 8 + 8 // Skip size+type+bufferSizeDB+maxBitrate
+			if avgOffset+4 <= len(data) {
+				return uint32(data[avgOffset])<<24 |
+					uint32(data[avgOffset+1])<<16 |
+					uint32(data[avgOffset+2])<<8 |
+					uint32(data[avgOffset+3])
+			}
+			break
+		}
+	}
+	return 0
 }
 
 // isMetadataAtom checks if a box type is a known metadata atom.

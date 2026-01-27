@@ -35,6 +35,7 @@ type Metadata struct {
 	CoverMimeType string                       // "image/jpeg" or "image/png"
 	Duration      time.Duration                // from mvhd
 	Bitrate       int                          // bps from esds
+	Codec         string                       // audio codec with profile (e.g., "AAC-LC", "xHE-AAC")
 	Chapters      []Chapter                    // chapter list (Phase 3)
 	MediaType     int                          // from stik (2 = audiobook)
 	Freeform      map[string]string            // freeform (----) atoms like com.apple.iTunes:ASIN
@@ -112,6 +113,9 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 
 	// Copy bitrate from esds (already in bps)
 	meta.Bitrate = int(raw.avgBitrate)
+
+	// Copy codec from esds
+	meta.Codec = raw.codec
 
 	// Parse genres from genre field (comma-separated)
 	if raw.genre != "" {

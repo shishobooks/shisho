@@ -1171,6 +1171,35 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Update audiobook-specific fields (M4B) - these always come from file metadata
+	if metadata.Duration > 0 {
+		durationSeconds := metadata.Duration.Seconds()
+		if file.AudiobookDurationSeconds == nil || *file.AudiobookDurationSeconds != durationSeconds {
+			file.AudiobookDurationSeconds = &durationSeconds
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "audiobook_duration_seconds")
+		}
+	}
+	if metadata.BitrateBps > 0 {
+		if file.AudiobookBitrateBps == nil || *file.AudiobookBitrateBps != metadata.BitrateBps {
+			file.AudiobookBitrateBps = &metadata.BitrateBps
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "audiobook_bitrate_bps")
+		}
+	}
+	if metadata.Codec != "" {
+		if file.AudiobookCodec == nil || *file.AudiobookCodec != metadata.Codec {
+			file.AudiobookCodec = &metadata.Codec
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "audiobook_codec")
+		}
+	}
+
+	// Update page count (CBZ) - always comes from file metadata
+	if metadata.PageCount != nil {
+		if file.PageCount == nil || *file.PageCount != *metadata.PageCount {
+			file.PageCount = metadata.PageCount
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "page_count")
+		}
+	}
+
 	// Apply file column updates
 	if len(fileUpdateOpts.Columns) > 0 {
 		if err := w.bookService.UpdateFile(ctx, file, fileUpdateOpts); err != nil {
@@ -1814,6 +1843,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		}
 		if metadata.BitrateBps > 0 {
 			file.AudiobookBitrateBps = &metadata.BitrateBps
+		}
+		if metadata.Codec != "" {
+			file.AudiobookCodec = &metadata.Codec
 		}
 		if metadata.PageCount != nil {
 			file.PageCount = metadata.PageCount

@@ -59,6 +59,8 @@ type ParsedMetadata struct {
 	Duration time.Duration
 	// BitrateBps is the audio bitrate in bits per second (M4B files only)
 	BitrateBps int
+	// Codec is the audio codec with profile (M4B files only), e.g. "AAC-LC", "xHE-AAC"
+	Codec string
 	// PageCount is the number of pages (CBZ files only)
 	PageCount *int
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata

@@ -104,6 +104,14 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
               </p>
             </div>
           )}
+
+        {/* Codec - M4B only */}
+        {file.file_type === FileTypeM4B && file.audiobook_codec != null && (
+          <div>
+            <p className="font-semibold">Codec</p>
+            <p className="text-muted-foreground">{file.audiobook_codec}</p>
+          </div>
+        )}
       </div>
 
       {/* Narrators - M4B only */}

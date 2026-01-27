@@ -449,3 +449,109 @@ func TestWrite_PreservesCommentAndYear(t *testing.T) {
 	assert.Equal(t, "This is a test comment with detailed description.", modified.Comment)
 	assert.Equal(t, "2024", modified.Year)
 }
+
+// TestParseFull_Codec tests that codec is extracted correctly for AAC files.
+func TestParseFull_Codec(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-codec-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Codec Test",
+		Duration: 1.0,
+	})
+
+	metadata, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+
+	// ffmpeg generates AAC-LC by default
+	assert.Equal(t, "AAC-LC", metadata.Codec)
+	assert.Positive(t, metadata.Bitrate)
+}
+
+// TestParse_Codec tests that codec is included in ParsedMetadata.
+func TestParse_Codec(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-parse-codec-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Parse Codec Test",
+		Duration: 1.0,
+	})
+
+	metadata, err := mp4.Parse(path)
+	require.NoError(t, err)
+
+	// ffmpeg generates AAC-LC by default
+	assert.Equal(t, "AAC-LC", metadata.Codec)
+	assert.Positive(t, metadata.BitrateBps)
+}
+
+// TestParse_EAC3Codec tests EAC3 (Dolby Digital Plus) codec detection.
+func TestParse_EAC3Codec(t *testing.T) {
+	t.Parallel()
+	dir := testgen.TempDir(t, "mp4-eac3-*")
+
+	path := testgen.GenerateM4BWithEAC3(t, dir, "test.m4b", testgen.M4BEAC3Options{
+		Title:   "EAC3 Codec Test",
+		Bitrate: 640000, // 640 kbps
+	})
+
+	metadata, err := mp4.Parse(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "EAC3", metadata.Codec)
+	assert.Equal(t, 640000, metadata.BitrateBps)
+}
+
+// TestParseFull_EAC3Codec tests EAC3 codec detection with ParseFull.
+func TestParseFull_EAC3Codec(t *testing.T) {
+	t.Parallel()
+	dir := testgen.TempDir(t, "mp4-eac3-full-*")
+
+	path := testgen.GenerateM4BWithEAC3(t, dir, "test.m4b", testgen.M4BEAC3Options{
+		Title:   "EAC3 Full Parse Test",
+		Bitrate: 448000, // 448 kbps
+	})
+
+	metadata, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "EAC3 Full Parse Test", metadata.Title)
+	assert.Equal(t, "EAC3", metadata.Codec)
+	assert.Equal(t, 448000, metadata.Bitrate)
+}
+
+// TestParse_EAC3BitrateVariants tests various EAC3 bitrate values.
+func TestParse_EAC3BitrateVariants(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		bitrate uint32
+	}{
+		{"128 kbps", 128000},
+		{"256 kbps", 256000},
+		{"384 kbps", 384000},
+		{"448 kbps", 448000},
+		{"640 kbps", 640000},
+		{"768 kbps", 768000},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := testgen.TempDir(t, "mp4-eac3-bitrate-*")
+
+			path := testgen.GenerateM4BWithEAC3(t, dir, "test.m4b", testgen.M4BEAC3Options{
+				Bitrate: tc.bitrate,
+			})
+
+			metadata, err := mp4.Parse(path)
+			require.NoError(t, err)
+
+			assert.Equal(t, "EAC3", metadata.Codec)
+			assert.Equal(t, int(tc.bitrate), metadata.BitrateBps)
+		})
+	}
+}

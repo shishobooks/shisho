@@ -262,6 +262,12 @@ const FileRow = ({
                 <span className="text-muted-foreground/50">·</span>
               </>
             )}
+            {file.audiobook_codec && (
+              <>
+                <span>{file.audiobook_codec}</span>
+                <span className="text-muted-foreground/50">·</span>
+              </>
+            )}
             {/* CBZ stats */}
             {file.page_count && (
               <>
@@ -399,6 +405,12 @@ const FileRow = ({
           {file.audiobook_bitrate_bps && (
             <>
               <span>{Math.round(file.audiobook_bitrate_bps / 1000)} kbps</span>
+              <span className="text-muted-foreground/50">·</span>
+            </>
+          )}
+          {file.audiobook_codec && (
+            <>
+              <span>{file.audiobook_codec}</span>
               <span className="text-muted-foreground/50">·</span>
             </>
           )}

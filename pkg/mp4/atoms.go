@@ -61,6 +61,11 @@ var (
 	BoxTypeStsd = gomp4.BoxTypeStsd()        // stsd - Sample description box
 	BoxTypeMp4a = gomp4.BoxTypeMp4a()        // mp4a - MPEG-4 audio
 	BoxTypeEsds = gomp4.BoxTypeEsds()        // esds - Elementary stream descriptor
+	BoxTypeEc3  = gomp4.StrToBoxType("ec-3") // ec-3 - E-AC-3 (Dolby Digital Plus)
+	BoxTypeDec3 = gomp4.StrToBoxType("dec3") // dec3 - E-AC-3 specific box
+	BoxTypeAc3  = gomp4.StrToBoxType("ac-3") // ac-3 - AC-3 (Dolby Digital)
+	BoxTypeDac3 = gomp4.StrToBoxType("dac3") // dac3 - AC-3 specific box
+	BoxTypeAlac = gomp4.StrToBoxType("alac") // alac - Apple Lossless
 	BoxTypeChpl = gomp4.StrToBoxType("chpl") // chpl - Chapter list (Nero)
 	BoxTypeTref = gomp4.StrToBoxType("tref") // tref - Track reference
 	BoxTypeChap = gomp4.StrToBoxType("chap") // chap - Chapter reference
