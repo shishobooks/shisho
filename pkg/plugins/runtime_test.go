@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -66,4 +67,129 @@ func TestLoadPlugin_ManifestReturned(t *testing.T) {
 	require.NotNil(t, m.Capabilities.MetadataEnricher)
 	assert.Equal(t, "Test enricher", m.Capabilities.MetadataEnricher.Description)
 	assert.Equal(t, []string{"epub"}, m.Capabilities.MetadataEnricher.FileTypes)
+}
+
+func TestLoadPlugin_MetadataEnricherFieldValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		manifest    string
+		mainJS      string
+		wantErr     string
+		wantFields  []string
+		wantWarning string
+	}{
+		{
+			name: "valid fields - should load successfully",
+			manifest: `{
+				"manifestVersion": 1,
+				"id": "test-enricher",
+				"name": "Test Enricher",
+				"version": "1.0.0",
+				"capabilities": {
+					"metadataEnricher": {
+						"fileTypes": ["epub"],
+						"fields": ["title", "authors", "cover"]
+					}
+				}
+			}`,
+			mainJS: `var plugin = (function() {
+				return { metadataEnricher: { enrich: function() { return { modified: false }; } } };
+			})();`,
+			wantFields: []string{"title", "authors", "cover"},
+		},
+		{
+			name: "invalid field name - should fail with error",
+			manifest: `{
+				"manifestVersion": 1,
+				"id": "test-enricher",
+				"name": "Test Enricher",
+				"version": "1.0.0",
+				"capabilities": {
+					"metadataEnricher": {
+						"fileTypes": ["epub"],
+						"fields": ["title", "invalid_field"]
+					}
+				}
+			}`,
+			mainJS: `var plugin = (function() {
+				return { metadataEnricher: { enrich: function() { return { modified: false }; } } };
+			})();`,
+			wantErr: `invalid metadata field "invalid_field"`,
+		},
+		{
+			name: "missing fields - enricher disabled with warning",
+			manifest: `{
+				"manifestVersion": 1,
+				"id": "test-enricher",
+				"name": "Test Enricher",
+				"version": "1.0.0",
+				"capabilities": {
+					"metadataEnricher": {
+						"fileTypes": ["epub"]
+					}
+				}
+			}`,
+			mainJS: `var plugin = (function() {
+				return { metadataEnricher: { enrich: function() { return { modified: false }; } } };
+			})();`,
+			wantErr:     "",
+			wantWarning: "metadataEnricher requires fields declaration",
+		},
+		{
+			name: "empty fields array - enricher disabled with warning",
+			manifest: `{
+				"manifestVersion": 1,
+				"id": "test-enricher",
+				"name": "Test Enricher",
+				"version": "1.0.0",
+				"capabilities": {
+					"metadataEnricher": {
+						"fileTypes": ["epub"],
+						"fields": []
+					}
+				}
+			}`,
+			mainJS: `var plugin = (function() {
+				return { metadataEnricher: { enrich: function() { return { modified: false }; } } };
+			})();`,
+			wantErr:     "",
+			wantWarning: "metadataEnricher requires fields declaration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory with plugin files
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(tt.manifest), 0644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "main.js"), []byte(tt.mainJS), 0644))
+
+			rt, err := LoadPlugin(dir, "test", "test-enricher")
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, rt)
+
+			if len(tt.wantFields) > 0 {
+				// Valid fields case: enricher should be enabled
+				enricherCap := rt.Manifest().Capabilities.MetadataEnricher
+				require.NotNil(t, enricherCap)
+				assert.Equal(t, tt.wantFields, enricherCap.Fields)
+				assert.Empty(t, rt.LoadWarning())
+				assert.Contains(t, rt.HookTypes(), "metadataEnricher")
+			}
+
+			if tt.wantWarning != "" {
+				// Missing fields case: enricher should be disabled with warning
+				assert.Equal(t, tt.wantWarning, rt.LoadWarning())
+				// Enricher hook should not be in the hook types
+				assert.NotContains(t, rt.HookTypes(), "metadataEnricher")
+			}
+		})
+	}
 }

@@ -29,11 +29,34 @@ export interface OutputGeneratorCap {
   sourceTypes: string[];
 }
 
+/** Valid metadata field names for enricher declarations. */
+export type MetadataField =
+  | "title"
+  | "subtitle"
+  | "authors"
+  | "narrators"
+  | "series"
+  | "seriesNumber"
+  | "genres"
+  | "tags"
+  | "description"
+  | "publisher"
+  | "imprint"
+  | "url"
+  | "releaseDate"
+  | "cover"
+  | "identifiers";
+
 /** Metadata enricher capability declaration. */
 export interface MetadataEnricherCap {
   description?: string;
   /** File types this enricher applies to (e.g., ["epub", "cbz"]). */
   fileTypes?: string[];
+  /**
+   * Metadata fields this enricher may set.
+   * Required for enrichers - if omitted, the enricher hook is disabled.
+   */
+  fields: MetadataField[];
 }
 
 /** Custom identifier type declaration. */

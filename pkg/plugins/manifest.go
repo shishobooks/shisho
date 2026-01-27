@@ -55,9 +55,29 @@ type OutputGeneratorCap struct {
 	SourceTypes []string `json:"sourceTypes"`
 }
 
+// ValidMetadataFields lists all valid field names for enricher declarations.
+// These map to fields in mediafile.ParsedMetadata.
+var ValidMetadataFields = []string{
+	"title", "subtitle", "authors", "narrators",
+	"series", "seriesNumber", "genres", "tags",
+	"description", "publisher", "imprint", "url",
+	"releaseDate", "cover", "identifiers",
+}
+
+// IsValidMetadataField returns true if the field name is a valid enricher field.
+func IsValidMetadataField(field string) bool {
+	for _, f := range ValidMetadataFields {
+		if f == field {
+			return true
+		}
+	}
+	return false
+}
+
 type MetadataEnricherCap struct {
 	Description string   `json:"description"`
 	FileTypes   []string `json:"fileTypes"`
+	Fields      []string `json:"fields"`
 }
 
 type IdentifierTypeCap struct {

@@ -80,6 +80,8 @@ export type ConfigSchema = Record<string, ConfigField>;
 export interface PluginConfigResponse {
   schema: ConfigSchema;
   values: Record<string, unknown>;
+  declaredFields?: string[];
+  fieldSettings?: Record<string, boolean>;
 }
 
 export enum QueryKey {
@@ -356,6 +358,30 @@ export const useSavePluginConfig = () => {
       });
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
+      });
+    },
+  });
+};
+
+export const useSavePluginFieldSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scope,
+      id,
+      fields,
+    }: {
+      scope: string;
+      id: string;
+      fields: Record<string, boolean>;
+    }) => {
+      return API.request("PUT", `/plugins/installed/${scope}/${id}/fields`, {
+        fields,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginConfig, variables.scope, variables.id],
       });
     },
   });

@@ -47,7 +47,8 @@ func TestPluginLifecycle(t *testing.T) {
     },
     "metadataEnricher": {
       "description": "Enriches metadata with genres",
-      "fileTypes": ["testformat"]
+      "fileTypes": ["testformat"],
+      "fields": ["genres"]
     },
     "outputGenerator": {
       "description": "Generates test output",
@@ -337,7 +338,8 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Uses config in enrichment",
-      "fileTypes": ["epub"]
+      "fileTypes": ["epub"],
+      "fields": ["description"]
     }
   },
   "configSchema": {

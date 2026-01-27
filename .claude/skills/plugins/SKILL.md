@@ -74,7 +74,7 @@ shisho/goodreads-metadata/
     "inputConverter": { "description": "", "sourceTypes": ["mobi"], "mimeTypes": [], "targetType": "epub" },
     "fileParser": { "description": "", "types": ["pdf"], "mimeTypes": ["application/pdf"] },
     "outputGenerator": { "description": "", "id": "mobi", "name": "MOBI", "sourceTypes": ["epub"] },
-    "metadataEnricher": { "description": "", "fileTypes": ["epub", "cbz"] },
+    "metadataEnricher": { "description": "", "fileTypes": ["epub", "cbz"], "fields": ["title", "authors", "description", "cover"] },
     "identifierTypes": [{ "id": "goodreads", "name": "Goodreads", "urlTemplate": "https://goodreads.com/book/show/{value}", "pattern": "^\\d+$" }],
     "httpAccess": { "description": "", "domains": ["api.goodreads.com"] },
     "fileAccess": { "level": "read", "description": "" },
@@ -97,6 +97,15 @@ shisho/goodreads-metadata/
 - JS exports hook but manifest doesn't declare capability → **load fails**
 - Manifest declares capability but JS doesn't export → silent (no error)
 - Reserved extensions (`epub`, `cbz`, `m4b`) cannot be claimed by fileParsers
+- `metadataEnricher` requires `fields` array → if missing/empty, enricher hook is **disabled** (other hooks still work)
+- Invalid field names in `fields` → **load fails**
+
+**Valid metadata fields for enrichers:**
+`title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`
+
+**Logical field groupings:**
+- `cover` → controls `coverData`, `coverMimeType`, and `coverPage`
+- `series` → controls both `series` (name) and `seriesNumber`
 
 ## main.js Pattern
 
@@ -200,6 +209,11 @@ metadataEnricher: {
 ```
 
 **Go invocation:** `Manager.RunMetadataEnricher(ctx, rt, enrichCtx) → *EnrichmentResult`
+
+**Field filtering:** Enricher results are filtered before merging:
+- Fields not declared in manifest → stripped + warning logged
+- Fields declared but disabled by user → stripped silently
+- Users configure field toggles globally and per-library via UI
 
 ### outputGenerator (5 min timeout)
 
@@ -438,6 +452,13 @@ Repositories provide a `repository.json` manifest:
 | `plugin_repositories` | `url` (unique `scope`) | Repository sources |
 | `plugin_identifier_types` | `id` | Custom identifier types |
 | `plugin_order` | `(hook_type, scope, plugin_id)` | Execution order per hook |
+| `plugin_field_settings` | `(scope, plugin_id, field)` | Global field enabled/disabled state |
+| `library_plugin_field_settings` | `(library_id, scope, plugin_id, field)` | Per-library field overrides |
+
+**Field settings behavior:**
+- No rows = all declared fields enabled by default
+- Per-library settings fully override global (can enable or disable)
+- Cascade deletes on plugin uninstall or library deletion
 
 ## API Endpoints
 
@@ -447,8 +468,15 @@ Repositories provide a `repository.json` manifest:
 - `DELETE /plugins/installed/:scope/:id` - Uninstall
 - `PATCH /plugins/installed/:scope/:id` - Enable/disable
 - `POST /plugins/installed/:scope/:id/update` - Update version (hot-reload)
-- `GET /plugins/installed/:scope/:id/config` - Get config schema + values
+- `GET /plugins/installed/:scope/:id/config` - Get config schema + values + declaredFields + fieldSettings
 - `POST /plugins/scan` - Scan local/ directory
+
+**Field Settings:**
+- `GET /plugins/installed/:scope/:id/fields` - Get global field settings
+- `PUT /plugins/installed/:scope/:id/fields` - Set global field settings
+- `GET /libraries/:libraryId/plugins/:scope/:id/fields` - Get per-library field settings
+- `PUT /libraries/:libraryId/plugins/:scope/:id/fields` - Set per-library field settings
+- `DELETE /libraries/:libraryId/plugins/:scope/:id/fields` - Reset to global defaults
 
 **Repositories:**
 - `GET /plugins/repositories` - List
@@ -468,7 +496,9 @@ Repositories provide a `repository.json` manifest:
 
 **Queries:** `usePluginsInstalled()`, `usePluginsAvailable()`, `usePluginOrder(hookType)`, `usePluginConfig(scope, id)`, `usePluginRepositories()`
 
-**Mutations:** `useInstallPlugin()`, `useUninstallPlugin()`, `useUpdatePlugin()`, `useUpdatePluginVersion()`, `useSetPluginOrder()`, `useSavePluginConfig()`, `useScanPlugins()`, `useSyncRepository()`, `useAddRepository()`, `useRemoveRepository()`
+**Mutations:** `useInstallPlugin()`, `useUninstallPlugin()`, `useUpdatePlugin()`, `useUpdatePluginVersion()`, `useSetPluginOrder()`, `useSavePluginConfig()`, `useSavePluginFieldSettings()`, `useScanPlugins()`, `useSyncRepository()`, `useAddRepository()`, `useRemoveRepository()`
+
+**Note:** `usePluginConfig` returns `declaredFields` and `fieldSettings` for enrichers, displayed in `PluginConfigDialog`.
 
 ## Testing
 
@@ -523,7 +553,13 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 ### Writing a test plugin
 
 ```go
+// File parser (no fields required)
 manifest := `{"manifestVersion":1,"id":"test","name":"Test","version":"1.0.0","capabilities":{"fileParser":{"types":["pdf"]}}}`
 mainJS := `var plugin=(function(){return{fileParser:{parse:function(ctx){return{title:"Test"}}}};})();`
 installTestPlugin(tc, pluginDir, "test", manifest, mainJS)
+
+// Enricher (fields required)
+manifest := `{"manifestVersion":1,"id":"test-enricher","name":"Test Enricher","version":"1.0.0","capabilities":{"metadataEnricher":{"fileTypes":["epub"],"fields":["title","description"]}}}`
+mainJS := `var plugin=(function(){return{metadataEnricher:{enrich:function(ctx){return{modified:true,metadata:{title:"Enriched"}}}}};})();`
+installTestPlugin(tc, pluginDir, "test-enricher", manifest, mainJS)
 ```

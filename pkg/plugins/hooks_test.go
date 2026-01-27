@@ -355,7 +355,8 @@ func TestRunMetadataEnricher_NotModified(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Does nothing",
-      "fileTypes": ["epub"]
+      "fileTypes": ["epub"],
+      "fields": ["title"]
     }
   }
 }`

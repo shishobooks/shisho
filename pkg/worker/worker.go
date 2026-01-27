@@ -52,6 +52,7 @@ type Worker struct {
 	searchService    *search.Service
 	seriesService    *series.Service
 	tagService       *tags.Service
+	pluginService    *plugins.Service
 	pluginManager    *plugins.Manager
 
 	queue           chan *models.Job
@@ -76,6 +77,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
 	searchService := search.NewService(db)
 	seriesService := series.NewService(db)
 	tagService := tags.NewService(db)
+	pluginService := plugins.NewService(db)
 
 	w := &Worker{
 		config: cfg,
@@ -93,6 +95,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
 		searchService:    searchService,
 		seriesService:    seriesService,
 		tagService:       tagService,
+		pluginService:    pluginService,
 		pluginManager:    pm,
 
 		queue:           make(chan *models.Job, cfg.WorkerProcesses),

@@ -29,6 +29,10 @@ type Runtime struct {
 	// fsCtx is the filesystem context for the current hook invocation.
 	// Set by hook execution code before invoking hooks, cleared after.
 	fsCtx *FSContext
+
+	// loadWarning holds a non-fatal warning from plugin load (e.g., missing fields declaration).
+	// The Manager can check this after successful load and store it in Plugin.LoadError.
+	loadWarning string
 }
 
 // LoadPlugin creates a new Runtime by reading manifest.json and executing main.js
@@ -105,6 +109,23 @@ func LoadPlugin(dir, scope, pluginID string) (*Runtime, error) {
 		return nil, errors.New("plugin exports 'metadataEnricher' but manifest does not declare it in capabilities")
 	}
 
+	// 10. Validate metadataEnricher fields (if declared)
+	if manifest.Capabilities.MetadataEnricher != nil {
+		enricherCap := manifest.Capabilities.MetadataEnricher
+		if len(enricherCap.Fields) == 0 {
+			// Missing or empty fields: disable the enricher hook but don't fail load
+			rt.metadataEnricher = nil
+			rt.loadWarning = "metadataEnricher requires fields declaration"
+		} else {
+			// Validate that all field names are valid
+			for _, f := range enricherCap.Fields {
+				if !IsValidMetadataField(f) {
+					return nil, errors.Errorf("invalid metadata field %q in metadataEnricher.fields", f)
+				}
+			}
+		}
+	}
+
 	return rt, nil
 }
 
@@ -131,6 +152,12 @@ func (rt *Runtime) Scope() string {
 // PluginID returns the plugin's ID (e.g., "goodreads-metadata").
 func (rt *Runtime) PluginID() string {
 	return rt.pluginID
+}
+
+// LoadWarning returns any non-fatal warning from plugin load.
+// Empty string means no warning.
+func (rt *Runtime) LoadWarning() string {
+	return rt.loadWarning
 }
 
 // HookTypes returns the list of hook type strings this plugin provides,

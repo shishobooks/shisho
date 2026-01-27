@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   usePluginConfig,
   useSavePluginConfig,
+  useSavePluginFieldSettings,
   type ConfigField,
 } from "@/hooks/queries/plugins";
 
@@ -30,6 +31,28 @@ interface PluginConfigDialogProps {
 
 const SECRET_MASK = "***";
 
+const FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  subtitle: "Subtitle",
+  authors: "Authors",
+  narrators: "Narrators",
+  series: "Series",
+  seriesNumber: "Series Number",
+  genres: "Genres",
+  tags: "Tags",
+  description: "Description",
+  publisher: "Publisher",
+  imprint: "Imprint",
+  url: "URL",
+  releaseDate: "Release Date",
+  cover: "Cover Image",
+  identifiers: "Identifiers",
+};
+
+const formatFieldLabel = (field: string): string => {
+  return FIELD_LABELS[field] ?? field;
+};
+
 export const PluginConfigDialog = ({
   onOpenChange,
   open,
@@ -42,7 +65,11 @@ export const PluginConfigDialog = ({
     open ? pluginId : undefined,
   );
   const saveConfig = useSavePluginConfig();
+  const saveFieldSettings = useSavePluginFieldSettings();
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [fieldSettings, setFieldSettings] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // Initialize form values from fetched data
   useEffect(() => {
@@ -59,8 +86,17 @@ export const PluginConfigDialog = ({
         }
       }
       setFormValues(initial);
+
+      // Initialize field settings
+      if (data.fieldSettings) {
+        setFieldSettings(data.fieldSettings);
+      }
     }
   }, [data]);
+
+  const handleFieldToggle = (field: string, enabled: boolean) => {
+    setFieldSettings((prev) => ({ ...prev, [field]: enabled }));
+  };
 
   const handleSave = () => {
     if (!data) return;
@@ -74,6 +110,28 @@ export const PluginConfigDialog = ({
         continue;
       }
       config[key] = value;
+    }
+
+    // Save field settings if there are declared fields
+    if (data.declaredFields && data.declaredFields.length > 0) {
+      const changedFields: Record<string, boolean> = {};
+      for (const field of data.declaredFields) {
+        const original = data.fieldSettings?.[field] ?? true;
+        const current = fieldSettings[field] ?? true;
+        if (original !== current) {
+          changedFields[field] = current;
+        }
+      }
+      if (Object.keys(changedFields).length > 0) {
+        saveFieldSettings.mutate(
+          { scope, id: pluginId, fields: changedFields },
+          {
+            onError: (err) => {
+              toast.error(`Failed to save field settings: ${err.message}`);
+            },
+          },
+        );
+      }
     }
 
     saveConfig.mutate(
@@ -181,10 +239,34 @@ export const PluginConfigDialog = ({
               renderField(key, field),
             )}
           </div>
-        ) : (
+        ) : !data?.declaredFields?.length ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
             This plugin has no configuration options.
           </p>
+        ) : null}
+
+        {data?.declaredFields && data.declaredFields.length > 0 && (
+          <>
+            <div className="border-t pt-4">
+              <Label className="text-base">Metadata Fields</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose which fields this plugin can set during enrichment.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {data.declaredFields.map((field) => (
+                <div className="flex items-center justify-between" key={field}>
+                  <span className="text-sm">{formatFieldLabel(field)}</span>
+                  <Switch
+                    checked={fieldSettings[field] ?? true}
+                    onCheckedChange={(checked) =>
+                      handleFieldToggle(field, checked)
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <DialogFooter>
@@ -195,12 +277,14 @@ export const PluginConfigDialog = ({
             disabled={
               isLoading ||
               saveConfig.isPending ||
+              saveFieldSettings.isPending ||
               !data ||
-              Object.keys(data.schema).length === 0
+              (Object.keys(data.schema).length === 0 &&
+                (!data.declaredFields || data.declaredFields.length === 0))
             }
             onClick={handleSave}
           >
-            {saveConfig.isPending ? (
+            {saveConfig.isPending || saveFieldSettings.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Saving...

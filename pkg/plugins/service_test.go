@@ -468,3 +468,245 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, idTypes)
 }
+
+func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+
+	// No settings stored = empty map (everything enabled by default)
+	settings, err := svc.GetFieldSettings(ctx, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Empty(t, settings)
+}
+
+func TestService_SetFieldSetting_DisableField(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+
+	// Disable a field
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	settings, err := svc.GetFieldSettings(ctx, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Len(t, settings, 1)
+	assert.False(t, settings["title"])
+}
+
+func TestService_SetFieldSetting_EnableFieldRemovesRow(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+
+	// Disable then re-enable
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	err = svc.SetFieldSetting(ctx, "community", "test-plugin", "title", true)
+	require.NoError(t, err)
+
+	// Should be empty (enabled = no row)
+	settings, err := svc.GetFieldSettings(ctx, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Empty(t, settings)
+}
+
+func TestService_SetFieldSetting_MultipleFields(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+
+	// Disable multiple fields
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+	err = svc.SetFieldSetting(ctx, "community", "test-plugin", "authors", false)
+	require.NoError(t, err)
+	err = svc.SetFieldSetting(ctx, "community", "test-plugin", "description", false)
+	require.NoError(t, err)
+
+	settings, err := svc.GetFieldSettings(ctx, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Len(t, settings, 3)
+	assert.False(t, settings["title"])
+	assert.False(t, settings["authors"])
+	assert.False(t, settings["description"])
+
+	// Re-enable one
+	err = svc.SetFieldSetting(ctx, "community", "test-plugin", "authors", true)
+	require.NoError(t, err)
+
+	settings, err = svc.GetFieldSettings(ctx, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Len(t, settings, 2)
+	assert.False(t, settings["title"])
+	assert.False(t, settings["description"])
+	_, hasAuthors := settings["authors"]
+	assert.False(t, hasAuthors) // no key means enabled
+}
+
+func TestService_GetLibraryFieldSettings_EmptyByDefault(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	settings, err := svc.GetLibraryFieldSettings(ctx, library.ID, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Empty(t, settings)
+}
+
+func TestService_SetLibraryFieldSetting_Override(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// Library can disable a field
+	err := svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	settings, err := svc.GetLibraryFieldSettings(ctx, library.ID, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Len(t, settings, 1)
+	assert.False(t, settings["title"])
+
+	// Library can also explicitly enable (to override global disable)
+	err = svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "authors", true)
+	require.NoError(t, err)
+
+	settings, err = svc.GetLibraryFieldSettings(ctx, library.ID, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Len(t, settings, 2)
+	assert.False(t, settings["title"])
+	assert.True(t, settings["authors"])
+}
+
+func TestService_ResetLibraryFieldSettings(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// Set some overrides
+	err := svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+	err = svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "authors", true)
+	require.NoError(t, err)
+
+	// Reset all
+	err = svc.ResetLibraryFieldSettings(ctx, library.ID, "community", "test-plugin")
+	require.NoError(t, err)
+
+	settings, err := svc.GetLibraryFieldSettings(ctx, library.ID, "community", "test-plugin")
+	require.NoError(t, err)
+	assert.Empty(t, settings)
+}
+
+func TestService_GetEffectiveFieldSettings_GlobalOnly(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// Disable title globally
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	declaredFields := []string{"title", "authors", "description"}
+	effective, err := svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", declaredFields)
+	require.NoError(t, err)
+
+	// title=false (from global), others=true (default)
+	assert.False(t, effective["title"])
+	assert.True(t, effective["authors"])
+	assert.True(t, effective["description"])
+}
+
+func TestService_GetEffectiveFieldSettings_LibraryOverridesGlobal(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// Disable title globally
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	// Library re-enables title
+	err = svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "title", true)
+	require.NoError(t, err)
+
+	// Library disables authors (globally enabled by default)
+	err = svc.SetLibraryFieldSetting(ctx, library.ID, "community", "test-plugin", "authors", false)
+	require.NoError(t, err)
+
+	declaredFields := []string{"title", "authors", "description"}
+	effective, err := svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", declaredFields)
+	require.NoError(t, err)
+
+	assert.True(t, effective["title"])       // library enabled, overrides global
+	assert.False(t, effective["authors"])    // library disabled, overrides default
+	assert.True(t, effective["description"]) // default enabled
+}
+
+func TestService_GetEffectiveFieldSettings_OnlyDeclaredFields(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// Disable title globally
+	err := svc.SetFieldSetting(ctx, "community", "test-plugin", "title", false)
+	require.NoError(t, err)
+
+	// Only ask for subset of fields
+	declaredFields := []string{"authors", "description"}
+	effective, err := svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", declaredFields)
+	require.NoError(t, err)
+
+	// Only requested fields returned
+	assert.Len(t, effective, 2)
+	assert.True(t, effective["authors"])
+	assert.True(t, effective["description"])
+	_, hasTitle := effective["title"]
+	assert.False(t, hasTitle)
+}
+
+func TestService_GetEffectiveFieldSettings_EmptyDeclaredFields(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "test-plugin")
+	library := insertTestLibrary(t, db, "Test Library")
+
+	effective, err := svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", nil)
+	require.NoError(t, err)
+	assert.Empty(t, effective)
+
+	effective, err = svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", []string{})
+	require.NoError(t, err)
+	assert.Empty(t, effective)
+}

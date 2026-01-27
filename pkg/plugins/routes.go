@@ -17,6 +17,8 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.DELETE("/installed/:scope/:id", h.uninstall)
 	g.PATCH("/installed/:scope/:id", h.update)
 	g.GET("/installed/:scope/:id/config", h.getConfig)
+	g.GET("/installed/:scope/:id/fields", h.getFieldSettings)
+	g.PUT("/installed/:scope/:id/fields", h.setFieldSettings)
 	g.POST("/installed/:scope/:id/reload", h.reload)
 	g.POST("/installed/:scope/:id/update", h.updateVersion)
 	g.GET("/order/:hookType", h.getOrder)
@@ -32,11 +34,15 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 }
 
 // RegisterLibraryRoutes registers per-library plugin order routes on a libraries group.
-func RegisterLibraryRoutes(g *echo.Group, service *Service, authMiddleware *auth.Middleware) {
-	h := &handler{service: service}
+func RegisterLibraryRoutes(g *echo.Group, service *Service, manager *Manager, authMiddleware *auth.Middleware) {
+	h := &handler{service: service, manager: manager}
 
 	g.GET("/:id/plugins/order/:hookType", h.getLibraryOrder, authMiddleware.RequireLibraryAccess("id"))
 	g.PUT("/:id/plugins/order/:hookType", h.setLibraryOrder, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))
 	g.DELETE("/:id/plugins/order/:hookType", h.resetLibraryOrder, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))
 	g.DELETE("/:id/plugins/order", h.resetAllLibraryOrders, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))
+
+	g.GET("/:id/plugins/:scope/:pluginId/fields", h.getLibraryFieldSettings, authMiddleware.RequireLibraryAccess("id"))
+	g.PUT("/:id/plugins/:scope/:pluginId/fields", h.setLibraryFieldSettings, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))
+	g.DELETE("/:id/plugins/:scope/:pluginId/fields", h.resetLibraryFieldSettings, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))
 }

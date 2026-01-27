@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +25,7 @@ func newTestContextWithPlugins(t *testing.T, pluginDir string) *testContext {
 	pluginService := plugins.NewService(tc.db)
 	pm := plugins.NewManager(pluginService, pluginDir)
 
+	tc.worker.pluginService = pluginService
 	tc.worker.pluginManager = pm
 	return tc
 }
@@ -443,7 +447,8 @@ func TestScanWithPluginMetadataEnricher(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Enriches enrichtest files with extra metadata",
-      "fileTypes": ["enrichtest"]
+      "fileTypes": ["enrichtest"],
+      "fields": ["description", "genres"]
     }
   }
 }`
@@ -548,7 +553,8 @@ func TestScanWithPluginMetadataEnricher_FileTypeFiltering(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Only enriches epub files",
-      "fileTypes": ["epub"]
+      "fileTypes": ["epub"],
+      "fields": ["description"]
     }
   }
 }`
@@ -640,7 +646,8 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "First enricher",
-      "fileTypes": ["ordtest"]
+      "fileTypes": ["ordtest"],
+      "fields": ["description"]
     }
   }
 }`
@@ -670,7 +677,8 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Second enricher",
-      "fileTypes": ["ordtest"]
+      "fileTypes": ["ordtest"],
+      "fields": ["description"]
     }
   }
 }`
@@ -771,7 +779,8 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Provides description",
-      "fileTypes": ["casctest"]
+      "fileTypes": ["casctest"],
+      "fields": ["description", "publisher"]
     }
   }
 }`
@@ -802,7 +811,8 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Provides genres",
-      "fileTypes": ["casctest"]
+      "fileTypes": ["casctest"],
+      "fields": ["description", "genres", "tags"]
     }
   }
 }`
@@ -1103,7 +1113,8 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
   "capabilities": {
     "metadataEnricher": {
       "description": "Enriches with all metadata fields",
-      "fileTypes": ["enrichall"]
+      "fileTypes": ["enrichall"],
+      "fields": ["subtitle", "authors", "narrators", "series", "seriesNumber", "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate", "identifiers"]
     }
   }
 }`
@@ -1333,7 +1344,8 @@ func TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser(t *testing.T
   "capabilities": {
     "metadataEnricher": {
       "description": "Enriches with custom identifiers",
-      "fileTypes": ["idtest"]
+      "fileTypes": ["idtest"],
+      "fields": ["identifiers"]
     }
   }
 }`
@@ -1395,4 +1407,562 @@ func TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser(t *testing.T
 	}
 	assert.Equal(t, "9781234567890", types["isbn_13"], "parser ISBN should be present")
 	assert.Equal(t, "12345", types["mangaupdates_series"], "enricher mangaupdates_series should be present")
+}
+
+// TestFilterMetadataFields_UndeclaredFieldsZeroed verifies that fields returned by
+// a plugin but not declared in its manifest are zeroed out with a warning logged.
+func TestFilterMetadataFields_UndeclaredFieldsZeroed(t *testing.T) {
+	t.Parallel()
+
+	// Create metadata with multiple fields set
+	md := &mediafile.ParsedMetadata{
+		Title:       "Test Title",
+		Description: "Test Description",
+		Publisher:   "Test Publisher",
+		Authors:     []mediafile.ParsedAuthor{{Name: "Test Author"}},
+	}
+
+	// Declare only title and authors - description and publisher are undeclared
+	declaredFields := []string{"title", "authors"}
+	enabledFields := map[string]bool{
+		"title":   true,
+		"authors": true,
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	// Declared and enabled fields should remain
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Len(t, filtered.Authors, 1)
+	assert.Equal(t, "Test Author", filtered.Authors[0].Name)
+
+	// Undeclared fields should be zeroed
+	assert.Empty(t, filtered.Description, "undeclared field 'description' should be zeroed")
+	assert.Empty(t, filtered.Publisher, "undeclared field 'publisher' should be zeroed")
+}
+
+// TestFilterMetadataFields_DisabledFieldsZeroed verifies that fields declared in
+// manifest but disabled by user are silently zeroed out.
+func TestFilterMetadataFields_DisabledFieldsZeroed(t *testing.T) {
+	t.Parallel()
+
+	md := &mediafile.ParsedMetadata{
+		Title:       "Test Title",
+		Description: "Test Description",
+		Genres:      []string{"Fantasy", "Adventure"},
+	}
+
+	// All fields declared, but description is disabled
+	declaredFields := []string{"title", "description", "genres"}
+	enabledFields := map[string]bool{
+		"title":       true,
+		"description": false, // User disabled this field
+		"genres":      true,
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	// Enabled fields should remain
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Len(t, filtered.Genres, 2)
+
+	// Disabled field should be zeroed (silently)
+	assert.Empty(t, filtered.Description, "disabled field 'description' should be zeroed")
+}
+
+// TestFilterMetadataFields_SeriesGrouping verifies that the "series" field declaration
+// controls both series name and seriesNumber.
+func TestFilterMetadataFields_SeriesGrouping(t *testing.T) {
+	t.Parallel()
+
+	seriesNum := float64(5)
+	md := &mediafile.ParsedMetadata{
+		Title:        "Test Title",
+		Series:       "Epic Series",
+		SeriesNumber: &seriesNum,
+	}
+
+	// Declare title and series (which controls both series and seriesNumber)
+	declaredFields := []string{"title", "series"}
+	enabledFields := map[string]bool{
+		"title":  true,
+		"series": false, // Disabled - should zero both series and seriesNumber
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Empty(t, filtered.Series, "series name should be zeroed when 'series' is disabled")
+	assert.Nil(t, filtered.SeriesNumber, "seriesNumber should be zeroed when 'series' is disabled")
+}
+
+// TestFilterMetadataFields_SeriesNumberAliasForSeries verifies that "seriesNumber"
+// declaration also controls both series fields (it's an alias for "series").
+func TestFilterMetadataFields_SeriesNumberAliasForSeries(t *testing.T) {
+	t.Parallel()
+
+	seriesNum := float64(3)
+	md := &mediafile.ParsedMetadata{
+		Title:        "Test Title",
+		Series:       "Epic Series",
+		SeriesNumber: &seriesNum,
+	}
+
+	// Declare only seriesNumber (alias for series) - should control both
+	declaredFields := []string{"title", "seriesNumber"}
+	enabledFields := map[string]bool{
+		"title":        true,
+		"seriesNumber": true, // This should enable both series and seriesNumber
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Equal(t, "Epic Series", filtered.Series)
+	assert.NotNil(t, filtered.SeriesNumber)
+	assert.InDelta(t, float64(3), *filtered.SeriesNumber, 0.01)
+}
+
+// TestFilterMetadataFields_CoverGrouping verifies that the "cover" field declaration
+// controls coverData, coverMimeType, and coverPage.
+func TestFilterMetadataFields_CoverGrouping(t *testing.T) {
+	t.Parallel()
+
+	coverPage := 0
+	md := &mediafile.ParsedMetadata{
+		Title:         "Test Title",
+		CoverData:     []byte("fake cover data"),
+		CoverMimeType: "image/jpeg",
+		CoverPage:     &coverPage,
+	}
+
+	// Cover field is declared but disabled
+	declaredFields := []string{"title", "cover"}
+	enabledFields := map[string]bool{
+		"title": true,
+		"cover": false, // Disabled - should zero all cover-related fields
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Empty(t, filtered.CoverData, "coverData should be zeroed when 'cover' is disabled")
+	assert.Empty(t, filtered.CoverMimeType, "coverMimeType should be zeroed when 'cover' is disabled")
+	assert.Nil(t, filtered.CoverPage, "coverPage should be zeroed when 'cover' is disabled")
+}
+
+// TestFilterMetadataFields_AllFieldsEnabled verifies that when all fields are
+// declared and enabled, nothing is filtered.
+func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
+	t.Parallel()
+
+	releaseDate := time.Now()
+	seriesNum := float64(1)
+	coverPage := 0
+	md := &mediafile.ParsedMetadata{
+		Title:         "Test Title",
+		Subtitle:      "Test Subtitle",
+		Authors:       []mediafile.ParsedAuthor{{Name: "Author"}},
+		Narrators:     []string{"Narrator"},
+		Series:        "Series",
+		SeriesNumber:  &seriesNum,
+		Genres:        []string{"Genre"},
+		Tags:          []string{"Tag"},
+		Description:   "Description",
+		Publisher:     "Publisher",
+		Imprint:       "Imprint",
+		URL:           "http://example.com",
+		ReleaseDate:   &releaseDate,
+		CoverData:     []byte("cover"),
+		CoverMimeType: "image/png",
+		CoverPage:     &coverPage,
+		Identifiers:   []mediafile.ParsedIdentifier{{Type: "isbn_13", Value: "123"}},
+	}
+
+	declaredFields := []string{
+		"title", "subtitle", "authors", "narrators",
+		"series", "genres", "tags", "description",
+		"publisher", "imprint", "url", "releaseDate",
+		"cover", "identifiers",
+	}
+	enabledFields := make(map[string]bool)
+	for _, f := range declaredFields {
+		enabledFields[f] = true
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+
+	// All fields should remain intact
+	assert.Equal(t, "Test Title", filtered.Title)
+	assert.Equal(t, "Test Subtitle", filtered.Subtitle)
+	assert.Len(t, filtered.Authors, 1)
+	assert.Len(t, filtered.Narrators, 1)
+	assert.Equal(t, "Series", filtered.Series)
+	assert.NotNil(t, filtered.SeriesNumber)
+	assert.Len(t, filtered.Genres, 1)
+	assert.Len(t, filtered.Tags, 1)
+	assert.Equal(t, "Description", filtered.Description)
+	assert.Equal(t, "Publisher", filtered.Publisher)
+	assert.Equal(t, "Imprint", filtered.Imprint)
+	assert.Equal(t, "http://example.com", filtered.URL)
+	assert.NotNil(t, filtered.ReleaseDate)
+	assert.NotEmpty(t, filtered.CoverData)
+	assert.Equal(t, "image/png", filtered.CoverMimeType)
+	assert.NotNil(t, filtered.CoverPage)
+	assert.Len(t, filtered.Identifiers, 1)
+}
+
+// TestFilterMetadataFields_NilMetadata verifies nil input returns nil.
+func TestFilterMetadataFields_NilMetadata(t *testing.T) {
+	t.Parallel()
+
+	log := logger.New()
+	result := filterMetadataFields(nil, []string{"title"}, map[string]bool{"title": true}, "test", log)
+	assert.Nil(t, result)
+}
+
+// TestFilterMetadataFields_EmptyDeclaredFields verifies that when no fields are
+// declared, all metadata fields are zeroed.
+func TestFilterMetadataFields_EmptyDeclaredFields(t *testing.T) {
+	t.Parallel()
+
+	md := &mediafile.ParsedMetadata{
+		Title:       "Test Title",
+		Description: "Test Description",
+	}
+
+	log := logger.New()
+	filtered := filterMetadataFields(md, []string{}, map[string]bool{}, "test-plugin", log)
+
+	// All fields should be zeroed when nothing is declared
+	assert.Empty(t, filtered.Title)
+	assert.Empty(t, filtered.Description)
+}
+
+// TestScanWithPluginMetadataEnricher_FieldFiltering verifies that enricher field
+// filtering is applied during scan based on user configuration.
+func TestScanWithPluginMetadataEnricher_FieldFiltering(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	// Parser for .filtertest files - provides only title
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "filtertest-parser",
+  "name": "FilterTest Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses filtertest files",
+      "types": ["filtertest"]
+    }
+  }
+}`
+	parserMainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Filter Test Book" };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "filtertest-parser", parserManifest, parserMainJS)
+
+	// Enricher that provides description and genres, both declared in manifest
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "filter-enricher",
+  "name": "Filter Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Enriches with description and genres",
+      "fileTypes": ["filtertest"],
+      "fields": ["description", "genres"]
+    }
+  }
+}`
+	enricherMainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      enrich: function(ctx) {
+        return {
+          modified: true,
+          metadata: {
+            description: "This is an enriched description",
+            genres: ["Fantasy", "Adventure"]
+          }
+        };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "filter-enricher", enricherManifest, enricherMainJS)
+
+	// Disable the "genres" field for this enricher
+	pluginService := plugins.NewService(tc.db)
+	err := pluginService.SetFieldSetting(context.Background(), "test", "filter-enricher", "genres", false)
+	require.NoError(t, err)
+
+	err = pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "filter-enricher")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	// Create library with test file
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Filter Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	testPath := filepath.Join(bookDir, "test.filtertest")
+	err = os.WriteFile(testPath, []byte("filtertest content"), 0644)
+	require.NoError(t, err)
+
+	// Run scan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify results
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Filter Test Book", book.Title)
+
+	// Description should be present (declared and enabled by default)
+	require.NotNil(t, book.Description)
+	assert.Equal(t, "This is an enriched description", *book.Description)
+
+	// Genres should NOT be present (declared but disabled by user)
+	assert.Empty(t, book.BookGenres, "genres should be filtered out because field is disabled")
+}
+
+// TestScanWithPluginMetadataEnricher_UndeclaredFieldFiltered verifies that fields
+// returned by an enricher but not declared in its manifest are filtered with a warning.
+func TestScanWithPluginMetadataEnricher_UndeclaredFieldFiltered(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	// Parser for .undecltest files
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "undecltest-parser",
+  "name": "UndeclTest Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses undecltest files",
+      "types": ["undecltest"]
+    }
+  }
+}`
+	parserMainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Undeclared Field Test" };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "undecltest-parser", parserManifest, parserMainJS)
+
+	// Enricher that declares only "description" but also returns "genres" (undeclared)
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "undecl-enricher",
+  "name": "Undeclared Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Returns more fields than declared",
+      "fileTypes": ["undecltest"],
+      "fields": ["description"]
+    }
+  }
+}`
+	// Note: This enricher returns genres which is NOT in the declared fields
+	enricherMainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      enrich: function(ctx) {
+        return {
+          modified: true,
+          metadata: {
+            description: "Valid description",
+            genres: ["Sneaky Genre"]
+          }
+        };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "undecl-enricher", enricherManifest, enricherMainJS)
+
+	pluginService := plugins.NewService(tc.db)
+	err := pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "undecl-enricher")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	// Create library with test file
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Undecl Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	testPath := filepath.Join(bookDir, "test.undecltest")
+	err = os.WriteFile(testPath, []byte("undecltest content"), 0644)
+	require.NoError(t, err)
+
+	// Run scan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify results
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Undeclared Field Test", book.Title)
+
+	// Description should be present (declared)
+	require.NotNil(t, book.Description)
+	assert.Equal(t, "Valid description", *book.Description)
+
+	// Genres should NOT be present (not declared in manifest)
+	assert.Empty(t, book.BookGenres, "undeclared field 'genres' should be filtered out")
+}
+
+// TestScanWithPluginMetadataEnricher_PerLibraryFieldOverride verifies that per-library
+// field settings override global settings.
+func TestScanWithPluginMetadataEnricher_PerLibraryFieldOverride(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	// Parser for .liboverride files
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "liboverride-parser",
+  "name": "LibOverride Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses liboverride files",
+      "types": ["liboverride"]
+    }
+  }
+}`
+	parserMainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Library Override Test" };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "liboverride-parser", parserManifest, parserMainJS)
+
+	// Enricher that provides description
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "liboverride-enricher",
+  "name": "LibOverride Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Enriches with description",
+      "fileTypes": ["liboverride"],
+      "fields": ["description"]
+    }
+  }
+}`
+	enricherMainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      enrich: function(ctx) {
+        return {
+          modified: true,
+          metadata: {
+            description: "Enriched description"
+          }
+        };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "liboverride-enricher", enricherManifest, enricherMainJS)
+
+	pluginService := plugins.NewService(tc.db)
+
+	// Globally enable description (default)
+	// No row needed - enabled is default
+
+	// Set up ordering
+	err := pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "liboverride-enricher")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	// Create library
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	// Get library ID
+	libs, err := tc.libraryService.ListLibraries(tc.ctx, libraries.ListLibrariesOptions{})
+	require.NoError(t, err)
+	require.Len(t, libs, 1)
+	libraryID := libs[0].ID
+
+	// Set per-library override to DISABLE description for this library
+	err = pluginService.SetLibraryFieldSetting(tc.ctx, libraryID, "test", "liboverride-enricher", "description", false)
+	require.NoError(t, err)
+
+	// Create test file
+	bookDir := filepath.Join(libraryPath, "Override Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	testPath := filepath.Join(bookDir, "test.liboverride")
+	err = os.WriteFile(testPath, []byte("liboverride content"), 0644)
+	require.NoError(t, err)
+
+	// Run scan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	// Verify results
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	assert.Equal(t, "Library Override Test", book.Title)
+
+	// Description should NOT be present due to per-library override
+	assert.Nil(t, book.Description, "description should be filtered due to per-library override")
 }

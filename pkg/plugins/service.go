@@ -440,3 +440,154 @@ func (s *Service) ResetAllLibraryOrders(ctx context.Context, libraryID int) erro
 		return errors.WithStack(err)
 	})
 }
+
+// GetFieldSettings returns global field settings for a plugin.
+// Returns a map of field name -> enabled status for fields that are explicitly disabled.
+// Absence from the map means the field is enabled (default).
+func (s *Service) GetFieldSettings(ctx context.Context, scope, pluginID string) (map[string]bool, error) {
+	var settings []*models.PluginFieldSetting
+	err := s.db.NewSelect().Model(&settings).
+		Where("scope = ?", scope).
+		Where("plugin_id = ?", pluginID).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	result := make(map[string]bool, len(settings))
+	for _, setting := range settings {
+		result[setting.Field] = setting.Enabled
+	}
+	return result, nil
+}
+
+// SetFieldSetting upserts a single global field setting.
+// If enabled=true, the row is deleted (enabled is the default).
+// If enabled=false, the row is upserted.
+func (s *Service) SetFieldSetting(ctx context.Context, scope, pluginID, field string, enabled bool) error {
+	if enabled {
+		// Delete the row - enabled is the default
+		_, err := s.db.NewDelete().Model((*models.PluginFieldSetting)(nil)).
+			Where("scope = ?", scope).
+			Where("plugin_id = ?", pluginID).
+			Where("field = ?", field).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		return nil
+	}
+
+	// Upsert disabled setting
+	setting := &models.PluginFieldSetting{
+		Scope:    scope,
+		PluginID: pluginID,
+		Field:    field,
+		Enabled:  false,
+	}
+	_, err := s.db.NewInsert().Model(setting).
+		On("CONFLICT (scope, plugin_id, field) DO UPDATE").
+		Set("enabled = EXCLUDED.enabled").
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+// GetLibraryFieldSettings returns per-library field overrides for a plugin.
+// Returns a map of field name -> enabled status for fields with explicit overrides.
+// Unlike global settings, both enabled and disabled overrides are stored.
+func (s *Service) GetLibraryFieldSettings(ctx context.Context, libraryID int, scope, pluginID string) (map[string]bool, error) {
+	var settings []*models.LibraryPluginFieldSetting
+	err := s.db.NewSelect().Model(&settings).
+		Where("library_id = ?", libraryID).
+		Where("scope = ?", scope).
+		Where("plugin_id = ?", pluginID).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	result := make(map[string]bool, len(settings))
+	for _, setting := range settings {
+		result[setting.Field] = setting.Enabled
+	}
+	return result, nil
+}
+
+// SetLibraryFieldSetting upserts a per-library field override.
+// Both enabled and disabled overrides are stored to allow library-specific overrides
+// in either direction.
+func (s *Service) SetLibraryFieldSetting(ctx context.Context, libraryID int, scope, pluginID, field string, enabled bool) error {
+	setting := &models.LibraryPluginFieldSetting{
+		LibraryID: libraryID,
+		Scope:     scope,
+		PluginID:  pluginID,
+		Field:     field,
+		Enabled:   enabled,
+	}
+	_, err := s.db.NewInsert().Model(setting).
+		On("CONFLICT (library_id, scope, plugin_id, field) DO UPDATE").
+		Set("enabled = EXCLUDED.enabled").
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+// ResetLibraryFieldSettings removes all per-library field overrides for a plugin.
+func (s *Service) ResetLibraryFieldSettings(ctx context.Context, libraryID int, scope, pluginID string) error {
+	_, err := s.db.NewDelete().Model((*models.LibraryPluginFieldSetting)(nil)).
+		Where("library_id = ?", libraryID).
+		Where("scope = ?", scope).
+		Where("plugin_id = ?", pluginID).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+// GetEffectiveFieldSettings returns the effective field settings for a library,
+// merging global settings with library-specific overrides.
+// Returns a map of field name -> enabled status for the specified declared fields.
+// Priority: library override > global setting > default (enabled).
+func (s *Service) GetEffectiveFieldSettings(ctx context.Context, libraryID int, scope, pluginID string, declaredFields []string) (map[string]bool, error) {
+	if len(declaredFields) == 0 {
+		return make(map[string]bool), nil
+	}
+
+	// Get global settings
+	globalSettings, err := s.GetFieldSettings(ctx, scope, pluginID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get library overrides
+	libraryOverrides, err := s.GetLibraryFieldSettings(ctx, libraryID, scope, pluginID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute effective settings for declared fields
+	result := make(map[string]bool, len(declaredFields))
+	for _, field := range declaredFields {
+		// Check library override first
+		if enabled, hasOverride := libraryOverrides[field]; hasOverride {
+			result[field] = enabled
+			continue
+		}
+
+		// Check global setting
+		if enabled, hasGlobal := globalSettings[field]; hasGlobal {
+			result[field] = enabled
+			continue
+		}
+
+		// Default: enabled
+		result[field] = true
+	}
+	return result, nil
+}

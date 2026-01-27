@@ -6,7 +6,8 @@
   "capabilities": {
     "metadataEnricher": {
       "description": "Test enricher",
-      "fileTypes": ["epub"]
+      "fileTypes": ["epub"],
+      "fields": ["title", "authors", "description", "genres", "tags", "cover"]
     }
   }
 }

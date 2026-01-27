@@ -90,3 +90,26 @@ type LibraryPlugin struct {
 	Enabled   bool   `bun:",notnull" json:"enabled"`
 	Position  int    `bun:",notnull" json:"position"`
 }
+
+// PluginFieldSetting stores global field enable/disable settings for a plugin.
+// Absence of a row means the field is enabled (default).
+type PluginFieldSetting struct {
+	bun.BaseModel `bun:"table:plugin_field_settings,alias:pfs" tstype:"-"`
+
+	Scope    string `bun:",pk" json:"scope"`
+	PluginID string `bun:",pk" json:"plugin_id"`
+	Field    string `bun:",pk" json:"field"`
+	Enabled  bool   `bun:",notnull" json:"enabled"`
+}
+
+// LibraryPluginFieldSetting stores per-library field overrides.
+// Only rows with explicit overrides are stored; absence means use global default.
+type LibraryPluginFieldSetting struct {
+	bun.BaseModel `bun:"table:library_plugin_field_settings,alias:lpfs" tstype:"-"`
+
+	LibraryID int    `bun:",pk" json:"library_id"`
+	Scope     string `bun:",pk" json:"scope"`
+	PluginID  string `bun:",pk" json:"plugin_id"`
+	Field     string `bun:",pk" json:"field"`
+	Enabled   bool   `bun:",notnull" json:"enabled"`
+}

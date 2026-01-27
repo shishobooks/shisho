@@ -2300,9 +2300,27 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
+		// Get effective field settings for this library + plugin
+		declaredFields := enricherCap.Fields
+		enabledFields, fErr := w.pluginService.GetEffectiveFieldSettings(ctx, libraryID, rt.Scope(), rt.PluginID(), declaredFields)
+		if fErr != nil {
+			log.Warn("failed to get field settings", logger.Data{
+				"plugin": rt.PluginID(),
+				"error":  fErr.Error(),
+			})
+			// Continue with default (all enabled) if settings lookup fails
+			enabledFields = make(map[string]bool, len(declaredFields))
+			for _, f := range declaredFields {
+				enabledFields[f] = true
+			}
+		}
+
+		// Filter to only declared and enabled fields, log warnings for undeclared
+		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), log)
+
 		// Merge: first non-empty wins per field, tracking source per field
 		enricherSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
-		mergeEnrichedMetadata(&enrichedMeta, result.Metadata, enricherSource)
+		mergeEnrichedMetadata(&enrichedMeta, filteredMetadata, enricherSource)
 		if !modified {
 			enrichedMeta.DataSource = enricherSource
 		}
@@ -2390,6 +2408,139 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 			}
 		}
 	}
+}
+
+// filterMetadataFields zeros out fields that are undeclared or disabled.
+// Undeclared fields (returned but not in manifest) are zeroed with a log warning.
+// Disabled fields (declared but user disabled) are zeroed silently.
+// Field groupings:
+//   - "series" or "seriesNumber" controls both series name and seriesNumber.
+//   - "cover" controls coverData, coverMimeType, and coverPage.
+func filterMetadataFields(
+	md *mediafile.ParsedMetadata,
+	declaredFields []string,
+	enabledFields map[string]bool,
+	pluginID string,
+	log logger.Logger,
+) *mediafile.ParsedMetadata {
+	if md == nil {
+		return nil
+	}
+
+	// Build a set of declared fields for fast lookup
+	declared := make(map[string]bool, len(declaredFields))
+	for _, f := range declaredFields {
+		declared[f] = true
+	}
+
+	// Helper to check if a field is allowed (declared AND enabled)
+	// For undeclared fields, log a warning and return false
+	// For disabled fields, silently return false
+	isFieldAllowed := func(field string) bool {
+		if !declared[field] {
+			return false
+		}
+		// Check enabledFields - if not in map, default is enabled (true)
+		if enabled, ok := enabledFields[field]; ok {
+			return enabled
+		}
+		return true
+	}
+
+	// Helper to check if a field has data and is undeclared (for warning)
+	warnIfUndeclared := func(field string, hasData bool) {
+		if hasData && !declared[field] {
+			log.Warn("enricher returned undeclared field", logger.Data{
+				"plugin": pluginID,
+				"field":  field,
+			})
+		}
+	}
+
+	// Create a copy to avoid mutating the original
+	result := *md
+
+	// Handle "series" grouping - both "series" and "seriesNumber" control the series fields
+	seriesAllowed := isFieldAllowed("series") || isFieldAllowed("seriesNumber")
+	seriesDeclared := declared["series"] || declared["seriesNumber"]
+	if !seriesDeclared {
+		if result.Series != "" {
+			log.Warn("enricher returned undeclared field", logger.Data{
+				"plugin": pluginID,
+				"field":  "series",
+			})
+		}
+		if result.SeriesNumber != nil {
+			log.Warn("enricher returned undeclared field", logger.Data{
+				"plugin": pluginID,
+				"field":  "seriesNumber",
+			})
+		}
+	}
+	if !seriesAllowed {
+		result.Series = ""
+		result.SeriesNumber = nil
+	}
+
+	// Handle "cover" grouping
+	if !isFieldAllowed("cover") {
+		warnIfUndeclared("cover", len(result.CoverData) > 0 || result.CoverMimeType != "" || result.CoverPage != nil)
+		result.CoverData = nil
+		result.CoverMimeType = ""
+		result.CoverPage = nil
+	}
+
+	// Handle individual fields
+	if !isFieldAllowed("title") {
+		warnIfUndeclared("title", result.Title != "")
+		result.Title = ""
+	}
+	if !isFieldAllowed("subtitle") {
+		warnIfUndeclared("subtitle", result.Subtitle != "")
+		result.Subtitle = ""
+	}
+	if !isFieldAllowed("authors") {
+		warnIfUndeclared("authors", len(result.Authors) > 0)
+		result.Authors = nil
+	}
+	if !isFieldAllowed("narrators") {
+		warnIfUndeclared("narrators", len(result.Narrators) > 0)
+		result.Narrators = nil
+	}
+	if !isFieldAllowed("genres") {
+		warnIfUndeclared("genres", len(result.Genres) > 0)
+		result.Genres = nil
+	}
+	if !isFieldAllowed("tags") {
+		warnIfUndeclared("tags", len(result.Tags) > 0)
+		result.Tags = nil
+	}
+	if !isFieldAllowed("description") {
+		warnIfUndeclared("description", result.Description != "")
+		result.Description = ""
+	}
+	if !isFieldAllowed("publisher") {
+		warnIfUndeclared("publisher", result.Publisher != "")
+		result.Publisher = ""
+	}
+	if !isFieldAllowed("imprint") {
+		warnIfUndeclared("imprint", result.Imprint != "")
+		result.Imprint = ""
+	}
+	if !isFieldAllowed("url") {
+		warnIfUndeclared("url", result.URL != "")
+		result.URL = ""
+	}
+	if !isFieldAllowed("releaseDate") {
+		warnIfUndeclared("releaseDate", result.ReleaseDate != nil)
+		result.ReleaseDate = nil
+	}
+	if !isFieldAllowed("identifiers") {
+		warnIfUndeclared("identifiers", len(result.Identifiers) > 0)
+		result.Identifiers = nil
+	}
+
+	return &result
 }
 
 // buildParsedMetadataContext converts ParsedMetadata to a map for plugin enrichment context.
