@@ -7,7 +7,13 @@ import {
   Puzzle,
   Users,
 } from "lucide-react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  ScrollRestoration,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
@@ -291,6 +297,7 @@ const AdminLayoutContent = () => {
 const AdminLayout = () => {
   return (
     <MobileNavProvider>
+      <ScrollRestoration />
       <AdminLayoutContent />
     </MobileNavProvider>
   );
