@@ -14,6 +14,7 @@ import { getFilename } from "@/utils/format";
 interface CoverGalleryTabsProps {
   files: File[];
   className?: string;
+  cacheBuster?: number;
 }
 
 interface FileWithLabel extends File {
@@ -55,7 +56,11 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
  * Allows switching between different file covers when a book has multiple files.
  * Only renders when there are 2+ files.
  */
-function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
+function CoverGalleryTabs({
+  files,
+  className,
+  cacheBuster,
+}: CoverGalleryTabsProps) {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -76,7 +81,9 @@ function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
 
   const hasCover = selectedFile?.cover_image_filename && !coverError;
   const coverUrl = selectedFile
-    ? `/api/books/files/${selectedFile.id}/cover`
+    ? cacheBuster
+      ? `/api/books/files/${selectedFile.id}/cover?t=${cacheBuster}`
+      : `/api/books/files/${selectedFile.id}/cover`
     : null;
 
   // Check cache synchronously before paint

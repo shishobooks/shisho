@@ -149,6 +149,7 @@ interface FileRowProps {
   isFileSelected?: boolean;
   onToggleSelect?: () => void;
   onMoveFile?: () => void;
+  cacheBuster?: number;
 }
 
 const FileRow = ({
@@ -173,6 +174,7 @@ const FileRow = ({
   isFileSelected = false,
   onToggleSelect,
   onMoveFile,
+  cacheBuster,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
@@ -220,7 +222,11 @@ const FileRow = ({
       {/* File cover thumbnail - constrained height, natural aspect ratio */}
       {!isSupplement && (
         <div className="shrink-0 self-start">
-          <FileCoverThumbnail className="h-14" file={file} />
+          <FileCoverThumbnail
+            cacheBuster={cacheBuster}
+            className="h-14"
+            file={file}
+          />
         </div>
       )}
 
@@ -977,7 +983,10 @@ const BookDetail = () => {
         <div className="lg:col-span-1">
           {mainFiles.length > 1 ? (
             /* Multiple files - show cover gallery with tabs */
-            <CoverGalleryTabs files={mainFiles} />
+            <CoverGalleryTabs
+              cacheBuster={coverCacheBuster}
+              files={mainFiles}
+            />
           ) : (
             /* Single file - show book cover directly */
             <div
@@ -1249,6 +1258,7 @@ const BookDetail = () => {
               <div className="space-y-2">
                 {mainFiles.map((file) => (
                   <FileRow
+                    cacheBuster={coverCacheBuster}
                     file={file}
                     hasExpandableMetadata={hasExpandableMetadata(file)}
                     isDownloading={downloadingFileId === file.id}
@@ -1290,6 +1300,7 @@ const BookDetail = () => {
                   <div className="space-y-2">
                     {supplements.map((file) => (
                       <FileRow
+                        cacheBuster={coverCacheBuster}
                         file={file}
                         hasExpandableMetadata={hasExpandableMetadata(file)}
                         isDownloading={downloadingFileId === file.id}

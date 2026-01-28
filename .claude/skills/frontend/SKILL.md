@@ -290,6 +290,52 @@ Center and constrain cover images on mobile:
 </div>
 ```
 
+## Cover Image Cache Busting
+
+**All cover image URLs MUST include a cache-busting query parameter** to ensure updated covers are displayed without browser caching issues.
+
+### Why Cache Busting is Required
+
+When a book or file's cover is updated (e.g., through metadata refresh or manual edit), the browser may continue showing the old cached version. Adding a timestamp parameter forces the browser to fetch the new image.
+
+### Patterns
+
+**Pattern 1: React Query timestamp** (preferred when query is available)
+```tsx
+const bookQuery = useBook(id);
+const coverUrl = `/api/books/${book.id}/cover?t=${bookQuery.dataUpdatedAt}`;
+```
+
+**Pattern 2: Entity timestamp** (for lists without query access)
+```tsx
+const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
+```
+
+**Pattern 3: Prop drilling** (for child components)
+```tsx
+// Parent component
+<FileCoverThumbnail file={file} cacheBuster={bookQuery.dataUpdatedAt} />
+
+// Child component
+const coverUrl = cacheBuster
+  ? `/api/books/files/${file.id}/cover?t=${cacheBuster}`
+  : `/api/books/files/${file.id}/cover`;
+```
+
+### Cover Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/books/{id}/cover` | Book cover (selected from files) |
+| `/api/books/files/{id}/cover` | Specific file's cover |
+| `/api/series/{id}/cover` | Series cover (from first book) |
+
+### Checklist for New Cover Components
+
+- [ ] Cover URL includes `?t=` cache buster parameter
+- [ ] Cache buster updates when data is refetched
+- [ ] Child components receive cache buster via props if needed
+
 ### Breadcrumbs
 
 Make breadcrumbs responsive with truncation:

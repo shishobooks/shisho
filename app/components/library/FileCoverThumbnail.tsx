@@ -8,6 +8,7 @@ interface FileCoverThumbnailProps {
   file: File;
   className?: string;
   onClick?: () => void;
+  cacheBuster?: number;
 }
 
 /**
@@ -19,6 +20,7 @@ function FileCoverThumbnail({
   file,
   className,
   onClick,
+  cacheBuster,
 }: FileCoverThumbnailProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -28,7 +30,9 @@ function FileCoverThumbnail({
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
   const hasCover = file.cover_image_filename && !imageError;
-  const coverUrl = `/api/books/files/${file.id}/cover`;
+  const coverUrl = cacheBuster
+    ? `/api/books/files/${file.id}/cover?t=${cacheBuster}`
+    : `/api/books/files/${file.id}/cover`;
 
   return (
     <div
