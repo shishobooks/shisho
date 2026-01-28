@@ -168,6 +168,20 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions) (*ScanRes
 func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Warn(msg, data)
+		}
+	}
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Info(msg, data)
+		}
+	}
+
 	// Retrieve file with relations from DB
 	file, err := w.bookService.RetrieveFileWithRelations(ctx, opts.FileID)
 	if err != nil {
@@ -177,7 +191,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 	// Check if file exists on disk
 	_, err = os.Stat(file.Filepath)
 	if os.IsNotExist(err) {
-		log.Info("file no longer exists on disk, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
+		logInfo("file no longer exists on disk, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
 
 		// Get parent book to check file count
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
@@ -199,13 +213,13 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 			// Delete from search index before deleting the book
 			if w.searchService != nil {
 				if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
-					log.Warn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
+					logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 				}
 			}
 			if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
 				return nil, errors.Wrap(err, "failed to delete orphaned book")
 			}
-			log.Info("deleted orphaned book", logger.Data{"book_id": book.ID})
+			logInfo("deleted orphaned book", logger.Data{"book_id": book.ID})
 
 			// Clean up empty directories up to library path
 			library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -216,7 +230,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 				for _, libPath := range library.LibraryPaths {
 					if strings.HasPrefix(bookPath, libPath.Filepath) {
 						if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
-							log.Warn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+							logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 						}
 						break
 					}
@@ -225,7 +239,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 		} else if fileDir != bookPath {
 			// Clean up empty directories up to book folder
 			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
-				log.Warn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 			}
 		}
 
@@ -241,8 +255,8 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 	}
 
 	// Check and recover missing cover if needed
-	if err := w.recoverMissingCover(ctx, file); err != nil {
-		log.Warn("failed to recover missing cover", logger.Data{"file_id": file.ID, "error": err.Error()})
+	if err := w.recoverMissingCover(ctx, file, opts.JobLog); err != nil {
+		logWarn("failed to recover missing cover", logger.Data{"file_id": file.ID, "error": err.Error()})
 	}
 
 	// File exists on disk - parse metadata
@@ -272,11 +286,11 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 	}
 
 	// Run metadata enrichers after parsing
-	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID)
+	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
 	// This is a resync (FileID mode), so pass isResync=true to enable book organization
-	return w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true)
+	return w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog)
 }
 
 // scanBook handles book resync - scan all files belonging to the book.
@@ -286,6 +300,20 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Warn(msg, data)
+		}
+	}
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Info(msg, data)
+		}
+	}
+
 	// Fetch book with files from DB
 	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &opts.BookID})
 	if err != nil {
@@ -294,13 +322,13 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 
 	// If book has no files, delete it
 	if len(book.Files) == 0 {
-		log.Info("book has no files, deleting", logger.Data{"book_id": book.ID})
+		logInfo("book has no files, deleting", logger.Data{"book_id": book.ID})
 		bookPath := book.Filepath
 
 		// Delete from search index before deleting the book
 		if w.searchService != nil {
 			if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
-				log.Warn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
+				logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 			}
 		}
 
@@ -318,7 +346,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 			for _, libPath := range library.LibraryPaths {
 				if strings.HasPrefix(bookPath, libPath.Filepath) {
 					if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
-						log.Warn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+						logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 					}
 					break
 				}
@@ -339,7 +367,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 			JobLog:       opts.JobLog,
 		})
 		if err != nil {
-			log.Warn("failed to scan file in book, continuing", logger.Data{
+			logWarn("failed to scan file in book, continuing", logger.Data{
 				"file_id": file.ID,
 				"book_id": book.ID,
 				"error":   err.Error(),
@@ -390,8 +418,23 @@ func (w *Worker) scanFileCore(
 	metadata *mediafile.ParsedMetadata,
 	forceRefresh bool,
 	isResync bool,
+	jobLog *joblogs.JobLogger,
 ) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
+
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if jobLog != nil {
+			jobLog.Warn(msg, data)
+		}
+	}
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if jobLog != nil {
+			jobLog.Info(msg, data)
+		}
+	}
 
 	// If no metadata, nothing to update
 	if metadata == nil {
@@ -404,11 +447,11 @@ func (w *Worker) scanFileCore(
 	// Sidecars can override file metadata but not manual user edits
 	bookSidecarData, err := sidecar.ReadBookSidecar(book.Filepath)
 	if err != nil {
-		log.Warn("failed to read book sidecar", logger.Data{"error": err.Error()})
+		logWarn("failed to read book sidecar", logger.Data{"error": err.Error()})
 	}
 	fileSidecarData, err := sidecar.ReadFileSidecar(file.Filepath)
 	if err != nil {
-		log.Warn("failed to read file sidecar", logger.Data{"error": err.Error()})
+		logWarn("failed to read file sidecar", logger.Data{"error": err.Error()})
 	}
 
 	bookUpdateOpts := books.UpdateBookOptions{Columns: []string{}}
@@ -429,7 +472,7 @@ func (w *Worker) scanFileCore(
 		}
 		titleSource := metadata.SourceForField("title")
 		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
-			log.Info("updating book title", logger.Data{"from": book.Title, "to": title})
+			logInfo("updating book title", logger.Data{"from": book.Title, "to": title})
 			book.Title = title
 			book.TitleSource = titleSource
 			bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "title", "title_source")
@@ -446,7 +489,7 @@ func (w *Worker) scanFileCore(
 		// Title (from sidecar - can override filepath-sourced data)
 		if bookSidecarData != nil && bookSidecarData.Title != "" {
 			if shouldApplySidecarScalar(bookSidecarData.Title, book.Title, book.TitleSource, forceRefresh) {
-				log.Info("updating book title from sidecar", logger.Data{"from": book.Title, "to": bookSidecarData.Title})
+				logInfo("updating book title from sidecar", logger.Data{"from": book.Title, "to": bookSidecarData.Title})
 				book.Title = bookSidecarData.Title
 				book.TitleSource = sidecarSource
 				bookUpdateOpts.Columns = appendIfMissing(bookUpdateOpts.Columns, "title", "title_source")
@@ -475,7 +518,7 @@ func (w *Worker) scanFileCore(
 			}
 			subtitleSource := metadata.SourceForField("subtitle")
 			if shouldUpdateScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, forceRefresh) {
-				log.Info("updating book subtitle", logger.Data{"from": existingSubtitle, "to": subtitle})
+				logInfo("updating book subtitle", logger.Data{"from": existingSubtitle, "to": subtitle})
 				book.Subtitle = &subtitle
 				book.SubtitleSource = &subtitleSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "subtitle", "subtitle_source")
@@ -492,7 +535,7 @@ func (w *Worker) scanFileCore(
 				existingSubtitleSource = *book.SubtitleSource
 			}
 			if shouldApplySidecarScalar(*bookSidecarData.Subtitle, existingSubtitle, existingSubtitleSource, forceRefresh) {
-				log.Info("updating book subtitle from sidecar", logger.Data{"from": existingSubtitle, "to": *bookSidecarData.Subtitle})
+				logInfo("updating book subtitle from sidecar", logger.Data{"from": existingSubtitle, "to": *bookSidecarData.Subtitle})
 				book.Subtitle = bookSidecarData.Subtitle
 				book.SubtitleSource = &sidecarSource
 				bookUpdateOpts.Columns = appendIfMissing(bookUpdateOpts.Columns, "subtitle", "subtitle_source")
@@ -512,7 +555,7 @@ func (w *Worker) scanFileCore(
 			}
 			descSource := metadata.SourceForField("description")
 			if shouldUpdateScalar(description, existingDescription, descSource, existingDescriptionSource, forceRefresh) {
-				log.Info("updating book description", nil)
+				logInfo("updating book description", nil)
 				book.Description = &description
 				book.DescriptionSource = &descSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "description", "description_source")
@@ -530,7 +573,7 @@ func (w *Worker) scanFileCore(
 				existingDescriptionSource = *book.DescriptionSource
 			}
 			if sanitizedDesc != "" && shouldApplySidecarScalar(sanitizedDesc, existingDescription, existingDescriptionSource, forceRefresh) {
-				log.Info("updating book description from sidecar", nil)
+				logInfo("updating book description from sidecar", nil)
 				book.Description = &sanitizedDesc
 				book.DescriptionSource = &sidecarSource
 				bookUpdateOpts.Columns = appendIfMissing(bookUpdateOpts.Columns, "description", "description_source")
@@ -559,7 +602,7 @@ func (w *Worker) scanFileCore(
 
 			authorSource := metadata.SourceForField("authors")
 			if shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
-				log.Info("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
+				logInfo("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
 
 				// Delete existing authors
 				if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
@@ -570,7 +613,7 @@ func (w *Worker) scanFileCore(
 				for i, parsedAuthor := range metadata.Authors {
 					person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create person for author", logger.Data{"name": parsedAuthor.Name, "error": err.Error()})
+						logWarn("failed to find/create person for author", logger.Data{"name": parsedAuthor.Name, "error": err.Error()})
 						continue
 					}
 					var role *string
@@ -584,7 +627,7 @@ func (w *Worker) scanFileCore(
 						SortOrder: i + 1,
 					}
 					if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-						log.Warn("failed to create author", logger.Data{"error": err.Error()})
+						logWarn("failed to create author", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -610,7 +653,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			if shouldApplySidecarRelationship(sidecarAuthorNames, existingAuthorNames, book.AuthorSource, forceRefresh) {
-				log.Info("updating authors from sidecar", logger.Data{"new_count": len(bookSidecarData.Authors), "old_count": len(book.Authors)})
+				logInfo("updating authors from sidecar", logger.Data{"new_count": len(bookSidecarData.Authors), "old_count": len(book.Authors)})
 
 				// Delete existing authors
 				if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
@@ -621,7 +664,7 @@ func (w *Worker) scanFileCore(
 				for i, sidecarAuthor := range bookSidecarData.Authors {
 					person, err := w.personService.FindOrCreatePerson(ctx, sidecarAuthor.Name, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create person for author", logger.Data{"name": sidecarAuthor.Name, "error": err.Error()})
+						logWarn("failed to find/create person for author", logger.Data{"name": sidecarAuthor.Name, "error": err.Error()})
 						continue
 					}
 					author := &models.Author{
@@ -631,7 +674,7 @@ func (w *Worker) scanFileCore(
 						SortOrder: i + 1,
 					}
 					if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-						log.Warn("failed to create author", logger.Data{"error": err.Error()})
+						logWarn("failed to create author", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -661,7 +704,7 @@ func (w *Worker) scanFileCore(
 
 			seriesSource := metadata.SourceForField("series")
 			if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, seriesSource, existingSeriesSource, forceRefresh) {
-				log.Info("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
+				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
 
 				// Delete existing series
 				if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
@@ -671,7 +714,7 @@ func (w *Worker) scanFileCore(
 				// Create new series
 				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, metadata.Series, book.LibraryID, seriesSource)
 				if err != nil {
-					log.Warn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
+					logWarn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
 				} else {
 					bookSeries := &models.BookSeries{
 						BookID:       book.ID,
@@ -680,7 +723,7 @@ func (w *Worker) scanFileCore(
 						SortOrder:    1,
 					}
 					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+						logWarn("failed to create book series", logger.Data{"error": err.Error()})
 					}
 				}
 			}
@@ -705,7 +748,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			if len(sidecarSeriesNames) > 0 && shouldApplySidecarRelationship(sidecarSeriesNames, existingSeriesNames, existingSeriesSource, forceRefresh) {
-				log.Info("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
+				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Delete existing series
 				if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
@@ -719,7 +762,7 @@ func (w *Worker) scanFileCore(
 					}
 					seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, sidecarSeries.Name, book.LibraryID, sidecarSource)
 					if err != nil {
-						log.Warn("failed to find/create series", logger.Data{"name": sidecarSeries.Name, "error": err.Error()})
+						logWarn("failed to find/create series", logger.Data{"name": sidecarSeries.Name, "error": err.Error()})
 						continue
 					}
 					bookSeries := &models.BookSeries{
@@ -729,7 +772,7 @@ func (w *Worker) scanFileCore(
 						SortOrder:    i + 1,
 					}
 					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+						logWarn("failed to create book series", logger.Data{"error": err.Error()})
 					}
 				}
 			}
@@ -750,7 +793,7 @@ func (w *Worker) scanFileCore(
 
 			genreSource := metadata.SourceForField("genres")
 			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
-				log.Info("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
+				logInfo("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
 
 				// Delete existing genres
 				if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
@@ -761,7 +804,7 @@ func (w *Worker) scanFileCore(
 				for _, genreName := range metadata.Genres {
 					genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
+						logWarn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
 						continue
 					}
 					bookGenre := &models.BookGenre{
@@ -769,7 +812,7 @@ func (w *Worker) scanFileCore(
 						GenreID: genreRecord.ID,
 					}
 					if err := w.bookService.CreateBookGenre(ctx, bookGenre); err != nil {
-						log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
+						logWarn("failed to create book genre", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -794,7 +837,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			if shouldApplySidecarRelationship(bookSidecarData.Genres, existingGenreNames, existingGenreSource, forceRefresh) {
-				log.Info("updating genres from sidecar", logger.Data{"new_count": len(bookSidecarData.Genres), "old_count": len(book.BookGenres)})
+				logInfo("updating genres from sidecar", logger.Data{"new_count": len(bookSidecarData.Genres), "old_count": len(book.BookGenres)})
 
 				// Delete existing genres
 				if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
@@ -805,7 +848,7 @@ func (w *Worker) scanFileCore(
 				for _, genreName := range bookSidecarData.Genres {
 					genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
+						logWarn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
 						continue
 					}
 					bookGenre := &models.BookGenre{
@@ -813,7 +856,7 @@ func (w *Worker) scanFileCore(
 						GenreID: genreRecord.ID,
 					}
 					if err := w.bookService.CreateBookGenre(ctx, bookGenre); err != nil {
-						log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
+						logWarn("failed to create book genre", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -840,7 +883,7 @@ func (w *Worker) scanFileCore(
 
 			tagSource := metadata.SourceForField("tags")
 			if shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
-				log.Info("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
+				logInfo("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
 
 				// Delete existing tags
 				if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
@@ -851,7 +894,7 @@ func (w *Worker) scanFileCore(
 				for _, tagName := range metadata.Tags {
 					tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
+						logWarn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
 						continue
 					}
 					bookTag := &models.BookTag{
@@ -859,7 +902,7 @@ func (w *Worker) scanFileCore(
 						TagID:  tagRecord.ID,
 					}
 					if err := w.bookService.CreateBookTag(ctx, bookTag); err != nil {
-						log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
+						logWarn("failed to create book tag", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -884,7 +927,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			if shouldApplySidecarRelationship(bookSidecarData.Tags, existingTagNames, existingTagSource, forceRefresh) {
-				log.Info("updating tags from sidecar", logger.Data{"new_count": len(bookSidecarData.Tags), "old_count": len(book.BookTags)})
+				logInfo("updating tags from sidecar", logger.Data{"new_count": len(bookSidecarData.Tags), "old_count": len(book.BookTags)})
 
 				// Delete existing tags
 				if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
@@ -895,7 +938,7 @@ func (w *Worker) scanFileCore(
 				for _, tagName := range bookSidecarData.Tags {
 					tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
 					if err != nil {
-						log.Warn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
+						logWarn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
 						continue
 					}
 					bookTag := &models.BookTag{
@@ -903,7 +946,7 @@ func (w *Worker) scanFileCore(
 						TagID:  tagRecord.ID,
 					}
 					if err := w.bookService.CreateBookTag(ctx, bookTag); err != nil {
-						log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
+						logWarn("failed to create book tag", logger.Data{"error": err.Error()})
 					}
 				}
 
@@ -922,11 +965,11 @@ func (w *Worker) scanFileCore(
 			// Reload book to get fresh author data for organization
 			book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 			if err != nil {
-				log.Warn("failed to reload book for organization", logger.Data{"error": err.Error()})
+				logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
 			} else {
 				// Call UpdateBook with OrganizeFiles flag to trigger file/folder organization
 				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
-					log.Warn("failed to organize book files after title/author change", logger.Data{
+					logWarn("failed to organize book files after title/author change", logger.Data{
 						"book_id": book.ID,
 						"error":   err.Error(),
 					})
@@ -934,12 +977,12 @@ func (w *Worker) scanFileCore(
 					// Reload book again to get updated file paths
 					book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 					if err != nil {
-						log.Warn("failed to reload book after organization", logger.Data{"error": err.Error()})
+						logWarn("failed to reload book after organization", logger.Data{"error": err.Error()})
 					}
 					// Also reload file to get updated filepath
 					file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
 					if err != nil {
-						log.Warn("failed to reload file after organization", logger.Data{"error": err.Error()})
+						logWarn("failed to reload file after organization", logger.Data{"error": err.Error()})
 					}
 				}
 			}
@@ -974,7 +1017,7 @@ func (w *Worker) scanFileCore(
 		}
 		nameSource := metadata.SourceForField("title")
 		if shouldUpdateScalar(newFileName, existingName, nameSource, existingNameSource, forceRefresh) {
-			log.Info("updating file name", logger.Data{"from": existingName, "to": newFileName})
+			logInfo("updating file name", logger.Data{"from": existingName, "to": newFileName})
 			file.Name = &newFileName
 			file.NameSource = &nameSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "name", "name_source")
@@ -991,7 +1034,7 @@ func (w *Worker) scanFileCore(
 			existingNameSource = *file.NameSource
 		}
 		if shouldApplySidecarScalar(*fileSidecarData.Name, existingName, existingNameSource, forceRefresh) {
-			log.Info("updating file name from sidecar", logger.Data{"from": existingName, "to": *fileSidecarData.Name})
+			logInfo("updating file name from sidecar", logger.Data{"from": existingName, "to": *fileSidecarData.Name})
 			file.Name = fileSidecarData.Name
 			file.NameSource = &sidecarSource
 			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "name", "name_source")
@@ -1010,7 +1053,7 @@ func (w *Worker) scanFileCore(
 		}
 		urlSource := metadata.SourceForField("url")
 		if shouldUpdateScalar(metadata.URL, existingURL, urlSource, existingURLSource, forceRefresh) {
-			log.Info("updating file URL", logger.Data{"from": existingURL, "to": metadata.URL})
+			logInfo("updating file URL", logger.Data{"from": existingURL, "to": metadata.URL})
 			file.URL = &metadata.URL
 			file.URLSource = &urlSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "url", "url_source")
@@ -1027,7 +1070,7 @@ func (w *Worker) scanFileCore(
 			existingURLSource = *file.URLSource
 		}
 		if shouldApplySidecarScalar(*fileSidecarData.URL, existingURL, existingURLSource, forceRefresh) {
-			log.Info("updating file URL from sidecar", logger.Data{"from": existingURL, "to": *fileSidecarData.URL})
+			logInfo("updating file URL from sidecar", logger.Data{"from": existingURL, "to": *fileSidecarData.URL})
 			file.URL = fileSidecarData.URL
 			file.URLSource = &sidecarSource
 			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "url", "url_source")
@@ -1048,7 +1091,7 @@ func (w *Worker) scanFileCore(
 		}
 		releaseDateSource := metadata.SourceForField("releaseDate")
 		if shouldUpdateScalar(newDateStr, existingDateStr, releaseDateSource, existingReleaseDateSource, forceRefresh) {
-			log.Info("updating file release date", logger.Data{"from": existingDateStr, "to": newDateStr})
+			logInfo("updating file release date", logger.Data{"from": existingDateStr, "to": newDateStr})
 			file.ReleaseDate = metadata.ReleaseDate
 			file.ReleaseDateSource = &releaseDateSource
 			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "release_date", "release_date_source")
@@ -1067,12 +1110,12 @@ func (w *Worker) scanFileCore(
 		if shouldApplySidecarScalar(*fileSidecarData.ReleaseDate, existingDateStr, existingReleaseDateSource, forceRefresh) {
 			// Parse sidecar date string
 			if parsedDate, err := time.Parse("2006-01-02", *fileSidecarData.ReleaseDate); err == nil {
-				log.Info("updating file release date from sidecar", logger.Data{"from": existingDateStr, "to": *fileSidecarData.ReleaseDate})
+				logInfo("updating file release date from sidecar", logger.Data{"from": existingDateStr, "to": *fileSidecarData.ReleaseDate})
 				file.ReleaseDate = &parsedDate
 				file.ReleaseDateSource = &sidecarSource
 				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "release_date", "release_date_source")
 			} else {
-				log.Warn("failed to parse sidecar release date", logger.Data{"date": *fileSidecarData.ReleaseDate, "error": err.Error()})
+				logWarn("failed to parse sidecar release date", logger.Data{"date": *fileSidecarData.ReleaseDate, "error": err.Error()})
 			}
 		}
 	}
@@ -1092,9 +1135,9 @@ func (w *Worker) scanFileCore(
 		if shouldUpdateScalar(publisherName, existingPublisherName, pubSource, existingPublisherSource, forceRefresh) {
 			publisher, err := w.publisherService.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 			if err != nil {
-				log.Warn("failed to find/create publisher", logger.Data{"publisher": publisherName, "error": err.Error()})
+				logWarn("failed to find/create publisher", logger.Data{"publisher": publisherName, "error": err.Error()})
 			} else {
-				log.Info("updating file publisher", logger.Data{"from": existingPublisherName, "to": publisherName})
+				logInfo("updating file publisher", logger.Data{"from": existingPublisherName, "to": publisherName})
 				file.PublisherID = &publisher.ID
 				file.PublisherSource = &pubSource
 				fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "publisher_id", "publisher_source")
@@ -1114,9 +1157,9 @@ func (w *Worker) scanFileCore(
 		if shouldApplySidecarScalar(*fileSidecarData.Publisher, existingPublisherName, existingPublisherSource, forceRefresh) {
 			publisher, err := w.publisherService.FindOrCreatePublisher(ctx, *fileSidecarData.Publisher, book.LibraryID)
 			if err != nil {
-				log.Warn("failed to find/create publisher", logger.Data{"publisher": *fileSidecarData.Publisher, "error": err.Error()})
+				logWarn("failed to find/create publisher", logger.Data{"publisher": *fileSidecarData.Publisher, "error": err.Error()})
 			} else {
-				log.Info("updating file publisher from sidecar", logger.Data{"from": existingPublisherName, "to": *fileSidecarData.Publisher})
+				logInfo("updating file publisher from sidecar", logger.Data{"from": existingPublisherName, "to": *fileSidecarData.Publisher})
 				file.PublisherID = &publisher.ID
 				file.PublisherSource = &sidecarSource
 				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "publisher_id", "publisher_source")
@@ -1139,9 +1182,9 @@ func (w *Worker) scanFileCore(
 		if shouldUpdateScalar(imprintName, existingImprintName, imprintSource, existingImprintSource, forceRefresh) {
 			imprint, err := w.imprintService.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
 			if err != nil {
-				log.Warn("failed to find/create imprint", logger.Data{"imprint": imprintName, "error": err.Error()})
+				logWarn("failed to find/create imprint", logger.Data{"imprint": imprintName, "error": err.Error()})
 			} else {
-				log.Info("updating file imprint", logger.Data{"from": existingImprintName, "to": imprintName})
+				logInfo("updating file imprint", logger.Data{"from": existingImprintName, "to": imprintName})
 				file.ImprintID = &imprint.ID
 				file.ImprintSource = &imprintSource
 				fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "imprint_id", "imprint_source")
@@ -1161,9 +1204,9 @@ func (w *Worker) scanFileCore(
 		if shouldApplySidecarScalar(*fileSidecarData.Imprint, existingImprintName, existingImprintSource, forceRefresh) {
 			imprint, err := w.imprintService.FindOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID)
 			if err != nil {
-				log.Warn("failed to find/create imprint", logger.Data{"imprint": *fileSidecarData.Imprint, "error": err.Error()})
+				logWarn("failed to find/create imprint", logger.Data{"imprint": *fileSidecarData.Imprint, "error": err.Error()})
 			} else {
-				log.Info("updating file imprint from sidecar", logger.Data{"from": existingImprintName, "to": *fileSidecarData.Imprint})
+				logInfo("updating file imprint from sidecar", logger.Data{"from": existingImprintName, "to": *fileSidecarData.Imprint})
 				file.ImprintID = &imprint.ID
 				file.ImprintSource = &sidecarSource
 				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "imprint_id", "imprint_source")
@@ -1218,7 +1261,7 @@ func (w *Worker) scanFileCore(
 			ID: &book.LibraryID,
 		})
 		if err != nil {
-			log.Warn("failed to retrieve library for file organization", logger.Data{"error": err.Error()})
+			logWarn("failed to retrieve library for file organization", logger.Data{"error": err.Error()})
 		} else if library.OrganizeFileStructure {
 			// Don't include author names in filenames - all files are inside the book folder
 			// which already has the author prefix (e.g., "[Author] Book Title/").
@@ -1253,13 +1296,13 @@ func (w *Worker) scanFileCore(
 			// only book-level changes (title, author) should rename the book sidecar.
 			newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
 			if err != nil {
-				log.Error("failed to rename file after name change", logger.Data{
+				logWarn("failed to rename file after name change", logger.Data{
 					"file_id": file.ID,
 					"path":    file.Filepath,
 					"error":   err.Error(),
 				})
 			} else if newPath != file.Filepath {
-				log.Info("renamed file after name change", logger.Data{
+				logInfo("renamed file after name change", logger.Data{
 					"file_id":  file.ID,
 					"old_path": file.Filepath,
 					"new_path": newPath,
@@ -1273,7 +1316,7 @@ func (w *Worker) scanFileCore(
 				}
 				file.Filepath = newPath
 				if err := w.bookService.UpdateFile(ctx, file, fileRenameOpts); err != nil {
-					log.Error("failed to update file path after rename", logger.Data{
+					logWarn("failed to update file path after rename", logger.Data{
 						"file_id": file.ID,
 						"error":   err.Error(),
 					})
@@ -1297,7 +1340,7 @@ func (w *Worker) scanFileCore(
 
 		narratorSource := metadata.SourceForField("narrators")
 		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, narratorSource, existingNarratorSource, forceRefresh) {
-			log.Info("updating narrators", logger.Data{"new_count": len(metadata.Narrators), "old_count": len(file.Narrators)})
+			logInfo("updating narrators", logger.Data{"new_count": len(metadata.Narrators), "old_count": len(file.Narrators)})
 
 			// Delete existing narrators
 			if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
@@ -1308,7 +1351,7 @@ func (w *Worker) scanFileCore(
 			for i, narratorName := range metadata.Narrators {
 				person, err := w.personService.FindOrCreatePerson(ctx, narratorName, book.LibraryID)
 				if err != nil {
-					log.Warn("failed to find/create person for narrator", logger.Data{"name": narratorName, "error": err.Error()})
+					logWarn("failed to find/create person for narrator", logger.Data{"name": narratorName, "error": err.Error()})
 					continue
 				}
 				narrator := &models.Narrator{
@@ -1317,7 +1360,7 @@ func (w *Worker) scanFileCore(
 					SortOrder: i + 1,
 				}
 				if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-					log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
+					logWarn("failed to create narrator", logger.Data{"error": err.Error()})
 				}
 			}
 
@@ -1346,7 +1389,7 @@ func (w *Worker) scanFileCore(
 		}
 
 		if shouldApplySidecarRelationship(sidecarNarratorNames, existingNarratorNames, existingNarratorSource, forceRefresh) {
-			log.Info("updating narrators from sidecar", logger.Data{"new_count": len(fileSidecarData.Narrators), "old_count": len(file.Narrators)})
+			logInfo("updating narrators from sidecar", logger.Data{"new_count": len(fileSidecarData.Narrators), "old_count": len(file.Narrators)})
 
 			// Delete existing narrators
 			if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
@@ -1357,7 +1400,7 @@ func (w *Worker) scanFileCore(
 			for i, sidecarNarrator := range fileSidecarData.Narrators {
 				person, err := w.personService.FindOrCreatePerson(ctx, sidecarNarrator.Name, book.LibraryID)
 				if err != nil {
-					log.Warn("failed to find/create person for narrator", logger.Data{"name": sidecarNarrator.Name, "error": err.Error()})
+					logWarn("failed to find/create person for narrator", logger.Data{"name": sidecarNarrator.Name, "error": err.Error()})
 					continue
 				}
 				narrator := &models.Narrator{
@@ -1366,7 +1409,7 @@ func (w *Worker) scanFileCore(
 					SortOrder: i + 1,
 				}
 				if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-					log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
+					logWarn("failed to create narrator", logger.Data{"error": err.Error()})
 				}
 			}
 
@@ -1395,7 +1438,7 @@ func (w *Worker) scanFileCore(
 
 		identifierSource := metadata.SourceForField("identifiers")
 		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh) {
-			log.Info("updating identifiers", logger.Data{"new_count": len(metadata.Identifiers), "old_count": len(file.Identifiers)})
+			logInfo("updating identifiers", logger.Data{"new_count": len(metadata.Identifiers), "old_count": len(file.Identifiers)})
 
 			// Delete existing identifiers
 			if err := w.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
@@ -1411,7 +1454,7 @@ func (w *Worker) scanFileCore(
 					Source: identifierSource,
 				}
 				if err := w.bookService.CreateFileIdentifier(ctx, identifier); err != nil {
-					log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
+					logWarn("failed to create identifier", logger.Data{"error": err.Error()})
 				}
 			}
 
@@ -1438,7 +1481,7 @@ func (w *Worker) scanFileCore(
 		}
 
 		if shouldApplySidecarRelationship(sidecarIdentifierValues, existingIdentifierValues, existingIdentifierSource, forceRefresh) {
-			log.Info("updating identifiers from sidecar", logger.Data{"new_count": len(fileSidecarData.Identifiers), "old_count": len(file.Identifiers)})
+			logInfo("updating identifiers from sidecar", logger.Data{"new_count": len(fileSidecarData.Identifiers), "old_count": len(file.Identifiers)})
 
 			// Delete existing identifiers
 			if err := w.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
@@ -1454,7 +1497,7 @@ func (w *Worker) scanFileCore(
 					Source: sidecarSource,
 				}
 				if err := w.bookService.CreateFileIdentifier(ctx, identifier); err != nil {
-					log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
+					logWarn("failed to create identifier", logger.Data{"error": err.Error()})
 				}
 			}
 
@@ -1475,7 +1518,7 @@ func (w *Worker) scanFileCore(
 		chapterSource := metadata.SourceForField("chapters")
 
 		if chapters.ShouldUpdateChapters(metadata.Chapters, chapterSource, existingChapterSource, forceRefresh) {
-			log.Info("updating chapters", logger.Data{"chapter_count": len(metadata.Chapters)})
+			logInfo("updating chapters", logger.Data{"chapter_count": len(metadata.Chapters)})
 
 			// Replace all chapters with new ones from metadata
 			if err := w.chapterService.ReplaceChapters(ctx, file.ID, metadata.Chapters); err != nil {
@@ -1496,7 +1539,7 @@ func (w *Worker) scanFileCore(
 		sidecarChapters := convertSidecarChapters(fileSidecarData.Chapters)
 
 		if chapters.ShouldUpdateChapters(sidecarChapters, sidecarSource, file.ChapterSource, forceRefresh) {
-			log.Info("updating chapters from sidecar", logger.Data{"chapter_count": len(sidecarChapters)})
+			logInfo("updating chapters from sidecar", logger.Data{"chapter_count": len(sidecarChapters)})
 
 			// Replace all chapters with new ones from sidecar
 			if err := w.chapterService.ReplaceChapters(ctx, file.ID, sidecarChapters); err != nil {
@@ -1552,12 +1595,12 @@ func (w *Worker) scanFileCore(
 			// Extract the cover page from CBZ
 			coverFilename, coverMimeType, err := extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
 			if err != nil {
-				log.Warn("failed to extract cover page from sidecar", logger.Data{
+				logWarn("failed to extract cover page from sidecar", logger.Data{
 					"error":      err.Error(),
 					"cover_page": *fileSidecarData.CoverPage,
 				})
 			} else {
-				log.Info("updating cover page from sidecar", logger.Data{
+				logInfo("updating cover page from sidecar", logger.Data{
 					"from_page": file.CoverPage,
 					"to_page":   *fileSidecarData.CoverPage,
 				})
@@ -1583,7 +1626,7 @@ func (w *Worker) scanFileCore(
 	// Reload book and file with full relations before writing sidecars
 	reloadedBook, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 	if err != nil {
-		log.Warn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
+		logWarn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
 	} else {
 		// Check if the book directory exists. For root-level files with OrganizeFileStructure
 		// enabled, we need to create the directory before writing the sidecar.
@@ -1600,11 +1643,11 @@ func (w *Worker) scanFileCore(
 				ID: &reloadedBook.LibraryID,
 			})
 			if libErr != nil {
-				log.Warn("failed to retrieve library for sidecar", logger.Data{"error": libErr.Error()})
+				logWarn("failed to retrieve library for sidecar", logger.Data{"error": libErr.Error()})
 			} else if lib.OrganizeFileStructure {
 				// Create the directory for root-level files that will be organized
 				if mkdirErr := os.MkdirAll(reloadedBook.Filepath, 0755); mkdirErr != nil {
-					log.Warn("failed to create book directory for sidecar", logger.Data{"error": mkdirErr.Error()})
+					logWarn("failed to create book directory for sidecar", logger.Data{"error": mkdirErr.Error()})
 				} else {
 					bookDirExists = true
 				}
@@ -1614,7 +1657,7 @@ func (w *Worker) scanFileCore(
 
 		if bookDirExists {
 			if err := sidecar.WriteBookSidecarFromModel(reloadedBook); err != nil {
-				log.Warn("failed to write book sidecar", logger.Data{"error": err.Error()})
+				logWarn("failed to write book sidecar", logger.Data{"error": err.Error()})
 			}
 		}
 		book = reloadedBook
@@ -1622,10 +1665,10 @@ func (w *Worker) scanFileCore(
 
 	reloadedFile, err := w.bookService.RetrieveFileWithRelations(ctx, file.ID)
 	if err != nil {
-		log.Warn("failed to reload file for sidecar", logger.Data{"error": err.Error()})
+		logWarn("failed to reload file for sidecar", logger.Data{"error": err.Error()})
 	} else {
 		if err := sidecar.WriteFileSidecarFromModel(reloadedFile); err != nil {
-			log.Warn("failed to write file sidecar", logger.Data{"error": err.Error()})
+			logWarn("failed to write file sidecar", logger.Data{"error": err.Error()})
 		}
 		file = reloadedFile
 	}
@@ -1636,7 +1679,7 @@ func (w *Worker) scanFileCore(
 
 	if w.searchService != nil {
 		if err := w.searchService.IndexBook(ctx, book); err != nil {
-			log.Warn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
+			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 		}
 	}
 
@@ -1654,6 +1697,21 @@ func (w *Worker) scanFileCore(
 // This function is called by scanFileByPath when a file exists on disk but not in DB.
 func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
+
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Warn(msg, data)
+		}
+	}
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if opts.JobLog != nil {
+			opts.JobLog.Info(msg, data)
+		}
+	}
+
 	path := opts.FilePath
 
 	// Get file stats
@@ -1728,7 +1786,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	// Create or reuse book
 	var book *models.Book
 	if existingBook != nil {
-		log.Info("using existing book for new file", logger.Data{"book_id": existingBook.ID, "path": path})
+		logInfo("using existing book for new file", logger.Data{"book_id": existingBook.ID, "path": path})
 		book = existingBook
 	} else {
 		// Derive initial title from filepath or metadata
@@ -1738,7 +1796,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 			titleSource = metadata.SourceForField("title")
 		}
 
-		log.Info("creating new book", logger.Data{"title": title, "path": bookPath})
+		logInfo("creating new book", logger.Data{"title": title, "path": bookPath})
 		book = &models.Book{
 			LibraryID:       opts.LibraryID,
 			Filepath:        bookPath,
@@ -1759,7 +1817,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 			for i, authorName := range filepathAuthors {
 				person, err := w.personService.FindOrCreatePerson(ctx, authorName, opts.LibraryID)
 				if err != nil {
-					log.Warn("failed to create person for filepath author", logger.Data{"author": authorName, "error": err.Error()})
+					logWarn("failed to create person for filepath author", logger.Data{"author": authorName, "error": err.Error()})
 					continue
 				}
 				author := &models.Author{
@@ -1768,7 +1826,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 					SortOrder: i + 1,
 				}
 				if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-					log.Warn("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})
+					logWarn("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})
 				}
 			}
 		}
@@ -1777,7 +1835,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 			if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(book.Title, fileType); ok {
 				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath)
 				if err != nil {
-					log.Warn("failed to create series for inferred title", logger.Data{"series": seriesName, "error": err.Error()})
+					logWarn("failed to create series for inferred title", logger.Data{"series": seriesName, "error": err.Error()})
 				} else {
 					bookSeries := &models.BookSeries{
 						BookID:       book.ID,
@@ -1786,7 +1844,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 						SortOrder:    1,
 					}
 					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						log.Warn("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
+						logWarn("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
 					}
 				}
 			}
@@ -1800,9 +1858,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	var coverPage *int
 
 	if metadata != nil && len(metadata.CoverData) > 0 {
-		coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata)
+		coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata, opts.JobLog)
 		if err != nil {
-			log.Warn("failed to extract cover", logger.Data{"error": err.Error()})
+			logWarn("failed to extract cover", logger.Data{"error": err.Error()})
 		} else if coverFilename != "" {
 			coverImagePath = &coverFilename
 			if extractedMimeType != "" {
@@ -1822,7 +1880,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	}
 
 	// Create file record
-	log.Info("creating file", logger.Data{"path": path, "filesize": size})
+	logInfo("creating file", logger.Data{"path": path, "filesize": size})
 	file := &models.File{
 		LibraryID:          opts.LibraryID,
 		BookID:             book.ID,
@@ -1864,7 +1922,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		for i, narratorName := range filepathNarrators {
 			person, err := w.personService.FindOrCreatePerson(ctx, narratorName, opts.LibraryID)
 			if err != nil {
-				log.Warn("failed to create person for filepath narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
+				logWarn("failed to create person for filepath narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
 				continue
 			}
 			narrator := &models.Narrator{
@@ -1873,12 +1931,12 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 				SortOrder: i + 1,
 			}
 			if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-				log.Warn("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
+				logWarn("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
 			}
 		}
 		file.NarratorSource = &narratorSource
 		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"narrator_source"}}); err != nil {
-			log.Warn("failed to update narrator source", logger.Data{"error": err.Error()})
+			logWarn("failed to update narrator source", logger.Data{"error": err.Error()})
 		}
 	}
 
@@ -1895,11 +1953,11 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	}
 
 	// Run metadata enrichers after parsing
-	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID)
+	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID, opts.JobLog)
 
 	// Use scanFileCore to handle all metadata updates (authors, series, etc.)
 	// This is a batch scan (FilePath mode), so pass isResync=false to skip book organization
-	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, false)
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, false, opts.JobLog)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to update metadata")
 	}
@@ -2146,8 +2204,16 @@ func (w *Worker) extractAndSaveCover(
 	filePath, bookPath string,
 	isRootLevelFile bool,
 	metadata *mediafile.ParsedMetadata,
+	jobLog *joblogs.JobLogger,
 ) (filename string, mimeType string, wasPreExisting bool, err error) {
 	log := logger.FromContext(ctx)
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if jobLog != nil {
+			jobLog.Info(msg, data)
+		}
+	}
 
 	if metadata == nil || len(metadata.CoverData) == 0 {
 		return "", "", false, nil
@@ -2165,7 +2231,7 @@ func (w *Worker) extractAndSaveCover(
 	// Check if cover already exists
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
 	if existingCoverPath != "" {
-		log.Info("cover already exists, using existing", logger.Data{"path": existingCoverPath})
+		logInfo("cover already exists, using existing", logger.Data{"path": existingCoverPath})
 		// Detect MIME type from file extension
 		existingMime := fileutils.MimeTypeFromExtension(filepath.Ext(existingCoverPath))
 		return filepath.Base(existingCoverPath), existingMime, true, nil
@@ -2181,7 +2247,7 @@ func (w *Worker) extractAndSaveCover(
 	// Save cover
 	coverFilename := coverBaseName + coverExt
 	coverFilepath := filepath.Join(coverDir, coverFilename)
-	log.Info("saving cover", logger.Data{"path": coverFilepath, "mime": normalizedMime})
+	logInfo("saving cover", logger.Data{"path": coverFilepath, "mime": normalizedMime})
 
 	coverFile, err := os.Create(coverFilepath)
 	if err != nil {
@@ -2249,7 +2315,7 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
 // Each enricher is called in user-defined order; first non-empty value per field wins.
-func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int) *mediafile.ParsedMetadata {
+func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
 		return metadata
 	}
@@ -2260,6 +2326,13 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	}
 
 	log := logger.FromContext(ctx)
+
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if jobLog != nil {
+			jobLog.Warn(msg, data)
+		}
+	}
 
 	// Build enrichment context
 	enrichCtx := map[string]interface{}{
@@ -2290,7 +2363,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 
 		result, eErr := w.pluginManager.RunMetadataEnricher(ctx, rt, enrichCtx)
 		if eErr != nil {
-			log.Warn("enricher failed", logger.Data{
+			logWarn("enricher plugin failed", logger.Data{
 				"plugin": rt.Manifest().ID,
 				"error":  eErr.Error(),
 			})
@@ -2304,7 +2377,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		declaredFields := enricherCap.Fields
 		enabledFields, fErr := w.pluginService.GetEffectiveFieldSettings(ctx, libraryID, rt.Scope(), rt.PluginID(), declaredFields)
 		if fErr != nil {
-			log.Warn("failed to get field settings", logger.Data{
+			logWarn("failed to get field settings", logger.Data{
 				"plugin": rt.PluginID(),
 				"error":  fErr.Error(),
 			})
@@ -2316,7 +2389,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 
 		// Filter to only declared and enabled fields, log warnings for undeclared
-		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), log)
+		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), logWarn)
 
 		// Merge: first non-empty wins per field, tracking source per field
 		enricherSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
@@ -2421,7 +2494,7 @@ func filterMetadataFields(
 	declaredFields []string,
 	enabledFields map[string]bool,
 	pluginID string,
-	log logger.Logger,
+	logWarn func(string, logger.Data),
 ) *mediafile.ParsedMetadata {
 	if md == nil {
 		return nil
@@ -2450,7 +2523,7 @@ func filterMetadataFields(
 	// Helper to check if a field has data and is undeclared (for warning)
 	warnIfUndeclared := func(field string, hasData bool) {
 		if hasData && !declared[field] {
-			log.Warn("enricher returned undeclared field", logger.Data{
+			logWarn("enricher returned undeclared field", logger.Data{
 				"plugin": pluginID,
 				"field":  field,
 			})
@@ -2465,13 +2538,13 @@ func filterMetadataFields(
 	seriesDeclared := declared["series"] || declared["seriesNumber"]
 	if !seriesDeclared {
 		if result.Series != "" {
-			log.Warn("enricher returned undeclared field", logger.Data{
+			logWarn("enricher returned undeclared field", logger.Data{
 				"plugin": pluginID,
 				"field":  "series",
 			})
 		}
 		if result.SeriesNumber != nil {
-			log.Warn("enricher returned undeclared field", logger.Data{
+			logWarn("enricher returned undeclared field", logger.Data{
 				"plugin": pluginID,
 				"field":  "seriesNumber",
 			})
@@ -2785,8 +2858,15 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 
 // recoverMissingCover checks if the file's cover image is missing from disk
 // and re-extracts it from the media file if needed.
-func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) error {
+func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, jobLog *joblogs.JobLogger) error {
 	log := logger.FromContext(ctx).Data(logger.Data{"file_id": file.ID, "filepath": file.Filepath})
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if jobLog != nil {
+			jobLog.Info(msg, data)
+		}
+	}
 
 	// If file has no cover mime type, nothing to recover
 	if file.CoverMimeType == nil {
@@ -2816,7 +2896,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) err
 		return nil
 	}
 
-	log.Info("cover file missing, re-extracting")
+	logInfo("cover file missing, re-extracting", nil)
 
 	// Re-extract cover from the media file
 	var metadata *mediafile.ParsedMetadata
@@ -2838,7 +2918,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) err
 	}
 
 	if metadata == nil || len(metadata.CoverData) == 0 {
-		log.Info("no cover data in media file")
+		logInfo("no cover data in media file", nil)
 		return nil
 	}
 
@@ -2861,7 +2941,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File) err
 		return errors.WithStack(err)
 	}
 
-	log.Info("recovered missing cover", logger.Data{"cover_path": coverFilepath})
+	logInfo("recovered missing cover", logger.Data{"cover_path": coverFilepath})
 
 	// Update file's cover mime type if it changed due to normalization
 	if normalizedMime != *file.CoverMimeType {

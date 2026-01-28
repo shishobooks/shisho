@@ -1430,7 +1430,7 @@ func TestFilterMetadataFields_UndeclaredFieldsZeroed(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	// Declared and enabled fields should remain
 	assert.Equal(t, "Test Title", filtered.Title)
@@ -1462,7 +1462,7 @@ func TestFilterMetadataFields_DisabledFieldsZeroed(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	// Enabled fields should remain
 	assert.Equal(t, "Test Title", filtered.Title)
@@ -1492,7 +1492,7 @@ func TestFilterMetadataFields_SeriesGrouping(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	assert.Equal(t, "Test Title", filtered.Title)
 	assert.Empty(t, filtered.Series, "series name should be zeroed when 'series' is disabled")
@@ -1519,7 +1519,7 @@ func TestFilterMetadataFields_SeriesNumberAliasForSeries(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	assert.Equal(t, "Test Title", filtered.Title)
 	assert.Equal(t, "Epic Series", filtered.Series)
@@ -1548,7 +1548,7 @@ func TestFilterMetadataFields_CoverGrouping(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	assert.Equal(t, "Test Title", filtered.Title)
 	assert.Empty(t, filtered.CoverData, "coverData should be zeroed when 'cover' is disabled")
@@ -1596,7 +1596,7 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", log)
+	filtered := filterMetadataFields(md, declaredFields, enabledFields, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	// All fields should remain intact
 	assert.Equal(t, "Test Title", filtered.Title)
@@ -1623,7 +1623,7 @@ func TestFilterMetadataFields_NilMetadata(t *testing.T) {
 	t.Parallel()
 
 	log := logger.New()
-	result := filterMetadataFields(nil, []string{"title"}, map[string]bool{"title": true}, "test", log)
+	result := filterMetadataFields(nil, []string{"title"}, map[string]bool{"title": true}, "test", func(msg string, data logger.Data) { log.Warn(msg, data) })
 	assert.Nil(t, result)
 }
 
@@ -1638,7 +1638,7 @@ func TestFilterMetadataFields_EmptyDeclaredFields(t *testing.T) {
 	}
 
 	log := logger.New()
-	filtered := filterMetadataFields(md, []string{}, map[string]bool{}, "test-plugin", log)
+	filtered := filterMetadataFields(md, []string{}, map[string]bool{}, "test-plugin", func(msg string, data logger.Data) { log.Warn(msg, data) })
 
 	// All fields should be zeroed when nothing is declared
 	assert.Empty(t, filtered.Title)
