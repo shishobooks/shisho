@@ -57,28 +57,43 @@ func StripTags(html string) string {
 
 // decodeHTMLEntities decodes common HTML entities to their character equivalents.
 func decodeHTMLEntities(s string) string {
-	// Common named entities
+	// Common named and numeric entities
 	replacements := []struct {
 		entity string
 		char   string
 	}{
 		{"&nbsp;", " "},
+		{"&#160;", " "}, // nbsp numeric
 		{"&amp;", "&"},
+		{"&#38;", "&"}, // ampersand numeric
 		{"&lt;", "<"},
+		{"&#60;", "<"}, // less than numeric
 		{"&gt;", ">"},
+		{"&#62;", ">"}, // greater than numeric
 		{"&quot;", "\""},
+		{"&#34;", "\""}, // quote numeric
 		{"&#39;", "'"},
 		{"&apos;", "'"},
 		{"&mdash;", "\u2014"},  // em dash
+		{"&#8212;", "\u2014"},  // em dash numeric
 		{"&ndash;", "\u2013"},  // en dash
+		{"&#8211;", "\u2013"},  // en dash numeric
 		{"&hellip;", "\u2026"}, // ellipsis
+		{"&#8230;", "\u2026"},  // ellipsis numeric
 		{"&rsquo;", "\u2019"},  // right single quote
+		{"&#8217;", "\u2019"},  // right single quote numeric
 		{"&lsquo;", "\u2018"},  // left single quote
+		{"&#8216;", "\u2018"},  // left single quote numeric
 		{"&rdquo;", "\u201D"},  // right double quote
+		{"&#8221;", "\u201D"},  // right double quote numeric
 		{"&ldquo;", "\u201C"},  // left double quote
+		{"&#8220;", "\u201C"},  // left double quote numeric
 		{"&copy;", "\u00A9"},   // copyright
+		{"&#169;", "\u00A9"},   // copyright numeric
 		{"&reg;", "\u00AE"},    // registered
+		{"&#174;", "\u00AE"},   // registered numeric
 		{"&trade;", "\u2122"},  // trademark
+		{"&#8482;", "\u2122"},  // trademark numeric
 	}
 
 	result := s

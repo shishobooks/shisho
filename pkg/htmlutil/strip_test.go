@@ -139,14 +139,24 @@ func TestDecodeHTMLEntities(t *testing.T) {
 			expected: "it's 'quoted'",
 		},
 		{
-			name:     "dashes",
+			name:     "dashes named entities",
 			input:    "em&mdash;dash and en&ndash;dash",
+			expected: "em\u2014dash and en\u2013dash",
+		},
+		{
+			name:     "dashes numeric entities",
+			input:    "em&#8212;dash and en&#8211;dash",
 			expected: "em\u2014dash and en\u2013dash",
 		},
 		{
 			name:     "copyright trademark",
 			input:    "&copy; 2024 Brand&trade; &reg;",
 			expected: "\u00A9 2024 Brand\u2122 \u00AE",
+		},
+		{
+			name:     "numeric entities",
+			input:    "&#60;tag&#62; &#38; &#8220;quoted&#8221; &#8216;single&#8217;",
+			expected: "<tag> & \u201Cquoted\u201D \u2018single\u2019",
 		},
 	}
 
