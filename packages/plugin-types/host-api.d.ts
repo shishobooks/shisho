@@ -42,10 +42,86 @@ export interface FetchResponse {
   json(): unknown;
 }
 
-/** HTTP client with domain whitelisting. */
+/**
+ * HTTP client with domain whitelisting.
+ *
+ * Domain patterns in manifest httpAccess.domains:
+ * - Exact match: "example.com" only allows "example.com"
+ * - Wildcard: "*.example.com" allows "example.com", "api.example.com", "a.b.example.com"
+ */
 export interface ShishoHTTP {
-  /** Fetch a URL. Domain must be declared in manifest httpAccess.domains. */
+  /**
+   * Fetch a URL. Domain must be declared in manifest httpAccess.domains.
+   * Supports wildcard patterns like "*.example.com" for subdomains.
+   */
   fetch(url: string, options?: FetchOptions): FetchResponse;
+}
+
+/** Parsed URL components from shisho.url.parse(). */
+export interface ParsedURL {
+  /** The original URL string. */
+  href: string;
+  /** URL scheme without ":" (e.g., "https"). */
+  protocol: string;
+  /** Host including port if present (e.g., "example.com:8080"). */
+  host: string;
+  /** Hostname without port (e.g., "example.com"). */
+  hostname: string;
+  /** Port number as string, or empty if not specified. */
+  port: string;
+  /** Path component (e.g., "/path/to/resource"). */
+  pathname: string;
+  /** Query string with leading "?" or empty string. */
+  search: string;
+  /** Fragment with leading "#" or empty string. */
+  hash: string;
+  /** Username from URL, or empty string. */
+  username: string;
+  /** Password from URL, or empty string. */
+  password: string;
+  /** Parsed query parameters. Single values are strings, repeated keys are arrays. */
+  query: Record<string, string | string[]>;
+}
+
+/**
+ * URL utilities that aren't available in Goja's ES5.1 runtime.
+ * Provides functionality similar to browser URLSearchParams and URL APIs.
+ */
+export interface ShishoURL {
+  /**
+   * Encode a string for use in URL query parameters.
+   * Similar to JavaScript's encodeURIComponent().
+   */
+  encodeURIComponent(str: string): string;
+
+  /**
+   * Decode a URL-encoded string.
+   * Similar to JavaScript's decodeURIComponent().
+   */
+  decodeURIComponent(str: string): string;
+
+  /**
+   * Convert an object to a URL query string.
+   * Keys are sorted alphabetically for deterministic output.
+   * Array values create multiple key=value pairs.
+   * Null/undefined values are skipped.
+   *
+   * @example
+   * shisho.url.searchParams({ q: "test", page: 1 }) // "page=1&q=test"
+   * shisho.url.searchParams({ tags: ["a", "b"] })   // "tags=a&tags=b"
+   */
+  searchParams(params: Record<string, unknown>): string;
+
+  /**
+   * Parse a URL string into its components.
+   *
+   * @example
+   * const url = shisho.url.parse("https://api.example.com/search?q=test");
+   * url.hostname // "api.example.com"
+   * url.pathname // "/search"
+   * url.query.q  // "test"
+   */
+  parse(url: string): ParsedURL;
 }
 
 /** Filesystem operations (sandboxed). */
@@ -270,6 +346,7 @@ export interface ShishoHostAPI {
   log: ShishoLog;
   config: ShishoConfig;
   http: ShishoHTTP;
+  url: ShishoURL;
   fs: ShishoFS;
   archive: ShishoArchive;
   xml: ShishoXML;

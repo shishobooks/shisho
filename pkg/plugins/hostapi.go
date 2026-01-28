@@ -67,6 +67,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 		return err
 	}
 
+	// Set up url namespace
+	if err := injectURLNamespace(vm, shishoObj); err != nil {
+		return err
+	}
+
 	return nil
 }
 

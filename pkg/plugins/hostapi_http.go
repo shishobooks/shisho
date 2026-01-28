@@ -146,7 +146,8 @@ func injectHTTPNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) 
 // by the plugin's declared domains list.
 //
 // Rules:
-//   - Subdomains must be listed explicitly (goodreads.com does NOT allow api.goodreads.com)
+//   - Exact match: "example.com" only allows "example.com"
+//   - Wildcard match: "*.example.com" allows "example.com", "api.example.com", "a.b.example.com"
 //   - Only standard ports (80 for http, 443 for https) are allowed unless the
 //     domain is listed with an explicit port (e.g., example.com:8080)
 //   - Host comparison is case-insensitive
@@ -161,7 +162,7 @@ func validateDomain(host string, allowedDomains []string) error {
 		allowed = strings.ToLower(allowed)
 		allowedHostname, allowedPort := splitHostPort(allowed)
 
-		if hostname != allowedHostname {
+		if !matchDomainPattern(hostname, allowedHostname) {
 			continue
 		}
 
@@ -180,6 +181,33 @@ func validateDomain(host string, allowedDomains []string) error {
 	}
 
 	return errors.Wrapf(errDomainNotAllowed, "domain %q", host)
+}
+
+// matchDomainPattern checks if hostname matches the pattern.
+//
+// Patterns:
+//   - "example.com" - exact match only
+//   - "*.example.com" - matches "example.com", "api.example.com", "a.b.example.com"
+func matchDomainPattern(hostname, pattern string) bool {
+	// Check for wildcard pattern
+	if strings.HasPrefix(pattern, "*.") {
+		baseDomain := pattern[2:] // Remove "*." prefix
+
+		// Match the naked domain itself
+		if hostname == baseDomain {
+			return true
+		}
+
+		// Match any subdomain: hostname must end with ".baseDomain"
+		if strings.HasSuffix(hostname, "."+baseDomain) {
+			return true
+		}
+
+		return false
+	}
+
+	// Exact match (no wildcard)
+	return hostname == pattern
 }
 
 // splitHostPort splits a host string into hostname and port.

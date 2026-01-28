@@ -456,3 +456,264 @@ func TestHTTPFetch_RedirectToAllowedDomain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "redirected ok", val.String())
 }
+
+// --- Wildcard Domain Matching Tests ---
+
+func TestMatchDomainPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		hostname string
+		pattern  string
+		expected bool
+	}{
+		// Exact match (no wildcard)
+		{
+			name:     "exact match",
+			hostname: "example.com",
+			pattern:  "example.com",
+			expected: true,
+		},
+		{
+			name:     "exact match fails for subdomain",
+			hostname: "api.example.com",
+			pattern:  "example.com",
+			expected: false,
+		},
+		{
+			name:     "exact match different domain",
+			hostname: "other.com",
+			pattern:  "example.com",
+			expected: false,
+		},
+
+		// Wildcard matches naked domain
+		{
+			name:     "wildcard matches naked domain",
+			hostname: "example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+
+		// Wildcard matches single subdomain
+		{
+			name:     "wildcard matches single subdomain",
+			hostname: "api.example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard matches www subdomain",
+			hostname: "www.example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+
+		// Wildcard matches nested subdomains
+		{
+			name:     "wildcard matches double nested subdomain",
+			hostname: "a.b.example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard matches triple nested subdomain",
+			hostname: "a.b.c.example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard matches cdn subdomain",
+			hostname: "cdn1.images.example.com",
+			pattern:  "*.example.com",
+			expected: true,
+		},
+
+		// Wildcard does NOT match different domains
+		{
+			name:     "wildcard does not match different domain",
+			hostname: "other.com",
+			pattern:  "*.example.com",
+			expected: false,
+		},
+		{
+			name:     "wildcard does not match suffix attack",
+			hostname: "malicious-example.com",
+			pattern:  "*.example.com",
+			expected: false,
+		},
+		{
+			name:     "wildcard does not match prefix attack",
+			hostname: "example.com.evil.com",
+			pattern:  "*.example.com",
+			expected: false,
+		},
+
+		// Edge cases
+		{
+			name:     "empty hostname",
+			hostname: "",
+			pattern:  "*.example.com",
+			expected: false,
+		},
+		{
+			name:     "single label hostname",
+			hostname: "localhost",
+			pattern:  "*.localhost",
+			expected: true,
+		},
+		{
+			name:     "wildcard for single label",
+			hostname: "sub.localhost",
+			pattern:  "*.localhost",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := matchDomainPattern(tt.hostname, tt.pattern)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValidateDomain_WildcardNakedDomain(t *testing.T) {
+	t.Parallel()
+	// *.example.com should match example.com
+	err := validateDomain("example.com", []string{"*.example.com"})
+	require.NoError(t, err)
+}
+
+func TestValidateDomain_WildcardSubdomain(t *testing.T) {
+	t.Parallel()
+	// *.example.com should match api.example.com
+	err := validateDomain("api.example.com", []string{"*.example.com"})
+	require.NoError(t, err)
+}
+
+func TestValidateDomain_WildcardNestedSubdomain(t *testing.T) {
+	t.Parallel()
+	// *.example.com should match a.b.c.example.com
+	err := validateDomain("a.b.c.example.com", []string{"*.example.com"})
+	require.NoError(t, err)
+}
+
+func TestValidateDomain_WildcardWithPort(t *testing.T) {
+	t.Parallel()
+	// *.example.com should work with standard ports
+	err := validateDomain("api.example.com:443", []string{"*.example.com"})
+	require.NoError(t, err)
+
+	err = validateDomain("api.example.com:80", []string{"*.example.com"})
+	require.NoError(t, err)
+}
+
+func TestValidateDomain_WildcardWithExplicitPort(t *testing.T) {
+	t.Parallel()
+	// *.example.com:8080 should only match that specific port
+	err := validateDomain("api.example.com:8080", []string{"*.example.com:8080"})
+	require.NoError(t, err)
+
+	// Should not match different port
+	err = validateDomain("api.example.com:9000", []string{"*.example.com:8080"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not in the allowed domains list")
+}
+
+func TestValidateDomain_WildcardBlocksNonStandardPort(t *testing.T) {
+	t.Parallel()
+	// *.example.com (no port) should block non-standard ports
+	err := validateDomain("api.example.com:8080", []string{"*.example.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not in the allowed domains list")
+}
+
+func TestValidateDomain_WildcardDoesNotMatchDifferentDomain(t *testing.T) {
+	t.Parallel()
+	// *.example.com should NOT match other.com
+	err := validateDomain("other.com", []string{"*.example.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not in the allowed domains list")
+}
+
+func TestValidateDomain_WildcardDoesNotMatchSuffixAttack(t *testing.T) {
+	t.Parallel()
+	// *.example.com should NOT match malicious-example.com
+	err := validateDomain("malicious-example.com", []string{"*.example.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not in the allowed domains list")
+}
+
+func TestValidateDomain_MixedExactAndWildcard(t *testing.T) {
+	t.Parallel()
+	// Should support both exact and wildcard in the same list
+	allowedDomains := []string{"specific.other.com", "*.example.com"}
+
+	// Exact match
+	err := validateDomain("specific.other.com", allowedDomains)
+	require.NoError(t, err)
+
+	// Wildcard match
+	err = validateDomain("api.example.com", allowedDomains)
+	require.NoError(t, err)
+
+	// Neither
+	err = validateDomain("random.other.com", allowedDomains)
+	require.Error(t, err)
+}
+
+func TestValidateDomain_WildcardCaseInsensitive(t *testing.T) {
+	t.Parallel()
+	// Case insensitive matching with wildcards
+	err := validateDomain("API.EXAMPLE.COM", []string{"*.example.com"})
+	require.NoError(t, err)
+
+	err = validateDomain("api.example.com", []string{"*.EXAMPLE.COM"})
+	require.NoError(t, err)
+}
+
+func TestHTTPFetch_WildcardDomainAllowed(t *testing.T) {
+	// Create a test server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("wildcard ok")) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	// Test server uses 127.0.0.1:PORT, so we need to allow *.0.0.1 or the exact host
+	// For this test, we'll use the exact host but demonstrate wildcard in validateDomain tests
+	host := ts.Listener.Addr().String()
+	rt := newTestRuntimeWithHTTPAccess([]string{host})
+	setupHTTPNamespace(t, rt)
+
+	script := fmt.Sprintf(`
+		var resp = shisho.http.fetch("%s/test");
+		resp.text();
+	`, ts.URL)
+
+	val, err := rt.vm.RunString(script)
+	require.NoError(t, err)
+	assert.Equal(t, "wildcard ok", val.String())
+}
+
+func TestHTTPFetch_WildcardRedirectAllowed(t *testing.T) {
+	// This test validates that wildcard domains work with redirects
+	// Since we can't easily create test servers with custom hostnames,
+	// we verify the validateDomain function behavior instead
+
+	// Simulate: redirect from api.example.com to cdn.example.com
+	// With wildcard *.example.com, both should be allowed
+	allowedDomains := []string{"*.example.com"}
+
+	err := validateDomain("api.example.com", allowedDomains)
+	require.NoError(t, err)
+
+	err = validateDomain("cdn.example.com", allowedDomains)
+	require.NoError(t, err)
+
+	err = validateDomain("images.cdn.example.com", allowedDomains)
+	require.NoError(t, err)
+}

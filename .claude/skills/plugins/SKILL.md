@@ -17,7 +17,8 @@ pkg/plugins/
   hooks.go          - Hook invocation and result parsing
   hostapi.go        - Host API injection (shisho.*)
   hostapi_fs.go     - Filesystem sandbox (FSContext)
-  hostapi_http.go   - HTTP with domain whitelisting
+  hostapi_http.go   - HTTP with domain whitelisting (supports wildcards)
+  hostapi_url.go    - URL utilities (encode/decode/searchParams/parse)
   hostapi_archive.go - ZIP operations
   hostapi_xml.go    - XML parsing
   hostapi_ffmpeg.go - FFmpeg transcode/probe/version
@@ -41,7 +42,7 @@ packages/plugin-types/
 ├── package.json       # @shisho/plugin-types
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
-├── host-api.d.ts      # ShishoHostAPI (log, config, http, fs, archive, xml, ffmpeg)
+├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, ffmpeg, shell)
 ├── hooks.d.ts         # Hook contexts, return types, ShishoPlugin interface
 ├── metadata.d.ts      # ParsedMetadata, ParsedAuthor, ParsedIdentifier, ParsedChapter
 └── manifest.d.ts      # PluginManifest, Capabilities, ConfigSchema, ConfigField
@@ -76,7 +77,7 @@ shisho/goodreads-metadata/
     "outputGenerator": { "description": "", "id": "mobi", "name": "MOBI", "sourceTypes": ["epub"] },
     "metadataEnricher": { "description": "", "fileTypes": ["epub", "cbz"], "fields": ["title", "authors", "description", "cover"] },
     "identifierTypes": [{ "id": "goodreads", "name": "Goodreads", "urlTemplate": "https://goodreads.com/book/show/{value}", "pattern": "^\\d+$" }],
-    "httpAccess": { "description": "", "domains": ["api.goodreads.com"] },
+    "httpAccess": { "description": "", "domains": ["*.goodreads.com"] },
     "fileAccess": { "level": "read", "description": "" },
     "ffmpegAccess": { "description": "" },
     "shellAccess": { "description": "", "commands": ["calibre-debug", "kindlegen"] }
@@ -272,6 +273,35 @@ resp.headers     // Record<string, string> — response headers (lowercase keys)
 resp.text()      // string — response body as text
 resp.json()      // any — response body parsed as JSON (throws on invalid JSON)
 resp.arrayBuffer() // ArrayBuffer — response body as raw bytes
+```
+
+**Domain patterns in `httpAccess.domains`:**
+- Exact match: `"example.com"` only allows `example.com`
+- Wildcard: `"*.example.com"` allows `example.com`, `api.example.com`, `a.b.example.com`
+
+### shisho.url
+
+URL utilities that aren't available in Goja's ES5.1 runtime.
+
+```javascript
+// Encode/decode URL components (like browser APIs)
+shisho.url.encodeURIComponent("hello world")  // → "hello+world"
+shisho.url.decodeURIComponent("hello+world")  // → "hello world"
+
+// Build query strings from objects (keys sorted alphabetically)
+shisho.url.searchParams({ q: "test", page: 1 })     // → "page=1&q=test"
+shisho.url.searchParams({ tags: ["a", "b"] })       // → "tags=a&tags=b"
+
+// Parse URL into components
+var url = shisho.url.parse("https://api.example.com:8080/search?q=test#results");
+url.protocol   // "https"
+url.hostname   // "api.example.com"
+url.port       // "8080"
+url.pathname   // "/search"
+url.search     // "?q=test"
+url.hash       // "#results"
+url.query      // { q: "test" }
+url.query.q    // "test"
 ```
 
 ### shisho.fs
