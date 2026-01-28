@@ -1396,7 +1396,10 @@ const BookDetail = () => {
           library={libraryQuery.data}
           onOpenChange={setShowMergeIntoDialog}
           onSuccess={(targetBook) => {
-            navigate(`/libraries/${libraryId}/books/${targetBook.id}`);
+            // Replace history so back button doesn't return to the now-deleted book
+            navigate(`/libraries/${libraryId}/books/${targetBook.id}`, {
+              replace: true,
+            });
           }}
           open={showMergeIntoDialog}
           sourceBook={book}
@@ -1447,8 +1450,11 @@ const BookDetail = () => {
             exitFileSelectMode();
             setSingleFileMoveId(null);
             // Navigate to target book if current book was deleted (all files moved)
+            // Replace history so back button doesn't return to the now-deleted book
             if (movedFileCount === mainFiles.length) {
-              navigate(`/libraries/${libraryId}/books/${targetBook.id}`);
+              navigate(`/libraries/${libraryId}/books/${targetBook.id}`, {
+                replace: true,
+              });
             }
           }}
           open={showMoveFilesDialog || singleFileMoveId !== null}
