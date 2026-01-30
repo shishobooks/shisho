@@ -30,6 +30,78 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
+// RelationshipUpdates holds all relationship data to be updated for a book.
+// This enables bulk inserts for better scan performance. When used in parallel
+// processing, callers should use ScanCache.LockBook to prevent race conditions.
+type RelationshipUpdates struct {
+	Authors    []*models.Author
+	Narrators  []*models.Narrator
+	BookGenres []*models.BookGenre
+	BookTags   []*models.BookTag
+	BookSeries []*models.BookSeries
+
+	// Delete flags indicate which relationships should be cleared before inserting new ones
+	DeleteAuthors   bool
+	DeleteNarrators bool
+	DeleteGenres    bool
+	DeleteTags      bool
+	DeleteSeries    bool
+
+	// FileID is required when DeleteNarrators is true (narrators are per-file)
+	FileID int
+}
+
+// UpdateBookRelationships updates all book relationships using the books service methods.
+// It first deletes existing relationships (if flagged) then bulk inserts new ones.
+// This method should be called with appropriate locking when used in parallel processing.
+func (w *Worker) UpdateBookRelationships(ctx context.Context, bookID int, updates RelationshipUpdates) error {
+	// Delete existing relationships if flagged
+	if updates.DeleteAuthors {
+		if err := w.bookService.DeleteAuthors(ctx, bookID); err != nil {
+			return errors.Wrap(err, "failed to delete authors")
+		}
+	}
+	if updates.DeleteNarrators && updates.FileID != 0 {
+		if _, err := w.bookService.DeleteNarratorsForFile(ctx, updates.FileID); err != nil {
+			return errors.Wrap(err, "failed to delete narrators")
+		}
+	}
+	if updates.DeleteGenres {
+		if err := w.bookService.DeleteBookGenres(ctx, bookID); err != nil {
+			return errors.Wrap(err, "failed to delete genres")
+		}
+	}
+	if updates.DeleteTags {
+		if err := w.bookService.DeleteBookTags(ctx, bookID); err != nil {
+			return errors.Wrap(err, "failed to delete tags")
+		}
+	}
+	if updates.DeleteSeries {
+		if err := w.bookService.DeleteBookSeries(ctx, bookID); err != nil {
+			return errors.Wrap(err, "failed to delete series")
+		}
+	}
+
+	// Bulk insert new relationships using service methods
+	if err := w.bookService.BulkCreateAuthors(ctx, updates.Authors); err != nil {
+		return errors.Wrap(err, "failed to insert authors")
+	}
+	if err := w.bookService.BulkCreateNarrators(ctx, updates.Narrators); err != nil {
+		return errors.Wrap(err, "failed to insert narrators")
+	}
+	if err := w.bookService.BulkCreateBookGenres(ctx, updates.BookGenres); err != nil {
+		return errors.Wrap(err, "failed to insert genres")
+	}
+	if err := w.bookService.BulkCreateBookTags(ctx, updates.BookTags); err != nil {
+		return errors.Wrap(err, "failed to insert tags")
+	}
+	if err := w.bookService.BulkCreateBookSeries(ctx, updates.BookSeries); err != nil {
+		return errors.Wrap(err, "failed to insert series")
+	}
+
+	return nil
+}
+
 // ErrInvalidScanOptions is returned when ScanOptions validation fails.
 var ErrInvalidScanOptions = errors.New("exactly one of FilePath, FileID, or BookID must be set")
 
@@ -88,8 +160,13 @@ type ScanResult struct {
 //   - FileID: scanFileByID (single file resync)
 //   - BookID: scanBook (book resync)
 //
+// The optional cache parameter enables shared entity lookups across parallel file processing.
+// When cache is nil, direct service calls are used (backward compatible).
+//
 // The public Scan method wraps this to implement books.Scanner.
-func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
+//
+//nolint:unparam // cache will be used in parallel scan mode (Task 2)
+func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	// Count how many entry points are set
 	entryPoints := 0
 	if opts.FilePath != "" {
@@ -110,11 +187,11 @@ func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions) (*ScanResul
 	// Route to appropriate handler
 	switch {
 	case opts.FilePath != "":
-		return w.scanFileByPath(ctx, opts)
+		return w.scanFileByPath(ctx, opts, cache)
 	case opts.FileID != 0:
-		return w.scanFileByID(ctx, opts)
+		return w.scanFileByID(ctx, opts, cache)
 	case opts.BookID != 0:
-		return w.scanBook(ctx, opts)
+		return w.scanBook(ctx, opts, cache)
 	default:
 		// This should never happen due to validation above
 		return nil, ErrInvalidScanOptions
@@ -125,7 +202,7 @@ func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions) (*ScanResul
 // If the file already exists in DB, delegates to scanFileByID.
 // If the file doesn't exist on disk, returns nil (skip silently).
 // If the file exists on disk but not in DB, creates a new file/book record.
-func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
+func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	// Validate LibraryID is required for path-based scan
 	if opts.LibraryID == 0 {
 		return nil, errors.New("LibraryID required for FilePath mode")
@@ -146,7 +223,7 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions) (*ScanRes
 			FileID:       existingFile.ID,
 			ForceRefresh: opts.ForceRefresh,
 			JobLog:       opts.JobLog,
-		})
+		}, cache)
 	}
 
 	// File doesn't exist in DB - check if it exists on disk
@@ -160,12 +237,12 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions) (*ScanRes
 	}
 
 	// File exists on disk but not in DB - parse metadata and create new record
-	return w.scanFileCreateNew(ctx, opts)
+	return w.scanFileCreateNew(ctx, opts, cache)
 }
 
 // scanFileByID handles single file resync - file already exists in DB.
 // If the file no longer exists on disk, deletes the file record (and book if it was the last file).
-func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
+func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
 	logWarn := func(msg string, data logger.Data) {
@@ -290,14 +367,14 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions) (*ScanResul
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
 	// This is a resync (FileID mode), so pass isResync=true to enable book organization
-	return w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog)
+	return w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
 }
 
 // scanBook handles book resync - scan all files belonging to the book.
 // It loops through all files in the book, calling scanFileByID for each.
 // If the book has no files, it deletes the book from the database.
 // Errors from individual file scans are logged and skipped (don't fail entire book scan).
-func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
+func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
 	logWarn := func(msg string, data logger.Data) {
@@ -365,7 +442,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 			FileID:       file.ID,
 			ForceRefresh: opts.ForceRefresh,
 			JobLog:       opts.JobLog,
-		})
+		}, cache)
 		if err != nil {
 			logWarn("failed to scan file in book, continuing", logger.Data{
 				"file_id": file.ID,
@@ -409,6 +486,8 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions) (*ScanResult, e
 //     When true, book organization (folder rename) is performed immediately after
 //     title/author changes. When false (batch scan), organization is skipped to
 //     avoid renaming directories while other files are still being discovered.
+//   - cache: Optional ScanCache for shared entity lookups. When nil, direct service
+//     calls are used.
 //
 // Returns a ScanResult with the updated file and book records.
 func (w *Worker) scanFileCore(
@@ -419,6 +498,7 @@ func (w *Worker) scanFileCore(
 	forceRefresh bool,
 	isResync bool,
 	jobLog *joblogs.JobLogger,
+	cache *ScanCache,
 ) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
@@ -461,6 +541,10 @@ func (w *Worker) scanFileCore(
 	// Supplements should not update book-level metadata (title, authors, series, etc.)
 	// They only update file-level metadata (name, URL, narrators, etc.)
 	isMainFile := file.FileRole != models.FileRoleSupplement
+
+	// Collect relationship updates for batch processing
+	var relUpdates RelationshipUpdates
+	relUpdates.FileID = file.ID // Needed for narrator updates
 
 	// Book-level updates: only for main files, not supplements
 	if isMainFile {
@@ -604,14 +688,17 @@ func (w *Worker) scanFileCore(
 			if shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
 				logInfo("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
 
-				// Delete existing authors
-				if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing authors")
-				}
-
-				// Create new authors
+				// Collect authors for batch insert (replaces immediate delete + create)
+				relUpdates.DeleteAuthors = true
+				relUpdates.Authors = nil // Clear any previous collection
 				for i, parsedAuthor := range metadata.Authors {
-					person, err := w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, book.LibraryID)
+					var person *models.Person
+					var err error
+					if cache != nil {
+						person, err = cache.GetOrCreatePerson(ctx, parsedAuthor.Name, book.LibraryID, w.personService)
+					} else {
+						person, err = w.personService.FindOrCreatePerson(ctx, parsedAuthor.Name, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create person for author", logger.Data{"name": parsedAuthor.Name, "error": err.Error()})
 						continue
@@ -620,15 +707,12 @@ func (w *Worker) scanFileCore(
 					if parsedAuthor.Role != "" {
 						role = &parsedAuthor.Role
 					}
-					author := &models.Author{
+					relUpdates.Authors = append(relUpdates.Authors, &models.Author{
 						BookID:    book.ID,
 						PersonID:  person.ID,
 						Role:      role,
 						SortOrder: i + 1,
-					}
-					if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-						logWarn("failed to create author", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update author source
@@ -655,27 +739,27 @@ func (w *Worker) scanFileCore(
 			if shouldApplySidecarRelationship(sidecarAuthorNames, existingAuthorNames, book.AuthorSource, forceRefresh) {
 				logInfo("updating authors from sidecar", logger.Data{"new_count": len(bookSidecarData.Authors), "old_count": len(book.Authors)})
 
-				// Delete existing authors
-				if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing authors")
-				}
-
-				// Create new authors from sidecar
+				// Collect authors for batch insert (replaces any metadata collection)
+				relUpdates.DeleteAuthors = true
+				relUpdates.Authors = nil // Clear previous collection
 				for i, sidecarAuthor := range bookSidecarData.Authors {
-					person, err := w.personService.FindOrCreatePerson(ctx, sidecarAuthor.Name, book.LibraryID)
+					var person *models.Person
+					var err error
+					if cache != nil {
+						person, err = cache.GetOrCreatePerson(ctx, sidecarAuthor.Name, book.LibraryID, w.personService)
+					} else {
+						person, err = w.personService.FindOrCreatePerson(ctx, sidecarAuthor.Name, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create person for author", logger.Data{"name": sidecarAuthor.Name, "error": err.Error()})
 						continue
 					}
-					author := &models.Author{
+					relUpdates.Authors = append(relUpdates.Authors, &models.Author{
 						BookID:    book.ID,
 						PersonID:  person.ID,
 						Role:      sidecarAuthor.Role,
 						SortOrder: i + 1,
-					}
-					if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-						logWarn("failed to create author", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update author source
@@ -706,25 +790,25 @@ func (w *Worker) scanFileCore(
 			if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, seriesSource, existingSeriesSource, forceRefresh) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
 
-				// Delete existing series
-				if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing series")
+				// Collect series for batch insert (replaces immediate delete + create)
+				relUpdates.DeleteSeries = true
+				relUpdates.BookSeries = nil // Clear any previous collection
+				var seriesRecord *models.Series
+				var err error
+				if cache != nil {
+					seriesRecord, err = cache.GetOrCreateSeries(ctx, metadata.Series, book.LibraryID, seriesSource, w.seriesService)
+				} else {
+					seriesRecord, err = w.seriesService.FindOrCreateSeries(ctx, metadata.Series, book.LibraryID, seriesSource)
 				}
-
-				// Create new series
-				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, metadata.Series, book.LibraryID, seriesSource)
 				if err != nil {
 					logWarn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
 				} else {
-					bookSeries := &models.BookSeries{
+					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:       book.ID,
 						SeriesID:     seriesRecord.ID,
 						SeriesNumber: metadata.SeriesNumber,
 						SortOrder:    1,
-					}
-					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						logWarn("failed to create book series", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 			}
 		}
@@ -750,30 +834,30 @@ func (w *Worker) scanFileCore(
 			if len(sidecarSeriesNames) > 0 && shouldApplySidecarRelationship(sidecarSeriesNames, existingSeriesNames, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
-				// Delete existing series
-				if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing series")
-				}
-
-				// Create new series from sidecar
+				// Collect series for batch insert (replaces any metadata collection)
+				relUpdates.DeleteSeries = true
+				relUpdates.BookSeries = nil // Clear previous collection
 				for i, sidecarSeries := range bookSidecarData.Series {
 					if sidecarSeries.Name == "" {
 						continue
 					}
-					seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, sidecarSeries.Name, book.LibraryID, sidecarSource)
+					var seriesRecord *models.Series
+					var err error
+					if cache != nil {
+						seriesRecord, err = cache.GetOrCreateSeries(ctx, sidecarSeries.Name, book.LibraryID, sidecarSource, w.seriesService)
+					} else {
+						seriesRecord, err = w.seriesService.FindOrCreateSeries(ctx, sidecarSeries.Name, book.LibraryID, sidecarSource)
+					}
 					if err != nil {
 						logWarn("failed to find/create series", logger.Data{"name": sidecarSeries.Name, "error": err.Error()})
 						continue
 					}
-					bookSeries := &models.BookSeries{
+					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:       book.ID,
 						SeriesID:     seriesRecord.ID,
 						SeriesNumber: sidecarSeries.Number,
 						SortOrder:    i + 1,
-					}
-					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						logWarn("failed to create book series", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 			}
 		}
@@ -795,25 +879,25 @@ func (w *Worker) scanFileCore(
 			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
 				logInfo("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
 
-				// Delete existing genres
-				if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing genres")
-				}
-
-				// Create new genres
+				// Collect genres for batch insert (replaces immediate delete + create)
+				relUpdates.DeleteGenres = true
+				relUpdates.BookGenres = nil // Clear any previous collection
 				for _, genreName := range metadata.Genres {
-					genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+					var genreRecord *models.Genre
+					var err error
+					if cache != nil {
+						genreRecord, err = cache.GetOrCreateGenre(ctx, genreName, book.LibraryID, w.genreService)
+					} else {
+						genreRecord, err = w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
 						continue
 					}
-					bookGenre := &models.BookGenre{
+					relUpdates.BookGenres = append(relUpdates.BookGenres, &models.BookGenre{
 						BookID:  book.ID,
 						GenreID: genreRecord.ID,
-					}
-					if err := w.bookService.CreateBookGenre(ctx, bookGenre); err != nil {
-						logWarn("failed to create book genre", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update genre source
@@ -839,25 +923,25 @@ func (w *Worker) scanFileCore(
 			if shouldApplySidecarRelationship(bookSidecarData.Genres, existingGenreNames, existingGenreSource, forceRefresh) {
 				logInfo("updating genres from sidecar", logger.Data{"new_count": len(bookSidecarData.Genres), "old_count": len(book.BookGenres)})
 
-				// Delete existing genres
-				if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing genres")
-				}
-
-				// Create new genres from sidecar
+				// Collect genres for batch insert (replaces any metadata collection)
+				relUpdates.DeleteGenres = true
+				relUpdates.BookGenres = nil // Clear previous collection
 				for _, genreName := range bookSidecarData.Genres {
-					genreRecord, err := w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+					var genreRecord *models.Genre
+					var err error
+					if cache != nil {
+						genreRecord, err = cache.GetOrCreateGenre(ctx, genreName, book.LibraryID, w.genreService)
+					} else {
+						genreRecord, err = w.genreService.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create genre", logger.Data{"name": genreName, "error": err.Error()})
 						continue
 					}
-					bookGenre := &models.BookGenre{
+					relUpdates.BookGenres = append(relUpdates.BookGenres, &models.BookGenre{
 						BookID:  book.ID,
 						GenreID: genreRecord.ID,
-					}
-					if err := w.bookService.CreateBookGenre(ctx, bookGenre); err != nil {
-						logWarn("failed to create book genre", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update genre source
@@ -885,25 +969,25 @@ func (w *Worker) scanFileCore(
 			if shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
 				logInfo("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
 
-				// Delete existing tags
-				if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing tags")
-				}
-
-				// Create new tags
+				// Collect tags for batch insert (replaces immediate delete + create)
+				relUpdates.DeleteTags = true
+				relUpdates.BookTags = nil // Clear any previous collection
 				for _, tagName := range metadata.Tags {
-					tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
+					var tagRecord *models.Tag
+					var err error
+					if cache != nil {
+						tagRecord, err = cache.GetOrCreateTag(ctx, tagName, book.LibraryID, w.tagService)
+					} else {
+						tagRecord, err = w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
 						continue
 					}
-					bookTag := &models.BookTag{
+					relUpdates.BookTags = append(relUpdates.BookTags, &models.BookTag{
 						BookID: book.ID,
 						TagID:  tagRecord.ID,
-					}
-					if err := w.bookService.CreateBookTag(ctx, bookTag); err != nil {
-						logWarn("failed to create book tag", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update tag source
@@ -929,25 +1013,25 @@ func (w *Worker) scanFileCore(
 			if shouldApplySidecarRelationship(bookSidecarData.Tags, existingTagNames, existingTagSource, forceRefresh) {
 				logInfo("updating tags from sidecar", logger.Data{"new_count": len(bookSidecarData.Tags), "old_count": len(book.BookTags)})
 
-				// Delete existing tags
-				if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete existing tags")
-				}
-
-				// Create new tags from sidecar
+				// Collect tags for batch insert (replaces any metadata collection)
+				relUpdates.DeleteTags = true
+				relUpdates.BookTags = nil // Clear previous collection
 				for _, tagName := range bookSidecarData.Tags {
-					tagRecord, err := w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
+					var tagRecord *models.Tag
+					var err error
+					if cache != nil {
+						tagRecord, err = cache.GetOrCreateTag(ctx, tagName, book.LibraryID, w.tagService)
+					} else {
+						tagRecord, err = w.tagService.FindOrCreateTag(ctx, tagName, book.LibraryID)
+					}
 					if err != nil {
 						logWarn("failed to find/create tag", logger.Data{"name": tagName, "error": err.Error()})
 						continue
 					}
-					bookTag := &models.BookTag{
+					relUpdates.BookTags = append(relUpdates.BookTags, &models.BookTag{
 						BookID: book.ID,
 						TagID:  tagRecord.ID,
-					}
-					if err := w.bookService.CreateBookTag(ctx, bookTag); err != nil {
-						logWarn("failed to create book tag", logger.Data{"error": err.Error()})
-					}
+					})
 				}
 
 				// Update tag source
@@ -1133,7 +1217,13 @@ func (w *Worker) scanFileCore(
 		}
 		pubSource := metadata.SourceForField("publisher")
 		if shouldUpdateScalar(publisherName, existingPublisherName, pubSource, existingPublisherSource, forceRefresh) {
-			publisher, err := w.publisherService.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
+			var publisher *models.Publisher
+			var err error
+			if cache != nil {
+				publisher, err = cache.GetOrCreatePublisher(ctx, publisherName, book.LibraryID, w.publisherService)
+			} else {
+				publisher, err = w.publisherService.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
+			}
 			if err != nil {
 				logWarn("failed to find/create publisher", logger.Data{"publisher": publisherName, "error": err.Error()})
 			} else {
@@ -1155,7 +1245,13 @@ func (w *Worker) scanFileCore(
 			existingPublisherSource = *file.PublisherSource
 		}
 		if shouldApplySidecarScalar(*fileSidecarData.Publisher, existingPublisherName, existingPublisherSource, forceRefresh) {
-			publisher, err := w.publisherService.FindOrCreatePublisher(ctx, *fileSidecarData.Publisher, book.LibraryID)
+			var publisher *models.Publisher
+			var err error
+			if cache != nil {
+				publisher, err = cache.GetOrCreatePublisher(ctx, *fileSidecarData.Publisher, book.LibraryID, w.publisherService)
+			} else {
+				publisher, err = w.publisherService.FindOrCreatePublisher(ctx, *fileSidecarData.Publisher, book.LibraryID)
+			}
 			if err != nil {
 				logWarn("failed to find/create publisher", logger.Data{"publisher": *fileSidecarData.Publisher, "error": err.Error()})
 			} else {
@@ -1180,7 +1276,13 @@ func (w *Worker) scanFileCore(
 		}
 		imprintSource := metadata.SourceForField("imprint")
 		if shouldUpdateScalar(imprintName, existingImprintName, imprintSource, existingImprintSource, forceRefresh) {
-			imprint, err := w.imprintService.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
+			var imprint *models.Imprint
+			var err error
+			if cache != nil {
+				imprint, err = cache.GetOrCreateImprint(ctx, imprintName, book.LibraryID, w.imprintService)
+			} else {
+				imprint, err = w.imprintService.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
+			}
 			if err != nil {
 				logWarn("failed to find/create imprint", logger.Data{"imprint": imprintName, "error": err.Error()})
 			} else {
@@ -1202,7 +1304,13 @@ func (w *Worker) scanFileCore(
 			existingImprintSource = *file.ImprintSource
 		}
 		if shouldApplySidecarScalar(*fileSidecarData.Imprint, existingImprintName, existingImprintSource, forceRefresh) {
-			imprint, err := w.imprintService.FindOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID)
+			var imprint *models.Imprint
+			var err error
+			if cache != nil {
+				imprint, err = cache.GetOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID, w.imprintService)
+			} else {
+				imprint, err = w.imprintService.FindOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID)
+			}
 			if err != nil {
 				logWarn("failed to find/create imprint", logger.Data{"imprint": *fileSidecarData.Imprint, "error": err.Error()})
 			} else {
@@ -1342,26 +1450,26 @@ func (w *Worker) scanFileCore(
 		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, narratorSource, existingNarratorSource, forceRefresh) {
 			logInfo("updating narrators", logger.Data{"new_count": len(metadata.Narrators), "old_count": len(file.Narrators)})
 
-			// Delete existing narrators
-			if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
-				return nil, errors.Wrap(err, "failed to delete existing narrators")
-			}
-
-			// Create new narrators
+			// Collect narrators for batch insert (replaces immediate delete + create)
+			relUpdates.DeleteNarrators = true
+			relUpdates.Narrators = nil // Clear any previous collection
 			for i, narratorName := range metadata.Narrators {
-				person, err := w.personService.FindOrCreatePerson(ctx, narratorName, book.LibraryID)
+				var person *models.Person
+				var err error
+				if cache != nil {
+					person, err = cache.GetOrCreatePerson(ctx, narratorName, book.LibraryID, w.personService)
+				} else {
+					person, err = w.personService.FindOrCreatePerson(ctx, narratorName, book.LibraryID)
+				}
 				if err != nil {
 					logWarn("failed to find/create person for narrator", logger.Data{"name": narratorName, "error": err.Error()})
 					continue
 				}
-				narrator := &models.Narrator{
+				relUpdates.Narrators = append(relUpdates.Narrators, &models.Narrator{
 					FileID:    file.ID,
 					PersonID:  person.ID,
 					SortOrder: i + 1,
-				}
-				if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-					logWarn("failed to create narrator", logger.Data{"error": err.Error()})
-				}
+				})
 			}
 
 			// Update narrator source
@@ -1391,26 +1499,26 @@ func (w *Worker) scanFileCore(
 		if shouldApplySidecarRelationship(sidecarNarratorNames, existingNarratorNames, existingNarratorSource, forceRefresh) {
 			logInfo("updating narrators from sidecar", logger.Data{"new_count": len(fileSidecarData.Narrators), "old_count": len(file.Narrators)})
 
-			// Delete existing narrators
-			if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
-				return nil, errors.Wrap(err, "failed to delete existing narrators")
-			}
-
-			// Create new narrators from sidecar
+			// Collect narrators for batch insert (replaces any metadata collection)
+			relUpdates.DeleteNarrators = true
+			relUpdates.Narrators = nil // Clear previous collection
 			for i, sidecarNarrator := range fileSidecarData.Narrators {
-				person, err := w.personService.FindOrCreatePerson(ctx, sidecarNarrator.Name, book.LibraryID)
+				var person *models.Person
+				var err error
+				if cache != nil {
+					person, err = cache.GetOrCreatePerson(ctx, sidecarNarrator.Name, book.LibraryID, w.personService)
+				} else {
+					person, err = w.personService.FindOrCreatePerson(ctx, sidecarNarrator.Name, book.LibraryID)
+				}
 				if err != nil {
 					logWarn("failed to find/create person for narrator", logger.Data{"name": sidecarNarrator.Name, "error": err.Error()})
 					continue
 				}
-				narrator := &models.Narrator{
+				relUpdates.Narrators = append(relUpdates.Narrators, &models.Narrator{
 					FileID:    file.ID,
 					PersonID:  person.ID,
 					SortOrder: i + 1,
-				}
-				if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-					logWarn("failed to create narrator", logger.Data{"error": err.Error()})
-				}
+				})
 			}
 
 			// Update narrator source
@@ -1418,6 +1526,22 @@ func (w *Worker) scanFileCore(
 			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"narrator_source"}}); err != nil {
 				return nil, errors.Wrap(err, "failed to update narrator source")
 			}
+		}
+	}
+
+	// Acquire per-book lock to prevent concurrent updates when multiple files
+	// belonging to the same book are processed in parallel. This lock covers:
+	// - Relationship updates (authors, series, genres, tags, narrators)
+	// - Search index updates
+	if cache != nil {
+		unlock := cache.LockBook(book.ID)
+		defer unlock()
+	}
+
+	// Batch update all collected relationships (authors, series, genres, tags, narrators)
+	if relUpdates.DeleteAuthors || relUpdates.DeleteSeries || relUpdates.DeleteGenres || relUpdates.DeleteTags || relUpdates.DeleteNarrators {
+		if err := w.UpdateBookRelationships(ctx, book.ID, relUpdates); err != nil {
+			logWarn("failed to update book relationships", logger.Data{"error": err.Error()})
 		}
 	}
 
@@ -1445,17 +1569,18 @@ func (w *Worker) scanFileCore(
 				return nil, errors.Wrap(err, "failed to delete existing identifiers")
 			}
 
-			// Create new identifiers
+			// Create new identifiers in bulk
+			identifiers := make([]*models.FileIdentifier, 0, len(metadata.Identifiers))
 			for _, id := range metadata.Identifiers {
-				identifier := &models.FileIdentifier{
+				identifiers = append(identifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
 					Source: identifierSource,
-				}
-				if err := w.bookService.CreateFileIdentifier(ctx, identifier); err != nil {
-					logWarn("failed to create identifier", logger.Data{"error": err.Error()})
-				}
+				})
+			}
+			if err := w.bookService.BulkCreateFileIdentifiers(ctx, identifiers); err != nil {
+				logWarn("failed to create identifiers", logger.Data{"error": err.Error()})
 			}
 
 			// Update identifier source
@@ -1488,17 +1613,18 @@ func (w *Worker) scanFileCore(
 				return nil, errors.Wrap(err, "failed to delete existing identifiers")
 			}
 
-			// Create new identifiers from sidecar
+			// Create new identifiers from sidecar in bulk
+			identifiers := make([]*models.FileIdentifier, 0, len(fileSidecarData.Identifiers))
 			for _, id := range fileSidecarData.Identifiers {
-				identifier := &models.FileIdentifier{
+				identifiers = append(identifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
 					Source: sidecarSource,
-				}
-				if err := w.bookService.CreateFileIdentifier(ctx, identifier); err != nil {
-					logWarn("failed to create identifier", logger.Data{"error": err.Error()})
-				}
+				})
+			}
+			if err := w.bookService.BulkCreateFileIdentifiers(ctx, identifiers); err != nil {
+				logWarn("failed to create identifiers", logger.Data{"error": err.Error()})
 			}
 
 			// Update identifier source
@@ -1677,7 +1803,10 @@ func (w *Worker) scanFileCore(
 	// Update search index
 	// ==========================================================================
 
-	if w.searchService != nil {
+	// Only update search index for individual resyncs. For full library scans,
+	// RebuildAllIndexes is called at the end of ProcessScanJob, making individual
+	// IndexBook calls redundant and wasteful.
+	if isResync && w.searchService != nil {
 		if err := w.searchService.IndexBook(ctx, book); err != nil {
 			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 		}
@@ -1695,7 +1824,7 @@ func (w *Worker) scanFileCore(
 // 5. Calling scanFileCore to update metadata
 //
 // This function is called by scanFileByPath when a file exists on disk but not in DB.
-func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*ScanResult, error) {
+func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
 	logWarn := func(msg string, data logger.Data) {
@@ -1774,6 +1903,13 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		bookPath = tempBookPath
 	}
 
+	// Acquire per-path lock to prevent concurrent book creation for same path.
+	// This is needed when multiple files in the same directory are processed in parallel.
+	if cache != nil {
+		unlock := cache.LockBookPath(bookPath, opts.LibraryID)
+		defer unlock()
+	}
+
 	// Check if a book already exists for this path
 	existingBook, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
 		Filepath:  &bookPath,
@@ -1815,7 +1951,13 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		filepathAuthors := extractAuthorsFromFilepath(bookPath, isRootLevelFile)
 		if len(filepathAuthors) > 0 && (metadata == nil || len(metadata.Authors) == 0) {
 			for i, authorName := range filepathAuthors {
-				person, err := w.personService.FindOrCreatePerson(ctx, authorName, opts.LibraryID)
+				var person *models.Person
+				var err error
+				if cache != nil {
+					person, err = cache.GetOrCreatePerson(ctx, authorName, opts.LibraryID, w.personService)
+				} else {
+					person, err = w.personService.FindOrCreatePerson(ctx, authorName, opts.LibraryID)
+				}
 				if err != nil {
 					logWarn("failed to create person for filepath author", logger.Data{"author": authorName, "error": err.Error()})
 					continue
@@ -1833,7 +1975,13 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 		// Infer series from title if it contains a volume indicator and no series from metadata
 		if metadata == nil || metadata.Series == "" {
 			if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(book.Title, fileType); ok {
-				seriesRecord, err := w.seriesService.FindOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath)
+				var seriesRecord *models.Series
+				var err error
+				if cache != nil {
+					seriesRecord, err = cache.GetOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath, w.seriesService)
+				} else {
+					seriesRecord, err = w.seriesService.FindOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath)
+				}
 				if err != nil {
 					logWarn("failed to create series for inferred title", logger.Data{"series": seriesName, "error": err.Error()})
 				} else {
@@ -1920,7 +2068,13 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 	if len(filepathNarrators) > 0 && (metadata == nil || len(metadata.Narrators) == 0) {
 		narratorSource := models.DataSourceFilepath
 		for i, narratorName := range filepathNarrators {
-			person, err := w.personService.FindOrCreatePerson(ctx, narratorName, opts.LibraryID)
+			var person *models.Person
+			var err error
+			if cache != nil {
+				person, err = cache.GetOrCreatePerson(ctx, narratorName, opts.LibraryID, w.personService)
+			} else {
+				person, err = w.personService.FindOrCreatePerson(ctx, narratorName, opts.LibraryID)
+			}
 			if err != nil {
 				logWarn("failed to create person for filepath narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
 				continue
@@ -1957,7 +2111,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions) (*Scan
 
 	// Use scanFileCore to handle all metadata updates (authors, series, etc.)
 	// This is a batch scan (FilePath mode), so pass isResync=false to skip book organization
-	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, false, opts.JobLog)
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, false, opts.JobLog, cache)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to update metadata")
 	}
@@ -2841,8 +2995,8 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 		ForceRefresh: opts.ForceRefresh,
 	}
 
-	// Call internal unified Scan method
-	result, err := w.scanInternal(ctx, internalOpts)
+	// Call internal unified Scan method (no cache for single-file rescans)
+	result, err := w.scanInternal(ctx, internalOpts, nil)
 	if err != nil {
 		return nil, err
 	}

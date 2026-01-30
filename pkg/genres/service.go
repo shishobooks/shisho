@@ -107,6 +107,14 @@ func (svc *Service) FindOrCreateGenre(ctx context.Context, name string, libraryI
 	}
 	err = svc.CreateGenre(ctx, genre)
 	if err != nil {
+		// Handle race condition: if another goroutine created the same genre
+		// between our retrieve and create, retry the retrieve
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return svc.RetrieveGenre(ctx, RetrieveGenreOptions{
+				Name:      &name,
+				LibraryID: &libraryID,
+			})
+		}
 		return nil, err
 	}
 	return genre, nil

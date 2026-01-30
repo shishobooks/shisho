@@ -107,6 +107,14 @@ func (svc *Service) FindOrCreateImprint(ctx context.Context, name string, librar
 	}
 	err = svc.CreateImprint(ctx, imprint)
 	if err != nil {
+		// Handle race condition: if another goroutine created the same imprint
+		// between our retrieve and create, retry the retrieve
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return svc.RetrieveImprint(ctx, RetrieveImprintOptions{
+				Name:      &name,
+				LibraryID: &libraryID,
+			})
+		}
 		return nil, err
 	}
 	return imprint, nil

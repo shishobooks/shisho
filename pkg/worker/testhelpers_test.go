@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
@@ -47,11 +48,20 @@ type testContext struct {
 func newTestContext(t *testing.T) *testContext {
 	t.Helper()
 
-	// Create in-memory SQLite database
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	// Create a uniquely named in-memory SQLite database with shared cache.
+	// Using a unique name per test ensures parallel tests don't share databases,
+	// while cache=shared allows multiple connections (from worker goroutines) to
+	// share the same database within a test.
+	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	sqldb, err := sql.Open(sqliteshim.ShimName, dbName)
 	if err != nil {
 		t.Fatalf("failed to open in-memory database: %v", err)
 	}
+
+	// Configure connection pool for shared in-memory database.
+	// Without this, closing a connection could destroy the database.
+	sqldb.SetMaxIdleConns(1000)
+	sqldb.SetConnMaxLifetime(0)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
@@ -82,6 +92,7 @@ func newTestContext(t *testing.T) *testContext {
 	w := &Worker{
 		config:           cfg,
 		log:              logger.New(),
+		db:               db,
 		bookService:      bookService,
 		chapterService:   chapterService,
 		libraryService:   libraryService,
@@ -222,11 +233,20 @@ func (tc *testContext) listChapters(fileID int) []*models.Chapter {
 func newTestContextWithSearchService(t *testing.T) *testContext {
 	t.Helper()
 
-	// Create in-memory SQLite database
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	// Create a uniquely named in-memory SQLite database with shared cache.
+	// Using a unique name per test ensures parallel tests don't share databases,
+	// while cache=shared allows multiple connections (from worker goroutines) to
+	// share the same database within a test.
+	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	sqldb, err := sql.Open(sqliteshim.ShimName, dbName)
 	if err != nil {
 		t.Fatalf("failed to open in-memory database: %v", err)
 	}
+
+	// Configure connection pool for shared in-memory database.
+	// Without this, closing a connection could destroy the database.
+	sqldb.SetMaxIdleConns(1000)
+	sqldb.SetConnMaxLifetime(0)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
@@ -258,6 +278,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	w := &Worker{
 		config:           cfg,
 		log:              logger.New(),
+		db:               db,
 		bookService:      bookService,
 		chapterService:   chapterService,
 		libraryService:   libraryService,

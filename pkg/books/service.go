@@ -1144,6 +1144,66 @@ func (svc *Service) DeleteBookTags(ctx context.Context, bookID int) error {
 	return errors.WithStack(err)
 }
 
+// BulkCreateAuthors creates multiple book-author associations in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateAuthors(ctx context.Context, authors []*models.Author) error {
+	if len(authors) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&authors).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// BulkCreateNarrators creates multiple file-narrator associations in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateNarrators(ctx context.Context, narrators []*models.Narrator) error {
+	if len(narrators) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&narrators).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// BulkCreateBookGenres creates multiple book-genre associations in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateBookGenres(ctx context.Context, bookGenres []*models.BookGenre) error {
+	if len(bookGenres) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&bookGenres).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// BulkCreateBookTags creates multiple book-tag associations in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateBookTags(ctx context.Context, bookTags []*models.BookTag) error {
+	if len(bookTags) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&bookTags).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// BulkCreateBookSeries creates multiple book-series associations in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateBookSeries(ctx context.Context, bookSeries []*models.BookSeries) error {
+	if len(bookSeries) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&bookSeries).Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// BulkCreateFileIdentifiers creates multiple file identifier records in a single query.
+// Returns nil if the slice is empty.
+func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, identifiers []*models.FileIdentifier) error {
+	if len(identifiers) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&identifiers).Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // DeleteNarratorsForFile deletes all narrators for a file.
 func (svc *Service) DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error) {
 	result, err := svc.db.NewDelete().

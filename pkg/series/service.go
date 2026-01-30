@@ -137,6 +137,14 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	}
 	err = svc.CreateSeries(ctx, series)
 	if err != nil {
+		// Handle race condition: if another goroutine created the same series
+		// between our retrieve and create, retry the retrieve
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return svc.RetrieveSeries(ctx, RetrieveSeriesOptions{
+				Name:      &name,
+				LibraryID: &libraryID,
+			})
+		}
 		return nil, err
 	}
 	return series, nil

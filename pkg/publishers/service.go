@@ -107,6 +107,14 @@ func (svc *Service) FindOrCreatePublisher(ctx context.Context, name string, libr
 	}
 	err = svc.CreatePublisher(ctx, publisher)
 	if err != nil {
+		// Handle race condition: if another goroutine created the same publisher
+		// between our retrieve and create, retry the retrieve
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return svc.RetrievePublisher(ctx, RetrievePublisherOptions{
+				Name:      &name,
+				LibraryID: &libraryID,
+			})
+		}
 		return nil, err
 	}
 	return publisher, nil

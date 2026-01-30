@@ -37,6 +37,7 @@ var (
 type Worker struct {
 	config *config.Config
 	log    logger.Logger
+	db     *bun.DB
 
 	processFuncs map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error
 
@@ -82,6 +83,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
 	w := &Worker{
 		config: cfg,
 		log:    logger.New(),
+		db:     db,
 
 		bookService:      bookService,
 		chapterService:   chapterService,

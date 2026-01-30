@@ -120,6 +120,14 @@ func (svc *Service) FindOrCreatePerson(ctx context.Context, name string, library
 	}
 	err = svc.CreatePerson(ctx, person)
 	if err != nil {
+		// Handle race condition: if another goroutine created the same person
+		// between our retrieve and create, retry the retrieve
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return svc.RetrievePerson(ctx, RetrievePersonOptions{
+				Name:      &name,
+				LibraryID: &libraryID,
+			})
+		}
 		return nil, err
 	}
 	return person, nil

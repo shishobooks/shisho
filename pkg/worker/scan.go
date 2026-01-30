@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
@@ -37,6 +39,13 @@ var (
 	// Regex to collapse multiple whitespace to single space.
 	multiSpaceRE = regexp.MustCompile(`\s+`)
 )
+
+// scanResult holds the result of a single file scan for the worker pool.
+type scanResult struct {
+	BookID int
+	Path   string
+	Err    error
+}
 
 // generateCBZFileName creates a clean file name for CBZ files.
 // Priority: 1) Title from ComicInfo (explicit metadata), 2) Series + Number (inferred), 3) Parse from filename.
@@ -324,20 +333,72 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// Organization is deferred to avoid breaking file paths during scan.
 		booksToOrganize := make(map[int]struct{})
 
+		// Parallel file processing with worker pool
+		workerCount := max(runtime.NumCPU(), 4)
+		jobLog.Info("starting parallel scan", logger.Data{
+			"worker_count":  workerCount,
+			"files_to_scan": len(filesToScan),
+		})
+
+		cache := NewScanCache()
+		fileChan := make(chan string, len(filesToScan))
+		resultChan := make(chan scanResult, len(filesToScan))
+
+		// Start workers
+		var wg sync.WaitGroup
+		for i := 0; i < workerCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for path := range fileChan {
+					result, err := w.scanInternal(ctx, ScanOptions{
+						FilePath:  path,
+						LibraryID: library.ID,
+						JobLog:    jobLog,
+					}, cache)
+
+					sr := scanResult{Path: path}
+					if err != nil {
+						sr.Err = err
+					} else if result != nil && result.Book != nil {
+						sr.BookID = result.Book.ID
+					}
+					resultChan <- sr
+				}
+			}()
+		}
+
+		// Dispatch files
 		for _, path := range filesToScan {
-			result, err := w.scanInternal(ctx, ScanOptions{
-				FilePath:  path,
-				LibraryID: library.ID,
-				JobLog:    jobLog,
-			})
-			if err != nil {
-				jobLog.Warn("failed to scan file", logger.Data{"path": path, "error": err.Error()})
+			fileChan <- path
+		}
+		close(fileChan)
+
+		// Collect results in background
+		go func() {
+			wg.Wait()
+			close(resultChan)
+		}()
+
+		// Process results
+		for result := range resultChan {
+			if result.Err != nil {
+				jobLog.Warn("failed to scan file", logger.Data{"path": result.Path, "error": result.Err.Error()})
 				continue
 			}
-			if result != nil && result.Book != nil {
-				booksToOrganize[result.Book.ID] = struct{}{}
+			if result.BookID != 0 {
+				booksToOrganize[result.BookID] = struct{}{}
 			}
 		}
+
+		jobLog.Info("parallel scan complete", logger.Data{
+			"persons_cached":    cache.PersonCount(),
+			"genres_cached":     cache.GenreCount(),
+			"tags_cached":       cache.TagCount(),
+			"series_cached":     cache.SeriesCount(),
+			"publishers_cached": cache.PublisherCount(),
+			"imprints_cached":   cache.ImprintCount(),
+		})
 
 		// Cleanup orphaned files (in DB but not on disk)
 		// Uses the unified Scan() function which handles file deletion properly
@@ -354,7 +415,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			for _, file := range existingFiles {
 				if _, seen := scannedPaths[file.Filepath]; !seen {
 					jobLog.Info("cleaning up orphaned file", logger.Data{"file_id": file.ID, "filepath": file.Filepath})
-					_, err := w.scanInternal(ctx, ScanOptions{FileID: file.ID})
+					_, err := w.scanInternal(ctx, ScanOptions{FileID: file.ID}, nil)
 					if err != nil {
 						jobLog.Warn("failed to cleanup orphaned file", logger.Data{"file_id": file.ID, "error": err.Error()})
 					}
