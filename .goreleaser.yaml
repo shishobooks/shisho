@@ -36,10 +36,10 @@ release:
   header: |
     ## Shisho {{ .Tag }}
 
-    Docker image: `ghcr.io/shishobooks/shisho:{{ .Tag }}`
+    Docker image: `ghcr.io/shishobooks/shisho:{{ trimprefix .Tag "v" }}`
 
     ```bash
-    docker pull ghcr.io/shishobooks/shisho:{{ .Tag }}
+    docker pull ghcr.io/shishobooks/shisho:{{ trimprefix .Tag "v" }}
     ```
   footer: |
     **Full Changelog**: https://github.com/shishobooks/shisho/compare/{{ .PreviousTag }}...{{ .Tag }}
