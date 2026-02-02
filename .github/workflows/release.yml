@@ -11,41 +11,13 @@ permissions:
   packages: write
 
 jobs:
-  test:
+  validate:
     name: Validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: "yarn"
-
-      - name: Install yq
-        uses: mikefarah/yq@v4
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Generate TypeScript types
-        run: make tygo
-
-      - name: Run Go tests
-        run: make test
-
-      - name: Run JS lint
-        run: yarn lint
+    uses: ./.github/workflows/ci.yml
 
   release:
     name: GitHub Release
-    needs: test
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +39,7 @@ jobs:
 
   docker-amd64:
     name: Docker (amd64)
-    needs: test
+    needs: validate
     runs-on: ubuntu-24.04
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -99,7 +71,7 @@ jobs:
 
   docker-arm64:
     name: Docker (arm64)
-    needs: test
+    needs: validate
     runs-on: ubuntu-24.04-arm
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -167,7 +139,7 @@ jobs:
 
   npm:
     name: npm Publish
-    needs: test
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
