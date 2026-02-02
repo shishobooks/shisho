@@ -1,7 +1,8 @@
-import { GitMerge, List, Loader2, X } from "lucide-react";
+import { GitMerge, List, Loader2, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,9 +10,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAddBooksToList, useListLists } from "@/hooks/queries/lists";
+import {
+  useAddBooksToList,
+  useCreateList,
+  useListLists,
+} from "@/hooks/queries/lists";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
-import type { Library } from "@/types";
+import type { CreateListPayload, Library } from "@/types";
 
 interface SelectionToolbarProps {
   library?: Library;
@@ -23,9 +28,11 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const listsQuery = useListLists();
   const addToListMutation = useAddBooksToList();
+  const createListMutation = useCreateList();
 
   const lists = listsQuery.data?.lists ?? [];
   const editableLists = lists.filter((list) => list.permission !== "viewer");
@@ -49,6 +56,33 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       toast.error(message);
     } finally {
       setAddingToListId(null);
+    }
+  };
+
+  const handleCreateList = () => {
+    setPopoverOpen(false);
+    setCreateDialogOpen(true);
+  };
+
+  const handleCreate = async (payload: CreateListPayload) => {
+    try {
+      const newList = await createListMutation.mutateAsync(payload);
+      toast.success(`Created "${payload.name}" list`);
+      // Automatically add the selected books to the newly created list
+      await addToListMutation.mutateAsync({
+        listId: newList.id,
+        payload: { book_ids: selectedBookIds },
+      });
+      const count = selectedBookIds.length;
+      toast.success(
+        `Added ${count} book${count !== 1 ? "s" : ""} to "${payload.name}"`,
+      );
+      exitSelectionMode();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create list";
+      toast.error(message);
+      throw error; // Re-throw so CreateListDialog knows it failed
     }
   };
 
@@ -84,7 +118,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             </p>
           )}
           {!listsQuery.isLoading && editableLists.length > 0 && (
-            <div className="flex flex-col gap-0.5 px-1 pb-2">
+            <div className="flex flex-col gap-0.5 px-1 pb-1">
               {editableLists.map((list) => {
                 const isAdding = addingToListId === list.id;
                 return (
@@ -104,6 +138,20 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {!listsQuery.isLoading && (
+            <div className="border-t px-1 py-1">
+              <Button
+                className="w-full justify-start"
+                onClick={handleCreateList}
+                size="sm"
+                variant="ghost"
+              >
+                <Plus className="h-4 w-4" />
+                Create New List
+              </Button>
             </div>
           )}
         </PopoverContent>
@@ -145,6 +193,13 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           open={showMergeDialog}
         />
       )}
+
+      <CreateListDialog
+        isPending={createListMutation.isPending}
+        onCreate={handleCreate}
+        onOpenChange={setCreateDialogOpen}
+        open={createDialogOpen}
+      />
     </div>
   );
 };
