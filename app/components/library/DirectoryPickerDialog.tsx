@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -204,6 +205,9 @@ const DirectoryPickerDialog = ({
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Select Directories</DialogTitle>
+          <DialogDescription>
+            Browse the filesystem and select one or more directories.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Breadcrumb navigation */}

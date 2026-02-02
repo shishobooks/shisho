@@ -1,6 +1,7 @@
 package errcodes
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/iancoleman/strcase"
@@ -22,6 +23,12 @@ func (h *Handler) Handle(err error, c echo.Context) {
 	// Silently ignore broken pipe errors - these are expected when clients
 	// disconnect during streaming (e.g., navigating away while audio plays)
 	if errutils.IsIgnorableErr(err) {
+		return
+	}
+
+	// Silently ignore context canceled errors - these are expected when clients
+	// disconnect before the request completes (e.g., navigating away quickly)
+	if errors.Is(err, context.Canceled) {
 		return
 	}
 

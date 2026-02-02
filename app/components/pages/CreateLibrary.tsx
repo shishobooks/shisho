@@ -1,6 +1,6 @@
 import { ArrowLeft, FolderOpen, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
@@ -17,31 +17,73 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useCreateLibrary } from "@/hooks/queries/libraries";
+import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
   DownloadFormatOriginal,
 } from "@/types/generated/models";
 
+// Initial values for the create form - stored once to compare against
+const INITIAL_VALUES = {
+  name: "",
+  organizeFileStructure: true,
+  coverAspectRatio: "book",
+  downloadFormatPreference: DownloadFormatOriginal,
+  libraryPaths: [""],
+};
+
 const CreateLibrary = () => {
   usePageTitle("Create Library");
 
-  const navigate = useNavigate();
   const createLibraryMutation = useCreateLibrary();
 
-  const [name, setName] = useState("");
-  const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
-  const [coverAspectRatio, setCoverAspectRatio] = useState("book");
-  const [downloadFormatPreference, setDownloadFormatPreference] = useState(
-    DownloadFormatOriginal,
+  const [name, setName] = useState(INITIAL_VALUES.name);
+  const [organizeFileStructure, setOrganizeFileStructure] = useState(
+    INITIAL_VALUES.organizeFileStructure,
   );
-  const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
+  const [coverAspectRatio, setCoverAspectRatio] = useState(
+    INITIAL_VALUES.coverAspectRatio,
+  );
+  const [downloadFormatPreference, setDownloadFormatPreference] = useState(
+    INITIAL_VALUES.downloadFormatPreference,
+  );
+  const [libraryPaths, setLibraryPaths] = useState<string[]>([
+    ...INITIAL_VALUES.libraryPaths,
+  ]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTargetIndex, setPickerTargetIndex] = useState<number | null>(
     null,
   );
+  const [changesSaved, setChangesSaved] = useState(false);
+
+  // Track whether user has unsaved changes by comparing against initial values
+  const hasUnsavedChanges = useMemo(() => {
+    if (changesSaved) return false;
+    return (
+      name.trim() !== INITIAL_VALUES.name ||
+      organizeFileStructure !== INITIAL_VALUES.organizeFileStructure ||
+      coverAspectRatio !== INITIAL_VALUES.coverAspectRatio ||
+      downloadFormatPreference !== INITIAL_VALUES.downloadFormatPreference ||
+      libraryPaths.some((p) => p.trim() !== "")
+    );
+  }, [
+    name,
+    organizeFileStructure,
+    coverAspectRatio,
+    downloadFormatPreference,
+    libraryPaths,
+    changesSaved,
+  ]);
+
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasUnsavedChanges);
+
+  const { requestNavigate } = useNavigateAfterSave(hasUnsavedChanges);
 
   const handleAddPath = () => {
     setLibraryPaths([...libraryPaths, ""]);
@@ -109,7 +151,8 @@ const CreateLibrary = () => {
 
       // Backend automatically triggers a scan after library creation
       toast.success("Library created! Scanning for media...");
-      navigate(`/libraries/${library.id}`);
+      setChangesSaved(true);
+      requestNavigate(`/libraries/${library.id}`);
     } catch (e) {
       let msg = "Something went wrong.";
       if (e instanceof Error) {
@@ -310,6 +353,12 @@ const CreateLibrary = () => {
         onOpenChange={setPickerOpen}
         onSelect={handlePickerSelect}
         open={pickerOpen}
+      />
+
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
       />
     </div>
   );

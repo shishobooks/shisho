@@ -1,6 +1,6 @@
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,25 +8,74 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useCreateUser, useRoles } from "@/hooks/queries/users";
+import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { sortRoles } from "@/utils/roles";
+
+// Initial values for the create form - stored once to compare against
+const INITIAL_VALUES = {
+  username: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+  roleId: null as number | null,
+  allLibraryAccess: true,
+  selectedLibraries: [] as number[],
+};
 
 const CreateUser = () => {
   usePageTitle("Create User");
 
-  const navigate = useNavigate();
   const createUserMutation = useCreateUser();
   const { data: rolesData } = useRoles();
   const { data: librariesData } = useLibraries();
 
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [roleId, setRoleId] = useState<number | null>(null);
-  const [allLibraryAccess, setAllLibraryAccess] = useState(true);
-  const [selectedLibraries, setSelectedLibraries] = useState<number[]>([]);
+  const [username, setUsername] = useState(INITIAL_VALUES.username);
+  const [email, setEmail] = useState(INITIAL_VALUES.email);
+  const [password, setPassword] = useState(INITIAL_VALUES.password);
+  const [confirmPassword, setConfirmPassword] = useState(
+    INITIAL_VALUES.confirmPassword,
+  );
+  const [roleId, setRoleId] = useState<number | null>(INITIAL_VALUES.roleId);
+  const [allLibraryAccess, setAllLibraryAccess] = useState(
+    INITIAL_VALUES.allLibraryAccess,
+  );
+  const [selectedLibraries, setSelectedLibraries] = useState<number[]>([
+    ...INITIAL_VALUES.selectedLibraries,
+  ]);
+  const [changesSaved, setChangesSaved] = useState(false);
+
+  // Track whether user has unsaved changes by comparing against initial values
+  const hasUnsavedChanges = useMemo(() => {
+    if (changesSaved) return false;
+    return (
+      username.trim() !== INITIAL_VALUES.username ||
+      email.trim() !== INITIAL_VALUES.email ||
+      password !== INITIAL_VALUES.password ||
+      confirmPassword !== INITIAL_VALUES.confirmPassword ||
+      roleId !== INITIAL_VALUES.roleId ||
+      allLibraryAccess !== INITIAL_VALUES.allLibraryAccess ||
+      selectedLibraries.length > INITIAL_VALUES.selectedLibraries.length
+    );
+  }, [
+    username,
+    email,
+    password,
+    confirmPassword,
+    roleId,
+    allLibraryAccess,
+    selectedLibraries,
+    changesSaved,
+  ]);
+
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasUnsavedChanges);
+
+  const { requestNavigate } = useNavigateAfterSave(hasUnsavedChanges);
 
   const handleLibraryToggle = (libraryId: number) => {
     setSelectedLibraries((prev) =>
@@ -78,7 +127,8 @@ const CreateUser = () => {
       });
 
       toast.success("User created successfully!");
-      navigate(`/settings/users/${user.id}`);
+      setChangesSaved(true);
+      requestNavigate(`/settings/users/${user.id}`);
     } catch (error) {
       let msg = "Failed to create user";
       if (error instanceof Error) {
@@ -88,7 +138,7 @@ const CreateUser = () => {
     }
   };
 
-  const roles = rolesData?.roles ?? [];
+  const roles = sortRoles(rolesData?.roles ?? []);
   const libraries = librariesData?.libraries ?? [];
 
   return (
@@ -272,6 +322,12 @@ const CreateUser = () => {
           </Button>
         </div>
       </div>
+
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };

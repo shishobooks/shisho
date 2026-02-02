@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import {
   Check,
   ChevronsUpDown,
@@ -24,12 +25,13 @@ import {
 } from "@/components/ui/command";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
-  Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -58,6 +60,7 @@ import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { cn } from "@/libraries/utils";
 import {
   FileRoleMain,
@@ -190,31 +193,114 @@ export function FileEditDialog({
     };
   }, []);
 
-  // Reset form when dialog opens with new file data
+  // Store initial values for change detection
+  const [initialValues, setInitialValues] = useState<{
+    narrators: string[];
+    name: string;
+    url: string;
+    publisher: string;
+    imprint: string;
+    releaseDate: string;
+    identifiers: Array<{ type: string; value: string }>;
+    fileRole: string;
+    coverPage: number | null;
+  } | null>(null);
+
+  // Track previous open state to detect open transitions.
+  // Start with false so that if dialog starts open, we detect it as "just opened".
+  const prevOpenRef = useRef(false);
+
+  // Initialize form only when dialog opens (closed->open transition)
+  // This preserves user edits when props change while dialog is open
+  // Also cleanup blob URLs when dialog closes to prevent memory leaks
   useEffect(() => {
-    if (open) {
-      setNarrators(file.narrators?.map((n) => n.person?.name || "") || []);
-      setNarratorSearch("");
-      setName(file.name || "");
-      setUrl(file.url || "");
-      setPublisher(file.publisher?.name || "");
-      setPublisherSearch("");
-      setImprint(file.imprint?.name || "");
-      setImprintSearch("");
-      setReleaseDate(formatDateForInput(file.release_date));
-      setIdentifiers(
-        file.identifiers?.map((id) => ({ type: id.type, value: id.value })) ||
-          [],
-      );
-      setNewIdentifierType("isbn_13");
-      setNewIdentifierValue("");
-      setFileRole(file.file_role ?? FileRoleMain);
-      setShowDowngradeConfirm(false);
-      setPendingCoverPage(null);
-      setPendingCoverFile(null);
+    const justOpened = open && !prevOpenRef.current;
+    const justClosed = !open && prevOpenRef.current;
+    prevOpenRef.current = open;
+
+    // Cleanup blob URL when dialog closes to prevent memory leak
+    if (justClosed) {
       updatePendingCoverPreview(null);
+      return;
     }
+
+    // Only initialize when dialog just opened, not on every prop change
+    if (!justOpened) return;
+
+    const initialNarrators =
+      file.narrators?.map((n) => n.person?.name || "") || [];
+    const initialName = file.name || "";
+    const initialUrl = file.url || "";
+    const initialPublisher = file.publisher?.name || "";
+    const initialImprint = file.imprint?.name || "";
+    const initialReleaseDate = formatDateForInput(file.release_date);
+    const initialIdentifiers =
+      file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
+    const initialFileRole = file.file_role ?? FileRoleMain;
+
+    setNarrators(initialNarrators);
+    setNarratorSearch("");
+    setName(initialName);
+    setUrl(initialUrl);
+    setPublisher(initialPublisher);
+    setPublisherSearch("");
+    setImprint(initialImprint);
+    setImprintSearch("");
+    setReleaseDate(initialReleaseDate);
+    setIdentifiers(initialIdentifiers);
+    setNewIdentifierType("isbn_13");
+    setNewIdentifierValue("");
+    setFileRole(initialFileRole);
+    setShowDowngradeConfirm(false);
+    setPendingCoverPage(null);
+    setPendingCoverFile(null);
+    updatePendingCoverPreview(null);
+
+    // Store initial values for comparison
+    setInitialValues({
+      narrators: initialNarrators,
+      name: initialName,
+      url: initialUrl,
+      publisher: initialPublisher,
+      imprint: initialImprint,
+      releaseDate: initialReleaseDate,
+      identifiers: initialIdentifiers,
+      fileRole: initialFileRole,
+      coverPage: file.cover_page ?? null,
+    });
   }, [open, file, updatePendingCoverPreview]);
+
+  // Compute hasChanges by comparing current values to initial values
+  const hasChanges = useMemo(() => {
+    if (!initialValues) return false;
+    return (
+      !equal(narrators, initialValues.narrators) ||
+      name !== initialValues.name ||
+      url !== initialValues.url ||
+      publisher !== initialValues.publisher ||
+      imprint !== initialValues.imprint ||
+      releaseDate !== initialValues.releaseDate ||
+      !equal(identifiers, initialValues.identifiers) ||
+      fileRole !== initialValues.fileRole ||
+      pendingCoverFile !== null ||
+      (pendingCoverPage !== null &&
+        pendingCoverPage !== initialValues.coverPage)
+    );
+  }, [
+    narrators,
+    name,
+    url,
+    publisher,
+    imprint,
+    releaseDate,
+    identifiers,
+    fileRole,
+    pendingCoverFile,
+    pendingCoverPage,
+    initialValues,
+  ]);
+
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
   const handleSelectPublisher = (name: string) => {
     setPublisher(name);
@@ -439,17 +525,37 @@ export function FileEditDialog({
         file: pendingCoverFile,
       });
       setCoverCacheBuster(Date.now());
+      setPendingCoverFile(null);
     }
 
-    if (pendingCoverPage !== null && pendingCoverPage !== file.cover_page) {
+    // Compare to initialValues.coverPage (snapshot) instead of file.cover_page (live prop)
+    // to stay consistent with hasChanges logic and avoid race conditions with refetches
+    if (
+      pendingCoverPage !== null &&
+      pendingCoverPage !== initialValues?.coverPage
+    ) {
       await setCoverPageMutation.mutateAsync({
         id: file.id,
         page: pendingCoverPage,
       });
       setCoverCacheBuster(Date.now());
+      setPendingCoverPage(null);
     }
 
-    onOpenChange(false);
+    // Reset initial values so hasChanges becomes false, then close via effect
+    // For coverPage, use pendingCoverPage if set, otherwise keep the current initial value
+    setInitialValues({
+      narrators: [...narrators],
+      name,
+      url,
+      publisher,
+      imprint,
+      releaseDate,
+      identifiers: [...identifiers],
+      fileRole,
+      coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
+    });
+    requestClose();
   };
 
   const isLoading =
@@ -465,10 +571,14 @@ export function FileEditDialog({
   );
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Edit File</DialogTitle>
+          <DialogDescription>
+            Update file metadata including cover, identifiers, and publishing
+            details.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4 min-w-0">
@@ -1137,6 +1247,6 @@ export function FileEditDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

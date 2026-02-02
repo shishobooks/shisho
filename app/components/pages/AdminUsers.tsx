@@ -10,6 +10,7 @@ import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Role, User } from "@/types";
+import { sortRoles } from "@/utils/roles";
 
 interface UserRowProps {
   user: User;
@@ -121,7 +122,7 @@ const AdminUsers = () => {
   }
 
   const users = usersData?.users ?? [];
-  const roles = rolesData?.roles ?? [];
+  const roles = sortRoles(rolesData?.roles ?? []);
 
   return (
     <div className="space-y-12">

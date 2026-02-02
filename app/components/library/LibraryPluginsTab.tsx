@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +30,10 @@ const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
 
 interface Props {
   libraryId: string;
+  onHasChangesChange?: (hasChanges: boolean) => void;
 }
 
-const LibraryPluginsTab = ({ libraryId }: Props) => {
+const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
   const [selectedHookType, setSelectedHookType] =
     useState<PluginHookType>("metadataEnricher");
   const { data, isLoading, error } = useLibraryPluginOrder(
@@ -59,6 +60,11 @@ const LibraryPluginsTab = ({ libraryId }: Props) => {
           item.id !== data?.plugins?.[i]?.id ||
           item.enabled !== data?.plugins?.[i]?.enabled,
       ));
+
+  // Notify parent of changes
+  useEffect(() => {
+    onHasChangesChange?.(hasChanged);
+  }, [hasChanged, onHasChangesChange]);
 
   const handleMove = (index: number, direction: "up" | "down") => {
     const newPlugins = [...displayPlugins];

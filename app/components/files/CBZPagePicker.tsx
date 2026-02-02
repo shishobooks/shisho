@@ -8,11 +8,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/libraries/utils";
 
@@ -143,8 +144,15 @@ const CBZPagePicker = ({
   // Show loading spinner only on initial load, not during navigation
   const isInitialLoad = loadedPage === null;
 
+  // Track if the user has navigated to a different page than the current one
+  const hasChanges = focusedPage !== currentPage;
+
   return (
-    <Dialog onOpenChange={handleOpenChange} open={open}>
+    <FormDialog
+      hasChanges={hasChanges}
+      onOpenChange={handleOpenChange}
+      open={open}
+    >
       <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 pr-14 border-b border-border/50 shrink-0">
           <DialogTitle className="flex items-center justify-between">
@@ -153,6 +161,9 @@ const CBZPagePicker = ({
               Page {focusedPage + 1} of {pageCount}
             </span>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Browse pages and select one to use as the cover image.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Main preview area - fixed height calculation */}
@@ -329,7 +340,7 @@ const CBZPagePicker = ({
           </div>
         </div>
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 };
 

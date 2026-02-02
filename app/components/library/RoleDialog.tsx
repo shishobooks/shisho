@@ -1,5 +1,6 @@
+import equal from "fast-deep-equal";
 import { Loader2, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import PermissionMatrix from "@/components/library/PermissionMatrix";
@@ -7,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,6 +22,7 @@ import {
   useDeleteRole,
   useUpdateRole,
 } from "@/hooks/queries/users";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import type { PermissionInput, Role } from "@/types";
 
 interface RoleDialogProps {
@@ -41,21 +43,63 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
   const updateRoleMutation = useUpdateRole();
   const deleteRoleMutation = useDeleteRole();
 
-  // Initialize form when role changes
+  // Store initial values for change detection
+  const [initialValues, setInitialValues] = useState<{
+    name: string;
+    permissions: PermissionInput[];
+  } | null>(null);
+
+  // Track previous open state to detect open transitions.
+  // Start with false so that if dialog starts open, we detect it as "just opened".
+  const prevOpenRef = useRef(false);
+
+  // Initialize form only when dialog opens (closed->open transition)
+  // This preserves user edits when props change while dialog is open
   useEffect(() => {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+
+    // Only initialize when dialog just opened, not on every prop change
+    if (!justOpened) return;
+
     if (role) {
-      setName(role.name);
-      setPermissions(
+      const initialName = role.name;
+      const initialPermissions =
         role.permissions?.map((p) => ({
           resource: p.resource,
           operation: p.operation,
-        })) ?? [],
-      );
+        })) ?? [];
+
+      setName(initialName);
+      setPermissions(initialPermissions);
+
+      // Store initial values for comparison
+      setInitialValues({
+        name: initialName,
+        permissions: initialPermissions,
+      });
     } else {
       setName("");
       setPermissions([]);
+      setInitialValues({
+        name: "",
+        permissions: [],
+      });
     }
   }, [role, open]);
+
+  // Compute hasChanges by comparing current values to initial values
+  // This works for both create mode (initialValues = { name: "", permissions: [] })
+  // and edit mode (initialValues = role data)
+  const hasChanges = useMemo(() => {
+    if (!initialValues) return false;
+    return (
+      name !== initialValues.name ||
+      !equal(permissions, initialValues.permissions)
+    );
+  }, [name, permissions, initialValues]);
+
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -80,7 +124,12 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
         });
         toast.success("Role created successfully");
       }
-      onOpenChange(false);
+      // Reset initial values so hasChanges becomes false, then close via effect
+      setInitialValues({
+        name,
+        permissions: [...permissions],
+      });
+      requestClose();
     } catch (error) {
       let msg = isEditMode ? "Failed to update role" : "Failed to create role";
       if (error instanceof Error) {
@@ -97,7 +146,11 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
       await deleteRoleMutation.mutateAsync(role.id);
       toast.success("Role deleted successfully");
       setDeleteConfirmOpen(false);
-      onOpenChange(false);
+      // Reset form state and initial values so hasChanges becomes false, then close
+      setName("");
+      setPermissions([]);
+      setInitialValues({ name: "", permissions: [] });
+      requestClose();
     } catch (error) {
       let msg = "Failed to delete role";
       if (error instanceof Error) {
@@ -114,7 +167,11 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
 
   return (
     <>
-      <Dialog onOpenChange={onOpenChange} open={open}>
+      <FormDialog
+        hasChanges={hasChanges}
+        onOpenChange={onOpenChange}
+        open={open}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -191,7 +248,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </FormDialog>
 
       <ConfirmDialog
         confirmLabel="Delete"

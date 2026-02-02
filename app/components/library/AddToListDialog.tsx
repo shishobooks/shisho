@@ -1,18 +1,18 @@
 import { List, Loader2, Plus, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -27,6 +27,7 @@ import {
   useUpdateBookLists,
   type ListWithCount,
 } from "@/hooks/queries/lists";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import type { CreateListPayload } from "@/types";
 
 interface AddToListDialogProps {
@@ -45,6 +46,9 @@ export const AddToListDialog = ({
   const [selectedListIds, setSelectedListIds] = useState<Set<number>>(
     new Set(),
   );
+  const [changesSaved, setChangesSaved] = useState(false);
+  // Store initial list IDs when dialog opens - used for hasChanges comparison
+  const [initialListIds, setInitialListIds] = useState<Set<number>>(new Set());
 
   const listsQuery = useListLists();
   const bookListsQuery = useBookLists(bookId, { enabled: open });
@@ -57,19 +61,41 @@ export const AddToListDialog = ({
   );
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
 
-  // Initialize selected lists when data loads
-  useEffect(() => {
-    if (bookListsQuery.data) {
-      setSelectedListIds(new Set(bookListsQuery.data.map((list) => list.id)));
-    }
-  }, [bookListsQuery.data]);
+  // Track previous open state to detect open transitions.
+  // Start with false so that if dialog starts open, we detect it as "just opened".
+  const prevOpenRef = useRef(false);
 
-  // Reset search when dialog opens
+  // Track previous bookId to detect when it changes while dialog is open.
+  const prevBookIdRef = useRef(bookId);
+
+  // Track whether we've initialized for this dialog session.
+  // This allows data to load after open transition (async fetch).
+  const initializedRef = useRef(false);
+
+  // Initialize selected lists only when dialog opens (closed->open transition)
+  // or when bookId changes, and data is available. This preserves user edits when data refetches.
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    const bookIdChanged = bookId !== prevBookIdRef.current;
+    prevOpenRef.current = open;
+    prevBookIdRef.current = bookId;
+
+    // Reset initialization flag when dialog opens OR when bookId changes
+    // (bookId change while dialog is open means we need to reinitialize)
+    if (justOpened || bookIdChanged) {
+      initializedRef.current = false;
       setSearch("");
+      setChangesSaved(false);
     }
-  }, [open]);
+
+    // Only initialize once per dialog session, and only when data is available
+    if (!open || !bookListsQuery.data || initializedRef.current) return;
+
+    initializedRef.current = true;
+    const initialIds = new Set(bookListsQuery.data.map((list) => list.id));
+    setSelectedListIds(initialIds);
+    setInitialListIds(initialIds);
+  }, [open, bookListsQuery.data, bookId]);
 
   // Filter lists by search
   const filteredLists = useMemo(() => {
@@ -102,7 +128,8 @@ export const AddToListDialog = ({
         listIds: Array.from(selectedListIds),
       });
       toast.success("Updated lists");
-      onOpenChange(false);
+      setChangesSaved(true);
+      requestClose();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update lists";
@@ -118,29 +145,37 @@ export const AddToListDialog = ({
     try {
       const newList = await createListMutation.mutateAsync(payload);
       toast.success(`Created "${payload.name}" list`);
-      setCreateDialogOpen(false);
+      // CreateListDialog handles its own closing via requestClose
       // Automatically select the newly created list
       setSelectedListIds((prev) => new Set([...prev, newList.id]));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to create list";
       toast.error(message);
+      throw error; // Re-throw so CreateListDialog knows it failed
     }
   };
 
   const hasChanges = useMemo(() => {
-    if (!bookListsQuery.data) return false;
-    const originalIds = new Set(bookListsQuery.data.map((list) => list.id));
-    if (originalIds.size !== selectedListIds.size) return true;
+    if (changesSaved) return false;
+    // Compare against stored initial state, not live query data
+    if (initialListIds.size === 0 && selectedListIds.size === 0) return false;
+    if (initialListIds.size !== selectedListIds.size) return true;
     for (const id of selectedListIds) {
-      if (!originalIds.has(id)) return true;
+      if (!initialListIds.has(id)) return true;
     }
     return false;
-  }, [bookListsQuery.data, selectedListIds]);
+  }, [changesSaved, initialListIds, selectedListIds]);
+
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
   return (
     <>
-      <Dialog onOpenChange={onOpenChange} open={open}>
+      <FormDialog
+        hasChanges={hasChanges}
+        onOpenChange={onOpenChange}
+        open={open}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -267,7 +302,7 @@ export const AddToListDialog = ({
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </FormDialog>
 
       <CreateListDialog
         isPending={createListMutation.isPending}

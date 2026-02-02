@@ -1,5 +1,6 @@
+import equal from "fast-deep-equal";
 import { ArrowLeft, Loader2, Save, Shield, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -17,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibraries } from "@/hooks/queries/libraries";
 import {
   useDeactivateUser,
@@ -27,6 +29,8 @@ import {
 } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { sortRoles } from "@/utils/roles";
 
 const UserDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -55,29 +59,81 @@ const UserDetail = () => {
 
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
 
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [initialValues, setInitialValues] = useState<{
+    username: string;
+    email: string;
+    roleId: number | null;
+    allLibraryAccess: boolean;
+    selectedLibraries: number[];
+  } | null>(null);
+
   const canWrite = hasPermission("users", "write");
   const isSelf = currentUser?.id === Number(id);
 
+  // Reset initialization state when user id changes
   useEffect(() => {
-    if (user) {
-      setUsername(user.username);
-      setEmail(user.email ?? "");
-      setRoleId(user.role_id);
+    setIsInitialized(false);
+  }, [id]);
 
+  // Initialize form when user data loads
+  // Check user.id matches id to prevent race condition when navigating
+  // between users (stale cached data could initialize the form incorrectly)
+  useEffect(() => {
+    if (user && user.id === Number(id) && !isInitialized) {
+      const initialUsername = user.username;
+      const initialEmail = user.email ?? "";
+      const initialRoleId = user.role_id;
       const hasAllAccess = user.library_access?.some(
         (a) => a.library_id === null,
       );
-      setAllLibraryAccess(hasAllAccess ?? false);
-
-      if (!hasAllAccess) {
-        setSelectedLibraries(
-          user.library_access
+      const initialAllLibraryAccess = hasAllAccess ?? false;
+      const initialSelectedLibraries = hasAllAccess
+        ? []
+        : (user.library_access
             ?.filter((a) => a.library_id !== null)
-            .map((a) => a.library_id!) ?? [],
-        );
-      }
+            .map((a) => a.library_id!) ?? []);
+
+      setUsername(initialUsername);
+      setEmail(initialEmail);
+      setRoleId(initialRoleId);
+      setAllLibraryAccess(initialAllLibraryAccess);
+      setSelectedLibraries(initialSelectedLibraries);
+      setIsInitialized(true);
+
+      // Store initial values for comparison
+      setInitialValues({
+        username: initialUsername,
+        email: initialEmail,
+        roleId: initialRoleId,
+        allLibraryAccess: initialAllLibraryAccess,
+        selectedLibraries: initialSelectedLibraries,
+      });
     }
-  }, [user]);
+  }, [user, id, isInitialized]);
+
+  // Compute hasChanges by comparing current values to initial values
+  const hasChanges = useMemo(() => {
+    if (!initialValues || !isInitialized) return false;
+    return (
+      username !== initialValues.username ||
+      email !== initialValues.email ||
+      roleId !== initialValues.roleId ||
+      allLibraryAccess !== initialValues.allLibraryAccess ||
+      !equal(selectedLibraries, initialValues.selectedLibraries)
+    );
+  }, [
+    username,
+    email,
+    roleId,
+    allLibraryAccess,
+    selectedLibraries,
+    isInitialized,
+    initialValues,
+  ]);
+
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasChanges);
 
   const handleSave = async () => {
     if (!id) return;
@@ -94,6 +150,15 @@ const UserDetail = () => {
         },
       });
       toast.success("User updated successfully");
+
+      // Update initial values to match saved values so hasChanges becomes false
+      setInitialValues({
+        username,
+        email,
+        roleId,
+        allLibraryAccess,
+        selectedLibraries: allLibraryAccess ? [] : selectedLibraries,
+      });
     } catch (error) {
       let msg = "Failed to update user";
       if (error instanceof Error) {
@@ -183,7 +248,7 @@ const UserDetail = () => {
     );
   }
 
-  const roles = rolesData?.roles ?? [];
+  const roles = sortRoles(rolesData?.roles ?? []);
   const libraries = librariesData?.libraries ?? [];
 
   return (
@@ -471,6 +536,12 @@ const UserDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };

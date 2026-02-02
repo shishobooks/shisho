@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import {
   Check,
   ChevronsUpDown,
@@ -6,7 +7,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
@@ -50,6 +52,7 @@ import { usePeopleList } from "@/hooks/queries/people";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import {
   AuthorRoleColorist,
   AuthorRoleCoverArtist,
@@ -59,11 +62,13 @@ import {
   AuthorRolePenciller,
   AuthorRoleTranslator,
   AuthorRoleWriter,
+  DataSourceManual,
   FileTypeCBZ,
   type AuthorInput,
   type Book,
   type SeriesInput,
 } from "@/types";
+import { forTitle } from "@/utils/sortname";
 
 interface BookEditDialogProps {
   book: Book;
@@ -174,37 +179,109 @@ export function BookEditDialog({
     { enabled: open && !!book.library_id },
   );
 
-  // Reset form when dialog opens with new book data
+  // Store initial values for change detection
+  const [initialValues, setInitialValues] = useState<{
+    title: string;
+    sortTitle: string;
+    subtitle: string;
+    description: string;
+    authors: AuthorInput[];
+    series: SeriesEntry[];
+    genres: string[];
+    tags: string[];
+  } | null>(null);
+
+  // Track previous open state to detect open transitions.
+  // Start with false so that if dialog starts open, we detect it as "just opened".
+  const prevOpenRef = useRef(false);
+
+  // Initialize form only when dialog opens (closed->open transition)
+  // This preserves user edits when props change while dialog is open
   useEffect(() => {
-    if (open) {
-      setTitle(book.title);
-      setSortTitle(book.sort_title || "");
-      setSubtitle(book.subtitle || "");
-      setDescription(book.description || "");
-      setAuthors(
-        book.authors?.map((a) => ({
-          name: a.person?.name || "",
-          role: a.role,
-        })) || [],
-      );
-      setSeriesEntries(
-        book.book_series?.map((bs) => ({
-          name: bs.series?.name || "",
-          number: bs.series_number?.toString() || "",
-        })) || [],
-      );
-      setGenres(
-        book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) ||
-          [],
-      );
-      setGenreSearch("");
-      setTags(
-        book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
-      );
-      setTagSearch("");
-      setAuthorSearch("");
-    }
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+
+    // Only initialize when dialog just opened, not on every prop change
+    if (!justOpened) return;
+
+    const initialTitle = book.title;
+    // Semantic value for state: "" when autogenerate is ON, actual value when manual
+    const semanticSortTitle =
+      book.sort_title_source === DataSourceManual ? book.sort_title || "" : "";
+    // Effective value for comparison: what would be displayed (accounts for generated value)
+    const effectiveSortTitle = book.sort_title || forTitle(initialTitle);
+    const initialSubtitle = book.subtitle || "";
+    const initialDescription = book.description || "";
+    const initialAuthors =
+      book.authors?.map((a) => ({
+        name: a.person?.name || "",
+        role: a.role,
+      })) || [];
+    const initialSeries =
+      book.book_series?.map((bs) => ({
+        name: bs.series?.name || "",
+        number: bs.series_number?.toString() || "",
+      })) || [];
+    const initialGenres =
+      book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [];
+    const initialTags =
+      book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [];
+
+    setTitle(initialTitle);
+    // Use semantic value for state (what we send to server)
+    setSortTitle(semanticSortTitle);
+    setSubtitle(initialSubtitle);
+    setDescription(initialDescription);
+    setAuthors(initialAuthors);
+    setSeriesEntries(initialSeries);
+    setGenres(initialGenres);
+    setGenreSearch("");
+    setTags(initialTags);
+    setTagSearch("");
+    setAuthorSearch("");
+
+    // Store initial values for comparison (use effective sort title, not semantic)
+    setInitialValues({
+      title: initialTitle,
+      sortTitle: effectiveSortTitle,
+      subtitle: initialSubtitle,
+      description: initialDescription,
+      authors: initialAuthors,
+      series: initialSeries,
+      genres: [...initialGenres].sort(),
+      tags: [...initialTags].sort(),
+    });
   }, [open, book]);
+
+  // Compute hasChanges by comparing current values to initial values
+  const hasChanges = useMemo(() => {
+    if (!initialValues) return false;
+    // For sort title, compare effective values (what would be displayed), not semantic values.
+    // sortTitle="" means auto mode, so effective value is generated from title.
+    const effectiveSortTitle = sortTitle || forTitle(title);
+    return (
+      title !== initialValues.title ||
+      effectiveSortTitle !== initialValues.sortTitle ||
+      subtitle !== initialValues.subtitle ||
+      description !== initialValues.description ||
+      !equal(authors, initialValues.authors) ||
+      !equal(seriesEntries, initialValues.series) ||
+      !equal([...genres].sort(), initialValues.genres) ||
+      !equal([...tags].sort(), initialValues.tags)
+    );
+  }, [
+    title,
+    sortTitle,
+    subtitle,
+    description,
+    authors,
+    seriesEntries,
+    genres,
+    tags,
+    initialValues,
+  ]);
+
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
   const handleRemoveAuthor = (index: number) => {
     setAuthors(authors.filter((_, i) => i !== index));
@@ -284,7 +361,11 @@ export function BookEditDialog({
     if (title !== book.title) {
       payload.title = title;
     }
-    if (sortTitle !== (book.sort_title || "")) {
+    // Compare effective sort title against initialValues.sortTitle (snapshot)
+    // This is consistent with hasChanges computation and handles the case where
+    // title changes affect the auto-generated sort title even when sortTitle state is ""
+    const effectiveSortTitle = sortTitle || forTitle(title);
+    if (effectiveSortTitle !== initialValues?.sortTitle) {
       payload.sort_title = sortTitle;
     }
     if (subtitle !== (book.subtitle || "")) {
@@ -350,7 +431,19 @@ export function BookEditDialog({
       payload,
     });
 
-    onOpenChange(false);
+    // Reset initial values so hasChanges becomes false, then close via effect
+    // Use effective sort title (not semantic) to match hasChanges comparison
+    setInitialValues({
+      title,
+      sortTitle: sortTitle || forTitle(title),
+      subtitle,
+      description,
+      authors: [...authors],
+      series: [...seriesEntries],
+      genres: [...genres].sort(),
+      tags: [...tags].sort(),
+    });
+    requestClose();
   };
 
   // Filter out already-selected series (server handles the search filtering)
@@ -384,10 +477,14 @@ export function BookEditDialog({
     !authors.find((a) => a.name.toLowerCase() === authorSearch.toLowerCase());
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Book</DialogTitle>
+          <DialogDescription>
+            Update the book's title, authors, series, genres, tags, and other
+            metadata.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
@@ -851,6 +948,6 @@ export function BookEditDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

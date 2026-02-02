@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import {
   forwardRef,
   useCallback,
@@ -37,6 +38,7 @@ export interface FileChaptersTabHandle {
 export interface ChaptersActionState {
   isSaving: boolean;
   canSave: boolean;
+  hasChanges: boolean;
 }
 
 interface FileChaptersTabProps {
@@ -83,6 +85,9 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Track whether we've initialized edit mode for this editing session
     const editInitializedRef = useRef(false);
 
+    // Store initial chapters for change detection
+    const [initialChapters, setInitialChapters] = useState<ChapterInput[]>([]);
+
     // M4B audio playback state
     const audioRef = useRef<HTMLAudioElement>(null);
     const [playingChapterIndex, setPlayingChapterIndex] = useState<
@@ -98,11 +103,14 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Initialize editedChapters when entering edit mode
     useEffect(() => {
       if (isEditing && !editInitializedRef.current && chapters.length > 0) {
-        setEditedChapters(chaptersToInputArray(chapters));
+        const chaptersAsInput = chaptersToInputArray(chapters);
+        setEditedChapters(chaptersAsInput);
+        setInitialChapters(chaptersAsInput);
         editInitializedRef.current = true;
       }
       if (!isEditing) {
         editInitializedRef.current = false;
+        setInitialChapters([]);
         setValidationErrors(new Map()); // Clear validation errors when exiting edit mode
       }
       // chapters reference changes when chaptersQuery.data changes, which is what we want
@@ -283,6 +291,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     const handleAddChapterFromEmpty = () => {
       const newChapter = createNewChapter(file.file_type);
       setEditedChapters([newChapter]);
+      setInitialChapters([]); // Starting from empty, so initial is empty
       editInitializedRef.current = true;
       onEditingChange(true);
     };
@@ -300,6 +309,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       // Prepend the new chapter to existing chapters
       const existingChaptersAsInputs = chaptersToInputArray(chapters);
       setEditedChapters([newChapter, ...existingChaptersAsInputs]);
+      setInitialChapters(existingChaptersAsInputs); // Initial is the existing chapters
       editInitializedRef.current = true;
       onEditingChange(true);
     };
@@ -342,15 +352,23 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       [editedChapters],
     );
 
+    // Compute whether chapters have been modified
+    const hasChanges = useMemo(() => {
+      if (!isEditing) return false;
+      return !equal(editedChapters, initialChapters);
+    }, [isEditing, editedChapters, initialChapters]);
+
     // Report action state changes to parent
     useEffect(() => {
       onActionStateChange?.({
         isSaving: updateChaptersMutation.isPending,
         canSave: isEditing && !hasValidationErrors,
+        hasChanges,
       });
     }, [
       updateChaptersMutation.isPending,
       hasValidationErrors,
+      hasChanges,
       isEditing,
       onActionStateChange,
     ]);

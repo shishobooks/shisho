@@ -538,6 +538,240 @@ All editable metadata fields should be treated as first-class citizens. Don't ad
 
 When a user clears a metadata field, the cleared value should be saved (not revert to some default). The scanner will repopulate the field from the source file on the next scan if needed.
 
+## Unsaved Changes Protection (Required)
+
+**All forms that create or update data MUST have unsaved changes protection.** This prevents users from accidentally losing their work when navigating away or closing a dialog.
+
+### When Protection is Required
+
+- Create forms (CreateUser, CreateLibrary, Setup)
+- Edit forms (UserDetail, LibrarySettings, BookEditDialog)
+- Any dialog or page where users enter data and click "Save"
+
+### When Protection is NOT Required
+
+- Action dialogs that execute immediately (merge, move, delete confirmation)
+- Quick actions with no pending state (add to list popover)
+- View-only pages
+- Settings that apply immediately on change (theme selection)
+
+### Pattern 1: Dialog Forms (FormDialog)
+
+For forms inside dialogs, use `FormDialog` instead of `Dialog`:
+
+```tsx
+import { FormDialog } from "@/components/ui/form-dialog";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+
+const MyEditDialog = ({ open, onOpenChange, initialData }) => {
+  const [name, setName] = useState("");
+  const [initialValues, setInitialValues] = useState<{ name: string } | null>(null);
+
+  // Initialize form when dialog opens
+  useEffect(() => {
+    if (open && initialData) {
+      setName(initialData.name);
+      setInitialValues({ name: initialData.name });
+    }
+  }, [open, initialData]);
+
+  // Compute hasChanges by comparing current values to initial
+  const hasChanges = useMemo(() => {
+    if (!initialValues) return false;
+    return name !== initialValues.name;
+  }, [name, initialValues]);
+
+  // useFormDialogClose handles closing after save (waits for hasChanges to update)
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
+
+  const handleSave = async () => {
+    await mutation.mutateAsync({ name });
+    setInitialValues({ name }); // Update initial values so hasChanges becomes false
+    requestClose(); // Close after state updates
+  };
+
+  return (
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
+      <DialogContent>
+        {/* form fields */}
+        <Button onClick={handleSave}>Save</Button>
+      </DialogContent>
+    </FormDialog>
+  );
+};
+```
+
+**Key points:**
+- `FormDialog` wraps `Dialog` and intercepts close attempts when `hasChanges` is true
+- Shows `UnsavedChangesDialog` confirmation before discarding
+- Also adds `beforeunload` handler for browser close/refresh
+- `useFormDialogClose` ensures dialog closes only after `hasChanges` updates to false
+
+### Pattern 2: Full-Page Forms (useUnsavedChanges)
+
+For forms on full pages (not dialogs), use the `useUnsavedChanges` hook:
+
+```tsx
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
+
+const MySettingsPage = () => {
+  const [name, setName] = useState("");
+  const [initialValues, setInitialValues] = useState<{ name: string } | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Reset when navigating to different entity
+  useEffect(() => {
+    setIsInitialized(false);
+  }, [entityId]);
+
+  // Initialize form when data loads
+  useEffect(() => {
+    if (query.isSuccess && query.data && !isInitialized) {
+      setName(query.data.name);
+      setInitialValues({ name: query.data.name });
+      setIsInitialized(true);
+    }
+  }, [query.isSuccess, query.data, isInitialized]);
+
+  // Compute hasChanges
+  const hasChanges = useMemo(() => {
+    if (!initialValues || !isInitialized) return false;
+    return name !== initialValues.name;
+  }, [name, initialValues, isInitialized]);
+
+  // Hook provides blocker dialog state and handlers
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasChanges);
+
+  const handleSave = async () => {
+    await mutation.mutateAsync({ name });
+    setInitialValues({ name }); // hasChanges becomes false
+  };
+
+  return (
+    <>
+      {/* form content */}
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
+    </>
+  );
+};
+```
+
+**Key points:**
+- `useUnsavedChanges` blocks SPA navigation via `react-router`'s `useBlocker`
+- Also adds `beforeunload` handler for browser close/refresh
+- Must render `UnsavedChangesDialog` and wire up the handlers
+
+### Pattern 3: Child Components with Unsaved State
+
+When a child component has its own save button and unsaved state (like LibraryPluginsTab inside LibrarySettings), expose the changes via callback:
+
+**Child component:**
+```tsx
+interface Props {
+  onHasChangesChange?: (hasChanges: boolean) => void;
+}
+
+const ChildEditor = ({ onHasChangesChange }) => {
+  const [localData, setLocalData] = useState(null);
+
+  const hasChanges = localData !== null && /* comparison logic */;
+
+  useEffect(() => {
+    onHasChangesChange?.(hasChanges);
+  }, [hasChanges, onHasChangesChange]);
+
+  // ... rest of component
+};
+```
+
+**Parent component:**
+```tsx
+const ParentPage = () => {
+  const [childHasChanges, setChildHasChanges] = useState(false);
+
+  // Combine parent form changes with child changes
+  const hasChanges = formHasChanges || childHasChanges;
+
+  const { showBlockerDialog, ... } = useUnsavedChanges(hasChanges);
+
+  return (
+    <>
+      <ChildEditor onHasChangesChange={setChildHasChanges} />
+      {/* ... */}
+    </>
+  );
+};
+```
+
+### Pattern 4: Tab Switching with Unsaved Changes
+
+When a page has tabs and one tab has inline editing, intercept tab changes:
+
+```tsx
+const [pendingTabChange, setPendingTabChange] = useState<string | null>(null);
+
+const handleTabChange = (value: string) => {
+  if (hasChanges) {
+    setPendingTabChange(value);
+    return;
+  }
+  navigateToTab(value);
+};
+
+const handleConfirmTabChange = () => {
+  if (pendingTabChange) {
+    setIsEditing(false);
+    navigateToTab(pendingTabChange);
+    setPendingTabChange(null);
+  }
+};
+
+return (
+  <>
+    <Tabs onValueChange={handleTabChange} value={activeTab}>
+      {/* ... */}
+    </Tabs>
+    <UnsavedChangesDialog
+      onDiscard={handleConfirmTabChange}
+      onStay={() => setPendingTabChange(null)}
+      open={pendingTabChange !== null}
+    />
+  </>
+);
+```
+
+### Comparing Values with Arrays/Objects
+
+For complex state with arrays or objects, use `fast-deep-equal`:
+
+```tsx
+import equal from "fast-deep-equal";
+
+const hasChanges = useMemo(() => {
+  if (!initialValues) return false;
+  return (
+    name !== initialValues.name ||
+    !equal(selectedItems, initialValues.selectedItems)
+  );
+}, [name, selectedItems, initialValues]);
+```
+
+### Checklist for New Forms
+
+- [ ] Form uses `FormDialog` (dialogs) or `useUnsavedChanges` (pages)
+- [ ] `initialValues` state stores values when form loads
+- [ ] `hasChanges` computed by comparing current state to initial values
+- [ ] After successful save, update `initialValues` so `hasChanges` becomes false
+- [ ] `UnsavedChangesDialog` rendered with proper handlers
+- [ ] Child components with own save buttons expose `onHasChangesChange`
+- [ ] Tab switching intercepted if tabs have inline editing
+
 ## UI/UX Consistency Requirements
 
 ### List Page Patterns
@@ -738,6 +972,10 @@ The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complet
 | API client | `app/libraries/api.ts` |
 | Query hooks | `app/hooks/queries/` |
 | Page title hook | `app/hooks/usePageTitle.ts` |
+| Unsaved changes hook | `app/hooks/useUnsavedChanges.ts` |
+| Form dialog close hook | `app/hooks/useFormDialogClose.ts` |
+| FormDialog component | `app/components/ui/form-dialog.tsx` |
+| UnsavedChangesDialog | `app/components/ui/unsaved-changes-dialog.tsx` |
 | Generated types | `app/types/generated/` |
 | Components | `app/components/` |
 | Pages | `app/components/pages/` |

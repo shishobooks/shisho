@@ -12,9 +12,11 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useBook } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { FileTypeCBZ, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 
@@ -36,13 +38,36 @@ const FileDetail = () => {
     : "details";
 
   // Navigate to new tab URL
-  const handleTabChange = (value: string) => {
+  const navigateToTab = (value: string) => {
     const basePath = `/libraries/${libraryId}/books/${bookId}/files/${fileId}`;
     if (value === "details") {
       navigate(basePath);
     } else {
       navigate(`${basePath}/${value}`);
     }
+  };
+
+  // Handle tab change with unsaved changes check
+  const handleTabChange = (value: string) => {
+    if (chaptersActionState.hasChanges) {
+      setPendingTabChange(value);
+      return;
+    }
+    navigateToTab(value);
+  };
+
+  // Handle confirming tab change (discard changes)
+  const handleConfirmTabChange = () => {
+    if (pendingTabChange) {
+      setIsEditingChapters(false);
+      navigateToTab(pendingTabChange);
+      setPendingTabChange(null);
+    }
+  };
+
+  // Handle canceling tab change
+  const handleCancelTabChange = () => {
+    setPendingTabChange(null);
   };
 
   // Edit states for each tab
@@ -52,7 +77,18 @@ const FileDetail = () => {
   // Chapters tab ref and action state
   const chaptersRef = useRef<FileChaptersTabHandle>(null);
   const [chaptersActionState, setChaptersActionState] =
-    useState<ChaptersActionState>({ isSaving: false, canSave: false });
+    useState<ChaptersActionState>({
+      isSaving: false,
+      canSave: false,
+      hasChanges: false,
+    });
+
+  // Pending tab change (when user tries to switch tabs with unsaved changes)
+  const [pendingTabChange, setPendingTabChange] = useState<string | null>(null);
+
+  // Unsaved changes protection for SPA navigation
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(chaptersActionState.hasChanges);
 
   const bookQuery = useBook(bookId);
   const libraryQuery = useLibrary(libraryId);
@@ -252,6 +288,20 @@ const FileDetail = () => {
           open={!!editingFile}
         />
       )}
+
+      {/* Unsaved changes dialog for tab switching */}
+      <UnsavedChangesDialog
+        onDiscard={handleConfirmTabChange}
+        onStay={handleCancelTabChange}
+        open={pendingTabChange !== null}
+      />
+
+      {/* Unsaved changes dialog for SPA navigation */}
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </LibraryLayout>
   );
 };

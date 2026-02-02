@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
@@ -8,8 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { API } from "@/libraries/api";
 
 interface SetupResponse {
@@ -21,17 +24,43 @@ interface SetupResponse {
   permissions: string[];
 }
 
+// Initial values for the setup form - stored once to compare against
+const INITIAL_VALUES = {
+  username: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+};
+
 const Setup = () => {
   usePageTitle("Setup");
 
-  const navigate = useNavigate();
   const { needsSetup, isLoading: authLoading, setAuthUser } = useAuth();
 
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [username, setUsername] = useState(INITIAL_VALUES.username);
+  const [email, setEmail] = useState(INITIAL_VALUES.email);
+  const [password, setPassword] = useState(INITIAL_VALUES.password);
+  const [confirmPassword, setConfirmPassword] = useState(
+    INITIAL_VALUES.confirmPassword,
+  );
   const [isLoading, setIsLoading] = useState(false);
+  const [changesSaved, setChangesSaved] = useState(false);
+
+  // Track whether user has unsaved changes by comparing against initial values
+  const hasUnsavedChanges = useMemo(() => {
+    if (changesSaved) return false;
+    return (
+      username.trim() !== INITIAL_VALUES.username ||
+      email.trim() !== INITIAL_VALUES.email ||
+      password !== INITIAL_VALUES.password ||
+      confirmPassword !== INITIAL_VALUES.confirmPassword
+    );
+  }, [username, email, password, confirmPassword, changesSaved]);
+
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasUnsavedChanges);
+
+  const { requestNavigate } = useNavigateAfterSave(hasUnsavedChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +100,8 @@ const Setup = () => {
 
       toast.success("Admin account created successfully!");
       setAuthUser(userData);
-      navigate("/");
+      setChangesSaved(true);
+      requestNavigate("/");
     } catch (error) {
       let msg = "Setup failed. Please try again.";
       if (error instanceof Error) {
@@ -178,6 +208,12 @@ const Setup = () => {
           </Button>
         </form>
       </div>
+
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };

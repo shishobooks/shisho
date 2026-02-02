@@ -1,15 +1,17 @@
+import equal from "fast-deep-equal";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +22,7 @@ import {
   useSavePluginFieldSettings,
   type ConfigField,
 } from "@/hooks/queries/plugins";
+import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 
 interface PluginConfigDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -71,28 +74,70 @@ export const PluginConfigDialog = ({
     {},
   );
 
-  // Initialize form values from fetched data
-  useEffect(() => {
-    if (data) {
-      const initial: Record<string, string> = {};
-      for (const [key, field] of Object.entries(data.schema)) {
-        const value = data.values[key];
-        if (value !== undefined && value !== null) {
-          initial[key] = String(value);
-        } else if (field.default !== undefined && field.default !== null) {
-          initial[key] = String(field.default);
-        } else {
-          initial[key] = field.type === "boolean" ? "false" : "";
-        }
-      }
-      setFormValues(initial);
+  // Store initial values for change detection
+  const [initialValues, setInitialValues] = useState<{
+    formValues: Record<string, string>;
+    fieldSettings: Record<string, boolean>;
+  } | null>(null);
 
-      // Initialize field settings
-      if (data.fieldSettings) {
-        setFieldSettings(data.fieldSettings);
+  // Track previous open state to detect open transitions.
+  // Start with false so that if dialog starts open, we detect it as "just opened".
+  const prevOpenRef = useRef(false);
+
+  // Track whether we've initialized for this dialog session.
+  // This allows data to load after open transition (async fetch).
+  const initializedRef = useRef(false);
+
+  // Initialize form values from fetched data, only when dialog opens
+  // This preserves user edits when data is refetched while dialog is open
+  useEffect(() => {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+
+    // Reset initialization flag when dialog opens
+    if (justOpened) {
+      initializedRef.current = false;
+    }
+
+    // Only initialize once per dialog session, and only when data is available
+    if (!open || !data || initializedRef.current) return;
+
+    initializedRef.current = true;
+
+    const initial: Record<string, string> = {};
+    for (const [key, field] of Object.entries(data.schema)) {
+      const value = data.values[key];
+      if (value !== undefined && value !== null) {
+        initial[key] = String(value);
+      } else if (field.default !== undefined && field.default !== null) {
+        initial[key] = String(field.default);
+      } else {
+        initial[key] = field.type === "boolean" ? "false" : "";
       }
     }
-  }, [data]);
+    setFormValues(initial);
+
+    // Initialize field settings
+    const initialFieldSettings = data.fieldSettings ?? {};
+    setFieldSettings(initialFieldSettings);
+
+    // Store initial values for comparison
+    setInitialValues({
+      formValues: { ...initial },
+      fieldSettings: { ...initialFieldSettings },
+    });
+  }, [open, data]);
+
+  // Compute hasChanges by comparing current values to initial values
+  const hasChanges = useMemo(() => {
+    if (!initialValues) return false;
+    return (
+      !equal(formValues, initialValues.formValues) ||
+      !equal(fieldSettings, initialValues.fieldSettings)
+    );
+  }, [formValues, fieldSettings, initialValues]);
+
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
   const handleFieldToggle = (field: string, enabled: boolean) => {
     setFieldSettings((prev) => ({ ...prev, [field]: enabled }));
@@ -139,7 +184,12 @@ export const PluginConfigDialog = ({
       {
         onSuccess: () => {
           toast.success("Plugin configuration saved.");
-          onOpenChange(false);
+          // Reset initial values so hasChanges becomes false, then close via effect
+          setInitialValues({
+            formValues: { ...formValues },
+            fieldSettings: { ...fieldSettings },
+          });
+          requestClose();
         },
         onError: (err) => {
           toast.error(`Failed to save configuration: ${err.message}`);
@@ -223,10 +273,14 @@ export const PluginConfigDialog = ({
   };
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
       <DialogContent className="overflow-x-hidden">
         <DialogHeader className="pr-8">
           <DialogTitle>Configure {pluginName}</DialogTitle>
+          <DialogDescription>
+            Adjust plugin settings and configure which metadata fields it can
+            modify.
+          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
@@ -295,6 +349,6 @@ export const PluginConfigDialog = ({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 };
