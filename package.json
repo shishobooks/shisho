@@ -1,6 +1,6 @@
 {
   "name": "shisho",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Your all-in-one solution for ebooks, audiobooks, and comics",
   "type": "module",
   "main": "index.js",

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-02-01
+
+### Features
+- Add create new list option to select mode toolbar
+- Add unsaved changes warning to forms and dialogs
+- Parallelize library scan with worker pool and entity caching
+- Add ScrollRestoration to scroll to top on navigation
+- Add URL utilities and wildcard domain matching to plugin system
+- Use replace navigation after merge to avoid 404 on back
+- Add numeric HTML entity decoding to description sanitizer
+- Add job logging to scan worker functions
+
+
 ## [0.0.10] - 2026-01-27
 
 ### Features
