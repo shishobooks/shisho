@@ -16,11 +16,12 @@ type GlobalSearchResponse struct {
 
 // BookSearchResult represents a book in search results.
 type BookSearchResult struct {
-	ID        int     `json:"id"`
-	Title     string  `json:"title"`
-	Subtitle  *string `json:"subtitle"`
-	Authors   string  `json:"authors"` // Comma-separated author names
-	LibraryID int     `json:"library_id"`
+	ID        int      `json:"id"`
+	Title     string   `json:"title"`
+	Subtitle  *string  `json:"subtitle"`
+	Authors   string   `json:"authors"`    // Comma-separated author names
+	FileTypes []string `json:"file_types"` // Unique file types for this book (e.g., ["epub", "m4b"])
+	LibraryID int      `json:"library_id"`
 }
 
 // SeriesSearchResult represents a series in search results.

@@ -15,17 +15,33 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
-const getSearchThumbnailClasses = (coverAspectRatio: string): string => {
+const getSearchThumbnailClasses = (variant: "book" | "audiobook"): string => {
   // For search thumbnails, we use a fixed width and vary the aspect ratio
+  return variant === "audiobook" ? "w-10 aspect-square" : "w-8 aspect-[2/3]";
+};
+
+// Determines which placeholder variant to show based on file types and library preference.
+// This mirrors the backend's selectCoverFile priority logic.
+const getPlaceholderVariant = (
+  fileTypes: string[] | undefined,
+  coverAspectRatio: string,
+): "book" | "audiobook" => {
+  if (!fileTypes || fileTypes.length === 0) return "book";
+
+  const hasBookFiles = fileTypes.some((ft) => ft === "epub" || ft === "cbz");
+  const hasAudiobookFiles = fileTypes.some((ft) => ft === "m4b");
+
   switch (coverAspectRatio) {
     case "audiobook":
     case "audiobook_fallback_book":
-      return "w-10 aspect-square";
-    case "book":
-    case "book_fallback_audiobook":
-    default:
-      return "w-8 aspect-[2/3]";
+      if (hasAudiobookFiles) return "audiobook";
+      if (hasBookFiles) return "book";
+      break;
+    default: // "book", "book_fallback_audiobook"
+      if (hasBookFiles) return "book";
+      if (hasAudiobookFiles) return "audiobook";
   }
+  return "book";
 };
 
 interface SearchResultCoverProps {
@@ -103,8 +119,13 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
 
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
-  const thumbnailClasses = getSearchThumbnailClasses(coverAspectRatio);
-  const isAudiobook = coverAspectRatio.startsWith("audiobook");
+  // Library-level variant used for series (which don't have file types)
+  const libraryVariant: "book" | "audiobook" = coverAspectRatio.startsWith(
+    "audiobook",
+  )
+    ? "audiobook"
+    : "book";
+  const seriesThumbnailClasses = getSearchThumbnailClasses(libraryVariant);
 
   const searchQuery = useGlobalSearch(
     {
@@ -287,45 +308,50 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   );
 
   const renderBookResult = useCallback(
-    (book: BookSearchResult, index: number) => (
-      <Link
-        className={cn(
-          "flex items-center gap-3 px-3 py-2 rounded-md",
-          selectedIndex === index
-            ? "bg-neutral-100 dark:bg-neutral-800"
-            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
-        )}
-        key={`book-${book.id}`}
-        onClick={handleResultClick}
-        ref={(el) => {
-          resultRefs.current[index] = el;
-        }}
-        title={book.authors ? `${book.title}\nby ${book.authors}` : book.title}
-        to={`/libraries/${libraryId}/books/${book.id}`}
-      >
-        <SearchResultCover
-          cacheBuster={searchQuery.dataUpdatedAt}
-          id={book.id}
-          thumbnailClasses={thumbnailClasses}
-          type="book"
-          variant={isAudiobook ? "audiobook" : "book"}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="font-medium truncate">{book.title}</div>
-          {book.authors && (
-            <div className="text-sm text-muted-foreground truncate">
-              {book.authors}
-            </div>
+    (book: BookSearchResult, index: number) => {
+      const variant = getPlaceholderVariant(book.file_types, coverAspectRatio);
+      const thumbnailClasses = getSearchThumbnailClasses(variant);
+      return (
+        <Link
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-md",
+            selectedIndex === index
+              ? "bg-neutral-100 dark:bg-neutral-800"
+              : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
           )}
-        </div>
-      </Link>
-    ),
+          key={`book-${book.id}`}
+          onClick={handleResultClick}
+          ref={(el) => {
+            resultRefs.current[index] = el;
+          }}
+          title={
+            book.authors ? `${book.title}\nby ${book.authors}` : book.title
+          }
+          to={`/libraries/${libraryId}/books/${book.id}`}
+        >
+          <SearchResultCover
+            cacheBuster={searchQuery.dataUpdatedAt}
+            id={book.id}
+            thumbnailClasses={thumbnailClasses}
+            type="book"
+            variant={variant}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium truncate">{book.title}</div>
+            {book.authors && (
+              <div className="text-sm text-muted-foreground truncate">
+                {book.authors}
+              </div>
+            )}
+          </div>
+        </Link>
+      );
+    },
     [
       handleResultClick,
       libraryId,
       searchQuery.dataUpdatedAt,
-      thumbnailClasses,
-      isAudiobook,
+      coverAspectRatio,
       selectedIndex,
     ],
   );
@@ -350,9 +376,9 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         <SearchResultCover
           cacheBuster={searchQuery.dataUpdatedAt}
           id={series.id}
-          thumbnailClasses={thumbnailClasses}
+          thumbnailClasses={seriesThumbnailClasses}
           type="series"
-          variant={isAudiobook ? "audiobook" : "book"}
+          variant={libraryVariant}
         />
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">{series.name}</div>
@@ -366,8 +392,8 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       handleResultClick,
       libraryId,
       searchQuery.dataUpdatedAt,
-      thumbnailClasses,
-      isAudiobook,
+      seriesThumbnailClasses,
+      libraryVariant,
       selectedIndex,
     ],
   );

@@ -11,6 +11,7 @@ export interface BookSearchResult {
   title: string;
   subtitle: string | null;
   authors: string;
+  file_types: string[];
   library_id: number;
 }
 

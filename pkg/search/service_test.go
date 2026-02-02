@@ -31,6 +31,122 @@ func setupTestDB(t *testing.T) *bun.DB {
 	return db
 }
 
+func TestGlobalSearch_ReturnsFileTypes(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a library
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Filepath:        "/test/audiobook",
+		Title:           "My Audiobook",
+		TitleSource:     "file",
+		SortTitle:       "My Audiobook",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create an M4B file (audiobook)
+	m4bFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/audiobook/test.m4b",
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Index the book in FTS
+	svc := NewService(db)
+	book.Files = []*models.File{m4bFile}
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	// Search for the book
+	results, err := svc.GlobalSearch(ctx, library.ID, "Audiobook")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find one book")
+	require.Equal(t, "My Audiobook", results.Books[0].Title)
+	require.Equal(t, []string{"m4b"}, results.Books[0].FileTypes, "Should include file types")
+}
+
+func TestGlobalSearch_ReturnsMultipleFileTypes(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a library
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a book with both EPUB and M4B files
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Filepath:        "/test/multiformat",
+		Title:           "Multi Format Book",
+		TitleSource:     "file",
+		SortTitle:       "Multi Format Book",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create EPUB file
+	epubFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/multiformat/test.epub",
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(epubFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create M4B file
+	m4bFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/multiformat/test.m4b",
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 2000,
+	}
+	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Index the book in FTS
+	svc := NewService(db)
+	book.Files = []*models.File{epubFile, m4bFile}
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	// Search for the book
+	results, err := svc.GlobalSearch(ctx, library.ID, "Multi")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find one book")
+	require.Equal(t, "Multi Format Book", results.Books[0].Title)
+	require.ElementsMatch(t, []string{"epub", "m4b"}, results.Books[0].FileTypes, "Should include all file types")
+}
+
 func TestSearchBooksByIdentifier_ReturnsAuthors(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

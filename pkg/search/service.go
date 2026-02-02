@@ -168,7 +168,54 @@ func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, li
 		}
 	}
 
+	// Populate file types for all results
+	if err := svc.populateBookFileTypes(ctx, results); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	return results, nil
+}
+
+// populateBookFileTypes fetches and populates file types for a slice of book search results.
+func (svc *Service) populateBookFileTypes(ctx context.Context, results []BookSearchResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	// Collect book IDs
+	bookIDs := make([]int, len(results))
+	for i, r := range results {
+		bookIDs[i] = r.ID
+	}
+
+	// Query file types for all books in one query
+	type bookFileType struct {
+		BookID   int    `bun:"book_id"`
+		FileType string `bun:"file_type"`
+	}
+	var fileTypes []bookFileType
+	err := svc.db.NewSelect().
+		TableExpr("files").
+		Column("book_id", "file_type").
+		Where("book_id IN (?)", bun.In(bookIDs)).
+		GroupExpr("book_id, file_type").
+		Scan(ctx, &fileTypes)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Build a map of book_id -> []file_type
+	fileTypeMap := make(map[int][]string)
+	for _, ft := range fileTypes {
+		fileTypeMap[ft.BookID] = append(fileTypeMap[ft.BookID], ft.FileType)
+	}
+
+	// Populate file types in results
+	for i := range results {
+		results[i].FileTypes = fileTypeMap[results[i].ID]
+	}
+
+	return nil
 }
 
 func (svc *Service) countBooksInternal(ctx context.Context, ftsQuery string, libraryID int, fileTypes []string) (int, error) {
