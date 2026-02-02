@@ -245,7 +245,7 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 	q := svc.db.NewSelect().
 		TableExpr("file_identifiers fi").
 		ColumnExpr("DISTINCT b.id, b.library_id, b.title, b.subtitle").
-		ColumnExpr("(SELECT GROUP_CONCAT(p.name, ', ') FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
+		ColumnExpr("(SELECT GROUP_CONCAT(DISTINCT p.name) FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
 		Join("JOIN files f ON f.id = fi.file_id").
 		Join("JOIN books b ON b.id = f.book_id").
 		Where("fi.value = ?", query).
@@ -334,22 +334,26 @@ func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 		return errors.WithStack(err)
 	}
 
-	// Collect author names
+	// Collect author names (deduplicated - same person can have multiple roles)
+	seenAuthors := make(map[string]bool)
 	var authorNames []string
 	for _, author := range book.Authors {
-		if author.Person != nil {
+		if author.Person != nil && !seenAuthors[author.Person.Name] {
 			authorNames = append(authorNames, author.Person.Name)
+			seenAuthors[author.Person.Name] = true
 		}
 	}
 
-	// Collect file names and narrators
+	// Collect file names and narrators (deduplicated)
 	var filenames []string
+	seenNarrators := make(map[string]bool)
 	var narratorNames []string
 	for _, file := range book.Files {
 		filenames = append(filenames, file.Filepath)
 		for _, narrator := range file.Narrators {
-			if narrator.Person != nil {
+			if narrator.Person != nil && !seenNarrators[narrator.Person.Name] {
 				narratorNames = append(narratorNames, narrator.Person.Name)
+				seenNarrators[narrator.Person.Name] = true
 			}
 		}
 	}
@@ -413,7 +417,7 @@ func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) erro
 	err = svc.db.NewSelect().
 		TableExpr("books b").
 		ColumnExpr("b.title").
-		ColumnExpr("(SELECT GROUP_CONCAT(p.name, ' ') FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id) AS authors").
+		ColumnExpr("(SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id)) AS authors").
 		Join("JOIN book_series bs ON bs.book_id = b.id").
 		Where("bs.series_id = ?", series.ID).
 		Scan(ctx, &books)
@@ -564,9 +568,9 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 			b.title,
 			b.filepath,
 			COALESCE(b.subtitle, ''),
-			COALESCE((SELECT GROUP_CONCAT(p.name, ' ') FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id)), ''),
 			COALESCE((SELECT GROUP_CONCAT(f.filepath, ' ') FROM files f WHERE f.book_id = b.id), ''),
-			COALESCE((SELECT GROUP_CONCAT(p.name, ' ') FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id)), ''),
 			COALESCE((SELECT GROUP_CONCAT(s.name, ' ') FROM book_series bs JOIN series s ON bs.series_id = s.id WHERE bs.book_id = b.id AND s.deleted_at IS NULL), '')
 		FROM books b
 	`)
@@ -583,7 +587,7 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 			s.name,
 			COALESCE(s.description, ''),
 			COALESCE((SELECT GROUP_CONCAT(b.title, ' ') FROM book_series bs JOIN books b ON bs.book_id = b.id WHERE bs.series_id = s.id), ''),
-			COALESCE((SELECT GROUP_CONCAT(p.name, ' ') FROM book_series bs JOIN books b ON bs.book_id = b.id JOIN authors a ON a.book_id = b.id JOIN persons p ON a.person_id = p.id WHERE bs.series_id = s.id), '')
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM book_series bs JOIN books b ON bs.book_id = b.id JOIN authors a ON a.book_id = b.id JOIN persons p ON a.person_id = p.id WHERE bs.series_id = s.id)), '')
 		FROM series s
 		WHERE s.deleted_at IS NULL
 	`)

@@ -222,3 +222,257 @@ func TestSearchBooksByIdentifier_ReturnsAuthors(t *testing.T) {
 	require.Equal(t, "Test Book", results[0].Title)
 	require.Equal(t, "Jane Doe", results[0].Authors, "Should include author name")
 }
+
+func TestGlobalSearch_DeduplicatesAuthorNames(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a library
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a person who has multiple roles on the same book
+	person := &models.Person{
+		LibraryID:      library.ID,
+		Name:           "Stan Lee",
+		SortName:       "Lee, Stan",
+		SortNameSource: "file",
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Filepath:        "/test/comic",
+		Title:           "Amazing Spider-Man",
+		TitleSource:     "file",
+		SortTitle:       "Amazing Spider-Man",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create author associations with different roles for the same person
+	// This can happen with CBZ files where someone is both writer and editor
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 0).
+		Value("role", "?", models.AuthorRoleWriter).
+		Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 1).
+		Value("role", "?", models.AuthorRoleEditor).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a file
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/comic/test.cbz",
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Index the book in FTS
+	svc := NewService(db)
+	writerRole := models.AuthorRoleWriter
+	editorRole := models.AuthorRoleEditor
+	book.Authors = []*models.Author{
+		{PersonID: person.ID, Person: person, SortOrder: 0, Role: &writerRole},
+		{PersonID: person.ID, Person: person, SortOrder: 1, Role: &editorRole},
+	}
+	book.Files = []*models.File{file}
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	// Search for the book
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spider")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find one book")
+
+	// The author name should appear only once, not duplicated
+	require.Equal(t, "Stan Lee", results.Books[0].Authors, "Author name should not be duplicated")
+}
+
+func TestSearchBooksByIdentifier_DeduplicatesAuthorNames(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a library
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a person who has multiple roles on the same book
+	person := &models.Person{
+		LibraryID:      library.ID,
+		Name:           "Stan Lee",
+		SortName:       "Lee, Stan",
+		SortNameSource: "file",
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Filepath:        "/test/comic",
+		Title:           "Amazing Spider-Man",
+		TitleSource:     "file",
+		SortTitle:       "Amazing Spider-Man",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create author associations with different roles for the same person
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 0).
+		Value("role", "?", models.AuthorRoleWriter).
+		Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 1).
+		Value("role", "?", models.AuthorRoleEditor).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a file with an identifier
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/comic/test.cbz",
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a file identifier (e.g., ISBN)
+	identifier := &models.FileIdentifier{
+		FileID: file.ID,
+		Type:   "isbn",
+		Value:  "978-0-13-468599-9",
+		Source: "file",
+	}
+	_, err = db.NewInsert().Model(identifier).Exec(ctx)
+	require.NoError(t, err)
+
+	// Search by identifier
+	svc := NewService(db)
+	results, err := svc.searchBooksByIdentifier(ctx, "978-0-13-468599-9", library.ID, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Should find one book by identifier")
+
+	// The author name should appear only once, not duplicated
+	require.Equal(t, "Stan Lee", results[0].Authors, "Author name should not be duplicated")
+}
+
+func TestRebuildAllIndexes_DeduplicatesAuthorNames(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a library
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a person who has multiple roles on the same book
+	person := &models.Person{
+		LibraryID:      library.ID,
+		Name:           "Stan Lee",
+		SortName:       "Lee, Stan",
+		SortNameSource: "file",
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Filepath:        "/test/comic",
+		Title:           "Amazing Spider-Man",
+		TitleSource:     "file",
+		SortTitle:       "Amazing Spider-Man",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create author associations with different roles for the same person
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 0).
+		Value("role", "?", models.AuthorRoleWriter).
+		Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().
+		Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 1).
+		Value("role", "?", models.AuthorRoleEditor).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a file
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/test/comic/test.cbz",
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Rebuild all indexes (this is called after a scan)
+	svc := NewService(db)
+	err = svc.RebuildAllIndexes(ctx)
+	require.NoError(t, err, "RebuildAllIndexes should not fail")
+
+	// Search for the book
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spider")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find one book")
+
+	// The author name should appear only once, not duplicated
+	require.Equal(t, "Stan Lee", results.Books[0].Authors, "Author name should not be duplicated")
+}
