@@ -79,6 +79,12 @@ func New(cfg *config.Config) (*bun.DB, error) {
 	retryConnector := newRetryConnector(connector, cfg.DatabaseMaxRetries)
 	sqldb = sql.OpenDB(retryConnector)
 
+	// Limit to a single connection for SQLite.
+	// SQLite only supports one writer at a time, so multiple connections
+	// just compete for the write lock. A single connection serializes
+	// all operations at the Go level, eliminating SQLITE_BUSY errors.
+	sqldb.SetMaxOpenConns(1)
+
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
 	// print out all queries in debug mode
@@ -113,6 +119,27 @@ func New(cfg *config.Config) (*bun.DB, error) {
 	_, err = db.Exec("PRAGMA busy_timeout=?", busyTimeoutMs)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to set busy_timeout")
+	}
+
+	// synchronous=NORMAL is faster than FULL and still safe with WAL mode.
+	// It only risks data loss on OS crash, not application crash.
+	_, err = db.Exec("PRAGMA synchronous=NORMAL")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to set synchronous mode")
+	}
+
+	// Increase page cache to 64MB (negative value = KB).
+	// Improves read performance for repeated queries.
+	_, err = db.Exec("PRAGMA cache_size=-65536")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to set cache_size")
+	}
+
+	// Store temporary tables in memory instead of disk.
+	// Faster for complex queries with temp results.
+	_, err = db.Exec("PRAGMA temp_store=MEMORY")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to set temp_store")
 	}
 
 	return db, nil
