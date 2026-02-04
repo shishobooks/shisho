@@ -6,7 +6,104 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
 
-**ALWAYS** use the `AskUserQuestion` tool when asking the user questions, in any context. If you have too many questions for the tool, split them up into multiple calls.
+**Record learnings about the codebase.** When you discover something important about how the codebase works (through exploration or discussion with the user), add it to the appropriate location:
+- **Domain-specific** (patterns, gotchas, conventions for a specific area) → Add to the relevant skill in `.claude/skills/`
+- **Project-wide** (general conventions, critical gotchas, workflow rules) → Add to this file (CLAUDE.md)
+
+Examples of things to record: discovered gotchas, naming conventions, architectural decisions, common mistakes, integration patterns, edge cases.
+
+## Skills Routing (MANDATORY)
+
+**You MUST invoke the relevant skill BEFORE writing or modifying code in these domains.** Do not skip skills because you "know the patterns" - skills contain project-specific conventions that differ from general knowledge.
+
+### Domain Skills
+
+| Skill | Invoke When | File Patterns / Keywords |
+|-------|-------------|--------------------------|
+| `frontend` | Any React/TypeScript/UI work | `app/**/*.tsx`, `app/**/*.ts`, components, hooks, queries, UI, styling, Tanstack Query |
+| `backend` | Any Go backend/API work | `pkg/**/*.go`, `cmd/**/*.go`, handlers, services, models, workers, migrations, Echo, Bun ORM |
+| `plugins` | Any plugin system work | `pkg/plugins/**`, hooks, runtime, host APIs, manifests, Goja, plugin lifecycle |
+| `e2e-testing` | Writing or debugging E2E tests | `e2e/**/*.ts`, Playwright, test independence, test-only endpoints |
+
+### File Format Skills
+
+| Skill | Invoke When | File Patterns / Keywords |
+|-------|-------------|--------------------------|
+| `epub` | EPUB parsing, generation, metadata | `pkg/epub/**`, OPF, Dublin Core, Calibre meta, `content.opf` |
+| `cbz` | CBZ/comic parsing, generation | `pkg/cbz/**`, ComicInfo.xml, comic metadata, creator roles |
+| `m4b` | M4B/audiobook parsing, generation | `pkg/mp4/**`, iTunes atoms, chapters, narrators, MP4 metadata |
+| `kepub` | KePub/Kobo conversion | `pkg/kepub/**`, koboSpan, fixed-layout, Kobo devices |
+
+### Utility Skills
+
+| Skill | Invoke When |
+|-------|-------------|
+| `favicon` | Creating or updating favicon, app icons, PWA icons |
+| `splash` | Creating or updating the README splash image |
+| `squash-merge-worktree` | Done with worktree work, ready to merge back to master |
+| `resolving-merge-conflicts` | Git merge/rebase/cherry-pick conflicts, `<<<<<<< HEAD` markers |
+
+### Trigger Examples
+
+**MUST invoke `frontend`:**
+- "Add a button to the book detail page"
+- "Fix the search component"
+- "Update the API hook for books"
+- Working on any file in `app/`
+
+**MUST invoke `backend`:**
+- "Add a new API endpoint"
+- "Fix the scan worker"
+- "Add a database migration"
+- Working on any file in `pkg/` or `cmd/`
+
+**MUST invoke `epub`:**
+- "Parse the series metadata from EPUB"
+- "Fix cover extraction for EPUBs"
+- Working on `pkg/epub/`
+
+**Multiple skills may apply:** If adding a feature that touches both frontend and backend, invoke both skills before starting.
+
+## Critical Gotchas
+
+These are common mistakes that cause bugs. They're documented in detail in the skills but are easy to miss.
+
+### Backend
+
+**Request binding must use structs** — The custom binder (`pkg/binder/`) uses mold and validator, which only work with structs. Never bind directly to a slice/array:
+```go
+// ❌ WRONG - causes nil pointer crash
+var entries []orderEntry
+c.Bind(&entries)
+
+// ✅ CORRECT - wrap in struct
+type payload struct { Order []orderEntry `json:"order"` }
+var p payload
+c.Bind(&p)
+```
+
+**CoverImagePath stores filename only** — `file.CoverImagePath` stores just the filename (e.g., `book.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime. Always use `filepath.Base()` when updating:
+```go
+// ❌ WRONG - stores full path, breaks cover serving
+file.CoverImagePath = &fullPath
+
+// ✅ CORRECT - stores filename only
+filename := filepath.Base(fullPath)
+file.CoverImagePath = &filename
+```
+
+**JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`.
+
+### Frontend
+
+**Cover images need cache busting** — All cover image URLs must include a `?t=` parameter to ensure updated covers display without caching issues:
+```tsx
+const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
+```
+
+### Plugins
+
+**SDK must stay in sync with Go** — When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-types/` MUST be updated to match. Breaking changes to the SDK should be avoided.
 
 ## Development Commands
 
@@ -133,7 +230,3 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
 - **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
-
-## User Preferences
-
-- **Plan execution:** Always use subagent-driven development (dispatch fresh subagent per task in current session) rather than parallel sessions
