@@ -50,7 +50,7 @@ export default defineConfig({
     host: "0.0.0.0",
     strictPort: false, // Allow Vite to auto-increment port if busy
     watch: {
-      ignored: ["**/coverage/**"],
+      ignored: ["**/coverage/**", "**/website/**"],
     },
     proxy: {
       "/api": {

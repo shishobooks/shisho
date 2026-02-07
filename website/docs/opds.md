@@ -1,5 +1,5 @@
 ---
-sidebar_position: 9
+sidebar_position: 10
 ---
 
 # OPDS
@@ -28,7 +28,7 @@ For example, to browse only EPUBs: `http://your-server/opds/v1/epub/catalog`
 
 ### KePub variant
 
-For Kobo devices or apps that benefit from KePub formatting, use the KePub feed:
+For Kobo devices or apps that benefit from KePub formatting (see [Kobo Sync](./kobo-sync) for the dedicated sync feature), use the KePub feed:
 
 ```
 http://your-server/opds/v1/kepub/{types}/catalog
@@ -71,4 +71,4 @@ Consult your app's documentation for how to add a new OPDS catalog.
 
 ## Library Access
 
-The feed respects your user's library permissions. You only see books from libraries you have access to.
+The feed respects your user's [library permissions](./users-and-permissions#library-access). You only see books from libraries you have access to.

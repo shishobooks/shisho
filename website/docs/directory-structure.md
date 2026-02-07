@@ -22,7 +22,7 @@ Shisho works best when each book has its own directory. All editions of a book (
     │   └── Saga Vol 1.cbz
     └── [James Clear] Atomic Habits/
         ├── Atomic Habits.epub
-        └── Supplement.pdf
+        └── Supplement.pdf          ← discovered as a supplement file
 ```
 
 ## Organize Files
@@ -30,3 +30,5 @@ Shisho works best when each book has its own directory. All editions of a book (
 Shisho includes an optional "Organize Files" feature in library settings that can automatically organize your books into a consistent directory structure. When enabled, Shisho will move and rename files based on metadata.
 
 If you prefer to manage your own file organization, you can leave this disabled and Shisho will work with whatever structure you have.
+
+Non-media files in a book's directory (like PDFs or text files) are automatically discovered as [supplement files](./supplement-files).

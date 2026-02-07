@@ -179,8 +179,16 @@ For detailed architecture information, see the skills:
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make check` before committing
 - **Don't run `make check` multiple times** — If you need to verify the exit code, run `make check && echo "SUCCESS"` once. If output is truncated, check the saved output file with `tail` to see if "SUCCESS" was printed. Don't run the test suite twice just to check output.
-- If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
-- **If a new field is added to `pkg/config/config.go`**, `shisho.example.yaml` MUST be updated with the new field (env var, default, description). This file must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
+- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
+  - New or changed config options → `website/docs/configuration.md`
+  - Plugin system changes → `website/docs/plugins/`
+  - Metadata, resource, or relationship changes → `website/docs/metadata.md`
+  - User/role/permission changes → `website/docs/users-and-permissions.md`
+  - Sidecar format changes → `website/docs/sidecar-files.md`
+  - Supplement discovery changes → `website/docs/supplement-files.md`
+  - Format support changes → `website/docs/supported-formats.md`
+  - New pages should cross-link to related pages (and vice versa)
+- **If a new field is added to `pkg/config/config.go`**, both `shisho.example.yaml` AND `website/docs/configuration.md` MUST be updated with the new field. These files must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
 
 ## Node.js Version
 
