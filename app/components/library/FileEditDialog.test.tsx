@@ -2,7 +2,15 @@ import { FileEditDialog } from "./FileEditDialog";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { FileRoleMain, FileTypeCBZ, type File } from "@/types";
 
@@ -181,6 +189,25 @@ describe("FileEditDialog handleSubmit cover page logic", () => {
 });
 
 describe("FileEditDialog", () => {
+  // Suppress React act() warnings from Radix UI internals (Select, Presence,
+  // DismissableLayer, FocusScope). These async state updates are internal to
+  // Radix's animation/focus management and cannot be wrapped in act() from tests.
+  const originalConsoleError = console.error;
+  beforeAll(() => {
+    console.error = (...args: unknown[]) => {
+      if (
+        typeof args[0] === "string" &&
+        args[0].includes("was not wrapped in act")
+      ) {
+        return;
+      }
+      originalConsoleError(...args);
+    };
+  });
+  afterAll(() => {
+    console.error = originalConsoleError;
+  });
+
   const createQueryClient = () =>
     new QueryClient({
       defaultOptions: {
