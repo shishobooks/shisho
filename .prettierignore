@@ -10,5 +10,7 @@ CLAUDE.md
 docs/
 website/build/
 website/.docusaurus/
+website/versioned_docs/
+website/versioned_sidebars/
 pkg/plugins/testdata/
 CHANGELOG.md
