@@ -50,6 +50,24 @@ Each domain (books, jobs, libraries, chapters) has:
   - M4B: `.claude/skills/m4b/SKILL.md`
   - KePub: `.claude/skills/kepub/SKILL.md`
 
+### Primary File System
+
+Each book has an optional `PrimaryFileID` (`*int`) that designates which file is the default for reading/downloading (used by Kobo sync and eReader browser).
+
+**Auto-assignment rules:**
+- When the first file is created for a book (`CreateFile`), it becomes primary automatically
+- When the primary file is deleted (`DeleteFile`), another file is promoted: main files preferred over supplements, oldest first
+- When files are moved between books (`MoveFilesToBook`), source books that lose their primary get a new one promoted, and target books with no primary get the first moved file
+
+**API endpoint:** `PUT /books/:id/primary-file` with `SetPrimaryFilePayload { FileID int }`. Validates that the file belongs to the book.
+
+**Key files:**
+- `pkg/books/handlers.go` — `setPrimaryFile` handler and `SetPrimaryFilePayload`
+- `pkg/books/service.go` — Auto-promotion in `CreateFile` and `DeleteFile`
+- `pkg/books/merge.go` — Primary file handling during `MoveFilesToBook`
+- `pkg/kobo/service.go` — Uses `primary_file_id` to determine which file to sync
+- `pkg/ereader/handlers.go` — Uses `PrimaryFileID` to select the default download file
+
 ### Cover Image System
 
 - Individual file covers: `{filename}.cover.{ext}`

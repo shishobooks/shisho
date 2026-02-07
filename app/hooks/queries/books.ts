@@ -259,4 +259,28 @@ export const useDeleteBooks = () => {
   });
 };
 
+interface SetPrimaryFileMutationVariables {
+  bookId: number;
+  fileId: number;
+}
+
+export const useSetPrimaryFile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Book, ShishoAPIError, SetPrimaryFileMutationVariables>({
+    mutationFn: ({ bookId, fileId }) => {
+      return API.request(
+        "PUT",
+        `/books/${bookId}/primary-file`,
+        { file_id: fileId },
+        null,
+      );
+    },
+    onSuccess: (data: Book) => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.setQueryData([QueryKey.RetrieveBook, String(data.id)], data);
+    },
+  });
+};
+
 export * from "./resync";

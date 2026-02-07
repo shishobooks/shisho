@@ -119,6 +119,17 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
+
+			// Set the first file as the primary file
+			book.PrimaryFileID = &book.Files[0].ID
+			_, err = tx.NewUpdate().
+				Model(book).
+				Column("primary_file_id").
+				Where("id = ?", book.ID).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 		}
 
 		// Note: Narrators are created separately via CreateNarrator after person creation
@@ -432,6 +443,28 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 		Exec(ctx)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// If this is the first file for the book, set it as primary
+	var book models.Book
+	err = svc.db.NewSelect().
+		Model(&book).
+		Where("id = ?", file.BookID).
+		Scan(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if book.PrimaryFileID == nil {
+		book.PrimaryFileID = &file.ID
+		_, err = svc.db.NewUpdate().
+			Model(&book).
+			Column("primary_file_id").
+			Where("id = ?", book.ID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	// Note: FileNarrators are created separately via CreateFileNarrator after person creation
@@ -1238,10 +1271,21 @@ func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (i
 }
 
 // DeleteFile deletes a file and its associated records (narrators, identifiers).
+// If the deleted file was the book's primary file, promotes another file to primary.
 func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Get the file to find its book_id
+		var file models.File
+		err := tx.NewSelect().
+			Model(&file).
+			Where("id = ?", fileID).
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete narrators for this file
-		_, err := tx.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.Narrator)(nil)).
 			Where("file_id = ?", fileID).
 			Exec(ctx)
@@ -1265,6 +1309,40 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		// Check if this was the primary file and promote another if needed
+		var book models.Book
+		err = tx.NewSelect().
+			Model(&book).
+			Where("id = ?", file.BookID).
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if book.PrimaryFileID != nil && *book.PrimaryFileID == fileID {
+			// Find the next primary: prefer main files, then oldest
+			var newPrimary models.File
+			err = tx.NewSelect().
+				Model(&newPrimary).
+				Where("book_id = ?", file.BookID).
+				OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+				Order("created_at ASC").
+				Limit(1).
+				Scan(ctx)
+			if err == nil {
+				// Found a file to promote
+				_, err = tx.NewUpdate().
+					Model(&book).
+					Set("primary_file_id = ?", newPrimary.ID).
+					Where("id = ?", book.ID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+			// If no files remain, the book deletion cascade will handle cleanup
 		}
 
 		return nil

@@ -559,16 +559,16 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.Forbidden("Access to this book is denied")
 	}
 
-	// Get the main file from the book's files
+	// Get the primary file from the book's files
 	var mainFile *models.File
 	for _, f := range book.Files {
-		if f.FileRole == models.FileRoleMain {
+		if book.PrimaryFileID != nil && f.ID == *book.PrimaryFileID {
 			mainFile = f
 			break
 		}
 	}
 	if mainFile == nil && len(book.Files) > 0 {
-		mainFile = book.Files[0] // Fallback to first file if no main file
+		mainFile = book.Files[0] // Fallback to first file if no primary set
 	}
 	if mainFile == nil {
 		return errcodes.NotFound("No files available for this book")
@@ -1008,9 +1008,11 @@ func formatDuration(seconds float64) string {
 
 // getBookFileType returns the primary file type for a book.
 func getBookFileType(book *models.Book) string {
-	for _, f := range book.Files {
-		if f.FileRole == models.FileRoleMain {
-			return f.FileType
+	if book.PrimaryFileID != nil {
+		for _, f := range book.Files {
+			if f.ID == *book.PrimaryFileID {
+				return f.FileType
+			}
 		}
 	}
 	if len(book.Files) > 0 {

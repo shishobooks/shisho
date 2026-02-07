@@ -195,7 +195,8 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 		Relation("Book.BookSeries.Series").
 		Relation("Publisher").
 		Where("f.file_type IN (?)", bun.In([]string{models.FileTypeEPUB, models.FileTypeCBZ})).
-		Where("f.file_role = ?", models.FileRoleMain)
+		Join("JOIN books AS b ON b.id = f.book_id").
+		Where("f.id = b.primary_file_id")
 
 	// Apply scope.
 	switch scope.Type {

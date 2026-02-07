@@ -12,6 +12,7 @@ import {
   Loader2,
   MoreVertical,
   RefreshCw,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import {
   useDeleteFile,
   useResyncBook,
   useResyncFile,
+  useSetPrimaryFile,
 } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
@@ -160,6 +162,10 @@ interface FileRowProps {
   cacheBuster?: number;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
+  isPrimary?: boolean;
+  showPrimaryBadge?: boolean;
+  onSetPrimary?: () => void;
+  isSettingPrimary?: boolean;
 }
 
 const FileRow = ({
@@ -187,6 +193,10 @@ const FileRow = ({
   cacheBuster,
   onDeleteFile,
   isDeletingFile,
+  isPrimary = false,
+  showPrimaryBadge = false,
+  onSetPrimary,
+  isSettingPrimary = false,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
@@ -262,6 +272,14 @@ const FileRow = ({
           >
             {file.name || getFilename(file.filepath)}
           </Link>
+
+          {/* Primary badge */}
+          {showPrimaryBadge && isPrimary && (
+            <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
+              <Star className="h-3 w-3 fill-current" />
+              Primary
+            </span>
+          )}
 
           {/* Stats and actions - desktop only (inline) */}
           <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground shrink-0">
@@ -397,6 +415,18 @@ const FileRow = ({
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh all metadata
                 </DropdownMenuItem>
+                {onSetPrimary && !isPrimary && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={isSettingPrimary}
+                      onClick={onSetPrimary}
+                    >
+                      <Star className="h-4 w-4 mr-2" />
+                      Set as primary
+                    </DropdownMenuItem>
+                  </>
+                )}
                 {onMoveFile && (
                   <>
                     <DropdownMenuSeparator />
@@ -545,6 +575,18 @@ const FileRow = ({
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh all metadata
               </DropdownMenuItem>
+              {onSetPrimary && !isPrimary && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={isSettingPrimary}
+                    onClick={onSetPrimary}
+                  >
+                    <Star className="h-4 w-4 mr-2" />
+                    Set as primary
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -691,6 +733,7 @@ const BookDetail = () => {
   const resyncBookMutation = useResyncBook();
   const deleteBookMutation = useDeleteBook();
   const deleteFileMutation = useDeleteFile();
+  const setPrimaryFileMutation = useSetPrimaryFile();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [showBookRefreshDialog, setShowBookRefreshDialog] = useState(false);
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
@@ -984,6 +1027,22 @@ const BookDetail = () => {
     } finally {
       setDeletingFileId(null);
     }
+  };
+
+  const handleSetPrimaryFile = (fileId: number) => {
+    const book = bookQuery.data;
+    if (!book) return;
+    setPrimaryFileMutation.mutate(
+      { bookId: book.id, fileId },
+      {
+        onSuccess: () => {
+          toast.success("Primary file updated");
+        },
+        onError: (error) => {
+          toast.error(error.message || "Failed to set primary file");
+        },
+      },
+    );
   };
 
   if (bookQuery.isLoading) {
@@ -1342,8 +1401,10 @@ const BookDetail = () => {
                     isDownloading={downloadingFileId === file.id}
                     isExpanded={expandedFileIds.has(file.id)}
                     isFileSelected={selectedFileIds.has(file.id)}
+                    isPrimary={book.primary_file_id === file.id}
                     isResyncing={resyncingFileId === file.id}
                     isSelectMode={isFileSelectMode}
+                    isSettingPrimary={setPrimaryFileMutation.isPending}
                     key={file.id}
                     libraryDownloadPreference={
                       libraryQuery.data?.download_format_preference
@@ -1361,8 +1422,14 @@ const BookDetail = () => {
                     onMoveFile={() => setSingleFileMoveId(file.id)}
                     onRefreshMetadata={() => handleRefreshFileMetadata(file.id)}
                     onScanMetadata={() => handleScanFileMetadata(file.id)}
+                    onSetPrimary={
+                      mainFiles.length > 1
+                        ? () => handleSetPrimaryFile(file.id)
+                        : undefined
+                    }
                     onToggleExpand={() => toggleFileExpanded(file.id)}
                     onToggleSelect={() => toggleFileSelection(file.id)}
+                    showPrimaryBadge={mainFiles.length > 1}
                   />
                 ))}
               </div>

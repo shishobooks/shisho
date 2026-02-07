@@ -30,5 +30,6 @@ type Book struct {
 	GenreSource       *string       `json:"genre_source" tstype:"DataSource"`
 	BookTags          []*BookTag    `bun:"rel:has-many,join:id=book_id" json:"book_tags,omitempty" tstype:"BookTag[]"`
 	TagSource         *string       `json:"tag_source" tstype:"DataSource"`
+	PrimaryFileID     *int          `json:"primary_file_id"`
 	Files             []*File       `bun:"rel:has-many" json:"files" tstype:"File[]"`
 }

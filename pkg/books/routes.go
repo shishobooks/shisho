@@ -71,6 +71,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/:id/cover", h.bookCover)
 	g.GET("/:id/lists", h.bookLists)
 	g.POST("/:id/lists", h.updateBookLists)
+	g.PUT("/:id/primary-file", h.setPrimaryFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("/files/:id/cover", h.fileCover)
 	g.POST("/files/:id", h.updateFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/files/:id/cover", h.uploadFileCover, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))

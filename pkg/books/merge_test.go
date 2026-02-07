@@ -412,3 +412,204 @@ func TestMoveFilesToBook_NoFilesSelected(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no files")
 }
+
+// setupTestBookWithFileAndPrimary creates a book with a file and sets primary_file_id.
+func setupTestBookWithFileAndPrimary(t *testing.T, db *bun.DB, svc *Service, library *models.Library, title string) (*models.Book, *models.File) {
+	t.Helper()
+	ctx := context.Background()
+
+	bookDir := t.TempDir()
+	now := time.Now()
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           title,
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       title,
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	_, err := db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	filePath := filepath.Join(bookDir, title+".epub")
+	err = os.WriteFile(filePath, []byte("test epub content"), 0644)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filePath,
+		FilesizeBytes: 17,
+	}
+	err = svc.CreateFile(ctx, file)
+	require.NoError(t, err)
+
+	return book, file
+}
+
+func TestMoveFilesToBook_PromotesSourcePrimaryWhenPrimaryMoved(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := setupTestLibrary(t, db)
+
+	// Create source book with primary file via CreateFile (sets primary)
+	sourceBook, sourceFile1 := setupTestBookWithFileAndPrimary(t, db, svc, library, "Source Book")
+
+	// Add a second file to source book
+	sourceFile2Path := filepath.Join(filepath.Dir(sourceFile1.Filepath), "Source Book 2.epub")
+	err := os.WriteFile(sourceFile2Path, []byte("test epub content 2"), 0644)
+	require.NoError(t, err)
+
+	sourceFile2 := &models.File{
+		LibraryID:     library.ID,
+		BookID:        sourceBook.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      sourceFile2Path,
+		FilesizeBytes: 19,
+	}
+	err = svc.CreateFile(ctx, sourceFile2)
+	require.NoError(t, err)
+
+	// Verify sourceFile1 is primary
+	err = db.NewSelect().Model(sourceBook).Where("id = ?", sourceBook.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, sourceBook.PrimaryFileID)
+	assert.Equal(t, sourceFile1.ID, *sourceBook.PrimaryFileID)
+
+	// Create target book
+	targetBook, _ := setupTestBookWithFileAndPrimary(t, db, svc, library, "Target Book")
+
+	// Move the primary file (sourceFile1) to target
+	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:      []int{sourceFile1.ID},
+		TargetBookID: &targetBook.ID,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.FilesMoved)
+
+	// Verify source book promoted sourceFile2 as new primary
+	var updatedSourceBook models.Book
+	err = db.NewSelect().Model(&updatedSourceBook).Where("id = ?", sourceBook.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedSourceBook.PrimaryFileID, "Source book should have a new primary after its primary was moved")
+	assert.Equal(t, sourceFile2.ID, *updatedSourceBook.PrimaryFileID, "Source book should promote remaining file as primary")
+}
+
+func TestMoveFilesToBook_SetsPrimaryOnTargetBookWhenNil(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := setupTestLibrary(t, db)
+
+	// Create source book with primary
+	_, sourceFile := setupTestBookWithFileAndPrimary(t, db, svc, library, "Source Book")
+
+	// Create target book with NO primary file (simulate legacy book or edge case)
+	targetBookDir := t.TempDir()
+	targetBook := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Target Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Target Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        targetBookDir,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+		// PrimaryFileID intentionally nil
+	}
+	_, err := db.NewInsert().Model(targetBook).Exec(ctx)
+	require.NoError(t, err)
+
+	// Move file to target (which has no primary)
+	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:      []int{sourceFile.ID},
+		TargetBookID: &targetBook.ID,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.FilesMoved)
+
+	// Verify target book now has the moved file as primary
+	var updatedTargetBook models.Book
+	err = db.NewSelect().Model(&updatedTargetBook).Where("id = ?", targetBook.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedTargetBook.PrimaryFileID, "Target book should have primary set after receiving a file")
+	assert.Equal(t, sourceFile.ID, *updatedTargetBook.PrimaryFileID)
+}
+
+func TestMoveFilesToBook_SetsPrimaryOnNewlyCreatedBook(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := setupTestLibrary(t, db)
+
+	// Create a library path
+	libraryPath := t.TempDir()
+	lp := &models.LibraryPath{
+		LibraryID: library.ID,
+		Filepath:  libraryPath,
+	}
+	_, err := db.NewInsert().Model(lp).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create source book with two files
+	sourceBook, sourceFile1 := setupTestBookWithFileAndPrimary(t, db, svc, library, "Source Book")
+
+	// Create second file in a different directory
+	newFileDir := filepath.Join(libraryPath, "New Book Dir")
+	err = os.MkdirAll(newFileDir, 0755)
+	require.NoError(t, err)
+
+	sourceFile2Path := filepath.Join(newFileDir, "New Book.epub")
+	err = os.WriteFile(sourceFile2Path, []byte("test epub content 2"), 0644)
+	require.NoError(t, err)
+
+	sourceFile2 := &models.File{
+		LibraryID:     library.ID,
+		BookID:        sourceBook.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      sourceFile2Path,
+		FilesizeBytes: 19,
+	}
+	err = svc.CreateFile(ctx, sourceFile2)
+	require.NoError(t, err)
+
+	// Move the second file to a new book (TargetBookID = nil)
+	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:      []int{sourceFile2.ID},
+		TargetBookID: nil,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.NewBookCreated)
+
+	// Verify the newly created book has primary set
+	var newBook models.Book
+	err = db.NewSelect().Model(&newBook).Where("id = ?", result.TargetBook.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, newBook.PrimaryFileID, "Newly created book should have primary set")
+	assert.Equal(t, sourceFile2.ID, *newBook.PrimaryFileID)
+
+	// Verify source book still has sourceFile1 as primary
+	var updatedSourceBook models.Book
+	err = db.NewSelect().Model(&updatedSourceBook).Where("id = ?", sourceBook.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedSourceBook.PrimaryFileID)
+	assert.Equal(t, sourceFile1.ID, *updatedSourceBook.PrimaryFileID)
+}

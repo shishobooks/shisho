@@ -254,6 +254,63 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 			return wrapErrorWithRollbackFailures(baseErr, failures)
 		}
 
+		// Handle primary file updates for source and target books
+		movedFileIDs := make(map[int]bool)
+		for _, move := range moves {
+			movedFileIDs[move.fileID] = true
+		}
+
+		// Fix source books that lost their primary file
+		for sourceBookID := range sourceBookPaths {
+			var srcBook models.Book
+			if err := tx.NewSelect().Model(&srcBook).Where("id = ?", sourceBookID).Scan(ctx); err != nil {
+				continue // Book may have been deleted
+			}
+			if srcBook.PrimaryFileID != nil && movedFileIDs[*srcBook.PrimaryFileID] {
+				// Primary was moved away — promote another file
+				var newPrimary models.File
+				err := tx.NewSelect().
+					Model(&newPrimary).
+					Where("book_id = ?", sourceBookID).
+					OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+					Order("created_at ASC").
+					Limit(1).
+					Scan(ctx)
+				if err == nil {
+					if _, err := tx.NewUpdate().
+						Model(&srcBook).
+						Set("primary_file_id = ?", newPrimary.ID).
+						Where("id = ?", sourceBookID).
+						Exec(ctx); err != nil {
+						log.Error("failed to promote primary file for source book", logger.Data{
+							"book_id": sourceBookID,
+							"file_id": newPrimary.ID,
+							"error":   err.Error(),
+						})
+					}
+				}
+				// If no files remain, the cleanup transaction below will delete the book
+			}
+		}
+
+		// Set primary on target book if it doesn't have one
+		if err := tx.NewSelect().Model(targetBook).Where("id = ?", targetBook.ID).Scan(ctx); err == nil {
+			if targetBook.PrimaryFileID == nil && len(moves) > 0 {
+				firstMovedFileID := moves[0].fileID
+				if _, err := tx.NewUpdate().
+					Model(targetBook).
+					Set("primary_file_id = ?", firstMovedFileID).
+					Where("id = ?", targetBook.ID).
+					Exec(ctx); err != nil {
+					log.Error("failed to set primary file for target book", logger.Data{
+						"book_id": targetBook.ID,
+						"file_id": firstMovedFileID,
+						"error":   err.Error(),
+					})
+				}
+			}
+		}
+
 		return nil
 	})
 	if err != nil {

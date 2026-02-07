@@ -606,6 +606,64 @@ func strPtr(s string) *string {
 	return &s
 }
 
+// SetPrimaryFilePayload is the request body for setting a book's primary file.
+type SetPrimaryFilePayload struct {
+	FileID int `json:"file_id" validate:"required,gt=0"`
+}
+
+func (h *handler) setPrimaryFile(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Bind params
+	params := SetPrimaryFilePayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Fetch the book
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
+		ID: &id,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Verify the file belongs to this book
+	fileBelongsToBook := false
+	for _, f := range book.Files {
+		if f.ID == params.FileID {
+			fileBelongsToBook = true
+			break
+		}
+	}
+	if !fileBelongsToBook {
+		return echo.NewHTTPError(http.StatusBadRequest, "File does not belong to this book")
+	}
+
+	// Update the book's primary file
+	book.PrimaryFileID = &params.FileID
+	err = h.bookService.UpdateBook(ctx, book, UpdateBookOptions{
+		Columns: []string{"primary_file_id"},
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.JSON(http.StatusOK, book)
+}
+
 func (h *handler) updateFile(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
