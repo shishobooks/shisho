@@ -1,11 +1,12 @@
 import { uniqBy } from "lodash";
-import { Check, List, MoreVertical, RefreshCw } from "lucide-react";
+import { Check, List, MoreVertical, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import AddToListPopover from "@/components/library/AddToListPopover";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,9 +14,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useResyncBook } from "@/hooks/queries/books";
+import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -136,7 +138,9 @@ const BookItem = ({
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const resyncBookMutation = useResyncBook();
+  const deleteBookMutation = useDeleteBook();
 
   // For placeholder variant: use same priority logic as backend's selectCoverFile
   const placeholderVariant = getCoverFileType(book.files, coverAspectRatio);
@@ -170,6 +174,17 @@ const BookItem = ({
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to refresh metadata",
+      );
+    }
+  };
+
+  const handleDeleteBook = async () => {
+    try {
+      await deleteBookMutation.mutateAsync(book.id);
+      toast.success("Book deleted");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete book",
       );
     }
   };
@@ -248,6 +263,14 @@ const BookItem = ({
               <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh all metadata
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -353,6 +376,15 @@ const BookItem = ({
         onConfirm={handleRefreshMetadata}
         onOpenChange={setShowRefreshDialog}
         open={showRefreshDialog}
+      />
+      <DeleteConfirmationDialog
+        files={book.files}
+        isPending={deleteBookMutation.isPending}
+        onConfirm={handleDeleteBook}
+        onOpenChange={setShowDeleteDialog}
+        open={showDeleteDialog}
+        title={book.title}
+        variant="book"
       />
     </div>
   );

@@ -11,6 +11,7 @@ type ListBooksQuery struct {
 	FileTypes []string `query:"file_types" json:"file_types,omitempty"` // Filter by file types (e.g., ["epub", "m4b"])
 	GenreIDs  []int    `query:"genre_ids" json:"genre_ids,omitempty"`   // Filter by genre IDs
 	TagIDs    []int    `query:"tag_ids" json:"tag_ids,omitempty"`       // Filter by tag IDs
+	IDs       []int    `query:"ids" json:"ids,omitempty"`               // Filter by specific book IDs
 }
 
 type UpdateBookPayload struct {

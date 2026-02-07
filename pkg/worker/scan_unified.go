@@ -3011,7 +3011,8 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 }
 
 // recoverMissingCover checks if the file's cover image is missing from disk
-// and re-extracts it from the media file if needed.
+// and re-extracts it from the media file if needed. This also handles the case
+// where a file never had a cover extracted (e.g., a promoted supplement).
 func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, jobLog *joblogs.JobLogger) error {
 	log := logger.FromContext(ctx).Data(logger.Data{"file_id": file.ID, "filepath": file.Filepath})
 
@@ -3020,11 +3021,6 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		if jobLog != nil {
 			jobLog.Info(msg, data)
 		}
-	}
-
-	// If file has no cover mime type, nothing to recover
-	if file.CoverMimeType == nil {
-		return nil
 	}
 
 	// Determine cover directory
@@ -3040,19 +3036,41 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		coverDir = filepath.Dir(file.Filepath)
 	}
 
-	// Check if cover file exists
+	// Check if cover file exists on disk
 	filename := filepath.Base(file.Filepath)
 	coverBaseName := filename + ".cover"
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
 
 	if existingCoverPath != "" {
-		// Cover exists, nothing to do
+		// Cover exists on disk - check if database needs updating
+		if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+			// Database doesn't have the cover info, update it
+			coverFilename := filepath.Base(existingCoverPath)
+			coverMimeType := fileutils.MimeTypeFromExtension(filepath.Ext(existingCoverPath))
+			coverSource := models.DataSourceExistingCover
+			file.CoverImageFilename = &coverFilename
+			file.CoverMimeType = &coverMimeType
+			file.CoverSource = &coverSource
+			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+				Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source"},
+			}); err != nil {
+				return errors.WithStack(err)
+			}
+			logInfo("updated database with existing cover", logger.Data{"cover_path": existingCoverPath})
+		}
 		return nil
 	}
 
-	logInfo("cover file missing, re-extracting", nil)
+	// Cover doesn't exist on disk - check if we need to extract one
+	// This handles both: 1) missing cover that was previously extracted, and
+	// 2) file that never had a cover (e.g., promoted supplement)
+	if file.CoverMimeType != nil {
+		logInfo("cover file missing, re-extracting", nil)
+	} else {
+		logInfo("no cover exists, extracting", nil)
+	}
 
-	// Re-extract cover from the media file
+	// Extract cover from the media file
 	var metadata *mediafile.ParsedMetadata
 	var parseErr error
 
@@ -3095,16 +3113,18 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		return errors.WithStack(err)
 	}
 
-	logInfo("recovered missing cover", logger.Data{"cover_path": coverFilepath})
+	logInfo("extracted cover", logger.Data{"cover_path": coverFilepath})
 
-	// Update file's cover mime type if it changed due to normalization
-	if normalizedMime != *file.CoverMimeType {
-		file.CoverMimeType = &normalizedMime
-		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-			Columns: []string{"cover_mime_type"},
-		}); err != nil {
-			return errors.WithStack(err)
-		}
+	// Update file's cover info in database
+	coverFilename := filepath.Base(coverFilepath)
+	coverSource := metadata.SourceForField("cover")
+	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &normalizedMime
+	file.CoverSource = &coverSource
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source"},
+	}); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil

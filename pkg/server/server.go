@@ -118,7 +118,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w)
+	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware)
 
 	// Libraries routes

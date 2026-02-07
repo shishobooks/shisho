@@ -1,3 +1,4 @@
+import { QueryKey as SearchQueryKey } from "./search";
 import {
   useMutation,
   useQuery,
@@ -8,6 +9,10 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   Book,
+  DeleteBookResponse,
+  DeleteBooksPayload,
+  DeleteBooksResponse,
+  DeleteFileResponse,
   File,
   ListBooksQuery,
   MergeBooksPayload,
@@ -196,6 +201,60 @@ export const useMergeBooks = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+    },
+  });
+};
+
+// Delete book mutation
+export const useDeleteBook = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<DeleteBookResponse, ShishoAPIError, number>({
+    mutationFn: (bookId) => {
+      return API.request("DELETE", `/books/${bookId}`, null, null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
+    },
+  });
+};
+
+// Delete file mutation
+export const useDeleteFile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<DeleteFileResponse, ShishoAPIError, number>({
+    mutationFn: (fileId) => {
+      return API.request("DELETE", `/books/files/${fileId}`, null, null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
+    },
+  });
+};
+
+// Bulk delete books mutation
+export const useDeleteBooks = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<DeleteBooksResponse, ShishoAPIError, DeleteBooksPayload>({
+    mutationFn: (payload) => {
+      return API.request("POST", "/books/delete", payload, null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };

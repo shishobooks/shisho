@@ -69,6 +69,12 @@ type handler struct {
 	downloadCache    *downloadcache.Cache
 	pageCache        *cbzpages.Cache
 	scanner          Scanner
+	pluginManager    pluginManager
+}
+
+// pluginManager defines the interface for plugin operations needed by the books handler.
+type pluginManager interface {
+	RegisteredFileExtensions() map[string]struct{}
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -113,6 +119,7 @@ func (h *handler) list(c echo.Context) error {
 		FileTypes: params.FileTypes,
 		GenreIDs:  params.GenreIDs,
 		TagIDs:    params.TagIDs,
+		IDs:       params.IDs,
 	}
 
 	// Filter by user's library access if user is in context
@@ -2097,5 +2104,245 @@ func (h *handler) mergeBooks(c echo.Context) error {
 		TargetBook:   result.TargetBook,
 		FilesMoved:   result.FilesMoved,
 		BooksDeleted: len(result.DeletedBookIDs),
+	})
+}
+
+// DeleteBooksRequest is the request body for bulk book deletion.
+type DeleteBooksRequest struct {
+	BookIDs []int `json:"book_ids"`
+}
+
+// DeleteBooksResponse is the response for bulk book deletion.
+type DeleteBooksResponse struct {
+	BooksDeleted int `json:"books_deleted"`
+	FilesDeleted int `json:"files_deleted"`
+}
+
+// DeleteBookResponse is the response for deleting a book.
+type DeleteBookResponse struct {
+	FilesDeleted int `json:"files_deleted"`
+}
+
+// DeleteFileResponse is the response for deleting a file.
+type DeleteFileResponse struct {
+	BookDeleted bool `json:"book_deleted"`
+}
+
+// deleteBook handles DELETE /books/:id.
+func (h *handler) deleteBook(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Parse book ID
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.ValidationError("Invalid book ID")
+	}
+
+	// Load book to get library ID
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// Load library for deletion config
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{ID: &book.LibraryID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Delete book and files
+	result, err := h.bookService.DeleteBookAndFiles(ctx, id, library)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Clean up search indexes
+	if err := h.searchService.DeleteFromBookIndex(ctx, id); err != nil {
+		log.Warn("failed to remove book from search index", logger.Data{"book_id": id, "error": err.Error()})
+	}
+
+	// Clean up orphaned entities
+	if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned series", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, DeleteBookResponse{
+		FilesDeleted: result.FilesDeleted,
+	})
+}
+
+// deleteFile handles DELETE /books/files/:id.
+func (h *handler) deleteFile(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Parse file ID
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.ValidationError("Invalid file ID")
+	}
+
+	// Load file to get library ID and book ID
+	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Check user has library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You do not have access to this library")
+		}
+	}
+
+	// Load library
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{ID: &file.LibraryID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Build supported types map (native + plugin-registered)
+	supportedTypes := map[string]struct{}{
+		models.FileTypeEPUB: {},
+		models.FileTypeCBZ:  {},
+		models.FileTypeM4B:  {},
+	}
+	if h.pluginManager != nil {
+		for ext := range h.pluginManager.RegisteredFileExtensions() {
+			supportedTypes[ext] = struct{}{}
+		}
+	}
+
+	// Delete file
+	result, err := h.bookService.DeleteFileAndCleanup(ctx, id, library, supportedTypes, h.config.SupplementExcludePatterns)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Clean up search indexes if book was deleted
+	if result.BookDeleted {
+		if err := h.searchService.DeleteFromBookIndex(ctx, result.BookID); err != nil {
+			log.Warn("failed to remove book from search index", logger.Data{"error": err, "bookID": result.BookID})
+		}
+		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err})
+		}
+		if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned series", logger.Data{"error": err})
+		}
+		if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err})
+		}
+		if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+			log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err})
+		}
+	}
+
+	// If a supplement was promoted, scan it to extract cover and update metadata
+	if result.PromotedFileID != nil {
+		if _, err := h.scanner.Scan(ctx, ScanOptions{FileID: *result.PromotedFileID}); err != nil {
+			log.Warn("failed to scan promoted file", logger.Data{"error": err, "fileID": *result.PromotedFileID})
+		}
+	}
+
+	return c.JSON(http.StatusOK, DeleteFileResponse{
+		BookDeleted: result.BookDeleted,
+	})
+}
+
+// deleteBooks handles POST /books/delete for bulk book deletion.
+func (h *handler) deleteBooks(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	var req DeleteBooksRequest
+	if err := c.Bind(&req); err != nil {
+		return errcodes.ValidationError("Invalid request body")
+	}
+
+	if len(req.BookIDs) == 0 {
+		return errcodes.ValidationError("book_ids is required")
+	}
+
+	// Load first book to get library (all books must be in same library)
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &req.BookIDs[0]})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if book == nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Check user has library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{ID: &book.LibraryID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Verify all books belong to same library
+	for _, bookID := range req.BookIDs[1:] {
+		b, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &bookID})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if b == nil {
+			return errcodes.NotFound("Book")
+		}
+		if b.LibraryID != library.ID {
+			return errcodes.ValidationError("All books must belong to the same library")
+		}
+	}
+
+	// Delete books
+	result, err := h.bookService.DeleteBooksAndFiles(ctx, req.BookIDs, library)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Clean up search indexes
+	for _, bookID := range req.BookIDs {
+		if err := h.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
+			log.Warn("failed to remove book from search index", logger.Data{"error": err.Error(), "book_id": bookID})
+		}
+	}
+	if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned series", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
+	}
+	if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+		log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, DeleteBooksResponse{
+		BooksDeleted: result.BooksDeleted,
+		FilesDeleted: result.FilesDeleted,
 	})
 }

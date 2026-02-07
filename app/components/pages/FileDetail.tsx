@@ -1,19 +1,21 @@
-import { ArrowLeft, BookOpen, Pencil } from "lucide-react";
+import { ArrowLeft, BookOpen, Pencil, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import FileChaptersTab, {
   type ChaptersActionState,
   type FileChaptersTabHandle,
 } from "@/components/files/FileChaptersTab";
 import FileDetailsTab from "@/components/files/FileDetailsTab";
+import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
-import { useBook } from "@/hooks/queries/books";
+import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -74,6 +76,10 @@ const FileDetail = () => {
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const [isEditingChapters, setIsEditingChapters] = useState(false);
 
+  // Delete file state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const deleteFileMutation = useDeleteFile();
+
   // Chapters tab ref and action state
   const chaptersRef = useRef<FileChaptersTabHandle>(null);
   const [chaptersActionState, setChaptersActionState] =
@@ -92,6 +98,28 @@ const FileDetail = () => {
 
   const bookQuery = useBook(bookId);
   const libraryQuery = useLibrary(libraryId);
+
+  // Handle file deletion
+  const handleDeleteFile = async () => {
+    if (!fileId) return;
+    try {
+      const result = await deleteFileMutation.mutateAsync(parseInt(fileId));
+      if (result.book_deleted) {
+        toast.success("Book deleted");
+        // Book was deleted because this was the last file
+        navigate("/");
+      } else {
+        toast.success("File deleted");
+        // Navigate back to book detail
+        navigate(`/libraries/${libraryId}/books/${bookId}`);
+      }
+      setShowDeleteDialog(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete file",
+      );
+    }
+  };
 
   // Find file for page title
   const fileForTitle = bookQuery.data?.files?.find(
@@ -236,20 +264,31 @@ const FileDetail = () => {
               </Button>
             </>
           ) : (
-            <Button
-              onClick={() => {
-                if (activeTab === "details") {
-                  setEditingFile(file);
-                } else {
-                  setIsEditingChapters(true);
-                }
-              }}
-              size="sm"
-              variant="outline"
-            >
-              <Pencil className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Edit</span>
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  if (activeTab === "details") {
+                    setEditingFile(file);
+                  } else {
+                    setIsEditingChapters(true);
+                  }
+                }}
+                size="sm"
+                variant="outline"
+              >
+                <Pencil className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit</span>
+              </Button>
+              <Button
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setShowDeleteDialog(true)}
+                size="sm"
+                variant="outline"
+              >
+                <Trash2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -301,6 +340,16 @@ const FileDetail = () => {
         onDiscard={proceedNavigation}
         onStay={cancelNavigation}
         open={showBlockerDialog}
+      />
+
+      {/* Delete file confirmation dialog */}
+      <DeleteConfirmationDialog
+        isPending={deleteFileMutation.isPending}
+        onConfirm={handleDeleteFile}
+        onOpenChange={setShowDeleteDialog}
+        open={showDeleteDialog}
+        title={filename}
+        variant="file"
       />
     </LibraryLayout>
   );

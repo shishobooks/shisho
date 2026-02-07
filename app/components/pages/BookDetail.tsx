@@ -12,6 +12,7 @@ import {
   Loader2,
   MoreVertical,
   RefreshCw,
+  Trash2,
   X,
 } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import AddToListPopover from "@/components/library/AddToListPopover";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverGalleryTabs from "@/components/library/CoverGalleryTabs";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
@@ -53,7 +55,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useBook, useResyncBook, useResyncFile } from "@/hooks/queries/books";
+import {
+  useBook,
+  useDeleteBook,
+  useDeleteFile,
+  useResyncBook,
+  useResyncFile,
+} from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -150,6 +158,8 @@ interface FileRowProps {
   onToggleSelect?: () => void;
   onMoveFile?: () => void;
   cacheBuster?: number;
+  onDeleteFile: () => void;
+  isDeletingFile: boolean;
 }
 
 const FileRow = ({
@@ -175,6 +185,8 @@ const FileRow = ({
   onToggleSelect,
   onMoveFile,
   cacheBuster,
+  onDeleteFile,
+  isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
@@ -394,6 +406,15 @@ const FileRow = ({
                     </DropdownMenuItem>
                   </>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  disabled={isDeletingFile}
+                  onClick={onDeleteFile}
+                >
+                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                  Delete file
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -523,6 +544,15 @@ const FileRow = ({
               <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh all metadata
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={isDeletingFile}
+                onClick={onDeleteFile}
+              >
+                <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                Delete file
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -659,9 +689,12 @@ const BookDetail = () => {
   usePageTitle(bookQuery.data?.title ?? "Book Details");
   const resyncFileMutation = useResyncFile();
   const resyncBookMutation = useResyncBook();
+  const deleteBookMutation = useDeleteBook();
+  const deleteFileMutation = useDeleteFile();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [showBookRefreshDialog, setShowBookRefreshDialog] = useState(false);
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const [downloadError, setDownloadError] = useState<DownloadError | null>(
     null,
@@ -684,6 +717,8 @@ const BookDetail = () => {
   );
   const [showMoveFilesDialog, setShowMoveFilesDialog] = useState(false);
   const [singleFileMoveId, setSingleFileMoveId] = useState<number | null>(null);
+  const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<File | null>(null);
 
   const toggleFileSelection = (fileId: number) => {
     setSelectedFileIds((prev) => {
@@ -917,6 +952,40 @@ const BookDetail = () => {
     }
   };
 
+  const handleDeleteBook = async () => {
+    if (!id) return;
+    try {
+      await deleteBookMutation.mutateAsync(parseInt(id));
+      toast.success("Book deleted");
+      navigate("/");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete book",
+      );
+    }
+  };
+
+  const handleDeleteFile = async () => {
+    if (!fileToDelete) return;
+    setDeletingFileId(fileToDelete.id);
+    try {
+      const result = await deleteFileMutation.mutateAsync(fileToDelete.id);
+      setFileToDelete(null);
+      if (result.book_deleted) {
+        toast.success("Book deleted");
+        navigate("/");
+      } else {
+        toast.success("File deleted");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete file",
+      );
+    } finally {
+      setDeletingFileId(null);
+    }
+  };
+
   if (bookQuery.isLoading) {
     return (
       <LibraryLayout>
@@ -1067,6 +1136,14 @@ const BookDetail = () => {
                     >
                       <GitMerge className="h-4 w-4 mr-2" />
                       Merge into another book
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                      Delete book
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1261,6 +1338,7 @@ const BookDetail = () => {
                     cacheBuster={coverCacheBuster}
                     file={file}
                     hasExpandableMetadata={hasExpandableMetadata(file)}
+                    isDeletingFile={deletingFileId === file.id}
                     isDownloading={downloadingFileId === file.id}
                     isExpanded={expandedFileIds.has(file.id)}
                     isFileSelected={selectedFileIds.has(file.id)}
@@ -1272,6 +1350,7 @@ const BookDetail = () => {
                     }
                     libraryId={libraryId!}
                     onCancelDownload={handleCancelDownload}
+                    onDeleteFile={() => setFileToDelete(file)}
                     onDownload={() => handleDownload(file.id, file.file_type)}
                     onDownloadKepub={() => handleDownloadKepub(file.id)}
                     onDownloadOriginal={() => handleDownloadOriginal(file.id)}
@@ -1303,6 +1382,7 @@ const BookDetail = () => {
                         cacheBuster={coverCacheBuster}
                         file={file}
                         hasExpandableMetadata={hasExpandableMetadata(file)}
+                        isDeletingFile={deletingFileId === file.id}
                         isDownloading={downloadingFileId === file.id}
                         isExpanded={expandedFileIds.has(file.id)}
                         isResyncing={resyncingFileId === file.id}
@@ -1313,6 +1393,7 @@ const BookDetail = () => {
                         }
                         libraryId={libraryId!}
                         onCancelDownload={handleCancelDownload}
+                        onDeleteFile={() => setFileToDelete(file)}
                         onDownload={() =>
                           handleDownload(file.id, file.file_type)
                         }
@@ -1464,6 +1545,27 @@ const BookDetail = () => {
               : mainFiles.filter((f) => selectedFileIds.has(f.id))
           }
           sourceBook={book}
+        />
+      )}
+
+      <DeleteConfirmationDialog
+        files={book.files}
+        isPending={deleteBookMutation.isPending}
+        onConfirm={handleDeleteBook}
+        onOpenChange={setShowDeleteDialog}
+        open={showDeleteDialog}
+        title={book.title}
+        variant="book"
+      />
+
+      {fileToDelete && (
+        <DeleteConfirmationDialog
+          isPending={deleteFileMutation.isPending}
+          onConfirm={handleDeleteFile}
+          onOpenChange={(open) => !open && setFileToDelete(null)}
+          open={!!fileToDelete}
+          title={fileToDelete.filepath.split("/").pop() ?? "File"}
+          variant="file"
         />
       )}
     </LibraryLayout>

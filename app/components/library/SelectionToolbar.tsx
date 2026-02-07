@@ -1,8 +1,9 @@
-import { GitMerge, List, Loader2, Plus, X } from "lucide-react";
+import { GitMerge, List, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useBooks, useDeleteBooks } from "@/hooks/queries/books";
 import {
   useAddBooksToList,
   useCreateList,
@@ -28,11 +30,19 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const listsQuery = useListLists();
   const addToListMutation = useAddBooksToList();
   const createListMutation = useCreateList();
+  const deleteBooksMutation = useDeleteBooks();
+
+  // Fetch book details for selected books (needed for dialog)
+  const booksQuery = useBooks(
+    { ids: selectedBookIds },
+    { enabled: showDeleteDialog && selectedBookIds.length > 0 },
+  );
 
   const lists = listsQuery.data?.lists ?? [];
   const editableLists = lists.filter((list) => list.permission !== "viewer");
@@ -83,6 +93,23 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         error instanceof Error ? error.message : "Failed to create list";
       toast.error(message);
       throw error; // Re-throw so CreateListDialog knows it failed
+    }
+  };
+
+  const handleDeleteBooks = async () => {
+    try {
+      const result = await deleteBooksMutation.mutateAsync({
+        book_ids: selectedBookIds,
+      });
+      toast.success(
+        `Deleted ${result.books_deleted} book${result.books_deleted !== 1 ? "s" : ""}`,
+      );
+      setShowDeleteDialog(false);
+      exitSelectionMode();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete books";
+      toast.error(message);
     }
   };
 
@@ -168,6 +195,15 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         </Button>
       )}
 
+      <Button
+        onClick={() => setShowDeleteDialog(true)}
+        size="sm"
+        variant="destructive"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete
+      </Button>
+
       <Button onClick={clearSelection} size="sm" variant="ghost">
         Clear
       </Button>
@@ -199,6 +235,19 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         onCreate={handleCreate}
         onOpenChange={setCreateDialogOpen}
         open={createDialogOpen}
+      />
+
+      <DeleteConfirmationDialog
+        books={booksQuery.data?.books?.map((b) => ({
+          id: b.id,
+          title: b.title,
+          files: b.files,
+        }))}
+        isPending={deleteBooksMutation.isPending}
+        onConfirm={handleDeleteBooks}
+        onOpenChange={setShowDeleteDialog}
+        open={showDeleteDialog}
+        variant="books"
       />
     </div>
   );

@@ -158,6 +158,7 @@ For detailed architecture information, see the skills:
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make check` before committing
+- **Don't run `make check` multiple times** — If you need to verify the exit code, run `make check && echo "SUCCESS"` once. If output is truncated, check the saved output file with `tail` to see if "SUCCESS" was printed. Don't run the test suite twice just to check output.
 - If a piece of code that is documented in `docs/` gets updated, the corresponding doc file should be updated as well
 - **If a new field is added to `pkg/config/config.go`**, `shisho.example.yaml` MUST be updated with the new field (env var, default, description). This file must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
 

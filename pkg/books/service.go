@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
@@ -33,6 +34,7 @@ type ListBooksOptions struct {
 	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
 	GenreIDs   []int    // Filter by genre IDs
 	TagIDs     []int    // Filter by tag IDs
+	IDs        []int    // Filter by specific book IDs
 	Search     *string  // Search query for title/author
 
 	includeTotal  bool
@@ -306,6 +308,11 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("b.library_id IN (?)", bun.In(opts.LibraryIDs))
+	}
+
+	// Filter by specific book IDs
+	if len(opts.IDs) > 0 {
+		q = q.Where("b.id IN (?)", bun.In(opts.IDs))
 	}
 
 	// Filter by file types
@@ -1367,4 +1374,222 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 
 		return nil
 	})
+}
+
+// DeleteBookAndFilesResult contains the results of deleting a book and its files.
+type DeleteBookAndFilesResult struct {
+	FilesDeleted int
+}
+
+// DeleteBookAndFiles deletes a book and all its files from both disk and database.
+// If library.OrganizeFileStructure is true, the entire book directory is deleted.
+// Otherwise, each file is deleted individually with its cover and sidecar.
+func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library *models.Library) (*DeleteBookAndFilesResult, error) {
+	result := &DeleteBookAndFilesResult{}
+
+	// Load book with files
+	var book models.Book
+	err := svc.db.NewSelect().
+		Model(&book).
+		Relation("Files").
+		Where("b.id = ?", bookID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcodes.NotFound("Book")
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	result.FilesDeleted = len(book.Files)
+
+	// Delete files from disk first (before DB transaction)
+	if library.OrganizeFileStructure && book.Filepath != "" {
+		// Organized structure: delete entire book directory
+		if err := os.RemoveAll(book.Filepath); err != nil && !os.IsNotExist(err) {
+			return nil, errors.Wrap(err, "failed to delete book directory")
+		}
+	} else {
+		// Root-level files: delete each file individually
+		for _, file := range book.Files {
+			if err := deleteFileFromDisk(file); err != nil {
+				return nil, errors.Wrap(err, "failed to delete file from disk")
+			}
+		}
+	}
+
+	// Delete book from database (cascades to files and associations)
+	if err := svc.DeleteBook(ctx, bookID); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// deleteFileFromDisk deletes a file and its associated cover and sidecar from disk.
+func deleteFileFromDisk(file *models.File) error {
+	// Delete the main file
+	if err := os.Remove(file.Filepath); err != nil && !os.IsNotExist(err) {
+		return errors.Wrap(err, "failed to delete main file")
+	}
+
+	// Delete cover image if exists (best effort)
+	// Cover filename may be stored as relative or absolute path
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath := *file.CoverImageFilename
+		if !filepath.IsAbs(coverPath) {
+			coverPath = filepath.Join(filepath.Dir(file.Filepath), coverPath)
+		}
+		_ = os.Remove(coverPath)
+	}
+
+	// Delete sidecar file if exists (best effort)
+	sidecarPath := file.Filepath + ".metadata.json"
+	_ = os.Remove(sidecarPath)
+
+	return nil
+}
+
+// DeleteBooksAndFilesResult contains the results of bulk book deletion.
+type DeleteBooksAndFilesResult struct {
+	BooksDeleted int
+	FilesDeleted int
+}
+
+// DeleteBooksAndFiles deletes multiple books and all their files from disk and database.
+func (svc *Service) DeleteBooksAndFiles(ctx context.Context, bookIDs []int, library *models.Library) (*DeleteBooksAndFilesResult, error) {
+	result := &DeleteBooksAndFilesResult{}
+
+	for _, bookID := range bookIDs {
+		bookResult, err := svc.DeleteBookAndFiles(ctx, bookID, library)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to delete book %d", bookID)
+		}
+		result.BooksDeleted++
+		result.FilesDeleted += bookResult.FilesDeleted
+	}
+
+	return result, nil
+}
+
+// DeleteFileAndCleanupResult contains the results of deleting a file.
+type DeleteFileAndCleanupResult struct {
+	BookDeleted    bool
+	BookID         int
+	PromotedFileID *int // ID of supplement file that was promoted to main, if any
+}
+
+// DeleteFileAndCleanup deletes a file from disk and database.
+// If this was the last main file in the book, it checks if any supplement files can be
+// promoted to main (based on supportedTypes). If a promotable supplement exists, the oldest
+// one is promoted. If no promotable supplements exist, the book and remaining files are deleted.
+// ignoredPatterns are glob patterns for files to ignore during directory cleanup (e.g., ".DS_Store", ".*").
+func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, library *models.Library, supportedTypes map[string]struct{}, ignoredPatterns []string) (*DeleteFileAndCleanupResult, error) {
+	result := &DeleteFileAndCleanupResult{}
+
+	// Load file with book
+	var file models.File
+	err := svc.db.NewSelect().
+		Model(&file).
+		Relation("Book").
+		Where("f.id = ?", fileID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcodes.NotFound("File")
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	result.BookID = file.BookID
+
+	// Delete file from disk
+	if err := deleteFileFromDisk(&file); err != nil {
+		return nil, err
+	}
+
+	// Delete file from database
+	if err := svc.DeleteFile(ctx, fileID); err != nil {
+		return nil, err
+	}
+
+	// Check if book has any remaining main files
+	mainCount, err := svc.db.NewSelect().
+		Model((*models.File)(nil)).
+		Where("book_id = ?", file.BookID).
+		Where("file_role = ?", models.FileRoleMain).
+		Count(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if mainCount > 0 {
+		// Other main files exist, nothing more to do
+		return result, nil
+	}
+
+	// No main files remain - check if we can promote a supplement
+	var supplements []models.File
+	err = svc.db.NewSelect().
+		Model(&supplements).
+		Where("book_id = ?", file.BookID).
+		Where("file_role = ?", models.FileRoleSupplement).
+		Order("created_at ASC"). // Oldest first
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if len(supplements) > 0 {
+		// Find the first supplement with a supported file type
+		var toPromote *models.File
+		for i := range supplements {
+			if _, supported := supportedTypes[supplements[i].FileType]; supported {
+				toPromote = &supplements[i]
+				break
+			}
+		}
+
+		if toPromote != nil {
+			// Promote this supplement to main
+			_, err = svc.db.NewUpdate().
+				Model(toPromote).
+				Set("file_role = ?", models.FileRoleMain).
+				WherePK().
+				Exec(ctx)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			result.PromotedFileID = &toPromote.ID
+			return result, nil
+		}
+
+		// No promotable supplements - delete all remaining files
+		for i := range supplements {
+			if err := deleteFileFromDisk(&supplements[i]); err != nil {
+				return nil, err
+			}
+			if err := svc.DeleteFile(ctx, supplements[i].ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Delete the book
+	if err := svc.DeleteBook(ctx, file.BookID); err != nil {
+		return nil, err
+	}
+	result.BookDeleted = true
+
+	// Clean up book directory if organized structure
+	if library.OrganizeFileStructure && file.Book != nil && file.Book.Filepath != "" {
+		// Delete book-level sidecar
+		bookSidecarPath := sidecar.BookSidecarPath(file.Book.Filepath)
+		_ = os.Remove(bookSidecarPath)
+
+		// Clean up empty book directory (ignoredPatterns handles .DS_Store, etc.)
+		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, ignoredPatterns...)
+	}
+
+	return result, nil
 }

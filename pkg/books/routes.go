@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/tags"
@@ -21,7 +22,7 @@ import (
 )
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner) {
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager) {
 	bookService := NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
@@ -49,11 +50,19 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		pageCache:        pageCache,
 		scanner:          scanner,
 	}
+	// Only set pluginManager if it's not nil to avoid interface holding nil pointer
+	if pm != nil {
+		h.pluginManager = pm
+	}
 
 	// Merge books - must be before /:id routes
 	g.POST("/merge", h.mergeBooks, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 
+	// Bulk delete books - must be before /:id routes
+	g.POST("/delete", h.deleteBooks, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
+	g.DELETE("/:id", h.deleteBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("", h.list)
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.POST("/:id/resync", h.resyncBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
@@ -74,4 +83,5 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/page/:pageNum", h.getPage)
 	g.GET("/files/:id/stream", h.streamFile)
 	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.DELETE("/files/:id", h.deleteFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 }

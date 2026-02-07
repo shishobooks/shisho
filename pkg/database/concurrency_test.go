@@ -148,7 +148,7 @@ func TestConcurrentMixedOperations(t *testing.T) {
 			}(w)
 		} else {
 			// Reader
-			go func(workerID int) {
+			go func(_ int) {
 				defer wg.Done()
 				for i := 0; i < opsPerWorker; i++ {
 					var sum int
