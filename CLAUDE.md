@@ -64,6 +64,19 @@ Examples of things to record: discovered gotchas, naming conventions, architectu
 
 **Multiple skills may apply:** If adding a feature that touches both frontend and backend, invoke both skills before starting.
 
+### Subagent Skill Routing
+
+**Subagents do not inherit CLAUDE.md.** When spawning any subagent (via the Task tool) that will read, review, or modify code, copy the Skills Routing tables above (Domain Skills, File Format Skills) into the task prompt so the subagent can self-determine which skills to invoke based on the files it encounters. Include this preamble:
+
+```
+Before working on code, invoke the relevant skills from this routing table using the Skill tool.
+Skills contain project-specific conventions that you won't know otherwise.
+
+[paste Domain Skills + File Format Skills tables here]
+```
+
+This applies to all subagent types (code-reviewer, parallel agents, plan executors, etc.).
+
 ## Critical Gotchas
 
 These are common mistakes that cause bugs. They're documented in detail in the skills but are easy to miss.
