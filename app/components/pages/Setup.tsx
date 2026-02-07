@@ -22,6 +22,8 @@ interface SetupResponse {
   role_id: number;
   role_name: string;
   permissions: string[];
+  library_access?: number[] | null;
+  must_change_password: boolean;
 }
 
 // Initial values for the setup form - stored once to compare against

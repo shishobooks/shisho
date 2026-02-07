@@ -120,3 +120,13 @@ func Conflict(msg string) error {
 		"conflict",
 	}
 }
+
+// PasswordResetRequired returns a 403 error indicating the user must reset
+// their password before continuing.
+func PasswordResetRequired() error {
+	return &Error{
+		http.StatusForbidden,
+		"You must reset your password before accessing this resource.",
+		"password_reset_required",
+	}
+}

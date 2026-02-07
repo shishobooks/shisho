@@ -48,8 +48,9 @@ For example, you might give a family member the Viewer role with access only to 
 1. Go to **Admin > Users**
 2. Click **Add User**
 3. Set the username, optional email, password, and role
-4. Choose which libraries the user can access
-5. Save
+4. (Optional) Enable **Require password reset on first login** to force the user to choose a new password after they sign in
+5. Choose which libraries the user can access
+6. Save
 
 Usernames and email addresses must be unique (case-insensitive).
 
@@ -59,7 +60,9 @@ You can deactivate a user to revoke their access without deleting their account.
 
 ### Changing Passwords
 
-Admins can reset any user's password from the user management page. Users can also change their own password from their user settings.
+Admins can reset any user's password from the user management page. When resetting another user's password, admins can also enable **Require user to reset password on next login**.
+
+Users can change their own password from their user security settings. If a user's account is marked as requiring a password reset, Shisho redirects them to security settings until they set a new password, and that forced-reset form only asks for the new password.
 
 ## Authentication
 

@@ -22,12 +22,13 @@ func NewService(db *bun.DB) *Service {
 
 // CreateUserOptions contains options for creating a user.
 type CreateUserOptions struct {
-	Username         string
-	Email            *string
-	Password         string
-	RoleID           int
-	LibraryIDs       []int
-	AllLibraryAccess bool
+	Username             string
+	Email                *string
+	Password             string
+	RoleID               int
+	LibraryIDs           []int
+	AllLibraryAccess     bool
+	RequirePasswordReset bool
 }
 
 // Create creates a new user.
@@ -78,11 +79,12 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 
 	// Create user
 	user := &models.User{
-		Username:     opts.Username,
-		Email:        opts.Email,
-		PasswordHash: hashedPassword,
-		RoleID:       opts.RoleID,
-		IsActive:     true,
+		Username:           opts.Username,
+		Email:              opts.Email,
+		PasswordHash:       hashedPassword,
+		RoleID:             opts.RoleID,
+		IsActive:           true,
+		MustChangePassword: opts.RequirePasswordReset,
 	}
 
 	_, err = s.db.NewInsert().Model(user).Exec(ctx)
@@ -226,7 +228,7 @@ func (s *Service) Update(ctx context.Context, user *models.User, opts UpdateOpti
 }
 
 // ResetPassword changes a user's password.
-func (s *Service) ResetPassword(ctx context.Context, userID int, newPassword string) error {
+func (s *Service) ResetPassword(ctx context.Context, userID int, newPassword string, requirePasswordReset bool) error {
 	hashedPassword, err := auth.HashPassword(newPassword)
 	if err != nil {
 		return err
@@ -235,6 +237,7 @@ func (s *Service) ResetPassword(ctx context.Context, userID int, newPassword str
 	_, err = s.db.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("password_hash = ?", hashedPassword).
+		Set("must_change_password = ?", requirePasswordReset).
 		Set("updated_at = CURRENT_TIMESTAMP").
 		Where("id = ?", userID).
 		Exec(ctx)

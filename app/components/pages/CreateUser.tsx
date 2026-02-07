@@ -22,6 +22,7 @@ const INITIAL_VALUES = {
   email: "",
   password: "",
   confirmPassword: "",
+  requirePasswordReset: false,
   roleId: null as number | null,
   allLibraryAccess: true,
   selectedLibraries: [] as number[],
@@ -40,6 +41,9 @@ const CreateUser = () => {
   const [confirmPassword, setConfirmPassword] = useState(
     INITIAL_VALUES.confirmPassword,
   );
+  const [requirePasswordReset, setRequirePasswordReset] = useState(
+    INITIAL_VALUES.requirePasswordReset,
+  );
   const [roleId, setRoleId] = useState<number | null>(INITIAL_VALUES.roleId);
   const [allLibraryAccess, setAllLibraryAccess] = useState(
     INITIAL_VALUES.allLibraryAccess,
@@ -57,6 +61,7 @@ const CreateUser = () => {
       email.trim() !== INITIAL_VALUES.email ||
       password !== INITIAL_VALUES.password ||
       confirmPassword !== INITIAL_VALUES.confirmPassword ||
+      requirePasswordReset !== INITIAL_VALUES.requirePasswordReset ||
       roleId !== INITIAL_VALUES.roleId ||
       allLibraryAccess !== INITIAL_VALUES.allLibraryAccess ||
       selectedLibraries.length > INITIAL_VALUES.selectedLibraries.length
@@ -66,6 +71,7 @@ const CreateUser = () => {
     email,
     password,
     confirmPassword,
+    requirePasswordReset,
     roleId,
     allLibraryAccess,
     selectedLibraries,
@@ -122,6 +128,7 @@ const CreateUser = () => {
         email: email.trim() || undefined,
         password,
         role_id: roleId,
+        require_password_reset: requirePasswordReset,
         all_library_access: allLibraryAccess,
         library_ids: allLibraryAccess ? undefined : selectedLibraries,
       });
@@ -211,6 +218,22 @@ const CreateUser = () => {
               type="password"
               value={confirmPassword}
             />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              checked={requirePasswordReset}
+              id="require-password-reset"
+              onCheckedChange={(checked) =>
+                setRequirePasswordReset(Boolean(checked))
+              }
+            />
+            <Label
+              className="text-sm font-normal cursor-pointer"
+              htmlFor="require-password-reset"
+            >
+              Require password reset on first login
+            </Label>
           </div>
         </div>
 

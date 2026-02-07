@@ -20,11 +20,12 @@ type StatusResponse struct {
 
 // MeResponse represents the current user response.
 type MeResponse struct {
-	ID            int      `json:"id"`
-	Username      string   `json:"username"`
-	Email         *string  `json:"email,omitempty"`
-	RoleID        int      `json:"role_id"`
-	RoleName      string   `json:"role_name"`
-	Permissions   []string `json:"permissions"`
-	LibraryAccess *[]int   `json:"library_access"` // nil = all libraries, empty = none, populated = specific libraries
+	ID                 int      `json:"id"`
+	Username           string   `json:"username"`
+	Email              *string  `json:"email,omitempty"`
+	RoleID             int      `json:"role_id"`
+	RoleName           string   `json:"role_name"`
+	Permissions        []string `json:"permissions"`
+	LibraryAccess      *[]int   `json:"library_access"` // nil = all libraries, empty = none, populated = specific libraries
+	MustChangePassword bool     `json:"must_change_password"`
 }

@@ -56,6 +56,7 @@ const UserDetail = () => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [requirePasswordReset, setRequirePasswordReset] = useState(false);
 
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
 
@@ -192,6 +193,7 @@ const UserDetail = () => {
         payload: {
           current_password: isSelf ? currentPassword : undefined,
           new_password: newPassword,
+          require_password_reset: isSelf ? undefined : requirePasswordReset,
         },
       });
       toast.success("Password reset successfully");
@@ -199,6 +201,7 @@ const UserDetail = () => {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setRequirePasswordReset(false);
     } catch (error) {
       let msg = "Failed to reset password";
       if (error instanceof Error) {
@@ -230,6 +233,16 @@ const UserDetail = () => {
         ? prev.filter((id) => id !== libraryId)
         : [...prev, libraryId],
     );
+  };
+
+  const handlePasswordDialogOpenChange = (open: boolean) => {
+    setPasswordDialogOpen(open);
+    if (!open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setRequirePasswordReset(false);
+    }
   };
 
   if (isLoading) {
@@ -431,7 +444,10 @@ const UserDetail = () => {
       </div>
 
       {/* Password Reset Dialog */}
-      <Dialog onOpenChange={setPasswordDialogOpen} open={passwordDialogOpen}>
+      <Dialog
+        onOpenChange={handlePasswordDialogOpenChange}
+        open={passwordDialogOpen}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
@@ -474,6 +490,23 @@ const UserDetail = () => {
                 value={confirmPassword}
               />
             </div>
+            {!isSelf && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={requirePasswordReset}
+                  id="require-password-reset"
+                  onCheckedChange={(checked) =>
+                    setRequirePasswordReset(Boolean(checked))
+                  }
+                />
+                <Label
+                  className="text-sm font-normal cursor-pointer"
+                  htmlFor="require-password-reset"
+                >
+                  Require user to reset password on next login
+                </Label>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

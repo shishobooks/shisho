@@ -8,6 +8,7 @@ export interface AuthUser {
   role_name: string;
   permissions: string[];
   library_access?: number[] | null; // null/undefined = all libraries, empty = none, populated = specific libraries
+  must_change_password: boolean;
 }
 
 export interface AuthContextValue {

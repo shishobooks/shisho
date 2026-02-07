@@ -9,14 +9,15 @@ import (
 type User struct {
 	bun.BaseModel `bun:"table:users,alias:u" tstype:"-"`
 
-	ID           int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	Username     string    `bun:",nullzero" json:"username"`
-	Email        *string   `json:"email,omitempty"`
-	PasswordHash string    `json:"-"` // Never expose password hash
-	RoleID       int       `json:"role_id"`
-	IsActive     bool      `json:"is_active"`
+	ID                 int       `bun:",pk,nullzero" json:"id"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	Username           string    `bun:",nullzero" json:"username"`
+	Email              *string   `json:"email,omitempty"`
+	PasswordHash       string    `json:"-"` // Never expose password hash
+	RoleID             int       `json:"role_id"`
+	IsActive           bool      `json:"is_active"`
+	MustChangePassword bool      `json:"must_change_password"`
 
 	// Relations
 	Role          *Role                `bun:"rel:belongs-to,join:role_id=id" json:"role,omitempty" tstype:"Role"`

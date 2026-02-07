@@ -56,6 +56,10 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			return errcodes.Unauthorized("User not found or inactive")
 		}
 
+		if user.MustChangePassword && !isSelfPasswordResetRequest(c, user.ID) {
+			return errcodes.PasswordResetRequired()
+		}
+
 		// Store user info in context
 		c.Set("user_id", user.ID)
 		c.Set("username", user.Username)
@@ -168,6 +172,9 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return respondBasicAuthRequired(c)
 		}
+		if user.MustChangePassword {
+			return respondBasicAuthRequired(c)
+		}
 
 		// Store user info in context
 		c.Set("user_id", user.ID)
@@ -176,6 +183,27 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 		return next(c)
 	}
+}
+
+func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
+	if c.Request().Method != http.MethodPost {
+		return false
+	}
+
+	path := c.Path()
+	if path == "" {
+		path = c.Request().URL.Path
+	}
+	if path != "/users/:id/reset-password" && path != "/api/users/:id/reset-password" {
+		return false
+	}
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return false
+	}
+
+	return id == userID
 }
 
 func respondBasicAuthRequired(c echo.Context) error {

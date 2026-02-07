@@ -42,6 +42,7 @@ interface LoginResponse {
   role_id: number;
   role_name: string;
   permissions: string[];
+  must_change_password: boolean;
 }
 
 export const useLogin = () => {

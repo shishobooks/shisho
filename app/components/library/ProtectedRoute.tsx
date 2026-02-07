@@ -24,6 +24,7 @@ const ProtectedRoute = ({
     needsSetup,
     hasPermission,
     hasLibraryAccess,
+    user,
   } = useAuth();
   const params = useParams();
   const location = useLocation();
@@ -48,6 +49,17 @@ const ProtectedRoute = ({
       <Navigate
         replace
         to={`/login?redirect=${encodeURIComponent(redirectTo)}`}
+      />
+    );
+  }
+
+  // Force users with temporary passwords to go to security settings
+  if (user?.must_change_password && location.pathname !== "/user/security") {
+    const redirectTo = location.pathname + location.search;
+    return (
+      <Navigate
+        replace
+        to={`/user/security?redirect=${encodeURIComponent(redirectTo)}`}
       />
     );
   }

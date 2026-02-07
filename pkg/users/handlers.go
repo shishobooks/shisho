@@ -144,30 +144,47 @@ func (h *handler) resetPassword(c echo.Context) error {
 	isSelf := currentUserID == id
 
 	if isSelf {
-		// Self-reset requires current password
-		if params.CurrentPassword == nil || *params.CurrentPassword == "" {
-			return errcodes.ValidationError("Current password is required when resetting your own password")
-		}
-
-		valid, err := h.userService.VerifyPassword(ctx, id, *params.CurrentPassword)
-		if err != nil {
-			return err
-		}
-		if !valid {
-			return errcodes.ValidationError("Current password is incorrect")
-		}
-	} else {
-		// Non-self reset requires users:write permission
-		user, ok := c.Get("user").(*models.User)
+		currentUser, ok := c.Get("user").(*models.User)
 		if !ok {
 			return errcodes.Unauthorized("Authentication required")
 		}
-		if !user.HasPermission(models.ResourceUsers, models.OperationWrite) {
+
+		// Users in forced-reset flow can set a new password without re-entering
+		// their temporary password. This is intentional: the admin has already
+		// authenticated the user out-of-band by giving them temporary credentials,
+		// so requiring the temp password again adds friction without meaningful
+		// security benefit. The risk surface is limited to stolen JWT sessions
+		// where the attacker would already have access to the account.
+		if !currentUser.MustChangePassword {
+			if params.CurrentPassword == nil || *params.CurrentPassword == "" {
+				return errcodes.ValidationError("Current password is required when resetting your own password")
+			}
+
+			valid, err := h.userService.VerifyPassword(ctx, id, *params.CurrentPassword)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return errcodes.ValidationError("Current password is incorrect")
+			}
+		}
+	} else {
+		// Non-self reset requires users:write permission
+		currentUser, ok := c.Get("user").(*models.User)
+		if !ok {
+			return errcodes.Unauthorized("Authentication required")
+		}
+		if !currentUser.HasPermission(models.ResourceUsers, models.OperationWrite) {
 			return errcodes.Forbidden("You don't have permission to reset other users' passwords")
 		}
 	}
 
-	err = h.userService.ResetPassword(ctx, id, params.NewPassword)
+	requirePasswordReset := false
+	if !isSelf {
+		requirePasswordReset = params.RequirePasswordReset
+	}
+
+	err = h.userService.ResetPassword(ctx, id, params.NewPassword, requirePasswordReset)
 	if err != nil {
 		return err
 	}

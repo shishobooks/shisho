@@ -65,6 +65,7 @@ interface CreateUserPayload {
   role_id: number;
   library_ids?: number[];
   all_library_access?: boolean;
+  require_password_reset?: boolean;
 }
 
 export const useCreateUser = () => {
@@ -111,6 +112,7 @@ export const useUpdateUser = () => {
 interface ResetPasswordPayload {
   current_password?: string;
   new_password: string;
+  require_password_reset?: boolean;
 }
 
 interface ResetPasswordVariables {

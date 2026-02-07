@@ -36,13 +36,14 @@ func buildMeResponse(user *models.User) MeResponse {
 	}
 
 	return MeResponse{
-		ID:            user.ID,
-		Username:      user.Username,
-		Email:         user.Email,
-		RoleID:        user.RoleID,
-		RoleName:      user.Role.Name,
-		Permissions:   permissions,
-		LibraryAccess: libraryAccess,
+		ID:                 user.ID,
+		Username:           user.Username,
+		Email:              user.Email,
+		RoleID:             user.RoleID,
+		RoleName:           user.Role.Name,
+		Permissions:        permissions,
+		LibraryAccess:      libraryAccess,
+		MustChangePassword: user.MustChangePassword,
 	}
 }
 

@@ -160,11 +160,12 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 
 	// Create user
 	user := &models.User{
-		Username:     username,
-		Email:        email,
-		PasswordHash: string(hashedPassword),
-		RoleID:       role.ID,
-		IsActive:     true,
+		Username:           username,
+		Email:              email,
+		PasswordHash:       string(hashedPassword),
+		RoleID:             role.ID,
+		IsActive:           true,
+		MustChangePassword: false,
 	}
 
 	_, err = s.db.NewInsert().Model(user).Exec(ctx)
