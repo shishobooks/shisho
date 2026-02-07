@@ -276,47 +276,107 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			return nil, errors.Wrap(err, "failed to retrieve parent book")
 		}
 
-		bookDeleted := len(book.Files) == 1
 		fileDir := filepath.Dir(file.Filepath)
 		bookPath := book.Filepath
 
-		// Delete the file
+		// Delete the file record (this also handles primary_file_id promotion)
 		if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
 			return nil, errors.Wrap(err, "failed to delete file record")
 		}
 
-		// If last file, delete the book too
-		if bookDeleted {
-			// Delete from search index before deleting the book
-			if w.searchService != nil {
-				if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
-					logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
+		// Check if any main files remain for this book
+		var hasMainFiles bool
+		for _, f := range book.Files {
+			if f.ID != file.ID && f.FileRole == models.FileRoleMain {
+				hasMainFiles = true
+				break
+			}
+		}
+
+		bookDeleted := false
+		if hasMainFiles {
+			// Other main files exist, just clean up empty dirs
+			if fileDir != bookPath {
+				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
+					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 				}
 			}
-			if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
-				return nil, errors.Wrap(err, "failed to delete orphaned book")
+		} else {
+			// No main files remain - check if we can promote a supplement
+			supportedTypes := map[string]struct{}{
+				models.FileTypeEPUB: {},
+				models.FileTypeCBZ:  {},
+				models.FileTypeM4B:  {},
 			}
-			logInfo("deleted orphaned book", logger.Data{"book_id": book.ID})
+			if w.pluginManager != nil {
+				for ext := range w.pluginManager.RegisteredFileExtensions() {
+					supportedTypes[ext] = struct{}{}
+				}
+			}
 
-			// Clean up empty directories up to library path
-			library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
-				ID: &book.LibraryID,
-			})
-			if libErr == nil && library != nil {
-				// Find which library path contains this book
-				for _, libPath := range library.LibraryPaths {
-					if strings.HasPrefix(bookPath, libPath.Filepath) {
-						if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
-							logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
-						}
-						break
+			// Collect remaining supplements (excluding the deleted file)
+			var supplements []*models.File
+			for i := range book.Files {
+				f := book.Files[i]
+				if f.ID != file.ID && f.FileRole == models.FileRoleSupplement {
+					supplements = append(supplements, f)
+				}
+			}
+
+			// Try to promote a supplement with a supported file type
+			var promoted bool
+			for _, supp := range supplements {
+				if _, supported := supportedTypes[supp.FileType]; supported {
+					if err := w.bookService.PromoteSupplementToMain(ctx, supp.ID); err != nil {
+						logWarn("failed to promote supplement to main", logger.Data{"file_id": supp.ID, "error": err.Error()})
+					} else {
+						logInfo("promoted supplement to main file", logger.Data{"file_id": supp.ID, "book_id": book.ID})
+						promoted = true
+					}
+					break
+				}
+			}
+
+			if !promoted {
+				// No promotable supplements - delete remaining supplements and the book
+				bookDeleted = true
+				for _, supp := range supplements {
+					if err := w.bookService.DeleteFile(ctx, supp.ID); err != nil {
+						logWarn("failed to delete supplement file", logger.Data{"file_id": supp.ID, "error": err.Error()})
 					}
 				}
 			}
-		} else if fileDir != bookPath {
-			// Clean up empty directories up to book folder
-			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
-				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+
+			if bookDeleted {
+				// Delete from search index before deleting the book
+				if w.searchService != nil {
+					if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
+						logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
+					}
+				}
+				if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
+					return nil, errors.Wrap(err, "failed to delete orphaned book")
+				}
+				logInfo("deleted orphaned book", logger.Data{"book_id": book.ID})
+
+				// Clean up empty directories up to library path
+				library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+					ID: &book.LibraryID,
+				})
+				if libErr == nil && library != nil {
+					for _, libPath := range library.LibraryPaths {
+						if strings.HasPrefix(bookPath, libPath.Filepath) {
+							if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
+								logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+							}
+							break
+						}
+					}
+				}
+			} else if fileDir != bookPath {
+				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
+					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+				}
 			}
 		}
 

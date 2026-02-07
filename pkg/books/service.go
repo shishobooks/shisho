@@ -1349,6 +1349,17 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	})
 }
 
+// PromoteSupplementToMain promotes a supplement file to a main file.
+// Used during scan cleanup when the last main file is deleted but a promotable supplement exists.
+func (svc *Service) PromoteSupplementToMain(ctx context.Context, fileID int) error {
+	_, err := svc.db.NewUpdate().
+		Model((*models.File)(nil)).
+		Set("file_role = ?", models.FileRoleMain).
+		Where("id = ?", fileID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // ListFilesForLibrary returns all main files for a library.
 // Used for orphan cleanup during batch scans - only main files are tracked,
 // supplements don't need orphan cleanup.

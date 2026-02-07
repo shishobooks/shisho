@@ -271,6 +271,146 @@ func TestScanFileByID_MissingFile_LastFile_DeletesBook(t *testing.T) {
 	assert.Empty(t, tc.listBooks())
 }
 
+func TestScanFileByID_MissingFile_LastMainFile_PromotesSupplement(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with 1 EPUB (main)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Book With Supplement")
+	testgen.GenerateEPUB(t, bookDir, "main-file.epub", testgen.EPUBOptions{
+		Title:   "Book With Supplement",
+		Authors: []string{"Test Author"},
+	})
+
+	// Run initial scan to create book and file in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	mainFileID := files[0].ID
+
+	// Manually add a CBZ supplement file in the DB (CBZ is a supported/promotable type)
+	supplementFile := &models.File{
+		LibraryID:     1,
+		BookID:        bookID,
+		Filepath:      filepath.Join(bookDir, "supplement.cbz"),
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 100,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, supplementFile)
+	require.NoError(t, err)
+
+	// Verify we have 2 files now
+	require.Len(t, tc.listFiles(), 2)
+
+	// Delete the main file from disk
+	err = os.Remove(files[0].Filepath)
+	require.NoError(t, err)
+
+	// Call Scan with FileID of the deleted main file
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID: mainFileID,
+	}, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// File should be deleted but book should NOT be deleted (supplement was promoted)
+	assert.True(t, result.FileDeleted, "FileDeleted should be true")
+	assert.False(t, result.BookDeleted, "BookDeleted should be false - supplement should be promoted")
+
+	// Verify main file is gone from DB
+	_, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, mainFileID)
+	require.Error(t, err)
+
+	// Verify book still exists with one file
+	updatedBook, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.Len(t, updatedBook.Files, 1)
+
+	// Verify the supplement was promoted to main
+	assert.Equal(t, models.FileRoleMain, updatedBook.Files[0].FileRole)
+	assert.Equal(t, supplementFile.ID, updatedBook.Files[0].ID)
+
+	// Verify primary_file_id points to the promoted file
+	require.NotNil(t, updatedBook.PrimaryFileID, "primary_file_id should be set")
+	assert.Equal(t, supplementFile.ID, *updatedBook.PrimaryFileID, "primary_file_id should point to promoted supplement")
+}
+
+func TestScanFileByID_MissingFile_LastMainFile_NoPromotableSupplement_DeletesBook(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with 1 EPUB (main)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Book With PDF")
+	testgen.GenerateEPUB(t, bookDir, "main-file.epub", testgen.EPUBOptions{
+		Title:   "Book With PDF",
+		Authors: []string{"Test Author"},
+	})
+
+	// Run initial scan to create book and file in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	mainFileID := files[0].ID
+
+	// Manually create a supplement file with an unsupported type (pdf) in the DB
+	supplementFile := &models.File{
+		LibraryID:     1,
+		BookID:        bookID,
+		Filepath:      filepath.Join(bookDir, "notes.pdf"),
+		FileType:      "pdf",
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 100,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, supplementFile)
+	require.NoError(t, err)
+
+	// Verify we have 2 files now
+	allFiles := tc.listFiles()
+	require.Len(t, allFiles, 2)
+
+	// Delete the main file from disk
+	err = os.Remove(files[0].Filepath)
+	require.NoError(t, err)
+
+	// Call Scan with FileID of the deleted main file
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID: mainFileID,
+	}, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Both file and book should be deleted (PDF is not promotable)
+	assert.True(t, result.FileDeleted, "FileDeleted should be true")
+	assert.True(t, result.BookDeleted, "BookDeleted should be true - no promotable supplement")
+
+	// Verify everything is gone
+	assert.Empty(t, tc.listFiles(), "all files should be deleted")
+	assert.Empty(t, tc.listBooks(), "book should be deleted")
+}
+
 func TestScanFileByID_NotFound(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
