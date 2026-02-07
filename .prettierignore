@@ -8,5 +8,7 @@ app/types/generated
 CLAUDE.md
 .cursor
 docs/
+website/build/
+website/.docusaurus/
 pkg/plugins/testdata/
 CHANGELOG.md

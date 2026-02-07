@@ -145,6 +145,10 @@ fabric.properties
 
 # Icon must end with two \r
 Icon
+!website/src/theme/Icon/
+!website/src/theme/Icon/**
+!website/src/theme/Admonition/Icon/
+!website/src/theme/Admonition/Icon/**
 
 
 # Thumbnails

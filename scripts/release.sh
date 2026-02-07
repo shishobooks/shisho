@@ -161,6 +161,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "  - CHANGELOG.md"
     echo "  - package.json -> $VERSION"
     echo "  - packages/plugin-types/package.json -> $VERSION"
+    echo "  - website/versioned_docs + website/versions.json"
     echo ""
     echo "Would commit: [Release] $TAG"
     echo "Would create tag: $TAG"
@@ -188,6 +189,16 @@ CHANGELOG_FILE="CHANGELOG.md"
     done < "$CHANGELOG_FILE"
 } > "$CHANGELOG_FILE.tmp" && mv "$CHANGELOG_FILE.tmp" "$CHANGELOG_FILE"
 
+# Version docs site snapshot
+if [[ -d "website" ]]; then
+    echo "Versioning docs website..."
+    (
+        cd website
+        yarn install --frozen-lockfile
+        yarn docs:version "$VERSION"
+    )
+fi
+
 # Update package versions
 echo "Updating package.json..."
 npm version "$VERSION" --no-git-tag-version
@@ -200,6 +211,9 @@ cd ../..
 # Commit changes
 echo "Committing changes..."
 git add CHANGELOG.md package.json packages/plugin-types/package.json
+if [[ -d "website" ]]; then
+    git add -A website
+fi
 git commit -m "[Release] $TAG"
 
 # Create tag

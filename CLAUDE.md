@@ -24,6 +24,7 @@ Examples of things to record: discovered gotchas, naming conventions, architectu
 | `backend` | Any Go backend/API work | `pkg/**/*.go`, `cmd/**/*.go`, handlers, services, models, workers, migrations, Echo, Bun ORM |
 | `plugins` | Any plugin system work | `pkg/plugins/**`, hooks, runtime, host APIs, manifests, Goja, plugin lifecycle |
 | `e2e-testing` | Writing or debugging E2E tests | `e2e/**/*.ts`, Playwright, test independence, test-only endpoints |
+| `docs` | Docs site work (content, config, theme, versioning) | `website/**`, Docusaurus, docs content, deployment |
 
 ### File Format Skills
 
@@ -61,6 +62,12 @@ Examples of things to record: discovered gotchas, naming conventions, architectu
 - "Parse the series metadata from EPUB"
 - "Fix cover extraction for EPUBs"
 - Working on `pkg/epub/`
+
+**MUST invoke `docs`:**
+- "Add a new docs page for the REST API"
+- "Fix the Docusaurus config"
+- "Update the theme colors on the docs site"
+- Working on any file in `website/`
 
 **Multiple skills may apply:** If adding a feature that touches both frontend and backend, invoke both skills before starting.
 

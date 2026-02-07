@@ -12,7 +12,7 @@
     "lint": "concurrently --kill-others-on-fail --group \"yarn:lint:*\"",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:prettier": "prettier --check .",
-    "lint:types": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint:types": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit && yarn --cwd website typecheck",
     "preview": "vite preview",
     "start": "vite",
     "test": "concurrently --kill-others-on-fail --group \"yarn:test:*\"",

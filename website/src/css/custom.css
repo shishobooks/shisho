@@ -1,0 +1,385 @@
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.55 0.2 280);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.145 0 0);
+  --border: oklch(0.922 0 0);
+  --ring: oklch(0.55 0.2 280);
+  --shisho-violet-300: oklch(0.811 0.111 293.571);
+  --ifm-font-family-base:
+    "Geist Variable", "Noto Sans", "Noto Sans Japanese", ui-sans-serif,
+    system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --ifm-heading-font-family: var(--ifm-font-family-base);
+  --ifm-font-weight-bold: 700;
+  --ifm-line-height-base: 1.6;
+  --ifm-color-primary: var(--shisho-violet-300);
+  --ifm-color-primary-dark: oklch(0.75 0.111 293.571);
+  --ifm-color-primary-darker: oklch(0.71 0.111 293.571);
+  --ifm-color-primary-darkest: oklch(0.64 0.111 293.571);
+  --ifm-color-primary-light: oklch(0.84 0.111 293.571);
+  --ifm-color-primary-lighter: oklch(0.87 0.111 293.571);
+  --ifm-color-primary-lightest: oklch(0.91 0.111 293.571);
+  --ifm-background-color: var(--background);
+  --ifm-font-color-base: var(--foreground);
+  --ifm-navbar-height: 65px;
+  --ifm-navbar-background-color: var(--background);
+  --ifm-navbar-link-color: var(--foreground);
+  --ifm-navbar-shadow: 0 1px 0 0 var(--border);
+  --ifm-footer-background-color: oklch(0.2 0 0);
+  --ifm-footer-color: oklch(0.9 0 0);
+  --ifm-footer-link-color: oklch(0.9 0 0);
+  --ifm-card-background-color: var(--card);
+  --ifm-toc-border-color: var(--border);
+  --ifm-code-font-size: 95%;
+  --ifm-code-border-radius: var(--radius);
+  --ifm-global-radius: var(--radius);
+  --ifm-pre-border-radius: var(--radius);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+  --background: oklch(0.23 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.27 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.8 0.15 280);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.32 0 0);
+  --muted: oklch(0.32 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.32 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 15%);
+  --ring: oklch(0.8 0.15 280);
+  --ifm-color-primary: var(--shisho-violet-300);
+  --ifm-color-primary-dark: oklch(0.75 0.111 293.571);
+  --ifm-color-primary-darker: oklch(0.71 0.111 293.571);
+  --ifm-color-primary-darkest: oklch(0.64 0.111 293.571);
+  --ifm-color-primary-light: oklch(0.84 0.111 293.571);
+  --ifm-color-primary-lighter: oklch(0.87 0.111 293.571);
+  --ifm-color-primary-lightest: oklch(0.91 0.111 293.571);
+  --ifm-background-color: var(--background);
+  --ifm-font-color-base: var(--foreground);
+  --ifm-navbar-background-color: oklch(0.23 0 0);
+  --ifm-navbar-link-color: var(--foreground);
+  --ifm-card-background-color: var(--card);
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
+}
+
+html,
+body {
+  background: var(--background);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar__inner {
+  margin: 0 auto;
+  max-width: 1280px;
+  padding-left: 24px;
+  padding-right: 24px;
+  width: 100%;
+}
+
+.navbar__items {
+  gap: 0.5rem;
+}
+
+.navbar__link {
+  align-items: center;
+  border-radius: var(--radius);
+  display: inline-flex;
+  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+}
+
+.navbar__link:hover,
+.navbar__link--active {
+  background: var(--accent);
+}
+
+.dropdown > .navbar__link::after {
+  content: none;
+}
+
+.dropdown > .navbar__link {
+  align-items: center;
+  display: inline-flex;
+}
+
+.navbar-dropdown-chevron {
+  margin-left: 0.3rem;
+  transform: translateY(1px);
+}
+
+.icon-external-link {
+  display: block;
+  flex: none;
+  height: 0.9em;
+  margin-left: 0.25rem;
+  width: 0.9em;
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--border);
+  padding-right: 1rem;
+}
+
+.theme-doc-sidebar-menu {
+  padding-right: 0.5rem;
+}
+
+.menu__link {
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  margin-right: 0;
+  padding-right: 0.875rem;
+}
+
+.menu__link--active {
+  background: color-mix(in oklab, var(--shisho-violet-300) 20%, transparent);
+  border-color: color-mix(in oklab, var(--shisho-violet-300) 20%, transparent);
+  color: var(--shisho-violet-300);
+}
+
+.theme-doc-version-banner,
+.alert--warning {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.theme-doc-version-badge {
+  margin-bottom: 0.75rem;
+}
+
+.theme-doc-markdown > h1 {
+  font-size: 2.125rem;
+  font-weight: 700;
+}
+
+.pagination-nav__link {
+  border-radius: var(--radius);
+  border-color: var(--border);
+}
+
+.shisho-logo {
+  align-items: center;
+  color: var(--foreground);
+  display: inline-flex;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+}
+
+.shisho-logo__icon {
+  color: var(--shisho-violet-300);
+  flex: none;
+  height: 1.25rem;
+  margin-right: 0.25rem;
+  width: 1.25rem;
+}
+
+.shisho-logo__wordmark {
+  line-height: 1;
+}
+
+.shisho-logo__sup {
+  color: var(--shisho-violet-300);
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-left: 0.125rem;
+  vertical-align: super;
+}
+
+.shisho-logo--sm {
+  font-size: 1.125rem;
+}
+
+.shisho-logo--md {
+  font-size: 1.25rem;
+}
+
+.shisho-logo--lg {
+  font-size: 2rem;
+}
+
+.shisho-logo--lg .shisho-logo__icon {
+  height: 1.5rem;
+  margin-right: 0.375rem;
+  width: 1.5rem;
+}
+
+.shisho-logo--link:hover {
+  opacity: 0.8;
+  text-decoration: none;
+}
+
+.docs-home {
+  min-height: calc(100vh - var(--ifm-navbar-height));
+}
+
+.docs-home__hero {
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.docs-home__hero::before {
+  background: radial-gradient(
+    70% 70% at 50% 20%,
+    color-mix(in oklch, var(--primary), transparent 82%),
+    transparent
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.docs-home__hero-inner {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 4rem 1.5rem;
+  position: relative;
+  text-align: center;
+}
+
+.docs-home__eyebrow {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  letter-spacing: 0.12em;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+}
+
+.docs-home__logo {
+  font-size: clamp(2.9rem, 9vw, 5.9rem);
+  line-height: 1;
+  margin-bottom: 1.25rem;
+}
+
+.docs-home__logo .shisho-logo__wordmark {
+  letter-spacing: 0.01em;
+}
+
+.docs-home__logo .shisho-logo__icon {
+  height: clamp(2.3rem, 7vw, 5rem);
+  margin-right: clamp(0.45rem, 1.4vw, 0.85rem);
+  transform: translateY(0.05em);
+  width: clamp(2.3rem, 7vw, 5rem);
+}
+
+.docs-home__logo .shisho-logo__sup {
+  font-size: 0.45em;
+  margin-left: 0.18em;
+  position: relative;
+  top: -0.18em;
+}
+
+.docs-home__subtitle {
+  color: var(--muted-foreground);
+  font-size: 1.125rem;
+  margin: 0 auto 2rem;
+  max-width: 38rem;
+}
+
+.docs-home__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.docs-home__button {
+  border-radius: var(--radius);
+}
+
+.docs-home__highlights {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 80rem;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.docs-home__card {
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.docs-home__card h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.docs-home__card p {
+  color: var(--muted-foreground);
+  margin-bottom: 1rem;
+}
+
+.docs-home__card-link {
+  font-weight: 600;
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+}
+
+.footer.footer--dark {
+  background-color: oklch(0.23 0 0) !important;
+  background-image: none !important;
+}
+
+.footer,
+.footer * {
+  color: var(--ifm-footer-color);
+}
+
+.footer .footer__link-item {
+  align-items: center;
+  color: var(--ifm-footer-link-color);
+  display: inline-flex;
+}
+
+.footer .footer__link-item:hover {
+  color: var(--foreground);
+}
+
+.footer .icon-external-link {
+  margin-left: 0.22rem;
+}
+
+.navbar-github-icon {
+  margin-right: 0.35rem;
+  vertical-align: -2px;
+}
+
+.navbar-docs-icon {
+  margin-right: 0.35rem;
+  transform: translateY(1px);
+}
+
+@media (max-width: 996px) {
+  .docs-home__highlights {
+    grid-template-columns: 1fr;
+  }
+
+  .navbar__inner {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

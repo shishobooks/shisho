@@ -72,10 +72,15 @@ install:
 .PHONY: setup
 setup: $(BUILD_DIR)/golangci-lint tygo
 	yarn
+	cd website && yarn
 
 .PHONY: start
 start: $(BUILD_DIR)/hivemind
 	$(BUILD_DIR)/hivemind
+
+.PHONY: docs
+docs:
+	cd website && yarn start
 
 .PHONY: start\:air
 start\:air: $(BUILD_DIR)/air

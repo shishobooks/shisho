@@ -11,6 +11,8 @@ export default tseslint.config(
   {
     ignores: [
       "build/*",
+      "website/build/**",
+      "website/.docusaurus/**",
       "app/types/generated/*",
       "app/components/ui",
       "test-results",
@@ -19,7 +21,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ["app/**/*.{ts,tsx}"],
+    files: ["app/**/*.{ts,tsx}", "website/src/**/*.{ts,tsx}"],
     ...reactPlugin.configs.flat["jsx-runtime"],
     languageOptions: {
       ...reactPlugin.configs.flat["jsx-runtime"].languageOptions,
@@ -48,7 +50,13 @@ export default tseslint.config(
   },
   {
     files: ["*.js"],
-    ignores: ["app/**"],
+    ignores: ["app/**", "website/**"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ["website/*.{js,ts}"],
     languageOptions: {
       globals: globals.node,
     },

@@ -61,6 +61,10 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Install docs dependencies
+        working-directory: ./website
+        run: yarn install --frozen-lockfile
+
       - name: Generate TypeScript types
         run: make tygo
 
