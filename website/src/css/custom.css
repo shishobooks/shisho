@@ -170,6 +170,12 @@ body {
   font-weight: 700;
 }
 
+.theme-edit-this-page {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
 .pagination-nav__link {
   border-radius: var(--radius);
   border-color: var(--border);
