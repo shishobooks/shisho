@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-02-07
+
+### Features
+- Add forced password reset flow for temporary passwords
+- Add primary file system for books
+- Add delete books and files functionality
+
+### Bug Fixes
+- Delete book when scan detects missing main file with only supplements remaining
+- Prevent SQLite database lock errors with single connection
+- Deduplicate author names in global search results
+- Show correct placeholder cover for audiobooks in global search
+
+### Documentation
+- Add metadata, plugins, users, sidecar, and supplement documentation pages
+- Add Kobo sync, eReader browser, and OPDS documentation pages
+- Add lists documentation page
+- Add Docusaurus documentation website
+- Add agent config symlinks and Codex environment setup
+- Add subagent skill routing instructions to CLAUDE.md
+- Add skills routing and critical gotchas to CLAUDE.md
+
+### Testing
+- Suppress Radix UI act() warnings in FileEditDialog tests
+
+### CI/CD
+- Reuse CI workflow for release validation
+
+
 ## [0.0.11] - 2026-02-01
 
 ### Features
