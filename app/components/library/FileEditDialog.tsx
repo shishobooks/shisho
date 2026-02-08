@@ -1181,7 +1181,7 @@ export function FileEditDialog({
                     onValueChange={setNewIdentifierType}
                     value={newIdentifierType}
                   >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-auto min-w-32 shrink-0 gap-2">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

@@ -39,7 +39,7 @@ type SeriesInput struct {
 
 // IdentifierPayload represents an identifier in update requests.
 type IdentifierPayload struct {
-	Type  string `json:"type" validate:"required,oneof=isbn_10 isbn_13 asin uuid goodreads google other"`
+	Type  string `json:"type" validate:"required,min=1,max=50"`
 	Value string `json:"value" validate:"required,max=100"`
 }
 

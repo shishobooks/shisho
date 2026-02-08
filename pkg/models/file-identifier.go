@@ -8,7 +8,7 @@ import (
 
 // FileIdentifier type constants.
 const (
-	//tygo:emit export type IdentifierType = typeof IdentifierTypeISBN10 | typeof IdentifierTypeISBN13 | typeof IdentifierTypeASIN | typeof IdentifierTypeUUID | typeof IdentifierTypeGoodreads | typeof IdentifierTypeGoogle | typeof IdentifierTypeOther;
+	//tygo:emit export type IdentifierType = typeof IdentifierTypeISBN10 | typeof IdentifierTypeISBN13 | typeof IdentifierTypeASIN | typeof IdentifierTypeUUID | typeof IdentifierTypeGoodreads | typeof IdentifierTypeGoogle | typeof IdentifierTypeOther | (string & {});
 	IdentifierTypeISBN10    = "isbn_10"
 	IdentifierTypeISBN13    = "isbn_13"
 	IdentifierTypeASIN      = "asin"
