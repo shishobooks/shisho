@@ -103,12 +103,12 @@ Metadata sources ranked (lower number = higher precedence):
 ```
 0: Manual (highest)
 1: Sidecar
-2: EPUB/CBZ Metadata
-3: M4B Metadata
+2: Plugin (enrichers and file parsers)
+3: File Metadata (epub_metadata, cbz_metadata, m4b_metadata)
 4: Filepath (lowest)
 ```
 
-Used to determine which metadata to keep when conflicts occur.
+Used to determine which metadata to keep when conflicts occur. During scans, enricher plugins override file-embedded metadata per-field (two-phase merge in `runMetadataEnrichers`).
 
 ### OPDS
 

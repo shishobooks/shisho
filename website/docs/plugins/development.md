@@ -343,6 +343,8 @@ var plugin = (function() {
 
 Return `{ modified: false }` to skip updating metadata for a book.
 
+Enricher values **override** file-embedded metadata for the same field. If a file has a bad title and your enricher returns a corrected title, the enricher's value wins. Among multiple enrichers, the first one (in user-defined order) to provide a value for a field wins. File-embedded metadata is only used as a fallback for fields that no enricher provided.
+
 Only fields declared in the manifest's `fields` array will be applied. Any returned fields not in the declared list are silently stripped. Users can further disable individual fields in the plugin settings.
 
 **Valid enricher fields:** `title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`

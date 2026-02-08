@@ -437,7 +437,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Uses a two-phase merge: enrichers merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
