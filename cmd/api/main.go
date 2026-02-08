@@ -17,12 +17,15 @@ import (
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/server"
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/shishobooks/shisho/pkg/worker"
 )
 
 func main() {
 	ctx := context.Background()
 	log := logger.New()
+
+	log.Info("starting shisho", logger.Data{"version": version.Version})
 
 	cfg, err := config.New()
 	if err != nil {
