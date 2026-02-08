@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-02-07
+
+### Features
+- Give metadata enrichers priority over file-parsed metadata
+
+### Documentation
+- Document enricher priority over file metadata
+- Fix file parser fields table in plugin development docs
+
+
 ## [0.0.15] - 2026-02-07
 
 
