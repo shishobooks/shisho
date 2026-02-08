@@ -12,9 +12,7 @@ const releasedDocVersions = fs.existsSync(versionsFilePath)
   ? (JSON.parse(fs.readFileSync(versionsFilePath, "utf8")) as string[])
   : [];
 const latestReleasedDocsVersion = releasedDocVersions[0];
-const baseUrl =
-  process.env.DOCS_BASE_URL ??
-  (process.env.GITHUB_ACTIONS ? `/${projectName}/` : "/");
+const baseUrl = "/";
 
 const config: Config = {
   title: "Shisho",
@@ -23,7 +21,7 @@ const config: Config = {
   future: {
     v4: true,
   },
-  url: "https://shishobooks.github.io",
+  url: "https://www.shishobooks.com",
   baseUrl,
   organizationName,
   projectName,

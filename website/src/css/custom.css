@@ -234,10 +234,6 @@ body {
   text-decoration: none;
 }
 
-.docs-home {
-  min-height: calc(100vh - var(--ifm-navbar-height));
-}
-
 .docs-home__hero {
   border-bottom: 1px solid var(--border);
   position: relative;

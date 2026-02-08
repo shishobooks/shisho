@@ -26,7 +26,7 @@ function shouldShowGithubIcon(label?: string, href?: string) {
 function shouldShowDocsIcon(label?: string, to?: string, href?: string) {
   if (!label) return false;
   if (label.toLowerCase() !== "docs") return false;
-  return Boolean(to?.startsWith("/docs") || href?.startsWith("/docs"));
+  return Boolean(to?.includes("/docs") || href?.includes("/docs"));
 }
 
 export default function NavbarNavLink({
