@@ -265,7 +265,7 @@ The full set of fields you can return:
 |-------|------|-------------|
 | `title` | `string` | Book title |
 | `subtitle` | `string` | Book subtitle |
-| `authors` | `[{ name, role?, sortName? }]` | List of authors |
+| `authors` | `[{ name, role? }]` | List of authors |
 | `narrators` | `[string]` | List of narrator names |
 | `series` | `string` | Series name |
 | `seriesNumber` | `number` | Position in series (supports decimals like `1.5`) |
@@ -284,6 +284,12 @@ The full set of fields you can return:
 | `pageCount` | `number` | Page count |
 | `identifiers` | `[{ type, value }]` | Identifiers (isbn_10, isbn_13, asin, uuid, etc.) |
 | `chapters` | `[{ title, startPage?, startTimestampMs?, href?, children? }]` | Chapter list |
+
+:::note[Field groupings for enrichers]
+When declaring `fields` in an enricher manifest, some return fields are grouped under a single logical name:
+- **`cover`** controls `coverData`, `coverMimeType`, and `coverPage`
+- **`series`** controls both `series` and `seriesNumber`
+:::
 
 **Manifest capability:**
 
