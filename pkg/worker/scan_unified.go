@@ -2555,7 +2555,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		"book":           buildBookContext(book, file),
 	}
 
-	enrichedMeta := *metadata // copy
+	var enrichedMeta mediafile.ParsedMetadata
 	modified := false
 
 	for _, rt := range runtimes {
@@ -2612,6 +2612,21 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			enrichedMeta.DataSource = enricherSource
 		}
 		modified = true
+	}
+
+	// Phase 2: Merge file-parsed metadata as fallback for fields no enricher provided.
+	// This gives enrichers priority over file metadata (priority 2 > priority 3).
+	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
+
+	// Copy technical fields that enrichers don't provide
+	enrichedMeta.Duration = metadata.Duration
+	enrichedMeta.BitrateBps = metadata.BitrateBps
+	enrichedMeta.Codec = metadata.Codec
+	enrichedMeta.PageCount = metadata.PageCount
+
+	// Use file parser's DataSource as fallback if no enricher modified anything
+	if !modified {
+		enrichedMeta.DataSource = metadata.DataSource
 	}
 
 	return &enrichedMeta
@@ -2680,6 +2695,14 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.CoverData = enrichment.CoverData
 		target.CoverMimeType = enrichment.CoverMimeType
 		target.FieldDataSources["cover"] = source
+	}
+	if target.CoverPage == nil && enrichment.CoverPage != nil {
+		target.CoverPage = enrichment.CoverPage
+		target.FieldDataSources["cover"] = source
+	}
+	if len(target.Chapters) == 0 && len(enrichment.Chapters) > 0 {
+		target.Chapters = enrichment.Chapters
+		target.FieldDataSources["chapters"] = source
 	}
 	// Identifiers are multi-valued by type, so we append new types from the enricher
 	// rather than using "first non-empty wins" like other fields.
