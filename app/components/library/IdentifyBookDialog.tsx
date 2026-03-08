@@ -136,8 +136,12 @@ export function IdentifyBookDialog({
           )}
 
           {searchMutation.isSuccess && results.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              No results found. Try a different search query.
+            <div className="text-center py-12 text-muted-foreground space-y-2">
+              <p>No results found.</p>
+              <p className="text-xs">
+                Make sure you have a metadata enricher plugin installed, or try
+                a different search query.
+              </p>
             </div>
           )}
 

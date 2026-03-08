@@ -1236,6 +1236,17 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errcodes.ValidationError(err.Error())
 	}
 
+	// Get all enricher runtimes first — if none exist, return empty results immediately
+	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if len(runtimes) == 0 {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"results": []SearchResult{},
+		})
+	}
+
 	// Look up the book
 	var book models.Book
 	if err := h.db.NewSelect().Model(&book).
@@ -1257,12 +1268,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 	if !user.HasLibraryAccess(book.LibraryID) {
 		return errcodes.Forbidden("You don't have access to this library")
-	}
-
-	// Get all enricher runtimes
-	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
-	if err != nil {
-		return errors.WithStack(err)
 	}
 
 	// Build context objects
