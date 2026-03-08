@@ -277,6 +277,10 @@ func (inst *Installer) DownloadPluginImage(ctx context.Context, scope, pluginID,
 		return nil
 	}
 
+	if !isAllowedDownloadURL(imageURL) {
+		return errors.Errorf("image URL not from allowed host: %s", imageURL)
+	}
+
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)

@@ -51,13 +51,19 @@ func NewManager(service *Service, pluginDir, pluginDataDir string) *Manager {
 // SetEventCallback registers a callback for plugin lifecycle events.
 // Only one callback is supported; subsequent calls replace the previous one.
 func (m *Manager) SetEventCallback(cb PluginEventCallback) {
+	m.mu.Lock()
 	m.onEvent = cb
+	m.mu.Unlock()
 }
 
 // emitEvent fires a plugin lifecycle event if a callback is registered.
 func (m *Manager) emitEvent(eventType PluginEventType, scope, id string, hooks []string) {
-	if m.onEvent != nil {
-		m.onEvent(PluginEvent{
+	m.mu.RLock()
+	cb := m.onEvent
+	m.mu.RUnlock()
+
+	if cb != nil {
+		cb(PluginEvent{
 			Type:  eventType,
 			Scope: scope,
 			ID:    id,

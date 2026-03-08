@@ -2,12 +2,14 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -719,11 +721,14 @@ func (m *Manager) RunOnUninstalling(rt *Runtime) {
 	}()
 
 	// Call the hook, recovering from panics (errors don't prevent uninstall)
+	log := logger.New()
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Log but don't propagate
-				_ = r
+				log.Warn("onUninstalling hook panicked", logger.Data{
+					"plugin": rt.scope + "/" + rt.pluginID,
+					"panic":  fmt.Sprintf("%v", r),
+				})
 			}
 		}()
 		_, _ = rt.onUninstalling(goja.Undefined())

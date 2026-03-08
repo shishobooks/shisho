@@ -119,10 +119,10 @@ type searchPayload struct {
 }
 
 type enrichPayload struct {
-	PluginScope  string      `json:"plugin_scope" validate:"required"`
-	PluginID     string      `json:"plugin_id" validate:"required"`
-	BookID       int         `json:"book_id" validate:"required"`
-	ProviderData interface{} `json:"provider_data"`
+	PluginScope  string `json:"plugin_scope" validate:"required"`
+	PluginID     string `json:"plugin_id" validate:"required"`
+	BookID       int    `json:"book_id" validate:"required"`
+	ProviderData any    `json:"provider_data"`
 }
 
 func (h *handler) listIdentifierTypes(c echo.Context) error {
@@ -1251,10 +1251,12 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
 	}
 
 	// Get all enricher runtimes
@@ -1330,10 +1332,12 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
 	}
 
 	bookCtx := buildSearchBookContext(&book)
