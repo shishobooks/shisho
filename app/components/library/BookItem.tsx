@@ -1,5 +1,12 @@
 import { uniqBy } from "lodash";
-import { Check, List, MoreVertical, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Check,
+  List,
+  MoreVertical,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -7,6 +14,7 @@ import { toast } from "sonner";
 import AddToListPopover from "@/components/library/AddToListPopover";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
+import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,6 +147,7 @@ const BookItem = ({
   const [coverError, setCoverError] = useState(false);
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showIdentifyDialog, setShowIdentifyDialog] = useState(false);
   const resyncBookMutation = useResyncBook();
   const deleteBookMutation = useDeleteBook();
 
@@ -264,6 +273,10 @@ const BookItem = ({
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh all metadata
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowIdentifyDialog(true)}>
+                <Search className="h-4 w-4 mr-2" />
+                Identify book
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -385,6 +398,11 @@ const BookItem = ({
         open={showDeleteDialog}
         title={book.title}
         variant="book"
+      />
+      <IdentifyBookDialog
+        book={book}
+        onOpenChange={setShowIdentifyDialog}
+        open={showIdentifyDialog}
       />
     </div>
   );
