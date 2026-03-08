@@ -56,6 +56,7 @@ Every setting can be set via an environment variable using the uppercase, unders
 | Setting | Env Variable | Default | Description |
 |---------|-------------|---------|-------------|
 | `plugin_dir` | `PLUGIN_DIR` | `/config/plugins/installed` | Directory where installed [plugins](./plugins/overview) are stored |
+| `plugin_data_dir` | `PLUGIN_DATA_DIR` | `/config/plugins/data` | Directory where plugin persistent data is stored (caches, tokens, DB files). Data survives plugin updates; optionally deleted on uninstall with `delete_data=true` |
 
 ### Supplement Discovery
 

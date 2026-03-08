@@ -115,13 +115,13 @@ type setOrderPayload struct {
 
 type searchPayload struct {
 	Query  string `json:"query" validate:"required"`
-	BookID int64  `json:"book_id" validate:"required"`
+	BookID int    `json:"book_id" validate:"required"`
 }
 
 type enrichPayload struct {
 	PluginScope  string      `json:"plugin_scope" validate:"required"`
 	PluginID     string      `json:"plugin_id" validate:"required"`
-	BookID       int64       `json:"book_id" validate:"required"`
+	BookID       int         `json:"book_id" validate:"required"`
 	ProviderData interface{} `json:"provider_data"`
 }
 
@@ -404,6 +404,11 @@ func (h *handler) update(c echo.Context) error {
 func (h *handler) getImage(c echo.Context) error {
 	scope := c.Param("scope")
 	id := c.Param("id")
+
+	if strings.Contains(scope, "..") || strings.Contains(id, "..") ||
+		strings.ContainsAny(scope, "/\\") || strings.ContainsAny(id, "/\\") {
+		return errcodes.ValidationError("Invalid scope or plugin ID")
+	}
 
 	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")
 	if _, err := os.Stat(iconPath); err != nil {
@@ -1245,6 +1250,13 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	// Get all enricher runtimes
 	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
 	if err != nil {
@@ -1315,6 +1327,13 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 		Relation("Files.Identifiers").
 		Scan(ctx); err != nil {
 		return errcodes.NotFound("Book")
+	}
+
+	// Check library access
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(book.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
 	}
 
 	bookCtx := buildSearchBookContext(&book)
@@ -1609,17 +1628,22 @@ func buildSearchBookContext(book *models.Book) map[string]interface{} {
 	}
 
 	if len(book.BookSeries) > 0 {
-		series := make([]map[string]interface{}, len(book.BookSeries))
-		for i, bs := range book.BookSeries {
+		series := make([]map[string]interface{}, 0, len(book.BookSeries))
+		for _, bs := range book.BookSeries {
+			if bs.Series == nil {
+				continue
+			}
 			s := map[string]interface{}{
 				"name": bs.Series.Name,
 			}
 			if bs.SeriesNumber != nil {
 				s["number"] = *bs.SeriesNumber
 			}
-			series[i] = s
+			series = append(series, s)
 		}
-		ctx["series"] = series
+		if len(series) > 0 {
+			ctx["series"] = series
+		}
 	}
 
 	// Collect identifiers from all files
@@ -1645,6 +1669,7 @@ func NewHandler(service *Service, manager *Manager, installer *Installer) *handl
 }
 
 // Exported handler methods for testing.
+func (h *handler) GetImage(c echo.Context) error              { return h.getImage(c) }
 func (h *handler) GetLibraryOrder(c echo.Context) error       { return h.getLibraryOrder(c) }
 func (h *handler) SetLibraryOrder(c echo.Context) error       { return h.setLibraryOrder(c) }
 func (h *handler) ResetLibraryOrder(c echo.Context) error     { return h.resetLibraryOrder(c) }
