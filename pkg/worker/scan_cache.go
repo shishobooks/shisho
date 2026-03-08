@@ -64,6 +64,11 @@ type ScanCache struct {
 	// Per-book mutexes to prevent concurrent relationship updates for same book
 	bookMu sync.Map // map[int]*sync.Mutex
 
+	// Pre-loaded file lookup for fast path during batch scans.
+	// Written once during LoadKnownFiles (single-threaded init), then read-only
+	// during the parallel scan, so a regular map is safe without synchronization.
+	knownFiles map[string]*models.File
+
 	// Counters for cache hits/misses (atomic for thread safety)
 	personCount    atomic.Int64
 	genreCount     atomic.Int64
@@ -76,6 +81,19 @@ type ScanCache struct {
 // NewScanCache creates a new ScanCache.
 func NewScanCache() *ScanCache {
 	return &ScanCache{}
+}
+
+// LoadKnownFiles populates the known files cache from a list of existing files.
+func (c *ScanCache) LoadKnownFiles(files []*models.File) {
+	c.knownFiles = make(map[string]*models.File, len(files))
+	for _, f := range files {
+		c.knownFiles[f.Filepath] = f
+	}
+}
+
+// GetKnownFile returns a known file by path, or nil if not found.
+func (c *ScanCache) GetKnownFile(path string) *models.File {
+	return c.knownFiles[path]
 }
 
 // cacheKey generates a unique key for an entity based on name and library ID.
