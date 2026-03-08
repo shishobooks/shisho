@@ -13,11 +13,17 @@ var Version = "dev"
 // minimum version requirement. Returns true if either version is empty,
 // "dev", or not parseable as semver (permissive by default).
 func IsCompatible(minVersion string) bool {
-	if minVersion == "" || Version == "" || Version == "dev" {
+	return isVersionCompatible(Version, minVersion)
+}
+
+// isVersionCompatible returns true if currentVersion satisfies the given
+// minimum version requirement. Extracted for testability (avoids mutating global).
+func isVersionCompatible(currentVersion, minVersion string) bool {
+	if minVersion == "" || currentVersion == "" || currentVersion == "dev" {
 		return true
 	}
 
-	currentParts := parseSemver(Version)
+	currentParts := parseSemver(currentVersion)
 	minParts := parseSemver(minVersion)
 	if currentParts == nil || minParts == nil {
 		return true // Can't parse, assume compatible

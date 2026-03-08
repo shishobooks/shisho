@@ -37,11 +37,7 @@ func TestIsCompatible(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			origVersion := Version
-			Version = tt.version
-			defer func() { Version = origVersion }()
-
-			got := IsCompatible(tt.minVersion)
+			got := isVersionCompatible(tt.version, tt.minVersion)
 			assert.Equal(t, tt.want, got)
 		})
 	}
