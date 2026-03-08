@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  type PluginSearchResult,
   usePluginEnrich,
   usePluginSearch,
+  type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
 import type { Book } from "@/types";
@@ -108,8 +108,8 @@ export function IdentifyBookDialog({
         <div className="flex gap-2">
           <Input
             className="flex-1"
-            onKeyDown={handleKeyDown}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Search by title, author, ISBN..."
             ref={inputRef}
             value={query}
@@ -176,10 +176,7 @@ export function IdentifyBookDialog({
                         <p className="font-medium leading-tight">
                           {result.title}
                         </p>
-                        <Badge
-                          className="shrink-0 text-xs"
-                          variant="outline"
-                        >
+                        <Badge className="shrink-0 text-xs" variant="outline">
                           {result.plugin_id}
                         </Badge>
                       </div>

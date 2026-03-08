@@ -12,6 +12,7 @@ import {
   Loader2,
   MoreVertical,
   RefreshCw,
+  Search,
   Star,
   Trash2,
   X,
@@ -28,6 +29,7 @@ import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmatio
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
@@ -762,6 +764,7 @@ const BookDetail = () => {
   const [singleFileMoveId, setSingleFileMoveId] = useState<number | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [fileToDelete, setFileToDelete] = useState<File | null>(null);
+  const [showIdentifyDialog, setShowIdentifyDialog] = useState(false);
 
   const toggleFileSelection = (fileId: number) => {
     setSelectedFileIds((prev) => {
@@ -1189,6 +1192,12 @@ const BookDetail = () => {
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh all metadata
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowIdentifyDialog(true)}
+                    >
+                      <Search className="h-4 w-4 mr-2" />
+                      Identify book
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => setShowMergeIntoDialog(true)}
@@ -1491,6 +1500,12 @@ const BookDetail = () => {
         book={book}
         onOpenChange={setEditDialogOpen}
         open={editDialogOpen}
+      />
+
+      <IdentifyBookDialog
+        book={book}
+        onOpenChange={setShowIdentifyDialog}
+        open={showIdentifyDialog}
       />
 
       <ResyncConfirmDialog
