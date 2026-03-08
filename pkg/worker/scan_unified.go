@@ -208,26 +208,46 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 		return nil, errors.New("LibraryID required for FilePath mode")
 	}
 
-	// Check if file already exists in DB
-	existingFile, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
-		Filepath:  &opts.FilePath,
-		LibraryID: &opts.LibraryID,
-	})
-	if err != nil && !errors.Is(err, errcodes.NotFound("File")) {
-		return nil, errors.Wrap(err, "failed to check if file exists")
-	}
-
-	// If file exists in DB, delegate to scanFileByID
-	if existingFile != nil {
-		return w.scanFileByID(ctx, ScanOptions{
-			FileID:       existingFile.ID,
-			ForceRefresh: opts.ForceRefresh,
-			JobLog:       opts.JobLog,
-		}, cache)
+	// Fast path: check pre-loaded cache for known file (avoids per-file DB query)
+	if cache != nil {
+		if existingFile := cache.GetKnownFile(opts.FilePath); existingFile != nil {
+			// File exists in DB — check if it changed on disk
+			if !opts.ForceRefresh && existingFile.FileModifiedAt != nil {
+				stat, err := os.Stat(opts.FilePath)
+				// Truncate to seconds for comparison — SQLite loses sub-second precision
+				if err == nil && stat.Size() == existingFile.FilesizeBytes &&
+					stat.ModTime().Truncate(time.Second).Equal(existingFile.FileModifiedAt.Truncate(time.Second)) {
+					// File unchanged — skip re-parsing entirely
+					return &ScanResult{File: existingFile}, nil
+				}
+			}
+			// File changed or ForceRefresh — delegate to scanFileByID for full rescan
+			return w.scanFileByID(ctx, ScanOptions{
+				FileID:       existingFile.ID,
+				ForceRefresh: opts.ForceRefresh,
+				JobLog:       opts.JobLog,
+			}, cache)
+		}
+	} else {
+		// No cache — fall back to per-file DB query (single-file rescan path)
+		existingFile, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+			Filepath:  &opts.FilePath,
+			LibraryID: &opts.LibraryID,
+		})
+		if err != nil && !errors.Is(err, errcodes.NotFound("File")) {
+			return nil, errors.Wrap(err, "failed to check if file exists")
+		}
+		if existingFile != nil {
+			return w.scanFileByID(ctx, ScanOptions{
+				FileID:       existingFile.ID,
+				ForceRefresh: opts.ForceRefresh,
+				JobLog:       opts.JobLog,
+			}, cache)
+		}
 	}
 
 	// File doesn't exist in DB - check if it exists on disk
-	_, err = os.Stat(opts.FilePath)
+	_, err := os.Stat(opts.FilePath)
 	if os.IsNotExist(err) {
 		// File doesn't exist on disk - skip silently
 		return nil, nil
@@ -266,7 +286,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	}
 
 	// Check if file exists on disk
-	_, err = os.Stat(file.Filepath)
+	fileStat, err := os.Stat(file.Filepath)
 	if os.IsNotExist(err) {
 		logInfo("file no longer exists on disk, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
 
@@ -427,7 +447,24 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
 	// This is a resync (FileID mode), so pass isResync=true to enable book organization
-	return w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update stored mod time and size so future rescans can skip unchanged files
+	if fileStat != nil {
+		modTime := fileStat.ModTime()
+		file.FileModifiedAt = &modTime
+		file.FilesizeBytes = fileStat.Size()
+		if updateErr := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+			Columns: []string{"file_modified_at", "filesize_bytes"},
+		}); updateErr != nil {
+			logWarn("failed to update file mod time", logger.Data{"error": updateErr.Error()})
+		}
+	}
+
+	return result, nil
 }
 
 // scanBook handles book resync - scan all files belonging to the book.
@@ -1909,6 +1946,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		return nil, errors.Wrap(err, "failed to stat file")
 	}
 	size := stats.Size()
+	modTime := stats.ModTime()
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
 	// Parse metadata from file
@@ -2095,6 +2133,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		Filepath:           path,
 		FileType:           fileType,
 		FilesizeBytes:      size,
+		FileModifiedAt:     &modTime,
 		CoverImageFilename: coverImagePath,
 		CoverMimeType:      coverMimeType,
 		CoverSource:        coverSource,

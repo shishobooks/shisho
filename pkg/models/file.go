@@ -32,6 +32,7 @@ type File struct {
 	FileType                 string            `bun:",nullzero" json:"file_type" tstype:"FileType"`
 	FileRole                 string            `bun:",nullzero,default:'main'" json:"file_role" tstype:"FileRole"`
 	FilesizeBytes            int64             `bun:",nullzero" json:"filesize_bytes"`
+	FileModifiedAt           *time.Time        `json:"file_modified_at"`
 	CoverImageFilename       *string           `json:"cover_image_filename"`
 	CoverMimeType            *string           `json:"cover_mime_type"`
 	CoverSource              *string           `json:"cover_source" tstype:"DataSource"`

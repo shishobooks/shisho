@@ -265,6 +265,16 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		jobLog.Info("processing library", logger.Data{"library_id": library.ID})
 		filesToScan := make([]string, 0)
 
+		// Pre-load all known files for fast lookup during discovery and scan
+		cache := NewScanCache()
+		existingFiles, err := w.bookService.ListFilesForLibrary(ctx, library.ID)
+		if err != nil {
+			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
+		} else {
+			cache.LoadKnownFiles(existingFiles)
+			jobLog.Info("pre-loaded known files", logger.Data{"count": len(existingFiles)})
+		}
+
 		// Go through all the library paths to find all the .cbz files.
 		for _, libraryPath := range library.LibraryPaths {
 			jobLog.Info("processing library path", logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
@@ -297,6 +307,13 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					// Not a built-in or plugin-registered extension, skip.
 					return nil
 				}
+				// Skip MIME detection for files we already know about — they were
+				// validated when first imported, so re-checking is redundant I/O.
+				if cache.GetKnownFile(path) != nil {
+					filesToScan = append(filesToScan, path)
+					return nil
+				}
+
 				mtype, err := mimetype.DetectFile(path)
 				if err != nil {
 					// We can't detect the mime type, so we just skip it.
@@ -340,7 +357,6 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"files_to_scan": len(filesToScan),
 		})
 
-		cache := NewScanCache()
 		fileChan := make(chan string, len(filesToScan))
 		resultChan := make(chan scanResult, len(filesToScan))
 
@@ -401,12 +417,8 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		})
 
 		// Cleanup orphaned files (in DB but not on disk)
-		// Uses the unified Scan() function which handles file deletion properly
-		existingFiles, err := w.bookService.ListFilesForLibrary(ctx, library.ID)
-		if err != nil {
-			jobLog.Warn("failed to list files for orphan cleanup", logger.Data{"error": err.Error()})
-		} else {
-			// Build a set of all file paths we scanned
+		// Uses the pre-loaded files from before the scan to avoid a second DB query
+		if existingFiles != nil {
 			scannedPaths := make(map[string]struct{}, len(filesToScan))
 			for _, path := range filesToScan {
 				scannedPaths[path] = struct{}{}
