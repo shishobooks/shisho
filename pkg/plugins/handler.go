@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
 )
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
@@ -21,6 +22,7 @@ type handler struct {
 	service   *Service
 	manager   *Manager
 	installer *Installer
+	db        *bun.DB
 }
 
 type installPayload struct {
@@ -33,8 +35,9 @@ type installPayload struct {
 }
 
 type updatePayload struct {
-	Enabled *bool             `json:"enabled"`
-	Config  map[string]string `json:"config"`
+	Enabled    *bool             `json:"enabled"`
+	AutoUpdate *bool             `json:"auto_update"`
+	Config     map[string]string `json:"config"`
 }
 
 type orderEntry struct {
@@ -44,6 +47,18 @@ type orderEntry struct {
 
 type setOrderPayload struct {
 	Order []orderEntry `json:"order" validate:"required"`
+}
+
+type searchPayload struct {
+	Query  string `json:"query" validate:"required"`
+	BookID int64  `json:"book_id" validate:"required"`
+}
+
+type enrichPayload struct {
+	PluginScope  string      `json:"plugin_scope" validate:"required"`
+	PluginID     string      `json:"plugin_id" validate:"required"`
+	BookID       int64       `json:"book_id" validate:"required"`
+	ProviderData interface{} `json:"provider_data"`
 }
 
 func (h *handler) listIdentifierTypes(c echo.Context) error {
@@ -94,7 +109,7 @@ func (h *handler) install(c echo.Context) error {
 			ID:          manifest.ID,
 			Name:        manifest.Name,
 			Version:     manifest.Version,
-			Enabled:     true,
+			Status:      models.PluginStatusActive,
 			InstalledAt: time.Now(),
 		}
 		if manifest.Description != "" {
@@ -108,7 +123,7 @@ func (h *handler) install(c echo.Context) error {
 		}
 	} else if payload.DownloadURL == "" && payload.SHA256 == "" {
 		// Look up the plugin in repositories
-		downloadURL, sha256Hash, version, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
+		downloadURL, sha256Hash, version, repoURL, imageURL, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -118,13 +133,20 @@ func (h *handler) install(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
+		// Download plugin icon (non-fatal)
+		if imageURL != "" {
+			_ = h.installer.DownloadPluginImage(ctx, payload.Scope, manifest.ID, imageURL)
+		}
+
 		plugin = &models.Plugin{
-			Scope:       payload.Scope,
-			ID:          manifest.ID,
-			Name:        manifest.Name,
-			Version:     version,
-			Enabled:     true,
-			InstalledAt: time.Now(),
+			Scope:           payload.Scope,
+			ID:              manifest.ID,
+			Name:            manifest.Name,
+			Version:         version,
+			Status:          models.PluginStatusActive,
+			RepositoryScope: &payload.Scope,
+			RepositoryURL:   &repoURL,
+			InstalledAt:     time.Now(),
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
@@ -147,7 +169,19 @@ func (h *handler) install(c echo.Context) error {
 		// Store load error but don't fail the install
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
+		if isVersionIncompatible(err) {
+			plugin.Status = models.PluginStatusNotSupported
+		} else {
+			plugin.Status = models.PluginStatusMalfunctioned
+		}
 		_ = h.service.UpdatePlugin(ctx, plugin)
+		h.manager.emitEvent(PluginEventMalfunctioned, plugin.Scope, plugin.ID, nil)
+	} else {
+		var hooks []string
+		if rt := h.manager.GetRuntime(plugin.Scope, plugin.ID); rt != nil {
+			hooks = rt.HookTypes()
+		}
+		h.manager.emitEvent(PluginEventInstalled, plugin.Scope, plugin.ID, hooks)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, plugin))
@@ -155,10 +189,10 @@ func (h *handler) install(c echo.Context) error {
 
 // findPluginInRepos searches enabled repositories for a plugin by scope and ID.
 // If version is empty, it returns the latest compatible version.
-func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion string, err error) {
+func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion, repoURL, imageURL string, err error) {
 	repos, err := h.service.ListRepositories(c.Request().Context())
 	if err != nil {
-		return "", "", "", errors.WithStack(err)
+		return "", "", "", "", "", errors.WithStack(err)
 	}
 
 	for _, repo := range repos {
@@ -185,18 +219,18 @@ func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version str
 				// Find specific version
 				for _, v := range compatible {
 					if v.Version == version {
-						return v.DownloadURL, v.SHA256, v.Version, nil
+						return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
 					}
 				}
 			} else {
 				// Return the first (latest) compatible version
 				v := compatible[0]
-				return v.DownloadURL, v.SHA256, v.Version, nil
+				return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
 			}
 		}
 	}
 
-	return "", "", "", errcodes.NotFound("Plugin in repositories")
+	return "", "", "", "", "", errcodes.NotFound("Plugin in repositories")
 }
 
 func (h *handler) uninstall(c echo.Context) error {
@@ -204,6 +238,11 @@ func (h *handler) uninstall(c echo.Context) error {
 
 	scope := c.Param("scope")
 	id := c.Param("id")
+
+	// Run onUninstalling lifecycle hook before unloading
+	if rt := h.manager.GetRuntime(scope, id); rt != nil {
+		h.manager.RunOnUninstalling(rt)
+	}
 
 	h.manager.UnloadPlugin(scope, id)
 
@@ -214,6 +253,13 @@ func (h *handler) uninstall(c echo.Context) error {
 	if err := h.service.UninstallPlugin(ctx, scope, id); err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Optionally delete persistent plugin data
+	if c.QueryParam("delete_data") == "true" {
+		h.manager.DeletePluginData(scope, id)
+	}
+
+	h.manager.emitEvent(PluginEventUninstalled, scope, id, nil)
 
 	return c.NoContent(http.StatusNoContent)
 }
@@ -238,22 +284,39 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	if payload.Enabled != nil {
-		wasEnabled := plugin.Enabled
-		plugin.Enabled = *payload.Enabled
+		wasActive := plugin.Status == models.PluginStatusActive
 
-		if *payload.Enabled && !wasEnabled {
-			// Enabling: load the plugin
+		if *payload.Enabled && !wasActive {
+			// Enabling: set Active and load the plugin
+			plugin.Status = models.PluginStatusActive
 			if err := h.manager.LoadPlugin(ctx, scope, id); err != nil {
 				errMsg := err.Error()
 				plugin.LoadError = &errMsg
+				if isVersionIncompatible(err) {
+					plugin.Status = models.PluginStatusNotSupported
+				} else {
+					plugin.Status = models.PluginStatusMalfunctioned
+				}
+				h.manager.emitEvent(PluginEventMalfunctioned, scope, id, nil)
 			} else {
 				plugin.LoadError = nil
+				var hooks []string
+				if rt := h.manager.GetRuntime(scope, id); rt != nil {
+					hooks = rt.HookTypes()
+				}
+				h.manager.emitEvent(PluginEventEnabled, scope, id, hooks)
 			}
-		} else if !*payload.Enabled && wasEnabled {
+		} else if !*payload.Enabled && wasActive {
 			// Disabling: unload the plugin
 			h.manager.UnloadPlugin(scope, id)
+			plugin.Status = models.PluginStatusDisabled
 			plugin.LoadError = nil
+			h.manager.emitEvent(PluginEventDisabled, scope, id, nil)
 		}
+	}
+
+	if payload.AutoUpdate != nil {
+		plugin.AutoUpdate = *payload.AutoUpdate
 	}
 
 	now := time.Now()
@@ -274,6 +337,18 @@ func (h *handler) update(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))
 }
 
+func (h *handler) getImage(c echo.Context) error {
+	scope := c.Param("scope")
+	id := c.Param("id")
+
+	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")
+	if _, err := os.Stat(iconPath); err != nil {
+		return errcodes.NotFound("Plugin icon not found")
+	}
+
+	return c.File(iconPath)
+}
+
 func (h *handler) reload(c echo.Context) error {
 	ctx := c.Request().Context()
 	scope := c.Param("scope")
@@ -287,8 +362,8 @@ func (h *handler) reload(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if !plugin.Enabled {
-		return errcodes.ValidationError("Plugin must be enabled to reload.")
+	if plugin.Status != models.PluginStatusActive {
+		return errcodes.ValidationError("Plugin must be active to reload.")
 	}
 
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
@@ -542,7 +617,7 @@ func (h *handler) updateVersion(c echo.Context) error {
 	targetVersion := *plugin.UpdateAvailableVersion
 
 	// 3. Find the download URL and SHA256 from repositories
-	downloadURL, sha256Hash, _, err := h.findPluginInRepos(c, scope, id, targetVersion)
+	downloadURL, sha256Hash, _, _, imageURL, err := h.findPluginInRepos(c, scope, id, targetVersion)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -553,12 +628,23 @@ func (h *handler) updateVersion(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Download updated plugin icon (non-fatal)
+	if imageURL != "" {
+		_ = h.installer.DownloadPluginImage(ctx, scope, manifest.ID, imageURL)
+	}
+
 	// 5. Hot-reload the plugin
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
+		h.manager.emitEvent(PluginEventMalfunctioned, scope, id, nil)
 	} else {
 		plugin.LoadError = nil
+		var hooks []string
+		if rt := h.manager.GetRuntime(scope, id); rt != nil {
+			hooks = rt.HookTypes()
+		}
+		h.manager.emitEvent(PluginEventUpdated, scope, id, hooks)
 	}
 
 	// 6. Update DB record
@@ -719,7 +805,7 @@ func (h *handler) scan(c echo.Context) error {
 			ID:          manifest.ID,
 			Name:        manifest.Name,
 			Version:     manifest.Version,
-			Enabled:     false,
+			Status:      models.PluginStatusDisabled,
 			InstalledAt: time.Now(),
 		}
 		if manifest.Description != "" {
@@ -1070,6 +1156,177 @@ func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// searchMetadata runs search() across all enabled enricher plugins and returns aggregated results.
+func (h *handler) searchMetadata(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var payload searchPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Look up the book
+	var book models.Book
+	if err := h.db.NewSelect().Model(&book).
+		Where("book.id = ?", payload.BookID).
+		Relation("Authors").
+		Relation("Authors.Person").
+		Relation("BookSeries").
+		Relation("BookSeries.Series").
+		Relation("Files").
+		Relation("Files.Identifiers").
+		Scan(ctx); err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Get all enricher runtimes
+	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Build context objects
+	bookCtx := buildSearchBookContext(&book)
+	fileCtx := map[string]interface{}{} // Minimal file context for search
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx["fileType"] = f.FileType
+		fileCtx["filePath"] = f.Filepath
+	}
+
+	var allResults []SearchResult
+	for _, rt := range runtimes {
+		searchCtx := map[string]interface{}{
+			"query": payload.Query,
+			"book":  bookCtx,
+			"file":  fileCtx,
+		}
+
+		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
+		if sErr != nil {
+			continue // Skip failed plugins
+		}
+		if resp != nil {
+			allResults = append(allResults, resp.Results...)
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"results": allResults,
+	})
+}
+
+// enrichMetadata runs enrich() on a specific plugin with a selected search result.
+func (h *handler) enrichMetadata(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var payload enrichPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Get the specific plugin runtime
+	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
+	if rt == nil {
+		return errcodes.NotFound("Plugin")
+	}
+
+	// Look up the book
+	var book models.Book
+	if err := h.db.NewSelect().Model(&book).
+		Where("book.id = ?", payload.BookID).
+		Relation("Authors").
+		Relation("Authors.Person").
+		Relation("BookSeries").
+		Relation("BookSeries.Series").
+		Relation("Files").
+		Relation("Files.Identifiers").
+		Scan(ctx); err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	bookCtx := buildSearchBookContext(&book)
+	fileCtx := map[string]interface{}{}
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx["fileType"] = f.FileType
+		fileCtx["filePath"] = f.Filepath
+	}
+
+	enrichCtx := map[string]interface{}{
+		"selectedResult": payload.ProviderData,
+		"book":           bookCtx,
+		"file":           fileCtx,
+	}
+
+	result, err := h.manager.RunMetadataEnrich(ctx, rt, enrichCtx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// buildSearchBookContext builds a context map for search/enrich from a book model.
+func buildSearchBookContext(book *models.Book) map[string]interface{} {
+	ctx := map[string]interface{}{
+		"id":    book.ID,
+		"title": book.Title,
+	}
+
+	if book.Subtitle != nil {
+		ctx["subtitle"] = *book.Subtitle
+	}
+	if book.Description != nil {
+		ctx["description"] = *book.Description
+	}
+
+	if len(book.Authors) > 0 {
+		authors := make([]map[string]interface{}, 0, len(book.Authors))
+		for _, a := range book.Authors {
+			author := map[string]interface{}{}
+			if a.Person != nil {
+				author["name"] = a.Person.Name
+			}
+			if a.Role != nil {
+				author["role"] = *a.Role
+			}
+			authors = append(authors, author)
+		}
+		ctx["authors"] = authors
+	}
+
+	if len(book.BookSeries) > 0 {
+		series := make([]map[string]interface{}, len(book.BookSeries))
+		for i, bs := range book.BookSeries {
+			s := map[string]interface{}{
+				"name": bs.Series.Name,
+			}
+			if bs.SeriesNumber != nil {
+				s["number"] = *bs.SeriesNumber
+			}
+			series[i] = s
+		}
+		ctx["series"] = series
+	}
+
+	// Collect identifiers from all files
+	var identifiers []map[string]interface{}
+	for _, f := range book.Files {
+		for _, id := range f.Identifiers {
+			identifiers = append(identifiers, map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			})
+		}
+	}
+	if len(identifiers) > 0 {
+		ctx["identifiers"] = identifiers
+	}
+
+	return ctx
 }
 
 // NewHandler creates a handler for testing and external route registration.

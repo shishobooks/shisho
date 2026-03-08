@@ -22,7 +22,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup: install plugin and set global order
-	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginOrder{
@@ -61,8 +61,8 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup
-	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Enabled: true}
-	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Enabled: true}
+	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Status: models.PluginStatusActive}
+	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(p1).Exec(ctx)
 	require.NoError(t, err)
 	_, err = db.NewInsert().Model(p2).Exec(ctx)
@@ -113,7 +113,7 @@ func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup
-	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestLibraryPluginOrder_ResetAll(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup
-	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 

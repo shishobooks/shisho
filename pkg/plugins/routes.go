@@ -4,11 +4,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
 )
 
 // RegisterRoutesWithGroup registers plugin management API routes.
-func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, installer *Installer) {
-	h := &handler{service: service, manager: manager, installer: installer}
+func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB) {
+	h := &handler{service: service, manager: manager, installer: installer, db: db}
 
 	g.GET("/identifier-types", h.listIdentifierTypes)
 	g.GET("/installed", h.listInstalled)
@@ -19,6 +20,7 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.GET("/installed/:scope/:id/config", h.getConfig)
 	g.GET("/installed/:scope/:id/fields", h.getFieldSettings)
 	g.PUT("/installed/:scope/:id/fields", h.setFieldSettings)
+	g.GET("/installed/:scope/:id/image", h.getImage)
 	g.POST("/installed/:scope/:id/reload", h.reload)
 	g.POST("/installed/:scope/:id/update", h.updateVersion)
 	g.GET("/order/:hookType", h.getOrder)
@@ -28,6 +30,9 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.POST("/repositories", h.addRepository)
 	g.DELETE("/repositories/:scope", h.removeRepository)
 	g.POST("/repositories/:scope/sync", h.syncRepository)
+
+	g.POST("/search", h.searchMetadata)
+	g.POST("/enrich", h.enrichMetadata)
 
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)

@@ -31,7 +31,7 @@ func setupHooksTestManager(t *testing.T, testdata, pluginID string) (*Manager, *
 	copyTestdataFile(t, srcDir, destDir, "main.js")
 
 	// Create the manager and install/load the plugin
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -39,7 +39,7 @@ func setupHooksTestManager(t *testing.T, testdata, pluginID string) (*Manager, *
 		ID:          pluginID,
 		Name:        pluginID + " Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -117,7 +117,7 @@ func TestRunInputConverter_Failure(t *testing.T) {
 	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
 	require.NoError(t, err)
 
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -125,7 +125,7 @@ func TestRunInputConverter_Failure(t *testing.T) {
 		ID:          "fail-converter",
 		Name:        "Fail Converter",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -259,7 +259,7 @@ func TestRunFileParser_MinimalFields(t *testing.T) {
 	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
 	require.NoError(t, err)
 
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -267,7 +267,7 @@ func TestRunFileParser_MinimalFields(t *testing.T) {
 		ID:          "minimal-parser",
 		Name:        "Minimal Parser",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -301,11 +301,12 @@ func TestRunFileParser_MinimalFields(t *testing.T) {
 	assert.Nil(t, md.Chapters)
 }
 
-func TestRunMetadataEnricher_Modified(t *testing.T) {
+func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
 	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
 	ctx := context.Background()
 
-	enrichCtx := map[string]interface{}{
+	searchCtx := map[string]interface{}{
+		"query": "My Book",
 		"book": map[string]interface{}{
 			"title":   "My Book",
 			"authors": []string{"Author A"},
@@ -314,12 +315,42 @@ func TestRunMetadataEnricher_Modified(t *testing.T) {
 			"fileType": "epub",
 			"filePath": "/library/book.epub",
 		},
-		"parsedMetadata": map[string]interface{}{
-			"title": "My Book",
+	}
+
+	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Results, 1)
+
+	result := resp.Results[0]
+	assert.Equal(t, "Search: My Book", result.Title)
+	assert.Equal(t, []string{"Search Author"}, result.Authors)
+	assert.Equal(t, "Search Publisher", result.Publisher)
+	require.Len(t, result.Identifiers, 1)
+	assert.Equal(t, "goodreads", result.Identifiers[0].Type)
+	assert.NotNil(t, result.ProviderData)
+}
+
+func TestRunMetadataEnrich_Modified(t *testing.T) {
+	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
+	ctx := context.Background()
+
+	enrichCtx := map[string]interface{}{
+		"selectedResult": map[string]interface{}{
+			"internalId": 42,
+			"query":      "My Book",
+		},
+		"book": map[string]interface{}{
+			"title":   "My Book",
+			"authors": []string{"Author A"},
+		},
+		"file": map[string]interface{}{
+			"fileType": "epub",
+			"filePath": "/library/book.epub",
 		},
 	}
 
-	result, err := mgr.RunMetadataEnricher(ctx, rt, enrichCtx)
+	result, err := mgr.RunMetadataEnrich(ctx, rt, enrichCtx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.Modified)
@@ -337,12 +368,12 @@ func TestRunMetadataEnricher_Modified(t *testing.T) {
 	assert.Equal(t, mediafile.ParsedIdentifier{Type: "goodreads", Value: "12345"}, result.Metadata.Identifiers[0])
 }
 
-func TestRunMetadataEnricher_NotModified(t *testing.T) {
+func TestRunMetadataEnrich_NotModified(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
-	// Create an enricher that returns modified: false
+	// Create an enricher that returns modified: false from enrich
 	destDir := filepath.Join(pluginDir, "test", "noop-enricher")
 	err := os.MkdirAll(destDir, 0755)
 	require.NoError(t, err)
@@ -363,6 +394,9 @@ func TestRunMetadataEnricher_NotModified(t *testing.T) {
 	mainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(context) {
+        return { results: [{ title: "Result", providerData: {} }] };
+      },
       enrich: function(context) {
         return { modified: false };
       }
@@ -375,7 +409,7 @@ func TestRunMetadataEnricher_NotModified(t *testing.T) {
 	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
 	require.NoError(t, err)
 
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -383,7 +417,7 @@ func TestRunMetadataEnricher_NotModified(t *testing.T) {
 		ID:          "noop-enricher",
 		Name:        "Noop Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -396,11 +430,12 @@ func TestRunMetadataEnricher_NotModified(t *testing.T) {
 	require.NotNil(t, rt)
 
 	enrichCtx := map[string]interface{}{
-		"book": map[string]interface{}{"title": "Test"},
-		"file": map[string]interface{}{"fileType": "epub"},
+		"selectedResult": map[string]interface{}{},
+		"book":           map[string]interface{}{"title": "Test"},
+		"file":           map[string]interface{}{"fileType": "epub"},
 	}
 
-	result, err := manager.RunMetadataEnricher(ctx, rt, enrichCtx)
+	result, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.False(t, result.Modified)
@@ -482,12 +517,22 @@ func TestRunFileParser_NoHook(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not have a fileParser hook")
 }
 
-func TestRunMetadataEnricher_NoHook(t *testing.T) {
+func TestRunMetadataSearch_NoHook(t *testing.T) {
 	// Use the converter plugin which has no enricher hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
 
-	_, err := mgr.RunMetadataEnricher(ctx, rt, map[string]interface{}{})
+	_, err := mgr.RunMetadataSearch(ctx, rt, map[string]interface{}{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
+}
+
+func TestRunMetadataEnrich_NoHook(t *testing.T) {
+	// Use the converter plugin which has no enricher hook
+	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
+	ctx := context.Background()
+
+	_, err := mgr.RunMetadataEnrich(ctx, rt, map[string]interface{}{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
 }

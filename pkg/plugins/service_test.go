@@ -44,7 +44,7 @@ func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin
 		ID:          id,
 		Name:        id + " Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	_, err := db.NewInsert().Model(plugin).Exec(context.Background())
@@ -66,7 +66,7 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 		Version:     "1.0.0",
 		Description: &desc,
 		Author:      &author,
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now().UTC().Truncate(time.Second),
 	}
 
@@ -79,7 +79,7 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 	assert.Equal(t, "1.0.0", retrieved.Version)
 	assert.Equal(t, &desc, retrieved.Description)
 	assert.Equal(t, &author, retrieved.Author)
-	assert.True(t, retrieved.Enabled)
+	assert.Equal(t, models.PluginStatusActive, retrieved.Status)
 
 	// Test not found
 	_, err = svc.RetrievePlugin(ctx, "community", "nonexistent")
@@ -116,7 +116,7 @@ func TestService_UpdatePlugin(t *testing.T) {
 	plugin := insertTestPlugin(t, db, "community", "test-plugin")
 
 	plugin.Version = "2.0.0"
-	plugin.Enabled = false
+	plugin.Status = models.PluginStatusDisabled
 	now := time.Now().UTC().Truncate(time.Second)
 	plugin.UpdatedAt = &now
 
@@ -126,7 +126,7 @@ func TestService_UpdatePlugin(t *testing.T) {
 	retrieved, err := svc.RetrievePlugin(ctx, "community", "test-plugin")
 	require.NoError(t, err)
 	assert.Equal(t, "2.0.0", retrieved.Version)
-	assert.False(t, retrieved.Enabled)
+	assert.Equal(t, models.PluginStatusDisabled, retrieved.Status)
 	assert.NotNil(t, retrieved.UpdatedAt)
 }
 

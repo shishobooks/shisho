@@ -24,37 +24,11 @@ export interface FileParserContext {
   fileType: string;
 }
 
-/** Context passed to metadataEnricher.enrich(). */
-export interface MetadataEnricherContext {
-  /** Metadata freshly parsed from the file on disk (e.g., from ComicInfo.xml, OPF, etc.). */
-  parsedMetadata: {
-    title?: string;
-    subtitle?: string;
-    series?: string;
-    seriesNumber?: number;
-    description?: string;
-    publisher?: string;
-    imprint?: string;
-    url?: string;
-    dataSource?: string;
-    authors?: Array<{ name: string; role?: string }>;
-    narrators?: string[];
-    genres?: string[];
-    tags?: string[];
-    releaseDate?: string;
-    identifiers?: Array<{ type: string; value: string }>;
-  };
-  /** File information from the database. */
-  file: {
-    id?: number;
-    filepath?: string;
-    fileType?: string;
-    fileRole?: string;
-    filesizeBytes?: number;
-    name?: string;
-    url?: string;
-  };
-  /** Current book state from the database, including manually-edited fields. */
+/** Context passed to metadataEnricher.search(). */
+export interface SearchContext {
+  /** Search query (book title for auto, user input for manual). */
+  query: string;
+  /** Current book state from the database. */
   book: {
     id?: number;
     title?: string;
@@ -66,6 +40,53 @@ export interface MetadataEnricherContext {
     tags?: string[];
     identifiers?: Array<{ type: string; value: string }>;
     publisher?: string;
+  };
+  /** File information. */
+  file: {
+    fileType?: string;
+    filePath?: string;
+  };
+}
+
+/** A single search result from metadataEnricher.search(). */
+export interface SearchResult {
+  title: string;
+  authors?: string[];
+  description?: string;
+  imageUrl?: string;
+  releaseDate?: string;
+  publisher?: string;
+  identifiers?: Array<{ type: string; value: string }>;
+  /** Opaque data passed back to enrich(). Use this to store internal IDs. */
+  providerData?: unknown;
+}
+
+/** Result returned from metadataEnricher.search(). */
+export interface SearchResponse {
+  results: SearchResult[];
+}
+
+/** Context passed to metadataEnricher.enrich(). */
+export interface EnrichContext {
+  /** The selected search result's providerData. */
+  selectedResult: unknown;
+  /** Current book state from the database. */
+  book: {
+    id?: number;
+    title?: string;
+    subtitle?: string;
+    description?: string;
+    series?: Array<{ name: string; number?: number }>;
+    authors?: Array<{ name: string; role?: string }>;
+    genres?: string[];
+    tags?: string[];
+    identifiers?: Array<{ type: string; value: string }>;
+    publisher?: string;
+  };
+  /** File information. */
+  file: {
+    fileType?: string;
+    filePath?: string;
   };
 }
 
@@ -131,7 +152,10 @@ export interface FileParserHook {
 
 /** Metadata enricher hook. */
 export interface MetadataEnricherHook {
-  enrich(context: MetadataEnricherContext): EnrichmentResult;
+  /** Search for candidate results from external sources. */
+  search(context: SearchContext): SearchResponse;
+  /** Enrich metadata from a selected search result. */
+  enrich(context: EnrichContext): EnrichmentResult;
 }
 
 /** Output generator hook. */
@@ -146,4 +170,11 @@ export interface ShishoPlugin {
   fileParser?: FileParserHook;
   metadataEnricher?: MetadataEnricherHook;
   outputGenerator?: OutputGeneratorHook;
+
+  /**
+   * Optional lifecycle hook called before the plugin is uninstalled.
+   * Use this to clean up resources (revoke tokens, delete caches, close connections).
+   * Errors in this hook do not prevent uninstall.
+   */
+  onUninstalling?: () => void;
 }

@@ -1,51 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API, type ShishoAPIError } from "@/libraries/api";
-import type { PluginIdentifierType } from "@/types/generated/models";
+import type {
+  Plugin,
+  PluginIdentifierType,
+  PluginOrder,
+  PluginRepository,
+} from "@/types/generated/models";
 
-// --- Types ---
-
-export interface Plugin {
-  scope: string;
-  id: string;
-  name: string;
-  version: string;
-  description?: string | null;
-  author?: string | null;
-  homepage?: string | null;
-  enabled: boolean;
-  installed_at: string;
-  updated_at?: string | null;
-  load_error?: string | null;
-  update_available_version?: string | null;
-}
-
-export interface PluginRepository {
-  url: string;
-  scope: string;
-  name?: string | null;
-  is_official: boolean;
-  enabled: boolean;
-  last_fetched_at?: string | null;
-  fetch_error?: string | null;
-}
-
-export interface PluginOrder {
-  hook_type: string;
-  scope: string;
-  plugin_id: string;
-  position: number;
-}
-
-export type PluginHookType =
-  | "inputConverter"
-  | "fileParser"
-  | "outputGenerator"
-  | "metadataEnricher";
+// Re-export generated types so consumers can import from this module
+export type {
+  Plugin,
+  PluginHookType,
+  PluginOrder,
+  PluginRepository,
+  PluginStatus,
+} from "@/types/generated/models";
+export {
+  PluginStatusActive,
+  PluginStatusDisabled,
+  PluginStatusMalfunctioned,
+  PluginStatusNotSupported,
+} from "@/types/generated/models";
 
 export interface PluginVersion {
   version: string;
   min_app_version: string;
+  changelog: string;
   download_url: string;
   sha256: string;
   manifest_version: number;
@@ -55,9 +36,11 @@ export interface AvailablePlugin {
   scope: string;
   id: string;
   name: string;
+  overview: string;
   description: string;
   author: string;
   homepage: string;
+  imageUrl: string;
   versions: PluginVersion[];
 }
 
@@ -510,6 +493,67 @@ export const useResetAllLibraryPluginOrders = () => {
       queryClient.invalidateQueries({
         queryKey: ["libraries", variables.libraryId, "plugins", "order"],
       });
+    },
+  });
+};
+
+// --- Metadata Search & Enrich ---
+
+export interface PluginSearchResult {
+  title: string;
+  authors?: string[];
+  description?: string;
+  image_url?: string;
+  release_date?: string;
+  publisher?: string;
+  identifiers?: { type: string; value: string }[];
+  provider_data?: unknown;
+  plugin_scope: string;
+  plugin_id: string;
+}
+
+export interface PluginSearchResponse {
+  results: PluginSearchResult[];
+}
+
+export const usePluginSearch = () => {
+  return useMutation<
+    PluginSearchResponse,
+    ShishoAPIError,
+    { query: string; bookId: number }
+  >({
+    mutationFn: ({ query, bookId }) => {
+      return API.request<PluginSearchResponse>("POST", "/plugins/search", {
+        query,
+        book_id: bookId,
+      });
+    },
+  });
+};
+
+export const usePluginEnrich = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { modified: boolean; metadata?: Record<string, unknown> },
+    ShishoAPIError,
+    {
+      pluginScope: string;
+      pluginId: string;
+      bookId: number;
+      providerData: unknown;
+    }
+  >({
+    mutationFn: ({ pluginScope, pluginId, bookId, providerData }) => {
+      return API.request("POST", "/plugins/enrich", {
+        plugin_scope: pluginScope,
+        plugin_id: pluginId,
+        book_id: bookId,
+        provider_data: providerData,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["books"] });
     },
   });
 };

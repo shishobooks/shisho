@@ -14,6 +14,7 @@ import (
 // It controls what filesystem operations a plugin can perform.
 type FSContext struct {
 	pluginDir     string         // Plugin's own directory (always accessible)
+	dataDir       string         // Persistent data directory (always accessible, read+write)
 	allowedPaths  []string       // Hook-provided paths (always accessible)
 	fileAccessCap *FileAccessCap // From manifest (nil = no global file access)
 	tempDir       string         // Lazy-created temp directory path
@@ -21,9 +22,10 @@ type FSContext struct {
 }
 
 // NewFSContext creates a new FSContext for a hook invocation.
-func NewFSContext(pluginDir string, allowedPaths []string, fileAccessCap *FileAccessCap) *FSContext {
+func NewFSContext(pluginDir, dataDir string, allowedPaths []string, fileAccessCap *FileAccessCap) *FSContext {
 	return &FSContext{
 		pluginDir:     pluginDir,
+		dataDir:       dataDir,
 		allowedPaths:  allowedPaths,
 		fileAccessCap: fileAccessCap,
 	}
@@ -66,6 +68,11 @@ func (ctx *FSContext) isReadAllowed(path string) bool {
 		return true
 	}
 
+	// Always allow persistent data directory
+	if ctx.dataDir != "" && isPathWithin(absPath, ctx.dataDir) {
+		return true
+	}
+
 	// Always allow temp directory
 	if ctx.tempDir != "" && isPathWithin(absPath, ctx.tempDir) {
 		return true
@@ -100,6 +107,11 @@ func (ctx *FSContext) isWriteAllowed(path string) bool {
 
 	// Always allow plugin's own directory
 	if isPathWithin(absPath, ctx.pluginDir) {
+		return true
+	}
+
+	// Always allow persistent data directory
+	if ctx.dataDir != "" && isPathWithin(absPath, ctx.dataDir) {
 		return true
 	}
 

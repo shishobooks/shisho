@@ -270,6 +270,47 @@ func (inst *Installer) extractZip(zipPath, destDir string) error {
 	return nil
 }
 
+// DownloadPluginImage downloads an image from the given URL and saves it as icon.png
+// in the plugin's directory. Errors are non-fatal and logged by the caller.
+func (inst *Installer) DownloadPluginImage(ctx context.Context, scope, pluginID, imageURL string) error {
+	if imageURL == "" {
+		return nil
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create image download request")
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to download plugin image")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("failed to download plugin image: HTTP %d", resp.StatusCode)
+	}
+
+	destDir := filepath.Join(inst.pluginDir, scope, pluginID)
+	destPath := filepath.Join(destDir, "icon.png")
+
+	// Limit image download to 5MB
+	const maxImageSize = 5 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize))
+	if err != nil {
+		return errors.Wrap(err, "failed to read plugin image")
+	}
+
+	if err := os.WriteFile(destPath, data, 0600); err != nil {
+		return errors.Wrap(err, "failed to save plugin image")
+	}
+
+	return nil
+}
+
 // isAllowedDownloadURL checks whether the URL matches any allowed download host prefix.
 func isAllowedDownloadURL(url string) bool {
 	for _, prefix := range AllowedDownloadHosts {

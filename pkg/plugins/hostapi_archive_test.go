@@ -62,7 +62,7 @@ func TestArchive_ExtractZip_ExtractsFiles(t *testing.T) {
 	err := os.MkdirAll(destDir, 0755)
 	require.NoError(t, err)
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -99,7 +99,7 @@ func TestArchive_ExtractZip_ZipSlipBlocked(t *testing.T) {
 	err = os.MkdirAll(destDir, 0755)
 	require.NoError(t, err)
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -121,7 +121,7 @@ func TestArchive_CreateZip_CreatesValidZip(t *testing.T) {
 
 	destPath := filepath.Join(pluginDir, "output.zip")
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.createZip("` + srcDir + `", "` + destPath + `")`)
@@ -150,7 +150,7 @@ func TestArchive_ReadZipEntry_ReadsSpecificEntry(t *testing.T) {
 		"second.txt": "second content",
 	})
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	val, err := rt.vm.RunString(`
@@ -174,7 +174,7 @@ func TestArchive_ReadZipEntry_NonExistentEntry(t *testing.T) {
 		"exists.txt": "content",
 	})
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.readZipEntry("` + zipPath + `", "nonexistent.txt")`)
@@ -192,7 +192,7 @@ func TestArchive_ListZipEntries_ReturnsAllNames(t *testing.T) {
 		"sub/c.txt": "c",
 	})
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	val, err := rt.vm.RunString(`
@@ -215,7 +215,7 @@ func TestArchive_ExtractZip_ReadAccessDenied(t *testing.T) {
 	destDir := filepath.Join(pluginDir, "output")
 
 	// No fileAccess capability - external dir is not accessible
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -234,7 +234,7 @@ func TestArchive_ExtractZip_WriteAccessDenied(t *testing.T) {
 	// Write to external dir (not writable without capability)
 	destDir := filepath.Join(externalDir, "output")
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -253,7 +253,7 @@ func TestArchive_CreateZip_ReadAccessDenied(t *testing.T) {
 
 	destPath := filepath.Join(pluginDir, "output.zip")
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.createZip("` + srcDir + `", "` + destPath + `")`)
@@ -273,7 +273,7 @@ func TestArchive_CreateZip_WriteAccessDenied(t *testing.T) {
 	// Write to external dir (not writable)
 	destPath := filepath.Join(externalDir, "output.zip")
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.createZip("` + srcDir + `", "` + destPath + `")`)
@@ -320,7 +320,7 @@ func TestArchive_ExtractZip_WithDirectoryEntries(t *testing.T) {
 	err := os.MkdirAll(destDir, 0755)
 	require.NoError(t, err)
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err = rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -343,7 +343,7 @@ func TestArchive_ReadZipEntry_ReadAccessDenied(t *testing.T) {
 	zipPath := filepath.Join(externalDir, "test.zip")
 	createTestZip(t, zipPath, map[string]string{"file.txt": "content"})
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.readZipEntry("` + zipPath + `", "file.txt")`)
@@ -358,7 +358,7 @@ func TestArchive_ListZipEntries_ReadAccessDenied(t *testing.T) {
 	zipPath := filepath.Join(externalDir, "test.zip")
 	createTestZip(t, zipPath, map[string]string{"file.txt": "content"})
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.listZipEntries("` + zipPath + `")`)
@@ -390,7 +390,7 @@ func TestArchive_ExtractZip_WithAllowedPaths(t *testing.T) {
 	createTestZip(t, zipPath, map[string]string{"hello.txt": "world"})
 
 	// Both srcDir and destDir are in allowedPaths
-	fsCtx := NewFSContext(pluginDir, []string{srcDir, destDir}, nil)
+	fsCtx := NewFSContext(pluginDir, "", []string{srcDir, destDir}, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.extractZip("` + zipPath + `", "` + destDir + `")`)
@@ -416,7 +416,7 @@ func TestArchive_CreateZip_RoundTrip(t *testing.T) {
 	err = os.MkdirAll(extractDir, 0755)
 	require.NoError(t, err)
 
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	// Create zip then extract it
@@ -434,7 +434,7 @@ func TestArchive_CreateZip_RoundTrip(t *testing.T) {
 
 func TestArchive_ExtractZip_MissingArgs(t *testing.T) {
 	pluginDir := t.TempDir()
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.extractZip("only-one-arg")`)
@@ -444,7 +444,7 @@ func TestArchive_ExtractZip_MissingArgs(t *testing.T) {
 
 func TestArchive_CreateZip_MissingArgs(t *testing.T) {
 	pluginDir := t.TempDir()
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.createZip("only-one-arg")`)
@@ -454,7 +454,7 @@ func TestArchive_CreateZip_MissingArgs(t *testing.T) {
 
 func TestArchive_ReadZipEntry_MissingArgs(t *testing.T) {
 	pluginDir := t.TempDir()
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.readZipEntry("only-one-arg")`)
@@ -464,7 +464,7 @@ func TestArchive_ReadZipEntry_MissingArgs(t *testing.T) {
 
 func TestArchive_ListZipEntries_MissingArgs(t *testing.T) {
 	pluginDir := t.TempDir()
-	fsCtx := NewFSContext(pluginDir, nil, nil)
+	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
 
 	_, err := rt.vm.RunString(`shisho.archive.listZipEntries()`)

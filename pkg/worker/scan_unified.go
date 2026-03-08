@@ -2528,6 +2528,8 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 }
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
+// Uses the search→first→enrich pattern: each enricher's search() is called with the
+// book title as query, then the first result is passed to enrich() for full metadata.
 // Each enricher is called in user-defined order; first non-empty value per field wins.
 func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
@@ -2548,12 +2550,15 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 	}
 
-	// Build enrichment context
-	enrichCtx := map[string]interface{}{
-		"parsedMetadata": buildParsedMetadataContext(metadata),
-		"file":           buildFileContext(file),
-		"book":           buildBookContext(book, file),
+	// Determine search query: use book title if available, fall back to parsed title
+	query := book.Title
+	if query == "" && metadata != nil {
+		query = metadata.Title
 	}
+
+	// Build shared context objects
+	fileCtx := buildFileContext(file)
+	bookCtx := buildBookContext(book, file)
 
 	var enrichedMeta mediafile.ParsedMetadata
 	modified := false
@@ -2575,9 +2580,38 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		result, eErr := w.pluginManager.RunMetadataEnricher(ctx, rt, enrichCtx)
+		// Phase 1: Search for candidates
+		searchCtx := map[string]interface{}{
+			"query": query,
+			"book":  bookCtx,
+			"file":  fileCtx,
+		}
+
+		searchResp, sErr := w.pluginManager.RunMetadataSearch(ctx, rt, searchCtx)
+		if sErr != nil {
+			logWarn("enricher search failed", logger.Data{
+				"plugin": rt.Manifest().ID,
+				"error":  sErr.Error(),
+			})
+			continue
+		}
+		if searchResp == nil || len(searchResp.Results) == 0 {
+			continue
+		}
+
+		// Take the first result
+		firstResult := searchResp.Results[0]
+
+		// Phase 2: Enrich with the selected result
+		enrichCtx := map[string]interface{}{
+			"selectedResult": firstResult.ProviderData,
+			"book":           bookCtx,
+			"file":           fileCtx,
+		}
+
+		result, eErr := w.pluginManager.RunMetadataEnrich(ctx, rt, enrichCtx)
 		if eErr != nil {
-			logWarn("enricher plugin failed", logger.Data{
+			logWarn("enricher enrich failed", logger.Data{
 				"plugin": rt.Manifest().ID,
 				"error":  eErr.Error(),
 			})
@@ -2614,7 +2648,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		modified = true
 	}
 
-	// Phase 2: Merge file-parsed metadata as fallback for fields no enricher provided.
+	// Phase 3: Merge file-parsed metadata as fallback for fields no enricher provided.
 	// This gives enrichers priority over file metadata (priority 2 > priority 3).
 	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
 
@@ -2851,68 +2885,6 @@ func filterMetadataFields(
 	}
 
 	return &result
-}
-
-// buildParsedMetadataContext converts ParsedMetadata to a map for plugin enrichment context.
-func buildParsedMetadataContext(md *mediafile.ParsedMetadata) map[string]interface{} {
-	if md == nil {
-		return nil
-	}
-
-	ctx := map[string]interface{}{
-		"title":       md.Title,
-		"subtitle":    md.Subtitle,
-		"series":      md.Series,
-		"description": md.Description,
-		"publisher":   md.Publisher,
-		"imprint":     md.Imprint,
-		"url":         md.URL,
-		"dataSource":  md.DataSource,
-	}
-
-	if md.SeriesNumber != nil {
-		ctx["seriesNumber"] = *md.SeriesNumber
-	}
-
-	if len(md.Authors) > 0 {
-		authors := make([]map[string]interface{}, len(md.Authors))
-		for i, a := range md.Authors {
-			authors[i] = map[string]interface{}{
-				"name": a.Name,
-				"role": a.Role,
-			}
-		}
-		ctx["authors"] = authors
-	}
-
-	if len(md.Narrators) > 0 {
-		ctx["narrators"] = md.Narrators
-	}
-
-	if len(md.Genres) > 0 {
-		ctx["genres"] = md.Genres
-	}
-
-	if len(md.Tags) > 0 {
-		ctx["tags"] = md.Tags
-	}
-
-	if md.ReleaseDate != nil {
-		ctx["releaseDate"] = md.ReleaseDate.Format("2006-01-02")
-	}
-
-	if len(md.Identifiers) > 0 {
-		identifiers := make([]map[string]interface{}, len(md.Identifiers))
-		for i, id := range md.Identifiers {
-			identifiers[i] = map[string]interface{}{
-				"type":  id.Type,
-				"value": id.Value,
-			}
-		}
-		ctx["identifiers"] = identifiers
-	}
-
-	return ctx
 }
 
 // buildFileContext converts a File model to a map for plugin enrichment context.

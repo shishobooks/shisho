@@ -189,7 +189,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 	pluginService := plugins.NewService(db)
 	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
-	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller)
+	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller, db)
 }
 
 func notFoundHandler(c echo.Context) error {

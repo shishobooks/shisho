@@ -55,11 +55,11 @@ func TestService_GetLibraryOrder(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup: install plugins first
-	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
-	plugin2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Test Enricher 2", Version: "1.0.0", Enabled: true}
+	plugin2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Test Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err = db.NewInsert().Model(plugin2).Exec(ctx)
 	require.NoError(t, err)
 
@@ -91,7 +91,7 @@ func TestService_ResetLibraryOrder(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup
-	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestService_ResetAllLibraryOrders(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Setup
-	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Enabled: true}
+	plugin := &models.Plugin{Scope: "test", ID: "enricher", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
