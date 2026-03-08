@@ -1,8 +1,3 @@
----
-name: plugins
-description: You MUST use this before working on anything plugin-related (e.g. hooks, runtime, manager, host APIs, manifests, repositories, installation, configuration, or scan integration). Covers the Goja JS runtime, hook types, host APIs, filesystem sandboxing, metadata priority, and the plugin lifecycle.
----
-
 # Plugin System Reference
 
 Shisho's plugin system allows third-party JavaScript to extend file parsing, metadata enrichment, format conversion, and output generation. Plugins run in sandboxed Goja VMs with controlled access to host APIs.

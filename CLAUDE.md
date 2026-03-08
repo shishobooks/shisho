@@ -6,83 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
 
-**Record learnings about the codebase.** When you discover something important about how the codebase works (through exploration or discussion with the user), add it to the appropriate location:
-- **Domain-specific** (patterns, gotchas, conventions for a specific area) → Add to the relevant skill in `.claude/skills/`
-- **Project-wide** (general conventions, critical gotchas, workflow rules) → Add to this file (CLAUDE.md)
+**Keep CLAUDE.md files up to date.** Subdirectory `CLAUDE.md` files document patterns, conventions, and gotchas for each area of the codebase. When you make changes that affect what's documented — adding new patterns, changing APIs, renaming fields, adding new conventions — update the relevant `CLAUDE.md` to reflect the new state. Outdated documentation is worse than no documentation.
+
+- **Domain-specific** (patterns, gotchas, conventions for a specific area) → Update or add to the relevant `CLAUDE.md` in the subdirectory (e.g., `pkg/epub/CLAUDE.md`)
+- **Project-wide** (general conventions, critical gotchas, workflow rules) → Update or add to this file (CLAUDE.md)
 
 Examples of things to record: discovered gotchas, naming conventions, architectural decisions, common mistakes, integration patterns, edge cases.
 
-## Skills Routing (MANDATORY)
+## Subdirectory CLAUDE.md Files
 
-**You MUST invoke the relevant skill BEFORE writing or modifying code in these domains.** Do not skip skills because you "know the patterns" - skills contain project-specific conventions that differ from general knowledge.
+Project-specific conventions are documented in `CLAUDE.md` files within each subdirectory. These are automatically loaded when working on files in that directory.
 
-### Domain Skills
+| Location | Covers |
+|----------|--------|
+| `pkg/CLAUDE.md` | Go backend: Echo handlers, Bun ORM, workers, metadata sync checklist |
+| `app/CLAUDE.md` | React frontend: Tanstack Query, components, UI patterns |
+| `pkg/plugins/CLAUDE.md` | Plugin system: Goja runtime, hooks, host APIs, manifests |
+| `pkg/epub/CLAUDE.md` | EPUB format: OPF, Dublin Core, parsing/generation |
+| `pkg/cbz/CLAUDE.md` | CBZ format: ComicInfo.xml, creator roles, chapter detection |
+| `pkg/kepub/CLAUDE.md` | KePub format: koboSpan wrapping, CBZ-to-KePub conversion |
+| `pkg/mp4/CLAUDE.md` | M4B format: iTunes atoms, chapters, narrator fallback |
+| `website/CLAUDE.md` | Docs site: Docusaurus, versioning, deployment |
+| `e2e/CLAUDE.md` | E2E testing: Playwright, per-browser isolation, fixtures |
 
-| Skill | Invoke When | File Patterns / Keywords |
-|-------|-------------|--------------------------|
-| `frontend` | Any React/TypeScript/UI work | `app/**/*.tsx`, `app/**/*.ts`, components, hooks, queries, UI, styling, Tanstack Query |
-| `backend` | Any Go backend/API work | `pkg/**/*.go`, `cmd/**/*.go`, handlers, services, models, workers, migrations, Echo, Bun ORM |
-| `plugins` | Any plugin system work | `pkg/plugins/**`, hooks, runtime, host APIs, manifests, Goja, plugin lifecycle |
-| `e2e-testing` | Writing or debugging E2E tests | `e2e/**/*.ts`, Playwright, test independence, test-only endpoints |
-| `docs` | Docs site work (content, config, theme, versioning) | `website/**`, Docusaurus, docs content, deployment |
+## Utility Skills
 
-### File Format Skills
-
-| Skill | Invoke When | File Patterns / Keywords |
-|-------|-------------|--------------------------|
-| `epub` | EPUB parsing, generation, metadata | `pkg/epub/**`, OPF, Dublin Core, Calibre meta, `content.opf` |
-| `cbz` | CBZ/comic parsing, generation | `pkg/cbz/**`, ComicInfo.xml, comic metadata, creator roles |
-| `m4b` | M4B/audiobook parsing, generation | `pkg/mp4/**`, iTunes atoms, chapters, narrators, MP4 metadata |
-| `kepub` | KePub/Kobo conversion | `pkg/kepub/**`, koboSpan, fixed-layout, Kobo devices |
-
-### Utility Skills
+These workflow-based skills (in `.claude/skills/`) are invoked on demand:
 
 | Skill | Invoke When |
 |-------|-------------|
 | `favicon` | Creating or updating favicon, app icons, PWA icons |
 | `splash` | Creating or updating the README splash image |
 | `squash-merge-worktree` | Done with worktree work, ready to merge back to master |
-| `resolving-merge-conflicts` | Git merge/rebase/cherry-pick conflicts, `<<<<<<< HEAD` markers |
-
-### Trigger Examples
-
-**MUST invoke `frontend`:**
-- "Add a button to the book detail page"
-- "Fix the search component"
-- "Update the API hook for books"
-- Working on any file in `app/`
-
-**MUST invoke `backend`:**
-- "Add a new API endpoint"
-- "Fix the scan worker"
-- "Add a database migration"
-- Working on any file in `pkg/` or `cmd/`
-
-**MUST invoke `epub`:**
-- "Parse the series metadata from EPUB"
-- "Fix cover extraction for EPUBs"
-- Working on `pkg/epub/`
-
-**MUST invoke `docs`:**
-- "Add a new docs page for the REST API"
-- "Fix the Docusaurus config"
-- "Update the theme colors on the docs site"
-- Working on any file in `website/`
-
-**Multiple skills may apply:** If adding a feature that touches both frontend and backend, invoke both skills before starting.
-
-### Subagent Skill Routing
-
-**Subagents do not inherit CLAUDE.md.** When spawning any subagent (via the Task tool) that will read, review, or modify code, copy the Skills Routing tables above (Domain Skills, File Format Skills) into the task prompt so the subagent can self-determine which skills to invoke based on the files it encounters. Include this preamble:
-
-```
-Before working on code, invoke the relevant skills from this routing table using the Skill tool.
-Skills contain project-specific conventions that you won't know otherwise.
-
-[paste Domain Skills + File Format Skills tables here]
-```
-
-This applies to all subagent types (code-reviewer, parallel agents, plan executors, etc.).
 
 ## Critical Gotchas
 
@@ -169,9 +124,9 @@ This allows the Dockerfile to use `yarn install --production` to skip installing
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
 - **Development**: Air for Go hot reload, Hivemind for process management
 
-For detailed architecture information, see the skills:
-- **Backend details**: `.claude/skills/backend/SKILL.md`
-- **Frontend details**: `.claude/skills/frontend/SKILL.md`
+For detailed architecture information, see:
+- **Backend details**: `pkg/CLAUDE.md`
+- **Frontend details**: `app/CLAUDE.md`
 
 ## Development Workflow
 

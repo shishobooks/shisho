@@ -1,12 +1,6 @@
----
-name: frontend
-description: You MUST use this before working on any React/TypeScript frontend code or anything UI related. Covers Tanstack Query, API integration, component patterns, and UI conventions for Shisho.
-user-invocable: false
----
-
 # Shisho Frontend Development
 
-This skill documents frontend patterns and conventions specific to Shisho.
+This file documents frontend patterns and conventions specific to Shisho.
 
 ## Stack
 
@@ -500,7 +494,7 @@ describe("MyComponent", () => {
 
 ### E2E Tests
 
-**See the `e2e-testing` skill for detailed E2E patterns**, including:
+**See `e2e/CLAUDE.md` for detailed E2E patterns**, including:
 - Test independence via `beforeAll` hooks
 - Test-only API endpoints (`ENVIRONMENT=test`)
 - Common pitfalls (shared database, toast assertions, redirect expectations)

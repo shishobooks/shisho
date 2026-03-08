@@ -1,8 +1,3 @@
----
-name: docs
-description: Use when working on the documentation website, Docusaurus config, docs content, theme customization, or versioning. Covers the website/ directory.
----
-
 # Documentation Site
 
 ## Overview

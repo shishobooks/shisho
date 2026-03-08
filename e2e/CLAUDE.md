@@ -1,12 +1,6 @@
----
-name: e2e-testing
-description: You MUST use this before writing or debugging E2E tests. Covers test independence, test-only API endpoints, Playwright configuration, and common pitfalls like shared database race conditions and toast assertions.
-user-invocable: false
----
-
 # E2E Testing
 
-This skill documents E2E testing patterns and conventions for Shisho.
+This file documents E2E testing patterns and conventions for Shisho.
 
 ## Stack
 

@@ -1,11 +1,6 @@
----
-name: cbz
-description: You MUST use this before working on anything CBZ/comic-related (e.g. parsing, generation, ComicInfo.xml metadata, etc.). Covers creator roles, page handling, and the cbz/filegen packages.
----
-
 # CBZ Format Reference
 
-This skill documents the CBZ (Comic Book ZIP) format as used in Shisho for parsing and generation.
+This file documents the CBZ (Comic Book ZIP) format as used in Shisho for parsing and generation.
 
 ## File Structure
 
@@ -268,7 +263,7 @@ Priority 3: Filepath
 
 ## KePub Conversion
 
-CBZ files can be converted to fixed-layout KePub for Kobo devices. See `kepub.md` skill for details.
+CBZ files can be converted to fixed-layout KePub for Kobo devices. See `pkg/kepub/CLAUDE.md` for details.
 
 **Quick Reference:**
 - Converts to fixed-layout EPUB with `rendition:layout="pre-paginated"`

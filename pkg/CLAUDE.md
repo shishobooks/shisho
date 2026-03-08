@@ -1,12 +1,6 @@
----
-name: backend
-description: You MUST use this before working on any Go backend code or working with the API. Covers Echo handlers, Bun ORM, worker jobs, file parsers, and the metadata sync checklist.
-user-invocable: false
----
-
 # Shisho Backend Development
 
-This skill documents backend patterns and conventions specific to Shisho.
+This file documents backend patterns and conventions specific to Shisho.
 
 ## Stack
 
@@ -44,11 +38,11 @@ Each domain (books, jobs, libraries, chapters) has:
 
 ### File Types
 
-- To learn more about all the file types that we support, refer to these skills:
-  - EPUB: `.claude/skills/epub/SKILL.md`
-  - CBZ: `.claude/skills/cbz/SKILL.md`
-  - M4B: `.claude/skills/m4b/SKILL.md`
-  - KePub: `.claude/skills/kepub/SKILL.md`
+- To learn more about all the file types that we support, refer to:
+  - EPUB: `pkg/epub/CLAUDE.md`
+  - CBZ: `pkg/cbz/CLAUDE.md`
+  - M4B: `pkg/mp4/CLAUDE.md`
+  - KePub: `pkg/kepub/CLAUDE.md`
 
 ### Primary File System
 
