@@ -7,9 +7,32 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// EnrichDeps holds optional dependencies for the enrich endpoint.
+// If nil, the enrich endpoint returns metadata without persisting it.
+type EnrichDeps struct {
+	BookStore     bookStore
+	RelStore      relationStore
+	IdentStore    identifierStore
+	PersonFinder  personFinder
+	GenreFinder   genreFinder
+	TagFinder     tagFinder
+	SearchIndexer searchIndexer
+}
+
 // RegisterRoutesWithGroup registers plugin management API routes.
-func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB) {
+func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB, ed *EnrichDeps) {
 	h := &handler{service: service, manager: manager, installer: installer, db: db}
+	if ed != nil {
+		h.enrich = &enrichDeps{
+			bookStore:     ed.BookStore,
+			relStore:      ed.RelStore,
+			identStore:    ed.IdentStore,
+			personFinder:  ed.PersonFinder,
+			genreFinder:   ed.GenreFinder,
+			tagFinder:     ed.TagFinder,
+			searchIndexer: ed.SearchIndexer,
+		}
+	}
 
 	g.GET("/identifier-types", h.listIdentifierTypes)
 	g.GET("/installed", h.listInstalled)
