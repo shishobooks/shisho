@@ -153,6 +153,8 @@ export interface PluginManifest {
   name: string;
   /** Semver version string. */
   version: string;
+  /** Short one-liner overview (separate from longer description). */
+  overview?: string;
   description?: string;
   author?: string;
   homepage?: string;

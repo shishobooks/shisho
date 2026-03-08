@@ -186,6 +186,11 @@ const AdminSettings = () => {
               value={config.plugin_dir}
             />
             <ConfigRow
+              description="Directory where plugin persistent data is stored"
+              label="Plugin Data Directory"
+              value={config.plugin_data_dir}
+            />
+            <ConfigRow
               description="File patterns excluded from supplement discovery"
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}

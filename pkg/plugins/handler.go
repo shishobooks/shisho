@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"os"
@@ -11,16 +12,81 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/htmlutil"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/uptrace/bun"
 )
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
+
+// enrichDeps holds dependencies for the enrich endpoint.
+// Uses interfaces to avoid circular imports with the books package.
+type enrichDeps struct {
+	bookStore     bookStore
+	relStore      relationStore
+	identStore    identifierStore
+	personFinder  personFinder
+	genreFinder   genreFinder
+	tagFinder     tagFinder
+	searchIndexer searchIndexer
+}
+
+// bookStore provides core book CRUD operations.
+type bookStore interface {
+	UpdateBook(ctx context.Context, book *models.Book, columns []string) error
+	RetrieveBook(ctx context.Context, bookID int) (*models.Book, error)
+}
+
+// relationStore provides book relationship CRUD operations.
+type relationStore interface {
+	DeleteAuthors(ctx context.Context, bookID int) error
+	CreateAuthor(ctx context.Context, author *models.Author) error
+	DeleteBookSeries(ctx context.Context, bookID int) error
+	CreateBookSeries(ctx context.Context, bs *models.BookSeries) error
+	FindOrCreateSeries(ctx context.Context, name string, libraryID int, nameSource string) (*models.Series, error)
+	DeleteBookGenres(ctx context.Context, bookID int) error
+	CreateBookGenre(ctx context.Context, bg *models.BookGenre) error
+	DeleteBookTags(ctx context.Context, bookID int) error
+	CreateBookTag(ctx context.Context, bt *models.BookTag) error
+}
+
+// identifierStore provides file identifier CRUD operations.
+type identifierStore interface {
+	DeleteIdentifiersForFile(ctx context.Context, fileID int) (int, error)
+	CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error
+}
+
+// personFinder finds or creates persons for author associations.
+type personFinder interface {
+	FindOrCreatePerson(ctx context.Context, name string, libraryID int) (*models.Person, error)
+}
+
+// genreFinder finds or creates genres.
+type genreFinder interface {
+	FindOrCreateGenre(ctx context.Context, name string, libraryID int) (*models.Genre, error)
+}
+
+// tagFinder finds or creates tags.
+type tagFinder interface {
+	FindOrCreateTag(ctx context.Context, name string, libraryID int) (*models.Tag, error)
+}
+
+// searchIndexer updates the search index after metadata changes.
+type searchIndexer interface {
+	IndexBook(ctx context.Context, book *models.Book) error
+}
 
 type handler struct {
 	service   *Service
 	manager   *Manager
 	installer *Installer
+	db        *bun.DB
+	enrich    *enrichDeps
 }
 
 type installPayload struct {
@@ -33,8 +99,9 @@ type installPayload struct {
 }
 
 type updatePayload struct {
-	Enabled *bool             `json:"enabled"`
-	Config  map[string]string `json:"config"`
+	Enabled    *bool             `json:"enabled"`
+	AutoUpdate *bool             `json:"auto_update"`
+	Config     map[string]string `json:"config"`
 }
 
 type orderEntry struct {
@@ -44,6 +111,18 @@ type orderEntry struct {
 
 type setOrderPayload struct {
 	Order []orderEntry `json:"order" validate:"required"`
+}
+
+type searchPayload struct {
+	Query  string `json:"query" validate:"required"`
+	BookID int    `json:"book_id" validate:"required"`
+}
+
+type enrichPayload struct {
+	PluginScope  string `json:"plugin_scope" validate:"required"`
+	PluginID     string `json:"plugin_id" validate:"required"`
+	BookID       int    `json:"book_id" validate:"required"`
+	ProviderData any    `json:"provider_data"`
 }
 
 func (h *handler) listIdentifierTypes(c echo.Context) error {
@@ -94,7 +173,7 @@ func (h *handler) install(c echo.Context) error {
 			ID:          manifest.ID,
 			Name:        manifest.Name,
 			Version:     manifest.Version,
-			Enabled:     true,
+			Status:      models.PluginStatusActive,
 			InstalledAt: time.Now(),
 		}
 		if manifest.Description != "" {
@@ -108,7 +187,7 @@ func (h *handler) install(c echo.Context) error {
 		}
 	} else if payload.DownloadURL == "" && payload.SHA256 == "" {
 		// Look up the plugin in repositories
-		downloadURL, sha256Hash, version, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
+		downloadURL, sha256Hash, version, repoURL, imageURL, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -118,13 +197,20 @@ func (h *handler) install(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
+		// Download plugin icon (non-fatal)
+		if imageURL != "" {
+			_ = h.installer.DownloadPluginImage(ctx, payload.Scope, manifest.ID, imageURL)
+		}
+
 		plugin = &models.Plugin{
-			Scope:       payload.Scope,
-			ID:          manifest.ID,
-			Name:        manifest.Name,
-			Version:     version,
-			Enabled:     true,
-			InstalledAt: time.Now(),
+			Scope:           payload.Scope,
+			ID:              manifest.ID,
+			Name:            manifest.Name,
+			Version:         version,
+			Status:          models.PluginStatusActive,
+			RepositoryScope: &payload.Scope,
+			RepositoryURL:   &repoURL,
+			InstalledAt:     time.Now(),
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
@@ -147,7 +233,19 @@ func (h *handler) install(c echo.Context) error {
 		// Store load error but don't fail the install
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
+		if isVersionIncompatible(err) {
+			plugin.Status = models.PluginStatusNotSupported
+		} else {
+			plugin.Status = models.PluginStatusMalfunctioned
+		}
 		_ = h.service.UpdatePlugin(ctx, plugin)
+		h.manager.emitEvent(PluginEventMalfunctioned, plugin.Scope, plugin.ID, nil)
+	} else {
+		var hooks []string
+		if rt := h.manager.GetRuntime(plugin.Scope, plugin.ID); rt != nil {
+			hooks = rt.HookTypes()
+		}
+		h.manager.emitEvent(PluginEventInstalled, plugin.Scope, plugin.ID, hooks)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, plugin))
@@ -155,10 +253,10 @@ func (h *handler) install(c echo.Context) error {
 
 // findPluginInRepos searches enabled repositories for a plugin by scope and ID.
 // If version is empty, it returns the latest compatible version.
-func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion string, err error) {
+func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion, repoURL, imageURL string, err error) {
 	repos, err := h.service.ListRepositories(c.Request().Context())
 	if err != nil {
-		return "", "", "", errors.WithStack(err)
+		return "", "", "", "", "", errors.WithStack(err)
 	}
 
 	for _, repo := range repos {
@@ -185,18 +283,18 @@ func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version str
 				// Find specific version
 				for _, v := range compatible {
 					if v.Version == version {
-						return v.DownloadURL, v.SHA256, v.Version, nil
+						return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
 					}
 				}
 			} else {
 				// Return the first (latest) compatible version
 				v := compatible[0]
-				return v.DownloadURL, v.SHA256, v.Version, nil
+				return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
 			}
 		}
 	}
 
-	return "", "", "", errcodes.NotFound("Plugin in repositories")
+	return "", "", "", "", "", errcodes.NotFound("Plugin in repositories")
 }
 
 func (h *handler) uninstall(c echo.Context) error {
@@ -204,6 +302,11 @@ func (h *handler) uninstall(c echo.Context) error {
 
 	scope := c.Param("scope")
 	id := c.Param("id")
+
+	// Run onUninstalling lifecycle hook before unloading
+	if rt := h.manager.GetRuntime(scope, id); rt != nil {
+		h.manager.RunOnUninstalling(rt)
+	}
 
 	h.manager.UnloadPlugin(scope, id)
 
@@ -214,6 +317,13 @@ func (h *handler) uninstall(c echo.Context) error {
 	if err := h.service.UninstallPlugin(ctx, scope, id); err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Optionally delete persistent plugin data
+	if c.QueryParam("delete_data") == "true" {
+		h.manager.DeletePluginData(scope, id)
+	}
+
+	h.manager.emitEvent(PluginEventUninstalled, scope, id, nil)
 
 	return c.NoContent(http.StatusNoContent)
 }
@@ -238,22 +348,39 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	if payload.Enabled != nil {
-		wasEnabled := plugin.Enabled
-		plugin.Enabled = *payload.Enabled
+		wasActive := plugin.Status == models.PluginStatusActive
 
-		if *payload.Enabled && !wasEnabled {
-			// Enabling: load the plugin
+		if *payload.Enabled && !wasActive {
+			// Enabling: set Active and load the plugin
+			plugin.Status = models.PluginStatusActive
 			if err := h.manager.LoadPlugin(ctx, scope, id); err != nil {
 				errMsg := err.Error()
 				plugin.LoadError = &errMsg
+				if isVersionIncompatible(err) {
+					plugin.Status = models.PluginStatusNotSupported
+				} else {
+					plugin.Status = models.PluginStatusMalfunctioned
+				}
+				h.manager.emitEvent(PluginEventMalfunctioned, scope, id, nil)
 			} else {
 				plugin.LoadError = nil
+				var hooks []string
+				if rt := h.manager.GetRuntime(scope, id); rt != nil {
+					hooks = rt.HookTypes()
+				}
+				h.manager.emitEvent(PluginEventEnabled, scope, id, hooks)
 			}
-		} else if !*payload.Enabled && wasEnabled {
+		} else if !*payload.Enabled && wasActive {
 			// Disabling: unload the plugin
 			h.manager.UnloadPlugin(scope, id)
+			plugin.Status = models.PluginStatusDisabled
 			plugin.LoadError = nil
+			h.manager.emitEvent(PluginEventDisabled, scope, id, nil)
 		}
+	}
+
+	if payload.AutoUpdate != nil {
+		plugin.AutoUpdate = *payload.AutoUpdate
 	}
 
 	now := time.Now()
@@ -274,6 +401,23 @@ func (h *handler) update(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))
 }
 
+func (h *handler) getImage(c echo.Context) error {
+	scope := c.Param("scope")
+	id := c.Param("id")
+
+	if strings.Contains(scope, "..") || strings.Contains(id, "..") ||
+		strings.ContainsAny(scope, "/\\") || strings.ContainsAny(id, "/\\") {
+		return errcodes.ValidationError("Invalid scope or plugin ID")
+	}
+
+	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")
+	if _, err := os.Stat(iconPath); err != nil {
+		return errcodes.NotFound("Plugin icon not found")
+	}
+
+	return c.File(iconPath)
+}
+
 func (h *handler) reload(c echo.Context) error {
 	ctx := c.Request().Context()
 	scope := c.Param("scope")
@@ -287,8 +431,8 @@ func (h *handler) reload(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if !plugin.Enabled {
-		return errcodes.ValidationError("Plugin must be enabled to reload.")
+	if plugin.Status != models.PluginStatusActive {
+		return errcodes.ValidationError("Plugin must be active to reload.")
 	}
 
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
@@ -542,7 +686,7 @@ func (h *handler) updateVersion(c echo.Context) error {
 	targetVersion := *plugin.UpdateAvailableVersion
 
 	// 3. Find the download URL and SHA256 from repositories
-	downloadURL, sha256Hash, _, err := h.findPluginInRepos(c, scope, id, targetVersion)
+	downloadURL, sha256Hash, _, _, imageURL, err := h.findPluginInRepos(c, scope, id, targetVersion)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -553,12 +697,23 @@ func (h *handler) updateVersion(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Download updated plugin icon (non-fatal)
+	if imageURL != "" {
+		_ = h.installer.DownloadPluginImage(ctx, scope, manifest.ID, imageURL)
+	}
+
 	// 5. Hot-reload the plugin
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
+		h.manager.emitEvent(PluginEventMalfunctioned, scope, id, nil)
 	} else {
 		plugin.LoadError = nil
+		var hooks []string
+		if rt := h.manager.GetRuntime(scope, id); rt != nil {
+			hooks = rt.HookTypes()
+		}
+		h.manager.emitEvent(PluginEventUpdated, scope, id, hooks)
 	}
 
 	// 6. Update DB record
@@ -719,7 +874,7 @@ func (h *handler) scan(c echo.Context) error {
 			ID:          manifest.ID,
 			Name:        manifest.Name,
 			Version:     manifest.Version,
-			Enabled:     false,
+			Status:      models.PluginStatusDisabled,
 			InstalledAt: time.Now(),
 		}
 		if manifest.Description != "" {
@@ -1072,12 +1227,453 @@ func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// searchMetadata runs search() across all enabled enricher plugins and returns aggregated results.
+func (h *handler) searchMetadata(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var payload searchPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Look up the book
+	var book models.Book
+	if err := h.db.NewSelect().Model(&book).
+		Where("book.id = ?", payload.BookID).
+		Relation("Authors").
+		Relation("Authors.Person").
+		Relation("BookSeries").
+		Relation("BookSeries.Series").
+		Relation("Files").
+		Relation("Files.Identifiers").
+		Scan(ctx); err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Check library access
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Get all enricher runtimes
+	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Build context objects
+	bookCtx := buildSearchBookContext(&book)
+	fileCtx := map[string]interface{}{} // Minimal file context for search
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx["fileType"] = f.FileType
+		fileCtx["filePath"] = f.Filepath
+	}
+
+	var allResults []SearchResult
+	for _, rt := range runtimes {
+		searchCtx := map[string]interface{}{
+			"query": payload.Query,
+			"book":  bookCtx,
+			"file":  fileCtx,
+		}
+
+		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
+		if sErr != nil {
+			continue // Skip failed plugins
+		}
+		if resp != nil {
+			allResults = append(allResults, resp.Results...)
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"results": allResults,
+	})
+}
+
+// enrichMetadata runs enrich() on a specific plugin with a selected search result,
+// then applies the returned metadata to the book.
+func (h *handler) enrichMetadata(c echo.Context) error {
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	var payload enrichPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	// Get the specific plugin runtime
+	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
+	if rt == nil {
+		return errcodes.NotFound("Plugin")
+	}
+
+	// Look up the book with all relations needed for enrichment
+	var book models.Book
+	if err := h.db.NewSelect().Model(&book).
+		Where("book.id = ?", payload.BookID).
+		Relation("Authors").
+		Relation("Authors.Person").
+		Relation("BookSeries").
+		Relation("BookSeries.Series").
+		Relation("BookGenres").
+		Relation("BookGenres.Genre").
+		Relation("BookTags").
+		Relation("BookTags.Tag").
+		Relation("Files").
+		Relation("Files.Identifiers").
+		Scan(ctx); err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Check library access
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	bookCtx := buildSearchBookContext(&book)
+	fileCtx := map[string]interface{}{}
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx["fileType"] = f.FileType
+		fileCtx["filePath"] = f.Filepath
+	}
+
+	enrichCtx := map[string]interface{}{
+		"selectedResult": payload.ProviderData,
+		"book":           bookCtx,
+		"file":           fileCtx,
+	}
+
+	result, err := h.manager.RunMetadataEnrich(ctx, rt, enrichCtx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// If the plugin didn't modify anything or we don't have persistence deps, return as-is
+	if !result.Modified || result.Metadata == nil || h.enrich == nil {
+		return c.JSON(http.StatusOK, result)
+	}
+
+	// Apply enriched metadata to the book
+	if err := h.applyEnrichment(ctx, &book, result.Metadata, rt, log); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Reload the book with all relations to return the updated state
+	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, book.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.JSON(http.StatusOK, updatedBook)
+}
+
+// applyEnrichment applies enriched metadata to a book, respecting field filtering.
+func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *mediafile.ParsedMetadata, rt *Runtime, log logger.Logger) error {
+	manifest := rt.Manifest()
+	if manifest.Capabilities.MetadataEnricher == nil {
+		return nil
+	}
+
+	// Get declared and effective field settings
+	declaredFields := manifest.Capabilities.MetadataEnricher.Fields
+	enabledFields, err := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
+	if err != nil {
+		log.Warn("failed to get field settings, using all enabled", logger.Data{"error": err.Error()})
+		enabledFields = make(map[string]bool, len(declaredFields))
+		for _, f := range declaredFields {
+			enabledFields[f] = true
+		}
+	}
+
+	// Build a set of declared fields
+	declared := make(map[string]bool, len(declaredFields))
+	for _, f := range declaredFields {
+		declared[f] = true
+	}
+
+	// Helper: check if a field is both declared and enabled
+	isAllowed := func(field string) bool {
+		if !declared[field] {
+			return false
+		}
+		if enabled, ok := enabledFields[field]; ok {
+			return enabled
+		}
+		return true // Default: enabled
+	}
+
+	pluginSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
+	var columns []string
+
+	// Title
+	title := strings.TrimSpace(md.Title)
+	if title != "" && isAllowed("title") {
+		book.Title = title
+		book.TitleSource = pluginSource
+		book.SortTitle = sortname.ForTitle(title)
+		book.SortTitleSource = pluginSource
+		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
+	}
+
+	// Subtitle
+	if md.Subtitle != "" && isAllowed("subtitle") {
+		subtitle := strings.TrimSpace(md.Subtitle)
+		book.Subtitle = &subtitle
+		book.SubtitleSource = &pluginSource
+		columns = append(columns, "subtitle", "subtitle_source")
+	}
+
+	// Description
+	if md.Description != "" && isAllowed("description") {
+		desc := htmlutil.StripTags(strings.TrimSpace(md.Description))
+		if desc != "" {
+			book.Description = &desc
+			book.DescriptionSource = &pluginSource
+			columns = append(columns, "description", "description_source")
+		}
+	}
+
+	// Apply scalar column updates
+	if len(columns) > 0 {
+		if err := h.enrich.bookStore.UpdateBook(ctx, book, columns); err != nil {
+			return errors.Wrap(err, "failed to update book")
+		}
+	}
+
+	// Authors
+	if len(md.Authors) > 0 && isAllowed("authors") && h.enrich.personFinder != nil {
+		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete authors")
+		}
+		for i, pa := range md.Authors {
+			if pa.Name == "" {
+				continue
+			}
+			person, pErr := h.enrich.personFinder.FindOrCreatePerson(ctx, pa.Name, book.LibraryID)
+			if pErr != nil {
+				log.Warn("failed to find/create person", logger.Data{"name": pa.Name, "error": pErr.Error()})
+				continue
+			}
+			var role *string
+			if pa.Role != "" {
+				role = &pa.Role
+			}
+			if err := h.enrich.relStore.CreateAuthor(ctx, &models.Author{
+				BookID:    book.ID,
+				PersonID:  person.ID,
+				Role:      role,
+				SortOrder: i + 1,
+			}); err != nil {
+				log.Warn("failed to create author", logger.Data{"error": err.Error()})
+			}
+		}
+		book.AuthorSource = pluginSource
+		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {
+			return errors.Wrap(err, "failed to update author source")
+		}
+	}
+
+	// Series
+	seriesAllowed := isAllowed("series") || isAllowed("seriesNumber")
+	if md.Series != "" && seriesAllowed {
+		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete series")
+		}
+		seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
+		if sErr != nil {
+			log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
+		} else {
+			if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
+				BookID:       book.ID,
+				SeriesID:     seriesRecord.ID,
+				SeriesNumber: md.SeriesNumber,
+				SortOrder:    1,
+			}); err != nil {
+				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+			}
+		}
+	}
+
+	// Genres
+	if len(md.Genres) > 0 && isAllowed("genres") && h.enrich.genreFinder != nil {
+		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete genres")
+		}
+		for _, genreName := range md.Genres {
+			if genreName == "" {
+				continue
+			}
+			genre, gErr := h.enrich.genreFinder.FindOrCreateGenre(ctx, genreName, book.LibraryID)
+			if gErr != nil {
+				log.Warn("failed to find/create genre", logger.Data{"genre": genreName, "error": gErr.Error()})
+				continue
+			}
+			if err := h.enrich.relStore.CreateBookGenre(ctx, &models.BookGenre{
+				BookID:  book.ID,
+				GenreID: genre.ID,
+			}); err != nil {
+				log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
+			}
+		}
+		book.GenreSource = &pluginSource
+		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"genre_source"}); err != nil {
+			return errors.Wrap(err, "failed to update genre source")
+		}
+	}
+
+	// Tags
+	if len(md.Tags) > 0 && isAllowed("tags") && h.enrich.tagFinder != nil {
+		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete tags")
+		}
+		for _, tagName := range md.Tags {
+			if tagName == "" {
+				continue
+			}
+			tag, tErr := h.enrich.tagFinder.FindOrCreateTag(ctx, tagName, book.LibraryID)
+			if tErr != nil {
+				log.Warn("failed to find/create tag", logger.Data{"tag": tagName, "error": tErr.Error()})
+				continue
+			}
+			if err := h.enrich.relStore.CreateBookTag(ctx, &models.BookTag{
+				BookID: book.ID,
+				TagID:  tag.ID,
+			}); err != nil {
+				log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
+			}
+		}
+		book.TagSource = &pluginSource
+		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"tag_source"}); err != nil {
+			return errors.Wrap(err, "failed to update tag source")
+		}
+	}
+
+	// Identifiers (file-level, applied to first file)
+	if len(md.Identifiers) > 0 && isAllowed("identifiers") && len(book.Files) > 0 {
+		fileID := book.Files[0].ID
+		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, fileID); err != nil {
+			return errors.Wrap(err, "failed to delete identifiers")
+		}
+		for _, ident := range md.Identifiers {
+			if ident.Type == "" || ident.Value == "" {
+				continue
+			}
+			if err := h.enrich.identStore.CreateFileIdentifier(ctx, &models.FileIdentifier{
+				FileID: fileID,
+				Type:   ident.Type,
+				Value:  ident.Value,
+			}); err != nil {
+				log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
+			}
+		}
+	}
+
+	// Write sidecars to keep them in sync
+	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, book.ID)
+	if err == nil {
+		if sErr := sidecar.WriteBookSidecarFromModel(updatedBook); sErr != nil {
+			log.Warn("failed to write book sidecar", logger.Data{"error": sErr.Error()})
+		}
+		for _, file := range updatedBook.Files {
+			if sErr := sidecar.WriteFileSidecarFromModel(file); sErr != nil {
+				log.Warn("failed to write file sidecar", logger.Data{"file_id": file.ID, "error": sErr.Error()})
+			}
+		}
+	}
+
+	// Update FTS index
+	if h.enrich.searchIndexer != nil && updatedBook != nil {
+		if err := h.enrich.searchIndexer.IndexBook(ctx, updatedBook); err != nil {
+			log.Warn("failed to update search index", logger.Data{"error": err.Error()})
+		}
+	}
+
+	return nil
+}
+
+// buildSearchBookContext builds a context map for search/enrich from a book model.
+func buildSearchBookContext(book *models.Book) map[string]interface{} {
+	ctx := map[string]interface{}{
+		"id":    book.ID,
+		"title": book.Title,
+	}
+
+	if book.Subtitle != nil {
+		ctx["subtitle"] = *book.Subtitle
+	}
+	if book.Description != nil {
+		ctx["description"] = *book.Description
+	}
+
+	if len(book.Authors) > 0 {
+		authors := make([]map[string]interface{}, 0, len(book.Authors))
+		for _, a := range book.Authors {
+			author := map[string]interface{}{}
+			if a.Person != nil {
+				author["name"] = a.Person.Name
+			}
+			if a.Role != nil {
+				author["role"] = *a.Role
+			}
+			authors = append(authors, author)
+		}
+		ctx["authors"] = authors
+	}
+
+	if len(book.BookSeries) > 0 {
+		series := make([]map[string]interface{}, 0, len(book.BookSeries))
+		for _, bs := range book.BookSeries {
+			if bs.Series == nil {
+				continue
+			}
+			s := map[string]interface{}{
+				"name": bs.Series.Name,
+			}
+			if bs.SeriesNumber != nil {
+				s["number"] = *bs.SeriesNumber
+			}
+			series = append(series, s)
+		}
+		if len(series) > 0 {
+			ctx["series"] = series
+		}
+	}
+
+	// Collect identifiers from all files
+	var identifiers []map[string]interface{}
+	for _, f := range book.Files {
+		for _, id := range f.Identifiers {
+			identifiers = append(identifiers, map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			})
+		}
+	}
+	if len(identifiers) > 0 {
+		ctx["identifiers"] = identifiers
+	}
+
+	return ctx
+}
+
 // NewHandler creates a handler for testing and external route registration.
 func NewHandler(service *Service, manager *Manager, installer *Installer) *handler { //nolint:revive // unexported return is intentional for same-package tests
 	return &handler{service: service, manager: manager, installer: installer}
 }
 
 // Exported handler methods for testing.
+func (h *handler) GetImage(c echo.Context) error              { return h.getImage(c) }
 func (h *handler) GetLibraryOrder(c echo.Context) error       { return h.getLibraryOrder(c) }
 func (h *handler) SetLibraryOrder(c echo.Context) error       { return h.setLibraryOrder(c) }
 func (h *handler) ResetLibraryOrder(c echo.Context) error     { return h.resetLibraryOrder(c) }

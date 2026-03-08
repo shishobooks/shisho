@@ -61,7 +61,7 @@ func main() {
 
 	// Plugin system
 	pluginService := plugins.NewService(db)
-	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir)
+	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir, cfg.PluginDataDir)
 	if err := pluginManager.LoadAll(ctx); err != nil {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}

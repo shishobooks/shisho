@@ -2,12 +2,14 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -40,7 +42,7 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, []string{sourcePath, targetDir}, rt.manifest.Capabilities.FileAccess)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, []string{sourcePath, targetDir}, rt.manifest.Capabilities.FileAccess)
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)
@@ -88,7 +90,7 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, []string{filePath}, rt.manifest.Capabilities.FileAccess)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, []string{filePath}, rt.manifest.Capabilities.FileAccess)
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)
@@ -131,8 +133,28 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	return md, nil
 }
 
-// RunMetadataEnricher invokes a plugin's metadataEnricher.enrich() hook.
-func (m *Manager) RunMetadataEnricher(ctx context.Context, rt *Runtime, enrichCtx map[string]interface{}) (*EnrichmentResult, error) {
+// SearchResult is a single search result from a metadata enricher's search() hook.
+type SearchResult struct {
+	Title        string                       `json:"title"`
+	Authors      []string                     `json:"authors"`
+	Description  string                       `json:"description"`
+	ImageURL     string                       `json:"image_url"`
+	ReleaseDate  string                       `json:"release_date"`
+	Publisher    string                       `json:"publisher"`
+	Identifiers  []mediafile.ParsedIdentifier `json:"identifiers"`
+	ProviderData interface{}                  `json:"provider_data"` // Opaque data passed back to enrich()
+	// Added by the caller, not the plugin:
+	PluginScope string `json:"plugin_scope"`
+	PluginID    string `json:"plugin_id"`
+}
+
+// SearchResponse is the result of a metadata enricher's search() hook.
+type SearchResponse struct {
+	Results []SearchResult
+}
+
+// RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
+func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}) (*SearchResponse, error) {
 	if rt.metadataEnricher == nil {
 		return nil, errors.New("plugin does not have a metadataEnricher hook")
 	}
@@ -146,7 +168,50 @@ func (m *Manager) RunMetadataEnricher(ctx context.Context, rt *Runtime, enrichCt
 
 	// Set up FSContext (no extra allowed paths for enrichers)
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, nil, rt.manifest.Capabilities.FileAccess)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
+	rt.SetFSContext(fsCtx)
+	defer func() {
+		rt.SetFSContext(nil)
+		fsCtx.Cleanup() //nolint:errcheck
+	}()
+
+	// Get the search method
+	enricherObj := rt.metadataEnricher.ToObject(rt.vm)
+	searchVal := enricherObj.Get("search")
+	if searchVal == nil || goja.IsUndefined(searchVal) {
+		return nil, errors.New("metadataEnricher.search is not defined")
+	}
+	searchFn, ok := goja.AssertFunction(searchVal)
+	if !ok {
+		return nil, errors.New("metadataEnricher.search is not a function")
+	}
+
+	// Call the hook
+	result, err := searchFn(goja.Undefined(), rt.vm.ToValue(searchCtx))
+	if err != nil {
+		return nil, errors.Wrap(err, "metadataEnricher.search failed")
+	}
+
+	// Parse the result
+	return parseSearchResponse(rt.vm, result, rt.scope, rt.pluginID), nil
+}
+
+// RunMetadataEnrich invokes a plugin's metadataEnricher.enrich() hook.
+func (m *Manager) RunMetadataEnrich(ctx context.Context, rt *Runtime, enrichCtx map[string]interface{}) (*EnrichmentResult, error) {
+	if rt.metadataEnricher == nil {
+		return nil, errors.New("plugin does not have a metadataEnricher hook")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	defer cancel()
+	_ = ctx // reserved for future cancellation support
+
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+
+	// Set up FSContext (no extra allowed paths for enrichers)
+	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)
@@ -189,7 +254,7 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, []string{sourcePath, destPath}, rt.manifest.Capabilities.FileAccess)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, []string{sourcePath, destPath}, rt.manifest.Capabilities.FileAccess)
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)
@@ -313,6 +378,67 @@ func parseEnrichmentResult(vm *goja.Runtime, val goja.Value) (*EnrichmentResult,
 	result.Metadata = metadata
 
 	return result, nil
+}
+
+// parseSearchResponse maps a JS search result to SearchResponse.
+func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID string) *SearchResponse {
+	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+		return &SearchResponse{}
+	}
+
+	obj := val.ToObject(vm)
+	resultsVal := obj.Get("results")
+	if resultsVal == nil || goja.IsUndefined(resultsVal) || goja.IsNull(resultsVal) {
+		return &SearchResponse{}
+	}
+
+	resultsObj := resultsVal.ToObject(vm)
+	lengthVal := resultsObj.Get("length")
+	if lengthVal == nil || goja.IsUndefined(lengthVal) {
+		return &SearchResponse{}
+	}
+	length := int(lengthVal.ToInteger())
+
+	results := make([]SearchResult, 0, length)
+	for i := 0; i < length; i++ {
+		itemVal := resultsObj.Get(intToString(i))
+		if itemVal == nil || goja.IsUndefined(itemVal) || goja.IsNull(itemVal) {
+			continue
+		}
+		itemObj := itemVal.ToObject(vm)
+
+		sr := SearchResult{
+			Title:       getStringField(itemObj, "title"),
+			Description: getStringField(itemObj, "description"),
+			ImageURL:    getStringField(itemObj, "imageUrl"),
+			ReleaseDate: getStringField(itemObj, "releaseDate"),
+			Publisher:   getStringField(itemObj, "publisher"),
+			PluginScope: pluginScope,
+			PluginID:    pluginID,
+		}
+
+		// authors -> []string
+		authorsVal := itemObj.Get("authors")
+		if authorsVal != nil && !goja.IsUndefined(authorsVal) && !goja.IsNull(authorsVal) {
+			sr.Authors = parseStringArray(vm, authorsVal)
+		}
+
+		// identifiers -> []ParsedIdentifier
+		identifiersVal := itemObj.Get("identifiers")
+		if identifiersVal != nil && !goja.IsUndefined(identifiersVal) && !goja.IsNull(identifiersVal) {
+			sr.Identifiers = parseIdentifiers(vm, identifiersVal)
+		}
+
+		// providerData -> opaque (exported as-is)
+		providerDataVal := itemObj.Get("providerData")
+		if providerDataVal != nil && !goja.IsUndefined(providerDataVal) && !goja.IsNull(providerDataVal) {
+			sr.ProviderData = providerDataVal.Export()
+		}
+
+		results = append(results, sr)
+	}
+
+	return &SearchResponse{Results: results}
 }
 
 // parseParsedMetadata maps a JS metadata object to mediafile.ParsedMetadata.
@@ -572,4 +698,39 @@ func parseByteData(val goja.Value) []byte {
 // intToString converts an int to its string representation for JS array indexing.
 func intToString(i int) string {
 	return strconv.Itoa(i)
+}
+
+// RunOnUninstalling invokes a plugin's optional onUninstalling() lifecycle hook.
+// This is called before uninstall to give the plugin a chance to clean up.
+// Errors in the hook do not prevent uninstall.
+func (m *Manager) RunOnUninstalling(rt *Runtime) {
+	if rt.onUninstalling == nil {
+		return
+	}
+
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+
+	// Set up FSContext for the hook (plugin dir + data dir only)
+	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
+	rt.SetFSContext(fsCtx)
+	defer func() {
+		rt.SetFSContext(nil)
+		fsCtx.Cleanup() //nolint:errcheck
+	}()
+
+	// Call the hook, recovering from panics (errors don't prevent uninstall)
+	log := logger.New()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warn("onUninstalling hook panicked", logger.Data{
+					"plugin": rt.scope + "/" + rt.pluginID,
+					"panic":  fmt.Sprintf("%v", r),
+				})
+			}
+		}()
+		_, _ = rt.onUninstalling(goja.Undefined())
+	}()
 }

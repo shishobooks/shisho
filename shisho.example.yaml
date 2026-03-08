@@ -100,6 +100,12 @@ download_cache_max_size_gb: 5
 # Default: /config/plugins/installed
 plugin_dir: /config/plugins/installed
 
+# Directory where plugin persistent data is stored (caches, tokens, DB files)
+# Data survives plugin updates; optionally deleted on uninstall with delete_data=true
+# Env: PLUGIN_DATA_DIR
+# Default: /config/plugins/data
+plugin_data_dir: /config/plugins/data
+
 # =============================================================================
 # SUPPLEMENT DISCOVERY SETTINGS
 # =============================================================================

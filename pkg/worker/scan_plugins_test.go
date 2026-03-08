@@ -23,7 +23,7 @@ func newTestContextWithPlugins(t *testing.T, pluginDir string) *testContext {
 	tc := newTestContext(t)
 
 	pluginService := plugins.NewService(tc.db)
-	pm := plugins.NewManager(pluginService, pluginDir)
+	pm := plugins.NewManager(pluginService, pluginDir, "")
 
 	tc.worker.pluginService = pluginService
 	tc.worker.pluginManager = pm
@@ -50,7 +50,7 @@ func installTestPlugin(t *testing.T, tc *testContext, pluginDir, id, manifestJSO
 		ID:          id,
 		Name:        id,
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = plugins.NewService(tc.db).InstallPlugin(context.Background(), plugin)
@@ -455,11 +455,20 @@ func TestScanWithPluginMetadataEnricher(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: { query: ctx.query } }] };
+      },
       enrich: function(ctx) {
+        var title = "";
+        if (ctx.selectedResult && ctx.selectedResult.query) {
+          title = ctx.selectedResult.query;
+        } else if (ctx.book && ctx.book.title) {
+          title = ctx.book.title;
+        }
         return {
           modified: true,
           metadata: {
-            description: "Enriched description for: " + ctx.parsedMetadata.title,
+            description: "Enriched description for: " + title,
             genres: ["Fantasy", "Adventure"]
           }
         };
@@ -561,6 +570,9 @@ func TestScanWithPluginMetadataEnricher_FileTypeFiltering(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -654,6 +666,9 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
 	enricher1MainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -685,6 +700,9 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
 	enricher2MainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -787,6 +805,9 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
 	enricher1MainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -819,6 +840,9 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
 	enricher2MainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -1121,6 +1145,9 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -1352,6 +1379,9 @@ func TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser(t *testing.T
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -1694,6 +1724,9 @@ func TestScanWithPluginMetadataEnricher_FieldFiltering(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -1801,6 +1834,9 @@ func TestScanWithPluginMetadataEnricher_UndeclaredFieldFiltered(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,
@@ -1903,6 +1939,9 @@ func TestScanWithPluginMetadataEnricher_PerLibraryFieldOverride(t *testing.T) {
 	enricherMainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, providerData: {} }] };
+      },
       enrich: function(ctx) {
         return {
           modified: true,

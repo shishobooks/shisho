@@ -2,11 +2,14 @@ package plugins
 
 import (
 	"context"
+	stderrors "errors"
+	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // reservedExtensions are built-in file types that plugins cannot claim.
@@ -19,29 +22,65 @@ var reservedExtensions = map[string]struct{}{
 // Manager holds loaded Runtime instances indexed by "scope/id".
 // It coordinates loading at startup, unloading, and hot-reloading on install/update/enable.
 type Manager struct {
-	mu        sync.RWMutex
-	plugins   map[string]*Runtime // key: "scope/id"
-	service   *Service
-	pluginDir string
+	mu            sync.RWMutex
+	plugins       map[string]*Runtime // key: "scope/id"
+	service       *Service
+	pluginDir     string
+	pluginDataDir string // Base directory for persistent plugin data
 
 	// fetchRepo is the function used to fetch repository manifests.
 	// Defaults to FetchRepository; tests can override this.
 	fetchRepo func(url string) (*RepositoryManifest, error)
+
+	// onEvent is called when a plugin lifecycle event occurs.
+	// Set via SetEventCallback. May be nil.
+	onEvent PluginEventCallback
 }
 
 // NewManager creates a new Manager.
-func NewManager(service *Service, pluginDir string) *Manager {
+func NewManager(service *Service, pluginDir, pluginDataDir string) *Manager {
 	return &Manager{
-		plugins:   make(map[string]*Runtime),
-		service:   service,
-		pluginDir: pluginDir,
-		fetchRepo: FetchRepository,
+		plugins:       make(map[string]*Runtime),
+		service:       service,
+		pluginDir:     pluginDir,
+		pluginDataDir: pluginDataDir,
+		fetchRepo:     FetchRepository,
+	}
+}
+
+// SetEventCallback registers a callback for plugin lifecycle events.
+// Only one callback is supported; subsequent calls replace the previous one.
+func (m *Manager) SetEventCallback(cb PluginEventCallback) {
+	m.mu.Lock()
+	m.onEvent = cb
+	m.mu.Unlock()
+}
+
+// emitEvent fires a plugin lifecycle event if a callback is registered.
+func (m *Manager) emitEvent(eventType PluginEventType, scope, id string, hooks []string) {
+	m.mu.RLock()
+	cb := m.onEvent
+	m.mu.RUnlock()
+
+	if cb != nil {
+		cb(PluginEvent{
+			Type:  eventType,
+			Scope: scope,
+			ID:    id,
+			Hooks: hooks,
+		})
 	}
 }
 
 // pluginKey returns the map key for a plugin.
 func pluginKey(scope, id string) string {
 	return scope + "/" + id
+}
+
+// isVersionIncompatible checks if the error (or any wrapped error) is ErrVersionIncompatible.
+func isVersionIncompatible(err error) bool {
+	var vErr *ErrVersionIncompatible
+	return stderrors.As(err, &vErr)
 }
 
 // LoadAll loads all enabled plugins from the database at startup.
@@ -55,14 +94,21 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	}
 
 	for _, p := range plugins {
-		if !p.Enabled {
+		if p.Status != models.PluginStatusActive {
 			continue
 		}
 
 		if err := m.loadPlugin(ctx, p.Scope, p.ID); err != nil {
-			// Store error in the plugin record
 			errMsg := err.Error()
 			p.LoadError = &errMsg
+
+			// Distinguish version incompatibility from other load errors
+			if isVersionIncompatible(err) {
+				p.Status = models.PluginStatusNotSupported
+			} else {
+				p.Status = models.PluginStatusMalfunctioned
+			}
+
 			if updateErr := m.service.UpdatePlugin(ctx, p); updateErr != nil {
 				log.Warn("failed to store load error", logger.Data{
 					"plugin": pluginKey(p.Scope, p.ID),
@@ -76,9 +122,10 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 			continue
 		}
 
-		// Clear any previous LoadError on success
-		if p.LoadError != nil {
+		// Clear any previous LoadError and ensure Active status on success
+		if p.LoadError != nil || p.Status != models.PluginStatusActive {
 			p.LoadError = nil
+			p.Status = models.PluginStatusActive
 			if updateErr := m.service.UpdatePlugin(ctx, p); updateErr != nil {
 				log.Warn("failed to clear load error", logger.Data{
 					"plugin": pluginKey(p.Scope, p.ID),
@@ -104,6 +151,9 @@ func (m *Manager) loadPlugin(ctx context.Context, scope, id string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to load plugin %s/%s", scope, id)
 	}
+
+	// Set the persistent data directory for this plugin
+	rt.dataDir = filepath.Join(m.pluginDataDir, scope, id)
 
 	if err := InjectHostAPIs(rt, m.service); err != nil {
 		return errors.Wrapf(err, "failed to inject host APIs for %s/%s", scope, id)
@@ -140,6 +190,20 @@ func (m *Manager) UnloadPlugin(scope, id string) {
 	m.mu.Unlock()
 }
 
+// DeletePluginData removes the persistent data directory for a plugin.
+// Errors are logged but not returned since this is a best-effort cleanup.
+func (m *Manager) DeletePluginData(scope, id string) {
+	dataDir := filepath.Join(m.pluginDataDir, scope, id)
+	if err := os.RemoveAll(dataDir); err != nil {
+		log := logger.New()
+		log.Warn("failed to delete plugin data directory", logger.Data{
+			"plugin": pluginKey(scope, id),
+			"path":   dataDir,
+			"error":  err.Error(),
+		})
+	}
+}
+
 // ReloadPlugin performs a hot-reload (called during update).
 // Acquires write lock on old runtime (waits for in-progress hooks), then swaps.
 func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
@@ -150,6 +214,9 @@ func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to reload plugin %s/%s", scope, id)
 	}
+
+	// Set the persistent data directory
+	newRT.dataDir = filepath.Join(m.pluginDataDir, scope, id)
 
 	// Inject host APIs into new runtime
 	if err := InjectHostAPIs(newRT, m.service); err != nil {
@@ -392,6 +459,11 @@ func (m *Manager) CheckForUpdates(ctx context.Context) error {
 
 	// For each installed plugin, find latest compatible version from matching repos
 	for _, plugin := range installedPlugins {
+		// Skip plugins with auto-update disabled
+		if !plugin.AutoUpdate {
+			continue
+		}
+
 		var latestVersion string
 
 		for _, sm := range manifests {

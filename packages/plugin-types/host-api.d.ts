@@ -343,6 +343,8 @@ export interface ShishoShell {
 
 /** Top-level host API object available as the global `shisho` variable. */
 export interface ShishoHostAPI {
+  /** Persistent data directory for this plugin. Created lazily on first access. */
+  readonly dataDir: string;
   log: ShishoLog;
   config: ShishoConfig;
   http: ShishoHTTP;

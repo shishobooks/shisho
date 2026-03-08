@@ -14,7 +14,7 @@ import (
 func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// Install a plugin at version 1.0.0
@@ -23,7 +23,7 @@ func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)
@@ -72,7 +72,7 @@ func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
 func TestManager_CheckForUpdates_AlreadyUpToDate(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// Install a plugin already at the latest version
@@ -81,7 +81,7 @@ func TestManager_CheckForUpdates_AlreadyUpToDate(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "2.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)
@@ -127,7 +127,7 @@ func TestManager_CheckForUpdates_AlreadyUpToDate(t *testing.T) {
 func TestManager_CheckForUpdates_ClearsStaleUpdate(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// Install a plugin that was previously flagged as having an update
@@ -137,7 +137,7 @@ func TestManager_CheckForUpdates_ClearsStaleUpdate(t *testing.T) {
 		ID:                     "my-plugin",
 		Name:                   "My Plugin",
 		Version:                "2.0.0",
-		Enabled:                true,
+		Status:                 models.PluginStatusActive,
 		InstalledAt:            time.Now(),
 		UpdateAvailableVersion: &staleVersion,
 	}
@@ -184,7 +184,7 @@ func TestManager_CheckForUpdates_ClearsStaleUpdate(t *testing.T) {
 func TestManager_CheckForUpdates_DisabledRepoSkipped(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// Remove the seeded official repository so we control what's in the DB
@@ -196,7 +196,7 @@ func TestManager_CheckForUpdates_DisabledRepoSkipped(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -247,7 +247,7 @@ func TestManager_CheckForUpdates_DisabledRepoSkipped(t *testing.T) {
 func TestManager_CheckForUpdates_FetchErrorSkipped(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -255,7 +255,7 @@ func TestManager_CheckForUpdates_FetchErrorSkipped(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)
@@ -289,7 +289,7 @@ func TestManager_CheckForUpdates_FetchErrorSkipped(t *testing.T) {
 func TestManager_CheckForUpdates_IncompatibleVersionsFiltered(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -297,7 +297,7 @@ func TestManager_CheckForUpdates_IncompatibleVersionsFiltered(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)
@@ -344,7 +344,7 @@ func TestManager_CheckForUpdates_IncompatibleVersionsFiltered(t *testing.T) {
 func TestManager_CheckForUpdates_NoPlugins(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// No plugins installed — should return immediately without error
@@ -355,7 +355,7 @@ func TestManager_CheckForUpdates_NoPlugins(t *testing.T) {
 func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := NewManager(service, t.TempDir())
+	mgr := NewManager(service, t.TempDir(), "")
 	ctx := context.Background()
 
 	// Plugin from scope "community"
@@ -364,7 +364,7 @@ func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
 		ID:          "my-plugin",
 		Name:        "My Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)

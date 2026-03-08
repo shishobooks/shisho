@@ -3,10 +3,14 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/dop251/goja"
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 )
+
+var errDefinePropertyNotFound = errors.New("failed to get Object.defineProperty")
 
 // ConfigGetter provides config values for a plugin at runtime.
 type ConfigGetter interface {
@@ -25,6 +29,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 	shishoObj := vm.NewObject()
 	if err := vm.Set("shisho", shishoObj); err != nil {
 		return fmt.Errorf("failed to set shisho global: %w", err)
+	}
+
+	// Set dataDir property (lazily creates the directory on first access)
+	if err := injectDataDirProperty(vm, shishoObj, rt); err != nil {
+		return err
 	}
 
 	// Set up log namespace
@@ -73,6 +82,37 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 	}
 
 	return nil
+}
+
+// injectDataDirProperty sets up shisho.dataDir as a string property.
+// The directory is lazily created on first access via a getter.
+func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) error {
+	if rt.dataDir == "" {
+		return nil
+	}
+
+	// Define a getter that lazily creates the directory
+	getter := vm.ToValue(func(_ goja.FunctionCall) goja.Value {
+		if err := os.MkdirAll(rt.dataDir, 0755); err != nil {
+			panic(vm.ToValue(fmt.Sprintf("shisho.dataDir: failed to create data directory: %v", err)))
+		}
+		return vm.ToValue(rt.dataDir)
+	})
+
+	// Use Object.defineProperty to set up a getter
+	objectVal := vm.GlobalObject().Get("Object")
+	defineProperty, ok := goja.AssertFunction(objectVal.ToObject(vm).Get("defineProperty"))
+	if !ok {
+		return errDefinePropertyNotFound
+	}
+
+	descriptor := vm.NewObject()
+	descriptor.Set("get", getter)         //nolint:errcheck
+	descriptor.Set("enumerable", true)    //nolint:errcheck
+	descriptor.Set("configurable", false) //nolint:errcheck
+
+	_, err := defineProperty(objectVal, shishoObj, vm.ToValue("dataDir"), descriptor)
+	return err
 }
 
 // injectLogNamespace sets up shisho.log with debug/info/warn/error methods.

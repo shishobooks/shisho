@@ -89,13 +89,22 @@ func TestPluginLifecycle(t *testing.T) {
       }
     },
     metadataEnricher: {
+      search: function(ctx) {
+        return {
+          results: [{
+            title: "Found: " + ctx.query,
+            providerData: { query: ctx.query }
+          }]
+        };
+      },
       enrich: function(ctx) {
+        var title = ctx.selectedResult && ctx.selectedResult.query ? ctx.selectedResult.query : (ctx.book ? ctx.book.title : "");
         return {
           modified: true,
           metadata: {
             genres: ["Science Fiction"],
             tags: ["enriched"],
-            description: "Enriched: " + ctx.book.title
+            description: "Enriched: " + title
           }
         };
       }
@@ -123,14 +132,14 @@ func TestPluginLifecycle(t *testing.T) {
 		ID:          pluginID,
 		Name:        "Lifecycle Test Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(context.Background(), plugin)
 	require.NoError(t, err)
 
 	// 4. Create a Manager and load the plugin
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	err = manager.LoadPlugin(ctx, scope, pluginID)
@@ -210,8 +219,9 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NotNil(t, metadata.SeriesNumber)
 	assert.InDelta(t, 1.5, *metadata.SeriesNumber, 0.001)
 
-	// 14. Run metadataEnricher
-	enrichCtx := map[string]interface{}{
+	// 14. Run metadataEnricher search + enrich
+	searchCtx := map[string]interface{}{
+		"query": "My Book",
 		"book": map[string]interface{}{
 			"title":   "My Book",
 			"authors": []string{"Author A"},
@@ -222,7 +232,25 @@ func TestPluginLifecycle(t *testing.T) {
 		},
 	}
 
-	enrichResult, err := manager.RunMetadataEnricher(ctx, rt, enrichCtx)
+	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	require.NoError(t, err)
+	require.NotNil(t, searchResp)
+	require.Len(t, searchResp.Results, 1)
+	assert.Equal(t, "Found: My Book", searchResp.Results[0].Title)
+
+	enrichCtx := map[string]interface{}{
+		"selectedResult": searchResp.Results[0].ProviderData,
+		"book": map[string]interface{}{
+			"title":   "My Book",
+			"authors": []string{"Author A"},
+		},
+		"file": map[string]interface{}{
+			"fileType": "testformat",
+			"filePath": testFile,
+		},
+	}
+
+	enrichResult, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
 	require.NoError(t, err)
 	require.NotNil(t, enrichResult)
 	assert.True(t, enrichResult.Modified)
@@ -355,6 +383,9 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 	mainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: "Result", providerData: {} }] };
+      },
       enrich: function(ctx) {
         var prefix = shisho.config.get("prefix");
         if (!prefix) {
@@ -382,7 +413,7 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 		ID:          pluginID,
 		Name:        "Config Test Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(context.Background(), plugin)
@@ -393,7 +424,7 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load and run
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	err = manager.LoadPlugin(ctx, scope, pluginID)
@@ -403,11 +434,12 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 	require.NotNil(t, rt)
 
 	enrichCtx := map[string]interface{}{
-		"book": map[string]interface{}{"title": "Test"},
-		"file": map[string]interface{}{"fileType": "epub"},
+		"selectedResult": map[string]interface{}{},
+		"book":           map[string]interface{}{"title": "Test"},
+		"file":           map[string]interface{}{"fileType": "epub"},
 	}
 
-	result, err := manager.RunMetadataEnricher(ctx, rt, enrichCtx)
+	result, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.Modified)
@@ -423,11 +455,11 @@ func TestPluginLifecycle_LoadAll(t *testing.T) {
 
 	// Create two plugins: one enabled, one disabled
 	for _, p := range []struct {
-		id      string
-		enabled bool
+		id     string
+		status models.PluginStatus
 	}{
-		{"enabled-plugin", true},
-		{"disabled-plugin", false},
+		{"enabled-plugin", models.PluginStatusActive},
+		{"disabled-plugin", models.PluginStatusDisabled},
 	} {
 		destDir := filepath.Join(pluginDir, "test", p.id)
 		err := os.MkdirAll(destDir, 0755)
@@ -465,7 +497,7 @@ func TestPluginLifecycle_LoadAll(t *testing.T) {
 			ID:          p.id,
 			Name:        p.id,
 			Version:     "1.0.0",
-			Enabled:     p.enabled,
+			Status:      p.status,
 			InstalledAt: time.Now(),
 		}
 		err = service.InstallPlugin(context.Background(), plugin)
@@ -473,7 +505,7 @@ func TestPluginLifecycle_LoadAll(t *testing.T) {
 	}
 
 	// Load all
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	err := manager.LoadAll(context.Background())
 	require.NoError(t, err)
 
@@ -537,13 +569,13 @@ func TestPluginLifecycle_ReloadPlugin(t *testing.T) {
 		ID:          pluginID,
 		Name:        "Reload Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(context.Background(), plugin)
 	require.NoError(t, err)
 
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	err = manager.LoadPlugin(ctx, scope, pluginID)

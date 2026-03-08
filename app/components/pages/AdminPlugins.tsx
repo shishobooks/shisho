@@ -35,6 +35,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  PluginStatusActive,
   useAddRepository,
   useInstallPlugin,
   usePluginOrder,
@@ -211,10 +212,12 @@ const InstalledTab = () => {
                       className="text-xs text-muted-foreground"
                       htmlFor={`enable-${plugin.scope}-${plugin.id}`}
                     >
-                      {plugin.enabled ? "Enabled" : "Disabled"}
+                      {plugin.status === PluginStatusActive
+                        ? "Enabled"
+                        : "Disabled"}
                     </Label>
                     <Switch
-                      checked={plugin.enabled}
+                      checked={plugin.status === PluginStatusActive}
                       id={`enable-${plugin.scope}-${plugin.id}`}
                       onCheckedChange={(checked) => {
                         updatePlugin.mutate({
@@ -225,7 +228,7 @@ const InstalledTab = () => {
                       }}
                     />
                   </div>
-                  {plugin.enabled && (
+                  {plugin.status === PluginStatusActive && (
                     <>
                       <Button
                         disabled={reloadPlugin.isPending}

@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -8,7 +9,20 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/version"
 )
+
+// ErrVersionIncompatible is returned when a plugin requires a newer Shisho version.
+// The Manager uses this to distinguish version incompatibility from other load errors
+// and set the appropriate PluginStatusNotSupported status.
+type ErrVersionIncompatible struct {
+	PluginMinVersion string
+	CurrentVersion   string
+}
+
+func (e *ErrVersionIncompatible) Error() string {
+	return fmt.Sprintf("plugin requires Shisho version %s or later (current: %s)", e.PluginMinVersion, e.CurrentVersion)
+}
 
 // Runtime wraps a goja VM for a single plugin. It loads manifest.json,
 // executes main.js (which defines a `plugin` global via IIFE), and extracts
@@ -19,12 +33,14 @@ type Runtime struct {
 	manifest *Manifest
 	scope    string
 	pluginID string
+	dataDir  string // Persistent data directory for this plugin
 
 	// Hook function references (nil if not provided by the plugin)
 	inputConverter   goja.Value
 	fileParser       goja.Value
 	outputGenerator  goja.Value
 	metadataEnricher goja.Value
+	onUninstalling   goja.Callable // Optional lifecycle hook called before uninstall
 
 	// fsCtx is the filesystem context for the current hook invocation.
 	// Set by hook execution code before invoking hooks, cleared after.
@@ -50,7 +66,15 @@ func LoadPlugin(dir, scope, pluginID string) (*Runtime, error) {
 		return nil, errors.Wrap(err, "failed to parse manifest")
 	}
 
-	// 2. Read main.js
+	// 2. Check version compatibility before loading JS
+	if manifest.MinShishoVersion != "" && !version.IsCompatible(manifest.MinShishoVersion) {
+		return nil, &ErrVersionIncompatible{
+			PluginMinVersion: manifest.MinShishoVersion,
+			CurrentVersion:   version.Version,
+		}
+	}
+
+	// 3. Read main.js
 	mainJSPath := filepath.Join(dir, "main.js")
 	mainJS, err := os.ReadFile(mainJSPath)
 	if err != nil {
@@ -91,6 +115,13 @@ func LoadPlugin(dir, scope, pluginID string) (*Runtime, error) {
 	rt.fileParser = extractHook(pluginObj, "fileParser")
 	rt.outputGenerator = extractHook(pluginObj, "outputGenerator")
 	rt.metadataEnricher = extractHook(pluginObj, "metadataEnricher")
+
+	// Extract optional lifecycle hook (no manifest capability needed)
+	if val := pluginObj.Get("onUninstalling"); val != nil && !goja.IsUndefined(val) && !goja.IsNull(val) {
+		if fn, ok := goja.AssertFunction(val); ok {
+			rt.onUninstalling = fn
+		}
+	}
 
 	// 8. Validate: If manifest declares a capability but JS doesn't export it -> warning (don't fail)
 	// (Warnings are silent for now; could be logged in the future)

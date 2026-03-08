@@ -22,7 +22,7 @@ func TestGetOutputGenerator(t *testing.T) {
 		ID:          "hooks-generator",
 		Name:        "Test Generator",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -52,7 +52,7 @@ func TestRegisteredOutputFormats(t *testing.T) {
 		ID:          "hooks-generator",
 		Name:        "Test Generator",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -82,7 +82,7 @@ func TestRegisteredOutputFormats_Empty(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -105,7 +105,7 @@ func TestPluginGenerator_Generate(t *testing.T) {
 		ID:          "hooks-generator",
 		Name:        "Test Generator",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -155,7 +155,7 @@ func TestPluginGenerator_Fingerprint(t *testing.T) {
 		ID:          "hooks-generator",
 		Name:        "Test Generator",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)

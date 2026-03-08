@@ -15,6 +15,20 @@ const (
 	PluginHookMetadataEnricher = "metadataEnricher"
 )
 
+// PluginStatus represents the lifecycle state of a plugin.
+type PluginStatus int
+
+const (
+	// PluginStatusActive means the plugin is running normally.
+	PluginStatusActive PluginStatus = 0
+	// PluginStatusDisabled means the user has disabled the plugin.
+	PluginStatusDisabled PluginStatus = -1
+	// PluginStatusMalfunctioned means the plugin failed to load (LoadError has details).
+	PluginStatusMalfunctioned PluginStatus = -2
+	// PluginStatusNotSupported means the plugin's minShishoVersion is incompatible.
+	PluginStatusNotSupported PluginStatus = -3
+)
+
 type PluginRepository struct {
 	bun.BaseModel `bun:"table:plugin_repositories,alias:pr" tstype:"-"`
 
@@ -30,18 +44,21 @@ type PluginRepository struct {
 type Plugin struct {
 	bun.BaseModel `bun:"table:plugins,alias:p" tstype:"-"`
 
-	Scope                  string     `bun:",pk" json:"scope"`
-	ID                     string     `bun:",pk" json:"id"`
-	Name                   string     `bun:",notnull" json:"name"`
-	Version                string     `bun:",notnull" json:"version"`
-	Description            *string    `json:"description"`
-	Author                 *string    `json:"author"`
-	Homepage               *string    `json:"homepage"`
-	Enabled                bool       `bun:",notnull" json:"enabled"`
-	InstalledAt            time.Time  `bun:",notnull" json:"installed_at"`
-	UpdatedAt              *time.Time `json:"updated_at"`
-	LoadError              *string    `json:"load_error"`
-	UpdateAvailableVersion *string    `json:"update_available_version"`
+	Scope                  string       `bun:",pk" json:"scope"`
+	ID                     string       `bun:",pk" json:"id"`
+	Name                   string       `bun:",notnull" json:"name"`
+	Version                string       `bun:",notnull" json:"version"`
+	Description            *string      `json:"description"`
+	Author                 *string      `json:"author"`
+	Homepage               *string      `json:"homepage"`
+	Status                 PluginStatus `bun:",notnull,default:0" json:"status"`
+	AutoUpdate             bool         `bun:",notnull,default:true" json:"auto_update"`
+	RepositoryScope        *string      `json:"repository_scope"`
+	RepositoryURL          *string      `json:"repository_url"`
+	InstalledAt            time.Time    `bun:",notnull" json:"installed_at"`
+	UpdatedAt              *time.Time   `json:"updated_at"`
+	LoadError              *string      `json:"load_error"`
+	UpdateAvailableVersion *string      `json:"update_available_version"`
 }
 
 type PluginConfig struct {

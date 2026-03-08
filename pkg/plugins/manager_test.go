@@ -8,9 +8,22 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// createInlinePlugin creates a plugin directory with the given manifest and main.js in pluginDir/scope/id/.
+func createInlinePlugin(t *testing.T, pluginDir, scope, id, manifestJSON, mainJS string) {
+	t.Helper()
+	destDir := filepath.Join(pluginDir, scope, id)
+	err := os.MkdirAll(destDir, 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifestJSON), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
+	require.NoError(t, err)
+}
 
 // setupTestManager creates a Manager with a temp plugin directory containing
 // the specified testdata plugin(s) copied into scope/id subdirectories.
@@ -32,7 +45,7 @@ func setupTestManager(t *testing.T, plugins ...struct{ scope, id, testdata strin
 		copyTestdataFile(t, srcDir, destDir, "main.js")
 	}
 
-	manager := NewManager(service, pluginDir)
+	manager := NewManager(service, pluginDir, "")
 	return manager, service
 }
 
@@ -54,7 +67,7 @@ func TestManager_LoadAll(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -79,7 +92,7 @@ func TestManager_LoadAll_Disabled(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     false,
+		Status:      models.PluginStatusDisabled,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -97,7 +110,7 @@ func TestManager_LoadAll_LoadError(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
-	mgr := NewManager(service, pluginDir)
+	mgr := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	// Install a plugin record pointing to non-existent directory
@@ -106,7 +119,7 @@ func TestManager_LoadAll_LoadError(t *testing.T) {
 		ID:          "nonexistent-plugin",
 		Name:        "Nonexistent Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := service.InstallPlugin(ctx, plugin)
@@ -137,7 +150,7 @@ func TestManager_LoadPlugin(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -161,7 +174,7 @@ func TestManager_UnloadPlugin(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -186,7 +199,7 @@ func TestManager_ReloadPlugin(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -215,7 +228,7 @@ func TestManager_GetOrderedRuntimes(t *testing.T) {
 		ID:          "simple-enricher",
 		Name:        "Simple Enricher",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -246,7 +259,7 @@ func TestManager_RegisteredFileExtensions(t *testing.T) {
 		ID:          "multi-hook",
 		Name:        "Multi Hook Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -296,7 +309,7 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
 	require.NoError(t, err)
 
-	mgr := NewManager(service, pluginDir)
+	mgr := NewManager(service, pluginDir, "")
 	ctx := context.Background()
 
 	plugin := &models.Plugin{
@@ -304,7 +317,7 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 		ID:          "reserved-parser",
 		Name:        "Reserved Parser",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err = service.InstallPlugin(ctx, plugin)
@@ -331,7 +344,7 @@ func TestManager_RegisteredConverterExtensions(t *testing.T) {
 		ID:          "multi-hook",
 		Name:        "Multi Hook Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -353,7 +366,7 @@ func TestManager_GetParserForType(t *testing.T) {
 		ID:          "multi-hook",
 		Name:        "Multi Hook Plugin",
 		Version:     "1.0.0",
-		Enabled:     true,
+		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
 	}
 	err := svc.InstallPlugin(ctx, plugin)
@@ -394,8 +407,8 @@ func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Install two plugins
-	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Enabled: true}
-	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Enabled: true}
+	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Status: models.PluginStatusActive}
+	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(p1).Exec(ctx)
 	require.NoError(t, err)
 	_, err = db.NewInsert().Model(p2).Exec(ctx)
@@ -456,8 +469,8 @@ func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
 	library := insertTestLibrary(t, db, "Test Library")
 
 	// Install two plugins
-	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Enabled: true}
-	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Enabled: true}
+	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Status: models.PluginStatusActive}
+	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(p1).Exec(ctx)
 	require.NoError(t, err)
 	_, err = db.NewInsert().Model(p2).Exec(ctx)
@@ -493,4 +506,139 @@ func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runtimes, 1)
 	assert.Equal(t, "enricher1", runtimes[0].pluginID)
+}
+
+func TestManager_LoadAll_VersionIncompatible_SetsNotSupported(t *testing.T) {
+	// Set a known current version for this test
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	// Create a plugin that requires version 99.0.0
+	manifestJSON := `{"manifestVersion":1,"id":"future-plugin","name":"Future Plugin","version":"1.0.0","minShishoVersion":"99.0.0","capabilities":{"metadataEnricher":{"fields":["title"]}}}`
+	mainJS := `var plugin=(function(){return{metadataEnricher:{enrich:function(ctx){return{modified:false}}}};})();`
+	createInlinePlugin(t, pluginDir, "test", "future-plugin", manifestJSON, mainJS)
+
+	mgr := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "future-plugin",
+		Name:        "Future Plugin",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	// LoadAll should not return error but should set NotSupported status
+	err = mgr.LoadAll(ctx)
+	require.NoError(t, err)
+
+	// Runtime should not be loaded
+	rt := mgr.GetRuntime("test", "future-plugin")
+	assert.Nil(t, rt)
+
+	// Status should be NotSupported with descriptive error
+	retrieved, err := service.RetrievePlugin(ctx, "test", "future-plugin")
+	require.NoError(t, err)
+	assert.Equal(t, models.PluginStatusNotSupported, retrieved.Status)
+	require.NotNil(t, retrieved.LoadError)
+	assert.Contains(t, *retrieved.LoadError, "requires Shisho version 99.0.0")
+	assert.Contains(t, *retrieved.LoadError, "current: 1.0.0")
+}
+
+func TestManager_LoadPlugin_VersionIncompatible(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	manifestJSON := `{"manifestVersion":1,"id":"future-plugin","name":"Future Plugin","version":"1.0.0","minShishoVersion":"99.0.0"}`
+	mainJS := `var plugin=(function(){return{};})();`
+	createInlinePlugin(t, pluginDir, "test", "future-plugin", manifestJSON, mainJS)
+
+	mgr := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "future-plugin",
+		Name:        "Future Plugin",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	// LoadPlugin should return ErrVersionIncompatible
+	err = mgr.LoadPlugin(ctx, "test", "future-plugin")
+	require.Error(t, err)
+
+	var vErr *ErrVersionIncompatible
+	assert.ErrorAs(t, err, &vErr)
+}
+
+func TestManager_LoadPlugin_CompatibleVersion(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "2.0.0"
+	defer func() { version.Version = origVersion }()
+
+	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "simple-enricher",
+		Name:        "Simple Enricher",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := svc.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	// Should load successfully (simple-enricher has no minShishoVersion or compatible one)
+	err = mgr.LoadPlugin(ctx, "test", "simple-enricher")
+	require.NoError(t, err)
+
+	rt := mgr.GetRuntime("test", "simple-enricher")
+	require.NotNil(t, rt)
+}
+
+func TestManager_LoadPlugin_NoMinVersion(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "simple-enricher",
+		Name:        "Simple Enricher",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := svc.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	// Should load successfully (no minShishoVersion = always compatible)
+	err = mgr.LoadPlugin(ctx, "test", "simple-enricher")
+	require.NoError(t, err)
+
+	rt := mgr.GetRuntime("test", "simple-enricher")
+	require.NotNil(t, rt)
 }
