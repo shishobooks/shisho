@@ -144,8 +144,9 @@ type SearchResult struct {
 	Identifiers  []mediafile.ParsedIdentifier `json:"identifiers"`
 	ProviderData interface{}                  `json:"provider_data"` // Opaque data passed back to enrich()
 	// Added by the caller, not the plugin:
-	PluginScope string `json:"plugin_scope"`
-	PluginID    string `json:"plugin_id"`
+	PluginScope    string   `json:"plugin_scope"`
+	PluginID       string   `json:"plugin_id"`
+	DisabledFields []string `json:"disabled_fields,omitempty"`
 }
 
 // SearchResponse is the result of a metadata enricher's search() hook.

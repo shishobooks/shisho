@@ -193,13 +193,15 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	bookSvc := books.NewService(db)
 	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
 	enrichDeps := &plugins.EnrichDeps{
-		BookStore:     bookAdapter,
-		RelStore:      bookAdapter,
-		IdentStore:    bookAdapter,
-		PersonFinder:  people.NewService(db),
-		GenreFinder:   genres.NewService(db),
-		TagFinder:     tags.NewService(db),
-		SearchIndexer: search.NewService(db),
+		BookStore:       bookAdapter,
+		RelStore:        bookAdapter,
+		IdentStore:      bookAdapter,
+		PersonFinder:    people.NewService(db),
+		GenreFinder:     genres.NewService(db),
+		TagFinder:       tags.NewService(db),
+		PublisherFinder: publishers.NewService(db),
+		ImprintFinder:   imprints.NewService(db),
+		SearchIndexer:   search.NewService(db),
 	}
 	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
 }
@@ -264,4 +266,16 @@ func (a *bookUpdaterAdapter) DeleteIdentifiersForFile(ctx context.Context, fileI
 
 func (a *bookUpdaterAdapter) CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error {
 	return a.svc.CreateFileIdentifier(ctx, identifier)
+}
+
+func (a *bookUpdaterAdapter) UpdateFile(ctx context.Context, file *models.File, columns []string) error {
+	return a.svc.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: columns})
+}
+
+func (a *bookUpdaterAdapter) DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error) {
+	return a.svc.DeleteNarratorsForFile(ctx, fileID)
+}
+
+func (a *bookUpdaterAdapter) CreateNarrator(ctx context.Context, narrator *models.Narrator) error {
+	return a.svc.CreateNarrator(ctx, narrator)
 }

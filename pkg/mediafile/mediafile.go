@@ -16,8 +16,8 @@ type ParsedAuthor struct {
 
 // ParsedIdentifier represents an identifier parsed from file metadata.
 type ParsedIdentifier struct {
-	Type  string // One of the IdentifierType constants (isbn_10, isbn_13, asin, uuid, goodreads, google, other)
-	Value string // The identifier value
+	Type  string `json:"type"`  // One of the IdentifierType constants (isbn_10, isbn_13, asin, uuid, goodreads, google, other)
+	Value string `json:"value"` // The identifier value
 }
 
 // ParsedChapter represents a chapter parsed from file metadata.
