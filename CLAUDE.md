@@ -189,11 +189,6 @@ Each commit should be in the format of `[{Category}] {Change description}`
 [CI] Add release automation with GitHub Actions
 ```
 
-### Workflow
-
-- Always develop in a git worktree and squash the changes back into master
-- This repo currently doesn't utilize pull requests, so instead of creating a PR, create a squash commit back into master
-
 ### Releases
 
 - Use `make release tag=0.2.0` to create a release
