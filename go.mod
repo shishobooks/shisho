@@ -8,6 +8,7 @@ require (
 	github.com/air-verse/air v1.64.2
 	github.com/creasty/defaults v1.8.0
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/go-playground/mold/v4 v4.5.1
 	github.com/go-playground/universal-translator v0.18.1
@@ -47,7 +48,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

@@ -56,6 +56,8 @@ type Worker struct {
 	pluginService    *plugins.Service
 	pluginManager    *plugins.Manager
 
+	monitor *Monitor
+
 	queue           chan *models.Job
 	shutdown        chan struct{}
 	doneFetching    chan struct{}
@@ -133,6 +135,10 @@ func (w *Worker) Start() {
 		go w.cleanupOldJobs()
 	}
 	go w.checkPluginUpdates()
+	if w.config.LibraryMonitorEnabled {
+		w.monitor = newMonitor(w)
+		w.monitor.start()
+	}
 }
 
 func (w *Worker) fetchJobs() {
@@ -358,6 +364,10 @@ func (w *Worker) checkPluginUpdates() {
 }
 
 func (w *Worker) Shutdown() {
+	if w.monitor != nil {
+		w.monitor.stop()
+	}
+
 	close(w.shutdown)
 
 	<-w.doneFetching

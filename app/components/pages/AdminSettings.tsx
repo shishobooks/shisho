@@ -157,6 +157,16 @@ const AdminSettings = () => {
               value={`${config.job_retention_days} days`}
             />
             <ConfigRow
+              description="Real-time filesystem monitoring of library paths"
+              label="Library Monitor"
+              value={config.library_monitor_enabled}
+            />
+            <ConfigRow
+              description="Seconds to wait before processing detected changes"
+              label="Monitor Delay"
+              value={`${config.library_monitor_delay_seconds}s`}
+            />
+            <ConfigRow
               description="Application environment mode"
               label="Environment"
               value={config.environment || "production"}
