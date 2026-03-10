@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-03-10
+
+### Features
+- Add plugin search and identify dialog with full metadata enrichment (#10)
+
+### CI/CD
+- Cache Playwright browsers in CI to speed up JS tests (#9)
+
+
 ## [0.0.18] - 2026-03-09
 
 ### Other
