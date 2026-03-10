@@ -37,7 +37,6 @@ These workflow-based skills (in `.claude/skills/`) are invoked on demand:
 |-------|-------------|
 | `favicon` | Creating or updating favicon, app icons, PWA icons |
 | `splash` | Creating or updating the README splash image |
-| `squash-merge-worktree` | Done with worktree work, ready to merge back to master |
 
 ## Critical Gotchas
 
@@ -188,11 +187,6 @@ Each commit should be in the format of `[{Category}] {Change description}`
 [E2E] Add tests for user authentication flow
 [CI] Add release automation with GitHub Actions
 ```
-
-### Workflow
-
-- Always develop in a git worktree and squash the changes back into master
-- This repo currently doesn't utilize pull requests, so instead of creating a PR, create a squash commit back into master
 
 ### Releases
 
