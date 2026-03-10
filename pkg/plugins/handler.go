@@ -1617,6 +1617,9 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		}
 	}
 
+	// File-level metadata: accumulate column updates and flush once at the end
+	var fileColumns []string
+
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && isAllowed("narrators") && targetFile != nil && h.enrich.personFinder != nil {
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
@@ -1640,9 +1643,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 			}
 		}
 		targetFile.NarratorSource = &pluginSource
-		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"narrator_source"}); err != nil {
-			return errors.Wrap(err, "failed to update narrator source")
-		}
+		fileColumns = append(fileColumns, "narrator_source")
 	}
 
 	// Publisher (file-level, applied to target file)
@@ -1653,9 +1654,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		} else {
 			targetFile.PublisherID = &publisher.ID
 			targetFile.PublisherSource = &pluginSource
-			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"publisher_id", "publisher_source"}); err != nil {
-				return errors.Wrap(err, "failed to update file publisher")
-			}
+			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
 		}
 	}
 
@@ -1667,9 +1666,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		} else {
 			targetFile.ImprintID = &imprint.ID
 			targetFile.ImprintSource = &pluginSource
-			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"imprint_id", "imprint_source"}); err != nil {
-				return errors.Wrap(err, "failed to update file imprint")
-			}
+			fileColumns = append(fileColumns, "imprint_id", "imprint_source")
 		}
 	}
 
@@ -1677,18 +1674,14 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	if md.URL != "" && isAllowed("url") && targetFile != nil {
 		targetFile.URL = &md.URL
 		targetFile.URLSource = &pluginSource
-		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"url", "url_source"}); err != nil {
-			return errors.Wrap(err, "failed to update file URL")
-		}
+		fileColumns = append(fileColumns, "url", "url_source")
 	}
 
 	// Release date (file-level, applied to target file)
 	if md.ReleaseDate != nil && isAllowed("releaseDate") && targetFile != nil {
 		targetFile.ReleaseDate = md.ReleaseDate
 		targetFile.ReleaseDateSource = &pluginSource
-		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"release_date", "release_date_source"}); err != nil {
-			return errors.Wrap(err, "failed to update file release date")
-		}
+		fileColumns = append(fileColumns, "release_date", "release_date_source")
 	}
 
 	// Identifiers (file-level, applied to target file)
@@ -1730,9 +1723,14 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 			log.Warn("failed to write cover file", logger.Data{"error": err.Error()})
 		} else {
 			targetFile.CoverImageFilename = &coverFilename
-			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"cover_image_filename"}); err != nil {
-				log.Warn("failed to update file cover path", logger.Data{"error": err.Error()})
-			}
+			fileColumns = append(fileColumns, "cover_image_filename")
+		}
+	}
+
+	// Flush all file-level column updates in a single DB call
+	if len(fileColumns) > 0 && targetFile != nil {
+		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, fileColumns); err != nil {
+			return errors.Wrap(err, "failed to update file metadata")
 		}
 	}
 

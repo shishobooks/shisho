@@ -65,10 +65,10 @@ export function IdentifyBookDialog({
     if (open) {
       setQuery(book.title);
       setSelectedResult(null);
-      setSelectedFileId(undefined);
+      setSelectedFileId(mainFiles.length > 1 ? mainFiles[0].id : undefined);
       hasSearchedRef.current = false;
     }
-  }, [open, book.title]);
+  }, [open, book.title, mainFiles]);
 
   // Auto-search after query is set from dialog open
   useEffect(() => {
@@ -340,8 +340,8 @@ export function IdentifyBookDialog({
             <div>
               <Label>Apply to file</Label>
               <p className="mt-1 text-xs text-muted-foreground">
-                Identifiers and cover image will be applied to the selected
-                file.
+                File-specific metadata (identifiers, cover, narrators,
+                publisher, etc.) will be applied to the selected file.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -350,9 +350,7 @@ export function IdentifyBookDialog({
                   className={cn(
                     "w-full text-left rounded-md border p-2.5 cursor-pointer transition-colors",
                     "hover:bg-muted/50",
-                    selectedFileId === file.id ||
-                      (selectedFileId === undefined &&
-                        file.id === mainFiles[0].id)
+                    selectedFileId === file.id
                       ? "border-primary bg-primary/5"
                       : "border-border",
                   )}
