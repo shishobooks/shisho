@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-03-09
+
+### Other
+- Fix remaining Dependabot alerts in website dependencies (#7)
+- Fix flakey E2E tests by isolating Vite cache per browser (#6)
+- Fix Dependabot security alerts for npm dependencies (#5)
+- Add manual Identify Book dialog (#4)
+- Move skills to subdirectory CLAUDE.md files for automatic context loading
+- Plugin System v2: UX and architecture revamp (#3)
+
+
 ## [0.0.17] - 2026-02-07
 
 
