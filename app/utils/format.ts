@@ -59,6 +59,35 @@ export const formatTimestamp = (ms: number): string => {
 };
 
 /**
+ * Human-readable labels for plugin metadata field names.
+ */
+export const METADATA_FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  subtitle: "Subtitle",
+  authors: "Authors",
+  narrators: "Narrators",
+  series: "Series",
+  seriesNumber: "Series Number",
+  genres: "Genres",
+  tags: "Tags",
+  description: "Description",
+  publisher: "Publisher",
+  imprint: "Imprint",
+  url: "URL",
+  releaseDate: "Release Date",
+  cover: "Cover Image",
+  identifiers: "Identifiers",
+};
+
+/**
+ * Formats a metadata field name into a human-readable label.
+ * @example formatMetadataFieldLabel("releaseDate") // "Release Date"
+ */
+export const formatMetadataFieldLabel = (field: string): string => {
+  return METADATA_FIELD_LABELS[field] ?? field;
+};
+
+/**
  * Formats identifier type codes into human-readable labels.
  * @example formatIdentifierType("isbn_13") // "ISBN-13"
  */

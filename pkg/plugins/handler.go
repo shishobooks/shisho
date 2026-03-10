@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -1250,7 +1251,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	// Look up the book
 	var book models.Book
 	if err := h.db.NewSelect().Model(&book).
-		Where("book.id = ?", payload.BookID).
+		Where("b.id = ?", payload.BookID).
 		Relation("Authors").
 		Relation("Authors.Person").
 		Relation("BookSeries").
@@ -1291,9 +1292,29 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		if sErr != nil {
 			continue // Skip failed plugins
 		}
-		if resp != nil {
-			allResults = append(allResults, resp.Results...)
+		if resp == nil {
+			continue
 		}
+
+		// Compute disabled fields for this plugin
+		var disabledFields []string
+		manifest := rt.Manifest()
+		if manifest.Capabilities.MetadataEnricher != nil {
+			declaredFields := manifest.Capabilities.MetadataEnricher.Fields
+			effectiveSettings, fErr := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
+			if fErr == nil {
+				for field, enabled := range effectiveSettings {
+					if !enabled {
+						disabledFields = append(disabledFields, field)
+					}
+				}
+			}
+		}
+
+		for i := range resp.Results {
+			resp.Results[i].DisabledFields = disabledFields
+		}
+		allResults = append(allResults, resp.Results...)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -1321,7 +1342,7 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	// Look up the book with all relations needed for enrichment
 	var book models.Book
 	if err := h.db.NewSelect().Model(&book).
-		Where("book.id = ?", payload.BookID).
+		Where("b.id = ?", payload.BookID).
 		Relation("Authors").
 		Relation("Authors.Person").
 		Relation("BookSeries").
@@ -1580,6 +1601,32 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *me
 				Value:  ident.Value,
 			}); err != nil {
 				log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
+			}
+		}
+	}
+
+	// Cover image (applied to first file)
+	if len(md.CoverData) > 0 && isAllowed("cover") && len(book.Files) > 0 {
+		file := book.Files[0]
+		coverDir := book.Filepath
+		coverBaseName := filepath.Base(file.Filepath) + ".cover"
+
+		// Normalize the cover image
+		normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
+		coverExt := ".png"
+		if normalizedMime == md.CoverMimeType {
+			coverExt = md.CoverExtension()
+		}
+
+		coverFilename := coverBaseName + coverExt
+		coverFilepath := filepath.Join(coverDir, coverFilename)
+
+		if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
+			log.Warn("failed to write cover file", logger.Data{"error": err.Error()})
+		} else {
+			file.CoverImageFilename = &coverFilename
+			if _, err := h.db.NewUpdate().Model(&file).Column("cover_image_filename").WherePK().Exec(ctx); err != nil {
+				log.Warn("failed to update file cover path", logger.Data{"error": err.Error()})
 			}
 		}
 	}

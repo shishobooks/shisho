@@ -23,6 +23,7 @@ import {
   type ConfigField,
 } from "@/hooks/queries/plugins";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { formatMetadataFieldLabel } from "@/utils/format";
 
 interface PluginConfigDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -33,28 +34,6 @@ interface PluginConfigDialogProps {
 }
 
 const SECRET_MASK = "***";
-
-const FIELD_LABELS: Record<string, string> = {
-  title: "Title",
-  subtitle: "Subtitle",
-  authors: "Authors",
-  narrators: "Narrators",
-  series: "Series",
-  seriesNumber: "Series Number",
-  genres: "Genres",
-  tags: "Tags",
-  description: "Description",
-  publisher: "Publisher",
-  imprint: "Imprint",
-  url: "URL",
-  releaseDate: "Release Date",
-  cover: "Cover Image",
-  identifiers: "Identifiers",
-};
-
-const formatFieldLabel = (field: string): string => {
-  return FIELD_LABELS[field] ?? field;
-};
 
 export const PluginConfigDialog = ({
   onOpenChange,
@@ -310,7 +289,9 @@ export const PluginConfigDialog = ({
             <div className="space-y-3">
               {data.declaredFields.map((field) => (
                 <div className="flex items-center justify-between" key={field}>
-                  <span className="text-sm">{formatFieldLabel(field)}</span>
+                  <span className="text-sm">
+                    {formatMetadataFieldLabel(field)}
+                  </span>
                   <Switch
                     checked={fieldSettings[field] ?? true}
                     onCheckedChange={(checked) =>

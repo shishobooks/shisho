@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
   Plugin,
@@ -510,6 +511,7 @@ export interface PluginSearchResult {
   provider_data?: unknown;
   plugin_scope: string;
   plugin_id: string;
+  disabled_fields?: string[];
 }
 
 export interface PluginSearchResponse {
@@ -553,7 +555,12 @@ export const usePluginEnrich = () => {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["books"] });
+      queryClient.invalidateQueries({
+        queryKey: [BooksQueryKey.ListBooks],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [BooksQueryKey.RetrieveBook],
+      });
     },
   });
 };

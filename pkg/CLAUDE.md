@@ -260,6 +260,18 @@ var payload setOrderPayload
 if err := c.Bind(&payload); err != nil { ... }
 ```
 
+- **Bun table aliases in WHERE/ORDER clauses**: Bun auto-aliases tables using the first letter of the table name (e.g., `books` → `b`, `files` → `f`, `persons` → `p`). Always use these aliases in `Where()`, `Order()`, and other SQL clauses — never use the full table name:
+
+```go
+// ❌ WRONG - "book" is not a valid alias, causes "no such column" error
+q.Where("book.id = ?", id)
+
+// ✅ CORRECT - Bun aliases "books" table as "b"
+q.Where("b.id = ?", id)
+```
+
+Check existing queries in `pkg/books/service.go` for reference. Common aliases: `b` (books), `f` (files), `a` (authors), `p` (persons), `s` (series), `bs` (book_series), `ch` (chapters), `n` (narrators).
+
 ### Config
 
 - Self-hosted app with config file-based configuration

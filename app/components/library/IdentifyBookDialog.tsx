@@ -1,5 +1,5 @@
-import { Loader2, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ExternalLink, Info, Loader2, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +15,14 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   usePluginEnrich,
+  usePluginIdentifierTypes,
   usePluginSearch,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
 import type { Book } from "@/types";
+import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import { getIdentifierUrl } from "@/utils/identifiers";
 
 interface IdentifyBookDialogProps {
   open: boolean;
@@ -37,6 +40,7 @@ export function IdentifyBookDialog({
     useState<PluginSearchResult | null>(null);
   const searchMutation = usePluginSearch();
   const enrichMutation = usePluginEnrich();
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const inputRef = useRef<HTMLInputElement>(null);
   const hasSearchedRef = useRef(false);
 
@@ -92,6 +96,27 @@ export function IdentifyBookDialog({
   };
 
   const results = searchMutation.data?.results ?? [];
+
+  // Detect plugin IDs that appear under multiple scopes
+  const ambiguousIds = useMemo(() => {
+    const items = searchMutation.data?.results ?? [];
+    const scopesByPluginId = new Map<string, Set<string>>();
+    for (const r of items) {
+      const scopes = scopesByPluginId.get(r.plugin_id) ?? new Set();
+      scopes.add(r.plugin_scope);
+      scopesByPluginId.set(r.plugin_id, scopes);
+    }
+    const ids = new Set<string>();
+    for (const [id, scopes] of scopesByPluginId) {
+      if (scopes.size > 1) ids.add(id);
+    }
+    return ids;
+  }, [searchMutation.data?.results]);
+
+  const pluginLabel = (result: PluginSearchResult) =>
+    ambiguousIds.has(result.plugin_id)
+      ? `${result.plugin_scope}/${result.plugin_id}`
+      : result.plugin_id;
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -150,10 +175,10 @@ export function IdentifyBookDialog({
               {results.map((result, index) => (
                 <button
                   className={cn(
-                    "w-full text-left rounded-lg border p-3 cursor-pointer transition-colors",
+                    "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
                     "hover:bg-muted/50",
                     selectedResult === result
-                      ? "ring-2 ring-primary border-primary"
+                      ? "border-primary bg-primary/5"
                       : "border-border",
                   )}
                   key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
@@ -181,7 +206,7 @@ export function IdentifyBookDialog({
                           {result.title}
                         </p>
                         <Badge className="shrink-0 text-xs" variant="outline">
-                          {result.plugin_id}
+                          {pluginLabel(result)}
                         </Badge>
                       </div>
 
@@ -207,19 +232,55 @@ export function IdentifyBookDialog({
                         )}
                       </div>
 
-                      {result.identifiers && result.identifiers.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {result.identifiers.map((id) => (
-                            <Badge
-                              className="text-xs"
-                              key={`${id.type}-${id.value}`}
-                              variant="secondary"
-                            >
-                              {id.type}: {id.value}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      {result.identifiers &&
+                        result.identifiers.filter((id) => id.type && id.value)
+                          .length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {result.identifiers
+                              .filter((id) => id.type && id.value)
+                              .map((id) => {
+                                const url = getIdentifierUrl(
+                                  id.type,
+                                  id.value,
+                                  pluginIdentifierTypes,
+                                );
+                                return url ? (
+                                  <a
+                                    className="inline-flex"
+                                    href={url}
+                                    key={`${id.type}-${id.value}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    rel="noopener noreferrer"
+                                    target="_blank"
+                                  >
+                                    <Badge
+                                      className="text-xs hover:bg-primary/20 transition-colors"
+                                      variant="secondary"
+                                    >
+                                      {formatIdentifierType(
+                                        id.type,
+                                        pluginIdentifierTypes,
+                                      )}
+                                      : {id.value}
+                                      <ExternalLink className="h-3 w-3 ml-1 shrink-0" />
+                                    </Badge>
+                                  </a>
+                                ) : (
+                                  <Badge
+                                    className="text-xs"
+                                    key={`${id.type}-${id.value}`}
+                                    variant="secondary"
+                                  >
+                                    {formatIdentifierType(
+                                      id.type,
+                                      pluginIdentifierTypes,
+                                    )}
+                                    : {id.value}
+                                  </Badge>
+                                );
+                              })}
+                          </div>
+                        )}
 
                       {result.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
@@ -239,6 +300,22 @@ export function IdentifyBookDialog({
             </div>
           )}
         </div>
+
+        {selectedResult?.disabled_fields &&
+          selectedResult.disabled_fields.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                The following fields are disabled for this plugin and won&apos;t
+                be updated:{" "}
+                {selectedResult.disabled_fields
+                  .map((f) => formatMetadataFieldLabel(f))
+                  .sort()
+                  .join(", ")}
+                . You can change this in the plugin settings.
+              </span>
+            </div>
+          )}
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} variant="outline">
