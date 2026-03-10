@@ -28,19 +28,24 @@ const validRepoURLPrefix = "https://raw.githubusercontent.com/"
 // enrichDeps holds dependencies for the enrich endpoint.
 // Uses interfaces to avoid circular imports with the books package.
 type enrichDeps struct {
-	bookStore     bookStore
-	relStore      relationStore
-	identStore    identifierStore
-	personFinder  personFinder
-	genreFinder   genreFinder
-	tagFinder     tagFinder
-	searchIndexer searchIndexer
+	bookStore       bookStore
+	relStore        relationStore
+	identStore      identifierStore
+	personFinder    personFinder
+	genreFinder     genreFinder
+	tagFinder       tagFinder
+	publisherFinder publisherFinder
+	imprintFinder   imprintFinder
+	searchIndexer   searchIndexer
 }
 
-// bookStore provides core book CRUD operations.
+// bookStore provides core book and file CRUD operations.
 type bookStore interface {
 	UpdateBook(ctx context.Context, book *models.Book, columns []string) error
 	RetrieveBook(ctx context.Context, bookID int) (*models.Book, error)
+	UpdateFile(ctx context.Context, file *models.File, columns []string) error
+	DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error)
+	CreateNarrator(ctx context.Context, narrator *models.Narrator) error
 }
 
 // relationStore provides book relationship CRUD operations.
@@ -62,7 +67,7 @@ type identifierStore interface {
 	CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error
 }
 
-// personFinder finds or creates persons for author associations.
+// personFinder finds or creates persons for author and narrator associations.
 type personFinder interface {
 	FindOrCreatePerson(ctx context.Context, name string, libraryID int) (*models.Person, error)
 }
@@ -75,6 +80,16 @@ type genreFinder interface {
 // tagFinder finds or creates tags.
 type tagFinder interface {
 	FindOrCreateTag(ctx context.Context, name string, libraryID int) (*models.Tag, error)
+}
+
+// publisherFinder finds or creates publishers.
+type publisherFinder interface {
+	FindOrCreatePublisher(ctx context.Context, name string, libraryID int) (*models.Publisher, error)
+}
+
+// imprintFinder finds or creates imprints.
+type imprintFinder interface {
+	FindOrCreateImprint(ctx context.Context, name string, libraryID int) (*models.Imprint, error)
 }
 
 // searchIndexer updates the search index after metadata changes.
@@ -123,6 +138,7 @@ type enrichPayload struct {
 	PluginScope  string `json:"plugin_scope" validate:"required"`
 	PluginID     string `json:"plugin_id" validate:"required"`
 	BookID       int    `json:"book_id" validate:"required"`
+	FileID       *int   `json:"file_id"`
 	ProviderData any    `json:"provider_data"`
 }
 
@@ -1366,12 +1382,27 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 		return errcodes.Forbidden("You don't have access to this library")
 	}
 
+	// Resolve the target file for enrichment
+	var targetFile *models.File
+	if payload.FileID != nil {
+		for _, f := range book.Files {
+			if f.ID == *payload.FileID {
+				targetFile = f
+				break
+			}
+		}
+		if targetFile == nil {
+			return errcodes.NotFound("File")
+		}
+	} else if len(book.Files) > 0 {
+		targetFile = book.Files[0]
+	}
+
 	bookCtx := buildSearchBookContext(&book)
 	fileCtx := map[string]interface{}{}
-	if len(book.Files) > 0 {
-		f := book.Files[0]
-		fileCtx["fileType"] = f.FileType
-		fileCtx["filePath"] = f.Filepath
+	if targetFile != nil {
+		fileCtx["fileType"] = targetFile.FileType
+		fileCtx["filePath"] = targetFile.Filepath
 	}
 
 	enrichCtx := map[string]interface{}{
@@ -1391,7 +1422,7 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	}
 
 	// Apply enriched metadata to the book
-	if err := h.applyEnrichment(ctx, &book, result.Metadata, rt, log); err != nil {
+	if err := h.applyEnrichment(ctx, &book, targetFile, result.Metadata, rt, log); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -1405,7 +1436,8 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 }
 
 // applyEnrichment applies enriched metadata to a book, respecting field filtering.
-func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *mediafile.ParsedMetadata, rt *Runtime, log logger.Logger) error {
+// targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
+func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, rt *Runtime, log logger.Logger) error {
 	manifest := rt.Manifest()
 	if manifest.Capabilities.MetadataEnricher == nil {
 		return nil
@@ -1585,10 +1617,83 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *me
 		}
 	}
 
-	// Identifiers (file-level, applied to first file)
-	if len(md.Identifiers) > 0 && isAllowed("identifiers") && len(book.Files) > 0 {
-		fileID := book.Files[0].ID
-		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, fileID); err != nil {
+	// Narrators (file-level, applied to target file)
+	if len(md.Narrators) > 0 && isAllowed("narrators") && targetFile != nil && h.enrich.personFinder != nil {
+		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
+			return errors.Wrap(err, "failed to delete narrators")
+		}
+		for i, narratorName := range md.Narrators {
+			if narratorName == "" {
+				continue
+			}
+			person, pErr := h.enrich.personFinder.FindOrCreatePerson(ctx, narratorName, book.LibraryID)
+			if pErr != nil {
+				log.Warn("failed to find/create person for narrator", logger.Data{"name": narratorName, "error": pErr.Error()})
+				continue
+			}
+			if err := h.enrich.bookStore.CreateNarrator(ctx, &models.Narrator{
+				FileID:    targetFile.ID,
+				PersonID:  person.ID,
+				SortOrder: i + 1,
+			}); err != nil {
+				log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
+			}
+		}
+		targetFile.NarratorSource = &pluginSource
+		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"narrator_source"}); err != nil {
+			return errors.Wrap(err, "failed to update narrator source")
+		}
+	}
+
+	// Publisher (file-level, applied to target file)
+	if md.Publisher != "" && isAllowed("publisher") && targetFile != nil && h.enrich.publisherFinder != nil {
+		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, md.Publisher, book.LibraryID)
+		if pErr != nil {
+			log.Warn("failed to find/create publisher", logger.Data{"name": md.Publisher, "error": pErr.Error()})
+		} else {
+			targetFile.PublisherID = &publisher.ID
+			targetFile.PublisherSource = &pluginSource
+			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"publisher_id", "publisher_source"}); err != nil {
+				return errors.Wrap(err, "failed to update file publisher")
+			}
+		}
+	}
+
+	// Imprint (file-level, applied to target file)
+	if md.Imprint != "" && isAllowed("imprint") && targetFile != nil && h.enrich.imprintFinder != nil {
+		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, md.Imprint, book.LibraryID)
+		if iErr != nil {
+			log.Warn("failed to find/create imprint", logger.Data{"name": md.Imprint, "error": iErr.Error()})
+		} else {
+			targetFile.ImprintID = &imprint.ID
+			targetFile.ImprintSource = &pluginSource
+			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"imprint_id", "imprint_source"}); err != nil {
+				return errors.Wrap(err, "failed to update file imprint")
+			}
+		}
+	}
+
+	// URL (file-level, applied to target file)
+	if md.URL != "" && isAllowed("url") && targetFile != nil {
+		targetFile.URL = &md.URL
+		targetFile.URLSource = &pluginSource
+		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"url", "url_source"}); err != nil {
+			return errors.Wrap(err, "failed to update file URL")
+		}
+	}
+
+	// Release date (file-level, applied to target file)
+	if md.ReleaseDate != nil && isAllowed("releaseDate") && targetFile != nil {
+		targetFile.ReleaseDate = md.ReleaseDate
+		targetFile.ReleaseDateSource = &pluginSource
+		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"release_date", "release_date_source"}); err != nil {
+			return errors.Wrap(err, "failed to update file release date")
+		}
+	}
+
+	// Identifiers (file-level, applied to target file)
+	if len(md.Identifiers) > 0 && isAllowed("identifiers") && targetFile != nil {
+		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete identifiers")
 		}
 		for _, ident := range md.Identifiers {
@@ -1596,20 +1701,20 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *me
 				continue
 			}
 			if err := h.enrich.identStore.CreateFileIdentifier(ctx, &models.FileIdentifier{
-				FileID: fileID,
+				FileID: targetFile.ID,
 				Type:   ident.Type,
 				Value:  ident.Value,
+				Source: pluginSource,
 			}); err != nil {
 				log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
 			}
 		}
 	}
 
-	// Cover image (applied to first file)
-	if len(md.CoverData) > 0 && isAllowed("cover") && len(book.Files) > 0 {
-		file := book.Files[0]
+	// Cover image (applied to target file)
+	if len(md.CoverData) > 0 && isAllowed("cover") && targetFile != nil {
 		coverDir := book.Filepath
-		coverBaseName := filepath.Base(file.Filepath) + ".cover"
+		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 
 		// Normalize the cover image
 		normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
@@ -1624,8 +1729,8 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, md *me
 		if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
 			log.Warn("failed to write cover file", logger.Data{"error": err.Error()})
 		} else {
-			file.CoverImageFilename = &coverFilename
-			if _, err := h.db.NewUpdate().Model(&file).Column("cover_image_filename").WherePK().Exec(ctx); err != nil {
+			targetFile.CoverImageFilename = &coverFilename
+			if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, []string{"cover_image_filename"}); err != nil {
 				log.Warn("failed to update file cover path", logger.Data{"error": err.Error()})
 			}
 		}

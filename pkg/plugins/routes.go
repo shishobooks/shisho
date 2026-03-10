@@ -10,13 +10,15 @@ import (
 // EnrichDeps holds optional dependencies for the enrich endpoint.
 // If nil, the enrich endpoint returns metadata without persisting it.
 type EnrichDeps struct {
-	BookStore     bookStore
-	RelStore      relationStore
-	IdentStore    identifierStore
-	PersonFinder  personFinder
-	GenreFinder   genreFinder
-	TagFinder     tagFinder
-	SearchIndexer searchIndexer
+	BookStore       bookStore
+	RelStore        relationStore
+	IdentStore      identifierStore
+	PersonFinder    personFinder
+	GenreFinder     genreFinder
+	TagFinder       tagFinder
+	PublisherFinder publisherFinder
+	ImprintFinder   imprintFinder
+	SearchIndexer   searchIndexer
 }
 
 // RegisterRoutesWithGroup registers plugin management API routes.
@@ -24,13 +26,15 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	h := &handler{service: service, manager: manager, installer: installer, db: db}
 	if ed != nil {
 		h.enrich = &enrichDeps{
-			bookStore:     ed.BookStore,
-			relStore:      ed.RelStore,
-			identStore:    ed.IdentStore,
-			personFinder:  ed.PersonFinder,
-			genreFinder:   ed.GenreFinder,
-			tagFinder:     ed.TagFinder,
-			searchIndexer: ed.SearchIndexer,
+			bookStore:       ed.BookStore,
+			relStore:        ed.RelStore,
+			identStore:      ed.IdentStore,
+			personFinder:    ed.PersonFinder,
+			genreFinder:     ed.GenreFinder,
+			tagFinder:       ed.TagFinder,
+			publisherFinder: ed.PublisherFinder,
+			imprintFinder:   ed.ImprintFinder,
+			searchIndexer:   ed.SearchIndexer,
 		}
 	}
 

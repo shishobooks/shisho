@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   usePluginEnrich,
   usePluginIdentifierTypes,
@@ -21,7 +22,13 @@ import {
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
 import type { Book } from "@/types";
-import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import {
+  formatDuration,
+  formatFileSize,
+  formatIdentifierType,
+  formatMetadataFieldLabel,
+  getFilename,
+} from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
 
 interface IdentifyBookDialogProps {
@@ -38,17 +45,27 @@ export function IdentifyBookDialog({
   const [query, setQuery] = useState("");
   const [selectedResult, setSelectedResult] =
     useState<PluginSearchResult | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<number | undefined>(
+    undefined,
+  );
   const searchMutation = usePluginSearch();
   const enrichMutation = usePluginEnrich();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const inputRef = useRef<HTMLInputElement>(null);
   const hasSearchedRef = useRef(false);
 
+  const mainFiles = useMemo(
+    () => book.files?.filter((f) => f.file_role === "main") ?? [],
+    [book.files],
+  );
+  const hasMultipleFiles = mainFiles.length > 1;
+
   // Pre-fill query and auto-search when dialog opens
   useEffect(() => {
     if (open) {
       setQuery(book.title);
       setSelectedResult(null);
+      setSelectedFileId(undefined);
       hasSearchedRef.current = false;
     }
   }, [open, book.title]);
@@ -81,6 +98,7 @@ export function IdentifyBookDialog({
         pluginScope: selectedResult.plugin_scope,
         pluginId: selectedResult.plugin_id,
         bookId: book.id,
+        fileId: selectedFileId,
         providerData: selectedResult.provider_data,
       },
       {
@@ -316,6 +334,65 @@ export function IdentifyBookDialog({
               </span>
             </div>
           )}
+
+        {hasMultipleFiles && (
+          <div className="space-y-2">
+            <div>
+              <Label>Apply to file</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Identifiers and cover image will be applied to the selected
+                file.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              {mainFiles.map((file) => (
+                <button
+                  className={cn(
+                    "w-full text-left rounded-md border p-2.5 cursor-pointer transition-colors",
+                    "hover:bg-muted/50",
+                    selectedFileId === file.id ||
+                      (selectedFileId === undefined &&
+                        file.id === mainFiles[0].id)
+                      ? "border-primary bg-primary/5"
+                      : "border-border",
+                  )}
+                  key={file.id}
+                  onClick={() => setSelectedFileId(file.id)}
+                  type="button"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge className="shrink-0 text-xs" variant="outline">
+                      {file.file_type.toUpperCase()}
+                    </Badge>
+                    <span className="text-sm truncate min-w-0">
+                      {file.name || getFilename(file.filepath)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-x-2 mt-1 text-xs text-muted-foreground">
+                    <span>{formatFileSize(file.filesize_bytes)}</span>
+                    {file.audiobook_duration_seconds != null && (
+                      <>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span>
+                          {formatDuration(file.audiobook_duration_seconds)}
+                        </span>
+                      </>
+                    )}
+                    {file.page_count != null && (
+                      <>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span>
+                          {file.page_count} page
+                          {file.page_count !== 1 ? "s" : ""}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} variant="outline">

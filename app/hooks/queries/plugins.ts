@@ -543,14 +543,16 @@ export const usePluginEnrich = () => {
       pluginScope: string;
       pluginId: string;
       bookId: number;
+      fileId?: number;
       providerData: unknown;
     }
   >({
-    mutationFn: ({ pluginScope, pluginId, bookId, providerData }) => {
+    mutationFn: ({ pluginScope, pluginId, bookId, fileId, providerData }) => {
       return API.request("POST", "/plugins/enrich", {
         plugin_scope: pluginScope,
         plugin_id: pluginId,
         book_id: bookId,
+        file_id: fileId,
         provider_data: providerData,
       });
     },
