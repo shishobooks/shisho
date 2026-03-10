@@ -28,6 +28,24 @@ func newTestMonitor(t *testing.T) *Monitor {
 	return m
 }
 
+func TestMonitor_DelayClampsToMinimum(t *testing.T) {
+	t.Parallel()
+
+	w := &Worker{
+		config: &config.Config{LibraryMonitorDelaySeconds: 0},
+		log:    logger.New(),
+	}
+	m := newMonitor(w)
+	assert.Equal(t, time.Duration(minMonitorDelaySeconds)*time.Second, m.delay)
+
+	w2 := &Worker{
+		config: &config.Config{LibraryMonitorDelaySeconds: 120},
+		log:    logger.New(),
+	}
+	m2 := newMonitor(w2)
+	assert.Equal(t, 120*time.Second, m2.delay)
+}
+
 func TestMonitor_FindLibraryID(t *testing.T) {
 	t.Parallel()
 	m := newTestMonitor(t)
@@ -98,20 +116,16 @@ func TestMonitor_IgnorePath(t *testing.T) {
 
 func TestMonitor_IgnorePath_Expiry(t *testing.T) {
 	t.Parallel()
-
-	w := &Worker{
-		config: &config.Config{
-			// Very short delay so ignore entries expire quickly.
-			LibraryMonitorDelaySeconds: 0,
-		},
-		log: logger.New(),
-	}
-	m := newMonitor(w)
+	m := newTestMonitor(t)
 
 	path := "/library/books/cover.jpg"
-	m.IgnorePath(path)
 
-	// With 0 delay, the ignore expires immediately (2 * 0 = 0).
+	// Manually insert an already-expired entry.
+	m.ignoreMu.Lock()
+	m.ignored[path] = time.Now().Add(-time.Second)
+	m.ignoreMu.Unlock()
+
+	// Expired entries should not be considered ignored.
 	assert.False(t, m.isIgnored(path))
 }
 

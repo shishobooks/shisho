@@ -44,12 +44,20 @@ type Monitor struct {
 	done     chan struct{}
 }
 
+// minMonitorDelaySeconds is the minimum allowed debounce delay.
+// Values below this are clamped to prevent instant event firing.
+const minMonitorDelaySeconds = 5
+
 // newMonitor creates a new filesystem monitor for the given worker.
 func newMonitor(w *Worker) *Monitor {
+	delaySec := w.config.LibraryMonitorDelaySeconds
+	if delaySec < minMonitorDelaySeconds {
+		delaySec = minMonitorDelaySeconds
+	}
 	return &Monitor{
 		worker:        w,
 		log:           w.log.Root(logger.Data{"component": "monitor"}),
-		delay:         time.Duration(w.config.LibraryMonitorDelaySeconds) * time.Second,
+		delay:         time.Duration(delaySec) * time.Second,
 		pending:       make(map[string]pendingEvent),
 		ignored:       make(map[string]time.Time),
 		pathToLibrary: make(map[string]int),
@@ -100,7 +108,7 @@ func (m *Monitor) cleanupIgnored() {
 }
 
 func (m *Monitor) run() {
-	defer func() { m.done <- struct{}{} }()
+	defer close(m.done)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
