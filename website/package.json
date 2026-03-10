@@ -45,5 +45,11 @@
   },
   "engines": {
     "node": ">=20.0"
+  },
+  "resolutions": {
+    "minimatch": ">=3.1.4",
+    "qs": ">=6.14.2",
+    "svgo": ">=3.3.3",
+    "serialize-javascript": ">=7.0.3"
   }
 }
