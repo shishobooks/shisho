@@ -46,6 +46,11 @@ function getApiPort(): number {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Allow E2E tests to isolate Vite's dependency pre-bundling cache per browser,
+  // preventing corruption when multiple Vite instances run from the same project.
+  ...(process.env.VITE_CACHE_DIR
+    ? { cacheDir: process.env.VITE_CACHE_DIR }
+    : {}),
   server: {
     host: "0.0.0.0",
     strictPort: false, // Allow Vite to auto-increment port if busy

@@ -140,6 +140,9 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
       timeout: 30000,
       env: {
         API_PORT: String(config.apiPort),
+        // Each browser gets its own Vite cache to prevent dependency pre-bundling
+        // corruption when multiple Vite instances run from the same project directory.
+        VITE_CACHE_DIR: path.join(config.tmpDir, "vite-cache"),
       },
     },
   ];
