@@ -37,7 +37,6 @@ These workflow-based skills (in `.claude/skills/`) are invoked on demand:
 |-------|-------------|
 | `favicon` | Creating or updating favicon, app icons, PWA icons |
 | `splash` | Creating or updating the README splash image |
-| `squash-merge-worktree` | Done with worktree work, ready to merge back to master |
 
 ## Critical Gotchas
 
