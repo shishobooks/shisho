@@ -132,6 +132,11 @@ func renderPageCover(path string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	defer func() {
+		_, _ = instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
+			Document: doc.Document,
+		})
+	}()
 
 	render, err := instance.RenderPageInDPI(&requests.RenderPageInDPI{
 		DPI: 150,

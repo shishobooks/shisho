@@ -7,6 +7,7 @@ import {
   FileRoleSupplement,
   FileTypeCBZ,
   FileTypeM4B,
+  FileTypePDF,
   type File,
 } from "@/types";
 import {
@@ -76,12 +77,13 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
         </div>
 
         {/* Page count - CBZ only */}
-        {file.file_type === FileTypeCBZ && file.page_count != null && (
-          <div>
-            <p className="font-semibold">Page Count</p>
-            <p className="text-muted-foreground">{file.page_count} pages</p>
-          </div>
-        )}
+        {(file.file_type === FileTypeCBZ || file.file_type === FileTypePDF) &&
+          file.page_count != null && (
+            <div>
+              <p className="font-semibold">Page Count</p>
+              <p className="text-muted-foreground">{file.page_count} pages</p>
+            </div>
+          )}
 
         {/* Duration - M4B only */}
         {file.file_type === FileTypeM4B &&

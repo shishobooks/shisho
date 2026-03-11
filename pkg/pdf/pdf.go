@@ -20,6 +20,13 @@ import (
 // that is not thread-safe, so we initialize it before any concurrent access.
 var pdfcpuInit sync.Once
 
+// EnsurePdfcpuInit initializes pdfcpu's global state exactly once. This must be
+// called before any concurrent use of pdfcpu's NewDefaultConfiguration().
+// Safe to call from multiple goroutines; only the first call does work.
+func EnsurePdfcpuInit() {
+	pdfcpuInit.Do(func() { model.NewDefaultConfiguration() })
+}
+
 // Parse reads metadata from a PDF file and returns it in the
 // mediafile.ParsedMetadata format for compatibility with the existing scanner.
 func Parse(path string) (*mediafile.ParsedMetadata, error) {
@@ -31,7 +38,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 
 	// Ensure pdfcpu global state is initialized before creating a configuration.
 	// This avoids data races when Parse is called concurrently.
-	pdfcpuInit.Do(func() { model.NewDefaultConfiguration() })
+	EnsurePdfcpuInit()
 
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
