@@ -39,6 +39,7 @@ const (
 	MimeTypeKepub       = "application/kepub+zip"
 	MimeTypeCBZ         = "application/vnd.comicbook+zip"
 	MimeTypeM4B         = "audio/mp4"
+	MimeTypePDF         = "application/pdf"
 	MimeTypeJPEG        = "image/jpeg"
 	MimeTypePNG         = "image/png"
 	MimeTypeWebP        = "image/webp"
@@ -213,6 +214,8 @@ func FileTypeMimeType(fileType string) string {
 		return MimeTypeCBZ
 	case "m4b":
 		return MimeTypeM4B
+	case "pdf":
+		return MimeTypePDF
 	default:
 		return "application/octet-stream"
 	}
