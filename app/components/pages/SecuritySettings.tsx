@@ -45,6 +45,7 @@ import {
   type APIKey,
   type APIKeyShortURL,
 } from "@/types/generated/apikeys";
+import { formatDateTime } from "@/utils/format";
 
 const SecuritySettings = () => {
   usePageTitle("Security Settings");
@@ -388,9 +389,9 @@ function EReaderKeyRow({ apiKey }: { apiKey: APIKey }) {
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{apiKey.name}</p>
           <p className="text-xs text-muted-foreground">
-            Added {new Date(apiKey.createdAt).toLocaleDateString()}
+            Added {formatDateTime(apiKey.createdAt)}
             {apiKey.lastAccessedAt &&
-              ` · Last used ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
+              ` · Last used ${formatDateTime(apiKey.lastAccessedAt)}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -639,9 +640,9 @@ function KoboKeyRow({ apiKey }: { apiKey: APIKey }) {
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{apiKey.name}</p>
           <p className="text-xs text-muted-foreground">
-            Added {new Date(apiKey.createdAt).toLocaleDateString()}
+            Added {formatDateTime(apiKey.createdAt)}
             {apiKey.lastAccessedAt &&
-              ` · Last synced ${new Date(apiKey.lastAccessedAt).toLocaleDateString()}`}
+              ` · Last synced ${formatDateTime(apiKey.lastAccessedAt)}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

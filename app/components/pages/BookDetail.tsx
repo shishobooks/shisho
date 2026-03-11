@@ -80,6 +80,7 @@ import {
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import {
   formatDate,
+  formatDateTime,
   formatDuration,
   formatFileSize,
   formatIdentifierType,
@@ -1345,13 +1346,13 @@ const BookDetail = () => {
               <div>
                 <p className="font-semibold">Created</p>
                 <p className="text-muted-foreground">
-                  {formatDate(book.created_at)}
+                  {formatDateTime(book.created_at)}
                 </p>
               </div>
               <div>
                 <p className="font-semibold">Updated</p>
                 <p className="text-muted-foreground">
-                  {formatDate(book.updated_at)}
+                  {formatDateTime(book.updated_at)}
                 </p>
               </div>
               <div>

@@ -35,6 +35,22 @@ export const formatDate = (dateString: string): string => {
 };
 
 /**
+ * Formats an ISO datetime string into a localized date+time string in the user's timezone.
+ * Includes the short timezone name so it's clear the time is local.
+ * @example formatDateTime("2024-01-15T18:30:00Z") // "1/15/2024, 12:30 PM CST" (locale-dependent)
+ */
+export const formatDateTime = (dateString: string): string => {
+  return new Date(dateString).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+};
+
+/**
  * Extracts the filename from a filepath.
  * @example getFilename("/path/to/file.txt") // "file.txt"
  */
