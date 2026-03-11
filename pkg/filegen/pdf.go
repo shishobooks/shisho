@@ -4,11 +4,17 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/shishobooks/shisho/pkg/models"
 )
+
+// pdfcpuInit ensures pdfcpu's global configuration is initialized exactly once.
+// pdfcpu's NewDefaultConfiguration() writes global state (config file, font cache)
+// that is not thread-safe, so we initialize it before any concurrent access.
+var pdfcpuInit sync.Once
 
 // PDFGenerator generates PDF files with modified metadata.
 type PDFGenerator struct{}
@@ -33,6 +39,10 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	if err := ctx.Err(); err != nil {
 		return NewGenerationError(models.FileTypePDF, err, "context cancelled")
 	}
+
+	// Ensure pdfcpu global state is initialized before creating a configuration.
+	// This avoids data races when Generate is called concurrently.
+	pdfcpuInit.Do(func() { model.NewDefaultConfiguration() })
 
 	// AddPropertiesFile reads srcPath and writes the result with updated info dict
 	// to destPath. When srcPath != destPath, pdfcpu creates destPath directly
