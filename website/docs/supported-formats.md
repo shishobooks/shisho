@@ -9,7 +9,7 @@ Shisho supports a variety of book formats across three media types.
 ## Ebooks
 
 - **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, and more
-- **PDF** — Basic metadata support (extensible via [plugins](./plugins/overview))
+- **PDF** — Full [metadata extraction](./metadata#pdf) including title, authors, description, cover art, and page count
 
 ## Audiobooks
 
