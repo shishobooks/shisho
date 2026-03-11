@@ -255,6 +255,76 @@ func TestMonitor_WatchRecursive(t *testing.T) {
 	assert.Contains(t, watchList, sub2)
 }
 
+func TestMonitor_EnqueueExistingFiles(t *testing.T) {
+	t.Parallel()
+
+	// Create a directory with files already in it (simulating the race condition
+	// where files exist before the watch is added).
+	root := t.TempDir()
+	sub := filepath.Join(root, "author")
+	require.NoError(t, os.MkdirAll(sub, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "book.epub"), []byte("test"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "cover.jpg"), []byte("test"), 0644))        // not scannable
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "book.epub.cover.jpg"), []byte("t"), 0644)) // shisho special
+
+	m := newTestMonitor(t)
+	m.pathToLibrary[root] = 1
+
+	m.enqueueExistingFiles(root)
+
+	// Stop the debounce timer so it doesn't fire after the test.
+	m.mu.Lock()
+	if m.timer != nil {
+		m.timer.Stop()
+	}
+
+	// Only the epub should be enqueued.
+	assert.Equal(t, 1, len(m.pending))
+	ep, ok := m.pending[filepath.Join(sub, "book.epub")]
+	assert.True(t, ok)
+	assert.Equal(t, fsnotify.Create, ep.Op)
+	assert.Equal(t, 1, ep.LibraryID)
+	m.mu.Unlock()
+}
+
+func TestMonitor_HandleEvent_NewDirEnqueuesExistingFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sub := filepath.Join(root, "new-author")
+	require.NoError(t, os.MkdirAll(sub, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "book.epub"), []byte("test"), 0644))
+
+	m := newTestMonitor(t)
+	m.pathToLibrary[root] = 1
+
+	watcher, err := fsnotify.NewWatcher()
+	require.NoError(t, err)
+	defer watcher.Close()
+	_, err = m.watchRecursive(watcher, root)
+	require.NoError(t, err)
+
+	// Stop the debounce timer so it doesn't fire during the test.
+	defer func() {
+		m.mu.Lock()
+		if m.timer != nil {
+			m.timer.Stop()
+		}
+		m.mu.Unlock()
+	}()
+
+	// Simulate a Create event for the new directory.
+	m.handleEvent(watcher, fsnotify.Event{Name: sub, Op: fsnotify.Create})
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// The epub inside the new directory should have been enqueued.
+	assert.Equal(t, 1, len(m.pending))
+	_, ok := m.pending[filepath.Join(sub, "book.epub")]
+	assert.True(t, ok)
+}
+
 func TestMonitor_ProcessEvent_CreateSkipsNonexistentFile(t *testing.T) {
 	t.Parallel()
 

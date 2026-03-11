@@ -122,7 +122,11 @@ func (m *Monitor) run() {
 		m.log.Err(err).Error("failed to set up filesystem watches")
 		return
 	}
-	m.log.Info("library monitor started", logger.Data{"directories_watched": watchCount})
+	m.log.Info("library monitor started", logger.Data{
+		"directories_watched": watchCount,
+		"library_paths":       m.libraryPathList(),
+		"delay_seconds":       int(m.delay.Seconds()),
+	})
 
 	cleanupTicker := time.NewTicker(5 * time.Minute)
 	defer cleanupTicker.Stop()
@@ -246,6 +250,65 @@ func (m *Monitor) isScannable(path string) bool {
 	return false
 }
 
+// libraryPathList returns the watched library paths for logging.
+func (m *Monitor) libraryPathList() []string {
+	paths := make([]string, 0, len(m.pathToLibrary))
+	for p := range m.pathToLibrary {
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// enqueueExistingFiles walks a directory tree and enqueues any scannable files
+// that already exist. This handles the race condition where files are created
+// inside a new directory before the watch is added (common with bulk copies on macOS/kqueue).
+func (m *Monitor) enqueueExistingFiles(root string) {
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if !m.isScannable(path) {
+			return nil
+		}
+		if isShishoSpecialFile(filepath.Base(path)) {
+			return nil
+		}
+		if m.isIgnored(path) {
+			return nil
+		}
+		libID := m.findLibraryID(path)
+		if libID == 0 {
+			return nil
+		}
+
+		m.mu.Lock()
+		if _, ok := m.pending[path]; !ok {
+			m.pending[path] = pendingEvent{
+				Op:        fsnotify.Create,
+				LibraryID: libID,
+			}
+			m.log.Info("filesystem event queued (existing file)", logger.Data{
+				"path":       path,
+				"library_id": libID,
+				"pending":    len(m.pending),
+			})
+		}
+		m.mu.Unlock()
+
+		return nil
+	})
+
+	// Reset the debounce timer if we enqueued anything.
+	m.mu.Lock()
+	if len(m.pending) > 0 {
+		if m.timer != nil {
+			m.timer.Stop()
+		}
+		m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
+	}
+	m.mu.Unlock()
+}
+
 // handleEvent processes a single fsnotify event, filtering irrelevant events
 // and feeding relevant ones into the debounce mechanism.
 func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
@@ -257,6 +320,8 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 
 	// Handle new directory creation: add recursive watches so we catch
 	// events for files created inside new subdirectories.
+	// Also scan for existing files — on macOS (kqueue), files may be created
+	// before the watch is added during bulk copies, so we won't get events for them.
 	if event.Has(fsnotify.Create) {
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
 			n, watchErr := m.watchRecursive(watcher, path)
@@ -266,11 +331,12 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 					"error": watchErr.Error(),
 				})
 			} else if n > 0 {
-				m.log.Debug("added watches for new directory", logger.Data{
+				m.log.Info("added watches for new directory", logger.Data{
 					"path":  path,
 					"count": n,
 				})
 			}
+			m.enqueueExistingFiles(path)
 			return // directories themselves are not scannable files
 		}
 	}
@@ -307,6 +373,13 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 			LibraryID: libID,
 		}
 	}
+
+	m.log.Info("filesystem event queued", logger.Data{
+		"path":       path,
+		"op":         event.Op.String(),
+		"library_id": libID,
+		"pending":    len(m.pending),
+	})
 
 	if m.timer != nil {
 		m.timer.Stop()
