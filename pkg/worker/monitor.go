@@ -33,6 +33,11 @@ type Monitor struct {
 	timer   *time.Timer
 	pending map[string]pendingEvent
 
+	// Prevents concurrent processPendingEvents invocations. time.AfterFunc runs
+	// in its own goroutine, so a second batch could fire while the first is still
+	// scanning files. TryLock lets the second invocation bail out harmlessly.
+	processing sync.Mutex
+
 	// Self-write ignore list: paths written by the scanner that should not trigger rescans.
 	ignoreMu sync.RWMutex
 	ignored  map[string]time.Time
@@ -52,6 +57,10 @@ const minMonitorDelaySeconds = 5
 func newMonitor(w *Worker) *Monitor {
 	delaySec := w.config.LibraryMonitorDelaySeconds
 	if delaySec < minMonitorDelaySeconds {
+		w.log.Warn("library_monitor_delay_seconds too low, clamping to minimum", logger.Data{
+			"configured": w.config.LibraryMonitorDelaySeconds,
+			"minimum":    minMonitorDelaySeconds,
+		})
 		delaySec = minMonitorDelaySeconds
 	}
 	return &Monitor{
@@ -377,6 +386,14 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 // processPendingEvents is called when the debounce timer fires.
 // It drains the pending events map and processes each one.
 func (m *Monitor) processPendingEvents() {
+	// Prevent concurrent processing — time.AfterFunc runs in its own goroutine,
+	// so a second batch could fire while the first is still scanning. If that
+	// happens, the new events stay in m.pending for the next cycle.
+	if !m.processing.TryLock() {
+		return
+	}
+	defer m.processing.Unlock()
+
 	// Drain pending events under the lock.
 	m.mu.Lock()
 	events := m.pending
