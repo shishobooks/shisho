@@ -416,11 +416,24 @@ func (m *Monitor) processPendingEvents() {
 	m.log.Info("processing filesystem events", logger.Data{"count": len(events)})
 
 	hadDeletes := false
+	booksToOrganize := make(map[int]struct{})
 	for path, event := range events {
 		result := m.processEvent(ctx, path, event)
-		if result != nil && (result.FileDeleted || result.BookDeleted) {
+		if result == nil {
+			continue
+		}
+		if result.FileDeleted || result.BookDeleted {
 			hadDeletes = true
 		}
+		if result.FileCreated && result.Book != nil {
+			booksToOrganize[result.Book.ID] = struct{}{}
+		}
+	}
+
+	// Organize new books — scanInternal with FilePath mode defers organization,
+	// so we must run it here (same as ProcessScanJob's post-scan organization).
+	if len(booksToOrganize) > 0 {
+		m.organizeBooks(ctx, booksToOrganize)
 	}
 
 	// Cleanup orphaned entities after deletes.
@@ -494,6 +507,35 @@ func (m *Monitor) processEvent(ctx context.Context, path string, event pendingEv
 		log.Err(err).Warn("failed to scan new file")
 	}
 	return result
+}
+
+// organizeBooks runs file organization for newly created books, moving files into
+// organized directory structures when the library has OrganizeFileStructure enabled.
+func (m *Monitor) organizeBooks(ctx context.Context, bookIDs map[int]struct{}) {
+	for bookID := range bookIDs {
+		book, err := m.worker.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+		if err != nil {
+			m.log.Warn("failed to retrieve book for organization", logger.Data{
+				"book_id": bookID,
+				"error":   err.Error(),
+			})
+			continue
+		}
+
+		library, err := m.worker.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+			ID: &book.LibraryID,
+		})
+		if err != nil || !library.OrganizeFileStructure {
+			continue
+		}
+
+		if err := m.worker.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
+			m.log.Warn("failed to organize book", logger.Data{
+				"book_id": bookID,
+				"error":   err.Error(),
+			})
+		}
+	}
 }
 
 // runOrphanCleanup removes entities that are no longer referenced by any books.
