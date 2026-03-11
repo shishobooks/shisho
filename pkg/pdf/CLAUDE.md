@@ -45,7 +45,7 @@ All PDF authors have an empty role (generic author, same as EPUB).
 
 ### Thread Safety
 
-pdfcpu's `NewDefaultConfiguration()` initializes global state (config files, font caches) that is not thread-safe. The parser uses `sync.Once` to ensure this initialization happens exactly once before any concurrent access.
+pdfcpu's `NewDefaultConfiguration()` initializes global state (config files, font caches) that is not thread-safe. Call `pdf.EnsurePdfcpuInit()` before any concurrent use of `NewDefaultConfiguration()`. This is a shared `sync.Once` guard used by both the parser and the file generator.
 
 ## Cover Extraction
 
