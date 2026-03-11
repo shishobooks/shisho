@@ -84,6 +84,7 @@ func validateFileTypes(types string) error {
 		models.FileTypeEPUB: true,
 		models.FileTypeCBZ:  true,
 		models.FileTypeM4B:  true,
+		models.FileTypePDF:  true,
 	}
 
 	for _, t := range parseFileTypes(types) {
