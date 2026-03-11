@@ -1,7 +1,11 @@
 package pdf
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +38,9 @@ func TestMain(m *testing.M) {
 	}
 	if err := createInvalidPDF(dir); err != nil {
 		panic("failed to create invalid.pdf: " + err.Error())
+	}
+	if err := createWithEmbeddedImage(dir); err != nil {
+		panic("failed to create with-image.pdf: " + err.Error())
 	}
 
 	code := m.Run()
@@ -234,4 +241,100 @@ func TestParse_InvalidPDF(t *testing.T) {
 	path := filepath.Join(testdataDir, "invalid.pdf")
 	_, err := Parse(path)
 	assert.Error(t, err)
+}
+
+func TestParse_CoverFromEmbeddedImage(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(testdataDir, "with-image.pdf")
+	meta, err := Parse(path)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, meta.CoverData, "CoverData should be non-empty for PDF with embedded image")
+	assert.Contains(t, []string{"image/jpeg", "image/png"}, meta.CoverMimeType,
+		"CoverMimeType should be jpeg or png")
+}
+
+func TestParse_CoverFromRenderedPage(t *testing.T) {
+	t.Parallel()
+
+	// The no-metadata.pdf is a text-only PDF with no embedded images,
+	// so cover extraction should fall through to Tier 2 (WASM rendering).
+	path := filepath.Join(testdataDir, "no-metadata.pdf")
+	meta, err := Parse(path)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, meta.CoverData, "CoverData should be non-empty from rendered page")
+	assert.Equal(t, "image/jpeg", meta.CoverMimeType,
+		"Rendered page cover should be JPEG")
+}
+
+// createWithEmbeddedImage creates a PDF with a JPEG image embedded on page 1.
+// This is used to test Tier 1 (pdfcpu embedded image extraction).
+func createWithEmbeddedImage(dir string) error {
+	// Create a small 4x4 red JPEG image in memory.
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+	var jpegBuf bytes.Buffer
+	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: 90}); err != nil {
+		return err
+	}
+	jpegData := jpegBuf.Bytes()
+
+	// Build a raw PDF with the JPEG image embedded as an XObject on page 1.
+	// PDF structure:
+	//   Obj 1: Catalog -> Pages (obj 2)
+	//   Obj 2: Pages -> [Page (obj 3)]
+	//   Obj 3: Page -> Resources (XObject -> Im0 = obj 4), Contents (obj 5)
+	//   Obj 4: Image XObject (DCTDecode JPEG stream)
+	//   Obj 5: Content stream (draws the image)
+	var buf bytes.Buffer
+	offsets := []int{}
+
+	buf.WriteString("%PDF-1.4\n")
+
+	// Obj 1: Catalog
+	offsets = append(offsets, buf.Len())
+	buf.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+
+	// Obj 2: Pages
+	offsets = append(offsets, buf.Len())
+	buf.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >>\nendobj\n")
+
+	// Obj 3: Page with Resources and Contents
+	offsets = append(offsets, buf.Len())
+	buf.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n")
+
+	// Obj 4: Image XObject (JPEG)
+	offsets = append(offsets, buf.Len())
+	buf.WriteString(fmt.Sprintf("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n", len(jpegData)))
+	buf.Write(jpegData)
+	buf.WriteString("\nendstream\nendobj\n")
+
+	// Obj 5: Content stream (draw image full-page)
+	contentStr := "q 612 0 0 792 0 0 cm /Im0 Do Q"
+	offsets = append(offsets, buf.Len())
+	buf.WriteString(fmt.Sprintf("5 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n", len(contentStr), contentStr))
+
+	// Xref table
+	xrefOffset := buf.Len()
+	buf.WriteString("xref\n")
+	buf.WriteString(fmt.Sprintf("0 %d\n", 6))
+	buf.WriteString("0000000000 65535 f \n")
+	for _, off := range offsets {
+		buf.WriteString(fmt.Sprintf("%010d 00000 n \n", off))
+	}
+
+	// Trailer
+	buf.WriteString("trailer\n")
+	buf.WriteString("<< /Size 6 /Root 1 0 R >>\n")
+	buf.WriteString("startxref\n")
+	buf.WriteString(fmt.Sprintf("%d\n", xrefOffset))
+	buf.WriteString("%%EOF\n")
+
+	return os.WriteFile(filepath.Join(dir, "with-image.pdf"), buf.Bytes(), 0644)
 }

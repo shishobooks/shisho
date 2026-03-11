@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	stdlog "log"
 	"os"
 	"strings"
 	"sync"
@@ -77,16 +78,26 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		pageCount = &pc
 	}
 
-	// TODO: Cover extraction will be added in Task 4.
+	// Extract cover image (best-effort: don't fail Parse if cover extraction fails).
+	var coverData []byte
+	var coverMime string
+	if cd, cm, err := extractCover(path); err != nil {
+		stdlog.Printf("pdf: cover extraction failed for %s: %v", path, err)
+	} else {
+		coverData = cd
+		coverMime = cm
+	}
 
 	return &mediafile.ParsedMetadata{
-		Title:       title,
-		Authors:     authors,
-		Description: description,
-		Tags:        tags,
-		ReleaseDate: releaseDate,
-		PageCount:   pageCount,
-		DataSource:  models.DataSourcePDFMetadata,
+		Title:         title,
+		Authors:       authors,
+		Description:   description,
+		Tags:          tags,
+		ReleaseDate:   releaseDate,
+		PageCount:     pageCount,
+		CoverData:     coverData,
+		CoverMimeType: coverMime,
+		DataSource:    models.DataSourcePDFMetadata,
 	}, nil
 }
 
