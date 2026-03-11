@@ -19,6 +19,7 @@ require (
 	github.com/gzuidhof/tygo v0.2.20
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/klippa-app/go-pdfium v1.18.0
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -41,7 +42,6 @@ require (
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/DarthSim/godotenv v1.3.1 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
@@ -65,6 +65,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/jolestar/go-commons-pool/v2 v2.1.2 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
