@@ -138,6 +138,8 @@ func (w *Worker) Start() {
 	if w.config.LibraryMonitorEnabled {
 		w.monitor = newMonitor(w)
 		w.monitor.start()
+	} else {
+		w.log.Info("library monitor disabled")
 	}
 }
 

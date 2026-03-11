@@ -94,6 +94,8 @@ func TestNew_Defaults(t *testing.T) {
 	assert.Equal(t, 3689, cfg.ServerPort)
 	assert.Equal(t, 60, cfg.SyncIntervalMinutes)
 	assert.Equal(t, 2, cfg.WorkerProcesses)
+	assert.True(t, cfg.LibraryMonitorEnabled)
+	assert.Equal(t, 60, cfg.LibraryMonitorDelaySeconds)
 }
 
 func TestNew_SyncInterval(t *testing.T) {
@@ -124,6 +126,29 @@ func TestNew_SyncIntervalFromEnv(t *testing.T) {
 	cfg, err := New()
 	require.NoError(t, err)
 	assert.Equal(t, 15, cfg.SyncIntervalMinutes)
+}
+
+func TestNew_LibraryMonitorDefaultWithPartialConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Config file that omits library_monitor_enabled (like shisho.dev.yaml).
+	configContent := `
+database_file_path: /data/shisho.db
+database_debug: true
+jwt_secret: test-secret-key
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("CONFIG_FILE", configPath)
+
+	cfg, err := New()
+	require.NoError(t, err)
+
+	// LibraryMonitorEnabled should still be true from defaults.
+	assert.True(t, cfg.LibraryMonitorEnabled)
+	assert.Equal(t, 60, cfg.LibraryMonitorDelaySeconds)
 }
 
 func TestNewForTest(t *testing.T) {
