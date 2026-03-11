@@ -26,11 +26,11 @@ func TestProcessScanJob_SupplementsInDirectory(t *testing.T) {
 	})
 
 	// Create supplement files
-	supplementPDF := filepath.Join(bookDir, "companion.pdf")
-	require.NoError(t, os.WriteFile(supplementPDF, []byte("PDF content"), 0644))
+	supplementTXT1 := filepath.Join(bookDir, "companion.txt")
+	require.NoError(t, os.WriteFile(supplementTXT1, []byte("Companion content"), 0644))
 
-	supplementTXT := filepath.Join(bookDir, "notes.txt")
-	require.NoError(t, os.WriteFile(supplementTXT, []byte("Notes content"), 0644))
+	supplementTXT2 := filepath.Join(bookDir, "notes.txt")
+	require.NoError(t, os.WriteFile(supplementTXT2, []byte("Notes content"), 0644))
 
 	err := tc.runScan()
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestProcessScanJob_SupplementsInDirectory(t *testing.T) {
 			assert.Equal(t, "m4b", f.FileType)
 		case models.FileRoleSupplement:
 			supplementFiles++
-			assert.Contains(t, []string{"pdf", "txt"}, f.FileType)
+			assert.Equal(t, "txt", f.FileType)
 		}
 	}
 	assert.Equal(t, 1, mainFiles)
@@ -78,14 +78,14 @@ func TestProcessScanJob_SupplementsExcludeHiddenFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(dsStore, []byte("dsstore"), 0644))
 
 	// Create normal supplement (should be included)
-	supplement := filepath.Join(bookDir, "guide.pdf")
+	supplement := filepath.Join(bookDir, "guide.txt")
 	require.NoError(t, os.WriteFile(supplement, []byte("guide"), 0644))
 
 	err := tc.runScan()
 	require.NoError(t, err)
 
 	files := tc.listFiles()
-	// Should have 2: main epub + guide.pdf supplement
+	// Should have 2: main epub + guide.txt supplement
 	// Hidden files and .DS_Store should be excluded
 	require.Len(t, files, 2)
 
@@ -113,14 +113,14 @@ func TestProcessScanJob_SupplementsExcludeShishoFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(metadataFile, []byte("{}"), 0644))
 
 	// Create normal supplement
-	supplement := filepath.Join(bookDir, "appendix.pdf")
+	supplement := filepath.Join(bookDir, "appendix.txt")
 	require.NoError(t, os.WriteFile(supplement, []byte("appendix"), 0644))
 
 	err := tc.runScan()
 	require.NoError(t, err)
 
 	files := tc.listFiles()
-	// Should have 2: main epub + appendix.pdf
+	// Should have 2: main epub + appendix.txt
 	require.Len(t, files, 2)
 
 	for _, f := range files {
@@ -141,7 +141,7 @@ func TestProcessScanJob_SupplementsInSubdirectory(t *testing.T) {
 
 	// Create subdirectory with supplements
 	subDir := testgen.CreateSubDir(t, bookDir, "extras")
-	require.NoError(t, os.WriteFile(filepath.Join(subDir, "bonus.pdf"), []byte("bonus"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "bonus.txt"), []byte("bonus"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(subDir, "artwork.jpg"), []byte("art"), 0644))
 
 	err := tc.runScan()
@@ -171,11 +171,11 @@ func TestProcessScanJob_RootLevelSupplements(t *testing.T) {
 	testgen.GenerateM4B(t, libraryPath, "My Book.m4b", testgen.M4BOptions{})
 
 	// Create supplement with matching basename
-	supplement := filepath.Join(libraryPath, "My Book.pdf")
+	supplement := filepath.Join(libraryPath, "My Book.txt")
 	require.NoError(t, os.WriteFile(supplement, []byte("supplement"), 0644))
 
 	// Create unrelated file (different basename - should NOT be picked up)
-	unrelated := filepath.Join(libraryPath, "Other Book.pdf")
+	unrelated := filepath.Join(libraryPath, "Other Book.txt")
 	require.NoError(t, os.WriteFile(unrelated, []byte("other"), 0644))
 
 	err := tc.runScan()
@@ -183,10 +183,10 @@ func TestProcessScanJob_RootLevelSupplements(t *testing.T) {
 
 	// Should have 1 book: "My Book" (Other Book.pdf has no main file so is ignored)
 	books := tc.listBooks()
-	require.Len(t, books, 1, "Only My Book should exist, Other Book.pdf doesn't have a main file")
+	require.Len(t, books, 1, "Only My Book should exist, Other Book.txt doesn't have a main file")
 
 	files := tc.listFiles()
-	// My Book.m4b (main) + My Book.pdf (supplement)
+	// My Book.m4b (main) + My Book.txt (supplement)
 	require.Len(t, files, 2)
 
 	mainCount := 0
