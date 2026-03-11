@@ -56,6 +56,8 @@ func GetGenerator(fileType string) (Generator, error) {
 		return &M4BGenerator{}, nil
 	case models.FileTypeCBZ:
 		return &CBZGenerator{}, nil
+	case models.FileTypePDF:
+		return &PDFGenerator{}, nil
 	default:
 		return nil, errors.Errorf("unsupported file type: %s", fileType)
 	}
@@ -70,6 +72,8 @@ func GetKepubGenerator(fileType string) (Generator, error) {
 	case models.FileTypeCBZ:
 		return NewKepubCBZGenerator(), nil
 	case models.FileTypeM4B:
+		return nil, ErrKepubNotSupported
+	case models.FileTypePDF:
 		return nil, ErrKepubNotSupported
 	default:
 		return nil, errors.Errorf("unsupported file type: %s", fileType)

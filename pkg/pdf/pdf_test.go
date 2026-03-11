@@ -77,13 +77,11 @@ func writeRawPDF(outPath string, pageCount int, infoEntries map[string]string) e
 
 	// Build Kids array
 	firstPageObj := objNum
-	kidsArr := ""
+	kidsParts := make([]string, pageCount)
 	for i := 0; i < pageCount; i++ {
-		if i > 0 {
-			kidsArr += " "
-		}
-		kidsArr += fmt.Sprintf("%d 0 R", firstPageObj+i)
+		kidsParts[i] = fmt.Sprintf("%d 0 R", firstPageObj+i)
 	}
+	kidsArr := strings.Join(kidsParts, " ")
 
 	b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Pages /Kids [%s] /Count %d /MediaBox [0 0 612 792] >>\nendobj\n",
 		pagesObj, kidsArr, pageCount))
@@ -98,7 +96,7 @@ func writeRawPDF(outPath string, pageCount int, infoEntries map[string]string) e
 
 	// Info dict object (optional)
 	infoObj := 0
-	if infoEntries != nil && len(infoEntries) > 0 {
+	if len(infoEntries) > 0 {
 		infoObj = objNum
 		objNum++
 		offsets = append(offsets, b.Len())
