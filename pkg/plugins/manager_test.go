@@ -253,7 +253,7 @@ func TestManager_RegisteredFileExtensions(t *testing.T) {
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
 	ctx := context.Background()
 
-	// Install and load multi-hook plugin (has fileParser types: ["pdf"])
+	// Install and load multi-hook plugin (has fileParser types: ["docx"])
 	plugin := &models.Plugin{
 		Scope:       "test",
 		ID:          "multi-hook",
@@ -269,7 +269,7 @@ func TestManager_RegisteredFileExtensions(t *testing.T) {
 	require.NoError(t, err)
 
 	exts := mgr.RegisteredFileExtensions()
-	assert.Contains(t, exts, "pdf")
+	assert.Contains(t, exts, "docx")
 }
 
 func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
@@ -291,14 +291,14 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
   "capabilities": {
     "fileParser": {
       "description": "Test parser with reserved types",
-      "types": ["epub", "cbz", "m4b", "docx"]
+      "types": ["epub", "cbz", "m4b", "pdf", "docx"]
     }
   }
 }`
 	mainJS := `var plugin = (function() {
   return {
     fileParser: {
-      types: ["epub", "cbz", "m4b", "docx"],
+      types: ["epub", "cbz", "m4b", "pdf", "docx"],
       parse: function(context) { return { title: "Test" }; }
     }
   };
@@ -332,13 +332,14 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 	assert.NotContains(t, exts, "epub")
 	assert.NotContains(t, exts, "cbz")
 	assert.NotContains(t, exts, "m4b")
+	assert.NotContains(t, exts, "pdf")
 }
 
 func TestManager_RegisteredConverterExtensions(t *testing.T) {
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
 	ctx := context.Background()
 
-	// Install and load multi-hook plugin (has inputConverter sourceTypes: ["pdf"])
+	// Install and load multi-hook plugin (has inputConverter sourceTypes: ["docx"])
 	plugin := &models.Plugin{
 		Scope:       "test",
 		ID:          "multi-hook",
@@ -354,7 +355,7 @@ func TestManager_RegisteredConverterExtensions(t *testing.T) {
 	require.NoError(t, err)
 
 	exts := mgr.RegisteredConverterExtensions()
-	assert.Contains(t, exts, "pdf")
+	assert.Contains(t, exts, "docx")
 }
 
 func TestManager_GetParserForType(t *testing.T) {
@@ -375,8 +376,8 @@ func TestManager_GetParserForType(t *testing.T) {
 	err = mgr.LoadPlugin(ctx, "test", "multi-hook")
 	require.NoError(t, err)
 
-	// Should find the parser for "pdf"
-	rt := mgr.GetParserForType("pdf")
+	// Should find the parser for "docx"
+	rt := mgr.GetParserForType("docx")
 	require.NotNil(t, rt)
 	assert.Equal(t, "Multi Hook Plugin", rt.manifest.Name)
 
@@ -390,6 +391,8 @@ func TestManager_GetParserForType(t *testing.T) {
 	rt = mgr.GetParserForType("cbz")
 	assert.Nil(t, rt)
 	rt = mgr.GetParserForType("m4b")
+	assert.Nil(t, rt)
+	rt = mgr.GetParserForType("pdf")
 	assert.Nil(t, rt)
 }
 

@@ -66,39 +66,39 @@ func TestScanWithPluginFileParser(t *testing.T) {
 
 	manifest := `{
   "manifestVersion": 1,
-  "id": "pdf-parser",
-  "name": "PDF Parser",
+  "id": "docx-parser",
+  "name": "DOCX Parser",
   "version": "1.0.0",
   "capabilities": {
     "fileParser": {
-      "description": "Parses PDF files",
-      "types": ["pdf"]
+      "description": "Parses DOCX files",
+      "types": ["docx"]
     }
   }
 }`
 
-	// Plugin that returns metadata from a "PDF" file
+	// Plugin that returns metadata from a "DOCX" file
 	mainJS := `var plugin = (function() {
   return {
     fileParser: {
       parse: function(ctx) {
         return {
-          title: "PDF Book Title",
-          authors: [{name: "PDF Author", role: ""}],
-          description: "A PDF book parsed by plugin"
+          title: "DOCX Book Title",
+          authors: [{name: "DOCX Author", role: ""}],
+          description: "A DOCX book parsed by plugin"
         };
       }
     }
   };
 })();`
 
-	installTestPlugin(t, tc, pluginDir, "pdf-parser", manifest, mainJS)
+	installTestPlugin(t, tc, pluginDir, "docx-parser", manifest, mainJS)
 
 	// Load the plugin
 	err := tc.worker.pluginManager.LoadAll(context.Background())
 	require.NoError(t, err)
 
-	// Create library with a .pdf file
+	// Create library with a .docx file
 	libraryPath := t.TempDir()
 	tc.createLibrary([]string{libraryPath})
 
@@ -106,9 +106,9 @@ func TestScanWithPluginFileParser(t *testing.T) {
 	err = os.MkdirAll(bookDir, 0755)
 	require.NoError(t, err)
 
-	// Create a fake PDF file (just content; no MIME validation since mimeTypes not declared)
-	pdfPath := filepath.Join(bookDir, "test.pdf")
-	err = os.WriteFile(pdfPath, []byte("fake pdf content"), 0644)
+	// Create a fake DOCX file (just content; no MIME validation since mimeTypes not declared)
+	docxPath := filepath.Join(bookDir, "test.docx")
+	err = os.WriteFile(docxPath, []byte("fake docx content"), 0644)
 	require.NoError(t, err)
 
 	// Run scan
@@ -120,19 +120,19 @@ func TestScanWithPluginFileParser(t *testing.T) {
 	require.Len(t, allBooks, 1)
 
 	book := allBooks[0]
-	assert.Equal(t, "PDF Book Title", book.Title)
+	assert.Equal(t, "DOCX Book Title", book.Title)
 	require.NotNil(t, book.Description)
-	assert.Equal(t, "A PDF book parsed by plugin", *book.Description)
+	assert.Equal(t, "A DOCX book parsed by plugin", *book.Description)
 	require.Len(t, book.Authors, 1)
-	assert.Equal(t, "PDF Author", book.Authors[0].Person.Name)
+	assert.Equal(t, "DOCX Author", book.Authors[0].Person.Name)
 
 	// Verify DataSource includes plugin identity
-	assert.Equal(t, "plugin:test/pdf-parser", book.TitleSource)
+	assert.Equal(t, "plugin:test/docx-parser", book.TitleSource)
 
 	// Verify file type
 	files := tc.listFiles()
 	require.Len(t, files, 1)
-	assert.Equal(t, "pdf", files[0].FileType)
+	assert.Equal(t, "docx", files[0].FileType)
 }
 
 // TestScanWithPluginFileParser_MIMEValidation verifies that MIME type validation
@@ -1280,7 +1280,7 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
 }
 
 // TestScanWithPluginFileParser_ReservedExtensions verifies that plugins cannot
-// override built-in parsers for reserved extensions (epub, cbz, m4b).
+// override built-in parsers for reserved extensions (epub, cbz, m4b, pdf).
 func TestScanWithPluginFileParser_ReservedExtensions(t *testing.T) {
 	t.Parallel()
 	pluginDir := t.TempDir()

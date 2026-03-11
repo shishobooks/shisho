@@ -28,6 +28,7 @@ var extensionsToScan = map[string]map[string]struct{}{
 	".epub": {"application/epub+zip": {}},
 	".m4b":  {"audio/x-m4a": {}, "video/mp4": {}},
 	".cbz":  {"application/zip": {}},
+	".pdf":  {"application/pdf": {}},
 }
 
 var (

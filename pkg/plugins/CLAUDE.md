@@ -92,7 +92,7 @@ shisho/goodreads-metadata/
 **Validation rules:**
 - JS exports hook but manifest doesn't declare capability → **load fails**
 - Manifest declares capability but JS doesn't export → silent (no error)
-- Reserved extensions (`epub`, `cbz`, `m4b`) cannot be claimed by fileParsers
+- Reserved extensions (`epub`, `cbz`, `m4b`, `pdf`) cannot be claimed by fileParsers
 - `metadataEnricher` requires `fields` array → if missing/empty, enricher hook is **disabled** (other hooks still work)
 - Invalid field names in `fields` → **load fails**
 
