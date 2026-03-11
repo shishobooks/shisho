@@ -32,9 +32,6 @@ func TestMain(m *testing.M) {
 	if err := createMultipleAuthors(dir); err != nil {
 		panic("failed to create multiple-authors.pdf: " + err.Error())
 	}
-	if err := createMultiplePages(dir); err != nil {
-		panic("failed to create multiple-pages.pdf: " + err.Error())
-	}
 	if err := createInvalidPDF(dir); err != nil {
 		panic("failed to create invalid.pdf: " + err.Error())
 	}
@@ -159,13 +156,9 @@ func createMultipleAuthors(dir string) error {
 		filepath.Join(dir, "multiple-authors.pdf"),
 		1,
 		map[string]string{
-			"Author": "Author One, Author Two",
+			"Author": "Alpha & Beta; Gamma, Delta",
 		},
 	)
-}
-
-func createMultiplePages(dir string) error {
-	return writeRawPDF(filepath.Join(dir, "multiple-pages.pdf"), 5, nil)
 }
 
 func createInvalidPDF(dir string) error {
@@ -216,9 +209,11 @@ func TestParse_MultipleAuthors(t *testing.T) {
 	meta, err := Parse(path)
 	require.NoError(t, err)
 
-	require.Len(t, meta.Authors, 2)
-	assert.Equal(t, "Author One", meta.Authors[0].Name)
-	assert.Equal(t, "Author Two", meta.Authors[1].Name)
+	require.Len(t, meta.Authors, 4)
+	assert.Equal(t, "Alpha", meta.Authors[0].Name)
+	assert.Equal(t, "Beta", meta.Authors[1].Name)
+	assert.Equal(t, "Gamma", meta.Authors[2].Name)
+	assert.Equal(t, "Delta", meta.Authors[3].Name)
 }
 
 func TestParse_Keywords(t *testing.T) {
