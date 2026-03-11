@@ -1,12 +1,12 @@
 var plugin = (function() {
   return {
     inputConverter: {
-      sourceTypes: ["pdf"],
+      sourceTypes: ["docx"],
       targetType: "epub",
       convert: function(context) { return { success: true, targetPath: "" }; }
     },
     fileParser: {
-      types: ["pdf"],
+      types: ["docx"],
       parse: function(context) { return { title: "Test" }; }
     }
   };
