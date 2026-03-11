@@ -42,6 +42,7 @@ Each domain (books, jobs, libraries, chapters) has:
   - EPUB: `pkg/epub/CLAUDE.md`
   - CBZ: `pkg/cbz/CLAUDE.md`
   - M4B: `pkg/mp4/CLAUDE.md`
+  - PDF: `pkg/pdf/CLAUDE.md`
   - KePub: `pkg/kepub/CLAUDE.md`
 
 ### Primary File System
@@ -360,6 +361,7 @@ When adding or modifying book/file metadata fields, ensure these files are updat
    - EPUB: `pkg/epub/opf.go`
    - CBZ: `pkg/cbz/cbz.go`
    - M4B: `pkg/mp4/metadata.go`
+   - PDF: `pkg/pdf/pdf.go`
 6. **File generators** - Update to write the field back:
    - EPUB: `pkg/filegen/epub.go`
    - CBZ: `pkg/filegen/cbz.go`
