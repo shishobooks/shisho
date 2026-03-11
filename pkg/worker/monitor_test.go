@@ -279,7 +279,7 @@ func TestMonitor_EnqueueExistingFiles(t *testing.T) {
 	}
 
 	// Only the epub should be enqueued.
-	assert.Equal(t, 1, len(m.pending))
+	assert.Len(t, m.pending, 1)
 	ep, ok := m.pending[filepath.Join(sub, "book.epub")]
 	assert.True(t, ok)
 	assert.Equal(t, fsnotify.Create, ep.Op)
@@ -320,7 +320,7 @@ func TestMonitor_HandleEvent_NewDirEnqueuesExistingFiles(t *testing.T) {
 	defer m.mu.Unlock()
 
 	// The epub inside the new directory should have been enqueued.
-	assert.Equal(t, 1, len(m.pending))
+	assert.Len(t, m.pending, 1)
 	_, ok := m.pending[filepath.Join(sub, "book.epub")]
 	assert.True(t, ok)
 }
