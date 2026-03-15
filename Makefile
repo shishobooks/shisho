@@ -22,11 +22,12 @@ check: tygo lint
 	+$(MAKE) -j3 test test\:js lint\:js
 
 # Like check but suppresses output on success — only shows output for failing steps.
-# Runs all steps concurrently (same as check), prints a one-line pass/fail summary.
+# Runs lint first (matching check behavior), then test/test:js/lint:js concurrently.
 .PHONY: check\:quiet
 check\:quiet: tygo
 	@tmpdir=$$(mktemp -d); \
-	for step in lint test test:js lint:js; do \
+	$(MAKE) --no-print-directory lint >$$tmpdir/lint.out 2>&1; echo $$? >$$tmpdir/lint.rc; \
+	for step in test test:js lint:js; do \
 		( $(MAKE) --no-print-directory $$step >$$tmpdir/$$step.out 2>&1; echo $$? >$$tmpdir/$$step.rc ) & \
 	done; \
 	wait; \

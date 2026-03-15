@@ -18,7 +18,7 @@ func newTestMonitor(t *testing.T) *Monitor {
 	t.Helper()
 	w := &Worker{
 		config: &config.Config{
-			LibraryMonitorDelaySeconds: 1,
+			LibraryMonitorDelaySeconds: minMonitorDelaySeconds,
 		},
 		log: logger.New(),
 	}
@@ -332,7 +332,7 @@ func TestMonitor_ProcessEvent_CreateSkipsNonexistentFile(t *testing.T) {
 	libDir := t.TempDir()
 	tc.createLibrary([]string{libDir})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = 1
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -352,7 +352,7 @@ func TestMonitor_ProcessEvent_DeleteSkipsUnknownFile(t *testing.T) {
 	libDir := t.TempDir()
 	tc.createLibrary([]string{libDir})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = 1
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -380,7 +380,7 @@ func TestMonitor_SkipsWhenScanJobActive(t *testing.T) {
 	err := tc.jobService.CreateJob(tc.ctx, job)
 	require.NoError(t, err)
 
-	tc.worker.config.LibraryMonitorDelaySeconds = 1
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -390,11 +390,15 @@ func TestMonitor_SkipsWhenScanJobActive(t *testing.T) {
 		LibraryID: 1,
 	}
 
-	// processPendingEvents should skip because a scan job is active.
+	// processPendingEvents should re-queue because a scan job is active.
 	m.processPendingEvents()
 
-	// Pending map should have been cleared (events dropped).
+	// Events should be re-queued (not dropped) and a timer should be set.
 	m.mu.Lock()
-	assert.Empty(t, m.pending)
+	assert.Len(t, m.pending, 1)
+	_, ok := m.pending[filepath.Join(libDir, "book.epub")]
+	assert.True(t, ok, "event should be re-queued")
+	assert.NotNil(t, m.timer, "timer should be restarted for re-queued events")
+	m.timer.Stop()
 	m.mu.Unlock()
 }

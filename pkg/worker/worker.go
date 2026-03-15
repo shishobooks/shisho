@@ -365,6 +365,14 @@ func (w *Worker) checkPluginUpdates() {
 	}
 }
 
+// RefreshMonitorWatches signals the filesystem monitor to reload library paths.
+// Safe to call even if the monitor is disabled (no-op).
+func (w *Worker) RefreshMonitorWatches() {
+	if w.monitor != nil {
+		w.monitor.RefreshWatches()
+	}
+}
+
 func (w *Worker) Shutdown() {
 	if w.monitor != nil {
 		w.monitor.stop()

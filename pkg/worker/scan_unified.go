@@ -281,7 +281,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 
 	// Patterns for files that should be treated as ignorable during directory cleanup
 	// (shisho covers/sidecars + OS junk like .DS_Store).
-	cleanupIgnoredPatterns := append(shishoSpecialFilePatterns, w.config.SupplementExcludePatterns...)
+	cleanupIgnoredPatterns := make([]string, 0, len(shishoSpecialFilePatterns)+len(w.config.SupplementExcludePatterns))
+	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, shishoSpecialFilePatterns...)
+	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, w.config.SupplementExcludePatterns...)
 
 	// Retrieve file with relations from DB
 	file, err := w.bookService.RetrieveFileWithRelations(ctx, opts.FileID)
@@ -516,7 +518,9 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		}
 
 		// Clean up empty directories up to library path
-		cleanupIgnoredPatterns := append(shishoSpecialFilePatterns, w.config.SupplementExcludePatterns...)
+		cleanupIgnoredPatterns := make([]string, 0, len(shishoSpecialFilePatterns)+len(w.config.SupplementExcludePatterns))
+		cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, shishoSpecialFilePatterns...)
+		cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, w.config.SupplementExcludePatterns...)
 		library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 			ID: &book.LibraryID,
 		})
