@@ -9,10 +9,12 @@
     }
 
     # API routes - proxy to Go backend (strip /api prefix)
+    # flush_interval -1 disables response buffering so SSE events stream immediately
     handle /api/* {
         uri strip_prefix /api
         reverse_proxy localhost:3689 {
             header_up X-Forwarded-Prefix /api
+            flush_interval -1
         }
     }
 
