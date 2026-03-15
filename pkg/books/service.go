@@ -14,7 +14,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
@@ -1672,12 +1671,14 @@ func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, librar
 
 	// Clean up book directory if organized structure
 	if library.OrganizeFileStructure && file.Book != nil && file.Book.Filepath != "" {
-		// Delete book-level sidecar
-		bookSidecarPath := sidecar.BookSidecarPath(file.Book.Filepath)
-		_ = os.Remove(bookSidecarPath)
+		// Combine caller's ignored patterns with shisho special file patterns
+		// so covers (*.cover.*) and sidecars (*.metadata.json) are cleaned up too
+		allIgnoredPatterns := make([]string, 0, len(ignoredPatterns)+len(fileutils.ShishoSpecialFilePatterns))
+		allIgnoredPatterns = append(allIgnoredPatterns, ignoredPatterns...)
+		allIgnoredPatterns = append(allIgnoredPatterns, fileutils.ShishoSpecialFilePatterns...)
 
-		// Clean up empty book directory (ignoredPatterns handles .DS_Store, etc.)
-		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, ignoredPatterns...)
+		// Clean up book directory (removes covers, sidecars, and OS junk files)
+		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, allIgnoredPatterns...)
 	}
 
 	return result, nil

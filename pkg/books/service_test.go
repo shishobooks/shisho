@@ -688,6 +688,87 @@ func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "book directory should be completely removed, including ignored files")
 }
 
+func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create temp directory for the book
+	bookDir := t.TempDir()
+
+	// Create library with OrganizeFileStructure enabled
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		OrganizeFileStructure:    true,
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create single main file
+	filePath := filepath.Join(bookDir, "test.epub")
+	err = os.WriteFile(filePath, []byte("content"), 0644)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filePath,
+		FilesizeBytes: 7,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create shisho-generated cover and sidecar files
+	coverPath := filepath.Join(bookDir, "test.epub.cover.jpg")
+	err = os.WriteFile(coverPath, []byte("fake cover"), 0644)
+	require.NoError(t, err)
+
+	sidecarPath := filepath.Join(bookDir, "test.epub.metadata.json")
+	err = os.WriteFile(sidecarPath, []byte("{}"), 0644)
+	require.NoError(t, err)
+
+	bookSidecarPath := filepath.Join(bookDir, "Test Book.metadata.json")
+	err = os.WriteFile(bookSidecarPath, []byte("{}"), 0644)
+	require.NoError(t, err)
+
+	// Verify files exist before deletion
+	_, err = os.Stat(coverPath)
+	require.NoError(t, err, "cover file should exist before deletion")
+	_, err = os.Stat(sidecarPath)
+	require.NoError(t, err, "sidecar file should exist before deletion")
+	_, err = os.Stat(bookSidecarPath)
+	require.NoError(t, err, "book sidecar file should exist before deletion")
+
+	// Delete the only file
+	bookSvc := NewService(db)
+	ignoredPatterns := []string{".*", ".DS_Store", "Thumbs.db"}
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil, ignoredPatterns)
+	require.NoError(t, err)
+
+	assert.True(t, result.BookDeleted, "book should be deleted when last file removed")
+
+	// Verify book directory is completely removed (including cover and sidecar files)
+	_, err = os.Stat(bookDir)
+	assert.True(t, os.IsNotExist(err), "book directory should be completely removed, including cover and sidecar files")
+}
+
 func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

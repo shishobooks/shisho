@@ -18,6 +18,15 @@ import (
 	_ "golang.org/x/image/webp" // Register WebP decoder for image normalization.
 )
 
+// ShishoSpecialFilePatterns are glob patterns for shisho-generated files (covers, sidecars).
+// These are used to skip special files during scanning and to treat them as ignorable
+// during directory cleanup after book deletion.
+// This slice must not be mutated at runtime.
+var ShishoSpecialFilePatterns = []string{
+	"*.cover.*",       // individual cover files: book.epub.cover.jpg
+	"*.metadata.json", // sidecar files: book.epub.metadata.json, Book Title.metadata.json
+}
+
 // OrganizeFileResult contains the results of organizing a file.
 type OrganizeFileResult struct {
 	OriginalPath  string

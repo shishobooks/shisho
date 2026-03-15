@@ -116,18 +116,10 @@ func isMainFileExtension(ext string) bool {
 	return ok
 }
 
-// shishoSpecialFilePatterns are glob patterns for shisho-generated files (covers, sidecars).
-// These are used both to skip special files during scanning and to treat them as ignorable
-// during directory cleanup after book deletion.
-var shishoSpecialFilePatterns = []string{
-	"*.cover.*",       // individual cover files: book.epub.cover.jpg
-	"*.metadata.json", // sidecar files: book.epub.metadata.json, Book Title.metadata.json
-}
-
 // isShishoSpecialFile returns true if the filename is a shisho-specific file.
 func isShishoSpecialFile(filename string) bool {
 	lower := strings.ToLower(filename)
-	for _, pattern := range shishoSpecialFilePatterns {
+	for _, pattern := range fileutils.ShishoSpecialFilePatterns {
 		if matched, _ := filepath.Match(pattern, lower); matched {
 			return true
 		}
