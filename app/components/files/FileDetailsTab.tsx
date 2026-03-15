@@ -76,7 +76,7 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
           </p>
         </div>
 
-        {/* Page count - CBZ only */}
+        {/* Page count - CBZ and PDF */}
         {(file.file_type === FileTypeCBZ || file.file_type === FileTypePDF) &&
           file.page_count != null && (
             <div>

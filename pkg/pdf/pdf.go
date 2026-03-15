@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	stdlog "log"
 	"os"
 	"strings"
 	"sync"
@@ -88,9 +87,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	// Extract cover image (best-effort: don't fail Parse if cover extraction fails).
 	var coverData []byte
 	var coverMime string
-	if cd, cm, err := extractCover(path); err != nil {
-		stdlog.Printf("pdf: cover extraction failed for %s: %v", path, err)
-	} else {
+	if cd, cm, err := extractCover(path); err == nil {
 		coverData = cd
 		coverMime = cm
 	}

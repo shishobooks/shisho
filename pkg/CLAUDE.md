@@ -375,6 +375,7 @@ When adding or modifying book/file metadata fields, ensure these files are updat
    - EPUB: `pkg/filegen/epub.go`
    - CBZ: `pkg/filegen/cbz.go`
    - M4B: `pkg/filegen/m4b.go`
+   - PDF: `pkg/filegen/pdf.go`
    - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
 7. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
 8. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files

@@ -175,7 +175,7 @@ type createBookRequest struct {
 	LibraryID int    `json:"libraryId" validate:"required"`
 	Title     string `json:"title" validate:"required"`
 	Filepath  string `json:"filepath"`
-	FileType  string `json:"fileType"` // "epub", "cbz", "m4b"
+	FileType  string `json:"fileType"` // "epub", "cbz", "m4b", "pdf"
 	AuthorID  *int   `json:"authorId"` // Optional author
 	SeriesID  *int   `json:"seriesId"` // Optional series
 	FileSize  *int64 `json:"fileSize"` // Optional file size in bytes
