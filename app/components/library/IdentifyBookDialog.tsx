@@ -136,6 +136,36 @@ export function IdentifyBookDialog({
       ? `${result.plugin_scope}/${result.plugin_id}`
       : result.plugin_id;
 
+  const resolveField = (
+    result: PluginSearchResult,
+    field: keyof PluginSearchResult,
+    metadataField?: string,
+  ) => {
+    const topLevel = result[field];
+    if (topLevel !== undefined && topLevel !== null && topLevel !== "") return topLevel;
+    if (result.metadata) {
+      const mdField = metadataField || field;
+      return (result.metadata as Record<string, unknown>)[mdField as string];
+    }
+    return undefined;
+  };
+
+  const resolveAuthors = (result: PluginSearchResult): string[] | undefined => {
+    if (result.authors && result.authors.length > 0) return result.authors;
+    if (result.metadata?.authors && result.metadata.authors.length > 0) {
+      return result.metadata.authors.map((a) => a.name);
+    }
+    return undefined;
+  };
+
+  const resolveNarrators = (result: PluginSearchResult): string[] | undefined => {
+    if (result.narrators && result.narrators.length > 0) return result.narrators;
+    if (result.metadata?.narrators && result.metadata.narrators.length > 0) {
+      return result.metadata.narrators;
+    }
+    return undefined;
+  };
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
@@ -228,11 +258,43 @@ export function IdentifyBookDialog({
                         </Badge>
                       </div>
 
-                      {result.authors && result.authors.length > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                          {result.authors.join(", ")}
-                        </p>
-                      )}
+                      {(() => {
+                        const subtitle = resolveField(result, "subtitle") as string;
+                        return subtitle ? (
+                          <p className="text-sm text-muted-foreground/80 leading-tight">
+                            {subtitle}
+                          </p>
+                        ) : null;
+                      })()}
+
+                      {(() => {
+                        const series = resolveField(result, "series") as string;
+                        const seriesNum = resolveField(result, "series_number") as number;
+                        return series ? (
+                          <p className="text-xs text-muted-foreground font-medium">
+                            {series}
+                            {seriesNum != null && ` #${seriesNum}`}
+                          </p>
+                        ) : null;
+                      })()}
+
+                      {(() => {
+                        const authors = resolveAuthors(result);
+                        return authors && authors.length > 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            {authors.join(", ")}
+                          </p>
+                        ) : null;
+                      })()}
+
+                      {(() => {
+                        const narrators = resolveNarrators(result);
+                        return narrators && narrators.length > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            Narrated by {narrators.join(", ")}
+                          </p>
+                        ) : null;
+                      })()}
 
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         {result.release_date && (
@@ -299,6 +361,33 @@ export function IdentifyBookDialog({
                               })}
                           </div>
                         )}
+
+                      {(() => {
+                        const genres = (resolveField(result, "genres") as string[]) ?? [];
+                        const tags = (resolveField(result, "tags") as string[]) ?? [];
+                        return (genres.length > 0 || tags.length > 0) ? (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {genres.map((g) => (
+                              <Badge
+                                className="text-xs"
+                                key={`genre-${g}`}
+                                variant="secondary"
+                              >
+                                {g}
+                              </Badge>
+                            ))}
+                            {tags.map((tag) => (
+                              <Badge
+                                className="text-xs bg-muted text-muted-foreground"
+                                key={`tag-${tag}`}
+                                variant="outline"
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
 
                       {result.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
