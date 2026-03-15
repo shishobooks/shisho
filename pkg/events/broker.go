@@ -1,6 +1,9 @@
 package events
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Event represents a server-sent event with a named type and JSON data.
 type Event struct {
@@ -50,4 +53,13 @@ func (b *Broker) Publish(evt Event) {
 			// Subscriber buffer full — drop event to avoid blocking.
 		}
 	}
+}
+
+// NewJobEvent builds an Event with the standard job payload format.
+func NewJobEvent(eventType string, jobID int, status, jobType string, libraryID *int) Event {
+	data := fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s"}`, jobID, status, jobType)
+	if libraryID != nil {
+		data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, jobID, status, jobType, *libraryID)
+	}
+	return Event{Type: eventType, Data: data}
 }

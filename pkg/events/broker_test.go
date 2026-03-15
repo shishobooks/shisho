@@ -91,3 +91,20 @@ done:
 	// Should have received up to buffer size (64), not all 200
 	require.LessOrEqual(t, drained, 64)
 }
+
+func TestNewJobEvent_WithoutLibraryID(t *testing.T) {
+	t.Parallel()
+
+	evt := NewJobEvent("job.created", 1, "pending", "scan", nil)
+	assert.Equal(t, "job.created", evt.Type)
+	assert.JSONEq(t, `{"job_id":1,"status":"pending","type":"scan"}`, evt.Data)
+}
+
+func TestNewJobEvent_WithLibraryID(t *testing.T) {
+	t.Parallel()
+
+	libraryID := 5
+	evt := NewJobEvent("job.status_changed", 3, "in_progress", "scan", &libraryID)
+	assert.Equal(t, "job.status_changed", evt.Type)
+	assert.JSONEq(t, `{"job_id":3,"status":"in_progress","type":"scan","library_id":5}`, evt.Data)
+}

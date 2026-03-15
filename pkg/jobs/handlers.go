@@ -1,7 +1,6 @@
 package jobs
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -57,11 +56,7 @@ func (h *handler) create(c echo.Context) error {
 	}
 
 	if h.broker != nil {
-		data := fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s"}`, job.ID, job.Status, job.Type)
-		if job.LibraryID != nil {
-			data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, job.ID, job.Status, job.Type, *job.LibraryID)
-		}
-		h.broker.Publish(events.Event{Type: "job.created", Data: data})
+		h.broker.Publish(events.NewJobEvent("job.created", job.ID, job.Status, job.Type, job.LibraryID))
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, job))

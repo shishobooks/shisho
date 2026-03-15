@@ -3,9 +3,12 @@ package events
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
+
+const heartbeatInterval = 30 * time.Second
 
 type handler struct {
 	broker *Broker
@@ -30,10 +33,17 @@ func (h *handler) stream(c echo.Context) error {
 	flusher.Flush()
 
 	ctx := c.Request().Context()
+	heartbeat := time.NewTicker(heartbeatInterval)
+	defer heartbeat.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-heartbeat.C:
+			// SSE comment line keeps the connection alive through proxies.
+			fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
 		case evt, ok := <-ch:
 			if !ok {
 				return nil

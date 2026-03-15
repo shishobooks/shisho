@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -434,11 +433,7 @@ func (w *Worker) publishJobEvent(eventType string, job *models.Job) {
 	if w.broker == nil {
 		return
 	}
-	data := fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s"}`, job.ID, job.Status, job.Type)
-	if job.LibraryID != nil {
-		data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, job.ID, job.Status, job.Type, *job.LibraryID)
-	}
-	w.broker.Publish(events.Event{Type: eventType, Data: data})
+	w.broker.Publish(events.NewJobEvent(eventType, job.ID, job.Status, job.Type, job.LibraryID))
 }
 
 const letterBytes = "abcdef0123456789"

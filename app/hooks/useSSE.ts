@@ -16,6 +16,12 @@ export function useSSE() {
 
     const es = new EventSource("/api/events");
 
+    es.onerror = () => {
+      // EventSource auto-reconnects on error. Log for debugging visibility
+      // but don't take action — reconnection is handled by the browser.
+      console.debug("[SSE] Connection error, will auto-reconnect");
+    };
+
     const handleJobCreated = () => {
       queryClient.invalidateQueries({ queryKey: [JobsQueryKey.ListJobs] });
       queryClient.invalidateQueries({
