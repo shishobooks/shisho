@@ -56,9 +56,17 @@ export interface SearchResult {
   imageUrl?: string;
   releaseDate?: string;
   publisher?: string;
+  subtitle?: string;
+  series?: string;
+  seriesNumber?: number;
+  genres?: string[];
+  tags?: string[];
+  narrators?: string[];
   identifiers?: Array<{ type: string; value: string }>;
   /** Opaque data passed back to enrich(). Use this to store internal IDs. */
   providerData?: unknown;
+  /** Full metadata for passthrough pattern. If provided, enrich() can return it as-is. */
+  metadata?: ParsedMetadata;
 }
 
 /** Result returned from metadataEnricher.search(). */
