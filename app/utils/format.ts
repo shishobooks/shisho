@@ -26,10 +26,31 @@ export const formatDuration = (seconds: number): string => {
 
 /**
  * Formats an ISO date string into a localized date string.
- * @example formatDate("2024-01-15T12:00:00Z") // "1/15/2024" (locale-dependent)
+ * @example formatDate("2024-01-15T12:00:00Z") // "Jan 15, 2024" (locale-dependent)
  */
 export const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString();
+  return new Date(dateString).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+};
+
+/**
+ * Formats an ISO datetime string into a localized date+time string in the user's timezone.
+ * Includes the short timezone name so it's clear the time is local.
+ * @example formatDateTime("2024-01-15T18:30:00Z") // "1/15/2024, 12:30 PM CST" (locale-dependent)
+ */
+export const formatDateTime = (dateString: string): string => {
+  return new Date(dateString).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 };
 
 /**
