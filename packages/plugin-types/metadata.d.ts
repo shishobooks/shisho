@@ -46,7 +46,7 @@ export interface ParsedMetadata {
   releaseDate?: string;
   /** MIME type of cover image (e.g., "image/jpeg"). */
   coverMimeType?: string;
-  /** Public URL for cover image. Server downloads at apply time. Lower precedence than coverData. */
+  /** Public URL for cover image. Server downloads at apply time. Lower precedence than coverData. Domain must be in httpAccess.domains. */
   coverUrl?: string;
   /** Cover image data as ArrayBuffer. */
   coverData?: ArrayBuffer;

@@ -71,7 +71,7 @@ When a new version of a plugin is available, you'll see an update indicator in *
 
 Plugins run in a sandboxed JavaScript environment. Each plugin must declare its required permissions in its manifest:
 
-- **HTTP access**: Which domains the plugin can make requests to
+- **HTTP access**: Which domains the plugin can make requests to (this also applies to `coverUrl` downloads — the server validates the URL domain against the plugin's allowed list)
 - **File access**: Whether the plugin can read or write files beyond its own directory
 - **FFmpeg access**: Whether the plugin can use FFmpeg for media processing
 - **Shell access**: Which specific shell commands the plugin can execute
