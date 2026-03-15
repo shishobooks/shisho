@@ -1445,10 +1445,10 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	return c.JSON(http.StatusOK, updatedBook)
 }
 
-// downloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
+// DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
 // Returns true if the download succeeded, false otherwise. Skips if CoverData is already set (precedence rule).
 // The URL's domain (and any redirect domains) must be in the plugin's httpAccess.domains allowlist.
-func downloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, allowedDomains []string, log logger.Logger) bool {
+func DownloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, allowedDomains []string, log logger.Logger) bool {
 	if len(md.CoverData) > 0 || md.CoverURL == "" {
 		return false
 	}
@@ -1785,7 +1785,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		if manifest.Capabilities.HTTPAccess != nil {
 			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
 		}
-		downloadCoverFromURL(ctx, md, allowedDomains, log)
+		DownloadCoverFromURL(ctx, md, allowedDomains, log)
 	}
 
 	// Apply cover data (from coverData or downloaded from coverUrl)

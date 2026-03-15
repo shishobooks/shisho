@@ -34,7 +34,7 @@ func TestDownloadCoverFromURL_Success(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/cover.jpg"}
-	ok := downloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
 
 	assert.True(t, ok)
 	assert.Equal(t, fakeJPEG, md.CoverData)
@@ -51,7 +51,7 @@ func TestDownloadCoverFromURL_CoverDataTakesPrecedence(t *testing.T) {
 		CoverURL:      "https://should-not-be-called.example.com/cover.jpg",
 	}
 
-	ok := downloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
 
 	assert.False(t, ok, "should skip when CoverData already set")
 	assert.Equal(t, existing, md.CoverData, "CoverData should be unchanged")
@@ -67,7 +67,7 @@ func TestDownloadCoverFromURL_NonImageRejected(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/not-image"}
-	ok := downloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
 
 	assert.False(t, ok, "should reject non-image content type")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -77,7 +77,7 @@ func TestDownloadCoverFromURL_EmptyURL(t *testing.T) {
 	t.Parallel()
 
 	md := &mediafile.ParsedMetadata{}
-	ok := downloadCoverFromURL(context.Background(), md, nil, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, nil, testLogger())
 
 	assert.False(t, ok, "should return false for empty URL")
 }
@@ -91,7 +91,7 @@ func TestDownloadCoverFromURL_ServerError(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/error"}
-	ok := downloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
 
 	assert.False(t, ok, "should return false on server error")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -107,7 +107,7 @@ func TestDownloadCoverFromURL_DomainNotAllowed(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/cover.jpg"}
-	ok := downloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
 
 	assert.False(t, ok, "should reject URL with domain not in allowed list")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -117,7 +117,7 @@ func TestDownloadCoverFromURL_NoHTTPAccess(t *testing.T) {
 	t.Parallel()
 
 	md := &mediafile.ParsedMetadata{CoverURL: "https://example.com/cover.jpg"}
-	ok := downloadCoverFromURL(context.Background(), md, nil, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, nil, testLogger())
 
 	assert.False(t, ok, "should reject when no domains are allowed")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -141,7 +141,7 @@ func TestDownloadCoverFromURL_RedirectToDisallowedDomain(t *testing.T) {
 
 	md := &mediafile.ParsedMetadata{CoverURL: redirector.URL + "/cover.jpg"}
 	// Only allow the redirector's host:port, not the target's
-	ok := downloadCoverFromURL(context.Background(), md, []string{testServerHost(redirector)}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{testServerHost(redirector)}, testLogger())
 
 	assert.False(t, ok, "should reject redirect to disallowed domain")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -151,7 +151,7 @@ func TestDownloadCoverFromURL_UnsupportedScheme(t *testing.T) {
 	t.Parallel()
 
 	md := &mediafile.ParsedMetadata{CoverURL: "ftp://example.com/cover.jpg"}
-	ok := downloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
+	ok := DownloadCoverFromURL(context.Background(), md, []string{"example.com"}, testLogger())
 
 	assert.False(t, ok, "should reject non-http/https scheme")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
