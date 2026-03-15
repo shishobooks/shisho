@@ -704,6 +704,122 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	assert.Nil(t, result.Metadata)
 }
 
+func TestPassthroughPattern(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	// Create a plugin that uses the passthrough pattern:
+	// search() returns metadata in providerData, enrich() returns it unchanged
+	destDir := filepath.Join(pluginDir, "test", "passthrough-enricher")
+	err := os.MkdirAll(destDir, 0755)
+	require.NoError(t, err)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "passthrough-enricher",
+  "name": "Passthrough Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Passthrough enricher",
+      "fileTypes": ["epub"],
+      "fields": ["title", "description", "genres", "cover"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(context) {
+        var md = {
+          title: "Passthrough Title",
+          description: "Passthrough description",
+          genres: ["SciFi"],
+          coverUrl: "https://example.com/cover.jpg"
+        };
+        return {
+          results: [{
+            title: "Passthrough Title",
+            description: "Passthrough description",
+            genres: ["SciFi"],
+            providerData: md,
+            metadata: md
+          }]
+        };
+      },
+      enrich: function(context) {
+        return { modified: true, metadata: context.selectedResult };
+      }
+    }
+  };
+})();`
+
+	err = os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
+	require.NoError(t, err)
+
+	manager := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "passthrough-enricher",
+		Name:        "Passthrough Enricher",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err = service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	err = manager.LoadPlugin(ctx, "test", "passthrough-enricher")
+	require.NoError(t, err)
+
+	rt := manager.GetRuntime("test", "passthrough-enricher")
+	require.NotNil(t, rt)
+
+	// Step 1: Search returns metadata in both display fields and metadata object
+	searchCtx := map[string]interface{}{
+		"query": "Test",
+		"book":  map[string]interface{}{"title": "Test"},
+		"file":  map[string]interface{}{"fileType": "epub"},
+	}
+
+	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	require.NoError(t, err)
+	require.Len(t, searchResp.Results, 1)
+
+	sr := searchResp.Results[0]
+	assert.Equal(t, "Passthrough Title", sr.Title)
+	assert.Equal(t, []string{"SciFi"}, sr.Genres)
+	require.NotNil(t, sr.Metadata)
+	assert.Equal(t, "Passthrough Title", sr.Metadata.Title)
+	assert.Equal(t, "https://example.com/cover.jpg", sr.Metadata.CoverURL)
+
+	// Step 2: Enrich receives providerData (the metadata) and returns it unchanged
+	enrichCtx := map[string]interface{}{
+		"selectedResult": sr.ProviderData,
+		"book":           map[string]interface{}{"title": "Test"},
+		"file":           map[string]interface{}{"fileType": "epub"},
+	}
+
+	enrichResp, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
+	require.NoError(t, err)
+	require.NotNil(t, enrichResp)
+	assert.True(t, enrichResp.Modified)
+	require.NotNil(t, enrichResp.Metadata)
+
+	// The enriched metadata should match what was originally returned at search time
+	assert.Equal(t, "Passthrough Title", enrichResp.Metadata.Title)
+	assert.Equal(t, "Passthrough description", enrichResp.Metadata.Description)
+	assert.Equal(t, []string{"SciFi"}, enrichResp.Metadata.Genres)
+	assert.Equal(t, "https://example.com/cover.jpg", enrichResp.Metadata.CoverURL)
+}
+
 func TestRunOutputGenerator_NoHook(t *testing.T) {
 	// Use the converter plugin which has no generator hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")

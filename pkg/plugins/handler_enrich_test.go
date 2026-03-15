@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -25,7 +26,7 @@ func TestDownloadCoverFromURL_Success(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/cover.jpg"}
-	ok := downloadCoverFromURL(md, testLogger())
+	ok := downloadCoverFromURL(context.Background(), md, testLogger())
 
 	assert.True(t, ok)
 	assert.Equal(t, fakeJPEG, md.CoverData)
@@ -42,7 +43,7 @@ func TestDownloadCoverFromURL_CoverDataTakesPrecedence(t *testing.T) {
 		CoverURL:      "https://should-not-be-called.example.com/cover.jpg",
 	}
 
-	ok := downloadCoverFromURL(md, testLogger())
+	ok := downloadCoverFromURL(context.Background(), md, testLogger())
 
 	assert.False(t, ok, "should skip when CoverData already set")
 	assert.Equal(t, existing, md.CoverData, "CoverData should be unchanged")
@@ -58,7 +59,7 @@ func TestDownloadCoverFromURL_NonImageRejected(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/not-image"}
-	ok := downloadCoverFromURL(md, testLogger())
+	ok := downloadCoverFromURL(context.Background(), md, testLogger())
 
 	assert.False(t, ok, "should reject non-image content type")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")
@@ -68,7 +69,7 @@ func TestDownloadCoverFromURL_EmptyURL(t *testing.T) {
 	t.Parallel()
 
 	md := &mediafile.ParsedMetadata{}
-	ok := downloadCoverFromURL(md, testLogger())
+	ok := downloadCoverFromURL(context.Background(), md, testLogger())
 
 	assert.False(t, ok, "should return false for empty URL")
 }
@@ -82,7 +83,7 @@ func TestDownloadCoverFromURL_ServerError(t *testing.T) {
 	defer srv.Close()
 
 	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/error"}
-	ok := downloadCoverFromURL(md, testLogger())
+	ok := downloadCoverFromURL(context.Background(), md, testLogger())
 
 	assert.False(t, ok, "should return false on server error")
 	assert.Nil(t, md.CoverData, "CoverData should remain nil")

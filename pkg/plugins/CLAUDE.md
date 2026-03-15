@@ -100,7 +100,7 @@ shisho/goodreads-metadata/
 `title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`
 
 **Logical field groupings:**
-- `cover` → controls `coverData`, `coverMimeType`, and `coverPage`
+- `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls both `series` (name) and `seriesNumber`
 
 ## main.js Pattern

@@ -1445,13 +1445,13 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 
 // downloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
 // Returns true if the download succeeded, false otherwise. Skips if CoverData is already set (precedence rule).
-func downloadCoverFromURL(md *mediafile.ParsedMetadata, log logger.Logger) bool {
+func downloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, log logger.Logger) bool {
 	if len(md.CoverData) > 0 || md.CoverURL == "" {
 		return false
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, md.CoverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, md.CoverURL, nil)
 	if err != nil {
 		log.Warn("failed to create cover download request", logger.Data{"url": md.CoverURL, "error": err.Error()})
 		return false
@@ -1755,7 +1755,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 
 	// Cover image: download from URL if coverData is empty and coverUrl is set
 	if md.CoverURL != "" && isAllowed("cover") && targetFile != nil {
-		downloadCoverFromURL(md, log)
+		downloadCoverFromURL(ctx, md, log)
 	}
 
 	// Apply cover data (from coverData or downloaded from coverUrl)
