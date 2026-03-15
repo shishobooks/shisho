@@ -167,6 +167,11 @@ const AdminSettings = () => {
               value={`${config.library_monitor_delay_seconds}s`}
             />
             <ConfigRow
+              description="How long login sessions remain valid"
+              label="Session Duration"
+              value={`${config.session_duration_days} days`}
+            />
+            <ConfigRow
               description="Application environment mode"
               label="Environment"
               value={config.environment || "production"}

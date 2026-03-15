@@ -2,7 +2,6 @@ package auth
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -13,8 +12,6 @@ import (
 const (
 	// CookieName is the name of the session cookie.
 	CookieName = "shisho_session"
-	// CookieMaxAge is how long the cookie is valid.
-	CookieMaxAge = 7 * 24 * time.Hour // 7 days
 )
 
 type handler struct {
@@ -71,7 +68,7 @@ func (h *handler) login(c echo.Context) error {
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(CookieMaxAge.Seconds()),
+		MaxAge:   int(h.authService.sessionDuration.Seconds()),
 		HttpOnly: true,
 		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
 		SameSite: http.SameSiteLaxMode,
@@ -169,7 +166,7 @@ func (h *handler) setup(c echo.Context) error {
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(CookieMaxAge.Seconds()),
+		MaxAge:   int(h.authService.sessionDuration.Seconds()),
 		HttpOnly: true,
 		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
 		SameSite: http.SameSiteLaxMode,

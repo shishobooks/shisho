@@ -91,3 +91,4 @@ macOS (FSEvents) and Docker containers typically don't need this adjustment.
 | Setting | Env Variable | Default | Description |
 |---------|-------------|---------|-------------|
 | `jwt_secret` | `JWT_SECRET` | - | **Required.** Secret key for signing JWT authentication tokens. Use a long, random string (at least 32 characters). Generate one with: `openssl rand -base64 32` |
+| `session_duration_days` | `SESSION_DURATION_DAYS` | `30` | How many days a login session remains valid before requiring re-authentication |

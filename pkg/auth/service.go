@@ -15,8 +15,6 @@ import (
 const (
 	// BcryptCost is the cost factor for bcrypt hashing.
 	BcryptCost = 12
-	// TokenExpiry is how long JWT tokens are valid.
-	TokenExpiry = 7 * 24 * time.Hour // 7 days
 )
 
 // JWTClaims represents the claims in a JWT token.
@@ -28,15 +26,17 @@ type JWTClaims struct {
 
 // Service handles authentication operations.
 type Service struct {
-	db        *bun.DB
-	jwtSecret []byte
+	db              *bun.DB
+	jwtSecret       []byte
+	sessionDuration time.Duration
 }
 
 // NewService creates a new auth service.
-func NewService(db *bun.DB, jwtSecret string) *Service {
+func NewService(db *bun.DB, jwtSecret string, sessionDuration time.Duration) *Service {
 	return &Service{
-		db:        db,
-		jwtSecret: []byte(jwtSecret),
+		db:              db,
+		jwtSecret:       []byte(jwtSecret),
+		sessionDuration: sessionDuration,
 	}
 }
 
@@ -79,7 +79,7 @@ func (s *Service) GenerateToken(user *models.User) (string, error) {
 		UserID:   user.ID,
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(TokenExpiry)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.sessionDuration)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},

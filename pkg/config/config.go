@@ -56,7 +56,8 @@ type Config struct {
 	SupplementExcludePatterns []string `koanf:"supplement_exclude_patterns" json:"supplement_exclude_patterns"`
 
 	// Authentication settings
-	JWTSecret string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
+	JWTSecret           string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
+	SessionDurationDays int    `koanf:"session_duration_days" json:"session_duration_days"`
 
 	// Environment settings
 	// Set to "test" to enable test-only API endpoints (e.g., /test/users)
@@ -97,6 +98,7 @@ func defaults() *Config {
 		LibraryMonitorEnabled:      true,
 		LibraryMonitorDelaySeconds: 60,
 		SupplementExcludePatterns:  []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
+		SessionDurationDays:        30,
 		JWTSecret:                  "", // Must be set via config or env var
 	}
 }
@@ -172,6 +174,11 @@ func NewForTest() *Config {
 	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
 	cfg.JWTSecret = "test-secret-key-for-testing-only"
 	return cfg
+}
+
+// SessionDuration returns the session duration as a time.Duration.
+func (c *Config) SessionDuration() time.Duration {
+	return time.Duration(c.SessionDurationDays) * 24 * time.Hour
 }
 
 // DownloadCacheMaxSizeBytes returns the maximum cache size in bytes.

@@ -152,3 +152,8 @@ supplement_exclude_patterns:
 # Generate one with: openssl rand -base64 32
 # Env: JWT_SECRET
 jwt_secret: your-secret-key-here-change-me
+
+# How many days a login session remains valid before requiring re-authentication
+# Env: SESSION_DURATION_DAYS
+# Default: 30
+session_duration_days: 30
