@@ -26,6 +26,7 @@ Project-specific conventions are documented in `CLAUDE.md` files within each sub
 | `pkg/cbz/CLAUDE.md` | CBZ format: ComicInfo.xml, creator roles, chapter detection |
 | `pkg/kepub/CLAUDE.md` | KePub format: koboSpan wrapping, CBZ-to-KePub conversion |
 | `pkg/mp4/CLAUDE.md` | M4B format: iTunes atoms, chapters, narrator fallback |
+| `pkg/pdf/CLAUDE.md` | PDF format: info dict metadata, pdfcpu thread safety |
 | `website/CLAUDE.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/CLAUDE.md` | E2E testing: Playwright, per-browser isolation, fixtures |
 

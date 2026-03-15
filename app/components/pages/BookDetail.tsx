@@ -98,7 +98,8 @@ const getCoverFileType = (
   if (!files || files.length === 0) return "book";
 
   const hasBookFiles = files.some(
-    (f) => f.file_type === "epub" || f.file_type === "cbz",
+    (f) =>
+      f.file_type === "epub" || f.file_type === "cbz" || f.file_type === "pdf",
   );
   const hasAudiobookFiles = files.some((f) => f.file_type === "m4b");
 

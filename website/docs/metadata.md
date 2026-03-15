@@ -120,9 +120,17 @@ Extracted from iTunes-style MP4 atoms:
 - **Cover**: from the `covr` atom
 - **Chapters**: from the `chpl` chapter list atom
 
+### PDF
+
+Extracted from the PDF info dictionary:
+
+- **Basic**: title, description (from Subject), tags (from Keywords), release date (from CreationDate), page count
+- **Authors**: split from the Author field on commas, ampersands, and semicolons
+- **Cover**: largest embedded image from page 1, falling back to a rendered image of the first page
+
 ### Supplements
 
-[Supplement files](./supplement-files) (PDFs, text files, etc.) don't have metadata extracted. Their display name is derived from the filename.
+[Supplement files](./supplement-files) (text files, etc.) don't have metadata extracted. Their display name is derived from the filename.
 
 ## Metadata Priority
 
@@ -133,7 +141,7 @@ Shisho tracks the **source** of every metadata field. When a scan encounters new
 | Highest | **Manual** | Edits made through the web interface |
 | | **Sidecar** | Values from [`.metadata.json` sidecar files](./sidecar-files) |
 | | **Plugin** | Data from [plugin](./plugins/overview) enrichers and parsers |
-| | **File metadata** | Embedded metadata from EPUB, CBZ, and M4B files |
+| | **File metadata** | Embedded metadata from EPUB, CBZ, M4B, and PDF files |
 | Lowest | **Filepath** | Parsed from the filename and directory structure |
 
 This means your manual edits are never overwritten by scans. If you want to reset a field to the value from the file, use the **Resync with refresh** option, which re-reads embedded file metadata and ignores the priority system (but still preserves manual edits for fields where the embedded value is empty).

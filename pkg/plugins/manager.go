@@ -17,6 +17,7 @@ var reservedExtensions = map[string]struct{}{
 	"epub": {},
 	"cbz":  {},
 	"m4b":  {},
+	"pdf":  {},
 }
 
 // Manager holds loaded Runtime instances indexed by "scope/id".
@@ -337,7 +338,7 @@ func (m *Manager) GetParserForType(fileType string) *Runtime {
 }
 
 // RegisteredFileExtensions returns all file extensions registered by plugin fileParsers
-// (excluding reserved built-in extensions: epub, cbz, m4b).
+// (excluding reserved built-in extensions: epub, cbz, m4b, pdf).
 func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 	result := make(map[string]struct{})
 

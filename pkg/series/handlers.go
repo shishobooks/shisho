@@ -302,7 +302,7 @@ func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File
 			continue
 		}
 		switch f.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ:
+		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
 			bookFiles = append(bookFiles, f)
 		case models.FileTypeM4B:
 			audiobookFiles = append(audiobookFiles, f)
