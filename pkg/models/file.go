@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	//tygo:emit export type FileType = typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeM4B;
+	//tygo:emit export type FileType = typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeM4B | typeof FileTypePDF;
 	FileTypeCBZ  = "cbz"
 	FileTypeEPUB = "epub"
 	FileTypeM4B  = "m4b"
+	FileTypePDF  = "pdf"
 )
 
 const (

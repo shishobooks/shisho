@@ -421,12 +421,12 @@ func TestScanFileByID_MissingFile_LastMainFile_NoPromotableSupplement_DeletesBoo
 	require.Len(t, files, 1)
 	mainFileID := files[0].ID
 
-	// Manually create a supplement file with an unsupported type (pdf) in the DB
+	// Manually create a supplement file with an unsupported type (txt) in the DB
 	supplementFile := &models.File{
 		LibraryID:     1,
 		BookID:        bookID,
-		Filepath:      filepath.Join(bookDir, "notes.pdf"),
-		FileType:      "pdf",
+		Filepath:      filepath.Join(bookDir, "notes.txt"),
+		FileType:      "txt",
 		FileRole:      models.FileRoleSupplement,
 		FilesizeBytes: 100,
 	}
@@ -449,7 +449,7 @@ func TestScanFileByID_MissingFile_LastMainFile_NoPromotableSupplement_DeletesBoo
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Both file and book should be deleted (PDF is not promotable)
+	// Both file and book should be deleted (txt is not promotable)
 	assert.True(t, result.FileDeleted, "FileDeleted should be true")
 	assert.True(t, result.BookDeleted, "BookDeleted should be true - no promotable supplement")
 
@@ -3490,7 +3490,7 @@ func TestScanFileCore_BookOrganization_SkippedDuringFullScan(t *testing.T) {
 }
 
 // TestScanFileCore_Supplement_SetsFileNameFromFilename verifies that supplement files
-// (like PDFs) can be rescanned and get their file.Name set from the filename on disk.
+// can be rescanned and get their file.Name set from the filename on disk.
 func TestScanFileCore_Supplement_SetsFileNameFromFilename(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
@@ -3507,12 +3507,12 @@ func TestScanFileCore_Supplement_SetsFileNameFromFilename(t *testing.T) {
 	err := tc.bookService.CreateBook(tc.ctx, book)
 	require.NoError(t, err)
 
-	// Create a supplement file (PDF)
+	// Create a supplement file (txt)
 	file := &models.File{
 		LibraryID:     1,
 		BookID:        book.ID,
-		Filepath:      "/library/[Author] Test Book/companion-guide.pdf",
-		FileType:      "pdf",
+		Filepath:      "/library/[Author] Test Book/companion-guide.txt",
+		FileType:      "txt",
 		FileRole:      models.FileRoleSupplement,
 		FilesizeBytes: 1000,
 	}
@@ -3578,12 +3578,12 @@ func TestScanFileCore_Supplement_DoesNotUpdateBookMetadata(t *testing.T) {
 	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
 	require.NoError(t, err)
 
-	// Create a supplement file (PDF)
+	// Create a supplement file (txt)
 	file := &models.File{
 		LibraryID:     1,
 		BookID:        book.ID,
-		Filepath:      "/library/[Author] Original Book Title/different-title.pdf",
-		FileType:      "pdf",
+		Filepath:      "/library/[Author] Original Book Title/different-title.txt",
+		FileType:      "txt",
 		FileRole:      models.FileRoleSupplement,
 		FilesizeBytes: 1000,
 	}
@@ -3641,8 +3641,8 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 	tc.createLibraryWithOptions([]string{libraryPath}, true)
 
 	// Create a real supplement file on disk
-	oldFilePath := filepath.Join(bookDir, "old-supplement-name.pdf")
-	require.NoError(t, os.WriteFile(oldFilePath, []byte("PDF content"), 0644))
+	oldFilePath := filepath.Join(bookDir, "old-supplement-name.txt")
+	require.NoError(t, os.WriteFile(oldFilePath, []byte("TXT content"), 0644))
 
 	// Create book
 	book := &models.Book{
@@ -3670,12 +3670,12 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
 	require.NoError(t, err)
 
-	// Create a supplement file (PDF)
+	// Create a supplement file (txt)
 	file := &models.File{
 		LibraryID:     1,
 		BookID:        book.ID,
 		Filepath:      oldFilePath,
-		FileType:      "pdf",
+		FileType:      "txt",
 		FileRole:      models.FileRoleSupplement,
 		FilesizeBytes: 1000,
 	}
@@ -3708,8 +3708,8 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 	assert.Equal(t, "New Supplement Name", *updatedFile.Name)
 
 	// The file should be renamed on disk WITHOUT the author prefix
-	// Should be "New Supplement Name.pdf", NOT "[Test Author] New Supplement Name.pdf"
-	expectedNewPath := filepath.Join(bookDir, "New Supplement Name.pdf")
+	// Should be "New Supplement Name.txt", NOT "[Test Author] New Supplement Name.txt"
+	expectedNewPath := filepath.Join(bookDir, "New Supplement Name.txt")
 	assert.Equal(t, expectedNewPath, updatedFile.Filepath, "Supplement should not have author prefix in filename")
 
 	// Verify old file no longer exists

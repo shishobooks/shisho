@@ -61,7 +61,7 @@ type ParsedMetadata struct {
 	BitrateBps int
 	// Codec is the audio codec with profile (M4B files only), e.g. "AAC-LC", "xHE-AAC"
 	Codec string
-	// PageCount is the number of pages (CBZ files only)
+	// PageCount is the number of pages (CBZ and PDF files)
 	PageCount *int
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata
 	Identifiers []ParsedIdentifier

@@ -106,6 +106,7 @@ func filterBar(baseURL, currentTypes, currentCovers string) string {
 		filterLink(baseURL, "types", "epub", currentTypes, currentCovers, "EPUB"),
 		filterLink(baseURL, "types", "cbz", currentTypes, currentCovers, "CBZ"),
 		filterLink(baseURL, "types", "m4b", currentTypes, currentCovers, "M4B"),
+		filterLink(baseURL, "types", "pdf", currentTypes, currentCovers, "PDF"),
 	}
 
 	// Build cover toggle links

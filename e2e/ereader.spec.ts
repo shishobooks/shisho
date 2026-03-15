@@ -15,6 +15,7 @@ interface TestData {
   userId: number;
   libraryId: number;
   bookId: number;
+  pdfBookId: number;
   apiKey: string;
   seriesId: number;
   authorId: number;
@@ -88,6 +89,17 @@ test.describe("eReader Browser UI", () => {
       },
     });
 
+    const pdfBookResp = await apiContext.post("/test/books", {
+      data: {
+        libraryId: library.id,
+        title: "PDF Document Test",
+        fileType: "pdf",
+        authorId: author.id,
+        pageCount: 42,
+      },
+    });
+    const pdfBook = (await pdfBookResp.json()) as { id: number };
+
     // Create API key with eReader permission
     const apiKeyResp = await apiContext.post("/test/api-keys", {
       data: {
@@ -102,6 +114,7 @@ test.describe("eReader Browser UI", () => {
       userId: user.id,
       libraryId: library.id,
       bookId: book1.id,
+      pdfBookId: pdfBook.id,
       apiKey: apiKeyData.key,
       seriesId: series.id,
       authorId: author.id,
@@ -216,6 +229,7 @@ test.describe("eReader Browser UI", () => {
       await expect(page.getByText("Test Book 1")).toBeVisible();
       await expect(page.getByText("Test Book 2")).toBeVisible();
       await expect(page.getByText("Audiobook Test")).toBeVisible();
+      await expect(page.getByText("PDF Document Test")).toBeVisible();
     });
 
     test("shows file type filter options", async ({ page }) => {
@@ -232,6 +246,9 @@ test.describe("eReader Browser UI", () => {
       await expect(
         page.locator(".filter-btn", { hasText: "M4B" }),
       ).toBeVisible();
+      await expect(
+        page.locator(".filter-btn", { hasText: "PDF" }),
+      ).toBeVisible();
     });
 
     test("can filter by file type", async ({ page }) => {
@@ -239,6 +256,17 @@ test.describe("eReader Browser UI", () => {
         `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all?types=epub`,
       );
       await expect(page.getByText("Test Book 1")).toBeVisible();
+      await expect(page.getByText("Test Book 2")).not.toBeVisible();
+      await expect(page.getByText("Audiobook Test")).not.toBeVisible();
+      await expect(page.getByText("PDF Document Test")).not.toBeVisible();
+    });
+
+    test("can filter by PDF file type", async ({ page }) => {
+      await page.goto(
+        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all?types=pdf`,
+      );
+      await expect(page.getByText("PDF Document Test")).toBeVisible();
+      await expect(page.getByText("Test Book 1")).not.toBeVisible();
       await expect(page.getByText("Test Book 2")).not.toBeVisible();
       await expect(page.getByText("Audiobook Test")).not.toBeVisible();
     });
@@ -284,6 +312,7 @@ test.describe("eReader Browser UI", () => {
       ).toBeVisible();
       await expect(page.getByText("Test Book 1")).toBeVisible();
       await expect(page.getByText("Test Book 2")).toBeVisible();
+      await expect(page.getByText("PDF Document Test")).toBeVisible();
     });
   });
 
@@ -329,6 +358,19 @@ test.describe("eReader Browser UI", () => {
       );
       await expect(
         page.getByRole("link", { name: /Download EPUB/i }),
+      ).toBeVisible();
+    });
+
+    test("shows PDF book details and download link", async ({ page }) => {
+      await page.goto(
+        `/ereader/key/${testData.apiKey}/download/${testData.pdfBookId}`,
+      );
+      await expect(
+        page.getByRole("heading", { name: "PDF Document Test" }),
+      ).toBeVisible();
+      await expect(page.getByText("By: Test Author")).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: /Download PDF/i }),
       ).toBeVisible();
     });
   });

@@ -26,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
+	"github.com/shishobooks/shisho/pkg/pdf"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
@@ -333,6 +334,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 				models.FileTypeEPUB: {},
 				models.FileTypeCBZ:  {},
 				models.FileTypeM4B:  {},
+				models.FileTypePDF:  {},
 			}
 			if w.pluginManager != nil {
 				for ext := range w.pluginManager.RegisteredFileExtensions() {
@@ -2538,6 +2540,8 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 		metadata, err = cbz.Parse(path)
 	case models.FileTypeM4B:
 		metadata, err = mp4.Parse(path)
+	case models.FileTypePDF:
+		metadata, err = pdf.Parse(path)
 	default:
 		// Check for plugin file parser
 		if w.pluginManager != nil {
@@ -3184,6 +3188,8 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		metadata, parseErr = epub.Parse(file.Filepath)
 	case models.FileTypeCBZ:
 		metadata, parseErr = cbz.Parse(file.Filepath)
+	case models.FileTypePDF:
+		metadata, parseErr = pdf.Parse(file.Filepath)
 	default:
 		return nil // Unknown file type, skip
 	}
