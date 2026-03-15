@@ -165,7 +165,12 @@ When updating the Node.js version, update **all** of these locations:
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
-- Whenever fixing a bug, test-driven development should be employed: write a test for the bug, confirm that it fails, fix the bug, and confirm that it passes.
+- **Follow Red-Green-Refactor TDD for bug fixes and new features.** Do NOT write the implementation and test at the same time. The steps must be sequential:
+  1. **Red:** Write the test first. Run it and confirm it **fails** (proving the test actually catches the bug or asserts the new behavior).
+  2. **Green:** Write the minimal implementation to make the test pass. Run the test and confirm it **passes**.
+  3. **Refactor:** Clean up the implementation if needed, re-running tests to ensure they still pass.
+
+  Skipping the Red step means you can't be sure the test is valid — it might pass regardless of the fix.
 
 ## Git Conventions
 
