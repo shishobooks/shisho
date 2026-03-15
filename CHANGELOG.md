@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-03-15
+
+### Features
+- Replace job status polling with Server-Sent Events (#15)
+- Add configurable session duration (#16)
+- Add richer search results with new fields, coverUrl, and passthrough pattern (#14)
+- Add first-class PDF support with metadata extraction and cover generation (#12)
+- Add filesystem watcher with debounced rescans (#11)
+
+
 ## [0.0.19] - 2026-03-10
 
 ### Features
