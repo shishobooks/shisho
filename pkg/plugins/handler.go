@@ -1473,7 +1473,7 @@ func downloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, log
 		return false
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10 MB max
 	if err != nil {
 		log.Warn("failed to read cover response body", logger.Data{"url": md.CoverURL, "error": err.Error()})
 		return false
