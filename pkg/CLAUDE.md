@@ -35,6 +35,15 @@ Each domain (books, jobs, libraries, chapters) has:
 - Main job type: scan job that processes ebook/audiobook files
 - Extracts metadata from EPUB (via `pkg/epub/`) and M4B files (via `pkg/mp4/`)
 - Generates cover images with filename-based storage strategy
+- **Library monitor** (`monitor.go`): watches library paths for filesystem changes via fsnotify, debounces events, and triggers targeted single-file rescans
+
+### scanInternal and File Organization
+
+**CRITICAL — `scanInternal(FilePath)` defers file organization.** When scanning a new file by path, `scanFileCore` is called with `isResync=false`, which skips the book organization step. The caller is responsible for running organization afterward if the library has `OrganizeFileStructure` enabled.
+
+- **`ProcessScanJob`** handles this by collecting book IDs into `booksToOrganize` and running organization in a batch after all files are scanned.
+- **`Monitor.processPendingEvents`** handles this by collecting book IDs from `FileCreated` results and calling `organizeBooks()` after processing all events.
+- **Any new caller of `scanInternal(FilePath)`** must also handle organization, or files will be left unorganized in the library root.
 
 ### File Types
 

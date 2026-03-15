@@ -44,6 +44,28 @@ Every setting can be set via an environment variable using the uppercase, unders
 | `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background worker processes |
 | `job_retention_days` | `JOB_RETENTION_DAYS` | `30` | Days to retain completed/failed jobs before cleanup. Set to `0` to disable |
 
+### Library Monitor
+
+| Setting | Env Variable | Default | Description |
+|---------|-------------|---------|-------------|
+| `library_monitor_enabled` | `LIBRARY_MONITOR_ENABLED` | `true` | Enable real-time filesystem monitoring of library paths. When enabled, file changes are detected automatically and trigger targeted rescans. Disable if your library is on a network drive that doesn't support inotify/FSEvents. On Linux, large libraries may require increasing `fs.inotify.max_user_watches` (see below) |
+| `library_monitor_delay_seconds` | `LIBRARY_MONITOR_DELAY_SECONDS` | `60` | Seconds to wait before processing detected changes. Additional changes during this window reset the timer, batching rapid changes into a single rescan |
+
+:::tip[Linux inotify watch limits]
+On Linux, the monitor uses inotify which has a per-user watch limit (default 8192 on some distros). Large libraries with many subdirectories may exceed this. To increase it:
+
+```bash
+# Temporary (until reboot)
+sudo sysctl -w fs.inotify.max_user_watches=524288
+
+# Permanent
+echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-inotify.conf
+sudo sysctl --system
+```
+
+macOS (FSEvents) and Docker containers typically don't need this adjustment.
+:::
+
 ### Cache
 
 | Setting | Env Variable | Default | Description |

@@ -126,7 +126,9 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	librariesGroup := e.Group("/libraries")
 	librariesGroup.Use(authMiddleware.Authenticate)
 	librariesGroup.Use(authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationRead))
-	libraries.RegisterRoutesWithGroup(librariesGroup, db, authMiddleware)
+	libraries.RegisterRoutesWithGroup(librariesGroup, db, authMiddleware, libraries.RegisterRoutesOptions{
+		OnLibraryChanged: w.RefreshMonitorWatches,
+	})
 	plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), pm, authMiddleware)
 
 	// Jobs routes

@@ -56,6 +56,8 @@ type Worker struct {
 	pluginService    *plugins.Service
 	pluginManager    *plugins.Manager
 
+	monitor *Monitor
+
 	queue           chan *models.Job
 	shutdown        chan struct{}
 	doneFetching    chan struct{}
@@ -133,6 +135,12 @@ func (w *Worker) Start() {
 		go w.cleanupOldJobs()
 	}
 	go w.checkPluginUpdates()
+	if w.config.LibraryMonitorEnabled {
+		w.monitor = newMonitor(w)
+		w.monitor.start()
+	} else {
+		w.log.Info("library monitor disabled")
+	}
 }
 
 func (w *Worker) fetchJobs() {
@@ -357,7 +365,47 @@ func (w *Worker) checkPluginUpdates() {
 	}
 }
 
+// cleanupOrphanedEntities removes series, people, genres, and tags
+// that are no longer referenced by any books.
+func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger) {
+	if n, err := w.seriesService.CleanupOrphanedSeries(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned series")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned series", logger.Data{"count": n})
+	}
+
+	if n, err := w.personService.CleanupOrphanedPeople(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned people")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned people", logger.Data{"count": n})
+	}
+
+	if n, err := w.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned genres")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned genres", logger.Data{"count": n})
+	}
+
+	if n, err := w.tagService.CleanupOrphanedTags(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned tags")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned tags", logger.Data{"count": n})
+	}
+}
+
+// RefreshMonitorWatches signals the filesystem monitor to reload library paths.
+// Safe to call even if the monitor is disabled (no-op).
+func (w *Worker) RefreshMonitorWatches() {
+	if w.monitor != nil {
+		w.monitor.RefreshWatches()
+	}
+}
+
 func (w *Worker) Shutdown() {
+	if w.monitor != nil {
+		w.monitor.stop()
+	}
+
 	close(w.shutdown)
 
 	<-w.doneFetching

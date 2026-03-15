@@ -115,16 +115,21 @@ func isMainFileExtension(ext string) bool {
 	return ok
 }
 
+// shishoSpecialFilePatterns are glob patterns for shisho-generated files (covers, sidecars).
+// These are used both to skip special files during scanning and to treat them as ignorable
+// during directory cleanup after book deletion.
+var shishoSpecialFilePatterns = []string{
+	"*.cover.*",       // individual cover files: book.epub.cover.jpg
+	"*.metadata.json", // sidecar files: book.epub.metadata.json, Book Title.metadata.json
+}
+
 // isShishoSpecialFile returns true if the filename is a shisho-specific file.
 func isShishoSpecialFile(filename string) bool {
 	lower := strings.ToLower(filename)
-	// Exclude individual cover files: *.cover.* pattern
-	if strings.Contains(lower, ".cover.") {
-		return true
-	}
-	// Exclude metadata files: *.metadata.json
-	if strings.HasSuffix(lower, ".metadata.json") {
-		return true
+	for _, pattern := range shishoSpecialFilePatterns {
+		if matched, _ := filepath.Match(pattern, lower); matched {
+			return true
+		}
 	}
 	return false
 }
@@ -459,37 +464,8 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		}
 	}
 
-	// Cleanup orphaned series (soft delete series with no books)
-	deletedCount, err := w.seriesService.CleanupOrphanedSeries(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned series", err, nil)
-	} else if deletedCount > 0 {
-		jobLog.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
-	}
-
-	// Cleanup orphaned people (delete people with no authors or narrators)
-	deletedPeopleCount, err := w.personService.CleanupOrphanedPeople(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned people", err, nil)
-	} else if deletedPeopleCount > 0 {
-		jobLog.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
-	}
-
-	// Cleanup orphaned genres (delete genres with no books)
-	deletedGenresCount, err := w.genreService.CleanupOrphanedGenres(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned genres", err, nil)
-	} else if deletedGenresCount > 0 {
-		jobLog.Info("cleaned up orphaned genres", logger.Data{"count": deletedGenresCount})
-	}
-
-	// Cleanup orphaned tags (delete tags with no books)
-	deletedTagsCount, err := w.tagService.CleanupOrphanedTags(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned tags", err, nil)
-	} else if deletedTagsCount > 0 {
-		jobLog.Info("cleaned up orphaned tags", logger.Data{"count": deletedTagsCount})
-	}
+	// Cleanup orphaned entities (series, people, genres, tags)
+	w.cleanupOrphanedEntities(ctx, logger.FromContext(ctx))
 
 	// Rebuild FTS indexes after scan completes
 	if w.searchService != nil {

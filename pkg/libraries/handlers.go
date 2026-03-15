@@ -2,6 +2,7 @@ package libraries
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -14,8 +15,9 @@ import (
 )
 
 type handler struct {
-	libraryService *Service
-	jobService     *jobs.Service
+	libraryService   *Service
+	jobService       *jobs.Service
+	onLibraryChanged func() // optional callback when libraries are created/updated
 }
 
 func (h *handler) create(c echo.Context) error {
@@ -78,6 +80,10 @@ func (h *handler) create(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if h.onLibraryChanged != nil {
+		h.onLibraryChanged()
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
@@ -206,6 +212,11 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Notify monitor of library changes (paths added/removed, library deleted/restored).
+	if h.onLibraryChanged != nil && (opts.UpdateLibraryPaths || slices.Contains(opts.Columns, "deleted_at")) {
+		h.onLibraryChanged()
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
