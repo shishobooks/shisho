@@ -537,6 +537,173 @@ func TestRunMetadataEnrich_NoHook(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
 }
 
+func TestRunMetadataSearch_NewFields(t *testing.T) {
+	t.Parallel()
+	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
+	ctx := context.Background()
+
+	searchCtx := map[string]interface{}{
+		"query": "My Book",
+		"book": map[string]interface{}{
+			"title":   "My Book",
+			"authors": []string{"Author A"},
+		},
+		"file": map[string]interface{}{
+			"fileType": "epub",
+			"filePath": "/library/book.epub",
+		},
+	}
+
+	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Results, 1)
+
+	result := resp.Results[0]
+
+	// Existing fields still work
+	assert.Equal(t, "Search: My Book", result.Title)
+	assert.Equal(t, []string{"Search Author"}, result.Authors)
+	assert.Equal(t, "Search Publisher", result.Publisher)
+
+	// New scalar fields
+	assert.Equal(t, "A Search Subtitle", result.Subtitle)
+	assert.Equal(t, "Search Series", result.Series)
+	require.NotNil(t, result.SeriesNumber)
+	assert.InDelta(t, 2.5, *result.SeriesNumber, 0.001)
+
+	// New array fields
+	assert.Equal(t, []string{"Fiction", "Fantasy"}, result.Genres)
+	assert.Equal(t, []string{"epic", "adventure"}, result.Tags)
+	assert.Equal(t, []string{"Narrator One", "Narrator Two"}, result.Narrators)
+
+	// Embedded metadata
+	require.NotNil(t, result.Metadata)
+	assert.Equal(t, "Search: My Book", result.Metadata.Title)
+	assert.Equal(t, "A Search Subtitle", result.Metadata.Subtitle)
+	assert.Equal(t, "Search Series", result.Metadata.Series)
+	require.NotNil(t, result.Metadata.SeriesNumber)
+	assert.InDelta(t, 2.5, *result.Metadata.SeriesNumber, 0.001)
+	assert.Equal(t, []string{"Fiction", "Fantasy"}, result.Metadata.Genres)
+	assert.Equal(t, []string{"epic", "adventure"}, result.Metadata.Tags)
+	assert.Equal(t, []string{"Narrator One", "Narrator Two"}, result.Metadata.Narrators)
+	assert.Equal(t, "https://example.com/cover.jpg", result.Metadata.CoverURL)
+	require.Len(t, result.Metadata.Authors, 1)
+	assert.Equal(t, "Search Author", result.Metadata.Authors[0].Name)
+	assert.Equal(t, "writer", result.Metadata.Authors[0].Role)
+}
+
+func TestRunMetadataEnrich_CoverUrl(t *testing.T) {
+	t.Parallel()
+	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
+	ctx := context.Background()
+
+	enrichCtx := map[string]interface{}{
+		"selectedResult": map[string]interface{}{
+			"internalId": 42,
+			"query":      "My Book",
+		},
+		"book": map[string]interface{}{
+			"title":   "My Book",
+			"authors": []string{"Author A"},
+		},
+		"file": map[string]interface{}{
+			"fileType": "epub",
+			"filePath": "/library/book.epub",
+		},
+	}
+
+	result, err := mgr.RunMetadataEnrich(ctx, rt, enrichCtx)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Modified)
+	require.NotNil(t, result.Metadata)
+	assert.Equal(t, "https://example.com/enriched-cover.jpg", result.Metadata.CoverURL)
+}
+
+func TestRunMetadataSearch_NoNewFields(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	destDir := filepath.Join(pluginDir, "test", "minimal-enricher")
+	err := os.MkdirAll(destDir, 0755)
+	require.NoError(t, err)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "minimal-enricher",
+  "name": "Minimal Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Minimal",
+      "fileTypes": ["epub"],
+      "fields": ["title"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(context) {
+        return { results: [{ title: "Just Title" }] };
+      },
+      enrich: function(context) {
+        return { modified: false };
+      }
+    }
+  };
+})();`
+
+	err = os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
+	require.NoError(t, err)
+
+	manager := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          "minimal-enricher",
+		Name:        "Minimal Enricher",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err = service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	err = manager.LoadPlugin(ctx, "test", "minimal-enricher")
+	require.NoError(t, err)
+
+	rt := manager.GetRuntime("test", "minimal-enricher")
+	require.NotNil(t, rt)
+
+	searchCtx := map[string]interface{}{
+		"query": "Test",
+		"book":  map[string]interface{}{"title": "Test"},
+		"file":  map[string]interface{}{"fileType": "epub"},
+	}
+
+	resp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+
+	result := resp.Results[0]
+	assert.Equal(t, "Just Title", result.Title)
+	assert.Empty(t, result.Subtitle)
+	assert.Empty(t, result.Series)
+	assert.Nil(t, result.SeriesNumber)
+	assert.Nil(t, result.Genres)
+	assert.Nil(t, result.Tags)
+	assert.Nil(t, result.Narrators)
+	assert.Nil(t, result.Metadata)
+}
+
 func TestRunOutputGenerator_NoHook(t *testing.T) {
 	// Use the converter plugin which has no generator hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")

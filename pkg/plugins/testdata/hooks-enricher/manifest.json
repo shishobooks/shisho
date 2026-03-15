@@ -7,7 +7,7 @@
     "metadataEnricher": {
       "description": "Test enricher",
       "fileTypes": ["epub"],
-      "fields": ["title", "authors", "description", "genres", "tags", "cover"]
+      "fields": ["title", "subtitle", "authors", "narrators", "description", "genres", "tags", "series", "seriesNumber", "cover", "publisher", "identifiers", "url", "releaseDate"]
     }
   }
 }
