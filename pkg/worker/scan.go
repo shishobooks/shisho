@@ -116,13 +116,10 @@ func isMainFileExtension(ext string) bool {
 	return ok
 }
 
-// shishoSpecialFilePatterns aliases the shared patterns from fileutils.
-var shishoSpecialFilePatterns = fileutils.ShishoSpecialFilePatterns
-
 // isShishoSpecialFile returns true if the filename is a shisho-specific file.
 func isShishoSpecialFile(filename string) bool {
 	lower := strings.ToLower(filename)
-	for _, pattern := range shishoSpecialFilePatterns {
+	for _, pattern := range fileutils.ShishoSpecialFilePatterns {
 		if matched, _ := filepath.Match(pattern, lower); matched {
 			return true
 		}
