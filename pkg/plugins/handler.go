@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"database/sql"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1333,6 +1334,13 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		allResults = append(allResults, resp.Results...)
 	}
 
+	// Strip binary cover data from search results — covers are displayed via imageUrl
+	for i := range allResults {
+		if allResults[i].Metadata != nil {
+			allResults[i].Metadata.CoverData = nil
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"results": allResults,
 	})
@@ -1433,6 +1441,47 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, updatedBook)
+}
+
+// downloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
+// Returns true if the download succeeded, false otherwise. Skips if CoverData is already set (precedence rule).
+func downloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, log logger.Logger) bool {
+	if len(md.CoverData) > 0 || md.CoverURL == "" {
+		return false
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, md.CoverURL, nil)
+	if err != nil {
+		log.Warn("failed to create cover download request", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Warn("failed to download cover from URL", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+	defer resp.Body.Close()
+
+	contentType := resp.Header.Get("Content-Type")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(contentType, "image/") {
+		log.Warn("cover URL returned non-image response", logger.Data{
+			"url":          md.CoverURL,
+			"status":       resp.StatusCode,
+			"content_type": contentType,
+		})
+		return false
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10 MB max
+	if err != nil {
+		log.Warn("failed to read cover response body", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+
+	md.CoverData = body
+	md.CoverMimeType = contentType
+	return true
 }
 
 // applyEnrichment applies enriched metadata to a book, respecting field filtering.
@@ -1704,7 +1753,12 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Cover image (applied to target file)
+	// Cover image: download from URL if coverData is empty and coverUrl is set
+	if md.CoverURL != "" && isAllowed("cover") && targetFile != nil {
+		downloadCoverFromURL(ctx, md, log)
+	}
+
+	// Apply cover data (from coverData or downloaded from coverUrl)
 	if len(md.CoverData) > 0 && isAllowed("cover") && targetFile != nil {
 		coverDir := book.Filepath
 		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"

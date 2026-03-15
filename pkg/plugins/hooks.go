@@ -141,8 +141,15 @@ type SearchResult struct {
 	ImageURL     string                       `json:"image_url"`
 	ReleaseDate  string                       `json:"release_date"`
 	Publisher    string                       `json:"publisher"`
+	Subtitle     string                       `json:"subtitle"`
+	Series       string                       `json:"series"`
+	SeriesNumber *float64                     `json:"series_number,omitempty"`
+	Genres       []string                     `json:"genres"`
+	Tags         []string                     `json:"tags"`
+	Narrators    []string                     `json:"narrators"`
 	Identifiers  []mediafile.ParsedIdentifier `json:"identifiers"`
 	ProviderData interface{}                  `json:"provider_data"` // Opaque data passed back to enrich()
+	Metadata     *mediafile.ParsedMetadata    `json:"metadata,omitempty"`
 	// Added by the caller, not the plugin:
 	PluginScope    string   `json:"plugin_scope"`
 	PluginID       string   `json:"plugin_id"`
@@ -414,8 +421,35 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			ImageURL:    getStringField(itemObj, "imageUrl"),
 			ReleaseDate: getStringField(itemObj, "releaseDate"),
 			Publisher:   getStringField(itemObj, "publisher"),
+			Subtitle:    getStringField(itemObj, "subtitle"),
+			Series:      getStringField(itemObj, "series"),
 			PluginScope: pluginScope,
 			PluginID:    pluginID,
+		}
+
+		// seriesNumber -> *float64
+		seriesNumVal := itemObj.Get("seriesNumber")
+		if seriesNumVal != nil && !goja.IsUndefined(seriesNumVal) && !goja.IsNull(seriesNumVal) {
+			f := seriesNumVal.ToFloat()
+			sr.SeriesNumber = &f
+		}
+
+		// genres -> []string
+		genresVal := itemObj.Get("genres")
+		if genresVal != nil && !goja.IsUndefined(genresVal) && !goja.IsNull(genresVal) {
+			sr.Genres = parseStringArray(vm, genresVal)
+		}
+
+		// tags -> []string
+		tagsVal := itemObj.Get("tags")
+		if tagsVal != nil && !goja.IsUndefined(tagsVal) && !goja.IsNull(tagsVal) {
+			sr.Tags = parseStringArray(vm, tagsVal)
+		}
+
+		// narrators -> []string
+		narratorsVal := itemObj.Get("narrators")
+		if narratorsVal != nil && !goja.IsUndefined(narratorsVal) && !goja.IsNull(narratorsVal) {
+			sr.Narrators = parseStringArray(vm, narratorsVal)
 		}
 
 		// authors -> []string
@@ -434,6 +468,15 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 		providerDataVal := itemObj.Get("providerData")
 		if providerDataVal != nil && !goja.IsUndefined(providerDataVal) && !goja.IsNull(providerDataVal) {
 			sr.ProviderData = providerDataVal.Export()
+		}
+
+		// metadata -> *ParsedMetadata (optional, for passthrough pattern)
+		metadataVal := itemObj.Get("metadata")
+		if metadataVal != nil && !goja.IsUndefined(metadataVal) && !goja.IsNull(metadataVal) {
+			md, mErr := parseParsedMetadata(vm, metadataVal)
+			if mErr == nil {
+				sr.Metadata = md
+			}
 		}
 
 		results = append(results, sr)
@@ -460,6 +503,7 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 	md.Imprint = getStringField(obj, "imprint")
 	md.URL = getStringField(obj, "url")
 	md.CoverMimeType = getStringField(obj, "coverMimeType")
+	md.CoverURL = getStringField(obj, "coverUrl")
 	md.DataSource = getStringField(obj, "dataSource")
 
 	// seriesNumber -> *float64

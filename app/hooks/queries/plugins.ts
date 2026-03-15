@@ -507,11 +507,33 @@ export interface PluginSearchResult {
   image_url?: string;
   release_date?: string;
   publisher?: string;
+  subtitle?: string;
+  series?: string;
+  series_number?: number;
+  genres?: string[];
+  tags?: string[];
+  narrators?: string[];
   identifiers?: { type: string; value: string }[];
   provider_data?: unknown;
   plugin_scope: string;
   plugin_id: string;
   disabled_fields?: string[];
+  /** Display-oriented subset of ParsedMetadata. Only includes fields relevant to search result display. */
+  metadata?: {
+    title?: string;
+    subtitle?: string;
+    authors?: { name: string; role?: string }[];
+    narrators?: string[];
+    series?: string;
+    series_number?: number;
+    genres?: string[];
+    tags?: string[];
+    description?: string;
+    publisher?: string;
+    release_date?: string;
+    cover_url?: string;
+    identifiers?: { type: string; value: string }[];
+  };
 }
 
 export interface PluginSearchResponse {

@@ -46,6 +46,8 @@ export interface ParsedMetadata {
   releaseDate?: string;
   /** MIME type of cover image (e.g., "image/jpeg"). */
   coverMimeType?: string;
+  /** Public URL for cover image. Server downloads at apply time. Lower precedence than coverData. */
+  coverUrl?: string;
   /** Cover image data as ArrayBuffer. */
   coverData?: ArrayBuffer;
   /** 0-indexed page number for CBZ cover. */

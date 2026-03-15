@@ -279,6 +279,7 @@ The full set of fields you can return:
 | `coverData` | `ArrayBuffer` | Cover image data |
 | `coverMimeType` | `string` | Cover MIME type (e.g., `image/jpeg`) |
 | `coverPage` | `number` | Cover page index (0-indexed, for page-based formats) |
+| `coverUrl` | `string` | Public URL for cover image. Server downloads at apply time. |
 | `duration` | `number` | Audiobook duration in seconds |
 | `bitrateBps` | `number` | Audio bitrate in bits per second |
 | `pageCount` | `number` | Page count |
@@ -287,7 +288,7 @@ The full set of fields you can return:
 
 :::note[Field groupings for enrichers]
 When declaring `fields` in an enricher manifest, some return fields are grouped under a single logical name:
-- **`cover`** controls `coverData`, `coverMimeType`, and `coverPage`
+- **`cover`** controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - **`series`** controls both `series` and `seriesNumber`
 :::
 
@@ -304,33 +305,66 @@ When declaring `fields` in an enricher manifest, some return fields are grouped 
 
 ### Metadata Enricher
 
-Enhances existing book metadata from external APIs. Runs after file parsing during library scans.
+Enhances existing book metadata from external APIs. The enricher has two hooks:
+
+1. **`search(context)`** — Returns candidate results for the user to choose from
+2. **`enrich(context)`** — Fetches full metadata for the selected result
 
 **Timeout:** 1 minute
+
+#### Search Results
+
+The `search()` hook returns results with display fields for comparing candidates:
 
 ```javascript
 var plugin = (function() {
   return {
     metadataEnricher: {
-      enrich: function(context) {
-        // context.book  - book metadata (title, authors, etc.)
-        // context.file  - file metadata (identifiers, etc.)
-
+      search: function(context) {
         var apiKey = shisho.config.get("apiKey");
-        var query = shisho.url.encodeURIComponent(context.book.title);
+        var query = shisho.url.encodeURIComponent(context.query);
         var resp = shisho.http.fetch(
           "https://api.example.com/search?q=" + query,
           { headers: { "Authorization": "Bearer " + apiKey } }
         );
 
-        if (!resp.ok) {
-          return { modified: false };
-        }
+        if (!resp.ok) return { results: [] };
+
+        var data = resp.json();
+        return {
+          results: data.items.map(function(item) {
+            return {
+              title: item.title,
+              subtitle: item.subtitle,
+              authors: item.authors,
+              narrators: item.narrators,
+              series: item.seriesName,
+              seriesNumber: item.seriesNumber,
+              genres: item.genres,
+              tags: item.tags,
+              description: item.description,
+              imageUrl: item.coverUrl,
+              releaseDate: item.publishDate,
+              publisher: item.publisher,
+              identifiers: [{ type: "isbn_13", value: item.isbn }],
+              providerData: { id: item.id }
+            };
+          })
+        };
+      },
+
+      enrich: function(context) {
+        var resp = shisho.http.fetch(
+          "https://api.example.com/books/" + context.selectedResult.id,
+          {}
+        );
+        if (!resp.ok) return { modified: false };
 
         var data = resp.json();
         return {
           modified: true,
           metadata: {
+            title: data.title,
             description: data.description,
             genres: data.genres
           }
@@ -340,6 +374,100 @@ var plugin = (function() {
   };
 })();
 ```
+
+**Search result fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `string` | **Required.** Book title |
+| `subtitle` | `string` | Subtitle or edition info |
+| `authors` | `string[]` | Author names |
+| `narrators` | `string[]` | Narrator names (audiobooks) |
+| `series` | `string` | Series name |
+| `seriesNumber` | `number` | Position in series |
+| `genres` | `string[]` | Genre classification |
+| `tags` | `string[]` | Freeform labels |
+| `description` | `string` | Book description |
+| `imageUrl` | `string` | Cover thumbnail URL for display |
+| `releaseDate` | `string` | Publication date |
+| `publisher` | `string` | Publisher name |
+| `identifiers` | `Array<{type, value}>` | ISBNs, ASINs, etc. |
+| `providerData` | `unknown` | Opaque data passed back to `enrich()` |
+| `metadata` | `ParsedMetadata` | Full metadata for passthrough (see below) |
+
+All fields except `title` are optional. The more fields you provide, the easier it is for users to pick the correct match.
+
+#### Cover Images: `coverUrl` vs `coverData`
+
+`ParsedMetadata` supports two ways to provide cover images:
+
+| Field | Use when | Works with passthrough? |
+|-------|----------|------------------------|
+| `coverUrl` | URL is publicly accessible (no auth required) | Yes |
+| `coverData` | URL requires authentication; download via `shisho.http.fetch()` | No (binary data doesn't survive JSON) |
+
+**Precedence:** `coverData` > `coverUrl`. If both are set, `coverData` wins.
+
+For authenticated covers, use `coverData` in the `enrich()` step:
+
+```javascript
+enrich: function(context) {
+  var resp = shisho.http.fetch("https://api.example.com/cover/" + context.selectedResult.id, {
+    headers: { "Authorization": "Bearer " + shisho.config.get("apiKey") }
+  });
+  return {
+    modified: true,
+    metadata: {
+      coverData: resp.arrayBuffer(),
+      coverMimeType: "image/jpeg"
+    }
+  };
+}
+```
+
+#### Passthrough Pattern
+
+If your API returns all metadata at search time, you can avoid a second API call in `enrich()` by including a `metadata` field in search results:
+
+```javascript
+search: function(context) {
+  var resp = shisho.http.fetch("https://api.example.com/search?q=" + context.query, {});
+  var data = resp.json();
+
+  return {
+    results: data.items.map(function(item) {
+      var md = {
+        title: item.title,
+        authors: [{ name: item.author, role: "" }],
+        description: item.description,
+        genres: item.genres,
+        coverUrl: item.coverImageUrl,
+        identifiers: [{ type: "isbn_13", value: item.isbn }]
+      };
+
+      return {
+        title: item.title,
+        authors: [item.author],
+        description: item.description,
+        imageUrl: item.coverImageUrl,
+        providerData: md,
+        metadata: md
+      };
+    })
+  };
+},
+
+enrich: function(context) {
+  // Passthrough — metadata was already provided at search time
+  return { modified: true, metadata: context.selectedResult };
+}
+```
+
+The `metadata` field on search results is used for display only — the actual enrichment still goes through `enrich()`. Store whatever `enrich()` needs in `providerData`.
+
+For authenticated covers with passthrough, use a partial passthrough: return text metadata at search time, then download just the cover in `enrich()`.
+
+#### Enrichment Behavior
 
 Return `{ modified: false }` to skip updating metadata for a book.
 
