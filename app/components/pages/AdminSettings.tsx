@@ -207,6 +207,20 @@ const AdminSettings = () => {
             />
           </div>
         </div>
+
+        {/* Authentication Settings */}
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Authentication
+          </h2>
+          <div className="space-y-0">
+            <ConfigRow
+              description="How long login sessions remain valid"
+              label="Session Duration"
+              value={`${config.session_duration_days} days`}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

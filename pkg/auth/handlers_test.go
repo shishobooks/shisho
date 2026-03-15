@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/binder"
@@ -106,7 +107,7 @@ func newTestContext(t *testing.T, payload, method, path string) (echo.Context, *
 func TestHandler_Setup_RejectsWhenUsersExist(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
-	svc := NewService(db, "test-jwt-secret")
+	svc := NewService(db, "test-jwt-secret", 30*24*time.Hour)
 	h := &handler{authService: svc}
 
 	// First create a user using raw SQL to simulate existing user
@@ -132,7 +133,7 @@ func TestHandler_Login_ReturnsMustChangePassword(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)
-	svc := NewService(db, "test-jwt-secret")
+	svc := NewService(db, "test-jwt-secret", 30*24*time.Hour)
 	h := &handler{authService: svc}
 
 	hashedPassword, err := HashPassword("securepassword123")

@@ -1,13 +1,15 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/labstack/echo/v4"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all auth routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, jwtSecret string) *Service {
-	authService := NewService(db, jwtSecret)
+func RegisterRoutes(e *echo.Echo, db *bun.DB, jwtSecret string, sessionDuration time.Duration) *Service {
+	authService := NewService(db, jwtSecret, sessionDuration)
 
 	h := &handler{
 		authService: authService,

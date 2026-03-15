@@ -68,7 +68,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager) 
 	}
 
 	// Register auth routes and get the auth service
-	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret)
+	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret, cfg.SessionDuration())
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register user and role management routes

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -70,7 +71,7 @@ func TestMiddlewareAuthenticate_BlocksWhenPasswordResetIsRequired(t *testing.T) 
 	t.Parallel()
 
 	db := setupMiddlewareDB(t)
-	authService := NewService(db, "test-secret")
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
 
@@ -102,7 +103,7 @@ func TestMiddlewareAuthenticate_AllowsSelfPasswordResetWhenRequired(t *testing.T
 	t.Parallel()
 
 	db := setupMiddlewareDB(t)
-	authService := NewService(db, "test-secret")
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
 
@@ -132,7 +133,7 @@ func TestMiddlewareAuthenticate_BlocksCrossUserPasswordReset(t *testing.T) {
 	t.Parallel()
 
 	db := setupMiddlewareDB(t)
-	authService := NewService(db, "test-secret")
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
 
@@ -167,7 +168,7 @@ func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
 	t.Parallel()
 
 	db := setupMiddlewareDB(t)
-	authService := NewService(db, "test-secret")
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
 

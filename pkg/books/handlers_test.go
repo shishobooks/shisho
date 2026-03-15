@@ -226,7 +226,7 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	cfg.CacheDir = t.TempDir()
 
 	// Create auth service and middleware
-	authService := auth.NewService(db, cfg.JWTSecret)
+	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register routes (pass nil for plugin manager in tests)
