@@ -3,8 +3,10 @@ package plugins
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1443,14 +1445,38 @@ func (h *handler) enrichMetadata(c echo.Context) error {
 	return c.JSON(http.StatusOK, updatedBook)
 }
 
-// downloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
+// DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
 // Returns true if the download succeeded, false otherwise. Skips if CoverData is already set (precedence rule).
-func downloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, log logger.Logger) bool {
+// The URL's domain (and any redirect domains) must be in the plugin's httpAccess.domains allowlist.
+func DownloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, allowedDomains []string, log logger.Logger) bool {
 	if len(md.CoverData) > 0 || md.CoverURL == "" {
 		return false
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	// Validate the cover URL domain against the plugin's allowed domains
+	parsedURL, err := url.Parse(md.CoverURL)
+	if err != nil {
+		log.Warn("failed to parse cover URL", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		log.Warn("cover URL uses unsupported scheme", logger.Data{"url": md.CoverURL, "scheme": parsedURL.Scheme})
+		return false
+	}
+	if err := validateDomain(parsedURL.Host, allowedDomains); err != nil {
+		log.Warn("cover URL domain not in plugin's httpAccess.domains", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if err := validateDomain(req.URL.Host, allowedDomains); err != nil {
+				return fmt.Errorf("redirect blocked: %w", err)
+			}
+			return nil
+		},
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, md.CoverURL, nil)
 	if err != nil {
 		log.Warn("failed to create cover download request", logger.Data{"url": md.CoverURL, "error": err.Error()})
@@ -1755,7 +1781,11 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 
 	// Cover image: download from URL if coverData is empty and coverUrl is set
 	if md.CoverURL != "" && isAllowed("cover") && targetFile != nil {
-		downloadCoverFromURL(ctx, md, log)
+		var allowedDomains []string
+		if manifest.Capabilities.HTTPAccess != nil {
+			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
+		}
+		DownloadCoverFromURL(ctx, md, allowedDomains, log)
 	}
 
 	// Apply cover data (from coverData or downloaded from coverUrl)

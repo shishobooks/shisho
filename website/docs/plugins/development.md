@@ -279,7 +279,7 @@ The full set of fields you can return:
 | `coverData` | `ArrayBuffer` | Cover image data |
 | `coverMimeType` | `string` | Cover MIME type (e.g., `image/jpeg`) |
 | `coverPage` | `number` | Cover page index (0-indexed, for page-based formats) |
-| `coverUrl` | `string` | Public URL for cover image. Server downloads at apply time. |
+| `coverUrl` | `string` | Public URL for cover image. Server downloads at apply time. Domain must be in `httpAccess.domains`. |
 | `duration` | `number` | Audiobook duration in seconds |
 | `bitrateBps` | `number` | Audio bitrate in bits per second |
 | `pageCount` | `number` | Page count |
@@ -407,6 +407,8 @@ All fields except `title` are optional. The more fields you provide, the easier 
 | `coverData` | URL requires authentication; download via `shisho.http.fetch()` | No (binary data doesn't survive JSON) |
 
 **Precedence:** `coverData` > `coverUrl`. If both are set, `coverData` wins.
+
+**Domain requirement:** When the server downloads a `coverUrl`, it validates the URL's domain against the plugin's `httpAccess.domains` allowlist — the same restriction that applies to `shisho.http.fetch()`. If the domain isn't allowed, or the plugin doesn't declare `httpAccess`, the download is rejected. Redirects are also validated against the allowlist.
 
 For authenticated covers, use `coverData` in the `enrich()` step:
 

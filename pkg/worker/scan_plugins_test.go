@@ -1558,7 +1558,7 @@ func TestFilterMetadataFields_SeriesNumberAliasForSeries(t *testing.T) {
 }
 
 // TestFilterMetadataFields_CoverGrouping verifies that the "cover" field declaration
-// controls coverData, coverMimeType, and coverPage.
+// controls coverData, coverMimeType, coverPage, and coverUrl.
 func TestFilterMetadataFields_CoverGrouping(t *testing.T) {
 	t.Parallel()
 
@@ -1568,6 +1568,7 @@ func TestFilterMetadataFields_CoverGrouping(t *testing.T) {
 		CoverData:     []byte("fake cover data"),
 		CoverMimeType: "image/jpeg",
 		CoverPage:     &coverPage,
+		CoverURL:      "https://example.com/cover.jpg",
 	}
 
 	// Cover field is declared but disabled
@@ -1584,6 +1585,7 @@ func TestFilterMetadataFields_CoverGrouping(t *testing.T) {
 	assert.Empty(t, filtered.CoverData, "coverData should be zeroed when 'cover' is disabled")
 	assert.Empty(t, filtered.CoverMimeType, "coverMimeType should be zeroed when 'cover' is disabled")
 	assert.Nil(t, filtered.CoverPage, "coverPage should be zeroed when 'cover' is disabled")
+	assert.Empty(t, filtered.CoverURL, "coverURL should be zeroed when 'cover' is disabled")
 }
 
 // TestFilterMetadataFields_AllFieldsEnabled verifies that when all fields are

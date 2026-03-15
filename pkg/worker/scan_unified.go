@@ -27,6 +27,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/shishobooks/shisho/pkg/pdf"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
@@ -2691,6 +2692,15 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		// Filter to only declared and enabled fields, log warnings for undeclared
 		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), logWarn)
 
+		// Download cover from URL if coverData is empty and coverUrl is set
+		if filteredMetadata.CoverURL != "" && len(filteredMetadata.CoverData) == 0 {
+			var allowedDomains []string
+			if rt.Manifest().Capabilities.HTTPAccess != nil {
+				allowedDomains = rt.Manifest().Capabilities.HTTPAccess.Domains
+			}
+			plugins.DownloadCoverFromURL(ctx, filteredMetadata, allowedDomains, log)
+		}
+
 		// Merge: first non-empty wins per field, tracking source per field
 		enricherSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
 		mergeEnrichedMetadata(&enrichedMeta, filteredMetadata, enricherSource)
@@ -2880,10 +2890,11 @@ func filterMetadataFields(
 
 	// Handle "cover" grouping
 	if !isFieldAllowed("cover") {
-		warnIfUndeclared("cover", len(result.CoverData) > 0 || result.CoverMimeType != "" || result.CoverPage != nil)
+		warnIfUndeclared("cover", len(result.CoverData) > 0 || result.CoverMimeType != "" || result.CoverPage != nil || result.CoverURL != "")
 		result.CoverData = nil
 		result.CoverMimeType = ""
 		result.CoverPage = nil
+		result.CoverURL = ""
 	}
 
 	// Handle individual fields
