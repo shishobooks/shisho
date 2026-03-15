@@ -196,6 +196,10 @@ func (m *Monitor) setupWatches(watcher *fsnotify.Watcher) (int, error) {
 		return 0, err
 	}
 
+	// Clear stale mappings so paths from removed/deleted libraries
+	// are ignored by findLibraryID even if OS-level watches linger.
+	m.pathToLibrary = make(map[string]int)
+
 	watchCount := 0
 	for _, lib := range libs {
 		for _, lp := range lib.LibraryPaths {
@@ -429,7 +433,15 @@ func (m *Monitor) processPendingEvents() {
 	// Skip processing if a scan job is already running — it will pick up all changes.
 	hasActive, err := m.worker.jobService.HasActiveJob(ctx, models.JobTypeScan, nil)
 	if err != nil {
-		m.log.Err(err).Warn("failed to check for active scan job")
+		m.log.Err(err).Warn("failed to check for active scan job, re-queuing events")
+		m.mu.Lock()
+		for path, ev := range events {
+			if _, ok := m.pending[path]; !ok {
+				m.pending[path] = ev
+			}
+		}
+		m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
+		m.mu.Unlock()
 		return
 	}
 	if hasActive {
