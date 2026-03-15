@@ -21,6 +21,33 @@ TYGO_OUTPUTS = $(shell yq '.packages[].output_path' tygo.yaml | tr '\n' ' ')
 check: tygo lint
 	+$(MAKE) -j3 test test\:js lint\:js
 
+# Like check but suppresses output on success — only shows output for failing steps.
+# Runs all steps concurrently (same as check), prints a one-line pass/fail summary.
+.PHONY: check\:quiet
+check\:quiet: tygo
+	@tmpdir=$$(mktemp -d); \
+	for step in lint test test:js lint:js; do \
+		( $(MAKE) --no-print-directory $$step >$$tmpdir/$$step.out 2>&1; echo $$? >$$tmpdir/$$step.rc ) & \
+	done; \
+	wait; \
+	failed=0; \
+	for step in lint test test:js lint:js; do \
+		rc=$$(cat $$tmpdir/$$step.rc); \
+		if [ $$rc -eq 0 ]; then \
+			printf '  \033[32mPASS\033[0m  %s\n' "$$step"; \
+		else \
+			printf '  \033[31mFAIL\033[0m  %s\n' "$$step"; \
+			cat $$tmpdir/$$step.out; \
+			failed=1; \
+		fi; \
+	done; \
+	rm -rf $$tmpdir; \
+	if [ $$failed -eq 1 ]; then \
+		printf '\n\033[31mcheck:quiet FAILED\033[0m\n'; exit 1; \
+	else \
+		printf '\n\033[32mcheck:quiet PASSED\033[0m\n'; \
+	fi
+
 .PHONY: build
 build:
 	CGO_ENABLED=0 go build -o $(BUILD_DIR)/api -installsuffix cgo $(LDFLAGS) ./cmd/api

@@ -279,6 +279,10 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		}
 	}
 
+	// Patterns for files that should be treated as ignorable during directory cleanup
+	// (shisho covers/sidecars + OS junk like .DS_Store).
+	cleanupIgnoredPatterns := append(shishoSpecialFilePatterns, w.config.SupplementExcludePatterns...)
+
 	// Retrieve file with relations from DB
 	file, err := w.bookService.RetrieveFileWithRelations(ctx, opts.FileID)
 	if err != nil {
@@ -317,7 +321,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		if hasMainFiles {
 			// Other main files exist, just clean up empty dirs
 			if fileDir != bookPath {
-				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
+				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
 					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 				}
 			}
@@ -386,7 +390,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 				if libErr == nil && library != nil {
 					for _, libPath := range library.LibraryPaths {
 						if strings.HasPrefix(bookPath, libPath.Filepath) {
-							if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
+							if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
 								logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 							}
 							break
@@ -394,7 +398,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 					}
 				}
 			} else if fileDir != bookPath {
-				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath); err != nil {
+				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
 					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 				}
 			}
@@ -512,6 +516,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		}
 
 		// Clean up empty directories up to library path
+		cleanupIgnoredPatterns := append(shishoSpecialFilePatterns, w.config.SupplementExcludePatterns...)
 		library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 			ID: &book.LibraryID,
 		})
@@ -519,7 +524,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 			// Find which library path contains this book
 			for _, libPath := range library.LibraryPaths {
 				if strings.HasPrefix(bookPath, libPath.Filepath) {
-					if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath); err != nil {
+					if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
 						logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 					}
 					break
