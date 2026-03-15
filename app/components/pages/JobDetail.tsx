@@ -23,7 +23,6 @@ import {
   JobLogLevelInfo,
   JobLogLevelWarn,
   JobStatusInProgress,
-  JobStatusPending,
   type JobLog,
 } from "@/types";
 
@@ -182,7 +181,7 @@ const JobDetail = () => {
   const logContainerRef = useRef<HTMLDivElement>(null);
   const lastLogIdRef = useRef<number | undefined>(undefined);
 
-  const { data, isLoading, error, refetch } = useJobLogs(id, {
+  const { data, isLoading, error } = useJobLogs(id, {
     level: levelFilter.length > 0 ? levelFilter : undefined,
     plugin: pluginFilter || undefined,
   });
@@ -221,17 +220,6 @@ const JobDetail = () => {
     }
     return true;
   });
-
-  // Polling for live updates
-  useEffect(() => {
-    if (
-      job?.status === JobStatusPending ||
-      job?.status === JobStatusInProgress
-    ) {
-      const interval = setInterval(refetch, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [job?.status, refetch]);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {

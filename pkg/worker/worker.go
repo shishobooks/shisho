@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -56,6 +57,8 @@ type Worker struct {
 	pluginService    *plugins.Service
 	pluginManager    *plugins.Manager
 
+	broker *events.Broker
+
 	monitor *Monitor
 
 	queue           chan *models.Job
@@ -67,7 +70,7 @@ type Worker struct {
 	doneUpdateCheck chan struct{}
 }
 
-func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
+func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker) *Worker {
 	bookService := books.NewService(db)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
@@ -101,6 +104,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager) *Worker {
 		tagService:       tagService,
 		pluginService:    pluginService,
 		pluginManager:    pm,
+		broker:           broker,
 
 		queue:           make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:        make(chan struct{}),
@@ -202,6 +206,7 @@ func (w *Worker) processJobs() {
 				log.Err(err).Error("update job error")
 				continue
 			}
+			w.publishJobEvent("job.status_changed", job)
 
 			// Process with panic recovery
 			func() {
@@ -212,6 +217,7 @@ func (w *Worker) processJobs() {
 						_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
 							Columns: []string{"status"},
 						})
+						w.publishJobEvent("job.status_changed", job)
 					}
 				}()
 
@@ -223,6 +229,7 @@ func (w *Worker) processJobs() {
 					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
 						Columns: []string{"status"},
 					})
+					w.publishJobEvent("job.status_changed", job)
 					return
 				}
 
@@ -233,6 +240,7 @@ func (w *Worker) processJobs() {
 					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
 						Columns: []string{"status"},
 					})
+					w.publishJobEvent("job.status_changed", job)
 					return
 				}
 
@@ -244,6 +252,7 @@ func (w *Worker) processJobs() {
 				if err != nil {
 					log.Err(err).Error("update job error")
 				}
+				w.publishJobEvent("job.status_changed", job)
 			}()
 		}
 	}
@@ -302,6 +311,7 @@ func (w *Worker) scheduleScanJobs() {
 				timer.Reset(duration)
 				continue
 			}
+			w.publishJobEvent("job.created", scanJob)
 
 			log.Info("created scheduled scan job")
 			timer.Reset(duration)
@@ -417,6 +427,13 @@ func (w *Worker) Shutdown() {
 		<-w.doneCleanup
 	}
 	<-w.doneUpdateCheck
+}
+
+func (w *Worker) publishJobEvent(eventType string, job *models.Job) {
+	if w.broker == nil {
+		return
+	}
+	w.broker.Publish(events.NewJobEvent(eventType, job.ID, job.Status, job.Type, job.LibraryID))
 }
 
 const letterBytes = "abcdef0123456789"

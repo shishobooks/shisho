@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
 import { AuthProvider } from "@/components/contexts/Auth";
+import { SSEProvider } from "@/components/contexts/SSEProvider";
 import ThemeProvider from "@/components/contexts/Theme/ThemeProvider";
 import { queryClient } from "@/libraries/query-client";
 import { router } from "@/router";
@@ -16,7 +17,9 @@ root.render(
     <ThemeProvider>
       <AuthProvider>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+          <SSEProvider>
+            <RouterProvider router={router} />
+          </SSEProvider>
         </QueryClientProvider>
       </AuthProvider>
     </ThemeProvider>

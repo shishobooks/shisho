@@ -7,11 +7,13 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
 	jobService *Service
+	broker     *events.Broker
 }
 
 func (h *handler) create(c echo.Context) error {
@@ -51,6 +53,10 @@ func (h *handler) create(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if h.broker != nil {
+		h.broker.Publish(events.NewJobEvent("job.created", job.ID, job.Status, job.Type, job.LibraryID))
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, job))
