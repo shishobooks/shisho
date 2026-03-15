@@ -8,14 +8,24 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// RegisterRoutesOptions configures optional behaviors for library routes.
+type RegisterRoutesOptions struct {
+	// OnLibraryChanged is called after a library is created or its paths/deletion state changes.
+	// Used by the monitor to refresh filesystem watches.
+	OnLibraryChanged func()
+}
+
 // RegisterRoutesWithGroup registers library routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, opts ...RegisterRoutesOptions) {
 	libraryService := NewService(db)
 	jobService := jobs.NewService(db)
 
 	h := &handler{
 		libraryService: libraryService,
 		jobService:     jobService,
+	}
+	if len(opts) > 0 && opts[0].OnLibraryChanged != nil {
+		h.onLibraryChanged = opts[0].OnLibraryChanged
 	}
 
 	g.GET("", h.list)

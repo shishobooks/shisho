@@ -107,6 +107,26 @@ plugin_dir: /config/plugins/installed
 plugin_data_dir: /config/plugins/data
 
 # =============================================================================
+# LIBRARY MONITOR SETTINGS
+# =============================================================================
+
+# Enable real-time filesystem monitoring of library paths
+# When enabled, file changes (create, modify, delete) are detected automatically
+# and trigger targeted rescans without requiring a full library scan.
+# Disable if your library is on a network drive that doesn't support inotify/FSEvents.
+# Env: LIBRARY_MONITOR_ENABLED
+# Default: true
+library_monitor_enabled: true
+
+# Delay in seconds before processing detected filesystem changes
+# When a change is detected, the monitor waits this long before acting.
+# If more changes occur during the wait, the timer resets — this batches
+# rapid changes (e.g., copying multiple files) into a single rescan.
+# Env: LIBRARY_MONITOR_DELAY_SECONDS
+# Default: 60
+library_monitor_delay_seconds: 60
+
+# =============================================================================
 # SUPPLEMENT DISCOVERY SETTINGS
 # =============================================================================
 

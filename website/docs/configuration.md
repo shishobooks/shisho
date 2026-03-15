@@ -44,6 +44,13 @@ Every setting can be set via an environment variable using the uppercase, unders
 | `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background worker processes |
 | `job_retention_days` | `JOB_RETENTION_DAYS` | `30` | Days to retain completed/failed jobs before cleanup. Set to `0` to disable |
 
+### Library Monitor
+
+| Setting | Env Variable | Default | Description |
+|---------|-------------|---------|-------------|
+| `library_monitor_enabled` | `LIBRARY_MONITOR_ENABLED` | `true` | Enable real-time filesystem monitoring of library paths. When enabled, file changes are detected automatically and trigger targeted rescans. Disable if your library is on a network drive that doesn't support inotify/FSEvents |
+| `library_monitor_delay_seconds` | `LIBRARY_MONITOR_DELAY_SECONDS` | `60` | Seconds to wait before processing detected changes. Additional changes during this window reset the timer, batching rapid changes into a single rescan |
+
 ### Cache
 
 | Setting | Env Variable | Default | Description |

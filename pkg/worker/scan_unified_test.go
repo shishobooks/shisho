@@ -271,6 +271,53 @@ func TestScanFileByID_MissingFile_LastFile_DeletesBook(t *testing.T) {
 	assert.Empty(t, tc.listBooks())
 }
 
+func TestScanFileByID_MissingFile_LastFile_CleansUpBookDirectory(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with 1 EPUB file
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Book With Sidecar")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Book With Sidecar",
+		Authors: []string{"Test Author"},
+	})
+
+	// Run initial scan to create book and file in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Simulate cover and sidecar files that would exist in a real setup.
+	// The test EPUB doesn't embed a cover, so we create these manually.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.epub.cover.jpg"), []byte("fake-cover"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.epub.metadata.json"), []byte("{}"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "Book With Sidecar.metadata.json"), []byte("{}"), 0644))
+
+	// Delete the physical EPUB file from disk
+	err = os.Remove(files[0].Filepath)
+	require.NoError(t, err)
+
+	// Call Scan with FileID of the deleted file
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID: fileID,
+	}, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.BookDeleted)
+
+	// The book directory should be cleaned up despite having cover/sidecar files.
+	_, err = os.Stat(bookDir)
+	assert.True(t, os.IsNotExist(err), "book directory should be removed after last file deletion (cover/sidecar files should be treated as ignorable)")
+}
+
 func TestScanFileByID_MissingFile_LastMainFile_PromotesSupplement(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
