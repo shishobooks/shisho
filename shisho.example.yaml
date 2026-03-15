@@ -114,6 +114,9 @@ plugin_data_dir: /config/plugins/data
 # When enabled, file changes (create, modify, delete) are detected automatically
 # and trigger targeted rescans without requiring a full library scan.
 # Disable if your library is on a network drive that doesn't support inotify/FSEvents.
+# On Linux, large libraries may require increasing the inotify watch limit:
+#   sysctl -w fs.inotify.max_user_watches=524288
+# Or persist via /etc/sysctl.d/99-inotify.conf
 # Env: LIBRARY_MONITOR_ENABLED
 # Default: true
 library_monitor_enabled: true

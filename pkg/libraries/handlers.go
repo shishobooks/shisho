@@ -2,6 +2,7 @@ package libraries
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -214,18 +215,9 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Notify monitor of library changes (paths added/removed, library deleted/restored).
-	if h.onLibraryChanged != nil && (opts.UpdateLibraryPaths || containsColumn(opts.Columns, "deleted_at")) {
+	if h.onLibraryChanged != nil && (opts.UpdateLibraryPaths || slices.Contains(opts.Columns, "deleted_at")) {
 		h.onLibraryChanged()
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
-}
-
-func containsColumn(columns []string, col string) bool {
-	for _, c := range columns {
-		if c == col {
-			return true
-		}
-	}
-	return false
 }

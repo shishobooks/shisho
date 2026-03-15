@@ -43,6 +43,9 @@ type Monitor struct {
 	ignored  map[string]time.Time
 
 	// Library path → library ID mapping for resolving which library a file belongs to.
+	// Only accessed from the run() goroutine (setupWatches, handleEvent, findLibraryID,
+	// enqueueExistingFiles). Must NOT be accessed from processPendingEvents or
+	// processEvent, which run in time.AfterFunc goroutines.
 	pathToLibrary map[string]int
 
 	shutdown chan struct{}
@@ -434,26 +437,12 @@ func (m *Monitor) processPendingEvents() {
 	hasActive, err := m.worker.jobService.HasActiveJob(ctx, models.JobTypeScan, nil)
 	if err != nil {
 		m.log.Err(err).Warn("failed to check for active scan job, re-queuing events")
-		m.mu.Lock()
-		for path, ev := range events {
-			if _, ok := m.pending[path]; !ok {
-				m.pending[path] = ev
-			}
-		}
-		m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
-		m.mu.Unlock()
+		m.requeue(events)
 		return
 	}
 	if hasActive {
 		m.log.Debug("scan job active, re-queuing events for later")
-		m.mu.Lock()
-		for path, ev := range events {
-			if _, ok := m.pending[path]; !ok {
-				m.pending[path] = ev
-			}
-		}
-		m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
-		m.mu.Unlock()
+		m.requeue(events)
 		return
 	}
 
@@ -504,6 +493,19 @@ func (m *Monitor) processPendingEvents() {
 			}
 		}
 	}
+}
+
+// requeue puts events back into m.pending (merging with any new arrivals)
+// and restarts the debounce timer.
+func (m *Monitor) requeue(events map[string]pendingEvent) {
+	m.mu.Lock()
+	for path, ev := range events {
+		if _, ok := m.pending[path]; !ok {
+			m.pending[path] = ev
+		}
+	}
+	m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
+	m.mu.Unlock()
 }
 
 // processEvent handles a single accumulated event for a file path.
@@ -614,27 +616,5 @@ func (m *Monitor) organizeBooks(ctx context.Context, bookIDs map[int]struct{}) {
 
 // runOrphanCleanup removes entities that are no longer referenced by any books.
 func (m *Monitor) runOrphanCleanup(ctx context.Context) {
-	if n, err := m.worker.seriesService.CleanupOrphanedSeries(ctx); err != nil {
-		m.log.Err(err).Warn("failed to cleanup orphaned series")
-	} else if n > 0 {
-		m.log.Info("cleaned up orphaned series", logger.Data{"count": n})
-	}
-
-	if n, err := m.worker.personService.CleanupOrphanedPeople(ctx); err != nil {
-		m.log.Err(err).Warn("failed to cleanup orphaned people")
-	} else if n > 0 {
-		m.log.Info("cleaned up orphaned people", logger.Data{"count": n})
-	}
-
-	if n, err := m.worker.genreService.CleanupOrphanedGenres(ctx); err != nil {
-		m.log.Err(err).Warn("failed to cleanup orphaned genres")
-	} else if n > 0 {
-		m.log.Info("cleaned up orphaned genres", logger.Data{"count": n})
-	}
-
-	if n, err := m.worker.tagService.CleanupOrphanedTags(ctx); err != nil {
-		m.log.Err(err).Warn("failed to cleanup orphaned tags")
-	} else if n > 0 {
-		m.log.Info("cleaned up orphaned tags", logger.Data{"count": n})
-	}
+	m.worker.cleanupOrphanedEntities(ctx, m.log)
 }

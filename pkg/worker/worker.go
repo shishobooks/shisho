@@ -365,6 +365,34 @@ func (w *Worker) checkPluginUpdates() {
 	}
 }
 
+// cleanupOrphanedEntities removes series, people, genres, and tags
+// that are no longer referenced by any books.
+func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger) {
+	if n, err := w.seriesService.CleanupOrphanedSeries(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned series")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned series", logger.Data{"count": n})
+	}
+
+	if n, err := w.personService.CleanupOrphanedPeople(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned people")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned people", logger.Data{"count": n})
+	}
+
+	if n, err := w.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned genres")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned genres", logger.Data{"count": n})
+	}
+
+	if n, err := w.tagService.CleanupOrphanedTags(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned tags")
+	} else if n > 0 {
+		log.Info("cleaned up orphaned tags", logger.Data{"count": n})
+	}
+}
+
 // RefreshMonitorWatches signals the filesystem monitor to reload library paths.
 // Safe to call even if the monitor is disabled (no-op).
 func (w *Worker) RefreshMonitorWatches() {

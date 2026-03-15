@@ -8,6 +8,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -362,6 +364,121 @@ func TestMonitor_ProcessEvent_DeleteSkipsUnknownFile(t *testing.T) {
 		LibraryID: 1,
 	})
 	assert.Nil(t, result)
+}
+
+func TestMonitor_ProcessEvent_CreateScansNewFile(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create a real EPUB file.
+	bookDir := testgen.CreateSubDir(t, libDir, "Test Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Monitor Test Book",
+		Authors: []string{"Test Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	// Process a Create event — should scan the file and create a book.
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Create,
+		LibraryID: 1,
+	})
+	require.NotNil(t, result)
+	assert.True(t, result.FileCreated)
+	assert.NotNil(t, result.Book)
+	assert.Equal(t, "Monitor Test Book", result.Book.Title)
+
+	// Verify the file exists in the database.
+	files := tc.listFiles()
+	assert.Len(t, files, 1)
+	assert.Equal(t, epubPath, files[0].Filepath)
+}
+
+func TestMonitor_ProcessEvent_WriteRescansExistingFile(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create and scan a file first.
+	bookDir := testgen.CreateSubDir(t, libDir, "Test Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Original Title",
+		Authors: []string{"Test Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	// Initial scan via Create.
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Create,
+		LibraryID: 1,
+	})
+	require.NotNil(t, result)
+
+	// Verify the file is in DB.
+	file, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{
+		Filepath: &epubPath,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, file)
+
+	// Now process a Write event — should rescan with ForceRefresh.
+	result = m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Write,
+		LibraryID: 1,
+	})
+	require.NotNil(t, result)
+	assert.NotNil(t, result.Book)
+}
+
+func TestMonitor_ProcessEvent_DeleteRemovesFile(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create and scan a file.
+	bookDir := testgen.CreateSubDir(t, libDir, "Test Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Delete Me",
+		Authors: []string{"Test Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	// Initial scan.
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Create,
+		LibraryID: 1,
+	})
+	require.NotNil(t, result)
+	assert.Len(t, tc.listFiles(), 1)
+
+	// Remove the file from disk, then process a Remove event.
+	require.NoError(t, os.Remove(epubPath))
+	result = m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Remove,
+		LibraryID: 1,
+	})
+	require.NotNil(t, result)
+	assert.True(t, result.FileDeleted)
+
+	// File and book should be cleaned up.
+	assert.Empty(t, tc.listFiles())
+	assert.Empty(t, tc.listBooks())
 }
 
 func TestMonitor_SkipsWhenScanJobActive(t *testing.T) {

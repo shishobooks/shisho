@@ -464,37 +464,8 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		}
 	}
 
-	// Cleanup orphaned series (soft delete series with no books)
-	deletedCount, err := w.seriesService.CleanupOrphanedSeries(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned series", err, nil)
-	} else if deletedCount > 0 {
-		jobLog.Info("cleaned up orphaned series", logger.Data{"count": deletedCount})
-	}
-
-	// Cleanup orphaned people (delete people with no authors or narrators)
-	deletedPeopleCount, err := w.personService.CleanupOrphanedPeople(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned people", err, nil)
-	} else if deletedPeopleCount > 0 {
-		jobLog.Info("cleaned up orphaned people", logger.Data{"count": deletedPeopleCount})
-	}
-
-	// Cleanup orphaned genres (delete genres with no books)
-	deletedGenresCount, err := w.genreService.CleanupOrphanedGenres(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned genres", err, nil)
-	} else if deletedGenresCount > 0 {
-		jobLog.Info("cleaned up orphaned genres", logger.Data{"count": deletedGenresCount})
-	}
-
-	// Cleanup orphaned tags (delete tags with no books)
-	deletedTagsCount, err := w.tagService.CleanupOrphanedTags(ctx)
-	if err != nil {
-		jobLog.Error("failed to cleanup orphaned tags", err, nil)
-	} else if deletedTagsCount > 0 {
-		jobLog.Info("cleaned up orphaned tags", logger.Data{"count": deletedTagsCount})
-	}
+	// Cleanup orphaned entities (series, people, genres, tags)
+	w.cleanupOrphanedEntities(ctx, logger.FromContext(ctx))
 
 	// Rebuild FTS indexes after scan completes
 	if w.searchService != nil {
