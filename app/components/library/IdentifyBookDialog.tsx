@@ -142,7 +142,8 @@ export function IdentifyBookDialog({
     metadataField?: string,
   ) => {
     const topLevel = result[field];
-    if (topLevel !== undefined && topLevel !== null && topLevel !== "") return topLevel;
+    if (topLevel !== undefined && topLevel !== null && topLevel !== "")
+      return topLevel;
     if (result.metadata) {
       const mdField = metadataField || field;
       return (result.metadata as Record<string, unknown>)[mdField as string];
@@ -158,8 +159,11 @@ export function IdentifyBookDialog({
     return undefined;
   };
 
-  const resolveNarrators = (result: PluginSearchResult): string[] | undefined => {
-    if (result.narrators && result.narrators.length > 0) return result.narrators;
+  const resolveNarrators = (
+    result: PluginSearchResult,
+  ): string[] | undefined => {
+    if (result.narrators && result.narrators.length > 0)
+      return result.narrators;
     if (result.metadata?.narrators && result.metadata.narrators.length > 0) {
       return result.metadata.narrators;
     }
@@ -259,7 +263,10 @@ export function IdentifyBookDialog({
                       </div>
 
                       {(() => {
-                        const subtitle = resolveField(result, "subtitle") as string;
+                        const subtitle = resolveField(
+                          result,
+                          "subtitle",
+                        ) as string;
                         return subtitle ? (
                           <p className="text-sm text-muted-foreground/80 leading-tight">
                             {subtitle}
@@ -269,7 +276,10 @@ export function IdentifyBookDialog({
 
                       {(() => {
                         const series = resolveField(result, "series") as string;
-                        const seriesNum = resolveField(result, "series_number") as number;
+                        const seriesNum = resolveField(
+                          result,
+                          "series_number",
+                        ) as number;
                         return series ? (
                           <p className="text-xs text-muted-foreground font-medium">
                             {series}
@@ -363,9 +373,11 @@ export function IdentifyBookDialog({
                         )}
 
                       {(() => {
-                        const genres = (resolveField(result, "genres") as string[]) ?? [];
-                        const tags = (resolveField(result, "tags") as string[]) ?? [];
-                        return (genres.length > 0 || tags.length > 0) ? (
+                        const genres =
+                          (resolveField(result, "genres") as string[]) ?? [];
+                        const tags =
+                          (resolveField(result, "tags") as string[]) ?? [];
+                        return genres.length > 0 || tags.length > 0 ? (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {genres.map((g) => (
                               <Badge

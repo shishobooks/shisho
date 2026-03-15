@@ -18,7 +18,7 @@ func TestDownloadCoverFromURL_Success(t *testing.T) {
 	t.Parallel()
 
 	fakeJPEG := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(fakeJPEG)
 	}))
@@ -51,7 +51,7 @@ func TestDownloadCoverFromURL_CoverDataTakesPrecedence(t *testing.T) {
 func TestDownloadCoverFromURL_NonImageRejected(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte("<html>Not an image</html>"))
 	}))
@@ -76,7 +76,7 @@ func TestDownloadCoverFromURL_EmptyURL(t *testing.T) {
 func TestDownloadCoverFromURL_ServerError(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()

@@ -1451,7 +1451,12 @@ func downloadCoverFromURL(md *mediafile.ParsedMetadata, log logger.Logger) bool 
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(md.CoverURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, md.CoverURL, nil)
+	if err != nil {
+		log.Warn("failed to create cover download request", logger.Data{"url": md.CoverURL, "error": err.Error()})
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Warn("failed to download cover from URL", logger.Data{"url": md.CoverURL, "error": err.Error()})
 		return false
