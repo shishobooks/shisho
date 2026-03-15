@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 export function useSSE() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -16,7 +15,6 @@ export function useSSE() {
     }
 
     const es = new EventSource("/api/events");
-    eventSourceRef.current = es;
 
     const handleJobCreated = () => {
       queryClient.invalidateQueries({ queryKey: [JobsQueryKey.ListJobs] });
@@ -57,7 +55,6 @@ export function useSSE() {
       es.removeEventListener("job.created", handleJobCreated);
       es.removeEventListener("job.status_changed", handleJobStatusChanged);
       es.close();
-      eventSourceRef.current = null;
     };
   }, [isAuthenticated, queryClient]);
 }
