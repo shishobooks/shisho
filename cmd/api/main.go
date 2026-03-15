@@ -14,6 +14,7 @@ import (
 	"github.com/robinjoseph08/golib/signals"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/database"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/server"
@@ -66,9 +67,11 @@ func main() {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}
 
-	wrkr := worker.New(cfg, db, pluginManager)
+	broker := events.NewBroker()
 
-	srv, err := server.New(cfg, db, wrkr, pluginManager)
+	wrkr := worker.New(cfg, db, pluginManager, broker)
+
+	srv, err := server.New(cfg, db, wrkr, pluginManager, broker)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}

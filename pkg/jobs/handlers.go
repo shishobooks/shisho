@@ -1,17 +1,20 @@
 package jobs
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
 	jobService *Service
+	broker     *events.Broker
 }
 
 func (h *handler) create(c echo.Context) error {
@@ -51,6 +54,14 @@ func (h *handler) create(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if h.broker != nil {
+		data := fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s"}`, job.ID, job.Status, job.Type)
+		if job.LibraryID != nil {
+			data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, job.ID, job.Status, job.Type, *job.LibraryID)
+		}
+		h.broker.Publish(events.Event{Type: "job.created", Data: data})
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, job))
