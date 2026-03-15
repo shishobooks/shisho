@@ -57,7 +57,7 @@ type Config struct {
 
 	// Authentication settings
 	JWTSecret           string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
-	SessionDurationDays int    `koanf:"session_duration_days" json:"session_duration_days"`
+	SessionDurationDays int    `koanf:"session_duration_days" json:"session_duration_days" validate:"min=1"`
 
 	// Environment settings
 	// Set to "test" to enable test-only API endpoints (e.g., /test/users)

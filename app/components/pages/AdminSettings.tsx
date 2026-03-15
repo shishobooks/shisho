@@ -167,11 +167,6 @@ const AdminSettings = () => {
               value={`${config.library_monitor_delay_seconds}s`}
             />
             <ConfigRow
-              description="How long login sessions remain valid"
-              label="Session Duration"
-              value={`${config.session_duration_days} days`}
-            />
-            <ConfigRow
               description="Application environment mode"
               label="Environment"
               value={config.environment || "production"}
@@ -209,6 +204,20 @@ const AdminSettings = () => {
               description="File patterns excluded from supplement discovery"
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}
+            />
+          </div>
+        </div>
+
+        {/* Authentication Settings */}
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Authentication
+          </h2>
+          <div className="space-y-0">
+            <ConfigRow
+              description="How long login sessions remain valid"
+              label="Session Duration"
+              value={`${config.session_duration_days} days`}
             />
           </div>
         </div>
