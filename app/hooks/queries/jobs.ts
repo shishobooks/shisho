@@ -70,12 +70,6 @@ export const useLatestScanJob = (libraryId: number | undefined) => {
       );
     },
     enabled: libraryId !== undefined,
-    refetchInterval: (query) => {
-      const job = query.state.data?.jobs[0];
-      const isActive =
-        job?.status === "pending" || job?.status === "in_progress";
-      return isActive ? 2000 : 30000;
-    },
   });
 };
 
