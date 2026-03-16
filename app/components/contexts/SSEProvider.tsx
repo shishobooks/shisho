@@ -1,8 +1,18 @@
 import type { ReactNode } from "react";
 
+import { BulkDownloadProvider } from "@/contexts/BulkDownload";
 import { useSSE } from "@/hooks/useSSE";
 
-export function SSEProvider({ children }: { children: ReactNode }) {
+function SSEListener() {
   useSSE();
-  return <>{children}</>;
+  return null;
+}
+
+export function SSEProvider({ children }: { children: ReactNode }) {
+  return (
+    <BulkDownloadProvider>
+      <SSEListener />
+      {children}
+    </BulkDownloadProvider>
+  );
 }
