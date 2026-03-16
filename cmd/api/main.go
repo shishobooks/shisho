@@ -128,11 +128,12 @@ func main() {
 }
 
 // initCacheDir creates the cache directories and verifies write permissions.
-// Creates subdirectories: downloads (generated files), cbz (extracted page images).
+// Creates subdirectories: downloads (generated files), downloads/bulk (bulk zip files), cbz (extracted page images).
 func initCacheDir(dir string) error {
 	// Create subdirectories
 	subdirs := []string{
 		filepath.Join(dir, "downloads"),
+		filepath.Join(dir, "downloads", "bulk"),
 		filepath.Join(dir, "cbz"),
 	}
 
