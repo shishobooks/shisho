@@ -17,9 +17,10 @@ const (
 )
 
 const (
-	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan;
-	JobTypeExport = "export"
-	JobTypeScan   = "scan"
+	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload;
+	JobTypeExport       = "export"
+	JobTypeScan         = "scan"
+	JobTypeBulkDownload = "bulk_download"
 )
 
 type Job struct {
@@ -31,7 +32,7 @@ type Job struct {
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
-	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData"`
+	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
@@ -43,6 +44,8 @@ func (job *Job) UnmarshalData() error {
 		job.DataParsed = &JobExportData{}
 	case JobTypeScan:
 		job.DataParsed = &JobScanData{}
+	case JobTypeBulkDownload:
+		job.DataParsed = &JobBulkDownloadData{}
 	}
 
 	err := json.Unmarshal([]byte(job.Data), job.DataParsed)
@@ -56,3 +59,15 @@ func (job *Job) UnmarshalData() error {
 type JobExportData struct{}
 
 type JobScanData struct{}
+
+type JobBulkDownloadData struct {
+	// Input (set on creation)
+	FileIDs            []int `json:"file_ids"`
+	EstimatedSizeBytes int64 `json:"estimated_size_bytes"`
+
+	// Result (set on completion)
+	ZipFilename     string `json:"zip_filename,omitempty"`
+	SizeBytes       int64  `json:"size_bytes,omitempty"`
+	FileCount       int    `json:"file_count,omitempty"`
+	FingerprintHash string `json:"fingerprint_hash,omitempty"`
+}
