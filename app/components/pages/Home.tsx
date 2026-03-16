@@ -573,10 +573,7 @@ const HomeContent = () => {
         renderItem={renderBookItem}
         total={booksQuery.data?.total ?? 0}
       />
-      <SelectionToolbar
-        books={booksQuery.data?.books}
-        library={libraryQuery.data}
-      />
+      <SelectionToolbar library={libraryQuery.data} />
     </LibraryLayout>
   );
 };

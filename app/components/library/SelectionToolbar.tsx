@@ -28,15 +28,14 @@ import {
 } from "@/hooks/queries/lists";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
-import type { Book, CreateListPayload, Library } from "@/types";
+import type { CreateListPayload, Library } from "@/types";
 import { formatFileSize } from "@/utils/format";
 
 interface SelectionToolbarProps {
   library?: Library;
-  books?: Book[];
 }
 
-export const SelectionToolbar = ({ library, books }: SelectionToolbarProps) => {
+export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -53,14 +52,21 @@ export const SelectionToolbar = ({ library, books }: SelectionToolbarProps) => {
   const createListMutation = useCreateList();
   const deleteBooksMutation = useDeleteBooks();
 
+  // Fetch all selected books (not just current page) for download info and delete dialog
+  const allSelectedBooksQuery = useBooks(
+    { ids: selectedBookIds },
+    { enabled: selectedBookIds.length > 0 },
+  );
+
   const downloadInfo = useMemo(() => {
-    if (!books || selectedBookIds.length === 0) return null;
+    const allBooks = allSelectedBooksQuery.data?.books;
+    if (!allBooks || selectedBookIds.length === 0) return null;
 
     const fileIds: number[] = [];
     let totalSize = 0;
 
     for (const bookId of selectedBookIds) {
-      const book = books.find((b) => b.id === bookId);
+      const book = allBooks.find((b) => b.id === bookId);
       if (!book?.primary_file_id) continue;
       const primaryFile = book.files?.find(
         (f) => f.id === book.primary_file_id,
@@ -72,7 +78,7 @@ export const SelectionToolbar = ({ library, books }: SelectionToolbarProps) => {
     }
 
     return { fileIds, totalSize };
-  }, [books, selectedBookIds]);
+  }, [allSelectedBooksQuery.data?.books, selectedBookIds]);
 
   const handleDownload = async () => {
     if (!downloadInfo || downloadInfo.fileIds.length === 0) return;
@@ -99,12 +105,6 @@ export const SelectionToolbar = ({ library, books }: SelectionToolbarProps) => {
       toast.error(message);
     }
   };
-
-  // Fetch book details for selected books (needed for dialog)
-  const booksQuery = useBooks(
-    { ids: selectedBookIds },
-    { enabled: showDeleteDialog && selectedBookIds.length > 0 },
-  );
 
   const lists = listsQuery.data?.lists ?? [];
   const editableLists = lists.filter((list) => list.permission !== "viewer");
@@ -323,7 +323,7 @@ export const SelectionToolbar = ({ library, books }: SelectionToolbarProps) => {
       />
 
       <DeleteConfirmationDialog
-        books={booksQuery.data?.books?.map((b) => ({
+        books={allSelectedBooksQuery.data?.books?.map((b) => ({
           id: b.id,
           title: b.title,
           files: b.files,
