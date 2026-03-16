@@ -6,14 +6,16 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
-	jobService *Service
-	broker     *events.Broker
+	jobService    *Service
+	broker        *events.Broker
+	downloadCache *downloadcache.Cache
 }
 
 func (h *handler) create(c echo.Context) error {

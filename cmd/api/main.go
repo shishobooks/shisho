@@ -14,6 +14,7 @@ import (
 	"github.com/robinjoseph08/golib/signals"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/database"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/plugins"
@@ -69,9 +70,11 @@ func main() {
 
 	broker := events.NewBroker()
 
-	wrkr := worker.New(cfg, db, pluginManager, broker)
+	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 
-	srv, err := server.New(cfg, db, wrkr, pluginManager, broker)
+	wrkr := worker.New(cfg, db, pluginManager, broker, dlCache)
+
+	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}

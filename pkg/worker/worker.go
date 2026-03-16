@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
@@ -57,7 +58,8 @@ type Worker struct {
 	pluginService    *plugins.Service
 	pluginManager    *plugins.Manager
 
-	broker *events.Broker
+	broker        *events.Broker
+	downloadCache *downloadcache.Cache
 
 	monitor *Monitor
 
@@ -70,7 +72,7 @@ type Worker struct {
 	doneUpdateCheck chan struct{}
 }
 
-func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker) *Worker {
+func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
 	bookService := books.NewService(db)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
@@ -105,6 +107,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 		pluginService:    pluginService,
 		pluginManager:    pm,
 		broker:           broker,
+		downloadCache:    dlCache,
 
 		queue:           make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:        make(chan struct{}),
@@ -116,7 +119,18 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	}
 
 	w.processFuncs = map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error{
-		models.JobTypeScan: w.ProcessScanJob,
+		models.JobTypeScan:         w.ProcessScanJob,
+		models.JobTypeBulkDownload: w.ProcessBulkDownloadJob,
+	}
+
+	if dlCache != nil {
+		dlCache.ShouldSkipCleanup = func() bool {
+			hasActive, err := w.jobService.HasActiveJob(context.Background(), models.JobTypeBulkDownload, nil)
+			if err != nil {
+				return false
+			}
+			return hasActive
+		}
 	}
 
 	return w
