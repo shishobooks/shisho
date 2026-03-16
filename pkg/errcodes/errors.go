@@ -95,6 +95,15 @@ func MalformedPayload() error {
 	}
 }
 
+// BadRequest returns a 400 error with the given message.
+func BadRequest(msg string) error {
+	return &Error{
+		http.StatusBadRequest,
+		msg,
+		"bad_request",
+	}
+}
+
 func EmptyRequestBody() error {
 	return &Error{
 		http.StatusBadRequest,

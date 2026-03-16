@@ -21,5 +21,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Mid
 
 	g.GET("", h.list)
 	g.GET("/:id", h.retrieve)
+	g.GET("/:id/download", h.download)
 	g.POST("", h.create, authMiddleware.RequirePermission(models.ResourceJobs, models.OperationWrite))
 }
