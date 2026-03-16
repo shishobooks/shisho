@@ -14,8 +14,9 @@ import (
 
 // Cache manages the download cache for generated files.
 type Cache struct {
-	dir     string
-	maxSize int64
+	dir               string
+	maxSize           int64
+	ShouldSkipCleanup func() bool
 }
 
 // NewCache creates a new Cache with the given directory and max size.
@@ -277,6 +278,22 @@ func (c *Cache) GetCachedPath(fileID int, fileType string, book *models.Book, fi
 	return GetCachedFilePath(c.dir, fileID, fileType, hash)
 }
 
+// BulkZipDir returns the directory path for bulk zip files.
+func (c *Cache) BulkZipDir() string {
+	return filepath.Join(c.dir, "bulk")
+}
+
+// BulkZipPath returns the full path for a bulk zip file identified by its fingerprint hash.
+func (c *Cache) BulkZipPath(fingerprintHash string) string {
+	return filepath.Join(c.dir, "bulk", fingerprintHash+".zip")
+}
+
+// BulkZipExists returns true if a bulk zip file with the given fingerprint hash exists.
+func (c *Cache) BulkZipExists(fingerprintHash string) bool {
+	_, err := os.Stat(c.BulkZipPath(fingerprintHash))
+	return err == nil
+}
+
 // TriggerCleanup runs cache cleanup if the cache exceeds the max size.
 // This runs in the current goroutine - call with `go` to run in background.
 func (c *Cache) TriggerCleanup() {
@@ -286,6 +303,10 @@ func (c *Cache) TriggerCleanup() {
 
 // runCleanup performs the actual cleanup operation.
 func (c *Cache) runCleanup() error {
+	if c.ShouldSkipCleanup != nil && c.ShouldSkipCleanup() {
+		return nil
+	}
+
 	// Get lock file to prevent concurrent cleanups
 	lockPath := filepath.Join(c.dir, ".cleanup.lock")
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)

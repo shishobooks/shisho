@@ -70,7 +70,7 @@ func RunCleanup(cacheDir string, maxSizeBytes int64) error {
 // findCachedFileExtension finds the extension of a cached file by file ID.
 func findCachedFileExtension(cacheDir string, fileID int) string {
 	// Try common extensions
-	extensions := []string{"epub", "m4b", "cbz"}
+	extensions := []string{"epub", "m4b", "cbz", "pdf"}
 	for _, ext := range extensions {
 		path := cachedFilename(cacheDir, fileID, ext)
 		if _, err := os.Stat(path); err == nil {
