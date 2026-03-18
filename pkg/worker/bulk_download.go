@@ -137,7 +137,7 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 			data.SizeBytes = info.Size()
 			data.FileCount = len(filesWithBooks)
 			data.FingerprintHash = compositeHash
-			return w.completeBulkDownloadJob(ctx, job, &data)
+			return w.saveBulkDownloadResult(ctx, job, &data)
 		}
 	}
 
@@ -197,6 +197,14 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 	}
 
 	zipWriter := zip.NewWriter(zipFile)
+	zipSuccess := false
+	defer func() {
+		if !zipSuccess {
+			zipWriter.Close()
+			zipFile.Close()
+			os.Remove(zipPath)
+		}
+	}()
 
 	// Sort file IDs for deterministic zip ordering
 	sortedFileIDs := make([]int, 0, len(cachedPaths))
@@ -216,36 +224,26 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 
 		writer, err := zipWriter.CreateHeader(header)
 		if err != nil {
-			zipWriter.Close()
-			zipFile.Close()
-			os.Remove(zipPath)
 			return errors.Wrapf(err, "failed to create zip entry for %s", filename)
 		}
 
 		f, err := os.Open(cachedPath)
 		if err != nil {
-			zipWriter.Close()
-			zipFile.Close()
-			os.Remove(zipPath)
 			return errors.Wrapf(err, "failed to open cached file %s", cachedPath)
 		}
 
 		_, err = io.Copy(writer, f)
 		f.Close()
 		if err != nil {
-			zipWriter.Close()
-			zipFile.Close()
-			os.Remove(zipPath)
 			return errors.Wrapf(err, "failed to write %s to zip", filename)
 		}
 	}
 
 	if err := zipWriter.Close(); err != nil {
-		zipFile.Close()
-		os.Remove(zipPath)
 		return errors.Wrap(err, "failed to finalize zip")
 	}
 	zipFile.Close()
+	zipSuccess = true
 
 	// Get zip file size
 	zipInfo, err := os.Stat(zipPath)
@@ -260,10 +258,10 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 	data.FileCount = len(cachedPaths)
 	data.FingerprintHash = compositeHash
 
-	return w.completeBulkDownloadJob(ctx, job, &data)
+	return w.saveBulkDownloadResult(ctx, job, &data)
 }
 
-func (w *Worker) completeBulkDownloadJob(ctx context.Context, job *models.Job, data *models.JobBulkDownloadData) error {
+func (w *Worker) saveBulkDownloadResult(ctx context.Context, job *models.Job, data *models.JobBulkDownloadData) error {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal bulk download result")
