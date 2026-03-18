@@ -13,10 +13,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
 )
 
 type handler struct {
 	jobService    *Service
+	db            *bun.DB
 	broker        *events.Broker
 	downloadCache *downloadcache.Cache
 }
@@ -114,6 +116,16 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) download(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	// Verify the user has books:read permission
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
+		return errcodes.Forbidden("You need books:read permission to download")
+	}
+
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Job")
@@ -141,6 +153,19 @@ func (h *handler) download(c echo.Context) error {
 
 	if data.FingerprintHash == "" {
 		return errcodes.BadRequest("Job has no download data")
+	}
+
+	// Verify the user has library access for the files in this download.
+	// Query the DB directly to avoid an import cycle (jobs cannot import books).
+	for _, fileID := range data.FileIDs {
+		var file models.File
+		err := h.db.NewSelect().Model(&file).Column("library_id").Where("id = ?", fileID).Scan(ctx)
+		if err != nil {
+			continue // File may have been deleted since job was created
+		}
+		if !user.HasLibraryAccess(file.LibraryID) {
+			return errcodes.Forbidden("You don't have access to one or more libraries in this download")
+		}
 	}
 
 	zipPath := h.downloadCache.BulkZipPath(data.FingerprintHash)

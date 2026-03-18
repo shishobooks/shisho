@@ -20,7 +20,7 @@ event: job.status_changed
 data: {"job_id":1,"status":"in_progress","type":"scan","library_id":2}
 ```
 
-Use `NewJobEvent()` to build job events consistently across callers (worker, HTTP handler).
+Use `NewJobEvent()` to build job events consistently across callers (worker, HTTP handler). Use `NewBulkDownloadProgressEvent()` for bulk download progress events.
 
 ## Event Types
 
@@ -28,6 +28,7 @@ Use `NewJobEvent()` to build job events consistently across callers (worker, HTT
 |-------|---------------|------------|
 | `job.created` | Job created via API or scheduler | `pkg/jobs/handlers.go`, `pkg/worker/worker.go` (scheduler) |
 | `job.status_changed` | Job transitions status (pending→in_progress, →completed, →failed) | `pkg/worker/worker.go` |
+| `bulk_download.progress` | Bulk download file generation progress (per-file updates, zipping status) | `pkg/worker/bulk_download.go` |
 
 ## Adding New Event Types
 

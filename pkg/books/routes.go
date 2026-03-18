@@ -1,8 +1,6 @@
 package books
 
 import (
-	"path/filepath"
-
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
@@ -22,7 +20,7 @@ import (
 )
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager) {
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache) {
 	bookService := NewService(db)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
@@ -32,7 +30,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	listsService := lists.NewService(db)
-	cache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 	h := &handler{
@@ -46,7 +43,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		publisherService: publisherService,
 		imprintService:   imprintService,
 		listsService:     listsService,
-		downloadCache:    cache,
+		downloadCache:    dlCache,
 		pageCache:        pageCache,
 		scanner:          scanner,
 	}

@@ -15,6 +15,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Mid
 
 	h := &handler{
 		jobService:    jobService,
+		db:            db,
 		broker:        broker,
 		downloadCache: dlCache,
 	}
