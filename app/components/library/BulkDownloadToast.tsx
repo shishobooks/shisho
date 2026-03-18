@@ -55,11 +55,7 @@ export const BulkDownloadToast = () => {
       </div>
 
       {status === "completed" && (
-        <Button
-          asChild
-          className="w-full mt-2"
-          size="sm"
-        >
+        <Button asChild className="w-full mt-2" size="sm">
           <a href={`/api/jobs/${jobId}/download`}>
             <Download className="h-4 w-4" />
             Download Zip
