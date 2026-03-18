@@ -198,7 +198,15 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 
 	zipWriter := zip.NewWriter(zipFile)
 
-	for fileID, cachedPath := range cachedPaths {
+	// Sort file IDs for deterministic zip ordering
+	sortedFileIDs := make([]int, 0, len(cachedPaths))
+	for fileID := range cachedPaths {
+		sortedFileIDs = append(sortedFileIDs, fileID)
+	}
+	sort.Ints(sortedFileIDs)
+
+	for _, fileID := range sortedFileIDs {
+		cachedPath := cachedPaths[fileID]
 		filename := dedupedNames[fileID]
 
 		header := &zip.FileHeader{
