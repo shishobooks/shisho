@@ -43,6 +43,30 @@ func (h *handler) create(c echo.Context) error {
 		}
 	}
 
+	// Validate bulk download jobs: require books:read permission and non-empty file_ids.
+	if params.Type == models.JobTypeBulkDownload {
+		user, ok := c.Get("user").(*models.User)
+		if !ok {
+			return errcodes.Unauthorized("User not found in context")
+		}
+		if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
+			return errcodes.Forbidden("Bulk download requires books:read permission")
+		}
+
+		// Validate file_ids by marshaling the data and checking the field.
+		dataBytes, err := json.Marshal(params.Data)
+		if err != nil {
+			return errcodes.BadRequest("Invalid bulk download data")
+		}
+		var bulkData models.JobBulkDownloadData
+		if err := json.Unmarshal(dataBytes, &bulkData); err != nil {
+			return errcodes.BadRequest("Invalid bulk download data")
+		}
+		if len(bulkData.FileIDs) == 0 {
+			return errcodes.BadRequest("No file IDs provided for bulk download")
+		}
+	}
+
 	job := &models.Job{
 		Type:       params.Type,
 		Status:     models.JobStatusPending,
