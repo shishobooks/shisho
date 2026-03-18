@@ -148,35 +148,40 @@ type CleanupStats struct {
 }
 
 // RunCleanupWithStats performs cleanup and returns statistics.
+// Includes both individual cached files and bulk zip files in accounting.
 func RunCleanupWithStats(cacheDir string, maxSizeBytes int64) (*CleanupStats, error) {
 	stats := &CleanupStats{}
 
-	// Get initial state
+	// Get initial state (individual files + bulk zips)
 	entriesBefore, err := ListCacheEntries(cacheDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list cache entries")
 	}
+	_, bulkSizeBefore, _ := listBulkZipEntries(cacheDir)
 
 	var totalBefore int64
 	for _, e := range entriesBefore {
 		totalBefore += e.SizeBytes
 	}
+	totalBefore += bulkSizeBefore
 
 	// Run cleanup
 	if err := RunCleanup(cacheDir, maxSizeBytes); err != nil {
 		return nil, err
 	}
 
-	// Get final state
+	// Get final state (individual files + bulk zips)
 	entriesAfter, err := ListCacheEntries(cacheDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list cache entries after cleanup")
 	}
+	_, bulkSizeAfter, _ := listBulkZipEntries(cacheDir)
 
 	var totalAfter int64
 	for _, e := range entriesAfter {
 		totalAfter += e.SizeBytes
 	}
+	totalAfter += bulkSizeAfter
 
 	stats.FilesRemoved = len(entriesBefore) - len(entriesAfter)
 	stats.BytesRemoved = totalBefore - totalAfter
