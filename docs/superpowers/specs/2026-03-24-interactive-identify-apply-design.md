@@ -84,7 +84,9 @@ When a field is in the search result's `disabled_fields` array (computed from pl
 
 ### Search Result Contract Change
 
-`search()` must return complete metadata in each result. The `SearchResult` type already has all metadata fields — plugins just need to populate them fully instead of deferring to `enrich()`.
+`search()` must return complete metadata in each result. The `SearchResult` type needs to be unified with `ParsedMetadata` — currently some fields like `imprint` and `url` only exist on `ParsedMetadata` but not as top-level `SearchResult` fields. Add any missing fields to `SearchResult` so it is the single canonical source for all metadata. The `Metadata` subfield on `SearchResult` can then be removed.
+
+Both the frontend review form and the scan worker read metadata from the top-level `SearchResult` fields exclusively.
 
 ### New Apply Endpoint
 
@@ -100,7 +102,7 @@ type applyPayload struct {
     // Fields contains the final merged values keyed by field name:
     // - "title": string
     // - "subtitle": string
-    // - "authors": []string
+    // - "authors": []{ name: string, role: string }  (role may be empty)
     // - "narrators": []string
     // - "series": string
     // - "series_number": float64
@@ -169,3 +171,18 @@ In `pkg/worker/scan_unified.go`, `runMetadataEnrichers`:
 ### No New Dependencies
 
 Tag inputs, text inputs, textarea, and cover display all use existing UI components and patterns.
+
+## Plugin SDK Changes
+
+Since `enrich()` is being removed, the TypeScript SDK in `packages/plugin-types/` must be updated:
+- Remove the `enrich` function from the `metadataEnricher` capability interface
+- Update any types that reference `EnrichmentResult` or `providerData`
+- The SDK must stay in sync with Go types per project conventions
+
+## Apply Payload Conversion
+
+The `Fields` map in the apply payload uses `map[string]any`, which requires type conversion to populate a `ParsedMetadata` struct. The handler should use manual conversion (switch on field name, type-assert each value) rather than reflection-based approaches, keeping it explicit and debuggable. Key conversions:
+- `authors`: `[]any` → `[]ParsedAuthor` (each element is `{ name: string, role: string }`)
+- `series_number`: `float64` → `*float64`
+- `release_date`: `string` → `*time.Time` (parse from ISO format)
+- `identifiers`: `[]any` → `[]ParsedIdentifier`
