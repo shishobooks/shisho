@@ -188,12 +188,8 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	search.RegisterRoutesWithGroup(searchGroup, db)
 
-	// Plugins routes (admin only)
-	pluginsGroup := e.Group("/plugins")
-	pluginsGroup.Use(authMiddleware.Authenticate)
-	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
+	// Plugin identify routes (editors can search/apply metadata)
 	pluginService := plugins.NewService(db)
-	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
 	bookSvc := books.NewService(db)
 	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
 	enrichDeps := &plugins.EnrichDeps{
@@ -207,6 +203,16 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 		ImprintFinder:   imprints.NewService(db),
 		SearchIndexer:   search.NewService(db),
 	}
+	pluginIdentifyGroup := e.Group("/plugins")
+	pluginIdentifyGroup.Use(authMiddleware.Authenticate)
+	pluginIdentifyGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	plugins.RegisterIdentifyRoutes(pluginIdentifyGroup, pluginService, pm, enrichDeps)
+
+	// Plugins management routes (admin only)
+	pluginsGroup := e.Group("/plugins")
+	pluginsGroup.Use(authMiddleware.Authenticate)
+	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
+	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
 	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
 }
 
