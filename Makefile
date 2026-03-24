@@ -120,6 +120,10 @@ start\:api:
 
 .PHONY: test
 test:
+	TZ=America/Chicago CI=true go test $(TEST_FILES) -coverprofile $(COVERAGE_PROFILE) $(TEST_FLAGS)
+
+.PHONY: test\:race
+test\:race:
 	TZ=America/Chicago CI=true go test -race $(TEST_FILES) -coverprofile $(COVERAGE_PROFILE) $(TEST_FLAGS)
 
 .PHONY: test\:cover
