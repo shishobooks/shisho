@@ -5,13 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,6 +49,7 @@ export function IdentifyBookDialog({
   const [selectedFileId, setSelectedFileId] = useState<number | undefined>(
     undefined,
   );
+  const [reviewHasChanges, setReviewHasChanges] = useState(false);
   const searchMutation = usePluginSearch();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
@@ -129,7 +130,11 @@ export function IdentifyBookDialog({
   };
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <FormDialog
+      hasChanges={step === "review" && reviewHasChanges}
+      onOpenChange={onOpenChange}
+      open={open}
+    >
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader className="pr-8">
           <DialogTitle>Identify Book</DialogTitle>
@@ -470,12 +475,16 @@ export function IdentifyBookDialog({
           <IdentifyReviewForm
             book={book}
             fileId={selectedFileId}
-            onBack={() => setStep("search")}
+            onBack={() => {
+              setReviewHasChanges(false);
+              setStep("search");
+            }}
             onClose={() => onOpenChange(false)}
+            onHasChangesChange={setReviewHasChanges}
             result={selectedResult}
           />
         )}
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

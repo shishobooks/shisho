@@ -1,5 +1,6 @@
+import equal from "fast-deep-equal";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ interface IdentifyReviewFormProps {
   fileId?: number;
   onBack: () => void;
   onClose: () => void;
+  onHasChangesChange?: (hasChanges: boolean) => void;
 }
 
 type FieldStatus = "unchanged" | "changed" | "new";
@@ -364,6 +366,7 @@ export function IdentifyReviewForm({
   fileId,
   onBack,
   onClose,
+  onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
   const applyMutation = usePluginApply();
@@ -371,6 +374,7 @@ export function IdentifyReviewForm({
     () => new Set(result.disabled_fields ?? []),
     [result.disabled_fields],
   );
+  const isDisabled = (field: string) => disabledFields.has(field);
 
   // ---- Extract current values ----
   const currentAuthors: AuthorEntry[] = useMemo(
@@ -485,6 +489,51 @@ export function IdentifyReviewForm({
     newCoverUrl && !isDisabled("cover") ? "new" : "current",
   );
 
+  // ---- Unsaved changes tracking ----
+  const hasChanges = useMemo(() => {
+    return (
+      title !== defaults.title.value ||
+      subtitle !== defaults.subtitle.value ||
+      description !== defaults.description.value ||
+      !equal(authors, defaults.authors.value) ||
+      !equal(narrators, defaults.narrators.value) ||
+      series !== defaults.series.value ||
+      seriesNumber !== defaults.seriesNumber.value ||
+      !equal(genres, defaults.genres.value) ||
+      !equal(tags, defaults.tags.value) ||
+      publisher !== defaults.publisher.value ||
+      imprint !== defaults.imprint.value ||
+      releaseDate !== defaults.releaseDate.value ||
+      url !== defaults.url.value ||
+      !equal(identifiers, defaults.identifiers.value) ||
+      coverSelection !==
+        (newCoverUrl && !disabledFields.has("cover") ? "new" : "current")
+    );
+  }, [
+    title,
+    subtitle,
+    description,
+    authors,
+    narrators,
+    series,
+    seriesNumber,
+    genres,
+    tags,
+    publisher,
+    imprint,
+    releaseDate,
+    url,
+    identifiers,
+    coverSelection,
+    defaults,
+    newCoverUrl,
+    disabledFields,
+  ]);
+
+  useEffect(() => {
+    onHasChangesChange?.(hasChanges);
+  }, [hasChanges, onHasChangesChange]);
+
   // ---- Submit ----
   const handleSubmit = () => {
     const fields: Record<string, unknown> = {
@@ -530,9 +579,6 @@ export function IdentifyReviewForm({
       },
     );
   };
-
-  // ---- Helper to check if a field is disabled ----
-  const isDisabled = (field: string) => disabledFields.has(field);
 
   // ---- Render ----
   return (
@@ -667,7 +713,12 @@ export function IdentifyReviewForm({
         <TagInput
           disabled={isDisabled("authors")}
           onChange={(names) =>
-            setAuthors(names.map((name) => ({ name, role: undefined })))
+            setAuthors(
+              names.map((name) => {
+                const existing = authors.find((a) => a.name === name);
+                return existing ?? { name, role: undefined };
+              }),
+            )
           }
           placeholder="Add author..."
           tags={authors.map((a) => a.name)}
