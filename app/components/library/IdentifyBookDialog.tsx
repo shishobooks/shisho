@@ -1,6 +1,5 @@
 import { ExternalLink, Info, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  usePluginEnrich,
   usePluginIdentifierTypes,
   usePluginOrder,
   usePluginSearch,
@@ -51,7 +49,6 @@ export function IdentifyBookDialog({
     undefined,
   );
   const searchMutation = usePluginSearch();
-  const enrichMutation = usePluginEnrich();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
   const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
@@ -95,28 +92,6 @@ export function IdentifyBookDialog({
     }
   };
 
-  const handleApply = () => {
-    if (!selectedResult) return;
-    enrichMutation.mutate(
-      {
-        pluginScope: selectedResult.plugin_scope,
-        pluginId: selectedResult.plugin_id,
-        bookId: book.id,
-        fileId: selectedFileId,
-        providerData: selectedResult.provider_data,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Book metadata updated successfully");
-          onOpenChange(false);
-        },
-        onError: (error) => {
-          toast.error(error.message || "Failed to apply metadata");
-        },
-      },
-    );
-  };
-
   const results = searchMutation.data?.results ?? [];
 
   // Detect plugin IDs that appear under multiple scopes
@@ -140,37 +115,9 @@ export function IdentifyBookDialog({
       ? `${result.plugin_scope}/${result.plugin_id}`
       : result.plugin_id;
 
-  const resolveField = (
-    result: PluginSearchResult,
-    field: keyof PluginSearchResult,
-    metadataField?: string,
-  ) => {
-    const topLevel = result[field];
-    if (topLevel !== undefined && topLevel !== null && topLevel !== "")
-      return topLevel;
-    if (result.metadata) {
-      const mdField = metadataField || field;
-      return (result.metadata as Record<string, unknown>)[mdField as string];
-    }
-    return undefined;
-  };
-
   const resolveAuthors = (result: PluginSearchResult): string[] | undefined => {
-    if (result.authors && result.authors.length > 0) return result.authors;
-    if (result.metadata?.authors && result.metadata.authors.length > 0) {
-      return result.metadata.authors.map((a) => a.name);
-    }
-    return undefined;
-  };
-
-  const resolveNarrators = (
-    result: PluginSearchResult,
-  ): string[] | undefined => {
-    if (result.narrators && result.narrators.length > 0)
-      return result.narrators;
-    if (result.metadata?.narrators && result.metadata.narrators.length > 0) {
-      return result.metadata.narrators;
-    }
+    if (result.authors && result.authors.length > 0)
+      return result.authors.map((a) => a.name);
     return undefined;
   };
 
@@ -273,39 +220,24 @@ export function IdentifyBookDialog({
                               {pluginLabel(result)}
                             </Badge>
                           </div>
-                          {(() => {
-                            const subtitle = resolveField(
-                              result,
-                              "subtitle",
-                            ) as string;
-                            return subtitle ? (
-                              <p className="text-sm text-muted-foreground/80 leading-tight">
-                                {subtitle}
-                              </p>
-                            ) : null;
-                          })()}
-                          {(() => {
-                            const series = resolveField(
-                              result,
-                              "series",
-                            ) as string;
-                            const seriesNum = resolveField(
-                              result,
-                              "series_number",
-                            ) as number;
-                            return series ? (
-                              <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                                {series}
-                                {seriesNum != null && ` #${seriesNum}`}
-                              </p>
-                            ) : null;
-                          })()}
+                          {result.subtitle && (
+                            <p className="text-sm text-muted-foreground/80 leading-tight">
+                              {result.subtitle}
+                            </p>
+                          )}
+                          {result.series && (
+                            <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                              {result.series}
+                              {result.series_number != null &&
+                                ` #${result.series_number}`}
+                            </p>
+                          )}
                         </div>
 
                         {/* People */}
                         {(() => {
                           const authors = resolveAuthors(result);
-                          const narrators = resolveNarrators(result);
+                          const narrators = result.narrators;
                           const hasAuthors = authors && authors.length > 0;
                           const hasNarrators =
                             narrators && narrators.length > 0;
@@ -396,10 +328,8 @@ export function IdentifyBookDialog({
 
                       {/* Zone 3: Taxonomy */}
                       {(() => {
-                        const genres =
-                          (resolveField(result, "genres") as string[]) ?? [];
-                        const tags =
-                          (resolveField(result, "tags") as string[]) ?? [];
+                        const genres = result.genres ?? [];
+                        const tags = result.tags ?? [];
                         return genres.length > 0 || tags.length > 0 ? (
                           <div className="mt-2.5 space-y-1">
                             {genres.length > 0 && (
@@ -534,15 +464,6 @@ export function IdentifyBookDialog({
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} variant="outline">
             Cancel
-          </Button>
-          <Button
-            disabled={!selectedResult || enrichMutation.isPending}
-            onClick={handleApply}
-          >
-            {enrichMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Apply
           </Button>
         </DialogFooter>
       </DialogContent>
