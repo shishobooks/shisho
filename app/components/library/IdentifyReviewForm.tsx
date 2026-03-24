@@ -908,24 +908,33 @@ export function IdentifyReviewForm({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t">
-        <Button onClick={onBack} type="button" variant="outline">
-          Back
-        </Button>
+      <div className="flex justify-between border-t p-4">
         <Button
           disabled={applyMutation.isPending}
-          onClick={handleSubmit}
-          type="button"
+          onClick={onBack}
+          variant="ghost"
         >
-          {applyMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Applying...
-            </>
-          ) : (
-            "Apply"
-          )}
+          Back to results
         </Button>
+        <div className="flex gap-2">
+          <Button
+            disabled={applyMutation.isPending}
+            onClick={onClose}
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button disabled={applyMutation.isPending} onClick={handleSubmit}>
+            {applyMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Applying...
+              </>
+            ) : (
+              "Apply Changes"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
