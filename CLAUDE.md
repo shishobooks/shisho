@@ -92,7 +92,8 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 - `make start:air` - Start API with hot reload via Air
 - `make check` - Run all validation checks in parallel (tests, Go lint, JS lint)
 - `make lint` - Run Go linting with golangci-lint
-- `make test` - Run all Go tests with race detection and coverage
+- `make test` - Run all Go tests with coverage
+- `make test:race` - Run all Go tests with race detection and coverage (used in CI)
 
 ### Frontend (React/TypeScript)
 - `pnpm start` - Start Vite dev server
