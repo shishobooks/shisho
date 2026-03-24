@@ -50,7 +50,7 @@ func (h *handler) create(c echo.Context) error {
 			return errcodes.Unauthorized("User not found in context")
 		}
 		if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
-			return errcodes.Forbidden("Bulk download requires books:read permission")
+			return errcodes.Forbidden("Bulk download without books:read permission")
 		}
 
 		// Validate file_ids by marshaling the data and checking the field.
@@ -147,7 +147,7 @@ func (h *handler) download(c echo.Context) error {
 		return errcodes.Unauthorized("User not found in context")
 	}
 	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
-		return errcodes.Forbidden("You need books:read permission to download")
+		return errcodes.Forbidden("Downloading without books:read permission")
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
@@ -188,7 +188,7 @@ func (h *handler) download(c echo.Context) error {
 			continue // File may have been deleted since job was created
 		}
 		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to one or more libraries in this download")
+			return errcodes.Forbidden("Accessing libraries in this download without permission")
 		}
 	}
 
