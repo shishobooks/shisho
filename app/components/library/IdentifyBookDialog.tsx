@@ -17,12 +17,14 @@ import { Label } from "@/components/ui/label";
 import {
   usePluginEnrich,
   usePluginIdentifierTypes,
+  usePluginOrder,
   usePluginSearch,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
-import type { Book } from "@/types";
+import { PluginHookMetadataEnricher, type Book } from "@/types";
 import {
+  formatDate,
   formatDuration,
   formatFileSize,
   formatIdentifierType,
@@ -51,6 +53,8 @@ export function IdentifyBookDialog({
   const searchMutation = usePluginSearch();
   const enrichMutation = usePluginEnrich();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
+  const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
+  const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
   const inputRef = useRef<HTMLInputElement>(null);
   const hasSearchedRef = useRef(false);
 
@@ -216,8 +220,9 @@ export function IdentifyBookDialog({
             <div className="text-center py-12 text-muted-foreground space-y-2">
               <p>No results found.</p>
               <p className="text-xs">
-                Make sure you have a metadata enricher plugin installed, or try
-                a different search query.
+                {hasEnricherPlugins
+                  ? "Try a different search query."
+                  : "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."}
               </p>
             </div>
           )}
@@ -252,80 +257,97 @@ export function IdentifyBookDialog({
                     )}
 
                     {/* Details */}
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium leading-tight">
-                          {result.title}
-                        </p>
-                        <Badge className="shrink-0 text-xs" variant="outline">
-                          {pluginLabel(result)}
-                        </Badge>
-                      </div>
+                    <div className="flex-1 min-w-0">
+                      {/* Zone 1: Identity */}
+                      <div>
+                        {/* Title + subtitle */}
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium leading-tight">
+                              {result.title}
+                            </p>
+                            <Badge
+                              className="shrink-0 text-xs"
+                              variant="outline"
+                            >
+                              {pluginLabel(result)}
+                            </Badge>
+                          </div>
+                          {(() => {
+                            const subtitle = resolveField(
+                              result,
+                              "subtitle",
+                            ) as string;
+                            return subtitle ? (
+                              <p className="text-sm text-muted-foreground/80 leading-tight">
+                                {subtitle}
+                              </p>
+                            ) : null;
+                          })()}
+                          {(() => {
+                            const series = resolveField(
+                              result,
+                              "series",
+                            ) as string;
+                            const seriesNum = resolveField(
+                              result,
+                              "series_number",
+                            ) as number;
+                            return series ? (
+                              <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                                {series}
+                                {seriesNum != null && ` #${seriesNum}`}
+                              </p>
+                            ) : null;
+                          })()}
+                        </div>
 
-                      {(() => {
-                        const subtitle = resolveField(
-                          result,
-                          "subtitle",
-                        ) as string;
-                        return subtitle ? (
-                          <p className="text-sm text-muted-foreground/80 leading-tight">
-                            {subtitle}
-                          </p>
-                        ) : null;
-                      })()}
+                        {/* People */}
+                        {(() => {
+                          const authors = resolveAuthors(result);
+                          const narrators = resolveNarrators(result);
+                          const hasAuthors = authors && authors.length > 0;
+                          const hasNarrators =
+                            narrators && narrators.length > 0;
+                          return hasAuthors || hasNarrators ? (
+                            <div className="mt-2 space-y-0.5">
+                              {hasAuthors && (
+                                <p className="text-sm text-muted-foreground">
+                                  {authors.join(", ")}
+                                </p>
+                              )}
+                              {hasNarrators && (
+                                <p className="text-xs text-muted-foreground">
+                                  Narrated by {narrators.join(", ")}
+                                </p>
+                              )}
+                            </div>
+                          ) : null;
+                        })()}
 
-                      {(() => {
-                        const series = resolveField(result, "series") as string;
-                        const seriesNum = resolveField(
-                          result,
-                          "series_number",
-                        ) as number;
-                        return series ? (
-                          <p className="text-xs text-muted-foreground font-medium">
-                            {series}
-                            {seriesNum != null && ` #${seriesNum}`}
-                          </p>
-                        ) : null;
-                      })()}
-
-                      {(() => {
-                        const authors = resolveAuthors(result);
-                        return authors && authors.length > 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            {authors.join(", ")}
-                          </p>
-                        ) : null;
-                      })()}
-
-                      {(() => {
-                        const narrators = resolveNarrators(result);
-                        return narrators && narrators.length > 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            Narrated by {narrators.join(", ")}
-                          </p>
-                        ) : null;
-                      })()}
-
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                        {result.release_date && (
-                          <span>{result.release_date}</span>
-                        )}
-                        {result.publisher && (
-                          <>
+                        {/* Date + publisher */}
+                        {(result.release_date || result.publisher) && (
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/55 mt-2">
                             {result.release_date && (
-                              <span className="text-muted-foreground/50">
+                              <span>{formatDate(result.release_date)}</span>
+                            )}
+                            {result.release_date && result.publisher && (
+                              <span className="text-muted-foreground/30">
                                 ·
                               </span>
                             )}
-                            <span>{result.publisher}</span>
-                          </>
+                            {result.publisher && (
+                              <span>{result.publisher}</span>
+                            )}
+                          </div>
                         )}
                       </div>
 
+                      {/* Zone 2: Identifiers */}
                       {result.identifiers &&
                         result.identifiers.filter((id) => id.type && id.value)
                           .length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
+                          <div className="flex flex-wrap gap-1 mt-2.5">
                             {result.identifiers
                               .filter((id) => id.type && id.value)
                               .map((id) => {
@@ -372,37 +394,53 @@ export function IdentifyBookDialog({
                           </div>
                         )}
 
+                      {/* Zone 3: Taxonomy */}
                       {(() => {
                         const genres =
                           (resolveField(result, "genres") as string[]) ?? [];
                         const tags =
                           (resolveField(result, "tags") as string[]) ?? [];
                         return genres.length > 0 || tags.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {genres.map((g) => (
-                              <Badge
-                                className="text-xs"
-                                key={`genre-${g}`}
-                                variant="secondary"
-                              >
-                                {g}
-                              </Badge>
-                            ))}
-                            {tags.map((tag) => (
-                              <Badge
-                                className="text-xs bg-muted text-muted-foreground"
-                                key={`tag-${tag}`}
-                                variant="outline"
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
+                          <div className="mt-2.5 space-y-1">
+                            {genres.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                  Genres
+                                </span>
+                                {genres.map((g) => (
+                                  <Badge
+                                    className="text-xs"
+                                    key={`genre-${g}`}
+                                    variant="outline"
+                                  >
+                                    {g}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {tags.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                  Tags
+                                </span>
+                                {tags.map((tag) => (
+                                  <Badge
+                                    className="text-xs"
+                                    key={`tag-${tag}`}
+                                    variant="outline"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ) : null;
                       })()}
 
+                      {/* Zone 4: Description */}
                       {result.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                        <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-line mt-2.5">
                           {result.description}
                         </p>
                       )}
