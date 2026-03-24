@@ -2652,27 +2652,10 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Take the first result
+		// Take the first result and convert directly to ParsedMetadata
+		// (enrich() hook has been removed; search results now carry all metadata)
 		firstResult := searchResp.Results[0]
-
-		// Phase 2: Enrich with the selected result
-		enrichCtx := map[string]interface{}{
-			"selectedResult": firstResult.ProviderData,
-			"book":           bookCtx,
-			"file":           fileCtx,
-		}
-
-		result, eErr := w.pluginManager.RunMetadataEnrich(ctx, rt, enrichCtx)
-		if eErr != nil {
-			logWarn("enricher enrich failed", logger.Data{
-				"plugin": rt.Manifest().ID,
-				"error":  eErr.Error(),
-			})
-			continue
-		}
-		if !result.Modified || result.Metadata == nil {
-			continue
-		}
+		searchMeta := searchResultToMetadata(&firstResult)
 
 		// Get effective field settings for this library + plugin
 		declaredFields := enricherCap.Fields
@@ -2690,7 +2673,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 
 		// Filter to only declared and enabled fields, log warnings for undeclared
-		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), logWarn)
+		filteredMetadata := filterMetadataFields(searchMeta, declaredFields, enabledFields, rt.PluginID(), logWarn)
 
 		// Download cover from URL if coverData is empty and coverUrl is set
 		if filteredMetadata.CoverURL != "" && len(filteredMetadata.CoverData) == 0 {
@@ -2726,6 +2709,37 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	}
 
 	return &enrichedMeta
+}
+
+// searchResultToMetadata converts a SearchResult into a ParsedMetadata.
+// This is a temporary bridge used during the scan pipeline until the enrich()
+// hook removal is fully integrated (Task 4 will refactor this properly).
+func searchResultToMetadata(sr *plugins.SearchResult) *mediafile.ParsedMetadata {
+	md := &mediafile.ParsedMetadata{
+		Title:        sr.Title,
+		Subtitle:     sr.Subtitle,
+		Description:  sr.Description,
+		Publisher:    sr.Publisher,
+		Imprint:      sr.Imprint,
+		URL:          sr.URL,
+		CoverURL:     sr.CoverURL,
+		Series:       sr.Series,
+		SeriesNumber: sr.SeriesNumber,
+		Authors:      sr.Authors,
+		Narrators:    sr.Narrators,
+		Genres:       sr.Genres,
+		Tags:         sr.Tags,
+		Identifiers:  sr.Identifiers,
+	}
+
+	// Parse release date string to *time.Time
+	if sr.ReleaseDate != "" {
+		if t, err := time.Parse(time.RFC3339, sr.ReleaseDate); err == nil {
+			md.ReleaseDate = &t
+		}
+	}
+
+	return md
 }
 
 // mergeEnrichedMetadata applies fields from enrichment result to the target

@@ -324,122 +324,12 @@ func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
 
 	result := resp.Results[0]
 	assert.Equal(t, "Search: My Book", result.Title)
-	assert.Equal(t, []string{"Search Author"}, result.Authors)
+	require.Len(t, result.Authors, 1)
+	assert.Equal(t, "Search Author", result.Authors[0].Name)
+	assert.Equal(t, "writer", result.Authors[0].Role)
 	assert.Equal(t, "Search Publisher", result.Publisher)
 	require.Len(t, result.Identifiers, 1)
 	assert.Equal(t, "goodreads", result.Identifiers[0].Type)
-	assert.NotNil(t, result.ProviderData)
-}
-
-func TestRunMetadataEnrich_Modified(t *testing.T) {
-	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
-	ctx := context.Background()
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": map[string]interface{}{
-			"internalId": 42,
-			"query":      "My Book",
-		},
-		"book": map[string]interface{}{
-			"title":   "My Book",
-			"authors": []string{"Author A"},
-		},
-		"file": map[string]interface{}{
-			"fileType": "epub",
-			"filePath": "/library/book.epub",
-		},
-	}
-
-	result, err := mgr.RunMetadataEnrich(ctx, rt, enrichCtx)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.Modified)
-	require.NotNil(t, result.Metadata)
-
-	assert.Equal(t, "Enriched: My Book", result.Metadata.Description)
-	assert.Equal(t, []string{"Enriched Genre"}, result.Metadata.Genres)
-	assert.Equal(t, []string{"enriched-tag"}, result.Metadata.Tags)
-	assert.Equal(t, "Enriched Series", result.Metadata.Series)
-	require.NotNil(t, result.Metadata.SeriesNumber)
-	assert.InDelta(t, 3.0, *result.Metadata.SeriesNumber, 0.001)
-	assert.Equal(t, "Enriched Publisher", result.Metadata.Publisher)
-	assert.Equal(t, "https://enriched.example.com", result.Metadata.URL)
-	require.Len(t, result.Metadata.Identifiers, 1)
-	assert.Equal(t, mediafile.ParsedIdentifier{Type: "goodreads", Value: "12345"}, result.Metadata.Identifiers[0])
-}
-
-func TestRunMetadataEnrich_NotModified(t *testing.T) {
-	db := setupTestDB(t)
-	service := NewService(db)
-	pluginDir := t.TempDir()
-
-	// Create an enricher that returns modified: false from enrich
-	destDir := filepath.Join(pluginDir, "test", "noop-enricher")
-	err := os.MkdirAll(destDir, 0755)
-	require.NoError(t, err)
-
-	manifest := `{
-  "manifestVersion": 1,
-  "id": "noop-enricher",
-  "name": "Noop Enricher",
-  "version": "1.0.0",
-  "capabilities": {
-    "metadataEnricher": {
-      "description": "Does nothing",
-      "fileTypes": ["epub"],
-      "fields": ["title"]
-    }
-  }
-}`
-	mainJS := `var plugin = (function() {
-  return {
-    metadataEnricher: {
-      search: function(context) {
-        return { results: [{ title: "Result", providerData: {} }] };
-      },
-      enrich: function(context) {
-        return { modified: false };
-      }
-    }
-  };
-})();`
-
-	err = os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644)
-	require.NoError(t, err)
-
-	manager := NewManager(service, pluginDir, "")
-	ctx := context.Background()
-
-	plugin := &models.Plugin{
-		Scope:       "test",
-		ID:          "noop-enricher",
-		Name:        "Noop Enricher",
-		Version:     "1.0.0",
-		Status:      models.PluginStatusActive,
-		InstalledAt: time.Now(),
-	}
-	err = service.InstallPlugin(ctx, plugin)
-	require.NoError(t, err)
-
-	err = manager.LoadPlugin(ctx, "test", "noop-enricher")
-	require.NoError(t, err)
-
-	rt := manager.GetRuntime("test", "noop-enricher")
-	require.NotNil(t, rt)
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": map[string]interface{}{},
-		"book":           map[string]interface{}{"title": "Test"},
-		"file":           map[string]interface{}{"fileType": "epub"},
-	}
-
-	result, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.False(t, result.Modified)
-	assert.Nil(t, result.Metadata)
 }
 
 func TestRunOutputGenerator_Success(t *testing.T) {
@@ -527,16 +417,6 @@ func TestRunMetadataSearch_NoHook(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
 }
 
-func TestRunMetadataEnrich_NoHook(t *testing.T) {
-	// Use the converter plugin which has no enricher hook
-	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
-	ctx := context.Background()
-
-	_, err := mgr.RunMetadataEnrich(ctx, rt, map[string]interface{}{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
-}
-
 func TestRunMetadataSearch_NewFields(t *testing.T) {
 	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
@@ -563,62 +443,24 @@ func TestRunMetadataSearch_NewFields(t *testing.T) {
 
 	// Existing fields still work
 	assert.Equal(t, "Search: My Book", result.Title)
-	assert.Equal(t, []string{"Search Author"}, result.Authors)
+	require.Len(t, result.Authors, 1)
+	assert.Equal(t, "Search Author", result.Authors[0].Name)
+	assert.Equal(t, "writer", result.Authors[0].Role)
 	assert.Equal(t, "Search Publisher", result.Publisher)
 
-	// New scalar fields
+	// Scalar fields
 	assert.Equal(t, "A Search Subtitle", result.Subtitle)
 	assert.Equal(t, "Search Series", result.Series)
 	require.NotNil(t, result.SeriesNumber)
 	assert.InDelta(t, 2.5, *result.SeriesNumber, 0.001)
+	assert.Equal(t, "Search Imprint", result.Imprint)
+	assert.Equal(t, "https://example.com/book", result.URL)
+	assert.Equal(t, "https://example.com/cover.jpg", result.CoverURL)
 
-	// New array fields
+	// Array fields
 	assert.Equal(t, []string{"Fiction", "Fantasy"}, result.Genres)
 	assert.Equal(t, []string{"epic", "adventure"}, result.Tags)
 	assert.Equal(t, []string{"Narrator One", "Narrator Two"}, result.Narrators)
-
-	// Embedded metadata
-	require.NotNil(t, result.Metadata)
-	assert.Equal(t, "Search: My Book", result.Metadata.Title)
-	assert.Equal(t, "A Search Subtitle", result.Metadata.Subtitle)
-	assert.Equal(t, "Search Series", result.Metadata.Series)
-	require.NotNil(t, result.Metadata.SeriesNumber)
-	assert.InDelta(t, 2.5, *result.Metadata.SeriesNumber, 0.001)
-	assert.Equal(t, []string{"Fiction", "Fantasy"}, result.Metadata.Genres)
-	assert.Equal(t, []string{"epic", "adventure"}, result.Metadata.Tags)
-	assert.Equal(t, []string{"Narrator One", "Narrator Two"}, result.Metadata.Narrators)
-	assert.Equal(t, "https://example.com/cover.jpg", result.Metadata.CoverURL)
-	require.Len(t, result.Metadata.Authors, 1)
-	assert.Equal(t, "Search Author", result.Metadata.Authors[0].Name)
-	assert.Equal(t, "writer", result.Metadata.Authors[0].Role)
-}
-
-func TestRunMetadataEnrich_CoverUrl(t *testing.T) {
-	t.Parallel()
-	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
-	ctx := context.Background()
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": map[string]interface{}{
-			"internalId": 42,
-			"query":      "My Book",
-		},
-		"book": map[string]interface{}{
-			"title":   "My Book",
-			"authors": []string{"Author A"},
-		},
-		"file": map[string]interface{}{
-			"fileType": "epub",
-			"filePath": "/library/book.epub",
-		},
-	}
-
-	result, err := mgr.RunMetadataEnrich(ctx, rt, enrichCtx)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.Modified)
-	require.NotNil(t, result.Metadata)
-	assert.Equal(t, "https://example.com/enriched-cover.jpg", result.Metadata.CoverURL)
 }
 
 func TestRunMetadataSearch_NoNewFields(t *testing.T) {
@@ -701,30 +543,28 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	assert.Nil(t, result.Genres)
 	assert.Nil(t, result.Tags)
 	assert.Nil(t, result.Narrators)
-	assert.Nil(t, result.Metadata)
 }
 
-func TestPassthroughPattern(t *testing.T) {
+func TestSearchResultCarriesAllMetadata(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
-	// Create a plugin that uses the passthrough pattern:
-	// search() returns metadata in providerData, enrich() returns it unchanged
-	destDir := filepath.Join(pluginDir, "test", "passthrough-enricher")
+	// Create a plugin where search() returns all metadata directly
+	destDir := filepath.Join(pluginDir, "test", "full-search-enricher")
 	err := os.MkdirAll(destDir, 0755)
 	require.NoError(t, err)
 
 	manifest := `{
   "manifestVersion": 1,
-  "id": "passthrough-enricher",
-  "name": "Passthrough Enricher",
+  "id": "full-search-enricher",
+  "name": "Full Search Enricher",
   "version": "1.0.0",
   "capabilities": {
     "metadataEnricher": {
-      "description": "Passthrough enricher",
+      "description": "Search carries all metadata",
       "fileTypes": ["epub"],
       "fields": ["title", "description", "genres", "cover"]
     }
@@ -734,24 +574,17 @@ func TestPassthroughPattern(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(context) {
-        var md = {
-          title: "Passthrough Title",
-          description: "Passthrough description",
-          genres: ["SciFi"],
-          coverUrl: "https://example.com/cover.jpg"
-        };
         return {
           results: [{
-            title: "Passthrough Title",
-            description: "Passthrough description",
+            title: "Full Title",
+            description: "Full description",
             genres: ["SciFi"],
-            providerData: md,
-            metadata: md
+            coverUrl: "https://example.com/cover.jpg",
+            authors: [{ name: "Full Author", role: "writer" }],
+            imprint: "Full Imprint",
+            url: "https://example.com/book"
           }]
         };
-      },
-      enrich: function(context) {
-        return { modified: true, metadata: context.selectedResult };
       }
     }
   };
@@ -767,8 +600,8 @@ func TestPassthroughPattern(t *testing.T) {
 
 	plugin := &models.Plugin{
 		Scope:       "test",
-		ID:          "passthrough-enricher",
-		Name:        "Passthrough Enricher",
+		ID:          "full-search-enricher",
+		Name:        "Full Search Enricher",
 		Version:     "1.0.0",
 		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now(),
@@ -776,13 +609,12 @@ func TestPassthroughPattern(t *testing.T) {
 	err = service.InstallPlugin(ctx, plugin)
 	require.NoError(t, err)
 
-	err = manager.LoadPlugin(ctx, "test", "passthrough-enricher")
+	err = manager.LoadPlugin(ctx, "test", "full-search-enricher")
 	require.NoError(t, err)
 
-	rt := manager.GetRuntime("test", "passthrough-enricher")
+	rt := manager.GetRuntime("test", "full-search-enricher")
 	require.NotNil(t, rt)
 
-	// Step 1: Search returns metadata in both display fields and metadata object
 	searchCtx := map[string]interface{}{
 		"query": "Test",
 		"book":  map[string]interface{}{"title": "Test"},
@@ -794,30 +626,15 @@ func TestPassthroughPattern(t *testing.T) {
 	require.Len(t, searchResp.Results, 1)
 
 	sr := searchResp.Results[0]
-	assert.Equal(t, "Passthrough Title", sr.Title)
+	assert.Equal(t, "Full Title", sr.Title)
+	assert.Equal(t, "Full description", sr.Description)
 	assert.Equal(t, []string{"SciFi"}, sr.Genres)
-	require.NotNil(t, sr.Metadata)
-	assert.Equal(t, "Passthrough Title", sr.Metadata.Title)
-	assert.Equal(t, "https://example.com/cover.jpg", sr.Metadata.CoverURL)
-
-	// Step 2: Enrich receives providerData (the metadata) and returns it unchanged
-	enrichCtx := map[string]interface{}{
-		"selectedResult": sr.ProviderData,
-		"book":           map[string]interface{}{"title": "Test"},
-		"file":           map[string]interface{}{"fileType": "epub"},
-	}
-
-	enrichResp, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
-	require.NoError(t, err)
-	require.NotNil(t, enrichResp)
-	assert.True(t, enrichResp.Modified)
-	require.NotNil(t, enrichResp.Metadata)
-
-	// The enriched metadata should match what was originally returned at search time
-	assert.Equal(t, "Passthrough Title", enrichResp.Metadata.Title)
-	assert.Equal(t, "Passthrough description", enrichResp.Metadata.Description)
-	assert.Equal(t, []string{"SciFi"}, enrichResp.Metadata.Genres)
-	assert.Equal(t, "https://example.com/cover.jpg", enrichResp.Metadata.CoverURL)
+	assert.Equal(t, "https://example.com/cover.jpg", sr.CoverURL)
+	require.Len(t, sr.Authors, 1)
+	assert.Equal(t, "Full Author", sr.Authors[0].Name)
+	assert.Equal(t, "writer", sr.Authors[0].Role)
+	assert.Equal(t, "Full Imprint", sr.Imprint)
+	assert.Equal(t, "https://example.com/book", sr.URL)
 }
 
 func TestRunOutputGenerator_NoHook(t *testing.T) {

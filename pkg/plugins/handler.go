@@ -1336,13 +1336,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		allResults = append(allResults, resp.Results...)
 	}
 
-	// Strip binary cover data from search results — covers are displayed via imageUrl
-	for i := range allResults {
-		if allResults[i].Metadata != nil {
-			allResults[i].Metadata.CoverData = nil
-		}
-	}
-
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"results": allResults,
 	})
@@ -1350,99 +1343,11 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 // enrichMetadata runs enrich() on a specific plugin with a selected search result,
 // then applies the returned metadata to the book.
+// DEPRECATED: This endpoint will be removed in favor of POST /plugins/apply.
 func (h *handler) enrichMetadata(c echo.Context) error {
-	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
-
-	var payload enrichPayload
-	if err := c.Bind(&payload); err != nil {
-		return errcodes.ValidationError(err.Error())
-	}
-
-	// Get the specific plugin runtime
-	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
-	if rt == nil {
-		return errcodes.NotFound("Plugin")
-	}
-
-	// Look up the book with all relations needed for enrichment
-	var book models.Book
-	if err := h.db.NewSelect().Model(&book).
-		Where("b.id = ?", payload.BookID).
-		Relation("Authors").
-		Relation("Authors.Person").
-		Relation("BookSeries").
-		Relation("BookSeries.Series").
-		Relation("BookGenres").
-		Relation("BookGenres.Genre").
-		Relation("BookTags").
-		Relation("BookTags.Tag").
-		Relation("Files").
-		Relation("Files.Identifiers").
-		Scan(ctx); err != nil {
-		return errcodes.NotFound("Book")
-	}
-
-	// Check library access
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
-	}
-	if !user.HasLibraryAccess(book.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
-	}
-
-	// Resolve the target file for enrichment
-	var targetFile *models.File
-	if payload.FileID != nil {
-		for _, f := range book.Files {
-			if f.ID == *payload.FileID {
-				targetFile = f
-				break
-			}
-		}
-		if targetFile == nil {
-			return errcodes.NotFound("File")
-		}
-	} else if len(book.Files) > 0 {
-		targetFile = book.Files[0]
-	}
-
-	bookCtx := buildSearchBookContext(&book)
-	fileCtx := map[string]interface{}{}
-	if targetFile != nil {
-		fileCtx["fileType"] = targetFile.FileType
-		fileCtx["filePath"] = targetFile.Filepath
-	}
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": payload.ProviderData,
-		"book":           bookCtx,
-		"file":           fileCtx,
-	}
-
-	result, err := h.manager.RunMetadataEnrich(ctx, rt, enrichCtx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// If the plugin didn't modify anything or we don't have persistence deps, return as-is
-	if !result.Modified || result.Metadata == nil || h.enrich == nil {
-		return c.JSON(http.StatusOK, result)
-	}
-
-	// Apply enriched metadata to the book
-	if err := h.applyEnrichment(ctx, &book, targetFile, result.Metadata, rt, log); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Reload the book with all relations to return the updated state
-	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, book.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return c.JSON(http.StatusOK, updatedBook)
+	// Stubbed out — RunMetadataEnrich has been removed.
+	// This handler will be fully removed in Task 2.
+	return errcodes.ValidationError("enrich endpoint is deprecated; use POST /plugins/apply instead")
 }
 
 // DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
