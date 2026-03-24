@@ -2581,9 +2581,9 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 }
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
-// Uses the search→first→enrich pattern: each enricher's search() is called with the
-// book title as query, then the first result is passed to enrich() for full metadata.
-// Each enricher is called in user-defined order; first non-empty value per field wins.
+// Each enricher's search() is called with the book title as query, and the first
+// result is converted directly to ParsedMetadata via SearchResultToMetadata.
+// Enrichers are called in user-defined order; first non-empty value per field wins.
 func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
 		return metadata
@@ -2633,7 +2633,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Phase 1: Search for candidates
+		// Search for candidates
 		searchCtx := map[string]interface{}{
 			"query": query,
 			"book":  bookCtx,
@@ -2653,7 +2653,6 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 
 		// Take the first result and convert directly to ParsedMetadata
-		// (enrich() hook has been removed; search results now carry all metadata)
 		firstResult := searchResp.Results[0]
 		searchMeta := plugins.SearchResultToMetadata(&firstResult)
 
@@ -2693,7 +2692,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		modified = true
 	}
 
-	// Phase 3: Merge file-parsed metadata as fallback for fields no enricher provided.
+	// Merge file-parsed metadata as fallback for fields no enricher provided.
 	// This gives enrichers priority over file metadata (priority 2 > priority 3).
 	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
 
