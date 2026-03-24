@@ -1,5 +1,13 @@
-import { GitMerge, List, Loader2, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import {
+  Download,
+  GitMerge,
+  List,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
@@ -12,13 +20,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useBooks, useDeleteBooks } from "@/hooks/queries/books";
+import { useCreateJob } from "@/hooks/queries/jobs";
 import {
   useAddBooksToList,
   useCreateList,
   useListLists,
 } from "@/hooks/queries/lists";
+import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import type { CreateListPayload, Library } from "@/types";
+import { formatFileSize } from "@/utils/format";
 
 interface SelectionToolbarProps {
   library?: Library;
@@ -33,16 +44,67 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
+  const { startDownload } = useBulkDownload();
+  const createJobMutation = useCreateJob();
+
   const listsQuery = useListLists();
   const addToListMutation = useAddBooksToList();
   const createListMutation = useCreateList();
   const deleteBooksMutation = useDeleteBooks();
 
-  // Fetch book details for selected books (needed for dialog)
-  const booksQuery = useBooks(
+  // Fetch all selected books (not just current page) for download info and delete dialog
+  const allSelectedBooksQuery = useBooks(
     { ids: selectedBookIds },
-    { enabled: showDeleteDialog && selectedBookIds.length > 0 },
+    { enabled: selectedBookIds.length > 0 },
   );
+
+  const downloadInfo = useMemo(() => {
+    const allBooks = allSelectedBooksQuery.data?.books;
+    if (!allBooks || selectedBookIds.length === 0) return null;
+
+    const fileIds: number[] = [];
+    let totalSize = 0;
+
+    for (const bookId of selectedBookIds) {
+      const book = allBooks.find((b) => b.id === bookId);
+      if (!book?.primary_file_id) continue;
+      const primaryFile = book.files?.find(
+        (f) => f.id === book.primary_file_id,
+      );
+      if (primaryFile) {
+        fileIds.push(primaryFile.id);
+        totalSize += primaryFile.filesize_bytes ?? 0;
+      }
+    }
+
+    return { fileIds, totalSize };
+  }, [allSelectedBooksQuery.data?.books, selectedBookIds]);
+
+  const handleDownload = async () => {
+    if (!downloadInfo || downloadInfo.fileIds.length === 0) return;
+
+    try {
+      const job = await createJobMutation.mutateAsync({
+        payload: {
+          type: "bulk_download",
+          data: {
+            file_ids: downloadInfo.fileIds,
+            estimated_size_bytes: downloadInfo.totalSize,
+          },
+        },
+      });
+      startDownload(
+        job.id,
+        downloadInfo.fileIds.length,
+        downloadInfo.totalSize,
+      );
+      exitSelectionMode();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start download";
+      toast.error(message);
+    }
+  };
 
   const lists = listsQuery.data?.lists ?? [];
   const editableLists = lists.filter((list) => list.permission !== "viewer");
@@ -184,6 +246,29 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         </PopoverContent>
       </Popover>
 
+      <Button
+        disabled={
+          !downloadInfo ||
+          downloadInfo.fileIds.length === 0 ||
+          createJobMutation.isPending
+        }
+        onClick={handleDownload}
+        size="sm"
+        variant="default"
+      >
+        {createJobMutation.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+        Download
+        {downloadInfo && downloadInfo.totalSize > 0 && (
+          <span className="text-xs opacity-75">
+            ({formatFileSize(downloadInfo.totalSize)})
+          </span>
+        )}
+      </Button>
+
       {selectedBookIds.length >= 2 && library && (
         <Button
           onClick={() => setShowMergeDialog(true)}
@@ -238,7 +323,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       />
 
       <DeleteConfirmationDialog
-        books={booksQuery.data?.books?.map((b) => ({
+        books={allSelectedBooksQuery.data?.books?.map((b) => ({
           id: b.id,
           title: b.title,
           files: b.files,

@@ -55,6 +55,15 @@ func (b *Broker) Publish(evt Event) {
 	}
 }
 
+// NewBulkDownloadProgressEvent builds a progress event for bulk download jobs.
+func NewBulkDownloadProgressEvent(jobID int, status string, current, total int, estimatedSizeBytes int64) Event {
+	data := fmt.Sprintf(
+		`{"job_id":%d,"status":"%s","current":%d,"total":%d,"estimated_size_bytes":%d}`,
+		jobID, status, current, total, estimatedSizeBytes,
+	)
+	return Event{Type: "bulk_download.progress", Data: data}
+}
+
 // NewJobEvent builds an Event with the standard job payload format.
 func NewJobEvent(eventType string, jobID int, status, jobType string, libraryID *int) Event {
 	data := fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s"}`, jobID, status, jobType)

@@ -231,7 +231,7 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 
 	// Register routes (pass nil for plugin manager in tests)
 	g := e.Group("/books")
-	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil)
+	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil)
 
 	return e
 }

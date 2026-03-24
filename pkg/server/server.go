@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -47,7 +46,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -81,17 +80,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker)
+	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker, dlCache)
 
 	// Register OPDS routes with Basic Auth
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
 
 	// Register eReader routes (API key auth for stock browser support)
-	downloadCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
-	ereader.RegisterRoutes(e, db, downloadCache)
+	ereader.RegisterRoutes(e, db, dlCache)
 
 	// Register Kobo sync routes (API key auth for Kobo device sync)
-	kobo.RegisterRoutes(e, db, downloadCache)
+	kobo.RegisterRoutes(e, db, dlCache)
 
 	// Config routes (require authentication)
 	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)
@@ -118,12 +116,12 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker) {
+func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm)
+	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm, dlCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware)
 
 	// Libraries routes
@@ -139,7 +137,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	jobsGroup := e.Group("/jobs")
 	jobsGroup.Use(authMiddleware.Authenticate)
 	jobsGroup.Use(authMiddleware.RequirePermission(models.ResourceJobs, models.OperationRead))
-	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker)
+	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, dlCache)
 	joblogs.RegisterRoutes(jobsGroup, db)
 
 	// People routes

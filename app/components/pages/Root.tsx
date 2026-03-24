@@ -1,5 +1,6 @@
 import { Outlet, ScrollRestoration } from "react-router-dom";
 
+import { BulkDownloadToast } from "@/components/library/BulkDownloadToast";
 import MobileDrawer from "@/components/library/MobileDrawer";
 import { Toaster } from "@/components/ui/sonner";
 import { MobileNavProvider } from "@/contexts/MobileNav";
@@ -14,6 +15,7 @@ const Root = () => {
         </div>
         <MobileDrawer />
         <Toaster richColors />
+        <BulkDownloadToast />
       </div>
     </MobileNavProvider>
   );
