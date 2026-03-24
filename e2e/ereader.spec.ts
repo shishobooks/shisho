@@ -5,8 +5,8 @@
  * These pages are authenticated via API key in the URL path.
  *
  * Running:
- *   yarn test:e2e                        # Run all E2E tests
- *   yarn test:e2e e2e/ereader.spec.ts    # Run only eReader tests
+ *   pnpm test:e2e                        # Run all E2E tests
+ *   pnpm test:e2e e2e/ereader.spec.ts    # Run only eReader tests
  */
 
 import { expect, getApiBaseURL, request, test } from "./fixtures";

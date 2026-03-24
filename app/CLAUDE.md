@@ -453,9 +453,9 @@ className="py-3 md:py-4 px-4 md:px-6"
 ### Running Tests
 
 ```bash
-yarn test           # Run all tests (unit + E2E via concurrently)
-yarn test:unit      # Run Vitest unit/component tests with coverage
-yarn test:e2e       # Run Playwright E2E tests
+pnpm test           # Run all tests (unit + E2E via concurrently)
+pnpm test:unit      # Run Vitest unit/component tests with coverage
+pnpm test:e2e       # Run Playwright E2E tests
 make test:js        # Run tests via Makefile (used in `make check`)
 ```
 

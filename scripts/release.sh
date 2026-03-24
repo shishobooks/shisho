@@ -194,8 +194,8 @@ if [[ -d "website" ]]; then
     echo "Versioning docs website..."
     (
         cd website
-        yarn install --frozen-lockfile
-        yarn docs:version "$VERSION"
+        pnpm install --frozen-lockfile
+        pnpm docs:version "$VERSION"
     )
 fi
 

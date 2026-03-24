@@ -6,16 +6,16 @@ This folder contains the versioned docs site for Shisho, built with Docusaurus a
 
 ```bash
 cd website
-yarn install
-yarn start
+pnpm install
+pnpm start
 ```
 
 ## Production build
 
 ```bash
 cd website
-yarn build
-yarn serve
+pnpm build
+pnpm serve
 ```
 
 ## Docs versioning model
@@ -24,4 +24,4 @@ yarn serve
 - Numbered versions come from `website/versioned_docs`.
 - `website/versions.json` tracks available released versions.
 
-Release tagging already snapshots docs automatically by running `yarn docs:version <version>` inside `website/`.
+Release tagging already snapshots docs automatically by running `pnpm docs:version <version>` inside `website/`.

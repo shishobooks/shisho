@@ -5,8 +5,8 @@
  * beforeAll clears users to ensure setup page is accessible.
  *
  * Running:
- *   yarn test:e2e                    # Run all E2E tests
- *   yarn test:e2e e2e/setup.spec.ts  # Run only setup tests
+ *   pnpm test:e2e                    # Run all E2E tests
+ *   pnpm test:e2e e2e/setup.spec.ts  # Run only setup tests
  */
 
 import { expect, getApiBaseURL, request, test } from "./fixtures";

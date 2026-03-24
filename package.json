@@ -4,20 +4,20 @@
   "description": "Your all-in-one solution for ebooks, audiobooks, and comics",
   "type": "module",
   "main": "index.js",
-  "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610",
+  "packageManager": "pnpm@10.33.0",
   "author": "Robin Joseph <robinmjoseph08@gmail.com>",
   "license": "MIT",
   "scripts": {
     "build": "tsc -b && vite build",
-    "lint": "concurrently --kill-others-on-fail --group \"yarn:lint:*\"",
+    "lint": "concurrently --kill-others-on-fail --group \"pnpm:lint:*\"",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:prettier": "prettier --check .",
-    "lint:types": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit && yarn --cwd website typecheck",
+    "lint:types": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit && pnpm -C website typecheck",
     "preview": "vite preview",
     "start": "vite",
-    "test": "concurrently --kill-others-on-fail --group \"yarn:test:*\"",
+    "test": "concurrently --kill-others-on-fail --group \"pnpm:test:*\"",
     "test:unit": "vitest run",
-    "test:e2e": "mkdir -p ./tmp && concurrently --kill-others-on-fail --group \"yarn:e2e:*\"",
+    "test:e2e": "mkdir -p ./tmp && concurrently --kill-others-on-fail --group \"pnpm:e2e:*\"",
     "e2e:chromium": "playwright test --project=chromium",
     "e2e:firefox": "playwright test --project=firefox"
   },
@@ -92,9 +92,15 @@
     "typescript-eslint": "^8.53.1",
     "vitest": "^4.0.18"
   },
-  "resolutions": {
-    "minimatch": ">=3.1.4",
-    "rollup": ">=4.59.0",
-    "ajv": "~6.14.0"
+  "pnpm": {
+    "overrides": {
+      "minimatch": ">=3.1.4",
+      "rollup": ">=4.59.0",
+      "ajv": "~6.14.0"
+    },
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "esbuild"
+    ]
   }
 }
