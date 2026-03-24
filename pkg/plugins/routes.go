@@ -59,6 +59,7 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.POST("/repositories/:scope/sync", h.syncRepository)
 
 	g.POST("/search", h.searchMetadata)
+	g.POST("/apply", h.applyMetadata)
 
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)

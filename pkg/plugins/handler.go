@@ -137,6 +137,14 @@ type searchPayload struct {
 	BookID int    `json:"book_id" validate:"required"`
 }
 
+type applyPayload struct {
+	BookID      int            `json:"book_id" validate:"required"`
+	FileID      *int           `json:"file_id"`
+	Fields      map[string]any `json:"fields" validate:"required"`
+	PluginScope string         `json:"plugin_scope" validate:"required"`
+	PluginID    string         `json:"plugin_id" validate:"required"`
+}
+
 func (h *handler) listIdentifierTypes(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -1849,6 +1857,187 @@ func buildSearchBookContext(book *models.Book) map[string]interface{} {
 	}
 
 	return ctx
+}
+
+// convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.
+func convertFieldsToMetadata(fields map[string]any) (*mediafile.ParsedMetadata, error) {
+	md := &mediafile.ParsedMetadata{}
+
+	if v, ok := fields["title"].(string); ok {
+		md.Title = v
+	}
+	if v, ok := fields["subtitle"].(string); ok {
+		md.Subtitle = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		md.Description = v
+	}
+	if v, ok := fields["publisher"].(string); ok {
+		md.Publisher = v
+	}
+	if v, ok := fields["imprint"].(string); ok {
+		md.Imprint = v
+	}
+	if v, ok := fields["url"].(string); ok {
+		md.URL = v
+	}
+	if v, ok := fields["series"].(string); ok {
+		md.Series = v
+	}
+	if v, ok := fields["cover_url"].(string); ok {
+		md.CoverURL = v
+	}
+
+	// Series number
+	if v, ok := fields["series_number"].(float64); ok {
+		md.SeriesNumber = &v
+	}
+
+	// Release date
+	if v, ok := fields["release_date"].(string); ok && v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, v)
+		}
+		if err == nil {
+			md.ReleaseDate = &t
+		}
+	}
+
+	// Authors: []{ name: string, role: string }
+	if v, ok := fields["authors"].([]any); ok {
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				name, _ := m["name"].(string)
+				role, _ := m["role"].(string)
+				if name != "" {
+					md.Authors = append(md.Authors, mediafile.ParsedAuthor{Name: name, Role: role})
+				}
+			}
+		}
+	}
+
+	// Narrators: []string
+	if v, ok := fields["narrators"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Narrators = append(md.Narrators, s)
+			}
+		}
+	}
+
+	// Genres: []string
+	if v, ok := fields["genres"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Genres = append(md.Genres, s)
+			}
+		}
+	}
+
+	// Tags: []string
+	if v, ok := fields["tags"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Tags = append(md.Tags, s)
+			}
+		}
+	}
+
+	// Identifiers: []{ type: string, value: string }
+	if v, ok := fields["identifiers"].([]any); ok {
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				idType, _ := m["type"].(string)
+				idValue, _ := m["value"].(string)
+				if idType != "" && idValue != "" {
+					md.Identifiers = append(md.Identifiers, mediafile.ParsedIdentifier{Type: idType, Value: idValue})
+				}
+			}
+		}
+	}
+
+	return md, nil
+}
+
+func (h *handler) applyMetadata(c echo.Context) error {
+	if h.enrich == nil {
+		return errors.New("enrichment dependencies not available")
+	}
+
+	var payload applyPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Look up plugin runtime (for httpAccess domain validation on cover download)
+	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
+	if rt == nil {
+		return errcodes.NotFound("Plugin")
+	}
+
+	// Look up book with all relations
+	book, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Library access check
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Resolve target file
+	var targetFile *models.File
+	if payload.FileID != nil {
+		for i := range book.Files {
+			if book.Files[i].ID == *payload.FileID {
+				targetFile = book.Files[i]
+				break
+			}
+		}
+		if targetFile == nil {
+			return errcodes.NotFound("File")
+		}
+	} else if len(book.Files) > 0 {
+		targetFile = book.Files[0]
+	}
+
+	// Convert fields map to ParsedMetadata
+	md, err := convertFieldsToMetadata(payload.Fields)
+	if err != nil {
+		return errcodes.ValidationError("invalid field data: " + err.Error())
+	}
+
+	// Download cover if cover_url set
+	if md.CoverURL != "" {
+		manifest := rt.Manifest()
+		var allowedDomains []string
+		if manifest.Capabilities.HTTPAccess != nil {
+			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
+		}
+		DownloadCoverFromURL(ctx, md, allowedDomains, log)
+	}
+
+	// Persist metadata (no field filtering — user already selected fields)
+	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, log); err != nil {
+		return errors.Wrap(err, "failed to apply metadata")
+	}
+
+	// Reload and return updated book
+	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	if err != nil {
+		return errors.Wrap(err, "failed to reload book")
+	}
+
+	return c.JSON(http.StatusOK, updatedBook)
 }
 
 // NewHandler creates a handler for testing and external route registration.
