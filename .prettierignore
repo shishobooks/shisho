@@ -15,3 +15,5 @@ website/versioned_sidebars/
 website/versions.json
 pkg/plugins/testdata/
 CHANGELOG.md
+pnpm-lock.yaml
+website/pnpm-lock.yaml
