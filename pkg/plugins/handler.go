@@ -1860,7 +1860,7 @@ func buildSearchBookContext(book *models.Book) map[string]interface{} {
 }
 
 // convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.
-func convertFieldsToMetadata(fields map[string]any) (*mediafile.ParsedMetadata, error) {
+func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	md := &mediafile.ParsedMetadata{}
 
 	if v, ok := fields["title"].(string); ok {
@@ -1957,7 +1957,7 @@ func convertFieldsToMetadata(fields map[string]any) (*mediafile.ParsedMetadata, 
 		}
 	}
 
-	return md, nil
+	return md
 }
 
 func (h *handler) applyMetadata(c echo.Context) error {
@@ -2011,10 +2011,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Convert fields map to ParsedMetadata
-	md, err := convertFieldsToMetadata(payload.Fields)
-	if err != nil {
-		return errcodes.ValidationError("invalid field data: " + err.Error())
-	}
+	md := convertFieldsToMetadata(payload.Fields)
 
 	// Download cover if cover_url set
 	if md.CoverURL != "" {
