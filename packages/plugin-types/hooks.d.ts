@@ -1,4 +1,4 @@
-import { ParsedMetadata } from "./metadata";
+import { ParsedAuthor, ParsedMetadata } from "./metadata";
 
 /** Context passed to inputConverter.convert(). */
 export interface InputConverterContext {
@@ -51,11 +51,14 @@ export interface SearchContext {
 /** A single search result from metadataEnricher.search(). */
 export interface SearchResult {
   title: string;
-  authors?: string[];
+  authors?: ParsedAuthor[];
   description?: string;
   imageUrl?: string;
   releaseDate?: string;
   publisher?: string;
+  imprint?: string;
+  url?: string;
+  coverUrl?: string;
   subtitle?: string;
   series?: string;
   seriesNumber?: number;
@@ -63,47 +66,11 @@ export interface SearchResult {
   tags?: string[];
   narrators?: string[];
   identifiers?: Array<{ type: string; value: string }>;
-  /** Opaque data passed back to enrich(). Use this to store internal IDs. */
-  providerData?: unknown;
-  /** Full metadata for passthrough pattern. If provided, enrich() can return it as-is. */
-  metadata?: ParsedMetadata;
 }
 
 /** Result returned from metadataEnricher.search(). */
 export interface SearchResponse {
   results: SearchResult[];
-}
-
-/** Context passed to metadataEnricher.enrich(). */
-export interface EnrichContext {
-  /** The selected search result's providerData. */
-  selectedResult: unknown;
-  /** Current book state from the database. */
-  book: {
-    id?: number;
-    title?: string;
-    subtitle?: string;
-    description?: string;
-    series?: Array<{ name: string; number?: number }>;
-    authors?: Array<{ name: string; role?: string }>;
-    genres?: string[];
-    tags?: string[];
-    identifiers?: Array<{ type: string; value: string }>;
-    publisher?: string;
-  };
-  /** File information. */
-  file: {
-    fileType?: string;
-    filePath?: string;
-  };
-}
-
-/** Result returned from metadataEnricher.enrich(). */
-export interface EnrichmentResult {
-  /** Whether metadata was modified. */
-  modified: boolean;
-  /** Updated metadata (only used if modified is true). */
-  metadata?: ParsedMetadata;
 }
 
 /** Context passed to outputGenerator.generate(). */
@@ -162,8 +129,6 @@ export interface FileParserHook {
 export interface MetadataEnricherHook {
   /** Search for candidate results from external sources. */
   search(context: SearchContext): SearchResponse;
-  /** Enrich metadata from a selected search result. */
-  enrich(context: EnrichContext): EnrichmentResult;
 }
 
 /** Output generator hook. */

@@ -15,7 +15,7 @@ The types provide autocompletion for:
 - **`shisho.*`** - Host APIs (log, config, http, fs, archive, xml, ffmpeg)
 - **`plugin`** - Hook structure (inputConverter, fileParser, metadataEnricher, outputGenerator)
 - **Hook contexts** - Typed `context` parameters for each hook method
-- **Return types** - `ParsedMetadata`, `ConvertResult`, `EnrichmentResult`, etc.
+- **Return types** - `ParsedMetadata`, `ConvertResult`, `SearchResponse`, etc.
 
 ### TypeScript
 
@@ -23,10 +23,10 @@ If you write your plugin in TypeScript (and compile to JavaScript for deployment
 
 ```typescript
 import type {
-  EnrichmentResult,
   FileParserContext,
-  MetadataEnricherContext,
   ParsedMetadata,
+  SearchContext,
+  SearchResponse,
   ShishoPlugin,
 } from "@shisho/plugin-types";
 
@@ -43,16 +43,18 @@ const plugin: ShishoPlugin = {
   },
 
   metadataEnricher: {
-    enrich(context: MetadataEnricherContext): EnrichmentResult {
+    search(context: SearchContext): SearchResponse {
       const apiKey = shisho.config.get("apiKey");
       const resp = shisho.http.fetch(
-        `https://api.example.com/lookup?title=${context.book.title}`,
+        `https://api.example.com/search?q=${context.query}`,
         { method: "GET" },
       );
-      const data = resp.json() as { description: string };
+      const data = resp.json() as { results: Array<{ title: string; description: string }> };
       return {
-        modified: true,
-        metadata: { description: data.description },
+        results: data.results.map((r) => ({
+          title: r.title,
+          description: r.description,
+        })),
       };
     },
   },
@@ -80,17 +82,18 @@ var plugin = (function () {
     },
 
     metadataEnricher: {
-      /** @param {MetadataEnricherContext} context @returns {EnrichmentResult} */
-      enrich: function (context) {
+      /** @param {SearchContext} context @returns {SearchResponse} */
+      search: function (context) {
         var apiKey = shisho.config.get("apiKey");
         var resp = shisho.http.fetch(
-          "https://api.example.com/lookup?title=" + context.book.title,
+          "https://api.example.com/search?q=" + context.query,
           { method: "GET" },
         );
         var data = resp.json();
         return {
-          modified: true,
-          metadata: { description: data.description },
+          results: data.results.map(function (r) {
+            return { title: r.title, description: r.description };
+          }),
         };
       },
     },
