@@ -7,8 +7,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// EnrichDeps holds optional dependencies for the enrich endpoint.
-// If nil, the enrich endpoint returns metadata without persisting it.
+// EnrichDeps holds optional dependencies for metadata persistence (apply/enrich).
+// If nil, metadata persistence operations are unavailable.
 type EnrichDeps struct {
 	BookStore       bookStore
 	RelStore        relationStore
@@ -59,7 +59,6 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.POST("/repositories/:scope/sync", h.syncRepository)
 
 	g.POST("/search", h.searchMetadata)
-	g.POST("/enrich", h.enrichMetadata)
 
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)

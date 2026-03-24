@@ -28,7 +28,7 @@ import (
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
 
-// enrichDeps holds dependencies for the enrich endpoint.
+// enrichDeps holds dependencies for metadata persistence (apply/enrich).
 // Uses interfaces to avoid circular imports with the books package.
 type enrichDeps struct {
 	bookStore       bookStore
@@ -135,14 +135,6 @@ type setOrderPayload struct {
 type searchPayload struct {
 	Query  string `json:"query" validate:"required"`
 	BookID int    `json:"book_id" validate:"required"`
-}
-
-type enrichPayload struct {
-	PluginScope  string `json:"plugin_scope" validate:"required"`
-	PluginID     string `json:"plugin_id" validate:"required"`
-	BookID       int    `json:"book_id" validate:"required"`
-	FileID       *int   `json:"file_id"`
-	ProviderData any    `json:"provider_data"`
 }
 
 func (h *handler) listIdentifierTypes(c echo.Context) error {
@@ -1341,15 +1333,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	})
 }
 
-// enrichMetadata runs enrich() on a specific plugin with a selected search result,
-// then applies the returned metadata to the book.
-// DEPRECATED: This endpoint will be removed in favor of POST /plugins/apply.
-func (h *handler) enrichMetadata(c echo.Context) error {
-	// Stubbed out — RunMetadataEnrich has been removed.
-	// This handler will be fully removed in Task 2.
-	return errcodes.ValidationError("enrich endpoint is deprecated; use POST /plugins/apply instead")
-}
-
 // DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
 // Returns true if the download succeeded, false otherwise. Skips if CoverData is already set (precedence rule).
 // The URL's domain (and any redirect domains) must be in the plugin's httpAccess.domains allowlist.
@@ -1423,7 +1406,6 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		return nil
 	}
 
-	// Get declared and effective field settings
 	declaredFields := manifest.Capabilities.MetadataEnricher.Fields
 	enabledFields, err := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
 	if err != nil {
@@ -1434,13 +1416,11 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Build a set of declared fields
 	declared := make(map[string]bool, len(declaredFields))
 	for _, f := range declaredFields {
 		declared[f] = true
 	}
 
-	// Helper: check if a field is both declared and enabled
 	isAllowed := func(field string) bool {
 		if !declared[field] {
 			return false
@@ -1448,15 +1428,85 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		if enabled, ok := enabledFields[field]; ok {
 			return enabled
 		}
-		return true // Default: enabled
+		return true
 	}
 
-	pluginSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
+	filtered := filterParsedMetadata(md, isAllowed)
+
+	// Download cover from URL before persisting (needs manifest for domain allowlist)
+	if filtered.CoverURL != "" && targetFile != nil {
+		var allowedDomains []string
+		if manifest.Capabilities.HTTPAccess != nil {
+			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
+		}
+		DownloadCoverFromURL(ctx, filtered, allowedDomains, log)
+	}
+
+	return h.persistMetadata(ctx, book, targetFile, filtered, rt.Scope(), rt.PluginID(), log)
+}
+
+// filterParsedMetadata returns a copy of md containing only the fields for which isAllowed returns true.
+func filterParsedMetadata(md *mediafile.ParsedMetadata, isAllowed func(string) bool) *mediafile.ParsedMetadata {
+	out := &mediafile.ParsedMetadata{}
+	if isAllowed("title") {
+		out.Title = md.Title
+	}
+	if isAllowed("subtitle") {
+		out.Subtitle = md.Subtitle
+	}
+	if isAllowed("description") {
+		out.Description = md.Description
+	}
+	if isAllowed("authors") {
+		out.Authors = md.Authors
+	}
+	if isAllowed("series") || isAllowed("seriesNumber") {
+		out.Series = md.Series
+		out.SeriesNumber = md.SeriesNumber
+	}
+	if isAllowed("genres") {
+		out.Genres = md.Genres
+	}
+	if isAllowed("tags") {
+		out.Tags = md.Tags
+	}
+	if isAllowed("narrators") {
+		out.Narrators = md.Narrators
+	}
+	if isAllowed("publisher") {
+		out.Publisher = md.Publisher
+	}
+	if isAllowed("imprint") {
+		out.Imprint = md.Imprint
+	}
+	if isAllowed("url") {
+		out.URL = md.URL
+	}
+	if isAllowed("releaseDate") {
+		out.ReleaseDate = md.ReleaseDate
+	}
+	if isAllowed("identifiers") {
+		out.Identifiers = md.Identifiers
+	}
+	if isAllowed("cover") {
+		out.CoverData = md.CoverData
+		out.CoverMimeType = md.CoverMimeType
+		out.CoverURL = md.CoverURL
+		out.CoverPage = md.CoverPage
+	}
+	return out
+}
+
+// persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
+// Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
+// targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, log logger.Logger) error {
+	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 
 	// Title
 	title := strings.TrimSpace(md.Title)
-	if title != "" && isAllowed("title") {
+	if title != "" {
 		book.Title = title
 		book.TitleSource = pluginSource
 		book.SortTitle = sortname.ForTitle(title)
@@ -1465,7 +1515,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Subtitle
-	if md.Subtitle != "" && isAllowed("subtitle") {
+	if md.Subtitle != "" {
 		subtitle := strings.TrimSpace(md.Subtitle)
 		book.Subtitle = &subtitle
 		book.SubtitleSource = &pluginSource
@@ -1473,7 +1523,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Description
-	if md.Description != "" && isAllowed("description") {
+	if md.Description != "" {
 		desc := htmlutil.StripTags(strings.TrimSpace(md.Description))
 		if desc != "" {
 			book.Description = &desc
@@ -1490,7 +1540,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Authors
-	if len(md.Authors) > 0 && isAllowed("authors") && h.enrich.personFinder != nil {
+	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
 		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete authors")
 		}
@@ -1523,8 +1573,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Series
-	seriesAllowed := isAllowed("series") || isAllowed("seriesNumber")
-	if md.Series != "" && seriesAllowed {
+	if md.Series != "" {
 		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete series")
 		}
@@ -1544,7 +1593,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Genres
-	if len(md.Genres) > 0 && isAllowed("genres") && h.enrich.genreFinder != nil {
+	if len(md.Genres) > 0 && h.enrich.genreFinder != nil {
 		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete genres")
 		}
@@ -1571,7 +1620,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Tags
-	if len(md.Tags) > 0 && isAllowed("tags") && h.enrich.tagFinder != nil {
+	if len(md.Tags) > 0 && h.enrich.tagFinder != nil {
 		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete tags")
 		}
@@ -1601,7 +1650,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	var fileColumns []string
 
 	// Narrators (file-level, applied to target file)
-	if len(md.Narrators) > 0 && isAllowed("narrators") && targetFile != nil && h.enrich.personFinder != nil {
+	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete narrators")
 		}
@@ -1627,7 +1676,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Publisher (file-level, applied to target file)
-	if md.Publisher != "" && isAllowed("publisher") && targetFile != nil && h.enrich.publisherFinder != nil {
+	if md.Publisher != "" && targetFile != nil && h.enrich.publisherFinder != nil {
 		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, md.Publisher, book.LibraryID)
 		if pErr != nil {
 			log.Warn("failed to find/create publisher", logger.Data{"name": md.Publisher, "error": pErr.Error()})
@@ -1639,7 +1688,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Imprint (file-level, applied to target file)
-	if md.Imprint != "" && isAllowed("imprint") && targetFile != nil && h.enrich.imprintFinder != nil {
+	if md.Imprint != "" && targetFile != nil && h.enrich.imprintFinder != nil {
 		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, md.Imprint, book.LibraryID)
 		if iErr != nil {
 			log.Warn("failed to find/create imprint", logger.Data{"name": md.Imprint, "error": iErr.Error()})
@@ -1651,21 +1700,21 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// URL (file-level, applied to target file)
-	if md.URL != "" && isAllowed("url") && targetFile != nil {
+	if md.URL != "" && targetFile != nil {
 		targetFile.URL = &md.URL
 		targetFile.URLSource = &pluginSource
 		fileColumns = append(fileColumns, "url", "url_source")
 	}
 
 	// Release date (file-level, applied to target file)
-	if md.ReleaseDate != nil && isAllowed("releaseDate") && targetFile != nil {
+	if md.ReleaseDate != nil && targetFile != nil {
 		targetFile.ReleaseDate = md.ReleaseDate
 		targetFile.ReleaseDateSource = &pluginSource
 		fileColumns = append(fileColumns, "release_date", "release_date_source")
 	}
 
 	// Identifiers (file-level, applied to target file)
-	if len(md.Identifiers) > 0 && isAllowed("identifiers") && targetFile != nil {
+	if len(md.Identifiers) > 0 && targetFile != nil {
 		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete identifiers")
 		}
@@ -1684,17 +1733,8 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Cover image: download from URL if coverData is empty and coverUrl is set
-	if md.CoverURL != "" && isAllowed("cover") && targetFile != nil {
-		var allowedDomains []string
-		if manifest.Capabilities.HTTPAccess != nil {
-			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
-		}
-		DownloadCoverFromURL(ctx, md, allowedDomains, log)
-	}
-
-	// Apply cover data (from coverData or downloaded from coverUrl)
-	if len(md.CoverData) > 0 && isAllowed("cover") && targetFile != nil {
+	// Apply cover data (caller is responsible for downloading cover URLs before calling persistMetadata)
+	if len(md.CoverData) > 0 && targetFile != nil {
 		coverDir := book.Filepath
 		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 
