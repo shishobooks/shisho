@@ -482,7 +482,7 @@ export function IdentifyReviewForm({
     : undefined;
   const hasCoverChoice = !!newCoverUrl;
   const [coverSelection, setCoverSelection] = useState<"current" | "new">(
-    newCoverUrl ? "new" : "current",
+    newCoverUrl && !isDisabled("cover") ? "new" : "current",
   );
 
   // ---- Submit ----
@@ -494,7 +494,7 @@ export function IdentifyReviewForm({
       authors: authors.map((a) => ({ name: a.name, role: a.role })),
       narrators,
       series,
-      series_number: seriesNumber ? parseFloat(seriesNumber) : undefined,
+      series_number: seriesNumber !== "" ? parseFloat(seriesNumber) : undefined,
       genres,
       tags,
       publisher,
