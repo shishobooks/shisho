@@ -156,6 +156,40 @@ type SearchResponse struct {
 	Results []SearchResult
 }
 
+// SearchResultToMetadata converts a SearchResult into a ParsedMetadata.
+// Used by the scan pipeline and the apply-metadata handler.
+func SearchResultToMetadata(sr *SearchResult) *mediafile.ParsedMetadata {
+	md := &mediafile.ParsedMetadata{
+		Title:        sr.Title,
+		Subtitle:     sr.Subtitle,
+		Description:  sr.Description,
+		Publisher:    sr.Publisher,
+		Imprint:      sr.Imprint,
+		URL:          sr.URL,
+		CoverURL:     sr.CoverURL,
+		Series:       sr.Series,
+		SeriesNumber: sr.SeriesNumber,
+		Authors:      sr.Authors,
+		Narrators:    sr.Narrators,
+		Genres:       sr.Genres,
+		Tags:         sr.Tags,
+		Identifiers:  sr.Identifiers,
+	}
+
+	// Parse release date string to *time.Time
+	if sr.ReleaseDate != "" {
+		t, err := time.Parse("2006-01-02", sr.ReleaseDate)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, sr.ReleaseDate)
+		}
+		if err == nil {
+			md.ReleaseDate = &t
+		}
+	}
+
+	return md
+}
+
 // RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
 func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}) (*SearchResponse, error) {
 	if rt.metadataEnricher == nil {
