@@ -84,9 +84,14 @@ When a field is in the search result's `disabled_fields` array (computed from pl
 
 ### Search Result Contract Change
 
-`search()` must return complete metadata in each result. The `SearchResult` type needs to be unified with `ParsedMetadata` — currently some fields like `imprint` and `url` only exist on `ParsedMetadata` but not as top-level `SearchResult` fields. Add any missing fields to `SearchResult` so it is the single canonical source for all metadata. The `Metadata` subfield on `SearchResult` can then be removed.
+`search()` must return complete metadata in each result. The `SearchResult` type needs to be unified with `ParsedMetadata`:
 
-Both the frontend review form and the scan worker read metadata from the top-level `SearchResult` fields exclusively.
+- Add missing fields to `SearchResult`: `imprint`, `url`, `coverUrl` (these currently only exist on `ParsedMetadata`)
+- Change `SearchResult.Authors` from `[]string` to `[]ParsedAuthor` (structs with `name` and `role`) to preserve role information
+- Remove the `Metadata` subfield on `SearchResult` — it becomes redundant
+- Remove `providerData` — no longer needed without `enrich()`
+
+`SearchResult` becomes the single canonical source for all metadata. Both the frontend review form and the scan worker read from its top-level fields exclusively.
 
 ### New Apply Endpoint
 
@@ -125,8 +130,15 @@ type applyPayload struct {
 2. Resolve target file (from `FileID` or first file)
 3. Convert `Fields` map into a `ParsedMetadata` struct
 4. If `cover_url` present, download it (validate domain against plugin's httpAccess allowlist)
-5. Apply metadata to book/file using existing `applyEnrichment` logic
+5. Apply metadata to book/file using the shared persistence helper (see below)
 6. Return updated book
+
+### Extract Shared Persistence Helper
+
+The current `applyEnrichment` function combines two concerns: field-filtering (`isAllowed()` checks) and database persistence (creating/updating authors, series, genres, tags, identifiers, cover, etc.). Extract the DB persistence logic into a shared helper (e.g. `persistMetadata`) that both callers can use:
+
+- **Interactive apply handler** — calls `persistMetadata` directly with the user's final selections. No field filtering needed since the user has already chosen which fields to apply and disabled fields are non-interactive in the UI.
+- **Scan worker** — applies `filterMetadataFields` first (based on declared + enabled fields), then calls `persistMetadata` with the filtered result.
 
 ### Update Scan Worker
 
