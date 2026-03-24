@@ -29,11 +29,13 @@ FROM node:24.13.0-alpine AS frontend-builder
 
 WORKDIR /app
 
+# Install pnpm via corepack (reads version from packageManager field in package.json)
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN corepack enable && corepack install
+
 # Install production dependencies only (build tools, not test/lint tools)
-# Note: Extended timeout for arm64 builds which run through slow QEMU emulation
-COPY package.json yarn.lock ./
-RUN yarn config set network-timeout 600000 && \
-    yarn install --production --frozen-lockfile
+# Note: fetch-timeout for arm64/QEMU is configured in .npmrc
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy frontend source
 COPY app/ ./app/
@@ -44,7 +46,7 @@ COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.t
 COPY --from=typegen /app/app/types/generated/ ./app/types/generated/
 
 # Build frontend
-RUN NODE_ENV=production yarn build
+RUN NODE_ENV=production pnpm build
 
 # =============================================================================
 # Stage 3: Build Backend

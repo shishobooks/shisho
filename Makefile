@@ -80,11 +80,11 @@ lint: $(BUILD_DIR)/golangci-lint
 
 .PHONY: lint\:js
 lint\:js:
-	yarn lint
+	pnpm lint
 
 .PHONY: test\:js
 test\:js:
-	yarn test
+	pnpm test
 
 $(BUILD_DIR)/golangci-lint:
 	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(BUILD_DIR) v2.7.2
@@ -99,8 +99,8 @@ install:
 
 .PHONY: setup
 setup: $(BUILD_DIR)/golangci-lint tygo
-	yarn
-	cd website && yarn
+	pnpm install
+	cd website && pnpm install
 
 .PHONY: start
 start: $(BUILD_DIR)/hivemind
@@ -108,7 +108,7 @@ start: $(BUILD_DIR)/hivemind
 
 .PHONY: docs
 docs:
-	cd website && yarn start
+	cd website && pnpm start
 
 .PHONY: start\:air
 start\:air: $(BUILD_DIR)/air

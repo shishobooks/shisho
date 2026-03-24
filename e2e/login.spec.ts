@@ -4,8 +4,8 @@
  * beforeAll creates a test user (testadmin/password123) before tests run.
  *
  * Running:
- *   yarn test:e2e                    # Run all E2E tests
- *   yarn test:e2e e2e/login.spec.ts  # Run only login tests
+ *   pnpm test:e2e                    # Run all E2E tests
+ *   pnpm test:e2e e2e/login.spec.ts  # Run only login tests
  */
 
 import { expect, getApiBaseURL, request, test } from "./fixtures";

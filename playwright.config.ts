@@ -116,7 +116,7 @@ interface WebServerConfig {
  */
 function createWebServers(config: BrowserConfig): WebServerConfig[] {
   // Allow reusing servers started by a concurrent run
-  // (yarn test:e2e runs chromium and firefox in parallel, both try to start all servers)
+  // (pnpm test:e2e runs chromium and firefox in parallel, both try to start all servers)
   const reuseExistingServer = true;
 
   return [
@@ -134,7 +134,7 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
       },
     },
     {
-      command: `yarn start --port ${config.frontendPort}`,
+      command: `pnpm start --port ${config.frontendPort}`,
       url: `http://localhost:${config.frontendPort}`,
       reuseExistingServer,
       timeout: 30000,
