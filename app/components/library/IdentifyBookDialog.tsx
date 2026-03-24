@@ -327,7 +327,7 @@ export function IdentifyBookDialog({
 
                         {/* Date + publisher */}
                         {(result.release_date || result.publisher) && (
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/50 mt-2">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
                             {result.release_date && (
                               <span>{formatDate(result.release_date)}</span>
                             )}
