@@ -49,7 +49,9 @@ const plugin: ShishoPlugin = {
         `https://api.example.com/search?q=${context.query}`,
         { method: "GET" },
       );
-      const data = resp.json() as { results: Array<{ title: string; description: string }> };
+      const data = resp.json() as {
+        results: Array<{ title: string; description: string }>;
+      };
       return {
         results: data.results.map((r) => ({
           title: r.title,
