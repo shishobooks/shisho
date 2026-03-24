@@ -371,3 +371,6 @@ test-results/
 
 # Auto Claude data directory
 .auto-claude/
+
+# Superpowers brainstorm mockups
+.superpowers/
