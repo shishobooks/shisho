@@ -11,7 +11,7 @@ Shisho's docs site is a Docusaurus 3 app in `website/` deployed to GitHub Pages.
 | Framework | Docusaurus 3.9.2 |
 | Location | `website/` |
 | Dev server | `make docs` |
-| Build | `cd website && yarn build` |
+| Build | `cd website && pnpm build` |
 | Deploy URL | `https://shishobooks.github.io/shisho/` |
 | Deploy trigger | Push to `master` touching `website/**` |
 | Workflow | `.github/workflows/docs.yml` |
@@ -54,7 +54,7 @@ website/
 
 Docs are versioned alongside app releases. The `scripts/release.sh` script handles this automatically:
 
-1. On `make release tag=X.X.X`, the script runs `yarn docs:version X.X.X` inside `website/`
+1. On `make release tag=X.X.X`, the script runs `pnpm docs:version X.X.X` inside `website/`
 2. This snapshots `docs/` → `versioned_docs/version-X.X.X/` and sidebars → `versioned_sidebars/`
 3. `versions.json` is updated with the new version
 4. All versioned files are committed with the release
@@ -91,10 +91,10 @@ The docs site is integrated into the main project's tooling:
 
 | Tool | Integration |
 |------|------------|
-| `make setup` | Runs `cd website && yarn` to install deps |
+| `make setup` | Runs `cd website && pnpm install` to install deps |
 | `make docs` | Starts Docusaurus dev server |
-| `make release` | Versions docs via `yarn docs:version` |
-| `yarn lint:types` | Runs `yarn --cwd website typecheck` |
+| `make release` | Versions docs via `pnpm docs:version` |
+| `pnpm lint:types` | Runs `pnpm -C website typecheck` |
 | ESLint | `website/src/**/*.{ts,tsx}` included in React config |
 | Prettier | `website/build/` and `website/.docusaurus/` ignored |
 | CI | `.github/workflows/ci.yml` installs website deps for type checking |
@@ -104,7 +104,7 @@ The docs site is integrated into the main project's tooling:
 GitHub Actions workflow (`.github/workflows/docs.yml`):
 - **Triggers**: Push to `master` when `website/**` changes, or manual `workflow_dispatch`
 - **Concurrency**: `docs-pages` group, cancels in-progress deploys
-- **Build**: Node.js 24, `yarn install --frozen-lockfile`, `yarn build`
+- **Build**: Node.js 24, `pnpm install --frozen-lockfile`, `pnpm build`
 - **Deploy**: GitHub Pages via `actions/deploy-pages@v4`
 
 The `baseUrl` is auto-detected: uses `DOCS_BASE_URL` env var if set, `/${projectName}/` in GitHub Actions, or `/` locally.
@@ -133,5 +133,5 @@ If new icon directories are added under `src/theme/`, add corresponding exceptio
 
 - **Editing versioned_docs directly** — These are snapshots. Edit `docs/` for unreleased content; versioned docs are regenerated on release.
 - **Forgetting `sidebar_position`** — Pages without it appear in alphabetical order. Always set explicit positions.
-- **Running `yarn` instead of `make setup`** — In a new worktree, `make setup` handles both root and website deps.
+- **Running `pnpm install` instead of `make setup`** — In a new worktree, `make setup` handles both root and website deps.
 - **Missing `.gitignore` exception for new Icon dirs** — New swizzled `Icon/` subdirectories won't be tracked without an exception.

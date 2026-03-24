@@ -95,18 +95,18 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 - `make test` - Run all Go tests with race detection and coverage
 
 ### Frontend (React/TypeScript)
-- `yarn start` - Start Vite dev server
-- `yarn build` - Build production frontend
-- `yarn lint` - Run ESLint, TypeScript checks, and Prettier
-- `yarn lint:eslint` - ESLint only
-- `yarn lint:types` - TypeScript type checking only
-- `yarn lint:prettier` - Prettier formatting check only
+- `pnpm start` - Start Vite dev server
+- `pnpm build` - Build production frontend
+- `pnpm lint` - Run ESLint, TypeScript checks, and Prettier
+- `pnpm lint:eslint` - ESLint only
+- `pnpm lint:types` - TypeScript type checking only
+- `pnpm lint:prettier` - Prettier formatting check only
 
 **Dependency Structure:** The `dependencies` vs `devDependencies` split in `package.json` is optimized for Docker builds, not traditional Node.js semantics:
-- `dependencies`: Everything needed for `yarn build` (React, UI libs, vite, typescript, @types/*)
+- `dependencies`: Everything needed for `pnpm build` (React, UI libs, vite, typescript, @types/*)
 - `devDependencies`: Only test/lint tools (eslint, prettier, vitest, playwright, testing-library)
 
-This allows the Dockerfile to use `yarn install --production` to skip installing test/lint tools, reducing build time and image layer size. When adding new packages, put build-time dependencies in `dependencies` and test/lint tools in `devDependencies`.
+This allows the Dockerfile to use `pnpm install --prod` to skip installing test/lint tools, reducing build time and image layer size. When adding new packages, put build-time dependencies in `dependencies` and test/lint tools in `devDependencies`.
 
 ### Database
 - `make db:migrate` - Run all pending migrations
@@ -155,7 +155,7 @@ When updating the Node.js version, update **all** of these locations:
 - `Dockerfile` - The `node:X.X.X-alpine` image in the frontend-builder stage
 - `.github/workflows/ci.yml` - `node-version` in lint-js and test-js jobs
 - `.github/workflows/release.yml` - `node-version` in test and npm jobs
-- `package.json` - `@types/node` version (run `yarn install` after)
+- `package.json` - `@types/node` version (run `pnpm install` after)
 
 ## Testing Strategy
 
