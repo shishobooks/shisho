@@ -16,6 +16,7 @@ pkg/plugins/
   hostapi_url.go    - URL utilities (encode/decode/searchParams/parse)
   hostapi_archive.go - ZIP operations
   hostapi_xml.go    - XML parsing
+  hostapi_html.go   - HTML parsing with CSS selectors (cascadia)
   hostapi_ffmpeg.go - FFmpeg transcode/probe/version
   hostapi_shell.go  - Shell exec with command allowlist
   generator.go      - PluginGenerator (filegen.Generator interface)
@@ -37,7 +38,7 @@ packages/plugin-types/
 ├── package.json       # @shisho/plugin-types
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
-├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, ffmpeg, shell)
+├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, ffmpeg, shell)
 ├── hooks.d.ts         # Hook contexts, return types, ShishoPlugin interface
 ├── metadata.d.ts      # ParsedMetadata, ParsedAuthor, ParsedIdentifier, ParsedChapter
 └── manifest.d.ts      # PluginManifest, Capabilities, ConfigSchema, ConfigField
@@ -346,6 +347,21 @@ node.namespace    // string — namespace URI
 node.text         // string — direct text content
 node.attributes   // Record<string, string>
 node.children     // XMLElement[]
+```
+
+### shisho.html
+
+```javascript
+// CSS selector-based HTML querying (uses cascadia for full CSS selector support)
+var elem = shisho.html.querySelector(htmlString, "script[type='application/ld+json']")  // → HTMLElement | null
+var elems = shisho.html.querySelectorAll(htmlString, "li.item")                         // → HTMLElement[]
+
+// HTMLElement properties:
+elem.tag          // string — element tag name
+elem.text         // string — recursive text content (all descendant text nodes)
+elem.innerHTML    // string — raw inner HTML of the element
+elem.attributes   // Record<string, string>
+elem.children     // HTMLElement[]
 ```
 
 ### shisho.ffmpeg
