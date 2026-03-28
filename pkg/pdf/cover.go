@@ -113,14 +113,25 @@ func mimeForFileType(ft string) string {
 	}
 }
 
+// EnsurePdfiumPoolInit initializes the go-pdfium WASM pool if not already done.
+// Safe to call multiple times; initialization happens at most once.
+func EnsurePdfiumPoolInit() error {
+	pdfiumOnce.Do(initPdfiumPool)
+	return pdfiumErr
+}
+
+// PdfiumInstance returns a pdfium instance from the shared WASM pool.
+// The caller must call instance.Close() when done to return it to the pool.
+func PdfiumInstance(timeout time.Duration) (pdfium.Pdfium, error) {
+	if err := EnsurePdfiumPoolInit(); err != nil {
+		return nil, err
+	}
+	return pdfiumPool.GetInstance(timeout)
+}
+
 // renderPageCover renders page 1 of a PDF to JPEG using go-pdfium WASM.
 func renderPageCover(path string) ([]byte, string, error) {
-	pdfiumOnce.Do(initPdfiumPool)
-	if pdfiumErr != nil {
-		return nil, "", pdfiumErr
-	}
-
-	instance, err := pdfiumPool.GetInstance(30 * time.Second)
+	instance, err := PdfiumInstance(30 * time.Second)
 	if err != nil {
 		return nil, "", err
 	}
