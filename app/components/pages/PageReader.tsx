@@ -1,5 +1,17 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Settings } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Settings,
+} from "lucide-react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -54,6 +66,21 @@ export default function PageReader({
   // Parse page from URL, default to 0
   const urlPage = parseInt(searchParams.get("page") || "0", 10);
   const [currentPage, setCurrentPage] = useState(isNaN(urlPage) ? 0 : urlPage);
+
+  // Image loading state
+  const [imageLoading, setImageLoading] = useState(true);
+  const currentPageUrl = getPageUrl(currentPage);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Reset loading state when the page URL changes
+  useEffect(() => {
+    // If the image is already cached by the browser, it may be complete immediately
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setImageLoading(false);
+    } else {
+      setImageLoading(true);
+    }
+  }, [currentPageUrl]);
 
   usePageTitle(title ? `Reading: ${title}` : "Reader");
 
@@ -259,12 +286,22 @@ export default function PageReader({
           type="button"
         />
 
+        {/* Loading spinner */}
+        {imageLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-[5]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
         <img
           alt={`Page ${currentPage + 1}`}
           className={
             fitMode === "fit-height" ? "max-h-full w-auto object-contain" : "" // original: no constraints, natural size
           }
-          src={getPageUrl(currentPage)}
+          onError={() => setImageLoading(false)}
+          onLoad={() => setImageLoading(false)}
+          ref={imgRef}
+          src={currentPageUrl}
         />
         {/* Preloaded images (hidden) */}
         {preloadedPages
