@@ -545,7 +545,7 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	assert.Nil(t, result.Narrators)
 }
 
-func TestSearchResultCarriesAllMetadata(t *testing.T) {
+func TestSearchMetadataCarriesAllFields(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)

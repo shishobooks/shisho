@@ -286,6 +286,9 @@ func parseConvertResult(vm *goja.Runtime, val goja.Value) (*ConvertResult, error
 }
 
 // parseSearchResponse maps a JS search result to SearchResponse.
+// Each result is parsed directly into ParsedMetadata. The releaseDate field
+// is parsed from "2006-01-02" or RFC3339 format strings into *time.Time.
+// PluginScope and PluginID are set on each result for server-side tracking.
 func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID string) *SearchResponse {
 	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
 		return &SearchResponse{}
