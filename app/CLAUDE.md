@@ -453,10 +453,9 @@ className="py-3 md:py-4 px-4 md:px-6"
 ### Running Tests
 
 ```bash
-pnpm test           # Run all tests (unit + E2E via concurrently)
-pnpm test:unit      # Run Vitest unit/component tests with coverage
-pnpm test:e2e       # Run Playwright E2E tests
-make test:js        # Run tests via Makefile (used in `make check`)
+mise test:unit      # Run Vitest unit/component tests with coverage
+mise test:js        # Run all JS tests (unit + E2E, used in `mise check`)
+mise test:e2e       # Run E2E tests (Chromium + Firefox in parallel)
 ```
 
 ### Test File Locations

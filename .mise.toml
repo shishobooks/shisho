@@ -1,0 +1,184 @@
+[tools]
+go = "1.25.5"
+node = "24.13.0"
+"npm:pnpm" = "10.33.0"
+"github:air-verse/air" = "1.64.2"
+"github:gzuidhof/tygo" = "0.2.20"
+"github:golangci/golangci-lint" = "2.7.2"
+
+# === Build ===
+
+[tasks.build]
+description = "Build production API binary"
+run = '''
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+CGO_ENABLED=0 go build -o ./build/api/api -installsuffix cgo \
+  -ldflags "-w -s -X github.com/shishobooks/shisho/pkg/version.Version=$VERSION" \
+  ./cmd/api
+'''
+
+[tasks."build:air"]
+description = "Build development API binary (used by air)"
+run = "go build -o ./build/api/api-air ./cmd/api"
+
+# === Dev Server ===
+
+[tasks.start]
+description = "Start development environment (API + web)"
+depends = ["start:air", "start:web"]
+
+[tasks."start:air"]
+description = "Start API with hot reload via Air"
+run = "air"
+
+[tasks."start:web"]
+description = "Start Vite dev server (waits for API)"
+run = "until nc -z localhost 3689 2>/dev/null; do sleep 0.5; done && pnpm start"
+
+[tasks."start:api"]
+description = "Start API directly (no hot reload)"
+run = "go run ./cmd/api"
+
+[tasks.docs]
+description = "Start documentation dev server"
+run = "cd website && pnpm start"
+
+# === Type Generation ===
+
+[tasks.tygo]
+description = "Generate TypeScript types from Go structs"
+run = "tygo generate"
+sources = ["tygo.yaml", "pkg/**/validators.go", "pkg/**/config.go", "pkg/**/model.go", "pkg/models/*.go", "pkg/mediafile/mediafile.go"]
+outputs = ["app/types/generated/**/*.ts"]
+
+# === Linting ===
+
+[tasks.lint]
+description = "Run Go linting"
+run = "golangci-lint run"
+
+[tasks."lint:js"]
+description = "Run all JS/TS linting"
+depends = ["tygo", "lint:eslint", "lint:prettier", "lint:types"]
+
+[tasks."lint:eslint"]
+description = "Run ESLint"
+run = "pnpm lint:eslint"
+
+[tasks."lint:prettier"]
+description = "Run Prettier check"
+run = "pnpm lint:prettier"
+
+[tasks."lint:types"]
+description = "Run TypeScript type checking"
+depends = ["tygo"]
+run = "pnpm lint:types"
+
+# === Testing ===
+
+[tasks.test]
+description = "Run Go tests with coverage"
+env = { TZ = "America/Chicago", CI = "true" }
+run = "go test ./pkg/... -coverprofile coverage.out"
+
+[tasks."test:race"]
+description = "Run Go tests with race detection"
+env = { TZ = "America/Chicago", CI = "true" }
+run = "go test -race ./pkg/... -coverprofile coverage.out"
+
+[tasks."test:js"]
+description = "Run all JS tests"
+depends = ["tygo", "test:unit", "test:e2e"]
+
+[tasks."test:unit"]
+description = "Run JS unit tests"
+run = "pnpm test:unit"
+
+[tasks."test:e2e"]
+description = "Run E2E tests"
+depends = ["e2e:chromium", "e2e:firefox"]
+
+[tasks."e2e:chromium"]
+description = "Run E2E tests in Chromium"
+run = "mkdir -p ./tmp && pnpm e2e:chromium"
+
+[tasks."e2e:firefox"]
+description = "Run E2E tests in Firefox"
+run = "mkdir -p ./tmp && pnpm e2e:firefox"
+
+[tasks."test:cover"]
+description = "Open coverage report in browser"
+run = "go tool cover -html=coverage.out"
+
+# === Check ===
+
+[tasks.check]
+description = "Run all validation checks"
+depends = ["lint", "lint:js", "test", "test:js"]
+
+[tasks."check:quiet"]
+description = "Run all checks, suppress output on success"
+depends = ["tygo"]
+run = '''
+tmpdir=$(mktemp -d)
+for step in lint test test:js lint:js; do
+  ( mise "$step" >"$tmpdir/$step.out" 2>&1; echo $? >"$tmpdir/$step.rc" ) &
+done
+wait
+failed=0
+for step in lint test test:js lint:js; do
+  rc=$(cat "$tmpdir/$step.rc")
+  if [ "$rc" -eq 0 ]; then
+    printf '  \033[32mPASS\033[0m  %s\n' "$step"
+  else
+    printf '  \033[31mFAIL\033[0m  %s\n' "$step"
+    cat "$tmpdir/$step.out"
+    failed=1
+  fi
+done
+rm -rf "$tmpdir"
+if [ "$failed" -eq 1 ]; then
+  printf '\n\033[31mcheck:quiet FAILED\033[0m\n'; exit 1
+else
+  printf '\n\033[32mcheck:quiet PASSED\033[0m\n'
+fi
+'''
+
+# === Database ===
+
+[tasks."db:migrate"]
+description = "Run all pending migrations"
+env = { CONFIG_FILE = "./shisho.dev.yaml" }
+run = '''
+go run ./cmd/migrations init
+go run ./cmd/migrations migrate
+'''
+
+[tasks."db:migrate:create"]
+description = "Create a new migration"
+env = { CONFIG_FILE = "./shisho.dev.yaml" }
+run = "go run ./cmd/migrations create {{arg(i=0, name='name')}}"
+
+[tasks."db:rollback"]
+description = "Rollback last migration"
+env = { CONFIG_FILE = "./shisho.dev.yaml" }
+run = "go run ./cmd/migrations rollback"
+
+# === Other ===
+
+[tasks.docker]
+description = "Build Docker image"
+run = "docker build -t shisho:${DOCKER_TAG:-latest} ."
+
+[tasks.setup]
+description = "Install tools and dependencies"
+run = '''
+mise install
+pnpm install
+cd website && pnpm install
+mise tygo
+'''
+
+[tasks.release]
+description = "Create a release"
+run = "./scripts/release.sh {{arg(i=0, name='tag')}} {{flag(name='dry-run')}}"

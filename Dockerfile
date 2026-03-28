@@ -5,22 +5,19 @@ FROM golang:1.25.5-alpine AS typegen
 
 WORKDIR /app
 
-# Install make and yq (needed for Makefile)
-RUN apk add --no-cache make yq
+# Install tygo (pinned to same version as .mise.toml)
+RUN go install github.com/gzuidhof/tygo@v0.2.20
 
-# Copy Go modules, tools definition, and Makefile
-COPY go.mod go.sum tools.go Makefile ./
+# Copy Go modules for type generation
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Install tygo using version from go.mod/go.sum
+# Copy source files and config needed for type generation
 COPY tygo.yaml ./
-RUN make SHELL=/bin/ash ./build/api/tygo
-
-# Copy source files needed for type generation
 COPY pkg/ ./pkg/
 
 # Generate TypeScript types
-RUN make SHELL=/bin/ash tygo
+RUN tygo generate
 
 # =============================================================================
 # Stage 2: Build Frontend

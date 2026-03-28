@@ -1,7 +1,5 @@
 {
   "setup-worktree": [
-    "pnpm install",
-    "make ./build/api/golangci-lint",
-    "make tygo"
+    "mise setup"
   ]
 }

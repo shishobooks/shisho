@@ -7,7 +7,7 @@ This file documents backend patterns and conventions specific to Shisho.
 - Go with Echo web framework
 - Bun ORM with SQLite database
 - Air for hot reload
-- Hivemind for process management
+- mise for task running and tool management
 
 ## Architecture
 
