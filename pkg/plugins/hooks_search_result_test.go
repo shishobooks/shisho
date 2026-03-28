@@ -10,6 +10,7 @@ import (
 )
 
 func TestSearchResultToMetadata_AllFieldsPopulated(t *testing.T) {
+	t.Parallel()
 	seriesNum := 3.5
 	sr := &SearchResult{
 		Title:        "The Great Book",
@@ -72,6 +73,7 @@ func TestSearchResultToMetadata_AllFieldsPopulated(t *testing.T) {
 }
 
 func TestSearchResultToMetadata_DateParsing_DateOnly(t *testing.T) {
+	t.Parallel()
 	sr := &SearchResult{
 		ReleaseDate: "2025-01-10",
 	}
@@ -85,6 +87,7 @@ func TestSearchResultToMetadata_DateParsing_DateOnly(t *testing.T) {
 }
 
 func TestSearchResultToMetadata_DateParsing_RFC3339(t *testing.T) {
+	t.Parallel()
 	sr := &SearchResult{
 		ReleaseDate: "2025-01-10T00:00:00Z",
 	}
@@ -98,6 +101,7 @@ func TestSearchResultToMetadata_DateParsing_RFC3339(t *testing.T) {
 }
 
 func TestSearchResultToMetadata_DateParsing_Invalid(t *testing.T) {
+	t.Parallel()
 	sr := &SearchResult{
 		ReleaseDate: "not-a-date",
 	}
@@ -108,6 +112,7 @@ func TestSearchResultToMetadata_DateParsing_Invalid(t *testing.T) {
 }
 
 func TestSearchResultToMetadata_EmptyResult(t *testing.T) {
+	t.Parallel()
 	sr := &SearchResult{}
 
 	md := SearchResultToMetadata(sr)
@@ -131,6 +136,7 @@ func TestSearchResultToMetadata_EmptyResult(t *testing.T) {
 }
 
 func TestSearchResultToMetadata_ImageURL_DoesNotFallbackToCoverURL(t *testing.T) {
+	t.Parallel()
 	// The ImageURL → CoverURL fallback happens in parseSearchResponse, not
 	// in SearchResultToMetadata. So when CoverURL is empty and ImageURL is
 	// set, the resulting ParsedMetadata.CoverURL should remain empty.

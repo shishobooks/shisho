@@ -10,6 +10,7 @@ import (
 )
 
 func TestConvertFieldsToMetadata_StringFields(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"title":       "My Book",
 		"subtitle":    "A Subtitle",
@@ -34,6 +35,7 @@ func TestConvertFieldsToMetadata_StringFields(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_Authors(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"authors": []any{
 			map[string]any{"name": "Author One", "role": "writer"},
@@ -49,6 +51,7 @@ func TestConvertFieldsToMetadata_Authors(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_StringArrays(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"narrators": []any{"Narrator A", "Narrator B"},
 		"genres":    []any{"Fantasy", "Sci-Fi"},
@@ -63,6 +66,7 @@ func TestConvertFieldsToMetadata_StringArrays(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_Identifiers(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"identifiers": []any{
 			map[string]any{"type": "isbn_13", "value": "9781234567890"},
@@ -78,6 +82,7 @@ func TestConvertFieldsToMetadata_Identifiers(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_SeriesNumber(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"series_number": float64(2.5),
 	}
@@ -89,6 +94,7 @@ func TestConvertFieldsToMetadata_SeriesNumber(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_ReleaseDate_DateOnly(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"release_date": "2025-06-15",
 	}
@@ -102,6 +108,7 @@ func TestConvertFieldsToMetadata_ReleaseDate_DateOnly(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_ReleaseDate_RFC3339(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"release_date": "2025-06-15T00:00:00Z",
 	}
@@ -115,6 +122,7 @@ func TestConvertFieldsToMetadata_ReleaseDate_RFC3339(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_ReleaseDate_Invalid(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"release_date": "not-a-date",
 	}
@@ -125,6 +133,7 @@ func TestConvertFieldsToMetadata_ReleaseDate_Invalid(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_EmptyFields(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{}
 
 	md := convertFieldsToMetadata(fields)
@@ -148,6 +157,7 @@ func TestConvertFieldsToMetadata_EmptyFields(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_WrongTypes(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"title":         123,       // int instead of string
 		"subtitle":      true,      // bool instead of string
@@ -175,6 +185,7 @@ func TestConvertFieldsToMetadata_WrongTypes(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_EmptyStringValues(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"title":    "",
 		"subtitle": "",
@@ -187,6 +198,7 @@ func TestConvertFieldsToMetadata_EmptyStringValues(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_AuthorsWithMissingName(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"authors": []any{
 			map[string]any{"role": "writer"},                         // missing name
@@ -203,6 +215,7 @@ func TestConvertFieldsToMetadata_AuthorsWithMissingName(t *testing.T) {
 }
 
 func TestConvertFieldsToMetadata_IdentifiersWithMissingTypeOrValue(t *testing.T) {
+	t.Parallel()
 	fields := map[string]any{
 		"identifiers": []any{
 			map[string]any{"type": "isbn_13"},                           // missing value
