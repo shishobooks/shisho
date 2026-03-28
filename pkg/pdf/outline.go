@@ -16,7 +16,7 @@ type OutlineEntry struct {
 
 // ExtractOutline extracts the bookmark/outline tree from a PDF and returns
 // a flat list of entries with their target page numbers.
-// Returns an empty slice (not an error) if the PDF has no bookmarks.
+// Returns nil (not an error) if the PDF has no bookmarks.
 func ExtractOutline(path string) ([]OutlineEntry, error) {
 	instance, err := PdfiumInstance(30 * time.Second)
 	if err != nil {
