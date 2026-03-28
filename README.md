@@ -138,6 +138,10 @@ Shisho can be configured via a YAML config file or environment variables. Enviro
 
 For a complete reference of all configuration options, see [`shisho.example.yaml`](shisho.example.yaml).
 
+## AI Usage
+
+While the app itself doesn't use any AI, it was built with the assistance of AI tooling. I know this community has been burned by other AI-built self-hosted applications in the past, but I don't intend on repeating those mistakes. I've wanted to build a "Jellyfin for books" for several years now, and while I would make small progress on it here and there, I wouldn't be able to meaningfully get any work done on it in between work and life. But with AI-assisted coding, I was able to make much more consistent progress on it. That doesn't mean I just let the AI go wild on it. Every feature that has been developed was planned and outlined by me. I created the foundation of the repo, and I picked the structure, the tooling, and the overall architectural design of it. And I intend on continuing to watch over it and ensure its stability. Unfortunately, you just have my word to go off of, but I care a lot about my digital book collection, and I want to make sure is usable, if even for my own sake. It's completely up to you on whether you want to use this yourself, but I wanted to make this point clear upfront.
+
 ## Contributing
 
 If there's a feature you'd like to see or a bug you've encountered:
