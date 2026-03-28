@@ -311,7 +311,7 @@ Searches external APIs for book metadata. The enricher implements a single `sear
 
 #### Search Results
 
-The `search()` hook returns results with all metadata fields populated:
+The `search()` hook returns `{ results: ParsedMetadata[] }` — the same metadata structure used by file parsers, with all fields populated:
 
 ```javascript
 var plugin = (function() {
@@ -381,12 +381,20 @@ All fields except `title` are optional. The more fields you provide, the easier 
 
 #### Cover Images
 
-Search results support two cover-related fields:
+Set `coverUrl` on your search results — the server handles downloading and domain validation automatically. The URL's domain must be in your manifest's `httpAccess.domains` list.
 
-- **`imageUrl`** — Used to display a thumbnail in search results
-- **`coverUrl`** — Used when applying the result. If empty, falls back to `imageUrl`
+```javascript
+return {
+  results: [{
+    title: "Book Title",
+    coverUrl: "https://covers.example.com/book.jpg"
+  }]
+};
+```
 
-**Domain requirement:** When the server downloads a cover URL, it validates the domain against the plugin's `httpAccess.domains` allowlist — the same restriction that applies to `shisho.http.fetch()`. If the domain isn't allowed, the download is rejected. Redirects are also validated.
+For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
+
+Search results also support `imageUrl` for displaying a thumbnail in the search results UI. If `coverUrl` is empty, `imageUrl` is used as the fallback for downloading the cover.
 
 #### Enrichment Behavior
 
@@ -563,6 +571,36 @@ title.attributes;  // { "attr": "value" }
 title.children;    // child elements
 ```
 
+### shisho.html
+
+HTML parsing with full CSS selector support. Use this instead of regex for scraping HTML content.
+
+```javascript
+// Find a single element
+var meta = shisho.html.querySelector(html, 'meta[name="description"]');
+var description = meta ? meta.attributes.content : "";
+
+// Find all matching elements
+var items = shisho.html.querySelectorAll(html, '.book-item');
+
+// Extract JSON-LD (common pattern for metadata enrichers)
+var scripts = shisho.html.querySelectorAll(html, 'script[type="application/ld+json"]');
+if (scripts.length > 0) {
+  var jsonLd = JSON.parse(scripts[0].text);
+}
+
+// Extract Open Graph data
+var ogTitle = shisho.html.querySelector(html, 'meta[property="og:title"]');
+var title = ogTitle ? ogTitle.attributes.content : "";
+```
+
+Each returned element has:
+- `tag` — element tag name (e.g., `"div"`, `"meta"`)
+- `attributes` — key-value pairs (e.g., `{ name: "description", content: "..." }`)
+- `text` — recursive inner text content
+- `innerHTML` — raw inner HTML string
+- `children` — child elements
+
 ### FFmpeg
 
 Requires the `ffmpegAccess` capability:
@@ -605,3 +643,39 @@ The default plugin directory is `plugins/` relative to the Shisho data directory
 ### Hot Reload
 
 During development, you can modify your plugin's files and click **Reload** in the admin interface to pick up changes without restarting the server.
+
+## Testing Plugins
+
+The SDK includes test utilities at `@shisho/plugin-sdk/testing` that eliminate mock boilerplate.
+
+### Setup
+
+```typescript
+import { createMockShisho } from "@shisho/plugin-sdk/testing";
+
+const mockShisho = createMockShisho({
+  fetch: {
+    "https://api.example.com/search?q=test": {
+      status: 200,
+      body: JSON.stringify({ results: [{ title: "Test Book" }] }),
+    },
+  },
+  config: {
+    api_key: "test-key",
+  },
+});
+
+globalThis.shisho = mockShisho;
+```
+
+### What's Included
+
+| API | Behavior |
+|-----|----------|
+| `log.*` | Silent no-ops |
+| `url.*` | Real implementations (encodeURIComponent, searchParams, parse) |
+| `config.*` | Returns values from the config map you provide |
+| `http.fetch` | Route-based mock — matches URLs, throws on unmatched |
+| `fs.*` | Path-based mock — virtual filesystem from the map you provide |
+
+Unmatched fetch URLs and missing fs paths throw descriptive errors so you know exactly what mock data to add.
