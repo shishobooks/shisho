@@ -187,26 +187,38 @@ fileParser: {
 
 ### metadataEnricher (1 min timeout)
 
-Enriches existing metadata from external sources. No file access beyond plugin dir.
+Searches external sources for metadata. No file access beyond plugin dir. Search results carry all metadata directly -- there is no separate `enrich()` hook.
 
 ```javascript
 metadataEnricher: {
-  enrich: function(context) {
-    // context contains book info (title, authors, identifiers, etc.)
+  search: function(context) {
+    // context.book  - { title, authors, identifiers, ... }
+    // context.file  - { fileType }
     var apiKey = shisho.config.get("apiKey");
-    var resp = shisho.http.fetch("https://api.example.com/lookup?title=" + context.book.title, {});
+    var resp = shisho.http.fetch("https://api.example.com/search?q=" + context.book.title, {});
+    var data = resp.json();
     return {
-      modified: true,
-      metadata: { description: "...", genres: ["..."] }
+      results: data.items.map(function(item) {
+        return {
+          title: item.title,
+          authors: [{ name: item.author, role: "writer" }],
+          description: item.description,
+          releaseDate: item.date,
+          genres: item.genres,
+          coverUrl: item.image,
+          identifiers: [{ type: "isbn_13", value: item.isbn }]
+        };
+      })
     };
-    // Or: return { modified: false }; to skip
   }
 }
 ```
 
-**Go invocation:** `Manager.RunMetadataEnricher(ctx, rt, enrichCtx) → *EnrichmentResult`
+**Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx) → *SearchResponse`
 
-**Field filtering:** Enricher results are filtered before merging:
+**SearchResult → ParsedMetadata:** Use `SearchResultToMetadata(sr)` (in `hooks.go`) to convert a `SearchResult` into a `*mediafile.ParsedMetadata`. Parses `releaseDate` strings in `"2006-01-02"` or RFC3339 format.
+
+**Field filtering:** Search results are filtered before merging:
 - Fields not declared in manifest → stripped + warning logged
 - Fields declared but disabled by user → stripped silently
 - Users configure field toggles globally and per-library via UI
@@ -432,7 +444,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Uses a two-phase merge: enrichers merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook returns `SearchResponse`; the first result is converted to `ParsedMetadata` via `SearchResultToMetadata()`. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
@@ -583,8 +595,8 @@ manifest := `{"manifestVersion":1,"id":"test","name":"Test","version":"1.0.0","c
 mainJS := `var plugin=(function(){return{fileParser:{parse:function(ctx){return{title:"Test"}}}};})();`
 installTestPlugin(tc, pluginDir, "test", manifest, mainJS)
 
-// Enricher (fields required)
+// Enricher (fields required, search hook returns results array)
 manifest := `{"manifestVersion":1,"id":"test-enricher","name":"Test Enricher","version":"1.0.0","capabilities":{"metadataEnricher":{"fileTypes":["epub"],"fields":["title","description"]}}}`
-mainJS := `var plugin=(function(){return{metadataEnricher:{enrich:function(ctx){return{modified:true,metadata:{title:"Enriched"}}}}};})();`
+mainJS := `var plugin=(function(){return{metadataEnricher:{search:function(ctx){return{results:[{title:"Enriched",description:"A description"}]}}}};})();`
 installTestPlugin(tc, pluginDir, "test-enricher", manifest, mainJS)
 ```

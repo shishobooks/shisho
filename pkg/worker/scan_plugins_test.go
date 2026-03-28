@@ -456,22 +456,11 @@ func TestScanWithPluginMetadataEnricher(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: { query: ctx.query } }] };
-      },
-      enrich: function(ctx) {
-        var title = "";
-        if (ctx.selectedResult && ctx.selectedResult.query) {
-          title = ctx.selectedResult.query;
-        } else if (ctx.book && ctx.book.title) {
-          title = ctx.book.title;
-        }
-        return {
-          modified: true,
-          metadata: {
-            description: "Enriched description for: " + title,
-            genres: ["Fantasy", "Adventure"]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "Enriched description for: " + ctx.query,
+          genres: ["Fantasy", "Adventure"]
+        }] };
       }
     }
   };
@@ -571,15 +560,10 @@ func TestScanWithPluginMetadataEnricher_FileTypeFiltering(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "SHOULD NOT APPEAR"
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "SHOULD NOT APPEAR"
+        }] };
       }
     }
   };
@@ -667,15 +651,10 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "From First Enricher"
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "From First Enricher"
+        }] };
       }
     }
   };
@@ -701,15 +680,10 @@ func TestScanWithPluginMetadataEnricher_Ordering(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "From Second Enricher"
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "From Second Enricher"
+        }] };
       }
     }
   };
@@ -806,16 +780,11 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "Description from Alpha",
-            publisher: "Publisher from Alpha"
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "Description from Alpha",
+          publisher: "Publisher from Alpha"
+        }] };
       }
     }
   };
@@ -841,17 +810,12 @@ func TestScanWithPluginMetadataEnricher_CascadingFieldSources(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "Description from Beta (should be ignored)",
-            genres: ["Action", "Fantasy"],
-            tags: ["tag-from-beta"]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "Description from Beta (should be ignored)",
+          genres: ["Action", "Fantasy"],
+          tags: ["tag-from-beta"]
+        }] };
       }
     }
   };
@@ -1146,27 +1110,22 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            subtitle: "Enriched Subtitle",
-            authors: [{name: "Enriched Author", role: ""}],
-            narrators: ["Enriched Narrator"],
-            series: "Enriched Series",
-            seriesNumber: 5,
-            genres: ["Horror", "Mystery"],
-            tags: ["enriched-tag"],
-            description: "Enriched description",
-            publisher: "Enriched Publisher",
-            imprint: "Enriched Imprint",
-            url: "https://example.com/enriched",
-            releaseDate: "2025-01-10T00:00:00Z",
-            identifiers: [{type: "asin", value: "B01ENRICHED"}]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          subtitle: "Enriched Subtitle",
+          authors: [{name: "Enriched Author", role: ""}],
+          narrators: ["Enriched Narrator"],
+          series: "Enriched Series",
+          seriesNumber: 5,
+          genres: ["Horror", "Mystery"],
+          tags: ["enriched-tag"],
+          description: "Enriched description",
+          publisher: "Enriched Publisher",
+          imprint: "Enriched Imprint",
+          url: "https://example.com/enriched",
+          releaseDate: "2025-01-10T00:00:00Z",
+          identifiers: [{type: "asin", value: "B01ENRICHED"}]
+        }] };
       }
     }
   };
@@ -1380,17 +1339,12 @@ func TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser(t *testing.T
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            identifiers: [
-              { type: "mangaupdates_series", value: "12345" }
-            ]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          identifiers: [
+            { type: "mangaupdates_series", value: "12345" }
+          ]
+        }] };
       }
     }
   };
@@ -1727,16 +1681,11 @@ func TestScanWithPluginMetadataEnricher_FieldFiltering(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "This is an enriched description",
-            genres: ["Fantasy", "Adventure"]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "This is an enriched description",
+          genres: ["Fantasy", "Adventure"]
+        }] };
       }
     }
   };
@@ -1837,16 +1786,11 @@ func TestScanWithPluginMetadataEnricher_UndeclaredFieldFiltered(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "Valid description",
-            genres: ["Sneaky Genre"]
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "Valid description",
+          genres: ["Sneaky Genre"]
+        }] };
       }
     }
   };
@@ -1942,15 +1886,10 @@ func TestScanWithPluginMetadataEnricher_PerLibraryFieldOverride(t *testing.T) {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: ctx.query, providerData: {} }] };
-      },
-      enrich: function(ctx) {
-        return {
-          modified: true,
-          metadata: {
-            description: "Enriched description"
-          }
-        };
+        return { results: [{
+          title: ctx.query,
+          description: "Enriched description"
+        }] };
       }
     }
   };

@@ -17,3 +17,4 @@ pkg/plugins/testdata/
 CHANGELOG.md
 pnpm-lock.yaml
 website/pnpm-lock.yaml
+.superpowers/

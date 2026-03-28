@@ -498,11 +498,11 @@ export const useResetAllLibraryPluginOrders = () => {
   });
 };
 
-// --- Metadata Search & Enrich ---
+// --- Metadata Search & Apply ---
 
 export interface PluginSearchResult {
   title: string;
-  authors?: string[];
+  authors?: Array<{ name: string; role?: string }>;
   description?: string;
   image_url?: string;
   release_date?: string;
@@ -513,27 +513,13 @@ export interface PluginSearchResult {
   genres?: string[];
   tags?: string[];
   narrators?: string[];
-  identifiers?: { type: string; value: string }[];
-  provider_data?: unknown;
+  identifiers?: Array<{ type: string; value: string }>;
+  imprint?: string;
+  url?: string;
+  cover_url?: string;
   plugin_scope: string;
   plugin_id: string;
   disabled_fields?: string[];
-  /** Display-oriented subset of ParsedMetadata. Only includes fields relevant to search result display. */
-  metadata?: {
-    title?: string;
-    subtitle?: string;
-    authors?: { name: string; role?: string }[];
-    narrators?: string[];
-    series?: string;
-    series_number?: number;
-    genres?: string[];
-    tags?: string[];
-    description?: string;
-    publisher?: string;
-    release_date?: string;
-    cover_url?: string;
-    identifiers?: { type: string; value: string }[];
-  };
 }
 
 export interface PluginSearchResponse {
@@ -555,28 +541,20 @@ export const usePluginSearch = () => {
   });
 };
 
-export const usePluginEnrich = () => {
+interface PluginApplyPayload {
+  book_id: number;
+  file_id?: number;
+  fields: Record<string, unknown>;
+  plugin_scope: string;
+  plugin_id: string;
+}
+
+export const usePluginApply = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    { modified: boolean; metadata?: Record<string, unknown> },
-    ShishoAPIError,
-    {
-      pluginScope: string;
-      pluginId: string;
-      bookId: number;
-      fileId?: number;
-      providerData: unknown;
-    }
-  >({
-    mutationFn: ({ pluginScope, pluginId, bookId, fileId, providerData }) => {
-      return API.request("POST", "/plugins/enrich", {
-        plugin_scope: pluginScope,
-        plugin_id: pluginId,
-        book_id: bookId,
-        file_id: fileId,
-        provider_data: providerData,
-      });
+  return useMutation<void, ShishoAPIError, PluginApplyPayload>({
+    mutationFn: (payload) => {
+      return API.request("POST", "/plugins/apply", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

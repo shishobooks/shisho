@@ -9,13 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMergeEnrichedMetadata_EnricherOverridesFileMetadata verifies that when
-// runMetadataEnrichers uses the two-phase merge, enricher data takes precedence
-// over file-parsed metadata for the same field.
+// TestMergeEnrichedMetadata_EnricherOverridesFileMetadata verifies that
+// enricher data takes precedence over file-parsed metadata for the same field.
 func TestMergeEnrichedMetadata_EnricherOverridesFileMetadata(t *testing.T) {
 	t.Parallel()
 
-	// Simulate Phase 1: enricher provides a title
+	// Enricher provides a title
 	var enrichedMeta mediafile.ParsedMetadata
 	enricherResult := &mediafile.ParsedMetadata{
 		Title: "Good Title",
@@ -23,7 +22,7 @@ func TestMergeEnrichedMetadata_EnricherOverridesFileMetadata(t *testing.T) {
 	enricherSource := "plugin:test/my-enricher"
 	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
 
-	// Simulate Phase 2: file parser provides a different title as fallback
+	// File parser provides a different title as fallback
 	fileMetadata := &mediafile.ParsedMetadata{
 		Title:      "Bad Title",
 		DataSource: "epub_metadata",
@@ -174,13 +173,13 @@ func TestMergeEnrichedMetadata_TechnicalFieldsPreserved(t *testing.T) {
 	// Simulate what runMetadataEnrichers does:
 	var enrichedMeta mediafile.ParsedMetadata
 
-	// Phase 1: enricher provides title
+	// Enricher provides title
 	enricherResult := &mediafile.ParsedMetadata{
 		Title: "Enricher Title",
 	}
 	mergeEnrichedMetadata(&enrichedMeta, enricherResult, "plugin:test/enricher")
 
-	// Phase 2: file parser fallback
+	// File parser fallback
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileMetadata.DataSource)
 
 	// Copy technical fields (as runMetadataEnrichers does)
@@ -284,7 +283,7 @@ func TestMergeEnrichedMetadata_ChaptersFallbackFromFile(t *testing.T) {
 }
 
 // TestMergeEnrichedMetadata_AllFields verifies that all content fields are
-// correctly handled by the two-phase merge, with enricher values taking
+// correctly handled by the enricher-first merge, with enricher values taking
 // precedence over file parser values.
 func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	t.Parallel()
@@ -344,11 +343,11 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 		DataSource:    fileSource,
 	}
 
-	// Phase 1: enricher merge
+	// Enricher merge
 	var enrichedMeta mediafile.ParsedMetadata
 	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
 
-	// Phase 2: file parser fallback
+	// File parser fallback
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
 
 	// All content fields should have enricher values
@@ -412,7 +411,7 @@ func TestMergeEnrichedMetadata_NoEnrichers_FileParserOnly(t *testing.T) {
 		DataSource:  fileSource,
 	}
 
-	// Only Phase 2 (file parser fallback), no enricher phase
+	// Only file parser fallback, no enricher results
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
 
 	assert.Equal(t, "File Title", enrichedMeta.Title)

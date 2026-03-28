@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Subagent Instructions
+
+**When dispatching subagents (for implementation, code review, spec review, or any other task), always include this instruction in the prompt:**
+
+> Check the project's root CLAUDE.md and any relevant subdirectory CLAUDE.md files for rules that apply to your work. These contain critical project conventions, gotchas, and requirements (e.g., docs update requirements, testing conventions, naming rules, metadata sync checklists). Violations of these rules are review failures.
+
+Subdirectory CLAUDE.md files are loaded automatically when working on files in that directory, but cross-cutting rules (like "update website docs when changing user-facing behavior") live in this root file and are easy to overlook if not explicitly checked.
+
 ## Important Notes
 
 **When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
@@ -138,7 +146,7 @@ For detailed architecture information, see:
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `make check` only when you need full verbose output for debugging.
 - **Don't run checks multiple times** — `make check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
-- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
+- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
   - Metadata, resource, or relationship changes → `website/docs/metadata.md`
@@ -162,7 +170,7 @@ When updating the Node.js version, update **all** of these locations:
 
 - Go tests use standard testing package with testify assertions
 - Tests should use `TZ=America/Chicago CI=true` environment
-- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests in `pkg/plugins` and `pkg/config` have shared global state and cannot be parallelized.
+- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. In `pkg/plugins`, tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, while tests that share a plugin manager or runtime instance should not. In `pkg/config`, tests mutate global config state and should not be parallelized.
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `make db:rollback && make db:migrate`
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.

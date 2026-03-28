@@ -93,19 +93,10 @@ func TestPluginLifecycle(t *testing.T) {
         return {
           results: [{
             title: "Found: " + ctx.query,
-            providerData: { query: ctx.query }
-          }]
-        };
-      },
-      enrich: function(ctx) {
-        var title = ctx.selectedResult && ctx.selectedResult.query ? ctx.selectedResult.query : (ctx.book ? ctx.book.title : "");
-        return {
-          modified: true,
-          metadata: {
             genres: ["Science Fiction"],
             tags: ["enriched"],
-            description: "Enriched: " + title
-          }
+            description: "Enriched: " + ctx.query
+          }]
         };
       }
     },
@@ -219,7 +210,7 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NotNil(t, metadata.SeriesNumber)
 	assert.InDelta(t, 1.5, *metadata.SeriesNumber, 0.001)
 
-	// 14. Run metadataEnricher search + enrich
+	// 14. Run metadataEnricher search (enrich hook has been removed)
 	searchCtx := map[string]interface{}{
 		"query": "My Book",
 		"book": map[string]interface{}{
@@ -237,27 +228,9 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NotNil(t, searchResp)
 	require.Len(t, searchResp.Results, 1)
 	assert.Equal(t, "Found: My Book", searchResp.Results[0].Title)
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": searchResp.Results[0].ProviderData,
-		"book": map[string]interface{}{
-			"title":   "My Book",
-			"authors": []string{"Author A"},
-		},
-		"file": map[string]interface{}{
-			"fileType": "testformat",
-			"filePath": testFile,
-		},
-	}
-
-	enrichResult, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
-	require.NoError(t, err)
-	require.NotNil(t, enrichResult)
-	assert.True(t, enrichResult.Modified)
-	require.NotNil(t, enrichResult.Metadata)
-	assert.Equal(t, []string{"Science Fiction"}, enrichResult.Metadata.Genres)
-	assert.Equal(t, []string{"enriched"}, enrichResult.Metadata.Tags)
-	assert.Equal(t, "Enriched: My Book", enrichResult.Metadata.Description)
+	assert.Equal(t, []string{"Science Fiction"}, searchResp.Results[0].Genres)
+	assert.Equal(t, []string{"enriched"}, searchResp.Results[0].Tags)
+	assert.Equal(t, "Enriched: My Book", searchResp.Results[0].Description)
 
 	// 15. Run outputGenerator
 	genSourceDir := t.TempDir()
@@ -379,24 +352,16 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
   }
 }`
 
-	// Plugin that reads config and uses it in enrichment
+	// Plugin that reads config and uses it in search results
 	mainJS := `var plugin = (function() {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ title: "Result", providerData: {} }] };
-      },
-      enrich: function(ctx) {
         var prefix = shisho.config.get("prefix");
         if (!prefix) {
           prefix = "default";
         }
-        return {
-          modified: true,
-          metadata: {
-            description: prefix + ": enriched"
-          }
-        };
+        return { results: [{ title: prefix + ": enriched" }] };
       }
     }
   };
@@ -433,17 +398,17 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 	rt := manager.GetRuntime(scope, pluginID)
 	require.NotNil(t, rt)
 
-	enrichCtx := map[string]interface{}{
-		"selectedResult": map[string]interface{}{},
-		"book":           map[string]interface{}{"title": "Test"},
-		"file":           map[string]interface{}{"fileType": "epub"},
+	searchCtx := map[string]interface{}{
+		"query": "Test",
+		"book":  map[string]interface{}{"title": "Test"},
+		"file":  map[string]interface{}{"fileType": "epub"},
 	}
 
-	result, err := manager.RunMetadataEnrich(ctx, rt, enrichCtx)
+	result, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.True(t, result.Modified)
-	assert.Equal(t, "custom: enriched", result.Metadata.Description)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, "custom: enriched", result.Results[0].Title)
 }
 
 // TestPluginLifecycle_LoadAll verifies that LoadAll loads all enabled plugins

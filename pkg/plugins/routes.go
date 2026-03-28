@@ -7,8 +7,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// EnrichDeps holds optional dependencies for the enrich endpoint.
-// If nil, the enrich endpoint returns metadata without persisting it.
+// EnrichDeps holds optional dependencies for metadata persistence (apply/enrich).
+// If nil, metadata persistence operations are unavailable.
 type EnrichDeps struct {
 	BookStore       bookStore
 	RelStore        relationStore
@@ -58,11 +58,30 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.DELETE("/repositories/:scope", h.removeRepository)
 	g.POST("/repositories/:scope/sync", h.syncRepository)
 
-	g.POST("/search", h.searchMetadata)
-	g.POST("/enrich", h.enrichMetadata)
-
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)
+}
+
+// RegisterIdentifyRoutes registers plugin search/apply routes that require books:write permission.
+// These are separate from the admin plugin management routes which require config:write.
+func RegisterIdentifyRoutes(g *echo.Group, service *Service, manager *Manager, ed *EnrichDeps) {
+	h := &handler{service: service, manager: manager}
+	if ed != nil {
+		h.enrich = &enrichDeps{
+			bookStore:       ed.BookStore,
+			relStore:        ed.RelStore,
+			identStore:      ed.IdentStore,
+			personFinder:    ed.PersonFinder,
+			genreFinder:     ed.GenreFinder,
+			tagFinder:       ed.TagFinder,
+			publisherFinder: ed.PublisherFinder,
+			imprintFinder:   ed.ImprintFinder,
+			searchIndexer:   ed.SearchIndexer,
+		}
+	}
+
+	g.POST("/search", h.searchMetadata)
+	g.POST("/apply", h.applyMetadata)
 }
 
 // RegisterLibraryRoutes registers per-library plugin order routes on a libraries group.

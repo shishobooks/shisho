@@ -28,7 +28,7 @@ import (
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
 
-// enrichDeps holds dependencies for the enrich endpoint.
+// enrichDeps holds dependencies for metadata persistence (apply/enrich).
 // Uses interfaces to avoid circular imports with the books package.
 type enrichDeps struct {
 	bookStore       bookStore
@@ -137,12 +137,12 @@ type searchPayload struct {
 	BookID int    `json:"book_id" validate:"required"`
 }
 
-type enrichPayload struct {
-	PluginScope  string `json:"plugin_scope" validate:"required"`
-	PluginID     string `json:"plugin_id" validate:"required"`
-	BookID       int    `json:"book_id" validate:"required"`
-	FileID       *int   `json:"file_id"`
-	ProviderData any    `json:"provider_data"`
+type applyPayload struct {
+	BookID      int            `json:"book_id" validate:"required"`
+	FileID      *int           `json:"file_id"`
+	Fields      map[string]any `json:"fields" validate:"required"`
+	PluginScope string         `json:"plugin_scope" validate:"required"`
+	PluginID    string         `json:"plugin_id" validate:"required"`
 }
 
 func (h *handler) listIdentifierTypes(c echo.Context) error {
@@ -1267,17 +1267,28 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		})
 	}
 
-	// Look up the book
-	var book models.Book
-	if err := h.db.NewSelect().Model(&book).
-		Where("b.id = ?", payload.BookID).
-		Relation("Authors").
-		Relation("Authors.Person").
-		Relation("BookSeries").
-		Relation("BookSeries.Series").
-		Relation("Files").
-		Relation("Files.Identifiers").
-		Scan(ctx); err != nil {
+	// Look up the book with relations
+	var book *models.Book
+	if h.enrich != nil {
+		book, err = h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	} else if h.db != nil {
+		var b models.Book
+		err = h.db.NewSelect().Model(&b).
+			Where("b.id = ?", payload.BookID).
+			Relation("Authors").
+			Relation("Authors.Person").
+			Relation("BookSeries").
+			Relation("BookSeries.Series").
+			Relation("Files").
+			Relation("Files.Identifiers").
+			Scan(ctx)
+		if err == nil {
+			book = &b
+		}
+	} else {
+		return errcodes.BadRequest("search dependencies not available")
+	}
+	if err != nil || book == nil {
 		return errcodes.NotFound("Book")
 	}
 
@@ -1291,7 +1302,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	// Build context objects
-	bookCtx := buildSearchBookContext(&book)
+	bookCtx := buildSearchBookContext(book)
 	fileCtx := map[string]interface{}{} // Minimal file context for search
 	if len(book.Files) > 0 {
 		f := book.Files[0]
@@ -1336,113 +1347,9 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		allResults = append(allResults, resp.Results...)
 	}
 
-	// Strip binary cover data from search results — covers are displayed via imageUrl
-	for i := range allResults {
-		if allResults[i].Metadata != nil {
-			allResults[i].Metadata.CoverData = nil
-		}
-	}
-
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"results": allResults,
 	})
-}
-
-// enrichMetadata runs enrich() on a specific plugin with a selected search result,
-// then applies the returned metadata to the book.
-func (h *handler) enrichMetadata(c echo.Context) error {
-	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
-
-	var payload enrichPayload
-	if err := c.Bind(&payload); err != nil {
-		return errcodes.ValidationError(err.Error())
-	}
-
-	// Get the specific plugin runtime
-	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
-	if rt == nil {
-		return errcodes.NotFound("Plugin")
-	}
-
-	// Look up the book with all relations needed for enrichment
-	var book models.Book
-	if err := h.db.NewSelect().Model(&book).
-		Where("b.id = ?", payload.BookID).
-		Relation("Authors").
-		Relation("Authors.Person").
-		Relation("BookSeries").
-		Relation("BookSeries.Series").
-		Relation("BookGenres").
-		Relation("BookGenres.Genre").
-		Relation("BookTags").
-		Relation("BookTags.Tag").
-		Relation("Files").
-		Relation("Files.Identifiers").
-		Scan(ctx); err != nil {
-		return errcodes.NotFound("Book")
-	}
-
-	// Check library access
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
-	}
-	if !user.HasLibraryAccess(book.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
-	}
-
-	// Resolve the target file for enrichment
-	var targetFile *models.File
-	if payload.FileID != nil {
-		for _, f := range book.Files {
-			if f.ID == *payload.FileID {
-				targetFile = f
-				break
-			}
-		}
-		if targetFile == nil {
-			return errcodes.NotFound("File")
-		}
-	} else if len(book.Files) > 0 {
-		targetFile = book.Files[0]
-	}
-
-	bookCtx := buildSearchBookContext(&book)
-	fileCtx := map[string]interface{}{}
-	if targetFile != nil {
-		fileCtx["fileType"] = targetFile.FileType
-		fileCtx["filePath"] = targetFile.Filepath
-	}
-
-	enrichCtx := map[string]interface{}{
-		"selectedResult": payload.ProviderData,
-		"book":           bookCtx,
-		"file":           fileCtx,
-	}
-
-	result, err := h.manager.RunMetadataEnrich(ctx, rt, enrichCtx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// If the plugin didn't modify anything or we don't have persistence deps, return as-is
-	if !result.Modified || result.Metadata == nil || h.enrich == nil {
-		return c.JSON(http.StatusOK, result)
-	}
-
-	// Apply enriched metadata to the book
-	if err := h.applyEnrichment(ctx, &book, targetFile, result.Metadata, rt, log); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Reload the book with all relations to return the updated state
-	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, book.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return c.JSON(http.StatusOK, updatedBook)
 }
 
 // DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
@@ -1510,48 +1417,16 @@ func DownloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, all
 	return true
 }
 
-// applyEnrichment applies enriched metadata to a book, respecting field filtering.
+// persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
+// Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
-func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, rt *Runtime, log logger.Logger) error {
-	manifest := rt.Manifest()
-	if manifest.Capabilities.MetadataEnricher == nil {
-		return nil
-	}
-
-	// Get declared and effective field settings
-	declaredFields := manifest.Capabilities.MetadataEnricher.Fields
-	enabledFields, err := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
-	if err != nil {
-		log.Warn("failed to get field settings, using all enabled", logger.Data{"error": err.Error()})
-		enabledFields = make(map[string]bool, len(declaredFields))
-		for _, f := range declaredFields {
-			enabledFields[f] = true
-		}
-	}
-
-	// Build a set of declared fields
-	declared := make(map[string]bool, len(declaredFields))
-	for _, f := range declaredFields {
-		declared[f] = true
-	}
-
-	// Helper: check if a field is both declared and enabled
-	isAllowed := func(field string) bool {
-		if !declared[field] {
-			return false
-		}
-		if enabled, ok := enabledFields[field]; ok {
-			return enabled
-		}
-		return true // Default: enabled
-	}
-
-	pluginSource := models.PluginDataSource(rt.Scope(), rt.PluginID())
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, log logger.Logger) error {
+	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 
 	// Title
 	title := strings.TrimSpace(md.Title)
-	if title != "" && isAllowed("title") {
+	if title != "" {
 		book.Title = title
 		book.TitleSource = pluginSource
 		book.SortTitle = sortname.ForTitle(title)
@@ -1560,7 +1435,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Subtitle
-	if md.Subtitle != "" && isAllowed("subtitle") {
+	if md.Subtitle != "" {
 		subtitle := strings.TrimSpace(md.Subtitle)
 		book.Subtitle = &subtitle
 		book.SubtitleSource = &pluginSource
@@ -1568,7 +1443,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Description
-	if md.Description != "" && isAllowed("description") {
+	if md.Description != "" {
 		desc := htmlutil.StripTags(strings.TrimSpace(md.Description))
 		if desc != "" {
 			book.Description = &desc
@@ -1585,7 +1460,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Authors
-	if len(md.Authors) > 0 && isAllowed("authors") && h.enrich.personFinder != nil {
+	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
 		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete authors")
 		}
@@ -1618,8 +1493,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Series
-	seriesAllowed := isAllowed("series") || isAllowed("seriesNumber")
-	if md.Series != "" && seriesAllowed {
+	if md.Series != "" {
 		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete series")
 		}
@@ -1639,7 +1513,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Genres
-	if len(md.Genres) > 0 && isAllowed("genres") && h.enrich.genreFinder != nil {
+	if len(md.Genres) > 0 && h.enrich.genreFinder != nil {
 		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete genres")
 		}
@@ -1666,7 +1540,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Tags
-	if len(md.Tags) > 0 && isAllowed("tags") && h.enrich.tagFinder != nil {
+	if len(md.Tags) > 0 && h.enrich.tagFinder != nil {
 		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete tags")
 		}
@@ -1696,7 +1570,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	var fileColumns []string
 
 	// Narrators (file-level, applied to target file)
-	if len(md.Narrators) > 0 && isAllowed("narrators") && targetFile != nil && h.enrich.personFinder != nil {
+	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete narrators")
 		}
@@ -1722,7 +1596,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Publisher (file-level, applied to target file)
-	if md.Publisher != "" && isAllowed("publisher") && targetFile != nil && h.enrich.publisherFinder != nil {
+	if md.Publisher != "" && targetFile != nil && h.enrich.publisherFinder != nil {
 		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, md.Publisher, book.LibraryID)
 		if pErr != nil {
 			log.Warn("failed to find/create publisher", logger.Data{"name": md.Publisher, "error": pErr.Error()})
@@ -1734,7 +1608,7 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// Imprint (file-level, applied to target file)
-	if md.Imprint != "" && isAllowed("imprint") && targetFile != nil && h.enrich.imprintFinder != nil {
+	if md.Imprint != "" && targetFile != nil && h.enrich.imprintFinder != nil {
 		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, md.Imprint, book.LibraryID)
 		if iErr != nil {
 			log.Warn("failed to find/create imprint", logger.Data{"name": md.Imprint, "error": iErr.Error()})
@@ -1746,21 +1620,21 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 	}
 
 	// URL (file-level, applied to target file)
-	if md.URL != "" && isAllowed("url") && targetFile != nil {
+	if md.URL != "" && targetFile != nil {
 		targetFile.URL = &md.URL
 		targetFile.URLSource = &pluginSource
 		fileColumns = append(fileColumns, "url", "url_source")
 	}
 
 	// Release date (file-level, applied to target file)
-	if md.ReleaseDate != nil && isAllowed("releaseDate") && targetFile != nil {
+	if md.ReleaseDate != nil && targetFile != nil {
 		targetFile.ReleaseDate = md.ReleaseDate
 		targetFile.ReleaseDateSource = &pluginSource
 		fileColumns = append(fileColumns, "release_date", "release_date_source")
 	}
 
 	// Identifiers (file-level, applied to target file)
-	if len(md.Identifiers) > 0 && isAllowed("identifiers") && targetFile != nil {
+	if len(md.Identifiers) > 0 && targetFile != nil {
 		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete identifiers")
 		}
@@ -1779,17 +1653,8 @@ func (h *handler) applyEnrichment(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Cover image: download from URL if coverData is empty and coverUrl is set
-	if md.CoverURL != "" && isAllowed("cover") && targetFile != nil {
-		var allowedDomains []string
-		if manifest.Capabilities.HTTPAccess != nil {
-			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
-		}
-		DownloadCoverFromURL(ctx, md, allowedDomains, log)
-	}
-
-	// Apply cover data (from coverData or downloaded from coverUrl)
-	if len(md.CoverData) > 0 && isAllowed("cover") && targetFile != nil {
+	// Apply cover data (caller is responsible for downloading cover URLs before calling persistMetadata)
+	if len(md.CoverData) > 0 && targetFile != nil {
 		coverDir := book.Filepath
 		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 
@@ -1904,6 +1769,184 @@ func buildSearchBookContext(book *models.Book) map[string]interface{} {
 	}
 
 	return ctx
+}
+
+// convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.
+func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
+	md := &mediafile.ParsedMetadata{}
+
+	if v, ok := fields["title"].(string); ok {
+		md.Title = v
+	}
+	if v, ok := fields["subtitle"].(string); ok {
+		md.Subtitle = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		md.Description = v
+	}
+	if v, ok := fields["publisher"].(string); ok {
+		md.Publisher = v
+	}
+	if v, ok := fields["imprint"].(string); ok {
+		md.Imprint = v
+	}
+	if v, ok := fields["url"].(string); ok {
+		md.URL = v
+	}
+	if v, ok := fields["series"].(string); ok {
+		md.Series = v
+	}
+	if v, ok := fields["cover_url"].(string); ok {
+		md.CoverURL = v
+	}
+
+	// Series number
+	if v, ok := fields["series_number"].(float64); ok {
+		md.SeriesNumber = &v
+	}
+
+	// Release date
+	if v, ok := fields["release_date"].(string); ok && v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, v)
+		}
+		if err == nil {
+			md.ReleaseDate = &t
+		}
+	}
+
+	// Authors: []{ name: string, role: string }
+	if v, ok := fields["authors"].([]any); ok {
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				name, _ := m["name"].(string)
+				role, _ := m["role"].(string)
+				if name != "" {
+					md.Authors = append(md.Authors, mediafile.ParsedAuthor{Name: name, Role: role})
+				}
+			}
+		}
+	}
+
+	// Narrators: []string
+	if v, ok := fields["narrators"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Narrators = append(md.Narrators, s)
+			}
+		}
+	}
+
+	// Genres: []string
+	if v, ok := fields["genres"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Genres = append(md.Genres, s)
+			}
+		}
+	}
+
+	// Tags: []string
+	if v, ok := fields["tags"].([]any); ok {
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				md.Tags = append(md.Tags, s)
+			}
+		}
+	}
+
+	// Identifiers: []{ type: string, value: string }
+	if v, ok := fields["identifiers"].([]any); ok {
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				idType, _ := m["type"].(string)
+				idValue, _ := m["value"].(string)
+				if idType != "" && idValue != "" {
+					md.Identifiers = append(md.Identifiers, mediafile.ParsedIdentifier{Type: idType, Value: idValue})
+				}
+			}
+		}
+	}
+
+	return md
+}
+
+func (h *handler) applyMetadata(c echo.Context) error {
+	if h.enrich == nil {
+		return errors.New("enrichment dependencies not available")
+	}
+
+	var payload applyPayload
+	if err := c.Bind(&payload); err != nil {
+		return errcodes.ValidationError(err.Error())
+	}
+
+	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
+
+	// Look up plugin runtime (for httpAccess domain validation on cover download)
+	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
+	if rt == nil {
+		return errcodes.NotFound("Plugin")
+	}
+
+	// Look up book with all relations
+	book, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	// Library access check
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Resolve target file
+	var targetFile *models.File
+	if payload.FileID != nil {
+		for i := range book.Files {
+			if book.Files[i].ID == *payload.FileID {
+				targetFile = book.Files[i]
+				break
+			}
+		}
+		if targetFile == nil {
+			return errcodes.NotFound("File")
+		}
+	} else if len(book.Files) > 0 {
+		targetFile = book.Files[0]
+	}
+
+	// Convert fields map to ParsedMetadata
+	md := convertFieldsToMetadata(payload.Fields)
+
+	// Download cover if cover_url set
+	if md.CoverURL != "" {
+		manifest := rt.Manifest()
+		var allowedDomains []string
+		if manifest.Capabilities.HTTPAccess != nil {
+			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
+		}
+		DownloadCoverFromURL(ctx, md, allowedDomains, log)
+	}
+
+	// Persist metadata (no field filtering — user already selected fields)
+	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, log); err != nil {
+		return errors.Wrap(err, "failed to apply metadata")
+	}
+
+	// Reload and return updated book
+	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	if err != nil {
+		return errors.Wrap(err, "failed to reload book")
+	}
+
+	return c.JSON(http.StatusOK, updatedBook)
 }
 
 // NewHandler creates a handler for testing and external route registration.

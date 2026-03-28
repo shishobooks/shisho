@@ -21,12 +21,6 @@ type ConvertResult struct {
 	TargetPath string
 }
 
-// EnrichmentResult is the result of a metadata enricher hook.
-type EnrichmentResult struct {
-	Modified bool
-	Metadata *mediafile.ParsedMetadata // nil if Modified is false
-}
-
 // RunInputConverter invokes a plugin's inputConverter.convert() hook.
 func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath, targetDir string) (*ConvertResult, error) {
 	if rt.inputConverter == nil {
@@ -136,7 +130,7 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 // SearchResult is a single search result from a metadata enricher's search() hook.
 type SearchResult struct {
 	Title        string                       `json:"title"`
-	Authors      []string                     `json:"authors"`
+	Authors      []mediafile.ParsedAuthor     `json:"authors"`
 	Description  string                       `json:"description"`
 	ImageURL     string                       `json:"image_url"`
 	ReleaseDate  string                       `json:"release_date"`
@@ -148,8 +142,9 @@ type SearchResult struct {
 	Tags         []string                     `json:"tags"`
 	Narrators    []string                     `json:"narrators"`
 	Identifiers  []mediafile.ParsedIdentifier `json:"identifiers"`
-	ProviderData interface{}                  `json:"provider_data"` // Opaque data passed back to enrich()
-	Metadata     *mediafile.ParsedMetadata    `json:"metadata,omitempty"`
+	Imprint      string                       `json:"imprint"`
+	URL          string                       `json:"url"`
+	CoverURL     string                       `json:"cover_url"`
 	// Added by the caller, not the plugin:
 	PluginScope    string   `json:"plugin_scope"`
 	PluginID       string   `json:"plugin_id"`
@@ -159,6 +154,40 @@ type SearchResult struct {
 // SearchResponse is the result of a metadata enricher's search() hook.
 type SearchResponse struct {
 	Results []SearchResult
+}
+
+// SearchResultToMetadata converts a SearchResult into a ParsedMetadata.
+// Used by the scan pipeline and the apply-metadata handler.
+func SearchResultToMetadata(sr *SearchResult) *mediafile.ParsedMetadata {
+	md := &mediafile.ParsedMetadata{
+		Title:        sr.Title,
+		Subtitle:     sr.Subtitle,
+		Description:  sr.Description,
+		Publisher:    sr.Publisher,
+		Imprint:      sr.Imprint,
+		URL:          sr.URL,
+		CoverURL:     sr.CoverURL,
+		Series:       sr.Series,
+		SeriesNumber: sr.SeriesNumber,
+		Authors:      sr.Authors,
+		Narrators:    sr.Narrators,
+		Genres:       sr.Genres,
+		Tags:         sr.Tags,
+		Identifiers:  sr.Identifiers,
+	}
+
+	// Parse release date string to *time.Time
+	if sr.ReleaseDate != "" {
+		t, err := time.Parse("2006-01-02", sr.ReleaseDate)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, sr.ReleaseDate)
+		}
+		if err == nil {
+			md.ReleaseDate = &t
+		}
+	}
+
+	return md
 }
 
 // RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
@@ -202,49 +231,6 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 
 	// Parse the result
 	return parseSearchResponse(rt.vm, result, rt.scope, rt.pluginID), nil
-}
-
-// RunMetadataEnrich invokes a plugin's metadataEnricher.enrich() hook.
-func (m *Manager) RunMetadataEnrich(ctx context.Context, rt *Runtime, enrichCtx map[string]interface{}) (*EnrichmentResult, error) {
-	if rt.metadataEnricher == nil {
-		return nil, errors.New("plugin does not have a metadataEnricher hook")
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-	_ = ctx // reserved for future cancellation support
-
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
-
-	// Set up FSContext (no extra allowed paths for enrichers)
-	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
-	rt.SetFSContext(fsCtx)
-	defer func() {
-		rt.SetFSContext(nil)
-		fsCtx.Cleanup() //nolint:errcheck
-	}()
-
-	// Get the enrich method
-	enricherObj := rt.metadataEnricher.ToObject(rt.vm)
-	enrichVal := enricherObj.Get("enrich")
-	if enrichVal == nil || goja.IsUndefined(enrichVal) {
-		return nil, errors.New("metadataEnricher.enrich is not defined")
-	}
-	enrichFn, ok := goja.AssertFunction(enrichVal)
-	if !ok {
-		return nil, errors.New("metadataEnricher.enrich is not a function")
-	}
-
-	// Call the hook
-	result, err := enrichFn(goja.Undefined(), rt.vm.ToValue(enrichCtx))
-	if err != nil {
-		return nil, errors.Wrap(err, "metadataEnricher.enrich failed")
-	}
-
-	// Parse the result
-	return parseEnrichmentResult(rt.vm, result)
 }
 
 // RunOutputGenerator invokes a plugin's outputGenerator.generate() hook.
@@ -356,38 +342,6 @@ func parseConvertResult(vm *goja.Runtime, val goja.Value) (*ConvertResult, error
 	return result, nil
 }
 
-// parseEnrichmentResult maps a JS result object to EnrichmentResult.
-func parseEnrichmentResult(vm *goja.Runtime, val goja.Value) (*EnrichmentResult, error) {
-	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
-		return nil, errors.New("metadataEnricher.enrich returned nil/undefined")
-	}
-
-	obj := val.ToObject(vm)
-	result := &EnrichmentResult{}
-
-	modifiedVal := obj.Get("modified")
-	if modifiedVal != nil && !goja.IsUndefined(modifiedVal) {
-		result.Modified = modifiedVal.ToBoolean()
-	}
-
-	if !result.Modified {
-		return result, nil
-	}
-
-	metadataVal := obj.Get("metadata")
-	if metadataVal == nil || goja.IsUndefined(metadataVal) || goja.IsNull(metadataVal) {
-		return result, nil
-	}
-
-	metadata, err := parseParsedMetadata(vm, metadataVal)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse enrichment metadata")
-	}
-	result.Metadata = metadata
-
-	return result, nil
-}
-
 // parseSearchResponse maps a JS search result to SearchResponse.
 func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID string) *SearchResponse {
 	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
@@ -423,8 +377,16 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			Publisher:   getStringField(itemObj, "publisher"),
 			Subtitle:    getStringField(itemObj, "subtitle"),
 			Series:      getStringField(itemObj, "series"),
+			Imprint:     getStringField(itemObj, "imprint"),
+			URL:         getStringField(itemObj, "url"),
 			PluginScope: pluginScope,
 			PluginID:    pluginID,
+		}
+
+		// coverUrl (also accept coverUrl and imageUrl as aliases)
+		sr.CoverURL = getStringField(itemObj, "coverUrl")
+		if sr.CoverURL == "" {
+			sr.CoverURL = getStringField(itemObj, "imageUrl")
 		}
 
 		// seriesNumber -> *float64
@@ -452,31 +414,16 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			sr.Narrators = parseStringArray(vm, narratorsVal)
 		}
 
-		// authors -> []string
+		// authors -> []ParsedAuthor
 		authorsVal := itemObj.Get("authors")
 		if authorsVal != nil && !goja.IsUndefined(authorsVal) && !goja.IsNull(authorsVal) {
-			sr.Authors = parseStringArray(vm, authorsVal)
+			sr.Authors = parseAuthors(vm, authorsVal)
 		}
 
 		// identifiers -> []ParsedIdentifier
 		identifiersVal := itemObj.Get("identifiers")
 		if identifiersVal != nil && !goja.IsUndefined(identifiersVal) && !goja.IsNull(identifiersVal) {
 			sr.Identifiers = parseIdentifiers(vm, identifiersVal)
-		}
-
-		// providerData -> opaque (exported as-is)
-		providerDataVal := itemObj.Get("providerData")
-		if providerDataVal != nil && !goja.IsUndefined(providerDataVal) && !goja.IsNull(providerDataVal) {
-			sr.ProviderData = providerDataVal.Export()
-		}
-
-		// metadata -> *ParsedMetadata (optional, for passthrough pattern)
-		metadataVal := itemObj.Get("metadata")
-		if metadataVal != nil && !goja.IsUndefined(metadataVal) && !goja.IsNull(metadataVal) {
-			md, mErr := parseParsedMetadata(vm, metadataVal)
-			if mErr == nil {
-				sr.Metadata = md
-			}
 		}
 
 		results = append(results, sr)

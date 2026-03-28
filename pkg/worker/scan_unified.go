@@ -2581,9 +2581,9 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 }
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
-// Uses the search→first→enrich pattern: each enricher's search() is called with the
-// book title as query, then the first result is passed to enrich() for full metadata.
-// Each enricher is called in user-defined order; first non-empty value per field wins.
+// Each enricher's search() is called with the book title as query, and the first
+// result is converted directly to ParsedMetadata via SearchResultToMetadata.
+// Enrichers are called in user-defined order; first non-empty value per field wins.
 func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
 		return metadata
@@ -2633,7 +2633,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Phase 1: Search for candidates
+		// Search for candidates
 		searchCtx := map[string]interface{}{
 			"query": query,
 			"book":  bookCtx,
@@ -2652,27 +2652,9 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Take the first result
+		// Take the first result and convert directly to ParsedMetadata
 		firstResult := searchResp.Results[0]
-
-		// Phase 2: Enrich with the selected result
-		enrichCtx := map[string]interface{}{
-			"selectedResult": firstResult.ProviderData,
-			"book":           bookCtx,
-			"file":           fileCtx,
-		}
-
-		result, eErr := w.pluginManager.RunMetadataEnrich(ctx, rt, enrichCtx)
-		if eErr != nil {
-			logWarn("enricher enrich failed", logger.Data{
-				"plugin": rt.Manifest().ID,
-				"error":  eErr.Error(),
-			})
-			continue
-		}
-		if !result.Modified || result.Metadata == nil {
-			continue
-		}
+		searchMeta := plugins.SearchResultToMetadata(&firstResult)
 
 		// Get effective field settings for this library + plugin
 		declaredFields := enricherCap.Fields
@@ -2690,7 +2672,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 
 		// Filter to only declared and enabled fields, log warnings for undeclared
-		filteredMetadata := filterMetadataFields(result.Metadata, declaredFields, enabledFields, rt.PluginID(), logWarn)
+		filteredMetadata := filterMetadataFields(searchMeta, declaredFields, enabledFields, rt.PluginID(), logWarn)
 
 		// Download cover from URL if coverData is empty and coverUrl is set
 		if filteredMetadata.CoverURL != "" && len(filteredMetadata.CoverData) == 0 {
@@ -2710,7 +2692,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		modified = true
 	}
 
-	// Phase 3: Merge file-parsed metadata as fallback for fields no enricher provided.
+	// Merge file-parsed metadata as fallback for fields no enricher provided.
 	// This gives enrichers priority over file metadata (priority 2 > priority 3).
 	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
 

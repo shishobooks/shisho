@@ -1,21 +1,20 @@
-import { ExternalLink, Info, Loader2, Search } from "lucide-react";
+import { IdentifyReviewForm } from "./IdentifyReviewForm";
+import { ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  usePluginEnrich,
   usePluginIdentifierTypes,
   usePluginOrder,
   usePluginSearch,
@@ -28,7 +27,6 @@ import {
   formatDuration,
   formatFileSize,
   formatIdentifierType,
-  formatMetadataFieldLabel,
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
@@ -44,14 +42,15 @@ export function IdentifyBookDialog({
   onOpenChange,
   book,
 }: IdentifyBookDialogProps) {
+  const [step, setStep] = useState<"search" | "review">("search");
   const [query, setQuery] = useState("");
   const [selectedResult, setSelectedResult] =
     useState<PluginSearchResult | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<number | undefined>(
     undefined,
   );
+  const [reviewHasChanges, setReviewHasChanges] = useState(false);
   const searchMutation = usePluginSearch();
-  const enrichMutation = usePluginEnrich();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
   const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
@@ -67,6 +66,7 @@ export function IdentifyBookDialog({
   // Pre-fill query and auto-search when dialog opens
   useEffect(() => {
     if (open) {
+      setStep("search");
       setQuery(book.title);
       setSelectedResult(null);
       setSelectedFileId(mainFiles.length > 1 ? mainFiles[0].id : undefined);
@@ -95,28 +95,6 @@ export function IdentifyBookDialog({
     }
   };
 
-  const handleApply = () => {
-    if (!selectedResult) return;
-    enrichMutation.mutate(
-      {
-        pluginScope: selectedResult.plugin_scope,
-        pluginId: selectedResult.plugin_id,
-        bookId: book.id,
-        fileId: selectedFileId,
-        providerData: selectedResult.provider_data,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Book metadata updated successfully");
-          onOpenChange(false);
-        },
-        onError: (error) => {
-          toast.error(error.message || "Failed to apply metadata");
-        },
-      },
-    );
-  };
-
   const results = searchMutation.data?.results ?? [];
 
   // Detect plugin IDs that appear under multiple scopes
@@ -140,42 +118,23 @@ export function IdentifyBookDialog({
       ? `${result.plugin_scope}/${result.plugin_id}`
       : result.plugin_id;
 
-  const resolveField = (
-    result: PluginSearchResult,
-    field: keyof PluginSearchResult,
-    metadataField?: string,
-  ) => {
-    const topLevel = result[field];
-    if (topLevel !== undefined && topLevel !== null && topLevel !== "")
-      return topLevel;
-    if (result.metadata) {
-      const mdField = metadataField || field;
-      return (result.metadata as Record<string, unknown>)[mdField as string];
-    }
-    return undefined;
-  };
-
   const resolveAuthors = (result: PluginSearchResult): string[] | undefined => {
-    if (result.authors && result.authors.length > 0) return result.authors;
-    if (result.metadata?.authors && result.metadata.authors.length > 0) {
-      return result.metadata.authors.map((a) => a.name);
-    }
+    if (result.authors && result.authors.length > 0)
+      return result.authors.map((a) => a.name);
     return undefined;
   };
 
-  const resolveNarrators = (
-    result: PluginSearchResult,
-  ): string[] | undefined => {
-    if (result.narrators && result.narrators.length > 0)
-      return result.narrators;
-    if (result.metadata?.narrators && result.metadata.narrators.length > 0) {
-      return result.metadata.narrators;
-    }
-    return undefined;
+  const handleSelectResult = (result: PluginSearchResult) => {
+    setSelectedResult(result);
+    setStep("review");
   };
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <FormDialog
+      hasChanges={step === "review" && reviewHasChanges}
+      onOpenChange={onOpenChange}
+      open={open}
+    >
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader className="pr-8">
           <DialogTitle>Identify Book</DialogTitle>
@@ -185,295 +144,7 @@ export function IdentifyBookDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Search bar */}
-        <div className="flex gap-2">
-          <Input
-            className="flex-1"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search by title, author, ISBN..."
-            ref={inputRef}
-            value={query}
-          />
-          <Button
-            disabled={searchMutation.isPending || !query.trim()}
-            onClick={handleSearch}
-            variant="outline"
-          >
-            {searchMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-
-        {/* Results */}
-        <div className="min-h-[200px] max-h-[60vh] overflow-y-auto">
-          {searchMutation.isPending && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          )}
-
-          {searchMutation.isSuccess && results.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground space-y-2">
-              <p>No results found.</p>
-              <p className="text-xs">
-                {hasEnricherPlugins
-                  ? "Try a different search query."
-                  : "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."}
-              </p>
-            </div>
-          )}
-
-          {searchMutation.isSuccess && results.length > 0 && (
-            <div className="space-y-2">
-              {results.map((result, index) => (
-                <button
-                  className={cn(
-                    "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
-                    "hover:bg-muted/50",
-                    selectedResult === result
-                      ? "border-primary bg-primary/5"
-                      : "border-border",
-                  )}
-                  key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
-                  onClick={() => setSelectedResult(result)}
-                  type="button"
-                >
-                  <div className="flex gap-3">
-                    {/* Cover thumbnail */}
-                    {result.image_url ? (
-                      <img
-                        alt=""
-                        className="w-16 h-24 object-cover rounded shrink-0 bg-muted"
-                        src={result.image_url}
-                      />
-                    ) : (
-                      <div className="w-16 h-24 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs">
-                        No cover
-                      </div>
-                    )}
-
-                    {/* Details */}
-                    <div className="flex-1 min-w-0">
-                      {/* Zone 1: Identity */}
-                      <div>
-                        {/* Title + subtitle */}
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-medium leading-tight">
-                              {result.title}
-                            </p>
-                            <Badge
-                              className="shrink-0 text-xs"
-                              variant="outline"
-                            >
-                              {pluginLabel(result)}
-                            </Badge>
-                          </div>
-                          {(() => {
-                            const subtitle = resolveField(
-                              result,
-                              "subtitle",
-                            ) as string;
-                            return subtitle ? (
-                              <p className="text-sm text-muted-foreground/80 leading-tight">
-                                {subtitle}
-                              </p>
-                            ) : null;
-                          })()}
-                          {(() => {
-                            const series = resolveField(
-                              result,
-                              "series",
-                            ) as string;
-                            const seriesNum = resolveField(
-                              result,
-                              "series_number",
-                            ) as number;
-                            return series ? (
-                              <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                                {series}
-                                {seriesNum != null && ` #${seriesNum}`}
-                              </p>
-                            ) : null;
-                          })()}
-                        </div>
-
-                        {/* People */}
-                        {(() => {
-                          const authors = resolveAuthors(result);
-                          const narrators = resolveNarrators(result);
-                          const hasAuthors = authors && authors.length > 0;
-                          const hasNarrators =
-                            narrators && narrators.length > 0;
-                          return hasAuthors || hasNarrators ? (
-                            <div className="mt-2 space-y-0.5">
-                              {hasAuthors && (
-                                <p className="text-sm text-muted-foreground">
-                                  {authors.join(", ")}
-                                </p>
-                              )}
-                              {hasNarrators && (
-                                <p className="text-xs text-muted-foreground">
-                                  Narrated by {narrators.join(", ")}
-                                </p>
-                              )}
-                            </div>
-                          ) : null;
-                        })()}
-
-                        {/* Date + publisher */}
-                        {(result.release_date || result.publisher) && (
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
-                            {result.release_date && (
-                              <span>{formatDate(result.release_date)}</span>
-                            )}
-                            {result.release_date && result.publisher && (
-                              <span className="text-muted-foreground/50">
-                                ·
-                              </span>
-                            )}
-                            {result.publisher && (
-                              <span>{result.publisher}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Zone 2: Identifiers */}
-                      {result.identifiers &&
-                        result.identifiers.filter((id) => id.type && id.value)
-                          .length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2.5">
-                            {result.identifiers
-                              .filter((id) => id.type && id.value)
-                              .map((id) => {
-                                const url = getIdentifierUrl(
-                                  id.type,
-                                  id.value,
-                                  pluginIdentifierTypes,
-                                );
-                                return url ? (
-                                  <a
-                                    className="inline-flex"
-                                    href={url}
-                                    key={`${id.type}-${id.value}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    rel="noopener noreferrer"
-                                    target="_blank"
-                                  >
-                                    <Badge
-                                      className="text-xs hover:bg-primary/20 transition-colors"
-                                      variant="secondary"
-                                    >
-                                      {formatIdentifierType(
-                                        id.type,
-                                        pluginIdentifierTypes,
-                                      )}
-                                      : {id.value}
-                                      <ExternalLink className="h-3 w-3 ml-1 shrink-0" />
-                                    </Badge>
-                                  </a>
-                                ) : (
-                                  <Badge
-                                    className="text-xs"
-                                    key={`${id.type}-${id.value}`}
-                                    variant="secondary"
-                                  >
-                                    {formatIdentifierType(
-                                      id.type,
-                                      pluginIdentifierTypes,
-                                    )}
-                                    : {id.value}
-                                  </Badge>
-                                );
-                              })}
-                          </div>
-                        )}
-
-                      {/* Zone 3: Taxonomy */}
-                      {(() => {
-                        const genres =
-                          (resolveField(result, "genres") as string[]) ?? [];
-                        const tags =
-                          (resolveField(result, "tags") as string[]) ?? [];
-                        return genres.length > 0 || tags.length > 0 ? (
-                          <div className="mt-2.5 space-y-1">
-                            {genres.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1">
-                                <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
-                                  Genres
-                                </span>
-                                {genres.map((g) => (
-                                  <Badge
-                                    className="text-xs"
-                                    key={`genre-${g}`}
-                                    variant="outline"
-                                  >
-                                    {g}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {tags.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1">
-                                <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
-                                  Tags
-                                </span>
-                                {tags.map((tag) => (
-                                  <Badge
-                                    className="text-xs"
-                                    key={`tag-${tag}`}
-                                    variant="outline"
-                                  >
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : null;
-                      })()}
-
-                      {/* Zone 4: Description */}
-                      {result.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-line mt-2.5">
-                          {result.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {searchMutation.isError && (
-            <div className="text-center py-12 text-destructive">
-              Search failed. Please try again.
-            </div>
-          )}
-        </div>
-
-        {selectedResult?.disabled_fields &&
-          selectedResult.disabled_fields.length > 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
-              <Info className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                The following fields are disabled for this plugin and won&apos;t
-                be updated:{" "}
-                {selectedResult.disabled_fields
-                  .map((f) => formatMetadataFieldLabel(f))
-                  .sort()
-                  .join(", ")}
-                . You can change this in the plugin settings.
-              </span>
-            </div>
-          )}
-
+        {/* File selector — visible in both search and review steps */}
         {hasMultipleFiles && (
           <div className="space-y-2">
             <div>
@@ -531,21 +202,289 @@ export function IdentifyBookDialog({
           </div>
         )}
 
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
-            Cancel
-          </Button>
-          <Button
-            disabled={!selectedResult || enrichMutation.isPending}
-            onClick={handleApply}
-          >
-            {enrichMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Apply
-          </Button>
-        </DialogFooter>
+        {/* Step 1: Search */}
+        {step === "search" && (
+          <>
+            {/* Search bar */}
+            <div className="flex gap-2">
+              <Input
+                className="flex-1"
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search by title, author, ISBN..."
+                ref={inputRef}
+                value={query}
+              />
+              <Button
+                disabled={searchMutation.isPending || !query.trim()}
+                onClick={handleSearch}
+                variant="outline"
+              >
+                {searchMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {/* Results */}
+            <div className="min-h-[200px] max-h-[60vh] overflow-y-auto">
+              {searchMutation.isPending && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+
+              {searchMutation.isSuccess && results.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground space-y-2">
+                  <p>No results found.</p>
+                  <p className="text-xs">
+                    {hasEnricherPlugins
+                      ? "Try a different search query."
+                      : "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."}
+                  </p>
+                </div>
+              )}
+
+              {searchMutation.isSuccess && results.length > 0 && (
+                <div className="space-y-2">
+                  {results.map((result, index) => (
+                    <button
+                      className={cn(
+                        "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
+                        "hover:bg-muted/50",
+                        selectedResult === result
+                          ? "border-primary bg-primary/5"
+                          : "border-border",
+                      )}
+                      key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
+                      onClick={() => handleSelectResult(result)}
+                      type="button"
+                    >
+                      <div className="flex gap-3">
+                        {/* Cover thumbnail */}
+                        {result.image_url ? (
+                          <img
+                            alt=""
+                            className="w-16 h-24 object-cover rounded shrink-0 bg-muted"
+                            src={result.image_url}
+                          />
+                        ) : (
+                          <div className="w-16 h-24 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs">
+                            No cover
+                          </div>
+                        )}
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          {/* Zone 1: Identity */}
+                          <div>
+                            {/* Title + subtitle */}
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-medium leading-tight">
+                                  {result.title}
+                                </p>
+                                <Badge
+                                  className="shrink-0 text-xs"
+                                  variant="outline"
+                                >
+                                  {pluginLabel(result)}
+                                </Badge>
+                              </div>
+                              {result.subtitle && (
+                                <p className="text-sm text-muted-foreground/80 leading-tight">
+                                  {result.subtitle}
+                                </p>
+                              )}
+                              {result.series && (
+                                <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                                  {result.series}
+                                  {result.series_number != null &&
+                                    ` #${result.series_number}`}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* People */}
+                            {(() => {
+                              const authors = resolveAuthors(result);
+                              const narrators = result.narrators;
+                              const hasAuthors = authors && authors.length > 0;
+                              const hasNarrators =
+                                narrators && narrators.length > 0;
+                              return hasAuthors || hasNarrators ? (
+                                <div className="mt-2 space-y-0.5">
+                                  {hasAuthors && (
+                                    <p className="text-sm text-muted-foreground">
+                                      {authors.join(", ")}
+                                    </p>
+                                  )}
+                                  {hasNarrators && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Narrated by {narrators.join(", ")}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Date + publisher */}
+                            {(result.release_date || result.publisher) && (
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
+                                {result.release_date && (
+                                  <span>{formatDate(result.release_date)}</span>
+                                )}
+                                {result.release_date && result.publisher && (
+                                  <span className="text-muted-foreground/50">
+                                    ·
+                                  </span>
+                                )}
+                                {result.publisher && (
+                                  <span>{result.publisher}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Zone 2: Identifiers */}
+                          {result.identifiers &&
+                            result.identifiers.filter(
+                              (id) => id.type && id.value,
+                            ).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2.5">
+                                {result.identifiers
+                                  .filter((id) => id.type && id.value)
+                                  .map((id) => {
+                                    const url = getIdentifierUrl(
+                                      id.type,
+                                      id.value,
+                                      pluginIdentifierTypes,
+                                    );
+                                    return url ? (
+                                      <a
+                                        className="inline-flex"
+                                        href={url}
+                                        key={`${id.type}-${id.value}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                      >
+                                        <Badge
+                                          className="text-xs hover:bg-primary/20 transition-colors"
+                                          variant="secondary"
+                                        >
+                                          {formatIdentifierType(
+                                            id.type,
+                                            pluginIdentifierTypes,
+                                          )}
+                                          : {id.value}
+                                          <ExternalLink className="h-3 w-3 ml-1 shrink-0" />
+                                        </Badge>
+                                      </a>
+                                    ) : (
+                                      <Badge
+                                        className="text-xs"
+                                        key={`${id.type}-${id.value}`}
+                                        variant="secondary"
+                                      >
+                                        {formatIdentifierType(
+                                          id.type,
+                                          pluginIdentifierTypes,
+                                        )}
+                                        : {id.value}
+                                      </Badge>
+                                    );
+                                  })}
+                              </div>
+                            )}
+
+                          {/* Zone 3: Taxonomy */}
+                          {(() => {
+                            const genres = result.genres ?? [];
+                            const tags = result.tags ?? [];
+                            return genres.length > 0 || tags.length > 0 ? (
+                              <div className="mt-2.5 space-y-1">
+                                {genres.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                      Genres
+                                    </span>
+                                    {genres.map((g) => (
+                                      <Badge
+                                        className="text-xs"
+                                        key={`genre-${g}`}
+                                        variant="outline"
+                                      >
+                                        {g}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {tags.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                      Tags
+                                    </span>
+                                    {tags.map((tag) => (
+                                      <Badge
+                                        className="text-xs"
+                                        key={`tag-${tag}`}
+                                        variant="outline"
+                                      >
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : null;
+                          })()}
+
+                          {/* Zone 4: Description */}
+                          {result.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-line mt-2.5">
+                              {result.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {searchMutation.isError && (
+                <div className="text-center py-12 text-destructive">
+                  Search failed. Please try again.
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => onOpenChange(false)} variant="outline">
+                Cancel
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* Step 2: Review */}
+        {step === "review" && selectedResult && (
+          <IdentifyReviewForm
+            book={book}
+            fileId={selectedFileId}
+            onBack={() => {
+              setReviewHasChanges(false);
+              setStep("search");
+            }}
+            onClose={() => onOpenChange(false)}
+            onHasChangesChange={setReviewHasChanges}
+            result={selectedResult}
+          />
+        )}
       </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

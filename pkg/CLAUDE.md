@@ -112,7 +112,7 @@ Metadata sources ranked (lower number = higher precedence):
 4: Filepath (lowest)
 ```
 
-Used to determine which metadata to keep when conflicts occur. During scans, enricher plugins override file-embedded metadata per-field (two-phase merge in `runMetadataEnrichers`).
+Used to determine which metadata to keep when conflicts occur. During scans, enricher plugins override file-embedded metadata per-field (enricher-first merge in `runMetadataEnrichers`).
 
 ### OPDS
 
