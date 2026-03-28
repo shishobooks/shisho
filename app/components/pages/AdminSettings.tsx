@@ -191,6 +191,16 @@ const AdminSettings = () => {
               value={`${config.download_cache_max_size_gb} GB`}
             />
             <ConfigRow
+              description="Resolution for rendering PDF pages in the viewer"
+              label="PDF Render DPI"
+              value={`${config.pdf_render_dpi} DPI`}
+            />
+            <ConfigRow
+              description="JPEG quality for rendered PDF pages"
+              label="PDF Render Quality"
+              value={`${config.pdf_render_quality}`}
+            />
+            <ConfigRow
               description="Directory where installed plugins are stored"
               label="Plugin Directory"
               value={config.plugin_dir}

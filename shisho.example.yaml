@@ -81,6 +81,7 @@ job_retention_days: 30
 # This includes:
 #   - {cache_dir}/downloads/  Generated download files with embedded metadata
 #   - {cache_dir}/cbz/        Extracted CBZ page images for the comic viewer
+#   - {cache_dir}/pdf/        Rendered PDF page images for the PDF viewer
 # Env: CACHE_DIR
 # Default: /config/cache
 cache_dir: /config/cache
@@ -90,6 +91,18 @@ cache_dir: /config/cache
 # Env: DOWNLOAD_CACHE_MAX_SIZE_GB
 # Default: 5
 download_cache_max_size_gb: 5
+
+# DPI for rendering PDF pages in the viewer (higher = sharper but larger images)
+# Range: 72-600. At 200 DPI, a typical letter-size page renders to ~1700x2200 pixels.
+# Env: PDF_RENDER_DPI
+# Default: 200
+pdf_render_dpi: 200
+
+# JPEG quality for rendered PDF pages (higher = better quality but larger files)
+# Range: 1-100
+# Env: PDF_RENDER_QUALITY
+# Default: 85
+pdf_render_quality: 85
 
 # =============================================================================
 # PLUGIN SETTINGS
