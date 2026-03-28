@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/abema/go-mp4 v1.4.1
+	github.com/andybalholm/cascadia v1.3.3
 	github.com/creasty/defaults v1.8.0
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/fsnotify/fsnotify v1.9.0
@@ -37,7 +38,6 @@ require (
 )
 
 require (
-	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
