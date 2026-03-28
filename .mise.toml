@@ -48,7 +48,7 @@ run = "cd website && pnpm start"
 [tasks.tygo]
 description = "Generate TypeScript types from Go structs"
 run = "tygo generate"
-sources = ["tygo.yaml", "pkg/**/validators.go", "pkg/**/config.go", "pkg/**/model.go", "pkg/mediafile/mediafile.go"]
+sources = ["tygo.yaml", "pkg/**/validators.go", "pkg/**/config.go", "pkg/**/model.go", "pkg/models/*.go", "pkg/mediafile/mediafile.go"]
 outputs = ["app/types/generated/**/*.ts"]
 
 # === Linting ===

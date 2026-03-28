@@ -177,7 +177,7 @@ For detailed architecture information, see:
 All tool versions are managed by mise via `.mise.toml`. When updating versions, update these locations:
 
 - `.mise.toml` - Single source of truth for Go, Node, pnpm, air, tygo, golangci-lint
-- `Dockerfile` - The `golang:X.X.X-alpine` and `node:X.X.X-alpine` images (Docker doesn't use mise)
+- `Dockerfile` - The `golang:X.X.X-alpine` and `node:X.X.X-alpine` images, and tygo version in `go install` (Docker doesn't use mise)
 - `package.json` - `@types/node` version (run `pnpm install` after)
 - `package.json` - `packageManager` field for pnpm (used by Docker via corepack)
 
