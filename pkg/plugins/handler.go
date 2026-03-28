@@ -1267,17 +1267,28 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		})
 	}
 
-	// Look up the book
-	var book models.Book
-	if err := h.db.NewSelect().Model(&book).
-		Where("b.id = ?", payload.BookID).
-		Relation("Authors").
-		Relation("Authors.Person").
-		Relation("BookSeries").
-		Relation("BookSeries.Series").
-		Relation("Files").
-		Relation("Files.Identifiers").
-		Scan(ctx); err != nil {
+	// Look up the book with relations
+	var book *models.Book
+	if h.enrich != nil {
+		book, err = h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	} else if h.db != nil {
+		var b models.Book
+		err = h.db.NewSelect().Model(&b).
+			Where("b.id = ?", payload.BookID).
+			Relation("Authors").
+			Relation("Authors.Person").
+			Relation("BookSeries").
+			Relation("BookSeries.Series").
+			Relation("Files").
+			Relation("Files.Identifiers").
+			Scan(ctx)
+		if err == nil {
+			book = &b
+		}
+	} else {
+		return errcodes.BadRequest("search dependencies not available")
+	}
+	if err != nil || book == nil {
 		return errcodes.NotFound("Book")
 	}
 
@@ -1291,7 +1302,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	// Build context objects
-	bookCtx := buildSearchBookContext(&book)
+	bookCtx := buildSearchBookContext(book)
 	fileCtx := map[string]interface{}{} // Minimal file context for search
 	if len(book.Files) > 0 {
 		f := book.Files[0]
