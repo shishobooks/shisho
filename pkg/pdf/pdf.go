@@ -92,6 +92,19 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		coverMime = cm
 	}
 
+	// Extract outline (bookmarks) as chapters. Best-effort — don't fail Parse.
+	var chapters []mediafile.ParsedChapter
+	outlineEntries, outlineErr := ExtractOutline(path)
+	if outlineErr == nil {
+		for _, entry := range outlineEntries {
+			startPage := entry.StartPage
+			chapters = append(chapters, mediafile.ParsedChapter{
+				Title:     entry.Title,
+				StartPage: &startPage,
+			})
+		}
+	}
+
 	return &mediafile.ParsedMetadata{
 		Title:         title,
 		Authors:       authors,
@@ -101,6 +114,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		PageCount:     pageCount,
 		CoverData:     coverData,
 		CoverMimeType: coverMime,
+		Chapters:      chapters,
 		DataSource:    models.DataSourcePDFMetadata,
 	}, nil
 }
