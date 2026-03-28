@@ -1429,7 +1429,7 @@ func (svc *Service) ListFilesForLibrary(ctx context.Context, libraryID int) ([]*
 	return files, errors.WithStack(err)
 }
 
-// DeleteBook deletes a book and all its associated records (files, authors, series, genres, tags).
+// DeleteBook deletes a book and all its associated records (files, narrators, identifiers, chapters, authors, series, genres, tags).
 func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		// Get all file IDs for this book
