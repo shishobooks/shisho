@@ -71,11 +71,50 @@ Cover extraction uses a two-tier approach implemented in `pkg/pdf/cover.go`:
 
 Cover extraction is best-effort. If either tier fails, `Parse()` logs a warning and returns metadata without a cover (does not fail the parse).
 
+## Outline (Bookmark) Extraction
+
+PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` API and converted to `ParsedChapter` entries during `Parse()`.
+
+- **Best-effort**: outline extraction failures are silently ignored (don't fail the parse)
+- **Flat output**: nested bookmark trees are recursively flattened into a linear list
+- **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
+- **No DestInfo = skipped**: bookmarks without a page destination are omitted
+
+### Key Types
+
+```go
+// OutlineEntry represents a single bookmark from a PDF's outline tree.
+type OutlineEntry struct {
+    Title     string
+    StartPage int // 0-indexed page number
+}
+```
+
+## Shared Pdfium Pool
+
+The pdfium WASM pool (`MaxTotal: 1`) is lazily initialized in `cover.go` and shared across:
+- Cover extraction (`renderPageCover`)
+- Outline extraction (`ExtractOutline`)
+- PDF page rendering (`pkg/pdfpages`)
+
+Access via exported functions:
+- `EnsurePdfiumPoolInit()` — idempotent pool initialization
+- `PdfiumInstance(timeout)` — get an instance; caller must `defer instance.Close()`
+
 ## Key Functions
 
 ```go
-// Parse metadata and cover from PDF file
+// Parse metadata, cover, and outline from PDF file
 func Parse(path string) (*mediafile.ParsedMetadata, error)
+
+// ExtractOutline extracts bookmarks as a flat list of OutlineEntry
+func ExtractOutline(path string) ([]OutlineEntry, error)
+
+// EnsurePdfiumPoolInit initializes the shared pdfium WASM pool
+func EnsurePdfiumPoolInit() error
+
+// PdfiumInstance returns an instance from the shared pool
+func PdfiumInstance(timeout time.Duration) (pdfium.Pdfium, error)
 
 // extractCover tries Tier 1 then Tier 2
 func extractCover(path string) ([]byte, string, error)
@@ -96,8 +135,11 @@ The `with-image.pdf` fixture embeds a small JPEG image as a DCTDecode XObject on
 ## Related Files
 
 - `pkg/pdf/pdf.go` - PDF parsing and metadata extraction
-- `pkg/pdf/cover.go` - Two-tier cover extraction
+- `pkg/pdf/cover.go` - Two-tier cover extraction and shared pdfium pool
+- `pkg/pdf/outline.go` - Outline (bookmark) extraction
 - `pkg/pdf/pdf_test.go` - PDF parsing tests with fixture generation
+- `pkg/pdf/outline_test.go` - Outline extraction tests
+- `pkg/pdfpages/` - PDF page rendering cache (uses shared pdfium pool)
 - `pkg/mediafile/mediafile.go` - ParsedMetadata type definition
 - `pkg/models/data-source.go` - DataSourcePDFMetadata constant
 - `pkg/models/file.go` - FileTypePDF constant

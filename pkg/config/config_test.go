@@ -96,6 +96,48 @@ func TestNew_Defaults(t *testing.T) {
 	assert.Equal(t, 2, cfg.WorkerProcesses)
 	assert.True(t, cfg.LibraryMonitorEnabled)
 	assert.Equal(t, 60, cfg.LibraryMonitorDelaySeconds)
+	assert.Equal(t, 200, cfg.PDFRenderDPI)
+	assert.Equal(t, 85, cfg.PDFRenderQuality)
+}
+
+func TestNew_PDFRenderDPI_Validation(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// DPI below minimum (72)
+	configContent := `
+database_file_path: /data/shisho.db
+jwt_secret: test-secret-key
+pdf_render_dpi: 10
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("CONFIG_FILE", configPath)
+
+	_, err = New()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "PDFRenderDPI")
+}
+
+func TestNew_PDFRenderQuality_Validation(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Quality above maximum (100)
+	configContent := `
+database_file_path: /data/shisho.db
+jwt_secret: test-secret-key
+pdf_render_quality: 200
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("CONFIG_FILE", configPath)
+
+	_, err = New()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "PDFRenderQuality")
 }
 
 func TestNew_SyncInterval(t *testing.T) {

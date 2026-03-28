@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -31,6 +32,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	imprintService := imprints.NewService(db)
 	listsService := lists.NewService(db)
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
+	pdfPageCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
 	h := &handler{
 		config:           cfg,
@@ -45,6 +47,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		listsService:     listsService,
 		downloadCache:    dlCache,
 		pageCache:        pageCache,
+		pdfPageCache:     pdfPageCache,
 		scanner:          scanner,
 	}
 	// Only set pluginManager if it's not nil to avoid interface holding nil pointer

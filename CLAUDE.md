@@ -35,6 +35,7 @@ Project-specific conventions are documented in `CLAUDE.md` files within each sub
 | `pkg/kepub/CLAUDE.md` | KePub format: koboSpan wrapping, CBZ-to-KePub conversion |
 | `pkg/mp4/CLAUDE.md` | M4B format: iTunes atoms, chapters, narrator fallback |
 | `pkg/pdf/CLAUDE.md` | PDF format: info dict metadata, pdfcpu thread safety |
+| `pkg/pdfpages/CLAUDE.md` | PDF page cache: render/cache PDF pages as JPEG, thread safety, config |
 | `pkg/events/CLAUDE.md` | SSE: event broker, streaming handler, event types |
 | `website/CLAUDE.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/CLAUDE.md` | E2E testing: Playwright, per-browser isolation, fixtures |

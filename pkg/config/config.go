@@ -44,6 +44,10 @@ type Config struct {
 	CacheDir               string `koanf:"cache_dir" json:"cache_dir"`
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
 
+	// PDF viewer rendering settings
+	PDFRenderDPI     int `koanf:"pdf_render_dpi" json:"pdf_render_dpi" validate:"min=72,max=600"`
+	PDFRenderQuality int `koanf:"pdf_render_quality" json:"pdf_render_quality" validate:"min=1,max=100"`
+
 	// Plugin settings
 	PluginDir     string `koanf:"plugin_dir" json:"plugin_dir"`
 	PluginDataDir string `koanf:"plugin_data_dir" json:"plugin_data_dir"`
@@ -95,6 +99,8 @@ func defaults() *Config {
 		PluginDir:                  "/config/plugins/installed",
 		PluginDataDir:              "/config/plugins/data",
 		DownloadCacheMaxSizeGB:     5,
+		PDFRenderDPI:               200,
+		PDFRenderQuality:           85,
 		LibraryMonitorEnabled:      true,
 		LibraryMonitorDelaySeconds: 60,
 		SupplementExcludePatterns:  []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},

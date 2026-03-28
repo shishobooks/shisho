@@ -1,17 +1,17 @@
 import PageReader from "@/components/pages/PageReader";
 import type { File } from "@/types";
 
-interface CBZReaderProps {
+interface PDFReaderProps {
   file: File;
   libraryId: string;
   bookTitle?: string;
 }
 
-export default function CBZReader({
+export default function PDFReader({
   file,
   libraryId,
   bookTitle,
-}: CBZReaderProps) {
+}: PDFReaderProps) {
   return (
     <PageReader
       bookId={file.book_id}
