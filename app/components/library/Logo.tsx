@@ -76,7 +76,7 @@ const Logo = ({ asLink = false, className, size = "md" }: LogoProps) => {
   );
 
   const baseClasses = cn(
-    "inline-flex items-center font-bold uppercase tracking-wider text-foreground",
+    "inline-flex items-center font-logo font-bold uppercase tracking-wider text-foreground",
     sizeClasses[size],
     className,
   );
