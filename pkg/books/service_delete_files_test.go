@@ -428,6 +428,129 @@ func TestDeleteBooksByIDs_EmptySlice(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDeleteFile_DeletesChapters(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+	now := time.Now()
+
+	// Create a file
+	file := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/audiobook.m4b",
+		FilesizeBytes: 1000,
+	}
+	err := svc.CreateFile(ctx, file)
+	require.NoError(t, err)
+
+	// Create a second file so the book isn't empty after deletion
+	file2 := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/audiobook2.m4b",
+		FilesizeBytes: 2000,
+	}
+	err = svc.CreateFile(ctx, file2)
+	require.NoError(t, err)
+
+	// Add chapters to the file being deleted
+	chapter1 := &models.Chapter{FileID: file.ID, Title: "Chapter 1", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	chapter2 := &models.Chapter{FileID: file.ID, Title: "Chapter 2", SortOrder: 1, CreatedAt: now, UpdatedAt: now}
+	_, err = db.NewInsert().Model(chapter1).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(chapter2).Exec(ctx)
+	require.NoError(t, err)
+
+	// Add a chapter to file2 (should NOT be deleted)
+	chapter3 := &models.Chapter{FileID: file2.ID, Title: "Other Chapter", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	_, err = db.NewInsert().Model(chapter3).Exec(ctx)
+	require.NoError(t, err)
+
+	// Delete file1
+	err = svc.DeleteFile(ctx, file.ID)
+	require.NoError(t, err)
+
+	// Verify chapters for deleted file are gone
+	var chapterCount int
+	err = db.NewSelect().TableExpr("chapters").
+		Where("file_id = ?", file.ID).
+		ColumnExpr("count(*)").
+		Scan(ctx, &chapterCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, chapterCount, "chapters for deleted file should be removed")
+
+	// Verify chapter for other file still exists
+	var otherChapterCount int
+	err = db.NewSelect().TableExpr("chapters").
+		Where("file_id = ?", file2.ID).
+		ColumnExpr("count(*)").
+		Scan(ctx, &otherChapterCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, otherChapterCount, "chapters for other file should still exist")
+}
+
+func TestDeleteBook_DeletesChapters(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+	now := time.Now()
+
+	// Create two files for the book
+	file1 := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/audiobook1.m4b",
+		FilesizeBytes: 1000,
+	}
+	err := svc.CreateFile(ctx, file1)
+	require.NoError(t, err)
+
+	file2 := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/book.epub",
+		FilesizeBytes: 2000,
+	}
+	err = svc.CreateFile(ctx, file2)
+	require.NoError(t, err)
+
+	// Add chapters to both files
+	chapter1 := &models.Chapter{FileID: file1.ID, Title: "Ch1", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	chapter2 := &models.Chapter{FileID: file2.ID, Title: "Ch2", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	_, err = db.NewInsert().Model(chapter1).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(chapter2).Exec(ctx)
+	require.NoError(t, err)
+
+	// Delete the book
+	err = svc.DeleteBook(ctx, book.ID)
+	require.NoError(t, err)
+
+	// Verify all chapters are gone
+	var chapterCount int
+	err = db.NewSelect().TableExpr("chapters").
+		Where("file_id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		ColumnExpr("count(*)").
+		Scan(ctx, &chapterCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, chapterCount, "all chapters should be deleted when book is deleted")
+}
+
 func TestPromoteNextPrimaryFile(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

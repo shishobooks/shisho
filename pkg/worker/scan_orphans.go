@@ -220,8 +220,8 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	jobLog.Info("batch orphan cleanup complete", logger.Data{
-		"partial_files_deleted":  len(partialOrphanFileIDs),
-		"promoted_files_deleted": len(promotedBookOrphanFileIDs),
-		"books_deleted":          len(bookIDsToDelete),
+		"partial_files_attempted":  len(partialOrphanFileIDs),
+		"promoted_files_attempted": len(promotedBookOrphanFileIDs),
+		"books_attempted":          len(bookIDsToDelete),
 	})
 }

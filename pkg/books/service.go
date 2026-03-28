@@ -1269,7 +1269,7 @@ func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (i
 	return int(n), nil
 }
 
-// DeleteFile deletes a file and its associated records (narrators, identifiers).
+// DeleteFile deletes a file and its associated records (narrators, identifiers, chapters).
 // If the deleted file was the book's primary file, promotes another file to primary.
 func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -1295,6 +1295,15 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 		// Delete identifiers for this file
 		_, err = tx.NewDelete().
 			Model((*models.FileIdentifier)(nil)).
+			Where("file_id = ?", fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete chapters for this file
+		_, err = tx.NewDelete().
+			Model((*models.Chapter)(nil)).
 			Where("file_id = ?", fileID).
 			Exec(ctx)
 		if err != nil {
@@ -1420,7 +1429,7 @@ func (svc *Service) ListFilesForLibrary(ctx context.Context, libraryID int) ([]*
 	return files, errors.WithStack(err)
 }
 
-// DeleteBook deletes a book and all its associated records (files, authors, series, genres, tags).
+// DeleteBook deletes a book and all its associated records (files, narrators, identifiers, chapters, authors, series, genres, tags).
 func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		// Get all file IDs for this book
@@ -1447,6 +1456,15 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 			// Delete identifiers for all files
 			_, err = tx.NewDelete().
 				Model((*models.FileIdentifier)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			// Delete chapters for all files
+			_, err = tx.NewDelete().
+				Model((*models.Chapter)(nil)).
 				Where("file_id IN (?)", bun.In(fileIDs)).
 				Exec(ctx)
 			if err != nil {
