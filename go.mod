@@ -3,7 +3,6 @@ module github.com/shishobooks/shisho
 go 1.25.0
 
 require (
-	github.com/DarthSim/hivemind v1.1.0
 	github.com/abema/go-mp4 v1.4.1
 	github.com/air-verse/air v1.64.2
 	github.com/creasty/defaults v1.8.0

@@ -5,8 +5,6 @@ github.com/BurntSushi/locker v0.0.0-20171006230638-a6e239ea1c69/go.mod h1:L1AbZd
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/DarthSim/godotenv v1.3.1 h1:NMWdswlRx2M9uPY4Ux8p/Q/rDs7A97OG89fECiQ/Tz0=
 github.com/DarthSim/godotenv v1.3.1/go.mod h1:B3ySe1HYTUFFR6+TPyHyxPWjUdh48il0Blebg9p1cCc=
-github.com/DarthSim/hivemind v1.1.0 h1:om9ELlhZ07p+yZ+OzYzaXd5RYw/j+X7UwgWyNLpOcBY=
-github.com/DarthSim/hivemind v1.1.0/go.mod h1:hXtCeYrLuyrV8/5z8d9sue+hbi2Y4rzaVgKneVpP/Ow=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/abema/go-mp4 v1.4.1 h1:YoS4VRqd+pAmddRPLFf8vMk74kuGl6ULSjzhsIqwr6M=
