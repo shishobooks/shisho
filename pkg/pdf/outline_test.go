@@ -99,7 +99,6 @@ func writeCleanPDFWithOutline(outPath string, pageCount int, bookmarks []outline
 	objNum++
 
 	// Page objects: 3 .. 3+pageCount-1
-	firstPageObj := objNum
 	pageObjNums := make([]int, pageCount)
 	for i := 0; i < pageCount; i++ {
 		pageObjNums[i] = objNum
@@ -181,8 +180,6 @@ func writeCleanPDFWithOutline(outPath string, pageCount int, bookmarks []outline
 	b.WriteString("startxref\n")
 	b.WriteString(fmt.Sprintf("%d\n", xrefOffset))
 	b.WriteString("%%EOF\n")
-
-	_ = firstPageObj // suppress unused variable warning if pageCount == 0
 
 	return os.WriteFile(outPath, []byte(b.String()), 0644)
 }
