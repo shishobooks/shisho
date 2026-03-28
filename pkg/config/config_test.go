@@ -96,6 +96,8 @@ func TestNew_Defaults(t *testing.T) {
 	assert.Equal(t, 2, cfg.WorkerProcesses)
 	assert.True(t, cfg.LibraryMonitorEnabled)
 	assert.Equal(t, 60, cfg.LibraryMonitorDelaySeconds)
+	assert.Equal(t, 200, cfg.PDFRenderDPI)
+	assert.Equal(t, 85, cfg.PDFRenderQuality)
 }
 
 func TestNew_SyncInterval(t *testing.T) {

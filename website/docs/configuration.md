@@ -70,8 +70,10 @@ macOS (FSEvents) and Docker containers typically don't need this adjustment.
 
 | Setting | Env Variable | Default | Description |
 |---------|-------------|---------|-------------|
-| `cache_dir` | `CACHE_DIR` | `/config/cache` | Directory for caching generated files (downloads and extracted CBZ pages) |
+| `cache_dir` | `CACHE_DIR` | `/config/cache` | Directory for caching generated files (downloads, extracted CBZ pages, and rendered PDF pages) |
 | `download_cache_max_size_gb` | `DOWNLOAD_CACHE_MAX_SIZE_GB` | `5` | Maximum size of the download cache in GB. Older files are removed automatically (LRU) when the limit is exceeded |
+| `pdf_render_dpi` | `PDF_RENDER_DPI` | `200` | DPI for rendering PDF pages in the viewer. Higher values produce sharper images but larger files. Range: 72-600 |
+| `pdf_render_quality` | `PDF_RENDER_QUALITY` | `85` | JPEG quality for rendered PDF pages (1-100). Higher values produce better quality but larger files |
 
 ### Plugins
 

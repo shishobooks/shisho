@@ -45,8 +45,8 @@ type Config struct {
 	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
 
 	// PDF viewer rendering settings
-	PDFRenderDPI     int `koanf:"pdf_render_dpi" json:"pdf_render_dpi"`
-	PDFRenderQuality int `koanf:"pdf_render_quality" json:"pdf_render_quality"`
+	PDFRenderDPI     int `koanf:"pdf_render_dpi" json:"pdf_render_dpi" validate:"min=72,max=600"`
+	PDFRenderQuality int `koanf:"pdf_render_quality" json:"pdf_render_quality" validate:"min=1,max=100"`
 
 	// Plugin settings
 	PluginDir     string `koanf:"plugin_dir" json:"plugin_dir"`
