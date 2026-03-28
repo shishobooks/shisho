@@ -109,10 +109,37 @@ func (w *Worker) cleanupOrphanedFiles(
 		// Full orphan: all main files are gone
 		jobLog.Info("all main files orphaned for book", logger.Data{"book_id": bookID})
 
-		// Load book with files to check for supplements
+		// Load book with files to check current state.
+		// The parallel scan may have added new files to this book since existingFiles was loaded.
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 		if err != nil {
 			jobLog.Warn("failed to retrieve orphaned book", logger.Data{"book_id": bookID, "error": err.Error()})
+			continue
+		}
+
+		// Check if the book gained new main files during the parallel scan.
+		// If new main files exist, this is actually a partial orphan — not a full deletion.
+		// We only check for main files here; supplements are handled separately below.
+		orphanIDs := make(map[int]struct{}, len(orphans))
+		for _, f := range orphans {
+			orphanIDs[f.ID] = struct{}{}
+		}
+		hasNewMainFiles := false
+		for _, f := range book.Files {
+			if _, isOrphan := orphanIDs[f.ID]; !isOrphan && f.FileRole == models.FileRoleMain {
+				hasNewMainFiles = true
+				break
+			}
+		}
+		if hasNewMainFiles {
+			// New files were added during scan — delete only the orphaned files, keep the book
+			for _, f := range orphans {
+				promotedBookOrphanFileIDs = append(promotedBookOrphanFileIDs, f.ID)
+				jobLog.Info("orphaned file (scan-updated book)", logger.Data{"file_id": f.ID, "filepath": f.Filepath})
+			}
+			if err := w.bookService.PromoteNextPrimaryFile(ctx, bookID); err != nil {
+				jobLog.Warn("failed to promote primary file", logger.Data{"book_id": bookID, "error": err.Error()})
+			}
 			continue
 		}
 
