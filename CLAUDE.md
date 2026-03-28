@@ -138,7 +138,7 @@ For detailed architecture information, see:
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - Always run `make check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `make check` only when you need full verbose output for debugging.
 - **Don't run checks multiple times** — `make check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
-- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
+- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
   - Metadata, resource, or relationship changes → `website/docs/metadata.md`
