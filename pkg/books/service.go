@@ -1630,7 +1630,7 @@ func (svc *Service) PromoteNextPrimaryFile(ctx context.Context, bookID int) erro
 		Order("created_at ASC").
 		Limit(1).
 		Scan(ctx)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return errors.WithStack(err)
 	}
 

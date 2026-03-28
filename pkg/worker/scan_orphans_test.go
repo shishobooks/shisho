@@ -113,8 +113,8 @@ func TestCleanupOrphanedFiles_FullOrphan_NoSupplements(t *testing.T) {
 	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, scannedPaths, library, jobLog)
 
 	// Book and file should both be deleted
-	assert.Len(t, tc.listBooks(), 0)
-	assert.Len(t, tc.listFiles(), 0)
+	assert.Empty(t, tc.listBooks())
+	assert.Empty(t, tc.listFiles())
 }
 
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
