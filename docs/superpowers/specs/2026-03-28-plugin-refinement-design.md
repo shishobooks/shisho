@@ -249,7 +249,21 @@ The testing subpath introduces runtime dependencies (HTML/XML parser libraries).
 
 ### Build
 
-The testing subpath requires `.ts` → `.js` compilation. Ship pre-compiled `.js` + `.d.ts` for clean consumer experience. Minimal build step via `tsc`.
+The package transitions from a zero-build type declaration package to one with a build step:
+
+**Before:** `packages/plugin-types/` shipped only `.d.ts` files. No compilation, no `tsconfig`, no build script. `"files": ["*.d.ts"]` in package.json.
+
+**After:** `packages/plugin-sdk/` has two entry points with different build characteristics:
+- **Main entry (`.`):** Still pure `.d.ts` files — no compilation needed, no change from before
+- **Testing entry (`./testing`):** Runtime TypeScript that must be compiled to `.js` + `.d.ts`
+
+**Build setup:**
+- Add a `tsconfig.json` to `packages/plugin-sdk/` targeting the `testing/` directory (the main `.d.ts` files don't need compilation)
+- Add a `build` script to `package.json` that runs `tsc` on the testing subpath
+- The `"files"` field in `package.json` expands from `["*.d.ts"]` to include `["*.d.ts", "testing/"]`
+- The compiled `testing/index.js` and `testing/index.d.ts` should be committed or generated before publish — decide during implementation whether to gitignore compiled output (build on publish) or commit it (simpler for monorepo consumers)
+
+**Impact on monorepo:** The root `pnpm` workspace already references `packages/plugin-types`. This path updates to `packages/plugin-sdk`. Any mise tasks or CI steps that reference the old path need updating. The `scripts/release.sh` updates the version in `packages/plugin-types/package.json` — this path must change too.
 
 ---
 
