@@ -380,74 +380,64 @@ body {
   margin-bottom: 3rem;
 }
 
-/* ---- HOMEPAGE: WHY SECTION ---- */
-.docs-home__why-intro {
-  color: var(--muted-foreground);
-  font-size: 1.0625rem;
-  line-height: 1.75;
-  margin-bottom: 2.5rem;
+/* ---- HOMEPAGE: WORKFLOW ---- */
+.docs-home__workflow {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(3, 1fr);
 }
 
-.docs-home__why-grid {
+.docs-home__workflow-step {
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow-x: auto;
+  padding: 2rem 1.75rem 1.75rem;
+  position: relative;
 }
 
-.docs-home__why-grid-header {
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  color: var(--muted-foreground);
-  display: grid;
+.docs-home__workflow-number {
+  color: var(--shisho-violet-300);
   font-size: 0.6875rem;
-  font-weight: 600;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
-  letter-spacing: 0.08em;
-  padding: 0.75rem 1.25rem;
-  text-transform: uppercase;
+  font-weight: 700;
+  left: 1.75rem;
+  letter-spacing: 0.06em;
+  position: absolute;
+  top: 1.25rem;
 }
 
-.docs-home__why-grid-header span:not(:first-child) {
-  text-align: center;
+.docs-home__workflow-number::before {
+  content: "Step ";
 }
 
-.docs-home__why-grid-row {
+.docs-home__workflow-icon {
   align-items: center;
-  border-bottom: 1px solid var(--border);
-  display: grid;
-  font-size: 0.9375rem;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
-  padding: 0.875rem 1.25rem;
-}
-
-.docs-home__why-grid-row:last-child {
-  border-bottom: none;
-}
-
-.docs-home__why-grid-row--highlight {
-  background: color-mix(in oklch, var(--shisho-violet-300), transparent 96%);
-}
-
-.docs-home__why-name {
-  font-weight: 600;
-}
-
-.docs-home__why-name--highlight {
+  background: color-mix(in oklch, var(--shisho-violet-300), transparent 88%);
+  border-radius: 8px;
   color: var(--shisho-violet-300);
+  display: flex;
+  height: 2.5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+  margin-top: 0.75rem;
+  width: 2.5rem;
 }
 
-.docs-home__why-cell {
+.docs-home__workflow-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.docs-home__workflow-desc {
+  color: var(--muted-foreground);
   font-size: 0.875rem;
-  text-align: center;
+  line-height: 1.55;
 }
 
-.docs-home__why-check {
-  color: var(--shisho-violet-300);
-  font-weight: 600;
-}
-
-.docs-home__why-dash {
-  color: color-mix(in oklch, var(--foreground), transparent 88%);
+@media (max-width: 900px) {
+  .docs-home__workflow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---- HOMEPAGE: FORMATS ---- */

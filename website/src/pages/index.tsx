@@ -4,18 +4,33 @@ import Layout from "@theme/Layout";
 import {
   Blocks,
   BookOpen,
+  FolderOpen,
   Github,
   Grid2x2,
   Layers,
+  MonitorSmartphone,
+  ScanSearch,
   Shield,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-const comparisonRows = [
-  { name: "Calibre", ebooks: true, audiobooks: false, comics: false },
-  { name: "Audiobookshelf", ebooks: false, audiobooks: true, comics: false },
-  { name: "Komga", ebooks: false, audiobooks: false, comics: true },
+const workflowSteps = [
+  {
+    icon: FolderOpen,
+    title: "Point it at your books",
+    desc: "Mount a directory of ebooks, audiobooks, or comics. Shisho scans the folder and imports everything it finds automatically.",
+  },
+  {
+    icon: ScanSearch,
+    title: "Metadata is extracted and enriched",
+    desc: "Titles, authors, narrators, series info, covers, and identifiers are pulled from each file. Auto-identify matches books against online sources to fill in any gaps.",
+  },
+  {
+    icon: MonitorSmartphone,
+    title: "Read, listen, or download from anywhere",
+    desc: "Browse your library from any device. Read in the browser, sync to your Kobo, connect via OPDS, or download files directly.",
+  },
 ];
 
 const formatCategories = [
@@ -171,65 +186,27 @@ export default function Home(): ReactNode {
           </div>
         </section>
 
-        {/* WHY SHISHO */}
+        {/* HOW IT WORKS */}
         <section className="docs-home__section">
-          <p className="docs-home__section-label">Why Shisho</p>
+          <p className="docs-home__section-label">How It Works</p>
           <h2 className="docs-home__section-heading">
-            Jellyfin, but for books
+            From folder to library in minutes
           </h2>
-          <p className="docs-home__why-intro">
-            There are excellent self-hosted tools for specific book types, but
-            nothing that handles them all well together. If you collect across
-            formats, you end up running multiple apps, each with its own
-            database, its own interface, and its own limitations.
+          <p className="docs-home__section-desc">
+            Shisho turns a directory of files into an organized, searchable
+            library with rich metadata. No manual cataloging required.
           </p>
-          <div className="docs-home__why-grid">
-            <div className="docs-home__why-grid-header">
-              <span />
-              <span>Ebooks</span>
-              <span>Audiobooks</span>
-              <span>Comics</span>
-            </div>
-            {comparisonRows.map((row) => (
-              <div className="docs-home__why-grid-row" key={row.name}>
-                <span className="docs-home__why-name">{row.name}</span>
-                <span className="docs-home__why-cell">
-                  {row.ebooks ? (
-                    <span className="docs-home__why-check">&#10003;</span>
-                  ) : (
-                    <span className="docs-home__why-dash">-</span>
-                  )}
-                </span>
-                <span className="docs-home__why-cell">
-                  {row.audiobooks ? (
-                    <span className="docs-home__why-check">&#10003;</span>
-                  ) : (
-                    <span className="docs-home__why-dash">-</span>
-                  )}
-                </span>
-                <span className="docs-home__why-cell">
-                  {row.comics ? (
-                    <span className="docs-home__why-check">&#10003;</span>
-                  ) : (
-                    <span className="docs-home__why-dash">-</span>
-                  )}
-                </span>
+          <div className="docs-home__workflow">
+            {workflowSteps.map((step, i) => (
+              <div className="docs-home__workflow-step" key={step.title}>
+                <div className="docs-home__workflow-number">{i + 1}</div>
+                <div className="docs-home__workflow-icon">
+                  <step.icon size={22} />
+                </div>
+                <h3 className="docs-home__workflow-title">{step.title}</h3>
+                <p className="docs-home__workflow-desc">{step.desc}</p>
               </div>
             ))}
-            <div className="docs-home__why-grid-row docs-home__why-grid-row--highlight">
-              <span className="docs-home__why-name docs-home__why-name--highlight">
-                Shisho
-              </span>
-              <span className="docs-home__why-cell docs-home__why-check">
-                &#10003;
-              </span>
-              <span className="docs-home__why-cell docs-home__why-check">
-                &#10003;
-              </span>
-              <span className="docs-home__why-cell docs-home__why-check">
-                &#10003;
-              </span>
-            </div>
           </div>
         </section>
 

@@ -76,20 +76,15 @@ const Logo = ({ asLink = false, className, size = "md" }: LogoProps) => {
   );
 
   const baseClasses = cn(
-    "inline-flex items-center font-bold uppercase tracking-wider text-foreground",
+    "inline-flex items-center font-logo font-bold uppercase tracking-wider text-foreground",
     sizeClasses[size],
     className,
   );
-
-  const logoFont = {
-    fontFamily: '"Noto Sans", "Noto Sans Japanese", sans-serif',
-  };
 
   if (asLink) {
     return (
       <Link
         className={cn(baseClasses, "hover:opacity-80 transition-opacity")}
-        style={logoFont}
         to="/"
       >
         {content}
@@ -97,11 +92,7 @@ const Logo = ({ asLink = false, className, size = "md" }: LogoProps) => {
     );
   }
 
-  return (
-    <span className={baseClasses} style={logoFont}>
-      {content}
-    </span>
-  );
+  return <span className={baseClasses}>{content}</span>;
 };
 
 export default Logo;
