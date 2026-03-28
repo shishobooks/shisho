@@ -16,7 +16,7 @@ Shisho's docs site is a Docusaurus 3 app in `website/` deployed to GitHub Pages.
 | Deploy trigger | Push to `master` touching `website/**` |
 | Workflow | `.github/workflows/docs.yml` |
 | Icons | `lucide-react` (swizzled theme icons) |
-| Fonts | Geist Variable, Noto Sans, Noto Sans JP |
+| Fonts | Geist, Noto Sans, Noto Sans JP |
 
 ## Directory Structure
 

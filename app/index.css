@@ -6,9 +6,8 @@
 
 @theme {
   --font-sans:
-    Geist, Noto Sans, Noto Sans Japanese, ui-sans-serif, system-ui,
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    Geist, Noto Sans, Noto Sans Japanese, ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 @utility container {

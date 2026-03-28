@@ -391,7 +391,7 @@ body {
 .docs-home__why-grid {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .docs-home__why-grid-header {
@@ -725,10 +725,6 @@ body {
 }
 
 @media (max-width: 996px) {
-  .docs-home__highlights {
-    grid-template-columns: 1fr;
-  }
-
   .navbar__inner {
     padding-left: 16px;
     padding-right: 16px;
