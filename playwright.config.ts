@@ -121,7 +121,7 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
 
   return [
     {
-      command: "make start:api",
+      command: "mise start:api",
       url: `http://localhost:${config.apiPort}/health`,
       reuseExistingServer,
       timeout: 60000,
