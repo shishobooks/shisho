@@ -9,15 +9,12 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc -b && vite build",
-    "lint": "concurrently --kill-others-on-fail --group \"pnpm:lint:*\"",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:prettier": "prettier --check .",
     "lint:types": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit && pnpm -C website typecheck",
     "preview": "vite preview",
     "start": "vite",
-    "test": "concurrently --kill-others-on-fail --group \"pnpm:test:*\"",
     "test:unit": "vitest run",
-    "test:e2e": "mkdir -p ./tmp && concurrently --kill-others-on-fail --group \"pnpm:e2e:*\"",
     "e2e:chromium": "playwright test --project=chromium",
     "e2e:firefox": "playwright test --project=firefox"
   },
@@ -80,7 +77,6 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@vitest/coverage-v8": "^4.0.18",
-    "concurrently": "^9.1.2",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
