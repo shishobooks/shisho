@@ -1348,6 +1348,54 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	})
 }
 
+// DeleteFilesByIDs batch-deletes files and their associated records (narrators, identifiers, chapters).
+// Unlike DeleteFile, it does NOT handle primary file promotion — the caller manages that separately.
+// Returns nil if fileIDs is empty.
+func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
+	if len(fileIDs) == 0 {
+		return nil
+	}
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Delete narrators for all files
+		_, err := tx.NewDelete().
+			Model((*models.Narrator)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete identifiers for all files
+		_, err = tx.NewDelete().
+			Model((*models.FileIdentifier)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete chapters for all files
+		_, err = tx.NewDelete().
+			Model((*models.Chapter)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete the file records
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
 // PromoteSupplementToMain promotes a supplement file to a main file.
 // Used during scan cleanup when the last main file is deleted but a promotable supplement exists.
 func (svc *Service) PromoteSupplementToMain(ctx context.Context, fileID int) error {
@@ -1462,6 +1510,147 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 
 		return nil
 	})
+}
+
+// DeleteBooksByIDs deletes multiple books and all their associated records in a single transaction.
+// Used during scan cleanup to remove books with no remaining files.
+func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
+	if len(bookIDs) == 0 {
+		return nil
+	}
+
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Get all file IDs for these books
+		var fileIDs []int
+		err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			Column("id").
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Scan(ctx, &fileIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete narrators, identifiers, and chapters for all files
+		if len(fileIDs) > 0 {
+			_, err = tx.NewDelete().
+				Model((*models.Narrator)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			_, err = tx.NewDelete().
+				Model((*models.FileIdentifier)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			_, err = tx.NewDelete().
+				Model((*models.Chapter)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// Delete files
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete authors
+		_, err = tx.NewDelete().
+			Model((*models.Author)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book series associations
+		_, err = tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book genres
+		_, err = tx.NewDelete().
+			Model((*models.BookGenre)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book tags
+		_, err = tx.NewDelete().
+			Model((*models.BookTag)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book records
+		_, err = tx.NewDelete().
+			Model((*models.Book)(nil)).
+			Where("id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
+// PromoteNextPrimaryFile selects the best remaining file for a book and sets it as
+// primary_file_id. Main files are preferred over supplements; among equal roles,
+// the oldest file (by created_at) wins. If no files remain, primary_file_id is set
+// to NULL. This is called after a batch file deletion completes its transaction.
+func (svc *Service) PromoteNextPrimaryFile(ctx context.Context, bookID int) error {
+	// Find the best candidate: prefer main over supplement, then oldest first.
+	var candidate models.File
+	err := svc.db.NewSelect().
+		Model(&candidate).
+		Where("book_id = ?", bookID).
+		OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+		Order("created_at ASC").
+		Limit(1).
+		Scan(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return errors.WithStack(err)
+	}
+
+	if err == nil {
+		// Found a candidate — promote it.
+		_, err = svc.db.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = ?", candidate.ID).
+			Where("id = ?", bookID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	}
+
+	// No files remain — clear the primary pointer.
+	_, err = svc.db.NewUpdate().
+		Model((*models.Book)(nil)).
+		Set("primary_file_id = NULL").
+		Where("id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // DeleteBookAndFilesResult contains the results of deleting a book and its files.

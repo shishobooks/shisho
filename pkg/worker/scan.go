@@ -414,23 +414,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"imprints_cached":   cache.ImprintCount(),
 		})
 
-		// Cleanup orphaned files (in DB but not on disk)
-		// Uses the pre-loaded files from before the scan to avoid a second DB query
+		// Cleanup orphaned files (in DB but not on disk) using batch operations.
+		// Uses the pre-loaded files from before the scan to avoid a second DB query.
 		if existingFiles != nil {
 			scannedPaths := make(map[string]struct{}, len(filesToScan))
 			for _, path := range filesToScan {
 				scannedPaths[path] = struct{}{}
 			}
-
-			for _, file := range existingFiles {
-				if _, seen := scannedPaths[file.Filepath]; !seen {
-					jobLog.Info("cleaning up orphaned file", logger.Data{"file_id": file.ID, "filepath": file.Filepath})
-					_, err := w.scanInternal(ctx, ScanOptions{FileID: file.ID}, nil)
-					if err != nil {
-						jobLog.Warn("failed to cleanup orphaned file", logger.Data{"file_id": file.ID, "error": err.Error()})
-					}
-				}
-			}
+			w.cleanupOrphanedFiles(ctx, existingFiles, scannedPaths, library, jobLog)
 		}
 
 		// Organize files after all scanning is complete
