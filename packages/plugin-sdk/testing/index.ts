@@ -113,10 +113,10 @@ export function createMockShisho(
 
   // --- log: silent no-ops ---
   const log: ShishoLog = {
-    debug(_msg: string): void {},
-    info(_msg: string): void {},
-    warn(_msg: string): void {},
-    error(_msg: string): void {},
+    debug() {},
+    info() {},
+    warn() {},
+    error() {},
   };
 
   // --- config: map-based ---
@@ -131,7 +131,7 @@ export function createMockShisho(
 
   // --- http: route-based mock ---
   const http: ShishoHTTP = {
-    fetch(url: string, _options?: unknown): FetchResponse {
+    fetch(url: string): FetchResponse {
       const mock = fetchRoutes[url];
       if (!mock) {
         const definedRoutes = Object.keys(fetchRoutes);
@@ -269,11 +269,11 @@ export function createMockShisho(
       return decoder.decode(entry);
     },
 
-    writeFile(_path: string, _data: ArrayBuffer): void {
+    writeFile(): void {
       // no-op
     },
 
-    writeTextFile(_path: string, _content: string): void {
+    writeTextFile(): void {
       // no-op
     },
 
@@ -281,7 +281,7 @@ export function createMockShisho(
       return path in fsMap;
     },
 
-    mkdir(_path: string): void {
+    mkdir(): void {
       // no-op
     },
 

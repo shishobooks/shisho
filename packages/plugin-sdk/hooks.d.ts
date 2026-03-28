@@ -1,4 +1,4 @@
-import { ParsedAuthor, ParsedMetadata } from "./metadata";
+import { ParsedMetadata } from "./metadata";
 
 /** Context passed to inputConverter.convert(). */
 export interface InputConverterContext {

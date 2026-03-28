@@ -67,10 +67,10 @@ export function createMockShisho(options = {}) {
     const fsMap = options.fs ?? {};
     // --- log: silent no-ops ---
     const log = {
-        debug(_msg) { },
-        info(_msg) { },
-        warn(_msg) { },
-        error(_msg) { },
+        debug() { },
+        info() { },
+        warn() { },
+        error() { },
     };
     // --- config: map-based ---
     const config = {
@@ -83,7 +83,7 @@ export function createMockShisho(options = {}) {
     };
     // --- http: route-based mock ---
     const http = {
-        fetch(url, _options) {
+        fetch(url) {
             const mock = fetchRoutes[url];
             if (!mock) {
                 const definedRoutes = Object.keys(fetchRoutes);
@@ -193,16 +193,16 @@ export function createMockShisho(options = {}) {
             const decoder = new TextDecoder();
             return decoder.decode(entry);
         },
-        writeFile(_path, _data) {
+        writeFile() {
             // no-op
         },
-        writeTextFile(_path, _content) {
+        writeTextFile() {
             // no-op
         },
         exists(path) {
             return path in fsMap;
         },
-        mkdir(_path) {
+        mkdir() {
             // no-op
         },
         listDir(path) {
