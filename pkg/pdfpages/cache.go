@@ -103,7 +103,7 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 	}
 
 	outPath := c.pagePath(fileID, pageNum)
-	if err := os.WriteFile(outPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(outPath, buf.Bytes(), 0600); err != nil {
 		return "", "", errors.WithStack(err)
 	}
 

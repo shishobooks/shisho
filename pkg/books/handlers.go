@@ -25,6 +25,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -68,6 +69,7 @@ type handler struct {
 	listsService     *lists.Service
 	downloadCache    *downloadcache.Cache
 	pageCache        *cbzpages.Cache
+	pdfPageCache     *pdfpages.Cache
 	scanner          Scanner
 	pluginManager    pluginManager
 }
@@ -1769,9 +1771,9 @@ func (h *handler) getPage(c echo.Context) error {
 		}
 	}
 
-	// Only CBZ files have pages
-	if file.FileType != models.FileTypeCBZ {
-		return errcodes.ValidationError("Only CBZ files have pages")
+	// Only CBZ and PDF files have pages
+	if file.FileType != models.FileTypeCBZ && file.FileType != models.FileTypePDF {
+		return errcodes.ValidationError("Only CBZ and PDF files have pages")
 	}
 
 	// Validate page number against page count
@@ -1782,8 +1784,14 @@ func (h *handler) getPage(c echo.Context) error {
 		return errcodes.NotFound("Page")
 	}
 
-	// Get or extract the page
-	cachedPath, mimeType, err := h.pageCache.GetPage(file.Filepath, file.ID, pageNum)
+	// Get or render the page from the appropriate cache
+	var cachedPath, mimeType string
+	switch file.FileType {
+	case models.FileTypeCBZ:
+		cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, pageNum)
+	case models.FileTypePDF:
+		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, pageNum)
+	}
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -133,12 +133,12 @@ func TestGetPage_InvalidPageNumber(t *testing.T) {
 
 	// Page number too high
 	_, _, err := cache.GetPage(testPDFPath, 3, 99)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "out of range")
 
 	// Negative page number
 	_, _, err = cache.GetPage(testPDFPath, 3, -1)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "out of range")
 }
 
