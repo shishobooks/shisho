@@ -5,11 +5,20 @@
   "homepage": "https://github.com/shishobooks/shisho/blob/master/packages/plugin-sdk/README.md",
   "types": "index.d.ts",
   "exports": {
-    ".": "./index.d.ts"
+    ".": "./index.d.ts",
+    "./testing": {
+      "types": "./testing/index.d.ts",
+      "import": "./testing/index.js",
+      "require": "./testing/index.js"
+    }
   },
   "files": [
-    "*.d.ts"
+    "*.d.ts",
+    "testing/"
   ],
+  "scripts": {
+    "build": "cd testing && npx tsc -p tsconfig.json"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
