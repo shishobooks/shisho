@@ -19,12 +19,12 @@ const workflowSteps = [
   {
     icon: FolderOpen,
     title: "Point it at your books",
-    desc: "Mount a directory of ebooks, audiobooks, or comics. Shisho scans the folder and imports everything it finds automatically.",
+    desc: "Mount a directory of ebooks, audiobooks, or comics. Shisho scans the folder, imports everything it finds automatically, and organizes everything on the file system.",
   },
   {
     icon: ScanSearch,
     title: "Metadata is extracted and enriched",
-    desc: "Titles, authors, narrators, series info, covers, and identifiers are pulled from each file. Auto-identify matches books against online sources to fill in any gaps.",
+    desc: "Titles, authors, narrators, series info, covers, and identifiers are pulled from each file. Metadata enricher plugins matches books against online sources to fill in any gaps.",
   },
   {
     icon: MonitorSmartphone,
