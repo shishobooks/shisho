@@ -4,41 +4,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/dop251/goja"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSearchResultToMetadata_AllFieldsPopulated(t *testing.T) {
+func TestParseSearchResponse_AllFields(t *testing.T) {
 	t.Parallel()
-	seriesNum := 3.5
-	sr := &SearchResult{
-		Title:        "The Great Book",
-		Subtitle:     "A Subtitle",
-		Description:  "A detailed description",
-		Publisher:    "Big Publisher",
-		Imprint:      "Imprint Name",
-		URL:          "https://example.com/book",
-		CoverURL:     "https://example.com/cover.jpg",
-		Series:       "Epic Series",
-		SeriesNumber: &seriesNum,
-		Authors: []mediafile.ParsedAuthor{
-			{Name: "Author One", Role: "writer"},
-			{Name: "Author Two", Role: "penciller"},
-		},
-		Narrators: []string{"Narrator A", "Narrator B"},
-		Genres:    []string{"Fantasy", "Adventure"},
-		Tags:      []string{"epic", "magic"},
-		Identifiers: []mediafile.ParsedIdentifier{
-			{Type: "isbn_13", Value: "9781234567890"},
-			{Type: "asin", Value: "B00TEST1234"},
-		},
-		ReleaseDate: "2025-01-10",
-		ImageURL:    "https://example.com/image.jpg",
-	}
 
-	md := SearchResultToMetadata(sr)
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "The Great Book",
+			subtitle: "A Subtitle",
+			description: "A detailed description",
+			publisher: "Big Publisher",
+			imprint: "Imprint Name",
+			url: "https://example.com/book",
+			coverUrl: "https://example.com/cover.jpg",
+			series: "Epic Series",
+			seriesNumber: 3.5,
+			releaseDate: "2025-01-10",
+			authors: [
+				{ name: "Author One", role: "writer" },
+				{ name: "Author Two", role: "penciller" }
+			],
+			narrators: ["Narrator A", "Narrator B"],
+			genres: ["Fantasy", "Adventure"],
+			tags: ["epic", "magic"],
+			identifiers: [
+				{ type: "isbn_13", value: "9781234567890" },
+				{ type: "asin", value: "B00TEST1234" }
+			]
+		}]
+	})`)
+	require.NoError(t, err)
 
+	resp := parseSearchResponse(vm, val, "test-scope", "test-plugin")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
 	assert.Equal(t, "The Great Book", md.Title)
 	assert.Equal(t, "A Subtitle", md.Subtitle)
 	assert.Equal(t, "A detailed description", md.Description)
@@ -49,6 +54,11 @@ func TestSearchResultToMetadata_AllFieldsPopulated(t *testing.T) {
 	assert.Equal(t, "Epic Series", md.Series)
 	require.NotNil(t, md.SeriesNumber)
 	assert.InDelta(t, 3.5, *md.SeriesNumber, 0.001)
+
+	require.NotNil(t, md.ReleaseDate)
+	assert.Equal(t, 2025, md.ReleaseDate.Year())
+	assert.Equal(t, time.January, md.ReleaseDate.Month())
+	assert.Equal(t, 10, md.ReleaseDate.Day())
 
 	require.Len(t, md.Authors, 2)
 	assert.Equal(t, "Author One", md.Authors[0].Name)
@@ -66,86 +76,77 @@ func TestSearchResultToMetadata_AllFieldsPopulated(t *testing.T) {
 	assert.Equal(t, "asin", md.Identifiers[1].Type)
 	assert.Equal(t, "B00TEST1234", md.Identifiers[1].Value)
 
+	assert.Equal(t, "test-scope", md.PluginScope)
+	assert.Equal(t, "test-plugin", md.PluginID)
+}
+
+func TestParseSearchResponse_DateParsing_RFC3339(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "RFC3339 Date Book",
+			releaseDate: "2025-01-10T00:00:00Z"
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
 	require.NotNil(t, md.ReleaseDate)
 	assert.Equal(t, 2025, md.ReleaseDate.Year())
 	assert.Equal(t, time.January, md.ReleaseDate.Month())
 	assert.Equal(t, 10, md.ReleaseDate.Day())
 }
 
-func TestSearchResultToMetadata_DateParsing_DateOnly(t *testing.T) {
+func TestParseSearchResponse_DateParsing_Invalid(t *testing.T) {
 	t.Parallel()
-	sr := &SearchResult{
-		ReleaseDate: "2025-01-10",
-	}
 
-	md := SearchResultToMetadata(sr)
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Bad Date Book",
+			releaseDate: "not-a-date"
+		}]
+	})`)
+	require.NoError(t, err)
 
-	require.NotNil(t, md.ReleaseDate)
-	assert.Equal(t, 2025, md.ReleaseDate.Year())
-	assert.Equal(t, time.January, md.ReleaseDate.Month())
-	assert.Equal(t, 10, md.ReleaseDate.Day())
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	assert.Nil(t, resp.Results[0].ReleaseDate)
 }
 
-func TestSearchResultToMetadata_DateParsing_RFC3339(t *testing.T) {
+func TestParseSearchResponse_EmptyResults(t *testing.T) {
 	t.Parallel()
-	sr := &SearchResult{
-		ReleaseDate: "2025-01-10T00:00:00Z",
-	}
 
-	md := SearchResultToMetadata(sr)
+	vm := goja.New()
+	val, err := vm.RunString(`({ results: [] })`)
+	require.NoError(t, err)
 
-	require.NotNil(t, md.ReleaseDate)
-	assert.Equal(t, 2025, md.ReleaseDate.Year())
-	assert.Equal(t, time.January, md.ReleaseDate.Month())
-	assert.Equal(t, 10, md.ReleaseDate.Day())
+	resp := parseSearchResponse(vm, val, "s", "p")
+	assert.Empty(t, resp.Results)
 }
 
-func TestSearchResultToMetadata_DateParsing_Invalid(t *testing.T) {
+func TestParseSearchResponse_NilInput(t *testing.T) {
 	t.Parallel()
-	sr := &SearchResult{
-		ReleaseDate: "not-a-date",
-	}
 
-	md := SearchResultToMetadata(sr)
+	vm := goja.New()
 
-	assert.Nil(t, md.ReleaseDate)
-}
+	// nil value
+	resp := parseSearchResponse(vm, nil, "s", "p")
+	assert.Empty(t, resp.Results)
 
-func TestSearchResultToMetadata_EmptyResult(t *testing.T) {
-	t.Parallel()
-	sr := &SearchResult{}
+	// undefined value
+	resp = parseSearchResponse(vm, goja.Undefined(), "s", "p")
+	assert.Empty(t, resp.Results)
 
-	md := SearchResultToMetadata(sr)
-
-	require.NotNil(t, md)
-	assert.Empty(t, md.Title)
-	assert.Empty(t, md.Subtitle)
-	assert.Empty(t, md.Description)
-	assert.Empty(t, md.Publisher)
-	assert.Empty(t, md.Imprint)
-	assert.Empty(t, md.URL)
-	assert.Empty(t, md.CoverURL)
-	assert.Empty(t, md.Series)
-	assert.Nil(t, md.SeriesNumber)
-	assert.Nil(t, md.Authors)
-	assert.Nil(t, md.Narrators)
-	assert.Nil(t, md.Genres)
-	assert.Nil(t, md.Tags)
-	assert.Nil(t, md.Identifiers)
-	assert.Nil(t, md.ReleaseDate)
-}
-
-func TestSearchResultToMetadata_ImageURL_DoesNotFallbackToCoverURL(t *testing.T) {
-	t.Parallel()
-	// The ImageURL → CoverURL fallback happens in parseSearchResponse, not
-	// in SearchResultToMetadata. So when CoverURL is empty and ImageURL is
-	// set, the resulting ParsedMetadata.CoverURL should remain empty.
-	sr := &SearchResult{
-		ImageURL: "https://example.com/image.jpg",
-		CoverURL: "",
-	}
-
-	md := SearchResultToMetadata(sr)
-
-	assert.Empty(t, md.CoverURL, "CoverURL should be empty because the ImageURL fallback is in parseSearchResponse, not SearchResultToMetadata")
+	// null value
+	val, err := vm.RunString(`null`)
+	require.NoError(t, err)
+	resp = parseSearchResponse(vm, val, "s", "p")
+	assert.Empty(t, resp.Results)
 }

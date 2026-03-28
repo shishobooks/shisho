@@ -216,7 +216,7 @@ metadataEnricher: {
 
 **Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx) → *SearchResponse`
 
-**SearchResult → ParsedMetadata:** Use `SearchResultToMetadata(sr)` (in `hooks.go`) to convert a `SearchResult` into a `*mediafile.ParsedMetadata`. Parses `releaseDate` strings in `"2006-01-02"` or RFC3339 format.
+**Search results are `ParsedMetadata` directly** — `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
 
 **Field filtering:** Search results are filtered before merging:
 - Fields not declared in manifest → stripped + warning logged
@@ -444,7 +444,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook returns `SearchResponse`; the first result is converted to `ParsedMetadata` via `SearchResultToMetadata()`. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 

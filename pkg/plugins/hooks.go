@@ -127,67 +127,10 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	return md, nil
 }
 
-// SearchResult is a single search result from a metadata enricher's search() hook.
-type SearchResult struct {
-	Title        string                       `json:"title"`
-	Authors      []mediafile.ParsedAuthor     `json:"authors"`
-	Description  string                       `json:"description"`
-	ImageURL     string                       `json:"image_url"`
-	ReleaseDate  string                       `json:"release_date"`
-	Publisher    string                       `json:"publisher"`
-	Subtitle     string                       `json:"subtitle"`
-	Series       string                       `json:"series"`
-	SeriesNumber *float64                     `json:"series_number,omitempty"`
-	Genres       []string                     `json:"genres"`
-	Tags         []string                     `json:"tags"`
-	Narrators    []string                     `json:"narrators"`
-	Identifiers  []mediafile.ParsedIdentifier `json:"identifiers"`
-	Imprint      string                       `json:"imprint"`
-	URL          string                       `json:"url"`
-	CoverURL     string                       `json:"cover_url"`
-	// Added by the caller, not the plugin:
-	PluginScope    string   `json:"plugin_scope"`
-	PluginID       string   `json:"plugin_id"`
-	DisabledFields []string `json:"disabled_fields,omitempty"`
-}
-
 // SearchResponse is the result of a metadata enricher's search() hook.
+// Results are ParsedMetadata directly — no intermediate SearchResult type.
 type SearchResponse struct {
-	Results []SearchResult
-}
-
-// SearchResultToMetadata converts a SearchResult into a ParsedMetadata.
-// Used by the scan pipeline and the apply-metadata handler.
-func SearchResultToMetadata(sr *SearchResult) *mediafile.ParsedMetadata {
-	md := &mediafile.ParsedMetadata{
-		Title:        sr.Title,
-		Subtitle:     sr.Subtitle,
-		Description:  sr.Description,
-		Publisher:    sr.Publisher,
-		Imprint:      sr.Imprint,
-		URL:          sr.URL,
-		CoverURL:     sr.CoverURL,
-		Series:       sr.Series,
-		SeriesNumber: sr.SeriesNumber,
-		Authors:      sr.Authors,
-		Narrators:    sr.Narrators,
-		Genres:       sr.Genres,
-		Tags:         sr.Tags,
-		Identifiers:  sr.Identifiers,
-	}
-
-	// Parse release date string to *time.Time
-	if sr.ReleaseDate != "" {
-		t, err := time.Parse("2006-01-02", sr.ReleaseDate)
-		if err != nil {
-			t, err = time.Parse(time.RFC3339, sr.ReleaseDate)
-		}
-		if err == nil {
-			md.ReleaseDate = &t
-		}
-	}
-
-	return md
+	Results []mediafile.ParsedMetadata
 }
 
 // RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
@@ -361,7 +304,7 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 	}
 	length := int(lengthVal.ToInteger())
 
-	results := make([]SearchResult, 0, length)
+	results := make([]mediafile.ParsedMetadata, 0, length)
 	for i := 0; i < length; i++ {
 		itemVal := resultsObj.Get(intToString(i))
 		if itemVal == nil || goja.IsUndefined(itemVal) || goja.IsNull(itemVal) {
@@ -369,64 +312,69 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 		}
 		itemObj := itemVal.ToObject(vm)
 
-		sr := SearchResult{
+		md := mediafile.ParsedMetadata{
 			Title:       getStringField(itemObj, "title"),
 			Description: getStringField(itemObj, "description"),
-			ImageURL:    getStringField(itemObj, "imageUrl"),
-			ReleaseDate: getStringField(itemObj, "releaseDate"),
 			Publisher:   getStringField(itemObj, "publisher"),
 			Subtitle:    getStringField(itemObj, "subtitle"),
 			Series:      getStringField(itemObj, "series"),
 			Imprint:     getStringField(itemObj, "imprint"),
 			URL:         getStringField(itemObj, "url"),
+			CoverURL:    getStringField(itemObj, "coverUrl"),
 			PluginScope: pluginScope,
 			PluginID:    pluginID,
 		}
 
-		// coverUrl (also accept coverUrl and imageUrl as aliases)
-		sr.CoverURL = getStringField(itemObj, "coverUrl")
-		if sr.CoverURL == "" {
-			sr.CoverURL = getStringField(itemObj, "imageUrl")
+		// releaseDate -> *time.Time (parse inline)
+		releaseDateStr := getStringField(itemObj, "releaseDate")
+		if releaseDateStr != "" {
+			t, err := time.Parse("2006-01-02", releaseDateStr)
+			if err != nil {
+				t, err = time.Parse(time.RFC3339, releaseDateStr)
+			}
+			if err == nil {
+				md.ReleaseDate = &t
+			}
 		}
 
 		// seriesNumber -> *float64
 		seriesNumVal := itemObj.Get("seriesNumber")
 		if seriesNumVal != nil && !goja.IsUndefined(seriesNumVal) && !goja.IsNull(seriesNumVal) {
 			f := seriesNumVal.ToFloat()
-			sr.SeriesNumber = &f
+			md.SeriesNumber = &f
 		}
 
 		// genres -> []string
 		genresVal := itemObj.Get("genres")
 		if genresVal != nil && !goja.IsUndefined(genresVal) && !goja.IsNull(genresVal) {
-			sr.Genres = parseStringArray(vm, genresVal)
+			md.Genres = parseStringArray(vm, genresVal)
 		}
 
 		// tags -> []string
 		tagsVal := itemObj.Get("tags")
 		if tagsVal != nil && !goja.IsUndefined(tagsVal) && !goja.IsNull(tagsVal) {
-			sr.Tags = parseStringArray(vm, tagsVal)
+			md.Tags = parseStringArray(vm, tagsVal)
 		}
 
 		// narrators -> []string
 		narratorsVal := itemObj.Get("narrators")
 		if narratorsVal != nil && !goja.IsUndefined(narratorsVal) && !goja.IsNull(narratorsVal) {
-			sr.Narrators = parseStringArray(vm, narratorsVal)
+			md.Narrators = parseStringArray(vm, narratorsVal)
 		}
 
 		// authors -> []ParsedAuthor
 		authorsVal := itemObj.Get("authors")
 		if authorsVal != nil && !goja.IsUndefined(authorsVal) && !goja.IsNull(authorsVal) {
-			sr.Authors = parseAuthors(vm, authorsVal)
+			md.Authors = parseAuthors(vm, authorsVal)
 		}
 
 		// identifiers -> []ParsedIdentifier
 		identifiersVal := itemObj.Get("identifiers")
 		if identifiersVal != nil && !goja.IsUndefined(identifiersVal) && !goja.IsNull(identifiersVal) {
-			sr.Identifiers = parseIdentifiers(vm, identifiersVal)
+			md.Identifiers = parseIdentifiers(vm, identifiersVal)
 		}
 
-		results = append(results, sr)
+		results = append(results, md)
 	}
 
 	return &SearchResponse{Results: results}

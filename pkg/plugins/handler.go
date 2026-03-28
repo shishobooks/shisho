@@ -1247,6 +1247,15 @@ func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// EnrichSearchResult wraps ParsedMetadata with server-added fields for the
+// search HTTP response (sent to the frontend, not used by plugins).
+type EnrichSearchResult struct {
+	mediafile.ParsedMetadata
+	PluginScope    string   `json:"plugin_scope"`
+	PluginID       string   `json:"plugin_id"`
+	DisabledFields []string `json:"disabled_fields,omitempty"`
+}
+
 // searchMetadata runs search() across all enabled enricher plugins and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -1263,7 +1272,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 	if len(runtimes) == 0 {
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"results": []SearchResult{},
+			"results": []EnrichSearchResult{},
 		})
 	}
 
@@ -1310,7 +1319,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		fileCtx["filePath"] = f.Filepath
 	}
 
-	var allResults []SearchResult
+	var allResults []EnrichSearchResult
 	for _, rt := range runtimes {
 		searchCtx := map[string]interface{}{
 			"query": payload.Query,
@@ -1341,10 +1350,14 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			}
 		}
 
-		for i := range resp.Results {
-			resp.Results[i].DisabledFields = disabledFields
+		for _, md := range resp.Results {
+			allResults = append(allResults, EnrichSearchResult{
+				ParsedMetadata: md,
+				PluginScope:    md.PluginScope,
+				PluginID:       md.PluginID,
+				DisabledFields: disabledFields,
+			})
 		}
-		allResults = append(allResults, resp.Results...)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{

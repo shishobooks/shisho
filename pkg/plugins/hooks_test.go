@@ -625,16 +625,16 @@ func TestSearchResultCarriesAllMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, searchResp.Results, 1)
 
-	sr := searchResp.Results[0]
-	assert.Equal(t, "Full Title", sr.Title)
-	assert.Equal(t, "Full description", sr.Description)
-	assert.Equal(t, []string{"SciFi"}, sr.Genres)
-	assert.Equal(t, "https://example.com/cover.jpg", sr.CoverURL)
-	require.Len(t, sr.Authors, 1)
-	assert.Equal(t, "Full Author", sr.Authors[0].Name)
-	assert.Equal(t, "writer", sr.Authors[0].Role)
-	assert.Equal(t, "Full Imprint", sr.Imprint)
-	assert.Equal(t, "https://example.com/book", sr.URL)
+	md := searchResp.Results[0]
+	assert.Equal(t, "Full Title", md.Title)
+	assert.Equal(t, "Full description", md.Description)
+	assert.Equal(t, []string{"SciFi"}, md.Genres)
+	assert.Equal(t, "https://example.com/cover.jpg", md.CoverURL)
+	require.Len(t, md.Authors, 1)
+	assert.Equal(t, "Full Author", md.Authors[0].Name)
+	assert.Equal(t, "writer", md.Authors[0].Role)
+	assert.Equal(t, "Full Imprint", md.Imprint)
+	assert.Equal(t, "https://example.com/book", md.URL)
 }
 
 func TestRunOutputGenerator_NoHook(t *testing.T) {

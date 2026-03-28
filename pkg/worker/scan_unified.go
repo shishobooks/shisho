@@ -2582,7 +2582,7 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
 // Each enricher's search() is called with the book title as query, and the first
-// result is converted directly to ParsedMetadata via SearchResultToMetadata.
+// result is used directly as ParsedMetadata (no conversion needed).
 // Enrichers are called in user-defined order; first non-empty value per field wins.
 func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
@@ -2652,9 +2652,9 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Take the first result and convert directly to ParsedMetadata
+		// Take the first result directly as ParsedMetadata (no conversion needed)
 		firstResult := searchResp.Results[0]
-		searchMeta := plugins.SearchResultToMetadata(&firstResult)
+		searchMeta := &firstResult
 
 		// Get effective field settings for this library + plugin
 		declaredFields := enricherCap.Fields

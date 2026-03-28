@@ -56,6 +56,8 @@ type ParsedMetadata struct {
 	// "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate",
 	// "cover", "identifiers".
 	FieldDataSources map[string]string `json:"-"`
+	PluginScope      string            `json:"-"`
+	PluginID         string            `json:"-"`
 	// Duration is the length of the audiobook (M4B files only)
 	Duration time.Duration `json:"duration"`
 	// BitrateBps is the audio bitrate in bits per second (M4B files only)
