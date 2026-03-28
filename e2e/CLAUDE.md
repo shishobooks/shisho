@@ -22,7 +22,7 @@ SQLite DB A                   SQLite DB B
 
 **Execution model:**
 - Tests within a browser run sequentially (`workers: 1`) to avoid database race conditions
-- Different browsers run in parallel via `concurrently` (`pnpm test:e2e` runs chromium and firefox simultaneously)
+- Different browsers run in parallel via mise (`mise test:e2e` runs chromium and firefox simultaneously)
 
 ### Adding New Browsers
 
@@ -179,9 +179,9 @@ test.describe("Feature Name", () => {
 ## Running Tests
 
 ```bash
-pnpm test:e2e                              # Run all browsers in parallel (~10-12s)
-pnpm test:e2e:chromium                     # Run only Chromium
-pnpm test:e2e:firefox                      # Run only Firefox
+mise test:e2e                              # Run all browsers in parallel (~10-12s)
+pnpm e2e:chromium                          # Run only Chromium
+pnpm e2e:firefox                           # Run only Firefox
 playwright test --project=chromium         # Alternative: direct Playwright call
 playwright test e2e/login.spec.ts          # Run specific test file
 ```

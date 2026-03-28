@@ -348,7 +348,8 @@ test-js:
     - run: mise tygo
     - run: pnpm test:unit
     - run: mise build
-    - run: pnpm test:e2e
+    - run: pnpm e2e:chromium
+    - run: pnpm e2e:firefox
 ```
 
 ## CI: `.github/workflows/release.yml`
