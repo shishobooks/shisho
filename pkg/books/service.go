@@ -1616,6 +1616,43 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 	})
 }
 
+// PromoteNextPrimaryFile selects the best remaining file for a book and sets it as
+// primary_file_id. Main files are preferred over supplements; among equal roles,
+// the oldest file (by created_at) wins. If no files remain, primary_file_id is set
+// to NULL. This is called after a batch file deletion completes its transaction.
+func (svc *Service) PromoteNextPrimaryFile(ctx context.Context, bookID int) error {
+	// Find the best candidate: prefer main over supplement, then oldest first.
+	var candidate models.File
+	err := svc.db.NewSelect().
+		Model(&candidate).
+		Where("book_id = ?", bookID).
+		OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+		Order("created_at ASC").
+		Limit(1).
+		Scan(ctx)
+	if err != nil && err != sql.ErrNoRows {
+		return errors.WithStack(err)
+	}
+
+	if err == nil {
+		// Found a candidate — promote it.
+		_, err = svc.db.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = ?", candidate.ID).
+			Where("id = ?", bookID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	}
+
+	// No files remain — clear the primary pointer.
+	_, err = svc.db.NewUpdate().
+		Model((*models.Book)(nil)).
+		Set("primary_file_id = NULL").
+		Where("id = ?", bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // DeleteBookAndFilesResult contains the results of deleting a book and its files.
 type DeleteBookAndFilesResult struct {
 	FilesDeleted int

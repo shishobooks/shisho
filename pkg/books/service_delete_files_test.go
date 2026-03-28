@@ -427,3 +427,87 @@ func TestDeleteBooksByIDs_EmptySlice(t *testing.T) {
 	err = svc.DeleteBooksByIDs(ctx, []int{})
 	require.NoError(t, err)
 }
+
+func TestPromoteNextPrimaryFile(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+
+	now := time.Now()
+
+	// Create 3 files: supplement (oldest), main (middle), main (newest)
+	supplementFile := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleSupplement,
+		Filepath:      "/test/supplement.epub",
+		FilesizeBytes: 500,
+		CreatedAt:     now.Add(-2 * time.Hour),
+	}
+	err := svc.CreateFile(ctx, supplementFile)
+	require.NoError(t, err)
+
+	mainFileOld := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/audio_old.m4b",
+		FilesizeBytes: 1000,
+		CreatedAt:     now.Add(-1 * time.Hour),
+	}
+	err = svc.CreateFile(ctx, mainFileOld)
+	require.NoError(t, err)
+
+	mainFileNew := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/audio_new.m4b",
+		FilesizeBytes: 2000,
+		CreatedAt:     now,
+	}
+	err = svc.CreateFile(ctx, mainFileNew)
+	require.NoError(t, err)
+
+	// Call promote
+	err = svc.PromoteNextPrimaryFile(ctx, book.ID)
+	require.NoError(t, err)
+
+	// Verify the oldest main file was chosen (not the supplement, not the newer main)
+	var updatedBook models.Book
+	err = db.NewSelect().Model(&updatedBook).Where("id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedBook.PrimaryFileID, "primary_file_id should be set")
+	assert.Equal(t, mainFileOld.ID, *updatedBook.PrimaryFileID, "oldest main file should be chosen")
+}
+
+func TestPromoteNextPrimaryFile_NoFiles(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+
+	// Manually set a primary_file_id on the book (simulating a stale pointer)
+	fakeID := 9999
+	book.PrimaryFileID = &fakeID
+	_, err := db.NewUpdate().Model(book).Column("primary_file_id").Where("id = ?", book.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	// Call promote with no files in the book
+	err = svc.PromoteNextPrimaryFile(ctx, book.ID)
+	require.NoError(t, err)
+
+	// Verify primary_file_id is now NULL
+	var updatedBook models.Book
+	err = db.NewSelect().Model(&updatedBook).Where("id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Nil(t, updatedBook.PrimaryFileID, "primary_file_id should be NULL when no files remain")
+}
