@@ -81,6 +81,136 @@ func TestCleanupOrphanedFiles_PartialOrphan(t *testing.T) {
 	require.Len(t, remainingBooks, 1)
 }
 
+func TestCleanupOrphanedFiles_FullOrphan_NoSupplements(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Single File")
+	testgen.GenerateEPUB(t, bookDir, "only.epub", testgen.EPUBOptions{
+		Title:   "Single File",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, 1)
+	require.NoError(t, err)
+
+	// No files in scannedPaths = all orphaned
+	scannedPaths := map[string]struct{}{}
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: intPtr(1)})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, scannedPaths, library, jobLog)
+
+	// Book and file should both be deleted
+	assert.Len(t, tc.listBooks(), 0)
+	assert.Len(t, tc.listFiles(), 0)
+}
+
+func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] With Supplement")
+	testgen.GenerateEPUB(t, bookDir, "main.epub", testgen.EPUBOptions{
+		Title:   "With Supplement",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+	require.Len(t, tc.listBooks(), 1)
+
+	allBooks := tc.listBooks()
+	bookID := allBooks[0].ID
+
+	// Manually add a supplement file in the DB (a CBZ supplement that can be promoted)
+	supplement := &models.File{
+		LibraryID:     1,
+		BookID:        bookID,
+		Filepath:      filepath.Join(bookDir, "supplement.cbz"),
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 100,
+	}
+	err = tc.bookService.CreateFile(tc.ctx, supplement)
+	require.NoError(t, err)
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, existingFiles, 1, "only main files are returned")
+
+	// No main files in scannedPaths = all main files orphaned
+	scannedPaths := map[string]struct{}{}
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: intPtr(1)})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, scannedPaths, library, jobLog)
+
+	// Book should still exist
+	remainingBooks := tc.listBooks()
+	require.Len(t, remainingBooks, 1)
+
+	// Main file should be deleted, supplement should remain and be promoted
+	remainingFiles := tc.listFiles()
+	require.Len(t, remainingFiles, 1)
+	assert.Equal(t, supplement.ID, remainingFiles[0].ID)
+	assert.Equal(t, models.FileRoleMain, remainingFiles[0].FileRole)
+}
+
+func TestCleanupOrphanedFiles_NoOrphans(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Healthy Book")
+	testgen.GenerateEPUB(t, bookDir, "file.epub", testgen.EPUBOptions{
+		Title:   "Healthy Book",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, 1)
+	require.NoError(t, err)
+
+	// All files are in scannedPaths — no orphans
+	scannedPaths := make(map[string]struct{})
+	for _, f := range existingFiles {
+		scannedPaths[f.Filepath] = struct{}{}
+	}
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: intPtr(1)})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, scannedPaths, library, jobLog)
+
+	// Everything should remain unchanged
+	assert.Len(t, tc.listBooks(), 1)
+	assert.Len(t, tc.listFiles(), 1)
+}
+
 func intPtr(i int) *int {
 	return &i
 }
