@@ -12,7 +12,7 @@ Subdirectory CLAUDE.md files are loaded automatically when working on files in t
 
 ## Important Notes
 
-**When `make tygo` says "Nothing to be done for \`tygo'", this is NORMAL.** It means the generated types are already up-to-date. Do not treat this as an error. Do not try to run `tygo` directly outside of make - always use `make tygo`. The user often has `make start` running in another session which runs tygo automatically, but you should still run `make tygo` yourself (especially in worktrees where `make start` may not be running).
+**When `mise tygo` prints "skipping, outputs are up-to-date", this is NORMAL.** It means the generated types are already up-to-date (mise checks source/output timestamps). Do not treat this as an error. The user often has `mise start` running in another session which runs tygo automatically via air, but you should still run `mise tygo` yourself (especially in worktrees where `mise start` may not be running).
 
 **Keep CLAUDE.md files up to date.** Subdirectory `CLAUDE.md` files document patterns, conventions, and gotchas for each area of the codebase. When you make changes that affect what's documented — adding new patterns, changing APIs, renaming fields, adding new conventions — update the relevant `CLAUDE.md` to reflect the new state. Outdated documentation is worse than no documentation.
 
@@ -93,20 +93,45 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 
 ## Development Commands
 
-### Backend (Go)
-- `make setup` - Install dependencies and build tools (run this when setting up a new worktree)
-- `make build` - Build production API binary
-- `make start` - Start development environment with Hivemind (both API and web)
-- `make start:air` - Start API with hot reload via Air
-- `make check` - Run all validation checks in parallel (tests, Go lint, JS lint)
-- `make lint` - Run Go linting with golangci-lint
-- `make test` - Run all Go tests with coverage
-- `make test:race` - Run all Go tests with race detection and coverage (used in CI)
+### Setup
+- `mise install` - Install all tools (Go, Node, pnpm, air, tygo, golangci-lint)
+- `mise setup` - Install JS dependencies and generate types (run after `mise install`)
 
-### Frontend (React/TypeScript)
+### Dev Server
+- `mise start` - Start development environment (API with hot reload + Vite frontend)
+- `mise start:air` - Start API with hot reload via Air only
+- `mise start:api` - Start API directly (no hot reload)
+- `mise docs` - Start documentation dev server
+
+### Build
+- `mise build` - Build production API binary
+
+### Linting
+- `mise lint` - Run Go linting with golangci-lint
+- `mise lint:js` - Run all JS/TS linting (ESLint, Prettier, TypeScript) in parallel
+- `mise check` - Run all validation checks in parallel (tests, Go lint, JS lint)
+- `mise check:quiet` - Same as check but suppresses output on success, only shows failures
+
+### Testing
+- `mise test` - Run all Go tests with coverage
+- `mise test:race` - Run all Go tests with race detection and coverage (used in CI)
+- `mise test:js` - Run all JS tests (unit + E2E) in parallel
+- `mise test:unit` - Run JS unit tests only
+- `mise test:e2e` - Run E2E tests (Chromium + Firefox) in parallel
+
+### Database
+- `mise db:migrate` - Run all pending migrations
+- `mise db:rollback` - Rollback last migration
+- `mise db:migrate:create <name>` - Create new migration
+
+### Type Generation
+- `mise tygo` - Generate TypeScript types from Go structs (skips if outputs are up-to-date)
+- Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
+- **IMPORTANT**: The `app/types/generated/` directory is gitignored - these files are auto-generated and cannot be `git add`ed. If you need to update types, modify the Go source structs and run `mise tygo`
+
+### Frontend (leaf commands, called by mise tasks)
 - `pnpm start` - Start Vite dev server
 - `pnpm build` - Build production frontend
-- `pnpm lint` - Run ESLint, TypeScript checks, and Prettier
 - `pnpm lint:eslint` - ESLint only
 - `pnpm lint:types` - TypeScript type checking only
 - `pnpm lint:prettier` - Prettier formatting check only
@@ -117,22 +142,12 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 
 This allows the Dockerfile to use `pnpm install --prod` to skip installing test/lint tools, reducing build time and image layer size. When adding new packages, put build-time dependencies in `dependencies` and test/lint tools in `devDependencies`.
 
-### Database
-- `make db:migrate` - Run all pending migrations
-- `make db:rollback` - Rollback last migration
-- `make db:migrate:create name=migration_name` - Create new migration
-
-### Type Generation
-- `make tygo` - Generate TypeScript types from Go structs (see note at top about "Nothing to be done" message)
-- Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
-- **IMPORTANT**: The `app/types/generated/` directory is gitignored - these files are auto-generated and cannot be `git add`ed. If you need to update types, modify the Go source structs and run `make tygo`
-
 ## Architecture Overview
 
 ### Stack
 - **Backend**: Go with Echo web framework, Bun ORM, SQLite database
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
-- **Development**: Air for Go hot reload, Hivemind for process management
+- **Development**: mise for tool/version management and task running, Air for Go hot reload
 
 For detailed architecture information, see:
 - **Backend details**: `pkg/CLAUDE.md`
@@ -140,12 +155,12 @@ For detailed architecture information, see:
 
 ## Development Workflow
 
-- Use `make start` to run both API and frontend in development (this also runs `make tygo` automatically)
+- Use `mise start` to run both API and frontend in development (air runs `mise tygo` automatically before each rebuild)
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
-- Always run `make check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `make check` only when you need full verbose output for debugging.
-- **Don't run checks multiple times** — `make check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
+- Always run `mise check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `mise check` only when you need full verbose output for debugging.
+- **Don't run checks multiple times** — `mise check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
 - **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
@@ -157,14 +172,14 @@ For detailed architecture information, see:
   - New pages should cross-link to related pages (and vice versa)
 - **If a new field is added to `pkg/config/config.go`**, both `shisho.example.yaml` AND `website/docs/configuration.md` MUST be updated with the new field. These files must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
 
-## Node.js Version
+## Tool Versions
 
-When updating the Node.js version, update **all** of these locations:
-- `.node-version` - Used by version managers (fnm, nodenv, etc.)
-- `Dockerfile` - The `node:X.X.X-alpine` image in the frontend-builder stage
-- `.github/workflows/ci.yml` - `node-version` in lint-js and test-js jobs
-- `.github/workflows/release.yml` - `node-version` in test and npm jobs
+All tool versions are managed by mise via `.mise.toml`. When updating versions, update these locations:
+
+- `.mise.toml` - Single source of truth for Go, Node, pnpm, air, tygo, golangci-lint
+- `Dockerfile` - The `golang:X.X.X-alpine` and `node:X.X.X-alpine` images (Docker doesn't use mise)
 - `package.json` - `@types/node` version (run `pnpm install` after)
+- `package.json` - `packageManager` field for pnpm (used by Docker via corepack)
 
 ## Testing Strategy
 
@@ -172,7 +187,7 @@ When updating the Node.js version, update **all** of these locations:
 - Tests should use `TZ=America/Chicago CI=true` environment
 - **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. In `pkg/plugins`, tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, while tests that share a plugin manager or runtime instance should not. In `pkg/config`, tests mutate global config state and should not be parallelized.
 - Frontend uses the same linting rules as backend for consistency
-- Database migrations tested via `make db:rollback && make db:migrate`
+- Database migrations tested via `mise db:rollback && mise db:migrate`
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
 - **Follow Red-Green-Refactor TDD for bug fixes and new features.** Do NOT write the implementation and test at the same time. The steps must be sequential:
   1. **Red:** Write the test first. Run it and confirm it **fails** (proving the test actually catches the bug or asserts the new behavior).
@@ -206,7 +221,7 @@ Each commit should be in the format of `[{Category}] {Change description}`
 
 ### Releases
 
-- Use `make release tag=0.2.0` to create a release
+- Use `mise release 0.2.0` to create a release
 - This runs `scripts/release.sh` which:
   1. Generates changelog from commits since the last tag
   2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-types/package.json`
@@ -216,8 +231,8 @@ Each commit should be in the format of `[{Category}] {Change description}`
 ## Worktree Setup
 
 - Worktrees should be created in `~/.worktrees/shisho/`
-- After creating a new worktree, run `make setup` to install dependencies and build tools
-- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && make setup`
+- After creating a new worktree, run `mise install && mise setup` to install tools and dependencies
+- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && mise install && mise setup`
 
 ## Database Best Practices
 
