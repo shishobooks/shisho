@@ -1512,6 +1512,110 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 	})
 }
 
+// DeleteBooksByIDs deletes multiple books and all their associated records in a single transaction.
+// Used during scan cleanup to remove books with no remaining files.
+func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
+	if len(bookIDs) == 0 {
+		return nil
+	}
+
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Get all file IDs for these books
+		var fileIDs []int
+		err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			Column("id").
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Scan(ctx, &fileIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete narrators, identifiers, and chapters for all files
+		if len(fileIDs) > 0 {
+			_, err = tx.NewDelete().
+				Model((*models.Narrator)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			_, err = tx.NewDelete().
+				Model((*models.FileIdentifier)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			_, err = tx.NewDelete().
+				Model((*models.Chapter)(nil)).
+				Where("file_id IN (?)", bun.In(fileIDs)).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// Delete files
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete authors
+		_, err = tx.NewDelete().
+			Model((*models.Author)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book series associations
+		_, err = tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book genres
+		_, err = tx.NewDelete().
+			Model((*models.BookGenre)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book tags
+		_, err = tx.NewDelete().
+			Model((*models.BookTag)(nil)).
+			Where("book_id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete book records
+		_, err = tx.NewDelete().
+			Model((*models.Book)(nil)).
+			Where("id IN (?)", bun.In(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
 // DeleteBookAndFilesResult contains the results of deleting a book and its files.
 type DeleteBookAndFilesResult struct {
 	FilesDeleted int
