@@ -27,15 +27,15 @@ pkg/plugins/
   routes.go         - Echo route registration
 ```
 
-## Plugin Types SDK (`@shisho/plugin-types`)
+## Plugin SDK (`@shisho/plugin-sdk`)
 
-The `packages/plugin-types/` directory contains a TypeScript type definitions package that plugin developers install for IDE autocompletion and type checking. It is the public API contract for plugin authors.
+The `packages/plugin-sdk/` directory contains a TypeScript type definitions package that plugin developers install for IDE autocompletion and type checking. It is the public API contract for plugin authors.
 
 **CRITICAL: The SDK must always be kept in sync with the Go implementation.** Any change to host APIs, hook contexts/return types, manifest schema, or metadata structures MUST be reflected in the corresponding `.d.ts` files. Breaking changes to the SDK should be avoided whenever possible — prefer additive changes (new optional fields) over removals or type changes.
 
 ```
-packages/plugin-types/
-├── package.json       # @shisho/plugin-types
+packages/plugin-sdk/
+├── package.json       # @shisho/plugin-sdk
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
 ├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, ffmpeg, shell)
@@ -579,8 +579,8 @@ Repositories provide a `repository.json` manifest:
 2. Add call in `hostapi.go`'s `InjectHostAPIs()`
 3. Add manifest capability type if needed (in `manifest.go`)
 4. Add tests in `hostapi_newapi_test.go`
-5. **Update `packages/plugin-types/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
-6. If a new manifest capability was added, update `packages/plugin-types/manifest.d.ts`
+5. **Update `packages/plugin-sdk/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
+6. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
 
 ### Adding a new hook type
 
@@ -591,8 +591,8 @@ Repositories provide a `repository.json` manifest:
 5. Create `RunNewHook()` method on Manager
 6. Add result parsing function
 7. Integrate in scan pipeline or relevant service
-8. **Update `packages/plugin-types/hooks.d.ts`** — add context/result interfaces and include the hook in `ShishoPlugin`
-9. **Update `packages/plugin-types/manifest.d.ts`** if a new capability type was added
+8. **Update `packages/plugin-sdk/hooks.d.ts`** — add context/result interfaces and include the hook in `ShishoPlugin`
+9. **Update `packages/plugin-sdk/manifest.d.ts`** if a new capability type was added
 
 ### Modifying ParsedMetadata or related structs
 
@@ -600,7 +600,7 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 
 1. Update the Go struct in `pkg/mediafile/mediafile.go`
 2. Update parsing in `pkg/plugins/hooks.go` (`parseParsedMetadata` and related functions)
-3. **Update `packages/plugin-types/metadata.d.ts`** to match
+3. **Update `packages/plugin-sdk/metadata.d.ts`** to match
 4. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
 
 ### Writing a test plugin

@@ -90,7 +90,7 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 
 ### Plugins
 
-**SDK must stay in sync with Go** — When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-types/` MUST be updated to match. Breaking changes to the SDK should be avoided.
+**SDK must stay in sync with Go** — When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-sdk/` MUST be updated to match. Breaking changes to the SDK should be avoided.
 
 ## Development Commands
 
@@ -224,7 +224,7 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - Use `mise release 0.2.0` to create a release
 - This runs `scripts/release.sh` which:
   1. Generates changelog from commits since the last tag
-  2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-types/package.json`
+  2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-sdk/package.json`
   3. Creates a commit `[Release] v0.2.0`
   4. Tags and pushes to trigger GitHub Actions
 

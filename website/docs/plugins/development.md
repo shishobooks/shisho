@@ -13,18 +13,18 @@ A plugin consists of two files:
 - **`manifest.json`** — declares the plugin's identity, capabilities, permissions, and configuration schema
 - **`main.js`** — the JavaScript code that implements the plugin's hooks
 
-### TypeScript Types Package
+### TypeScript SDK
 
-The `@shisho/plugin-types` npm package provides TypeScript type definitions for all plugin APIs. Install it for IDE autocompletion and type checking:
+The `@shisho/plugin-sdk` npm package provides TypeScript type definitions for all plugin APIs. Install it for IDE autocompletion and type checking:
 
 ```bash
-npm install @shisho/plugin-types
+npm install @shisho/plugin-sdk
 ```
 
 You can write plugins in TypeScript and compile to JavaScript, or use plain JavaScript with JSDoc annotations for type hints:
 
 ```javascript
-/// <reference types="@shisho/plugin-types" />
+/// <reference types="@shisho/plugin-sdk" />
 
 /** @type {ShishoPlugin} */
 var plugin = {
