@@ -2,9 +2,9 @@
 go = "1.25.5"
 node = "24.13.0"
 "npm:pnpm" = "10.33.0"
-"ubi:air-verse/air" = "1.64.2"
-"ubi:gzuidhof/tygo" = "0.2.20"
-"ubi:golangci/golangci-lint" = "2.7.2"
+"github:air-verse/air" = "1.64.2"
+"github:gzuidhof/tygo" = "0.2.20"
+"github:golangci/golangci-lint" = "2.7.2"
 
 # === Build ===
 
