@@ -180,8 +180,8 @@ test.describe("Feature Name", () => {
 
 ```bash
 mise test:e2e                              # Run all browsers in parallel (~10-12s)
-pnpm e2e:chromium                          # Run only Chromium
-pnpm e2e:firefox                           # Run only Firefox
+mise e2e:chromium                          # Run only Chromium
+mise e2e:firefox                           # Run only Firefox
 playwright test --project=chromium         # Alternative: direct Playwright call
 playwright test e2e/login.spec.ts          # Run specific test file
 ```

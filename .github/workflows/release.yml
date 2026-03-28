@@ -143,10 +143,14 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
+      - name: Get Node version from mise
+        id: node
+        run: echo "version=$(mise current node)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version-file: ".mise.toml"
+          node-version: ${{ steps.node.outputs.version }}
           cache: "pnpm"
           registry-url: "https://registry.npmjs.org"
 

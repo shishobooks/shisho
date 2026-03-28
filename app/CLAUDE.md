@@ -453,10 +453,9 @@ className="py-3 md:py-4 px-4 md:px-6"
 ### Running Tests
 
 ```bash
-pnpm test:unit      # Run Vitest unit/component tests with coverage
-mise test:js        # Run all JS tests (used in `mise check`)
+mise test:unit      # Run Vitest unit/component tests with coverage
+mise test:js        # Run all JS tests (unit + E2E, used in `mise check`)
 mise test:e2e       # Run E2E tests (Chromium + Firefox in parallel)
-mise test:unit      # Run unit tests via mise
 ```
 
 ### Test File Locations
