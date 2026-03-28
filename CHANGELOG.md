@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-03-28
+
+### Features
+- Add in-app PDF viewer with server-side rendering (#27)
+- Redesign docs homepage, darken app theme, use Tailwind font-logo class (#28)
+- Replace sequential orphan cleanup with batch operations (#25)
+- Add interactive identify apply with field-by-field review (#24)
+- Migrate from Yarn to pnpm (#22)
+- Add bulk download for selected books (#19)
+- Improve identify search result row layout and readability (#20)
+
+### Bug Fixes
+- Validate and download cover URLs using plugin httpAccess domains (#18)
+
+### Documentation
+- Add note about AI usage to README (#30)
+
+### CI/CD
+- Update task-start script to use mise instead of make (#29)
+- Migrate from Make/Hivemind/concurrently to mise (#26)
+- Move race detection to CI-only, speed up local test runs 8x (#23)
+- Add concurrency limits to cancel redundant CI runs (#21)
+
+
 ## [0.0.20] - 2026-03-15
 
 ### Features
