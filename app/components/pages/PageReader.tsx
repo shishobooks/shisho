@@ -288,7 +288,7 @@ export default function PageReader({
 
         {/* Loading spinner */}
         {imageLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-[5]">
+          <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         )}
