@@ -378,6 +378,8 @@ release:
 
 ### npm job
 
+Keep `setup-node` here — it handles the OIDC-based npm provenance flow that mise can't replicate. Use mise only for Go tooling (tygo).
+
 ```yaml
 npm:
   name: npm Publish
@@ -386,6 +388,17 @@ npm:
   steps:
     - uses: actions/checkout@v4
     - uses: jdx/mise-action@v2
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ".mise.toml"
+        cache: "pnpm"
+        registry-url: "https://registry.npmjs.org"
+
     - run: pnpm install --frozen-lockfile
     - run: mise tygo
 
@@ -402,17 +415,7 @@ npm:
       run: npm publish --access public
 ```
 
-Note: The current workflow uses `id-token: write` permissions and `setup-node` with `registry-url` for npm authentication. The `setup-node` action writes `~/.npmrc` with the registry URL and injects an auth token. With mise replacing `setup-node`, we need to handle this manually. The `npm publish` command doesn't use `--provenance`, so OIDC signing isn't in play — just token-based auth. Add an `.npmrc` setup step:
-
-```yaml
-    - uses: jdx/mise-action@v2
-    - name: Configure npm registry
-      run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-```
-
-If the project doesn't have an `NPM_TOKEN` secret yet (and instead relies on GitHub's OIDC), keep `setup-node` just for the npm job and use mise for everything else. Check the repo's secrets during implementation to determine which approach to use.
+Note: `setup-node` is kept specifically for OIDC npm provenance. `pnpm/action-setup` is also kept since `setup-node` expects it for caching. `mise-action` is still used for Go + tygo. The `node-version-file` points to `.mise.toml` — `setup-node` v4 supports reading versions from mise config files, keeping `.mise.toml` as the single source of truth.
 
 ## CI: `.github/workflows/docs.yml`
 
