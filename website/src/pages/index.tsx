@@ -275,10 +275,7 @@ export default function Home(): ReactNode {
               <h2 className="docs-home__section-heading">
                 Up and running in minutes
               </h2>
-              <p
-                className="docs-home__section-desc"
-                style={{ marginBottom: "2rem" }}
-              >
+              <p className="docs-home__section-desc docs-home__section-desc--tight">
                 Shisho runs as a Docker container. Point it at your book
                 collection and you're done.
               </p>
