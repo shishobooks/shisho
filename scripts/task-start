@@ -61,10 +61,10 @@ tmux split-window -d -v -l "$HALF_SIZE" -t "${TASK_NAME}.1" -c "$WORKTREE_DIR"
 
 # Pane layout:
 #   Pane 0 (top): claude
-#   Pane 1 (middle): make start (pre-typed, not executed)
-#   Pane 2 (bottom): other commands / make setup
-tmux send-keys -t "${TASK_NAME}.2" "make setup" Enter
-tmux send-keys -t "${TASK_NAME}.1" "make start"
+#   Pane 1 (middle): mise start (pre-typed, not executed)
+#   Pane 2 (bottom): other commands / mise setup
+tmux send-keys -t "${TASK_NAME}.2" "mise setup" Enter
+tmux send-keys -t "${TASK_NAME}.1" "mise start"
 tmux send-keys -t "${TASK_NAME}.0" "claude --dangerously-skip-permissions" Enter
 tmux select-window -t "$TASK_NAME"
 tmux select-pane -t "${TASK_NAME}.0"
