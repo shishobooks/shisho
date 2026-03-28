@@ -1348,6 +1348,54 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	})
 }
 
+// DeleteFilesByIDs batch-deletes files and their associated records (narrators, identifiers, chapters).
+// Unlike DeleteFile, it does NOT handle primary file promotion — the caller manages that separately.
+// Returns nil if fileIDs is empty.
+func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
+	if len(fileIDs) == 0 {
+		return nil
+	}
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Delete narrators for all files
+		_, err := tx.NewDelete().
+			Model((*models.Narrator)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete identifiers for all files
+		_, err = tx.NewDelete().
+			Model((*models.FileIdentifier)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete chapters for all files
+		_, err = tx.NewDelete().
+			Model((*models.Chapter)(nil)).
+			Where("file_id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Delete the file records
+		_, err = tx.NewDelete().
+			Model((*models.File)(nil)).
+			Where("id IN (?)", bun.In(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
 // PromoteSupplementToMain promotes a supplement file to a main file.
 // Used during scan cleanup when the last main file is deleted but a promotable supplement exists.
 func (svc *Service) PromoteSupplementToMain(ctx context.Context, fileID int) error {
