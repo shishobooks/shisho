@@ -94,8 +94,7 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 ## Development Commands
 
 ### Setup
-- `mise install` - Install all tools (Go, Node, pnpm, air, tygo, golangci-lint)
-- `mise setup` - Install JS dependencies and generate types (run after `mise install`)
+- `mise setup` - Install all tools, JS dependencies, and generate types (one-command setup)
 
 ### Dev Server
 - `mise start` - Start development environment (API with hot reload + Vite frontend)
@@ -231,8 +230,8 @@ Each commit should be in the format of `[{Category}] {Change description}`
 ## Worktree Setup
 
 - Worktrees should be created in `~/.worktrees/shisho/`
-- After creating a new worktree, run `mise install && mise setup` to install tools and dependencies
-- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && mise install && mise setup`
+- After creating a new worktree, run `mise setup` to install tools and dependencies
+- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && mise setup`
 
 ## Database Best Practices
 

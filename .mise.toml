@@ -171,11 +171,12 @@ description = "Build Docker image"
 run = "docker build -t shisho:${DOCKER_TAG:-latest} ."
 
 [tasks.setup]
-description = "Install dependencies (run after mise install)"
-depends = ["tygo"]
+description = "Install tools and dependencies"
 run = '''
+mise install
 pnpm install
 cd website && pnpm install
+mise tygo
 '''
 
 [tasks.release]

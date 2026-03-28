@@ -1,6 +1,5 @@
 {
   "setup-worktree": [
-    "mise install",
     "mise setup"
   ]
 }
