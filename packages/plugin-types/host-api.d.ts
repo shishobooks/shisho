@@ -188,6 +188,42 @@ export interface ShishoXML {
   ): XMLElement[];
 }
 
+/** A parsed HTML element returned by shisho.html queries. */
+export interface HtmlElement {
+  /** Element tag name (e.g., "div", "meta", "script"). */
+  tag: string;
+  /** Element attributes as key-value pairs. */
+  attributes: Record<string, string>;
+  /** Recursive inner text content (all text nodes concatenated). */
+  text: string;
+  /** Raw inner HTML string. Useful for script tags (JSON-LD) or rich content. */
+  innerHTML: string;
+  /** Direct child elements. */
+  children: HtmlElement[];
+}
+
+/** HTML parsing with CSS selector support. */
+export interface ShishoHTML {
+  /**
+   * Find the first element matching a CSS selector.
+   * Supports full CSS selector syntax (attribute selectors, combinators, pseudo-classes).
+   *
+   * @example
+   * var meta = shisho.html.querySelector(html, 'meta[name="description"]');
+   * var description = meta ? meta.attributes.content : "";
+   */
+  querySelector(html: string, selector: string): HtmlElement | null;
+
+  /**
+   * Find all elements matching a CSS selector.
+   *
+   * @example
+   * var scripts = shisho.html.querySelectorAll(html, 'script[type="application/ld+json"]');
+   * var jsonLd = JSON.parse(scripts[0].text);
+   */
+  querySelectorAll(html: string, selector: string): HtmlElement[];
+}
+
 /** Result from shisho.ffmpeg.transcode(). */
 export interface TranscodeResult {
   /** Process exit code (0 = success). */
@@ -352,6 +388,7 @@ export interface ShishoHostAPI {
   fs: ShishoFS;
   archive: ShishoArchive;
   xml: ShishoXML;
+  html: ShishoHTML;
   ffmpeg: ShishoFFmpeg;
   shell: ShishoShell;
 }

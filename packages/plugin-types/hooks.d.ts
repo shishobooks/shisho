@@ -48,29 +48,9 @@ export interface SearchContext {
   };
 }
 
-/** A single search result from metadataEnricher.search(). */
-export interface SearchResult {
-  title: string;
-  authors?: ParsedAuthor[];
-  description?: string;
-  imageUrl?: string;
-  releaseDate?: string;
-  publisher?: string;
-  imprint?: string;
-  url?: string;
-  coverUrl?: string;
-  subtitle?: string;
-  series?: string;
-  seriesNumber?: number;
-  genres?: string[];
-  tags?: string[];
-  narrators?: string[];
-  identifiers?: Array<{ type: string; value: string }>;
-}
-
 /** Result returned from metadataEnricher.search(). */
 export interface SearchResponse {
-  results: SearchResult[];
+  results: ParsedMetadata[];
 }
 
 /** Context passed to outputGenerator.generate(). */
