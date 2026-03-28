@@ -75,6 +75,7 @@ import {
   DownloadFormatKepub,
   FileTypeCBZ,
   FileTypeEPUB,
+  FileTypePDF,
   type File,
 } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -371,8 +372,9 @@ const FileRow = ({
               </Tooltip>
             )}
 
-            {/* Read button - CBZ only */}
-            {file.file_type === FileTypeCBZ && (
+            {/* Read button - CBZ and PDF */}
+            {(file.file_type === FileTypeCBZ ||
+              file.file_type === FileTypePDF) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link
@@ -534,8 +536,9 @@ const FileRow = ({
             </Tooltip>
           )}
 
-          {/* Read button - CBZ only */}
-          {file.file_type === FileTypeCBZ && (
+          {/* Read button - CBZ and PDF */}
+          {(file.file_type === FileTypeCBZ ||
+            file.file_type === FileTypePDF) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
