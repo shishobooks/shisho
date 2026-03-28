@@ -14,7 +14,7 @@ Consolidate five separate tools (Make, Hivemind, concurrently, nodenv, goenv) in
 - **All tasks inline in `.mise.toml`** — no file-based tasks in `.mise/tasks/`
 - **`mise <task>` syntax** — not `mise run <task>`
 - **Exact version pinning** — every tool pinned to a specific version, no ranges
-- **`ubi` backend for Go CLI tools** — pre-built binaries, fast installs, no compilation
+- **`github` backend for CLI tools** — pre-built binaries from GitHub releases, fast installs, no compilation
 - **Big-bang migration** — Makefile deleted, not kept alongside
 
 ## `.mise.toml` — Tools
@@ -26,9 +26,9 @@ Single source of truth for all tool versions. Replaces `.node-version`, `.go-ver
 go = "1.25.5"
 node = "24.13.0"
 "npm:pnpm" = "10.33.0"
-"ubi:air-verse/air" = "1.64.2"
-"ubi:gzuidhof/tygo" = "0.2.20"
-"ubi:golangci/golangci-lint" = "2.7.2"
+"github:air-verse/air" = "1.64.2"
+"github:gzuidhof/tygo" = "0.2.20"
+"github:golangci/golangci-lint" = "2.7.2"
 ```
 
 The `packageManager` field stays in `package.json` because the Dockerfile uses corepack. It won't conflict — mise's pnpm takes precedence on PATH in dev.
