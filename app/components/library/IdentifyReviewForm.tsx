@@ -523,7 +523,7 @@ export function IdentifyReviewForm({
   // Cover state — page-based formats (CBZ, PDF) derive covers from page
   // content and shouldn't be overwritten by plugin images.
   const coverEditable = !isPageBasedFileType(file?.file_type);
-  const newCoverUrl = result.image_url || result.cover_url;
+  const newCoverUrl = result.cover_url;
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`
     : undefined;
