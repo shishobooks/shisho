@@ -420,3 +420,106 @@ func TestMergeEnrichedMetadata_NoEnrichers_FileParserOnly(t *testing.T) {
 	assert.Equal(t, "File Author", enrichedMeta.Authors[0].Name)
 	assert.Equal(t, "File Description", enrichedMeta.Description)
 }
+
+// TestCoverPageProtection_EnricherCannotOverridePageCover verifies that when a
+// file parser sets CoverPage (e.g. CBZ/PDF), the enricher's downloaded cover
+// image does not replace the file parser's page-derived cover. This simulates
+// the post-merge logic in runMetadataEnrichers.
+func TestCoverPageProtection_EnricherCannotOverridePageCover(t *testing.T) {
+	t.Parallel()
+
+	fileCoverPage := 0
+	fileSource := "cbz_metadata"
+
+	// File parser provides cover from page content
+	fileMetadata := &mediafile.ParsedMetadata{
+		Title:         "My CBZ Book",
+		CoverData:     []byte("page-derived cover"),
+		CoverMimeType: "image/jpeg",
+		CoverPage:     &fileCoverPage,
+		DataSource:    fileSource,
+		FieldDataSources: map[string]string{
+			"cover": fileSource,
+		},
+	}
+
+	// Enricher provides a downloaded cover image (no CoverPage)
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverData:     []byte("enricher-downloaded cover"),
+		CoverMimeType: "image/png",
+	}
+
+	// Simulate runMetadataEnrichers merge order:
+	// 1. Enricher results merge first into empty target
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+
+	// 2. File parser merges as fallback
+	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
+
+	// At this point, enricher's CoverData is in enrichedMeta (it merged first).
+	// But CoverPage came from file parser (enricher didn't set it).
+	// Verify the problematic intermediate state:
+	assert.Equal(t, []byte("enricher-downloaded cover"), enrichedMeta.CoverData)
+	require.NotNil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, 0, *enrichedMeta.CoverPage)
+
+	// 3. Apply CoverPage protection (as runMetadataEnrichers does)
+	if fileMetadata.CoverPage != nil {
+		enrichedMeta.CoverData = fileMetadata.CoverData
+		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
+		enrichedMeta.CoverPage = fileMetadata.CoverPage
+		enrichedMeta.FieldDataSources["cover"] = fileMetadata.SourceForField("cover")
+	}
+
+	// File parser's cover should be restored
+	assert.Equal(t, []byte("page-derived cover"), enrichedMeta.CoverData)
+	assert.Equal(t, "image/jpeg", enrichedMeta.CoverMimeType)
+	require.NotNil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, 0, *enrichedMeta.CoverPage)
+	assert.Equal(t, fileSource, enrichedMeta.FieldDataSources["cover"])
+}
+
+// TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved verifies that when
+// a file parser does NOT set CoverPage (e.g. EPUB/M4B), the enricher's cover
+// is preserved as normal.
+func TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved(t *testing.T) {
+	t.Parallel()
+
+	fileSource := "epub_metadata"
+
+	// File parser provides cover but no CoverPage
+	fileMetadata := &mediafile.ParsedMetadata{
+		Title:         "My EPUB Book",
+		CoverData:     []byte("epub-embedded cover"),
+		CoverMimeType: "image/jpeg",
+		DataSource:    fileSource,
+	}
+
+	// Enricher provides a better cover
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverData:     []byte("enricher high-res cover"),
+		CoverMimeType: "image/png",
+	}
+
+	// Simulate runMetadataEnrichers merge order
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
+
+	// CoverPage protection should NOT trigger (no CoverPage)
+	if fileMetadata.CoverPage != nil {
+		enrichedMeta.CoverData = fileMetadata.CoverData
+		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
+		enrichedMeta.CoverPage = fileMetadata.CoverPage
+		enrichedMeta.FieldDataSources["cover"] = fileMetadata.SourceForField("cover")
+	}
+
+	// Enricher's cover should be preserved
+	assert.Equal(t, []byte("enricher high-res cover"), enrichedMeta.CoverData)
+	assert.Equal(t, "image/png", enrichedMeta.CoverMimeType)
+	assert.Nil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"])
+}
