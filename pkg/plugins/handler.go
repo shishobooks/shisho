@@ -133,8 +133,10 @@ type setOrderPayload struct {
 }
 
 type searchPayload struct {
-	Query  string `json:"query" validate:"required"`
-	BookID int    `json:"book_id" validate:"required"`
+	Query       string                       `json:"query" validate:"required"`
+	BookID      int                          `json:"book_id" validate:"required"`
+	Author      string                       `json:"author"`
+	Identifiers []mediafile.ParsedIdentifier `json:"identifiers"`
 }
 
 type applyPayload struct {
@@ -1284,12 +1286,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		var b models.Book
 		err = h.db.NewSelect().Model(&b).
 			Where("b.id = ?", payload.BookID).
-			Relation("Authors").
-			Relation("Authors.Person").
-			Relation("BookSeries").
-			Relation("BookSeries.Series").
-			Relation("Files").
-			Relation("Files.Identifiers").
 			Scan(ctx)
 		if err == nil {
 			book = &b
@@ -1310,22 +1306,26 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errcodes.Forbidden("You don't have access to this library")
 	}
 
-	// Build context objects
-	bookCtx := buildSearchBookContext(book)
-	fileCtx := map[string]interface{}{} // Minimal file context for search
-	if len(book.Files) > 0 {
-		f := book.Files[0]
-		fileCtx["fileType"] = f.FileType
-		fileCtx["filePath"] = f.Filepath
+	// Build flat search context from payload
+	searchCtx := map[string]interface{}{
+		"query": payload.Query,
+	}
+	if payload.Author != "" {
+		searchCtx["author"] = payload.Author
+	}
+	if len(payload.Identifiers) > 0 {
+		ids := make([]map[string]interface{}, len(payload.Identifiers))
+		for i, id := range payload.Identifiers {
+			ids[i] = map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			}
+		}
+		searchCtx["identifiers"] = ids
 	}
 
 	var allResults []EnrichSearchResult
 	for _, rt := range runtimes {
-		searchCtx := map[string]interface{}{
-			"query": payload.Query,
-			"book":  bookCtx,
-			"file":  fileCtx,
-		}
 
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
@@ -1718,71 +1718,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	return nil
-}
-
-// buildSearchBookContext builds a context map for search/enrich from a book model.
-func buildSearchBookContext(book *models.Book) map[string]interface{} {
-	ctx := map[string]interface{}{
-		"id":    book.ID,
-		"title": book.Title,
-	}
-
-	if book.Subtitle != nil {
-		ctx["subtitle"] = *book.Subtitle
-	}
-	if book.Description != nil {
-		ctx["description"] = *book.Description
-	}
-
-	if len(book.Authors) > 0 {
-		authors := make([]map[string]interface{}, 0, len(book.Authors))
-		for _, a := range book.Authors {
-			author := map[string]interface{}{}
-			if a.Person != nil {
-				author["name"] = a.Person.Name
-			}
-			if a.Role != nil {
-				author["role"] = *a.Role
-			}
-			authors = append(authors, author)
-		}
-		ctx["authors"] = authors
-	}
-
-	if len(book.BookSeries) > 0 {
-		series := make([]map[string]interface{}, 0, len(book.BookSeries))
-		for _, bs := range book.BookSeries {
-			if bs.Series == nil {
-				continue
-			}
-			s := map[string]interface{}{
-				"name": bs.Series.Name,
-			}
-			if bs.SeriesNumber != nil {
-				s["number"] = *bs.SeriesNumber
-			}
-			series = append(series, s)
-		}
-		if len(series) > 0 {
-			ctx["series"] = series
-		}
-	}
-
-	// Collect identifiers from all files
-	var identifiers []map[string]interface{}
-	for _, f := range book.Files {
-		for _, id := range f.Identifiers {
-			identifiers = append(identifiers, map[string]interface{}{
-				"type":  id.Type,
-				"value": id.Value,
-			})
-		}
-	}
-	if len(identifiers) > 0 {
-		ctx["identifiers"] = identifiers
-	}
-
-	return ctx
 }
 
 // convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.

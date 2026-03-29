@@ -526,9 +526,8 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	require.NotNil(t, rt)
 
 	searchCtx := map[string]interface{}{
-		"query": "Test",
-		"book":  map[string]interface{}{"title": "Test"},
-		"file":  map[string]interface{}{"fileType": "epub"},
+		"query":  "Test",
+		"author": "Test Author",
 	}
 
 	resp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
@@ -616,9 +615,8 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
 	require.NotNil(t, rt)
 
 	searchCtx := map[string]interface{}{
-		"query": "Test",
-		"book":  map[string]interface{}{"title": "Test"},
-		"file":  map[string]interface{}{"fileType": "epub"},
+		"query":  "Test",
+		"author": "Test Author",
 	}
 
 	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
