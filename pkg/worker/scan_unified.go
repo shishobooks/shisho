@@ -128,6 +128,7 @@ type ScanOptions struct {
 
 	// Behavior
 	ForceRefresh bool // Bypass priority checks, overwrite all metadata
+	SkipPlugins  bool // Skip enricher plugins, use only file-embedded metadata
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -453,7 +454,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	}
 
 	// Run metadata enrichers after parsing
-	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
+	if !opts.SkipPlugins {
+		metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
+	}
 
 	// Apply enricher cover if it's higher resolution than the current cover
 	w.upgradeEnricherCover(ctx, metadata, file, book.Filepath, opts.JobLog)
@@ -554,6 +557,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		fileResult, err := w.scanFileByID(ctx, ScanOptions{
 			FileID:       file.ID,
 			ForceRefresh: opts.ForceRefresh,
+			SkipPlugins:  opts.SkipPlugins,
 			JobLog:       opts.JobLog,
 		}, cache)
 		if err != nil {
@@ -2222,7 +2226,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	}
 
 	// Run metadata enrichers after parsing
-	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID, opts.JobLog)
+	if !opts.SkipPlugins {
+		metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID, opts.JobLog)
+	}
 
 	// Apply enricher cover if it's higher resolution than the current cover
 	w.upgradeEnricherCover(ctx, metadata, file, bookPath, opts.JobLog)
