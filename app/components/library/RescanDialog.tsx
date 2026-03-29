@@ -81,12 +81,12 @@ export function RescanDialog({
           {modes.map((mode) => (
             <Label
               className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[[data-state=checked]]:border-primary"
-              htmlFor={`rescan-${mode.value}`}
+              htmlFor={`rescan-${entityType}-${mode.value}`}
               key={mode.value}
             >
               <RadioGroupItem
                 className="mt-0.5"
-                id={`rescan-${mode.value}`}
+                id={`rescan-${entityType}-${mode.value}`}
                 value={mode.value}
               />
               <div className="space-y-0.5">

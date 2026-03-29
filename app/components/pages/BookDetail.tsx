@@ -1449,25 +1449,29 @@ const BookDetail = () => {
         open={showBookRescanDialog}
       />
 
-      <RescanDialog
-        entityName={
-          rescanFileId
-            ? book.files.find((f) => f.id === rescanFileId)?.name ||
-              getFilename(
-                book.files.find((f) => f.id === rescanFileId)?.filepath ?? "",
-              )
-            : ""
-        }
-        entityType="file"
-        isPending={resyncFileMutation.isPending}
-        onConfirm={(mode) => {
-          if (rescanFileId) handleRescanFile(rescanFileId, mode);
-        }}
-        onOpenChange={(open) => {
-          if (!open) setRescanFileId(null);
-        }}
-        open={rescanFileId !== null}
-      />
+      {(() => {
+        const rescanFile = rescanFileId
+          ? book.files.find((f) => f.id === rescanFileId)
+          : null;
+        return (
+          <RescanDialog
+            entityName={
+              rescanFile
+                ? rescanFile.name || getFilename(rescanFile.filepath)
+                : ""
+            }
+            entityType="file"
+            isPending={resyncFileMutation.isPending}
+            onConfirm={(mode) => {
+              if (rescanFileId) handleRescanFile(rescanFileId, mode);
+            }}
+            onOpenChange={(open) => {
+              if (!open) setRescanFileId(null);
+            }}
+            open={rescanFileId !== null}
+          />
+        );
+      })()}
 
       {editingFile && (
         <FileEditDialog
