@@ -201,6 +201,20 @@ const AdminSettings = () => {
               value={`${config.pdf_render_quality}`}
             />
             <ConfigRow
+              description="File patterns excluded from supplement discovery"
+              label="Supplement Exclude Patterns"
+              value={config.supplement_exclude_patterns.join(", ")}
+            />
+          </div>
+        </div>
+
+        {/* Plugin Settings */}
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            Plugins
+          </h2>
+          <div className="space-y-0">
+            <ConfigRow
               description="Directory where installed plugins are stored"
               label="Plugin Directory"
               value={config.plugin_dir}
@@ -211,14 +225,9 @@ const AdminSettings = () => {
               value={config.plugin_data_dir}
             />
             <ConfigRow
-              description="Confidence threshold (0-1) for automatic metadata enrichment. Results below this score are skipped during scans."
+              description="Confidence threshold for automatic metadata enrichment during scans. Results below this score are skipped. Per-plugin thresholds override this value."
               label="Enrichment Confidence Threshold"
-              value={config.enrichment_confidence_threshold}
-            />
-            <ConfigRow
-              description="File patterns excluded from supplement discovery"
-              label="Supplement Exclude Patterns"
-              value={config.supplement_exclude_patterns.join(", ")}
+              value={`${Math.round(config.enrichment_confidence_threshold * 100)}%`}
             />
           </div>
         </div>
