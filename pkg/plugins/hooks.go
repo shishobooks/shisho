@@ -15,6 +15,18 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// safeCallJS invokes a goja function with panic recovery. The goja runtime can
+// panic on certain JS exceptions (e.g., nil pointer in handleThrow). This wrapper
+// ensures plugin errors never crash the server.
+func safeCallJS(fn goja.Callable, this goja.Value, args ...goja.Value) (result goja.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("JS runtime panicked: %v", r)
+		}
+	}()
+	return fn(this, args...)
+}
+
 // ConvertResult is the result of an input converter hook.
 type ConvertResult struct {
 	Success    bool
@@ -60,7 +72,7 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 	contextObj.Set("targetDir", targetDir)   //nolint:errcheck
 
 	// Call the hook
-	result, err := convertFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(convertFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return nil, errors.Wrap(err, "inputConverter.convert failed")
 	}
@@ -108,7 +120,7 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	contextObj.Set("fileType", fileType) //nolint:errcheck
 
 	// Call the hook
-	result, err := parseFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(parseFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return nil, errors.Wrap(err, "fileParser.parse failed")
 	}
@@ -167,7 +179,7 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	}
 
 	// Call the hook
-	result, err := searchFn(goja.Undefined(), rt.vm.ToValue(searchCtx))
+	result, err := safeCallJS(searchFn, goja.Undefined(), rt.vm.ToValue(searchCtx))
 	if err != nil {
 		return nil, errors.Wrap(err, "metadataEnricher.search failed")
 	}
@@ -217,7 +229,7 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 	contextObj.Set("file", fileCtx)          //nolint:errcheck
 
 	// Call the hook
-	_, err := generateFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	_, err := safeCallJS(generateFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return errors.Wrap(err, "outputGenerator.generate failed")
 	}
@@ -251,7 +263,7 @@ func (m *Manager) RunFingerprint(rt *Runtime, bookCtx, fileCtx map[string]interf
 	contextObj.Set("file", fileCtx) //nolint:errcheck
 
 	// Call the hook
-	result, err := fingerprintFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(fingerprintFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return "", errors.Wrap(err, "outputGenerator.fingerprint failed")
 	}
