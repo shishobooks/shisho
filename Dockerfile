@@ -27,7 +27,8 @@ FROM node:24.13.0-alpine AS frontend-builder
 WORKDIR /app
 
 # Install pnpm via corepack (reads version from packageManager field in package.json)
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY packages/plugin-sdk/package.json ./packages/plugin-sdk/
 RUN corepack enable && corepack install
 
 # Install production dependencies only (build tools, not test/lint tools)

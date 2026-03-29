@@ -175,7 +175,6 @@ description = "Install tools and dependencies"
 run = '''
 mise install
 pnpm install
-cd website && pnpm install
 mise tygo
 '''
 

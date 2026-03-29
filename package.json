@@ -92,11 +92,16 @@
     "overrides": {
       "minimatch": ">=3.1.4",
       "rollup": ">=4.59.0",
-      "ajv": "~6.14.0"
+      "ajv": "~6.14.0",
+      "qs": ">=6.14.2",
+      "svgo": ">=3.3.3",
+      "serialize-javascript": ">=7.0.3"
     },
     "onlyBuiltDependencies": [
       "@swc/core",
-      "esbuild"
+      "esbuild",
+      "core-js",
+      "core-js-pure"
     ]
   }
 }
