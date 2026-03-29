@@ -615,6 +615,35 @@ func MoveFileWithAssociatedFiles(originalFilePath, newFilePath string) (int, err
 	return associatedMoved, nil
 }
 
+// ImageResolution returns the total pixel count (width * height) of an image
+// by reading only the image header (no full decode). Returns 0 if the image
+// cannot be decoded.
+func ImageResolution(data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0
+	}
+	return cfg.Width * cfg.Height
+}
+
+// ImageFileResolution returns the total pixel count of an image file on disk.
+// Returns 0 if the file cannot be read or decoded.
+func ImageFileResolution(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0
+	}
+	return cfg.Width * cfg.Height
+}
+
 // moveFileAssociatedFiles moves only file-specific associated files (covers and file sidecar).
 // This does NOT move book sidecars - use moveAssociatedCovers for that.
 func moveFileAssociatedFiles(originalFilePath, newFilePath string) (int, error) {
