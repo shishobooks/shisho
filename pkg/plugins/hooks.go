@@ -43,8 +43,8 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -91,8 +91,8 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -155,8 +155,8 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext (no extra allowed paths for enrichers)
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -198,8 +198,8 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -243,8 +243,8 @@ func (m *Manager) RunFingerprint(rt *Runtime, bookCtx, fileCtx map[string]interf
 		return "", errors.New("plugin does not have an outputGenerator hook")
 	}
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Get the fingerprint method
 	generatorObj := rt.outputGenerator.ToObject(rt.vm)
@@ -670,8 +670,8 @@ func (m *Manager) RunOnUninstalling(rt *Runtime) {
 		return
 	}
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext for the hook (plugin dir + data dir only)
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)

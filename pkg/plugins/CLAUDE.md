@@ -467,8 +467,10 @@ Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads
 ## Thread Safety
 
 - `Manager.mu` (RWMutex): protects `plugins` map
-- `Runtime.mu` (RWMutex): Read lock for hook invocation, write lock for reload
+- `Runtime.mu` (RWMutex): **Exclusive lock** for hook invocation, write lock for reload
+- Goja VMs are single-threaded — concurrent JS execution on the same VM corrupts internal state. All hook runners acquire an exclusive lock (`rt.mu.Lock()`) to ensure only one goroutine executes JS on a given runtime at a time. Different plugins (different runtimes) can run concurrently.
 - Hot-reload: acquire write lock on old runtime → swap in new → release
+- **CRITICAL:** Never use `RLock` for hook invocations. The parallel scan worker pool will call hooks from multiple goroutines simultaneously, and goja cannot handle concurrent access.
 
 ## Scan Pipeline Integration
 
