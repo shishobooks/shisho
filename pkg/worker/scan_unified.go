@@ -2528,6 +2528,146 @@ func (w *Worker) extractAndSaveCover(
 	return coverFilename, normalizedMime, false, nil
 }
 
+// upgradeEnricherCover checks if an enricher provided a cover image that is
+// higher resolution than the file's current cover. If so, it saves the enricher
+// cover to disk and updates the file record.
+//
+// This is called after runMetadataEnrichers in both scan paths (new file creation
+// and rescan). It only applies covers from plugin sources, respects the cover
+// field setting (already enforced by filterMetadataFields), and never replaces
+// covers for page-based formats (CBZ, PDF).
+//
+// bookFilepath is the parent book's filepath. The cover directory is determined
+// automatically: if bookFilepath is a directory, covers are saved there; otherwise
+// (root-level files where the book path may not exist as a directory), covers are
+// saved in the file's parent directory.
+func (w *Worker) upgradeEnricherCover(
+	ctx context.Context,
+	metadata *mediafile.ParsedMetadata,
+	file *models.File,
+	bookFilepath string,
+	jobLog *joblogs.JobLogger,
+) {
+	log := logger.FromContext(ctx)
+
+	logInfo := func(msg string, data logger.Data) {
+		log.Info(msg, data)
+		if jobLog != nil {
+			jobLog.Info(msg, data)
+		}
+	}
+
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if jobLog != nil {
+			jobLog.Warn(msg, data)
+		}
+	}
+
+	// 1. Skip if no cover data in enriched metadata
+	if metadata == nil || len(metadata.CoverData) == 0 {
+		return
+	}
+
+	// 2. Skip if the cover source is not from a plugin
+	coverSource := metadata.SourceForField("cover")
+	if !strings.HasPrefix(coverSource, models.DataSourcePluginPrefix) {
+		return
+	}
+
+	// 3. Skip for page-based file types — they derive covers from page content
+	if models.IsPageBasedFileType(file.FileType) {
+		return
+	}
+
+	// 4. Determine the cover directory (same logic as recoverMissingCover)
+	coverDir := bookFilepath
+	if info, err := os.Stat(bookFilepath); err != nil || !info.IsDir() {
+		coverDir = filepath.Dir(file.Filepath)
+	}
+
+	coverBaseName := filepath.Base(file.Filepath) + ".cover"
+	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
+
+	currentResolution := 0
+	if existingCoverPath != "" {
+		currentResolution = fileutils.ImageFileResolution(existingCoverPath)
+	}
+
+	// 5. Resolution gate — enricher cover must be strictly larger
+	enricherResolution := fileutils.ImageResolution(metadata.CoverData)
+	if enricherResolution == 0 {
+		logWarn("enricher cover could not be decoded, skipping", logger.Data{
+			"file_id": file.ID,
+			"source":  coverSource,
+		})
+		return
+	}
+	if enricherResolution <= currentResolution {
+		logInfo("enricher cover not larger than current cover, skipping", logger.Data{
+			"file_id":             file.ID,
+			"enricher_resolution": enricherResolution,
+			"current_resolution":  currentResolution,
+			"source":              coverSource,
+		})
+		return
+	}
+
+	// 6. Save enricher cover — normalize and write to disk
+	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	coverExt := ".png"
+	if normalizedMime == metadata.CoverMimeType {
+		coverExt = metadata.CoverExtension()
+	}
+
+	coverFilename := coverBaseName + coverExt
+	coverFilepath := filepath.Join(coverDir, coverFilename)
+
+	// Remove any existing cover file with a different extension
+	if existingCoverPath != "" && existingCoverPath != coverFilepath {
+		os.Remove(existingCoverPath)
+	}
+
+	coverFile, err := os.Create(coverFilepath)
+	if err != nil {
+		logWarn("failed to save enricher cover", logger.Data{
+			"error": err.Error(),
+			"path":  coverFilepath,
+		})
+		return
+	}
+	defer coverFile.Close()
+
+	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
+		logWarn("failed to write enricher cover data", logger.Data{
+			"error": err.Error(),
+			"path":  coverFilepath,
+		})
+		return
+	}
+
+	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
+		"file_id":             file.ID,
+		"enricher_resolution": enricherResolution,
+		"current_resolution":  currentResolution,
+		"source":              coverSource,
+		"path":                coverFilepath,
+	})
+
+	// 7. Update file record
+	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &normalizedMime
+	file.CoverSource = &coverSource
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source"},
+	}); err != nil {
+		logWarn("failed to update file cover after enricher upgrade", logger.Data{
+			"error":   err.Error(),
+			"file_id": file.ID,
+		})
+	}
+}
+
 // parseFileMetadata extracts metadata from a file based on its type.
 // For built-in types (epub, cbz, m4b), uses the native parsers.
 // For other types, falls back to plugin file parsers if available.
