@@ -45,6 +45,7 @@ The dialog gains two new controls below the existing query input:
 - Not editable — just clearable individually
 - If all are cleared, `identifiers` is omitted from the payload
 - Users who want to search by a specific ISBN paste it into the query field
+- Must use the same visual treatment as the identifier display on the review step (IdentifyReviewForm) — both steps show identifiers as read-only dismissable chips with formatted type labels
 
 ### API Changes
 
