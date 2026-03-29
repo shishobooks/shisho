@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -2694,6 +2695,25 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		firstResult := searchResp.Results[0]
 		searchMeta := &firstResult
 
+		// Check confidence threshold (if result provides a score)
+		if searchMeta.Confidence != nil {
+			threshold := w.getEnrichmentConfidenceThreshold(ctx, rt)
+			if *searchMeta.Confidence < threshold {
+				logWarn("enricher result below confidence threshold, skipping", logger.Data{
+					"plugin":     rt.PluginID(),
+					"confidence": fmt.Sprintf("%.0f%%", *searchMeta.Confidence*100),
+					"threshold":  fmt.Sprintf("%.0f%%", threshold*100),
+					"book":       book.Title,
+				})
+				continue
+			}
+			log.Info("enricher auto-applying result", logger.Data{
+				"plugin":     rt.PluginID(),
+				"confidence": fmt.Sprintf("%.0f%%", *searchMeta.Confidence*100),
+				"book":       book.Title,
+			})
+		}
+
 		// Get effective field settings for this library + plugin
 		declaredFields := enricherCap.Fields
 		enabledFields, fErr := w.pluginService.GetEffectiveFieldSettings(ctx, libraryID, rt.Scope(), rt.PluginID(), declaredFields)
@@ -3245,4 +3265,24 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	}
 
 	return coverBaseName + ext, mimeType, nil
+}
+
+// getEnrichmentConfidenceThreshold returns the effective confidence threshold for a plugin.
+// Priority: per-plugin threshold > global config > default (0.85).
+func (w *Worker) getEnrichmentConfidenceThreshold(ctx context.Context, rt *plugins.Runtime) float64 {
+	// Check per-plugin threshold
+	if w.pluginService != nil {
+		plugin, err := w.pluginService.GetPlugin(ctx, rt.Scope(), rt.PluginID())
+		if err == nil && plugin != nil && plugin.ConfidenceThreshold != nil {
+			return *plugin.ConfidenceThreshold
+		}
+	}
+
+	// Fall back to global config
+	if w.config != nil && w.config.EnrichmentConfidenceThreshold > 0 {
+		return w.config.EnrichmentConfidenceThreshold
+	}
+
+	// Default
+	return 0.85
 }
