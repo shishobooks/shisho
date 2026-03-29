@@ -318,10 +318,36 @@ var plugin = (function() {
   return {
     metadataEnricher: {
       search: function(context) {
+        // context.query       — search query (title or free text)
+        // context.author      — author name (optional)
+        // context.identifiers — [{ type, value }] (optional)
+
         var apiKey = shisho.config.get("apiKey");
-        var query = shisho.url.encodeURIComponent(context.query);
+
+        // Check for ISBN in query (users may paste ISBNs into the search box)
+        var isbnMatch = context.query.match(/^97[89]\d{10}$/);
+        if (isbnMatch) {
+          // Direct ISBN lookup
+        }
+
+        // Use author to narrow results
+        var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+        if (context.author) {
+          searchUrl += "&author=" + shisho.url.encodeURIComponent(context.author);
+        }
+
+        // Check for known identifiers
+        if (context.identifiers) {
+          for (var i = 0; i < context.identifiers.length; i++) {
+            var id = context.identifiers[i];
+            if (id.type === "isbn_13") {
+              // Direct lookup by ISBN
+            }
+          }
+        }
+
         var resp = shisho.http.fetch(
-          "https://api.example.com/search?q=" + query,
+          searchUrl,
           { headers: { "Authorization": "Bearer " + apiKey } }
         );
 

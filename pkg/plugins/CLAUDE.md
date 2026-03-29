@@ -193,10 +193,15 @@ Searches external sources for metadata. No file access beyond plugin dir. Search
 ```javascript
 metadataEnricher: {
   search: function(context) {
-    // context.book  - { title, authors, identifiers, ... }
-    // context.file  - { fileType }
+    // context.query       - search query (title or free text)
+    // context.author      - author name (optional)
+    // context.identifiers - [{ type, value }] (optional)
     var apiKey = shisho.config.get("apiKey");
-    var resp = shisho.http.fetch("https://api.example.com/search?q=" + context.book.title, {});
+    var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+    if (context.author) {
+      searchUrl += "&author=" + shisho.url.encodeURIComponent(context.author);
+    }
+    var resp = shisho.http.fetch(searchUrl, {});
     var data = resp.json();
     return {
       results: data.items.map(function(item) {
@@ -460,7 +465,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), and file identifiers (as `identifiers`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
