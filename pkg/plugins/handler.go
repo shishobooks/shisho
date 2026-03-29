@@ -1286,6 +1286,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		var b models.Book
 		err = h.db.NewSelect().Model(&b).
 			Where("b.id = ?", payload.BookID).
+			Relation("Files").
 			Scan(ctx)
 		if err == nil {
 			book = &b
@@ -1322,6 +1323,22 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			}
 		}
 		searchCtx["identifiers"] = ids
+	}
+
+	// Add file hints from the book's first file (non-modifiable context)
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx := map[string]interface{}{
+			"fileType": f.FileType,
+		}
+		if f.AudiobookDurationSeconds != nil {
+			fileCtx["duration"] = *f.AudiobookDurationSeconds
+		}
+		if f.PageCount != nil {
+			fileCtx["pageCount"] = *f.PageCount
+		}
+		fileCtx["filesizeBytes"] = f.FilesizeBytes
+		searchCtx["file"] = fileCtx
 	}
 
 	var allResults []EnrichSearchResult

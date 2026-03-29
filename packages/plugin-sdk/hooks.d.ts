@@ -32,6 +32,17 @@ export interface SearchContext {
   author?: string;
   /** Structured identifiers for direct lookup (ISBN, ASIN, etc.). Optional. */
   identifiers?: Array<{ type: string; value: string }>;
+  /** Read-only file metadata for matching hints. Not user-editable. */
+  file?: {
+    /** File type extension (e.g., "epub", "cbz", "m4b", "pdf"). */
+    fileType?: string;
+    /** Audiobook duration in seconds. */
+    duration?: number;
+    /** Number of pages (CBZ/PDF). */
+    pageCount?: number;
+    /** File size in bytes. */
+    filesizeBytes?: number;
+  };
 }
 
 /** Result returned from metadataEnricher.search(). */

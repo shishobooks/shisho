@@ -2663,6 +2663,21 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			searchCtx["identifiers"] = identifiers
 		}
 
+		// Add file hints (non-modifiable context)
+		if file != nil {
+			fileCtx := map[string]interface{}{
+				"fileType": file.FileType,
+			}
+			if file.AudiobookDurationSeconds != nil {
+				fileCtx["duration"] = *file.AudiobookDurationSeconds
+			}
+			if file.PageCount != nil {
+				fileCtx["pageCount"] = *file.PageCount
+			}
+			fileCtx["filesizeBytes"] = file.FilesizeBytes
+			searchCtx["file"] = fileCtx
+		}
+
 		searchResp, sErr := w.pluginManager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
 			logWarn("enricher search failed", logger.Data{
