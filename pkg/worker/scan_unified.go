@@ -3190,6 +3190,7 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 		FileID:       opts.FileID,
 		BookID:       opts.BookID,
 		ForceRefresh: opts.ForceRefresh,
+		SkipPlugins:  opts.SkipPlugins,
 	}
 
 	// Call internal unified Scan method (no cache for single-file rescans)

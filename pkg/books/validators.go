@@ -57,7 +57,25 @@ type UpdateFilePayload struct {
 
 // ResyncPayload contains the request parameters for resync operations.
 type ResyncPayload struct {
-	Refresh bool `json:"refresh"`
+	Mode    string `json:"mode"`
+	Refresh bool   `json:"refresh"` // Deprecated: kept for backwards compatibility
+}
+
+// resolveScanMode converts a ResyncPayload into ForceRefresh and SkipPlugins flags.
+// Supports three modes: "scan" (default), "refresh", and "reset".
+// Falls back to the deprecated Refresh boolean if Mode is empty.
+func (p ResyncPayload) resolveScanMode() (forceRefresh, skipPlugins bool) {
+	switch p.Mode {
+	case "refresh":
+		return true, false
+	case "reset":
+		return true, true
+	case "scan", "":
+		// For empty mode, check deprecated Refresh field for backwards compatibility
+		return p.Refresh, false
+	default:
+		return false, false
+	}
 }
 
 // MoveFilesPayload is the payload for moving files to another book.
