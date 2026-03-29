@@ -1245,9 +1245,10 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		}
 	}
 
-	// Files with a cover_page derive their cover from page content and cannot have it replaced by upload
-	if file.CoverPage != nil {
-		return errcodes.ValidationError("Cover upload is not supported for this file type. Use the cover page selector instead.")
+	// Files with page-derived covers cannot have them replaced by upload:
+	// CBZ uses cover_page, PDF renders from page content.
+	if file.CoverPage != nil || file.FileType == models.FileTypePDF {
+		return errcodes.ValidationError("Cover upload is not supported for this file type.")
 	}
 
 	// Get the parent book for the cover directory
