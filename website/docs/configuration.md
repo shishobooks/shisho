@@ -82,6 +82,12 @@ macOS (FSEvents) and Docker containers typically don't need this adjustment.
 | `plugin_dir` | `PLUGIN_DIR` | `/config/plugins/installed` | Directory where installed [plugins](./plugins/overview) are stored |
 | `plugin_data_dir` | `PLUGIN_DATA_DIR` | `/config/plugins/data` | Directory where plugin persistent data is stored (caches, tokens, DB files). Data survives plugin updates; optionally deleted on uninstall with `delete_data=true` |
 
+### Enrichment
+
+| Setting | Env Variable | Default | Description |
+|---------|-------------|---------|-------------|
+| `enrichment_confidence_threshold` | `ENRICHMENT_CONFIDENCE_THRESHOLD` | `0.85` | Confidence threshold (0-1) for automatic metadata enrichment during scans. When a plugin returns a confidence score, results below this threshold are skipped. Per-plugin thresholds override this value. |
+
 ### Supplement Discovery
 
 | Setting | Env Variable | Default | Description |

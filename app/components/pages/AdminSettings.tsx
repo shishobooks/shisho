@@ -211,6 +211,11 @@ const AdminSettings = () => {
               value={config.plugin_data_dir}
             />
             <ConfigRow
+              description="Confidence threshold (0-1) for automatic metadata enrichment. Results below this score are skipped during scans."
+              label="Enrichment Confidence Threshold"
+              value={config.enrichment_confidence_threshold}
+            />
+            <ConfigRow
               description="File patterns excluded from supplement discovery"
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}

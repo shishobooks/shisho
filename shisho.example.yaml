@@ -120,6 +120,17 @@ plugin_dir: /config/plugins/installed
 plugin_data_dir: /config/plugins/data
 
 # =============================================================================
+# ENRICHMENT SETTINGS
+# =============================================================================
+
+# Confidence threshold for automatic metadata enrichment during scans.
+# When a plugin returns a confidence score with search results, results
+# below this threshold are skipped. Range: 0.0 - 1.0 (0.85 = 85%).
+# Per-plugin thresholds can override this in plugin settings.
+# Env: ENRICHMENT_CONFIDENCE_THRESHOLD
+enrichment_confidence_threshold: 0.85
+
+# =============================================================================
 # LIBRARY MONITOR SETTINGS
 # =============================================================================
 
