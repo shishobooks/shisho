@@ -26,26 +26,12 @@ export interface FileParserContext {
 
 /** Context passed to metadataEnricher.search(). */
 export interface SearchContext {
-  /** Search query (book title for auto, user input for manual). */
+  /** Search query — title or free-text. Always present. */
   query: string;
-  /** Current book state from the database. */
-  book: {
-    id?: number;
-    title?: string;
-    subtitle?: string;
-    description?: string;
-    series?: Array<{ name: string; number?: number }>;
-    authors?: Array<{ name: string; role?: string }>;
-    genres?: string[];
-    tags?: string[];
-    identifiers?: Array<{ type: string; value: string }>;
-    publisher?: string;
-  };
-  /** File information. */
-  file: {
-    fileType?: string;
-    filePath?: string;
-  };
+  /** Author name to narrow results. Optional. */
+  author?: string;
+  /** Structured identifiers for direct lookup (ISBN, ASIN, etc.). Optional. */
+  identifiers?: Array<{ type: string; value: string }>;
 }
 
 /** Result returned from metadataEnricher.search(). */
