@@ -1,10 +1,10 @@
-import CBZPagePicker from "./CBZPagePicker";
-import CBZPagePreview from "./CBZPagePreview";
 import {
   countDescendants,
   formatTimestampMs,
   parseTimestampMs,
 } from "./chapterUtils";
+import PagePicker from "./PagePicker";
+import PagePreview from "./PagePreview";
 import {
   ChevronDown,
   ChevronLeft,
@@ -38,6 +38,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  FileTypePDF,
   type Chapter,
   type FileType,
 } from "@/types";
@@ -143,7 +144,7 @@ export interface ChapterRowProps {
   onStartTimestampChange?: (ms: number) => void;
   onDelete?: () => void;
   onValidationChange?: (chapterId: number, hasError: boolean) => void;
-  // CBZ edit mode: called when page input loses focus (for reordering)
+  // Page-based edit mode: called when page input loses focus (for reordering)
   onBlur?: () => void;
   // EPUB edit mode: callbacks for child chapter editing (curried by index)
   onChildTitleChange?: (childIndex: number) => (title: string) => void;
@@ -153,10 +154,10 @@ export interface ChapterRowProps {
   playingChapterIndex?: number | null;
   onPlay?: (chapterIndex: number, timestampMs: number) => void;
   onStop?: () => void;
-  // CBZ view mode: navigation to reader
+  // Page-based view mode: navigation to reader
   libraryId?: number;
   bookId?: number;
-  // CBZ
+  // Page-based (CBZ, PDF)
   fileId?: number;
   pageCount?: number;
   // M4B
@@ -167,7 +168,7 @@ export interface ChapterRowProps {
  * Renders a single chapter row with type-specific display.
  *
  * View mode: Displays chapter title, position (based on file type), and thumbnail/play button.
- * Edit mode: Supports inline editing for EPUB (titles only), CBZ (titles + pages), and M4B (titles + timestamps).
+ * Edit mode: Supports inline editing for EPUB (titles only), CBZ/PDF (titles + pages), and M4B (titles + timestamps).
  *
  * Handles recursive rendering of children chapters (for EPUB hierarchy).
  */
@@ -190,6 +191,8 @@ const ChapterRow = (props: ChapterRowProps) => {
   const hasChildren = children.length > 0;
   const isEpub = fileType === FileTypeEPUB;
   const isCbz = fileType === FileTypeCBZ;
+  const isPdf = fileType === FileTypePDF;
+  const isPageBased = isCbz || isPdf;
   const isM4b = fileType === FileTypeM4B;
   const isPlaying =
     chapterIndex != null && playingChapterIndex === chapterIndex;
@@ -203,7 +206,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // State for delete confirmation dialog (EPUB only)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // CBZ edit mode state: local page value and validation
+  // Page-based edit mode state: local page value and validation
   // Internal data is 0-indexed, but UI displays 1-indexed
   const currentPage = chapter.start_page ?? 0;
   const [localPageValue, setLocalPageValue] = useState(String(currentPage + 1));
@@ -230,13 +233,13 @@ const ChapterRow = (props: ChapterRowProps) => {
     setHasTimestampError(false);
   }, [chapter.start_timestamp_ms]);
 
-  // CBZ helper: Validate page number (1-indexed display value)
+  // Page helper: Validate page number (1-indexed display value)
   const pageCount = props.pageCount ?? 0;
   const validatePage = (displayValue: number): boolean => {
     return displayValue >= 1 && displayValue <= pageCount;
   };
 
-  // CBZ handler: Page input change (input is 1-indexed, convert to 0-indexed for storage)
+  // Page handler: Page input change (input is 1-indexed, convert to 0-indexed for storage)
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocalPageValue(value);
@@ -253,7 +256,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     }
   };
 
-  // CBZ handler: Decrement page
+  // Page handler: Decrement page
   const handleDecrementPage = () => {
     const newPage = Math.max(0, currentPage - 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
@@ -262,7 +265,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     props.onBlur?.();
   };
 
-  // CBZ handler: Increment page
+  // Page handler: Increment page
   const handleIncrementPage = () => {
     const newPage = Math.min(pageCount - 1, currentPage + 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
@@ -271,7 +274,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     props.onBlur?.();
   };
 
-  // CBZ handler: Page selection from picker (receives 0-indexed page)
+  // Page handler: Page selection from picker (receives 0-indexed page)
   const handlePageSelect = (page: number) => {
     setLocalPageValue(String(page + 1)); // Display is 1-indexed
     setHasPageError(false);
@@ -439,13 +442,13 @@ const ChapterRow = (props: ChapterRowProps) => {
     );
   }
 
-  // CBZ edit mode
-  if (isEditing && isCbz) {
+  // Page-based edit mode (CBZ, PDF)
+  if (isEditing && isPageBased) {
     return (
       <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
         {/* Small thumbnail with hover preview (clickable to open page picker) */}
         {fileId != null && (
-          <CBZPagePreview
+          <PagePreview
             fileId={fileId}
             onClick={() => setPagePickerOpen(true)}
             page={currentPage}
@@ -495,7 +498,7 @@ const ChapterRow = (props: ChapterRowProps) => {
           </Button>
         </div>
 
-        {/* Delete button (immediate, no confirmation for CBZ) */}
+        {/* Delete button (immediate, no confirmation for page-based files) */}
         <Button
           onClick={() => props.onDelete?.()}
           size="icon"
@@ -508,7 +511,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Page picker dialog */}
         {fileId != null && (
-          <CBZPagePicker
+          <PagePicker
             currentPage={currentPage}
             fileId={fileId}
             key={fileId}
@@ -628,17 +631,17 @@ const ChapterRow = (props: ChapterRowProps) => {
           <div className="w-5" />
         ) : null}
 
-        {/* CBZ: Page thumbnail with hover preview */}
-        {isCbz && chapter.start_page != null && fileId != null && (
-          <CBZPagePreview
+        {/* Page thumbnail with hover preview */}
+        {isPageBased && chapter.start_page != null && fileId != null && (
+          <PagePreview
             fileId={fileId}
             page={chapter.start_page}
             thumbnailSize={60}
           />
         )}
 
-        {/* Chapter title - clickable for CBZ to open reader at this chapter */}
-        {isCbz &&
+        {/* Chapter title - clickable for page-based files to open reader at this chapter */}
+        {isPageBased &&
         libraryId &&
         bookId &&
         fileId &&
@@ -654,7 +657,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         )}
 
         {/* Position display based on file type (1-indexed for user display) */}
-        {isCbz && chapter.start_page != null && (
+        {isPageBased && chapter.start_page != null && (
           <span className="text-muted-foreground text-sm">
             Page {chapter.start_page + 1}
           </span>

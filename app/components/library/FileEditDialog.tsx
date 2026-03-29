@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import CBZPagePicker from "@/components/files/CBZPagePicker";
+import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -659,8 +659,8 @@ export function FileEditDialog({
                           : "aspect-[2/3]",
                       )}
                     >
-                      {/* Non-CBZ: Show pending preview or current cover */}
-                      {file.file_type !== FileTypeCBZ && (
+                      {/* Non-page-based: Show pending preview or current cover */}
+                      {file.cover_page == null && (
                         <>
                           {pendingCoverPreview ? (
                             <img
@@ -685,8 +685,8 @@ export function FileEditDialog({
                           )}
                         </>
                       )}
-                      {/* CBZ: Show pending page or current cover */}
-                      {file.file_type === FileTypeCBZ && (
+                      {/* Page-based: Show pending page or current cover */}
+                      {file.cover_page != null && (
                         <>
                           {pendingCoverPage !== null &&
                           pendingCoverPage !== file.cover_page ? (
@@ -711,8 +711,8 @@ export function FileEditDialog({
                         </>
                       )}
                     </div>
-                    {/* Page number badge for CBZ */}
-                    {file.file_type === FileTypeCBZ &&
+                    {/* Page number badge */}
+                    {file.cover_page != null &&
                       (pendingCoverPage ?? file.cover_page) != null && (
                         <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
                           Page {(pendingCoverPage ?? file.cover_page)! + 1}
@@ -752,8 +752,8 @@ export function FileEditDialog({
                         </Button>
                       </>
                     )}
-                    {/* CBZ: Select page button */}
-                    {file.file_type === FileTypeCBZ && (
+                    {/* Select page button */}
+                    {file.cover_page != null && (
                       <Button
                         disabled={setCoverPageMutation.isPending}
                         onClick={() => setCoverPagePickerOpen(true)}
@@ -770,8 +770,8 @@ export function FileEditDialog({
                       </Button>
                     )}
                     {/* Unsaved indicator */}
-                    {((file.file_type !== FileTypeCBZ && pendingCoverFile) ||
-                      (file.file_type === FileTypeCBZ &&
+                    {((file.cover_page == null && pendingCoverFile) ||
+                      (file.cover_page != null &&
                         pendingCoverPage !== null &&
                         pendingCoverPage !== file.cover_page)) && (
                       <span className="text-xs text-orange-500 font-medium">
@@ -782,9 +782,9 @@ export function FileEditDialog({
                 </div>
               </div>
 
-              {/* CBZ Page Picker Dialog */}
-              {file.file_type === FileTypeCBZ && file.page_count != null && (
-                <CBZPagePicker
+              {/* Page Picker Dialog */}
+              {file.cover_page != null && file.page_count != null && (
+                <PagePicker
                   currentPage={pendingCoverPage ?? file.cover_page ?? null}
                   fileId={file.id}
                   onOpenChange={setCoverPagePickerOpen}

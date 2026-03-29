@@ -16,13 +16,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
-// updateFileCoverPagePayload is the request body for setting a CBZ cover page.
+// updateFileCoverPagePayload is the request body for setting a cover page.
 type updateFileCoverPagePayload struct {
 	Page int `json:"page"` // 0-indexed page number
 }
 
 // updateFileCoverPage handles PUT /files/:id/cover-page
-// Sets the cover page for a CBZ file and extracts it as an external cover image.
+// Sets the cover page for a page-based file (CBZ, PDF) and extracts it as an external cover image.
 func (h *handler) updateFileCoverPage(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
@@ -52,21 +52,29 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		}
 	}
 
-	// Validate file type is CBZ
-	if file.FileType != models.FileTypeCBZ {
-		return errcodes.ValidationError("Cover page selection is only available for CBZ files")
+	// Validate file has pages
+	if file.PageCount == nil {
+		return errcodes.ValidationError("This file does not support page-based covers")
 	}
 
 	// Validate page is within bounds
-	if file.PageCount == nil || payload.Page < 0 || payload.Page >= *file.PageCount {
+	if payload.Page < 0 || payload.Page >= *file.PageCount {
 		return errcodes.ValidationError("Page number is out of bounds")
 	}
 
-	// Extract the page image using the page cache
-	cachedPath, mimeType, err := h.pageCache.GetPage(file.Filepath, file.ID, payload.Page)
+	// Extract the page image using the appropriate page cache
+	var cachedPath, mimeType string
+	switch file.FileType {
+	case models.FileTypeCBZ:
+		cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, payload.Page)
+	case models.FileTypePDF:
+		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, payload.Page)
+	default:
+		return errcodes.ValidationError("This file does not support page-based covers")
+	}
 	if err != nil {
-		log.Error("failed to extract page from CBZ", logger.Data{"error": err.Error(), "page": payload.Page})
-		return errcodes.ValidationError("Failed to extract page from CBZ file")
+		log.Error("failed to extract cover page", logger.Data{"error": err.Error(), "page": payload.Page, "file_type": file.FileType})
+		return errcodes.ValidationError("Failed to extract page from file")
 	}
 
 	// Determine cover directory (same logic as fileCover and uploadFileCover)
@@ -109,7 +117,7 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return errcodes.ValidationError("Failed to save cover image")
 	}
 
-	log.Info("set CBZ cover page", logger.Data{
+	log.Info("set cover page", logger.Data{
 		"file_id":    file.ID,
 		"page":       payload.Page,
 		"cover_path": coverFilePath,

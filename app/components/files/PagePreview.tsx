@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/libraries/utils";
 
-export interface CBZPagePreviewProps {
+export interface PagePreviewProps {
   fileId: number;
   /** 0-indexed page number */
   page: number;
@@ -27,12 +27,12 @@ export interface CBZPagePreviewProps {
 }
 
 /**
- * CBZ page thumbnail with hover preview.
+ * Page thumbnail with hover preview.
  *
  * Shows a small thumbnail that displays a larger preview on hover.
  * Can wrap custom children or render a default thumbnail.
  */
-const CBZPagePreview = ({
+const PagePreview = ({
   fileId,
   page,
   thumbnailSize = 60,
@@ -41,7 +41,7 @@ const CBZPagePreview = ({
   className,
   onClick,
   children,
-}: CBZPagePreviewProps) => {
+}: PagePreviewProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
@@ -138,4 +138,4 @@ const CBZPagePreview = ({
   );
 };
 
-export default CBZPagePreview;
+export default PagePreview;

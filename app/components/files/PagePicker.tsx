@@ -17,7 +17,7 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/libraries/utils";
 
-export interface CBZPagePickerProps {
+export interface PagePickerProps {
   fileId: number;
   pageCount: number;
   currentPage: number | null;
@@ -28,10 +28,10 @@ export interface CBZPagePickerProps {
 }
 
 /**
- * Dialog for selecting a page from a CBZ file.
+ * Dialog for selecting a page from a file.
  * Shows a large preview of the focused page with a scrollable thumbnail strip below.
  */
-const CBZPagePicker = ({
+const PagePicker = ({
   fileId,
   pageCount,
   currentPage,
@@ -39,7 +39,7 @@ const CBZPagePicker = ({
   open,
   onOpenChange,
   title = "Select Page",
-}: CBZPagePickerProps) => {
+}: PagePickerProps) => {
   // Track the currently focused/previewed page (not necessarily the selected one)
   const [focusedPage, setFocusedPage] = useState<number>(currentPage ?? 0);
   // Track the last loaded page to avoid flashing during transitions
@@ -47,14 +47,36 @@ const CBZPagePicker = ({
   const thumbnailStripRef = useRef<HTMLDivElement>(null);
   const thumbnailRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
+  // Progressive thumbnail loading: main preview loads first, then thumbnails
+  // expand outward from the focused page. Only applies on initial open —
+  // once thumbnails are unlocked, navigating uses browser cache.
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [thumbnailLoadRadius, setThumbnailLoadRadius] = useState(0);
+
   // Reset state when dialog opens
   const handleOpenChange = (newOpen: boolean) => {
     if (newOpen) {
       setFocusedPage(currentPage ?? 0);
       setLoadedPage(null);
+      setPreviewLoaded(false);
+      setThumbnailLoadRadius(0);
     }
     onOpenChange(newOpen);
   };
+
+  // After the main preview loads, progressively expand thumbnail loading
+  useEffect(() => {
+    if (!previewLoaded || !open) return;
+
+    const maxRadius = 20;
+    if (thumbnailLoadRadius >= maxRadius) return;
+
+    const timer = setTimeout(() => {
+      setThumbnailLoadRadius((prev) => Math.min(prev + 3, maxRadius));
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [previewLoaded, thumbnailLoadRadius, open]);
 
   // Navigate to previous/next page
   const goToPrevious = useCallback(() => {
@@ -225,7 +247,10 @@ const CBZPagePicker = ({
             <img
               alt={`Page ${focusedPage + 1}`}
               className="max-h-full max-w-full object-contain rounded shadow-2xl"
-              onLoad={() => setLoadedPage(focusedPage)}
+              onLoad={() => {
+                setLoadedPage(focusedPage);
+                if (!previewLoaded) setPreviewLoaded(true);
+              }}
               src={`/api/books/files/${fileId}/page/${focusedPage}`}
             />
           </div>
@@ -273,12 +298,17 @@ const CBZPagePicker = ({
                     style={{ width: "72px", height: "96px" }}
                     type="button"
                   >
-                    <img
-                      alt={`Page ${page + 1}`}
-                      className="w-full h-full object-contain"
-                      loading="lazy"
-                      src={`/api/books/files/${fileId}/page/${page}`}
-                    />
+                    {previewLoaded &&
+                    Math.abs(page - focusedPage) <= thumbnailLoadRadius ? (
+                      <img
+                        alt={`Page ${page + 1}`}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                        src={`/api/books/files/${fileId}/page/${page}`}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-muted animate-pulse" />
+                    )}
                     <div
                       className={cn(
                         "absolute bottom-0 left-0 right-0 text-xs text-center py-0.5 font-medium tabular-nums",
@@ -344,4 +374,4 @@ const CBZPagePicker = ({
   );
 };
 
-export default CBZPagePicker;
+export default PagePicker;

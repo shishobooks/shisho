@@ -37,10 +37,10 @@ type File struct {
 	CoverImageFilename       *string           `json:"cover_image_filename"`
 	CoverMimeType            *string           `json:"cover_mime_type"`
 	CoverSource              *string           `json:"cover_source" tstype:"DataSource"`
-	CoverPage                *int              `json:"cover_page"` // 0-indexed page number for CBZ cover, NULL for EPUB/M4B
+	CoverPage                *int              `json:"cover_page"` // 0-indexed page number for CBZ/PDF cover, NULL for EPUB/M4B
 	Name                     *string           `json:"name"`
 	NameSource               *string           `json:"name_source" tstype:"DataSource"`
-	PageCount                *int              `json:"page_count"` // Number of pages for CBZ files, NULL for EPUB/M4B
+	PageCount                *int              `json:"page_count"` // Number of pages for CBZ/PDF files, NULL for EPUB/M4B
 	AudiobookDurationSeconds *float64          `json:"audiobook_duration_seconds"`
 	AudiobookBitrateBps      *int              `json:"audiobook_bitrate_bps"`
 	AudiobookCodec           *string           `json:"audiobook_codec"`

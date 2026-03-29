@@ -21,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +64,7 @@ func createTestCBZWithPages(t *testing.T, path string, numPages int) {
 func TestUpdateFileCoverPage(t *testing.T) {
 	t.Parallel()
 	t.Run("sets cover page and extracts cover image", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
@@ -153,6 +155,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 400 for invalid page number", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
@@ -225,6 +228,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 400 for negative page number", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
@@ -296,7 +300,77 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("returns 400 for non-CBZ file", func(t *testing.T) {
+	t.Run("accepts PDF file type", func(t *testing.T) {
+		t.Parallel()
+		db := setupTestDB(t)
+		ctx := context.Background()
+		cfg := &config.Config{CacheDir: t.TempDir()}
+		e := echo.New()
+		bookService := NewService(db)
+		pdfPageCache := pdfpages.NewCache(cfg.CacheDir, 150, 85)
+
+		h := &handler{
+			bookService:  bookService,
+			pdfPageCache: pdfPageCache,
+		}
+
+		library := &models.Library{
+			Name:                     "Test Library",
+			CoverAspectRatio:         "book",
+			DownloadFormatPreference: models.DownloadFormatOriginal,
+		}
+		_, err := db.NewInsert().Model(library).Exec(ctx)
+		require.NoError(t, err)
+
+		bookDir := filepath.Join(t.TempDir(), "Test Book")
+		err = os.MkdirAll(bookDir, 0755)
+		require.NoError(t, err)
+
+		book := &models.Book{
+			LibraryID:       library.ID,
+			Title:           "Test Book",
+			TitleSource:     models.DataSourceFilepath,
+			SortTitle:       "Test Book",
+			SortTitleSource: models.DataSourceFilepath,
+			AuthorSource:    models.DataSourceFilepath,
+			Filepath:        bookDir,
+		}
+		_, err = db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
+
+		pageCount := 10
+		file := &models.File{
+			LibraryID:     library.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypePDF,
+			FileRole:      models.FileRoleMain,
+			Filepath:      filepath.Join(bookDir, "test.pdf"),
+			FilesizeBytes: 1000,
+			PageCount:     &pageCount,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+
+		payload := map[string]int{"page": 0}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues(strconv.Itoa(file.ID))
+
+		err = h.updateFileCoverPage(c)
+		// Handler should pass validation but fail at extraction (PDF file doesn't exist on disk).
+		// Key: it should NOT return a validation error about file type.
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "does not support page-based covers")
+		assert.NotContains(t, err.Error(), "only available for CBZ files")
+		assert.Contains(t, err.Error(), "Failed to extract page from file")
+	})
+
+	t.Run("returns 400 for file without pages", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}

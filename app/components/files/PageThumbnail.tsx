@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { cn } from "@/libraries/utils";
 
-export interface CBZPageThumbnailProps {
+export interface PageThumbnailProps {
   fileId: number;
   page: number;
   size?: number;
@@ -10,17 +10,17 @@ export interface CBZPageThumbnailProps {
 }
 
 /**
- * Renders a thumbnail image for a CBZ page.
+ * Renders a thumbnail image for a page.
  *
  * Shows a grey placeholder while loading and displays the page number
  * if the image fails to load.
  */
-const CBZPageThumbnail = ({
+const PageThumbnail = ({
   fileId,
   page,
   size = 60,
   onClick,
-}: CBZPageThumbnailProps) => {
+}: PageThumbnailProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -68,4 +68,4 @@ const CBZPageThumbnail = ({
   );
 };
 
-export default CBZPageThumbnail;
+export default PageThumbnail;
