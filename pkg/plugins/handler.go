@@ -118,9 +118,10 @@ type installPayload struct {
 }
 
 type updatePayload struct {
-	Enabled    *bool             `json:"enabled"`
-	AutoUpdate *bool             `json:"auto_update"`
-	Config     map[string]string `json:"config"`
+	Enabled             *bool             `json:"enabled"`
+	AutoUpdate          *bool             `json:"auto_update"`
+	Config              map[string]string `json:"config"`
+	ConfidenceThreshold *float64          `json:"confidence_threshold"`
 }
 
 type orderEntry struct {
@@ -417,6 +418,12 @@ func (h *handler) update(c echo.Context) error {
 			if err := h.service.SetConfig(ctx, scope, id, key, value); err != nil {
 				return errors.WithStack(err)
 			}
+		}
+	}
+
+	if payload.ConfidenceThreshold != nil {
+		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, payload.ConfidenceThreshold); err != nil {
+			return errors.WithStack(err)
 		}
 	}
 
@@ -800,10 +807,11 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 }
 
 type pluginConfigResponse struct {
-	Schema         ConfigSchema           `json:"schema"`
-	Values         map[string]interface{} `json:"values"`
-	DeclaredFields []string               `json:"declaredFields"`
-	FieldSettings  map[string]bool        `json:"fieldSettings"`
+	Schema              ConfigSchema           `json:"schema"`
+	Values              map[string]interface{} `json:"values"`
+	DeclaredFields      []string               `json:"declaredFields"`
+	FieldSettings       map[string]bool        `json:"fieldSettings"`
+	ConfidenceThreshold *float64               `json:"confidence_threshold"`
 }
 
 func (h *handler) getConfig(c echo.Context) error {
@@ -840,11 +848,23 @@ func (h *handler) getConfig(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Get plugin for confidence threshold
+	plugin, err := h.service.GetPlugin(ctx, scope, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var confidenceThreshold *float64
+	if plugin != nil {
+		confidenceThreshold = plugin.ConfidenceThreshold
+	}
+
 	return c.JSON(http.StatusOK, pluginConfigResponse{
-		Schema:         schema,
-		Values:         values,
-		DeclaredFields: declaredFields,
-		FieldSettings:  fieldSettings,
+		Schema:              schema,
+		Values:              values,
+		DeclaredFields:      declaredFields,
+		FieldSettings:       fieldSettings,
+		ConfidenceThreshold: confidenceThreshold,
 	})
 }
 
