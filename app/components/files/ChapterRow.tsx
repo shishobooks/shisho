@@ -144,7 +144,7 @@ export interface ChapterRowProps {
   onStartTimestampChange?: (ms: number) => void;
   onDelete?: () => void;
   onValidationChange?: (chapterId: number, hasError: boolean) => void;
-  // CBZ edit mode: called when page input loses focus (for reordering)
+  // Page-based edit mode: called when page input loses focus (for reordering)
   onBlur?: () => void;
   // EPUB edit mode: callbacks for child chapter editing (curried by index)
   onChildTitleChange?: (childIndex: number) => (title: string) => void;
@@ -168,7 +168,7 @@ export interface ChapterRowProps {
  * Renders a single chapter row with type-specific display.
  *
  * View mode: Displays chapter title, position (based on file type), and thumbnail/play button.
- * Edit mode: Supports inline editing for EPUB (titles only), CBZ (titles + pages), and M4B (titles + timestamps).
+ * Edit mode: Supports inline editing for EPUB (titles only), CBZ/PDF (titles + pages), and M4B (titles + timestamps).
  *
  * Handles recursive rendering of children chapters (for EPUB hierarchy).
  */
@@ -206,7 +206,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // State for delete confirmation dialog (EPUB only)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // CBZ edit mode state: local page value and validation
+  // Page-based edit mode state: local page value and validation
   // Internal data is 0-indexed, but UI displays 1-indexed
   const currentPage = chapter.start_page ?? 0;
   const [localPageValue, setLocalPageValue] = useState(String(currentPage + 1));
@@ -233,13 +233,13 @@ const ChapterRow = (props: ChapterRowProps) => {
     setHasTimestampError(false);
   }, [chapter.start_timestamp_ms]);
 
-  // CBZ helper: Validate page number (1-indexed display value)
+  // Page helper: Validate page number (1-indexed display value)
   const pageCount = props.pageCount ?? 0;
   const validatePage = (displayValue: number): boolean => {
     return displayValue >= 1 && displayValue <= pageCount;
   };
 
-  // CBZ handler: Page input change (input is 1-indexed, convert to 0-indexed for storage)
+  // Page handler: Page input change (input is 1-indexed, convert to 0-indexed for storage)
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocalPageValue(value);
@@ -256,7 +256,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     }
   };
 
-  // CBZ handler: Decrement page
+  // Page handler: Decrement page
   const handleDecrementPage = () => {
     const newPage = Math.max(0, currentPage - 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
@@ -265,7 +265,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     props.onBlur?.();
   };
 
-  // CBZ handler: Increment page
+  // Page handler: Increment page
   const handleIncrementPage = () => {
     const newPage = Math.min(pageCount - 1, currentPage + 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
@@ -274,7 +274,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     props.onBlur?.();
   };
 
-  // CBZ handler: Page selection from picker (receives 0-indexed page)
+  // Page handler: Page selection from picker (receives 0-indexed page)
   const handlePageSelect = (page: number) => {
     setLocalPageValue(String(page + 1)); // Display is 1-indexed
     setHasPageError(false);
@@ -498,7 +498,7 @@ const ChapterRow = (props: ChapterRowProps) => {
           </Button>
         </div>
 
-        {/* Delete button (immediate, no confirmation for CBZ) */}
+        {/* Delete button (immediate, no confirmation for page-based files) */}
         <Button
           onClick={() => props.onDelete?.()}
           size="icon"

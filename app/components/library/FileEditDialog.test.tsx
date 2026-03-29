@@ -64,7 +64,7 @@ vi.mock("@/components/files/PagePicker", () => ({
     open: boolean;
   }) =>
     open ? (
-      <div data-testid="cbz-page-picker">
+      <div data-testid="page-picker">
         <button data-testid="select-page-5" onClick={() => onSelect(5)}>
           Select Page 5
         </button>
@@ -286,7 +286,7 @@ describe("FileEditDialog", () => {
 
       // Wait for picker to appear
       await waitFor(() => {
-        expect(screen.getByTestId("cbz-page-picker")).toBeInTheDocument();
+        expect(screen.getByTestId("page-picker")).toBeInTheDocument();
       });
 
       // Select a different page
@@ -294,7 +294,7 @@ describe("FileEditDialog", () => {
 
       // Verify the cover page change is reflected (picker should close)
       await waitFor(() => {
-        expect(screen.queryByTestId("cbz-page-picker")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("page-picker")).not.toBeInTheDocument();
       });
 
       // At this point, pendingCoverPage should be 5, hasChanges should be true

@@ -51,7 +51,7 @@ interface FileChaptersTabProps {
 
 /**
  * Creates a new chapter with appropriate defaults based on file type.
- * - CBZ: start_page defaults to 0
+ * - CBZ/PDF: start_page defaults to 0
  * - M4B: start_timestamp_ms defaults to 0
  */
 const createNewChapter = (fileType: string): ChapterInput => {
@@ -298,7 +298,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Handles clicking the uncovered pages warning for CBZ files.
+     * Handles clicking the uncovered pages warning for page-based files.
      * Adds a new chapter at page 0 and enters edit mode.
      */
     const handleAddChapterAtPageZero = () => {
@@ -385,7 +385,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Handles adding a new chapter for CBZ files.
+     * Handles adding a new chapter for page-based files.
      * Defaults:
      * - Start page: last chapter's start_page + 1 (or 0 if no chapters)
      * - Title: pattern detection from last chapter title
@@ -834,7 +834,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
           <audio ref={audioRef} src={`/api/books/files/${file.id}/stream`} />
         )}
 
-        {/* CBZ uncovered pages warning (display uses 1-indexed page numbers) */}
+        {/* Uncovered pages warning (display uses 1-indexed page numbers) */}
         {hasUncoveredPages && (
           <button
             className="w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left hover:bg-amber-500/20 transition-colors cursor-pointer"
