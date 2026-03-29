@@ -3278,8 +3278,8 @@ func (w *Worker) getEnrichmentConfidenceThreshold(ctx context.Context, rt *plugi
 		}
 	}
 
-	// Fall back to global config
-	if w.config != nil && w.config.EnrichmentConfidenceThreshold > 0 {
+	// Fall back to global config (default is 0.85, set in config defaults)
+	if w.config != nil {
 		return w.config.EnrichmentConfidenceThreshold
 	}
 

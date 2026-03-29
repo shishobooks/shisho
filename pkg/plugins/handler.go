@@ -118,10 +118,11 @@ type installPayload struct {
 }
 
 type updatePayload struct {
-	Enabled             *bool             `json:"enabled"`
-	AutoUpdate          *bool             `json:"auto_update"`
-	Config              map[string]string `json:"config"`
-	ConfidenceThreshold *float64          `json:"confidence_threshold"`
+	Enabled                  *bool             `json:"enabled"`
+	AutoUpdate               *bool             `json:"auto_update"`
+	Config                   map[string]string `json:"config"`
+	ConfidenceThreshold      *float64          `json:"confidence_threshold"`
+	ClearConfidenceThreshold *bool             `json:"clear_confidence_threshold"`
 }
 
 type orderEntry struct {
@@ -421,7 +422,14 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	if payload.ConfidenceThreshold != nil {
+	if payload.ClearConfidenceThreshold != nil && *payload.ClearConfidenceThreshold {
+		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, nil); err != nil {
+			return errors.WithStack(err)
+		}
+	} else if payload.ConfidenceThreshold != nil {
+		if *payload.ConfidenceThreshold < 0 || *payload.ConfidenceThreshold > 1 {
+			return errcodes.ValidationError("confidence_threshold must be between 0 and 1")
+		}
 		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, payload.ConfidenceThreshold); err != nil {
 			return errors.WithStack(err)
 		}

@@ -131,6 +131,29 @@ func TestParseSearchResponse_EmptyResults(t *testing.T) {
 	assert.Empty(t, resp.Results)
 }
 
+func TestParseSearchResponse_Confidence(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+
+	val, err := vm.RunString(`({ results: [
+		{ title: "High", confidence: 0.95 },
+		{ title: "Low", confidence: 0.3 },
+		{ title: "None" }
+	] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "", "")
+	require.Len(t, resp.Results, 3)
+
+	require.NotNil(t, resp.Results[0].Confidence)
+	assert.InDelta(t, 0.95, *resp.Results[0].Confidence, 0.001)
+
+	require.NotNil(t, resp.Results[1].Confidence)
+	assert.InDelta(t, 0.3, *resp.Results[1].Confidence, 0.001)
+
+	assert.Nil(t, resp.Results[2].Confidence)
+}
+
 func TestParseSearchResponse_NilInput(t *testing.T) {
 	t.Parallel()
 

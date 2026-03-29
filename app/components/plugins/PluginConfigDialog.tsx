@@ -177,7 +177,9 @@ export const PluginConfigDialog = ({
         id: pluginId,
         config,
         confidence_threshold:
-          confidenceThreshold != null ? confidenceThreshold / 100 : null,
+          confidenceThreshold != null ? confidenceThreshold / 100 : undefined,
+        clear_confidence_threshold:
+          confidenceThreshold == null ? true : undefined,
       },
       {
         onSuccess: () => {

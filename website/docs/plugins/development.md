@@ -372,7 +372,6 @@ var plugin = (function() {
               genres: item.genres,
               tags: item.tags,
               description: item.description,
-              imageUrl: item.coverUrl,
               coverUrl: item.coverUrl,
               releaseDate: item.publishDate,
               publisher: item.publisher,
@@ -402,8 +401,7 @@ var plugin = (function() {
 | `genres` | `string[]` | Genre classification |
 | `tags` | `string[]` | Freeform labels |
 | `description` | `string` | Book description |
-| `imageUrl` | `string` | Cover thumbnail URL for display in search results |
-| `coverUrl` | `string` | Cover image URL for download (falls back to `imageUrl` if empty) |
+| `coverUrl` | `string` | Cover image URL. Server downloads at apply time. Domain must be in `httpAccess.domains`. |
 | `releaseDate` | `string` | Publication date (`YYYY-MM-DD` or ISO 8601) |
 | `publisher` | `string` | Publisher name |
 | `imprint` | `string` | Imprint name |
@@ -428,7 +426,7 @@ return {
 
 For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
 
-Search results also support `imageUrl` for displaying a thumbnail in the search results UI. If `coverUrl` is empty, `imageUrl` is used as the fallback for downloading the cover.
+If both `coverUrl` and `coverData` are set, `coverData` takes precedence.
 
 #### File Hints
 

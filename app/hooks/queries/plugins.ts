@@ -329,15 +329,18 @@ export const useSavePluginConfig = () => {
       id,
       config,
       confidence_threshold,
+      clear_confidence_threshold,
     }: {
       scope: string;
       id: string;
       config: Record<string, string>;
       confidence_threshold?: number | null;
+      clear_confidence_threshold?: boolean;
     }) => {
       return API.request<Plugin>("PATCH", `/plugins/installed/${scope}/${id}`, {
         config,
         confidence_threshold,
+        clear_confidence_threshold,
       });
     },
     onSuccess: (_data, variables) => {
