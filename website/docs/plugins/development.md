@@ -426,6 +426,14 @@ return {
 
 For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
 
+**Cover enrichment rules:**
+
+During automatic scans, enricher-provided covers are subject to additional checks:
+
+- **Resolution gate:** An enricher cover is only applied if its total resolution (width × height) is strictly greater than the file's current cover. If the file already has a cover of equal or greater resolution, the enricher cover is skipped. This prevents low-resolution external images from replacing high-quality embedded covers.
+- **Page-based formats:** CBZ and PDF files derive covers from their page content. Plugin covers are never applied to these formats, even if the plugin declares the `cover` field.
+- **Field settings:** The `cover` field must be enabled in the plugin's per-library field settings for cover enrichment to take effect. If disabled, all cover data from the plugin is silently stripped.
+
 #### File Hints
 
 The `context.file` object provides read-only metadata about the file being enriched. Use it to narrow your search — for example, filtering audiobook results by duration or distinguishing a comic from a novel by page count:
@@ -478,6 +486,8 @@ return {
 When a user identifies a book using the interactive review screen, they choose which fields to keep on a field-by-field basis. During automatic scans, the first search result's metadata is applied for all enabled fields.
 
 Enricher values **override** file-embedded metadata for the same field. If a file has a bad title and your enricher returns a corrected title, the enricher's value wins. Among multiple enrichers, the first one (in user-defined order) to provide a value for a field wins. File-embedded metadata is only used as a fallback for fields that no enricher provided.
+
+During automatic scans, enrichment also respects a cover resolution gate — enricher covers must have a higher total resolution than the existing cover to be applied. See [Cover Images](#cover-images) above for details.
 
 Only fields declared in the manifest's `fields` array will be applied. Any returned fields not in the declared list are silently stripped. Users can further disable individual fields in the plugin settings.
 
