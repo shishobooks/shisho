@@ -1245,6 +1245,12 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		}
 	}
 
+	// Files with cover_page derive their cover from page content (CBZ, PDF) and
+	// cannot have it replaced by upload.
+	if file.CoverPage != nil {
+		return errcodes.ValidationError("Cover upload is not supported for this file type.")
+	}
+
 	// Get the parent book for the cover directory
 	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
 		ID: &file.BookID,

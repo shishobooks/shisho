@@ -135,7 +135,7 @@ export function IdentifyBookDialog({
       onOpenChange={onOpenChange}
       open={open}
     >
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden [&>*]:min-w-0">
         <DialogHeader className="pr-8">
           <DialogTitle>Identify Book</DialogTitle>
           <DialogDescription>

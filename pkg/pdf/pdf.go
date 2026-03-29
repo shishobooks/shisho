@@ -85,11 +85,16 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	}
 
 	// Extract cover image (best-effort: don't fail Parse if cover extraction fails).
+	// PDF covers are always derived from page 0, so set CoverPage to signal this
+	// is a page-based cover that should not be overwritten.
 	var coverData []byte
 	var coverMime string
+	var coverPage *int
 	if cd, cm, err := extractCover(path); err == nil {
 		coverData = cd
 		coverMime = cm
+		page0 := 0
+		coverPage = &page0
 	}
 
 	// Extract outline (bookmarks) as chapters. Best-effort — don't fail Parse.
@@ -114,6 +119,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		PageCount:     pageCount,
 		CoverData:     coverData,
 		CoverMimeType: coverMime,
+		CoverPage:     coverPage,
 		Chapters:      chapters,
 		DataSource:    models.DataSourcePDFMetadata,
 	}, nil

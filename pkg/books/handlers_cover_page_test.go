@@ -8,8 +8,10 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -461,4 +463,167 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		err = h.updateFileCoverPage(c)
 		require.Error(t, err)
 	})
+}
+
+// TestUploadFileCover_RejectsFileWithCoverPage verifies that the uploadFileCover
+// handler returns a validation error when the target file has CoverPage set,
+// since page-based covers (CBZ/PDF) should not be overwritten by uploads.
+func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+	e := echo.New()
+	bookService := NewService(db)
+
+	h := &handler{
+		bookService: bookService,
+	}
+
+	// Create test library
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create book directory
+	bookDir := filepath.Join(t.TempDir(), "Test Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	// Create book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create file with CoverPage set (simulates CBZ/PDF)
+	coverPage := 0
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeCBZ,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filepath.Join(bookDir, "test.cbz"),
+		FilesizeBytes: 1000,
+		CoverPage:     &coverPage,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Build multipart form with a JPEG cover image
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="cover"; filename="cover.jpg"`)
+	partHeader.Set("Content-Type", "image/jpeg")
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+
+	// Write a minimal valid JPEG
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	err = jpeg.Encode(part, img, nil)
+	require.NoError(t, err)
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/", &body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(file.ID))
+
+	err = h.uploadFileCover(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Cover upload is not supported")
+}
+
+// TestUploadFileCover_RejectsPDFFile verifies that the uploadFileCover handler
+// returns a validation error for PDF files, since PDF covers are rendered from
+// page content and should not be overwritten.
+func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+	e := echo.New()
+	bookService := NewService(db)
+
+	h := &handler{
+		bookService: bookService,
+	}
+
+	// Create test library
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	bookDir := filepath.Join(t.TempDir(), "Test Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create PDF file with CoverPage set (scanner sets cover_page=0 for PDFs)
+	pdfCoverPage := 0
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypePDF,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filepath.Join(bookDir, "test.pdf"),
+		FilesizeBytes: 1000,
+		CoverPage:     &pdfCoverPage,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Build multipart form with a JPEG cover image
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="cover"; filename="cover.jpg"`)
+	partHeader.Set("Content-Type", "image/jpeg")
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	err = jpeg.Encode(part, img, nil)
+	require.NoError(t, err)
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/", &body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(file.ID))
+
+	err = h.uploadFileCover(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Cover upload is not supported")
 }

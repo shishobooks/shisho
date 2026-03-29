@@ -1,5 +1,12 @@
 import equal from "fast-deep-equal";
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Loader2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,11 +22,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   usePluginApply,
+  usePluginIdentifierTypes,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
 import type { Book, File } from "@/types";
-import { formatMetadataFieldLabel } from "@/utils/format";
+import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +57,32 @@ interface IdentifierEntry {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Load natural dimensions of an image URL. */
+function useImageDimensions(src: string | undefined) {
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+
+  useEffect(() => {
+    if (!src) {
+      setDims(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setDims({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => {
+      if (!cancelled) setDims(null);
+    };
+    img.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return dims;
+}
 
 /** Determine field status and default value for a scalar field. */
 function resolveScalar(
@@ -122,7 +156,13 @@ function resolveIdentifiers(
   ) {
     return { value: current, status: "unchanged" };
   }
-  return { value: incoming, status: "changed" };
+  // Merge: keep all current, add new incoming identifiers
+  const existingKeys = new Set(current.map(key));
+  const merged = [
+    ...current,
+    ...incoming.filter((id) => !existingKeys.has(key(id))),
+  ];
+  return { value: merged, status: "changed" };
 }
 
 /** Extract current file from book. */
@@ -171,8 +211,8 @@ function CurrentBar({
   onUseCurrent?: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-l-2 border-muted-foreground/30 bg-muted/50 rounded-r-md px-3 py-1.5 text-sm text-muted-foreground">
-      <span className="min-w-0 truncate">{children}</span>
+    <div className="flex items-start justify-between gap-2 border-l-2 border-muted-foreground/30 bg-muted/50 rounded-r-md px-3 py-1.5 text-sm text-muted-foreground">
+      <span className="min-w-0 break-words">{children}</span>
       {onUseCurrent && (
         <Button
           className="shrink-0 text-xs h-6 px-2"
@@ -370,6 +410,7 @@ export function IdentifyReviewForm({
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
   const applyMutation = usePluginApply();
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const disabledFields = useMemo(
     () => new Set(result.disabled_fields ?? []),
     [result.disabled_fields],
@@ -441,7 +482,7 @@ export function IdentifyReviewForm({
       imprint: resolveScalar(file?.imprint?.name, result.imprint),
       releaseDate: resolveScalar(
         file?.release_date ? file.release_date.split("T")[0] : undefined,
-        result.release_date,
+        result.release_date ? result.release_date.split("T")[0] : undefined,
       ),
       url: resolveScalar(file?.url, result.url),
       identifiers: resolveIdentifiers(currentIdentifiers, incomingIdentifiers),
@@ -479,15 +520,19 @@ export function IdentifyReviewForm({
     defaults.identifiers.value,
   );
 
-  // Cover state
+  // Cover state — files with cover_page (CBZ, PDF) derive covers from page
+  // content and shouldn't be overwritten by plugin images.
+  const coverEditable = file?.cover_page == null;
   const newCoverUrl = result.image_url || result.cover_url;
-  const currentCoverUrl = file
+  const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`
     : undefined;
-  const hasCoverChoice = !!newCoverUrl;
+  const hasCoverChoice = !!newCoverUrl && coverEditable;
   const [coverSelection, setCoverSelection] = useState<"current" | "new">(
     newCoverUrl && !isDisabled("cover") ? "new" : "current",
   );
+  const currentCoverDims = useImageDimensions(currentCoverUrl);
+  const newCoverDims = useImageDimensions(newCoverUrl);
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -535,7 +580,7 @@ export function IdentifyReviewForm({
   }, [hasChanges, onHasChangesChange]);
 
   // ---- Submit ----
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const fields: Record<string, unknown> = {
       title,
       subtitle,
@@ -560,24 +605,21 @@ export function IdentifyReviewForm({
       fields.cover_url = newCoverUrl;
     }
 
-    applyMutation.mutate(
-      {
+    try {
+      await applyMutation.mutateAsync({
         book_id: book.id,
         file_id: fileId,
         fields,
         plugin_scope: result.plugin_scope,
         plugin_id: result.plugin_id,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Metadata applied successfully.");
-          onClose();
-        },
-        onError: (err) => {
-          toast.error(err.message || "Failed to apply metadata.");
-        },
-      },
-    );
+      });
+      toast.success("Metadata applied successfully.");
+      onClose();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to apply metadata.";
+      toast.error(message);
+    }
   };
 
   // ---- Render ----
@@ -664,6 +706,20 @@ export function IdentifyReviewForm({
                 Use new
               </span>
             </button>
+          </div>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            {currentCoverUrl && (
+              <span className="w-[calc(6rem+4px)] text-center">
+                {currentCoverDims
+                  ? `${currentCoverDims.w} × ${currentCoverDims.h}`
+                  : "\u00A0"}
+              </span>
+            )}
+            <span className="w-[calc(6rem+4px)] text-center">
+              {newCoverDims
+                ? `${newCoverDims.w} × ${newCoverDims.h}`
+                : "\u00A0"}
+            </span>
           </div>
         </div>
       )}
@@ -915,11 +971,31 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setUrl(file?.url ?? "")}
         status={defaults.url.status}
       >
-        <Input
-          disabled={isDisabled("url")}
-          onChange={(e) => setUrl(e.target.value)}
-          value={url}
-        />
+        <div className="flex gap-2">
+          <Input
+            className="flex-1"
+            disabled={isDisabled("url")}
+            onChange={(e) => setUrl(e.target.value)}
+            value={url}
+          />
+          <Button
+            asChild={!!url.trim()}
+            disabled={!url.trim()}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            {url.trim() ? (
+              <a href={url.trim()} rel="noopener noreferrer" target="_blank">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            ) : (
+              <span>
+                <ExternalLink className="h-4 w-4" />
+              </span>
+            )}
+          </Button>
+        </div>
       </FieldWrapper>
 
       {/* Identifiers */}
@@ -947,12 +1023,16 @@ export function IdentifyReviewForm({
               }
             >
               {currentIdentifiers
-                .map((id) => `${id.type}:${id.value}`)
+                .map(
+                  (id) =>
+                    `${formatIdentifierType(id.type, pluginIdentifierTypes)}: ${id.value}`,
+                )
                 .join(", ")}
             </CurrentBar>
           )}
         <IdentifierTagInput
           disabled={isDisabled("identifiers")}
+          identifierTypes={pluginIdentifierTypes}
           onChange={setIdentifiers}
           value={identifiers}
         />
@@ -999,35 +1079,21 @@ function IdentifierTagInput({
   value,
   onChange,
   disabled,
+  identifierTypes,
 }: {
   value: IdentifierEntry[];
   onChange: (ids: IdentifierEntry[]) => void;
   disabled?: boolean;
+  identifierTypes?: Array<{ id: string; name: string }>;
 }) {
-  const [input, setInput] = useState("");
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && input.trim()) {
-      e.preventDefault();
-      const colonIndex = input.indexOf(":");
-      if (colonIndex > 0) {
-        const type = input.slice(0, colonIndex).trim();
-        const val = input.slice(colonIndex + 1).trim();
-        if (type && val) {
-          onChange([...value, { type, value: val }]);
-          setInput("");
-        }
-      }
-    }
-    if (e.key === "Backspace" && !input && value.length > 0) {
-      onChange(value.slice(0, -1));
-    }
-  };
+  if (value.length === 0) {
+    return <p className="text-sm text-muted-foreground">No identifiers</p>;
+  }
 
   return (
     <div
       className={cn(
-        "flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-[36px]",
+        "flex flex-wrap gap-1.5",
         disabled && "opacity-50 cursor-not-allowed",
       )}
     >
@@ -1038,7 +1104,7 @@ function IdentifierTagInput({
           variant="secondary"
         >
           <span className="truncate" title={`${id.type}:${id.value}`}>
-            {id.type}:{id.value}
+            {formatIdentifierType(id.type, identifierTypes)}: {id.value}
           </span>
           {!disabled && (
             <button
@@ -1051,16 +1117,6 @@ function IdentifierTagInput({
           )}
         </Badge>
       ))}
-      {!disabled && (
-        <input
-          className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={value.length === 0 ? "type:value (press Enter)" : ""}
-          type="text"
-          value={input}
-        />
-      )}
     </div>
   );
 }
