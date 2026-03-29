@@ -1326,7 +1326,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 	var allResults []EnrichSearchResult
 	for _, rt := range runtimes {
-
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
 			continue // Skip failed plugins
