@@ -17,7 +17,7 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/libraries/utils";
 
-export interface CBZPagePickerProps {
+export interface PagePickerProps {
   fileId: number;
   pageCount: number;
   currentPage: number | null;
@@ -28,10 +28,10 @@ export interface CBZPagePickerProps {
 }
 
 /**
- * Dialog for selecting a page from a CBZ file.
+ * Dialog for selecting a page from a file.
  * Shows a large preview of the focused page with a scrollable thumbnail strip below.
  */
-const CBZPagePicker = ({
+const PagePicker = ({
   fileId,
   pageCount,
   currentPage,
@@ -39,7 +39,7 @@ const CBZPagePicker = ({
   open,
   onOpenChange,
   title = "Select Page",
-}: CBZPagePickerProps) => {
+}: PagePickerProps) => {
   // Track the currently focused/previewed page (not necessarily the selected one)
   const [focusedPage, setFocusedPage] = useState<number>(currentPage ?? 0);
   // Track the last loaded page to avoid flashing during transitions
@@ -344,4 +344,4 @@ const CBZPagePicker = ({
   );
 };
 
-export default CBZPagePicker;
+export default PagePicker;

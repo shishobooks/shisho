@@ -54,8 +54,8 @@ vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
 }));
 
-// Mock CBZPagePicker
-vi.mock("@/components/files/CBZPagePicker", () => ({
+// Mock PagePicker
+vi.mock("@/components/files/PagePicker", () => ({
   default: ({
     onSelect,
     open,

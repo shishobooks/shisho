@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import CBZPagePicker from "@/components/files/CBZPagePicker";
+import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -782,9 +782,9 @@ export function FileEditDialog({
                 </div>
               </div>
 
-              {/* CBZ Page Picker Dialog */}
+              {/* Page Picker Dialog */}
               {file.file_type === FileTypeCBZ && file.page_count != null && (
-                <CBZPagePicker
+                <PagePicker
                   currentPage={pendingCoverPage ?? file.cover_page ?? null}
                   fileId={file.id}
                   onOpenChange={setCoverPagePickerOpen}

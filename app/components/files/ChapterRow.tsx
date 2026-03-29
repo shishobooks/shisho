@@ -1,10 +1,10 @@
-import CBZPagePicker from "./CBZPagePicker";
-import CBZPagePreview from "./CBZPagePreview";
 import {
   countDescendants,
   formatTimestampMs,
   parseTimestampMs,
 } from "./chapterUtils";
+import PagePicker from "./PagePicker";
+import PagePreview from "./PagePreview";
 import {
   ChevronDown,
   ChevronLeft,
@@ -445,7 +445,7 @@ const ChapterRow = (props: ChapterRowProps) => {
       <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
         {/* Small thumbnail with hover preview (clickable to open page picker) */}
         {fileId != null && (
-          <CBZPagePreview
+          <PagePreview
             fileId={fileId}
             onClick={() => setPagePickerOpen(true)}
             page={currentPage}
@@ -508,7 +508,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Page picker dialog */}
         {fileId != null && (
-          <CBZPagePicker
+          <PagePicker
             currentPage={currentPage}
             fileId={fileId}
             key={fileId}
@@ -628,9 +628,9 @@ const ChapterRow = (props: ChapterRowProps) => {
           <div className="w-5" />
         ) : null}
 
-        {/* CBZ: Page thumbnail with hover preview */}
+        {/* Page thumbnail with hover preview */}
         {isCbz && chapter.start_page != null && fileId != null && (
-          <CBZPagePreview
+          <PagePreview
             fileId={fileId}
             page={chapter.start_page}
             thumbnailSize={60}

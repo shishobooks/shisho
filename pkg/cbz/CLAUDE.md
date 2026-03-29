@@ -346,7 +346,7 @@ type ParsedChapter struct {
 
 This applies to:
 - `ChapterRow.tsx` - page display and edit inputs
-- `CBZPagePicker.tsx` - page selection dialog
+- `PagePicker.tsx` - page selection dialog
 - `CBZReader.tsx` - reader page counter
 - `FileChaptersTab.tsx` - uncovered pages warning
 
