@@ -556,13 +556,15 @@ export const usePluginApply = () => {
     mutationFn: (payload) => {
       return API.request("POST", "/plugins/apply", payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [BooksQueryKey.ListBooks],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [BooksQueryKey.RetrieveBook],
-      });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [BooksQueryKey.ListBooks],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [BooksQueryKey.RetrieveBook],
+        }),
+      ]);
     },
   });
 };

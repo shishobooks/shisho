@@ -722,8 +722,8 @@ export function FileEditDialog({
 
                   {/* Action buttons and status */}
                   <div className="flex flex-col gap-2 pt-1">
-                    {/* Non-CBZ: Upload button */}
-                    {file.file_type !== FileTypeCBZ && (
+                    {/* Upload button — hidden for files with cover_page (CBZ, PDF) */}
+                    {file.cover_page == null && (
                       <>
                         <input
                           accept="image/jpeg,image/png,image/webp"
