@@ -365,12 +365,26 @@ export function IdentifyBookDialog({
                                 <p className="font-medium leading-tight">
                                   {result.title}
                                 </p>
-                                <Badge
-                                  className="shrink-0 text-xs"
-                                  variant="outline"
-                                >
-                                  {pluginLabel(result)}
-                                </Badge>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {result.confidence != null && (
+                                    <Badge
+                                      className={cn(
+                                        "text-xs",
+                                        result.confidence >= 0.9
+                                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                          : result.confidence >= 0.7
+                                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                                      )}
+                                      variant="secondary"
+                                    >
+                                      {Math.round(result.confidence * 100)}%
+                                    </Badge>
+                                  )}
+                                  <Badge className="text-xs" variant="outline">
+                                    {pluginLabel(result)}
+                                  </Badge>
+                                </div>
                               </div>
                               {result.subtitle && (
                                 <p className="text-sm text-muted-foreground/80 leading-tight">

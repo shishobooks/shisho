@@ -520,6 +520,7 @@ export interface PluginSearchResult {
   plugin_scope: string;
   plugin_id: string;
   disabled_fields?: string[];
+  confidence?: number;
 }
 
 export interface PluginSearchResponse {
