@@ -19,7 +19,8 @@ type htmlElement struct {
 	Children   []*htmlElement
 }
 
-// injectHTMLNamespace sets up shisho.html with querySelector and querySelectorAll.
+// injectHTMLNamespace sets up shisho.html with parse, querySelector, and querySelectorAll.
+// Uses a two-step parse-then-query pattern consistent with shisho.xml.
 // No file access needed - operates on in-memory strings.
 func injectHTMLNamespace(vm *goja.Runtime, shishoObj *goja.Object) error {
 	htmlObj := vm.NewObject()
@@ -27,11 +28,27 @@ func injectHTMLNamespace(vm *goja.Runtime, shishoObj *goja.Object) error {
 		return fmt.Errorf("failed to set shisho.html: %w", err)
 	}
 
-	htmlObj.Set("querySelector", func(call goja.FunctionCall) goja.Value { //nolint:errcheck
-		if len(call.Arguments) < 2 {
-			panic(vm.ToValue("shisho.html.querySelector: html and selector arguments are required"))
+	htmlObj.Set("parse", func(call goja.FunctionCall) goja.Value { //nolint:errcheck
+		if len(call.Arguments) < 1 {
+			panic(vm.ToValue("shisho.html.parse: html argument is required"))
 		}
 		htmlStr := call.Argument(0).String()
+
+		doc, err := html.Parse(strings.NewReader(htmlStr))
+		if err != nil {
+			panic(vm.ToValue(fmt.Sprintf("shisho.html.parse: HTML parse error: %s", err)))
+		}
+
+		elem := nodeToHTMLElement(doc)
+		return htmlElementToGojaValue(vm, elem, doc)
+	})
+
+	htmlObj.Set("querySelector", func(call goja.FunctionCall) goja.Value { //nolint:errcheck
+		if len(call.Arguments) < 2 {
+			panic(vm.ToValue("shisho.html.querySelector: doc and selector arguments are required"))
+		}
+
+		node := extractHTMLNode(vm, call.Argument(0))
 		selectorStr := call.Argument(1).String()
 
 		sel, err := cascadia.Parse(selectorStr)
@@ -39,25 +56,21 @@ func injectHTMLNamespace(vm *goja.Runtime, shishoObj *goja.Object) error {
 			panic(vm.ToValue(fmt.Sprintf("shisho.html.querySelector: invalid selector: %s", err)))
 		}
 
-		doc, err := html.Parse(strings.NewReader(htmlStr))
-		if err != nil {
-			panic(vm.ToValue(fmt.Sprintf("shisho.html.querySelector: HTML parse error: %s", err)))
-		}
-
-		match := cascadia.Query(doc, sel)
+		match := cascadia.Query(node, sel)
 		if match == nil {
 			return goja.Null()
 		}
 
 		elem := nodeToHTMLElement(match)
-		return htmlElementToGojaValue(vm, elem)
+		return htmlElementToGojaValue(vm, elem, match)
 	})
 
 	htmlObj.Set("querySelectorAll", func(call goja.FunctionCall) goja.Value { //nolint:errcheck
 		if len(call.Arguments) < 2 {
-			panic(vm.ToValue("shisho.html.querySelectorAll: html and selector arguments are required"))
+			panic(vm.ToValue("shisho.html.querySelectorAll: doc and selector arguments are required"))
 		}
-		htmlStr := call.Argument(0).String()
+
+		node := extractHTMLNode(vm, call.Argument(0))
 		selectorStr := call.Argument(1).String()
 
 		sel, err := cascadia.Parse(selectorStr)
@@ -65,21 +78,36 @@ func injectHTMLNamespace(vm *goja.Runtime, shishoObj *goja.Object) error {
 			panic(vm.ToValue(fmt.Sprintf("shisho.html.querySelectorAll: invalid selector: %s", err)))
 		}
 
-		doc, err := html.Parse(strings.NewReader(htmlStr))
-		if err != nil {
-			panic(vm.ToValue(fmt.Sprintf("shisho.html.querySelectorAll: HTML parse error: %s", err)))
-		}
-
-		matches := cascadia.QueryAll(doc, sel)
+		matches := cascadia.QueryAll(node, sel)
 		result := make([]interface{}, len(matches))
 		for i, m := range matches {
 			elem := nodeToHTMLElement(m)
-			result[i] = htmlElementToGojaValue(vm, elem)
+			result[i] = htmlElementToGojaValue(vm, elem, m)
 		}
 		return vm.ToValue(result)
 	})
 
 	return nil
+}
+
+// extractHTMLNode retrieves the stored *html.Node from a goja object.
+// Panics with a descriptive error if the object doesn't contain a valid node.
+func extractHTMLNode(vm *goja.Runtime, val goja.Value) *html.Node {
+	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+		panic(vm.ToValue("shisho.html: invalid document — use shisho.html.parse() first"))
+	}
+
+	obj := val.ToObject(vm)
+	nodeVal := obj.Get("__node")
+	if nodeVal == nil || goja.IsUndefined(nodeVal) {
+		panic(vm.ToValue("shisho.html: invalid document — use shisho.html.parse() first"))
+	}
+
+	node, ok := nodeVal.Export().(*html.Node)
+	if !ok {
+		panic(vm.ToValue("shisho.html: invalid document — use shisho.html.parse() first"))
+	}
+	return node
 }
 
 // nodeToHTMLElement converts an html.Node to our htmlElement struct.
@@ -133,8 +161,9 @@ func renderInnerHTML(n *html.Node) string {
 	return buf.String()
 }
 
-// htmlElementToGojaValue converts an htmlElement to a goja object.
-func htmlElementToGojaValue(vm *goja.Runtime, elem *htmlElement) goja.Value {
+// htmlElementToGojaValue converts an htmlElement to a goja object,
+// storing the original *html.Node as a hidden __node property for querySelector reuse.
+func htmlElementToGojaValue(vm *goja.Runtime, elem *htmlElement, node *html.Node) goja.Value {
 	obj := vm.NewObject()
 	obj.Set("tag", elem.Tag)             //nolint:errcheck
 	obj.Set("text", elem.Text)           //nolint:errcheck
@@ -146,11 +175,34 @@ func htmlElementToGojaValue(vm *goja.Runtime, elem *htmlElement) goja.Value {
 	}
 	obj.Set("attributes", attrs) //nolint:errcheck
 
+	// Build children with matching html.Node references
+	childNodes := childElementNodes(node)
 	children := make([]interface{}, len(elem.Children))
 	for i, child := range elem.Children {
-		children[i] = htmlElementToGojaValue(vm, child)
+		var childNode *html.Node
+		if i < len(childNodes) {
+			childNode = childNodes[i]
+		}
+		children[i] = htmlElementToGojaValue(vm, child, childNode)
 	}
 	obj.Set("children", vm.ToValue(children)) //nolint:errcheck
 
+	// Store the original *html.Node for querySelector/querySelectorAll reuse
+	obj.Set("__node", node) //nolint:errcheck
+
 	return obj
+}
+
+// childElementNodes returns the child element nodes of n in order.
+func childElementNodes(n *html.Node) []*html.Node {
+	var nodes []*html.Node
+	if n == nil {
+		return nodes
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			nodes = append(nodes, c)
+		}
+	}
+	return nodes
 }

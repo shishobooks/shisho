@@ -202,26 +202,40 @@ export interface HtmlElement {
   children: HtmlElement[];
 }
 
-/** HTML parsing with CSS selector support. */
+/** HTML parsing with CSS selector support. Uses a two-step parse-then-query pattern. */
 export interface ShishoHTML {
+  /**
+   * Parse an HTML string into an element tree.
+   * Returns the root element with stored node references for efficient querying.
+   *
+   * @example
+   * var doc = shisho.html.parse(htmlString);
+   * var title = shisho.html.querySelector(doc, "title");
+   */
+  parse(html: string): HtmlElement;
+
   /**
    * Find the first element matching a CSS selector.
    * Supports full CSS selector syntax (attribute selectors, combinators, pseudo-classes).
+   * The doc argument must be a parsed element from shisho.html.parse() or a previous query result.
    *
    * @example
-   * var meta = shisho.html.querySelector(html, 'meta[name="description"]');
+   * var doc = shisho.html.parse(html);
+   * var meta = shisho.html.querySelector(doc, 'meta[name="description"]');
    * var description = meta ? meta.attributes.content : "";
    */
-  querySelector(html: string, selector: string): HtmlElement | null;
+  querySelector(doc: HtmlElement, selector: string): HtmlElement | null;
 
   /**
    * Find all elements matching a CSS selector.
+   * The doc argument must be a parsed element from shisho.html.parse() or a previous query result.
    *
    * @example
-   * var scripts = shisho.html.querySelectorAll(html, 'script[type="application/ld+json"]');
+   * var doc = shisho.html.parse(html);
+   * var scripts = shisho.html.querySelectorAll(doc, 'script[type="application/ld+json"]');
    * var jsonLd = JSON.parse(scripts[0].text);
    */
-  querySelectorAll(html: string, selector: string): HtmlElement[];
+  querySelectorAll(doc: HtmlElement, selector: string): HtmlElement[];
 }
 
 /** Result from shisho.ffmpeg.transcode(). */

@@ -365,16 +365,21 @@ node.children     // XMLElement[]
 ### shisho.html
 
 ```javascript
-// CSS selector-based HTML querying (uses cascadia for full CSS selector support)
-var elem = shisho.html.querySelector(htmlString, "script[type='application/ld+json']")  // → HTMLElement | null
-var elems = shisho.html.querySelectorAll(htmlString, "li.item")                         // → HTMLElement[]
+// Two-step parse-then-query pattern (consistent with shisho.xml)
+var doc = shisho.html.parse(htmlString)                                    // → HtmlElement (with __node)
+var elem = shisho.html.querySelector(doc, "script[type='application/ld+json']")  // → HtmlElement | null
+var elems = shisho.html.querySelectorAll(doc, "li.item")                         // → HtmlElement[]
 
-// HTMLElement properties:
+// Can also query child elements from previous results
+var section = shisho.html.querySelector(doc, "section")
+var links = shisho.html.querySelectorAll(section, "a")
+
+// HtmlElement properties:
 elem.tag          // string — element tag name
 elem.text         // string — recursive text content (all descendant text nodes)
 elem.innerHTML    // string — raw inner HTML of the element
 elem.attributes   // Record<string, string>
-elem.children     // HTMLElement[]
+elem.children     // HtmlElement[]
 ```
 
 ### shisho.ffmpeg

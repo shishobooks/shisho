@@ -652,25 +652,32 @@ title.children;    // child elements
 
 ### HTML
 
-HTML parsing with full CSS selector support. Use this instead of regex for scraping HTML content.
+HTML parsing with full CSS selector support. Uses a two-step parse-then-query pattern (same as `shisho.xml`). Use this instead of regex for scraping HTML content.
 
 ```javascript
+// Parse once, query many times
+var doc = shisho.html.parse(html);
+
 // Find a single element
-var meta = shisho.html.querySelector(html, 'meta[name="description"]');
+var meta = shisho.html.querySelector(doc, 'meta[name="description"]');
 var description = meta ? meta.attributes.content : "";
 
 // Find all matching elements
-var items = shisho.html.querySelectorAll(html, '.book-item');
+var items = shisho.html.querySelectorAll(doc, '.book-item');
 
 // Extract JSON-LD (common pattern for metadata enrichers)
-var scripts = shisho.html.querySelectorAll(html, 'script[type="application/ld+json"]');
+var scripts = shisho.html.querySelectorAll(doc, 'script[type="application/ld+json"]');
 if (scripts.length > 0) {
   var jsonLd = JSON.parse(scripts[0].text);
 }
 
 // Extract Open Graph data
-var ogTitle = shisho.html.querySelector(html, 'meta[property="og:title"]');
+var ogTitle = shisho.html.querySelector(doc, 'meta[property="og:title"]');
 var title = ogTitle ? ogTitle.attributes.content : "";
+
+// You can also query child elements returned by previous queries
+var section = shisho.html.querySelector(doc, "section.content");
+var links = shisho.html.querySelectorAll(section, "a");
 ```
 
 Each returned element has:
