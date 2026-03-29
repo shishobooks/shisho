@@ -67,10 +67,18 @@ function useImageDimensions(src: string | undefined) {
       setDims(null);
       return;
     }
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => setDims({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => setDims(null);
+    img.onload = () => {
+      if (!cancelled) setDims({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => {
+      if (!cancelled) setDims(null);
+    };
     img.src = src;
+    return () => {
+      cancelled = true;
+    };
   }, [src]);
 
   return dims;
@@ -1100,7 +1108,7 @@ function IdentifierTagInput({
           </span>
           {!disabled && (
             <button
-              className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p.5 cursor-pointer"
+              className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
               onClick={() => onChange(value.filter((_, j) => j !== i))}
               type="button"
             >
