@@ -2765,9 +2765,9 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	// This gives enrichers priority over file metadata (priority 2 > priority 3).
 	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
 
-	// Files with CoverPage derive covers from page content (CBZ, PDF) and must
+	// Page-based formats (CBZ, PDF) derive covers from page content and must
 	// not have them replaced by enricher-downloaded images.
-	if metadata.CoverPage != nil {
+	if models.IsPageBasedFileType(file.FileType) {
 		enrichedMeta.CoverData = metadata.CoverData
 		enrichedMeta.CoverMimeType = metadata.CoverMimeType
 		enrichedMeta.CoverPage = metadata.CoverPage

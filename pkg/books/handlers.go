@@ -1245,9 +1245,9 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		}
 	}
 
-	// Files with cover_page derive their cover from page content (CBZ, PDF) and
+	// Page-based formats (CBZ, PDF) derive their cover from page content and
 	// cannot have it replaced by upload.
-	if file.CoverPage != nil {
+	if models.IsPageBasedFileType(file.FileType) {
 		return errcodes.ValidationError("Cover upload is not supported for this file type.")
 	}
 

@@ -465,7 +465,10 @@ func TestCoverPageProtection_EnricherCannotOverridePageCover(t *testing.T) {
 	require.NotNil(t, enrichedMeta.CoverPage)
 	assert.Equal(t, 0, *enrichedMeta.CoverPage)
 
-	// 3. Apply CoverPage protection (as runMetadataEnrichers does)
+	// 3. Apply page-based file type protection (as runMetadataEnrichers does)
+	// In production, this checks models.IsPageBasedFileType(file.FileType).
+	// For this test, we simulate by checking CoverPage since we're testing the
+	// CBZ case where CoverPage is always set.
 	if fileMetadata.CoverPage != nil {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
@@ -509,7 +512,9 @@ func TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved(t *testing.T) {
 	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
 
-	// CoverPage protection should NOT trigger (no CoverPage)
+	// Page-based file type protection should NOT trigger (EPUB is not page-based)
+	// In production, this checks models.IsPageBasedFileType(file.FileType).
+	// For this test, the EPUB case naturally has no CoverPage, same result.
 	if fileMetadata.CoverPage != nil {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
