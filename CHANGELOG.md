@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-03-29
+
+### Features
+- Refine plugin system: type unification, HTML API, search context, confidence scores (#35)
+- Add PDF cover page selection (#34)
+- Refine identify workflow with cover, date, identifier, and UI improvements (#33)
+
+### CI/CD
+- Upgrade GitHub Actions to Node.js 24 versions (#32)
+
+
 ## [0.0.21] - 2026-03-28
 
 ### Features

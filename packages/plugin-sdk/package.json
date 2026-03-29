@@ -1,6 +1,6 @@
 {
   "name": "@shisho/plugin-sdk",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "TypeScript SDK for Shisho plugin development — types, host API declarations, and test utilities",
   "homepage": "https://github.com/shishobooks/shisho/blob/master/packages/plugin-sdk/README.md",
   "types": "index.d.ts",
