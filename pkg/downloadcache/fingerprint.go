@@ -34,7 +34,7 @@ type Fingerprint struct {
 	Imprint           *string                 `json:"imprint,omitempty"`
 	ReleaseDate       *time.Time              `json:"release_date,omitempty"`
 	Cover             *FingerprintCover       `json:"cover,omitempty"`
-	CoverPage         *int                    `json:"cover_page,omitempty"` // For CBZ files: page index of cover
+	CoverPage         *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
 	Chapters          []FingerprintChapter    `json:"chapters,omitempty"`
 	Format            string                  `json:"format,omitempty"`             // Download format: original, kepub, or plugin:<id>
 	Name              *string                 `json:"name,omitempty"`               // File name (edition name)

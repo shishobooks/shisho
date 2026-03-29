@@ -659,7 +659,7 @@ export function FileEditDialog({
                           : "aspect-[2/3]",
                       )}
                     >
-                      {/* Non-CBZ: Show pending preview or current cover */}
+                      {/* Non-page-based: Show pending preview or current cover */}
                       {file.cover_page == null && (
                         <>
                           {pendingCoverPreview ? (
@@ -685,7 +685,7 @@ export function FileEditDialog({
                           )}
                         </>
                       )}
-                      {/* CBZ: Show pending page or current cover */}
+                      {/* Page-based: Show pending page or current cover */}
                       {file.cover_page != null && (
                         <>
                           {pendingCoverPage !== null &&
@@ -711,7 +711,7 @@ export function FileEditDialog({
                         </>
                       )}
                     </div>
-                    {/* Page number badge for CBZ */}
+                    {/* Page number badge */}
                     {file.cover_page != null &&
                       (pendingCoverPage ?? file.cover_page) != null && (
                         <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
@@ -752,7 +752,7 @@ export function FileEditDialog({
                         </Button>
                       </>
                     )}
-                    {/* CBZ: Select page button */}
+                    {/* Select page button */}
                     {file.cover_page != null && (
                       <Button
                         disabled={setCoverPageMutation.isPending}
