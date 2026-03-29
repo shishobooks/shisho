@@ -160,7 +160,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "Would update:"
     echo "  - CHANGELOG.md"
     echo "  - package.json -> $VERSION"
-    echo "  - packages/plugin-types/package.json -> $VERSION"
+    echo "  - packages/plugin-sdk/package.json -> $VERSION"
     echo "  - website/versioned_docs + website/versions.json"
     echo ""
     echo "Would commit: [Release] $TAG"
@@ -203,14 +203,14 @@ fi
 echo "Updating package.json..."
 npm version "$VERSION" --no-git-tag-version
 
-echo "Updating packages/plugin-types/package.json..."
-cd packages/plugin-types
+echo "Updating packages/plugin-sdk/package.json..."
+cd packages/plugin-sdk
 npm version "$VERSION" --no-git-tag-version
 cd ../..
 
 # Commit changes
 echo "Committing changes..."
-git add CHANGELOG.md package.json packages/plugin-types/package.json
+git add CHANGELOG.md package.json packages/plugin-sdk/package.json
 if [[ -d "website" ]]; then
     git add -A website
 fi

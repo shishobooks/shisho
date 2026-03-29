@@ -363,6 +363,8 @@ Sessionx.vim
 build/
 tmp/
 app/types/generated/*.ts
+packages/plugin-sdk/testing/index.js
+packages/plugin-sdk/testing/index.d.ts
 .playwright-mcp
 
 # Playwright

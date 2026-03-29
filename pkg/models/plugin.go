@@ -59,6 +59,7 @@ type Plugin struct {
 	UpdatedAt              *time.Time   `json:"updated_at"`
 	LoadError              *string      `json:"load_error"`
 	UpdateAvailableVersion *string      `json:"update_available_version"`
+	ConfidenceThreshold    *float64     `json:"confidence_threshold"`
 }
 
 type PluginConfig struct {

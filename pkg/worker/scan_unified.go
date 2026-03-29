@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -2582,7 +2583,7 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.
 // Each enricher's search() is called with the book title as query, and the first
-// result is converted directly to ParsedMetadata via SearchResultToMetadata.
+// result is used directly as ParsedMetadata (no conversion needed).
 // Enrichers are called in user-defined order; first non-empty value per field wins.
 func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.ParsedMetadata, file *models.File, book *models.Book, libraryID int, jobLog *joblogs.JobLogger) *mediafile.ParsedMetadata {
 	if w.pluginManager == nil || metadata == nil {
@@ -2609,9 +2610,38 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		query = metadata.Title
 	}
 
-	// Build shared context objects
-	fileCtx := buildFileContext(file)
-	bookCtx := buildBookContext(book, file)
+	// Determine author: first author name if available
+	var author string
+	if len(book.Authors) > 0 {
+		for _, a := range book.Authors {
+			if a.Person != nil {
+				author = a.Person.Name
+				break
+			}
+		}
+	}
+
+	// Collect identifiers from the file being enriched
+	var identifiers []map[string]interface{}
+	if file != nil && len(file.Identifiers) > 0 {
+		identifiers = make([]map[string]interface{}, len(file.Identifiers))
+		for i, id := range file.Identifiers {
+			identifiers[i] = map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			}
+		}
+	}
+
+	// Pre-load confidence thresholds for all enricher runtimes to avoid per-file DB queries
+	thresholdCache := make(map[string]*float64) // key: "scope/pluginID"
+	for _, rt := range runtimes {
+		key := rt.Scope() + "/" + rt.PluginID()
+		plugin, err := w.pluginService.GetPlugin(ctx, rt.Scope(), rt.PluginID())
+		if err == nil && plugin != nil {
+			thresholdCache[key] = plugin.ConfidenceThreshold
+		}
+	}
 
 	var enrichedMeta mediafile.ParsedMetadata
 	modified := false
@@ -2633,11 +2663,30 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Search for candidates
+		// Build flat search context (same shape as interactive identify)
 		searchCtx := map[string]interface{}{
 			"query": query,
-			"book":  bookCtx,
-			"file":  fileCtx,
+		}
+		if author != "" {
+			searchCtx["author"] = author
+		}
+		if len(identifiers) > 0 {
+			searchCtx["identifiers"] = identifiers
+		}
+
+		// Add file hints (non-modifiable context)
+		if file != nil {
+			fileCtx := map[string]interface{}{
+				"fileType": file.FileType,
+			}
+			if file.AudiobookDurationSeconds != nil {
+				fileCtx["duration"] = *file.AudiobookDurationSeconds
+			}
+			if file.PageCount != nil {
+				fileCtx["pageCount"] = *file.PageCount
+			}
+			fileCtx["filesizeBytes"] = file.FilesizeBytes
+			searchCtx["file"] = fileCtx
 		}
 
 		searchResp, sErr := w.pluginManager.RunMetadataSearch(ctx, rt, searchCtx)
@@ -2652,9 +2701,29 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Take the first result and convert directly to ParsedMetadata
+		// Take the first result directly as ParsedMetadata (no conversion needed)
 		firstResult := searchResp.Results[0]
-		searchMeta := plugins.SearchResultToMetadata(&firstResult)
+		searchMeta := &firstResult
+
+		// Check confidence threshold (if result provides a score)
+		if searchMeta.Confidence != nil {
+			key := rt.Scope() + "/" + rt.PluginID()
+			threshold := w.getConfidenceThresholdFromCache(thresholdCache[key])
+			if *searchMeta.Confidence < threshold {
+				logWarn("enricher result below confidence threshold, skipping", logger.Data{
+					"plugin":     rt.PluginID(),
+					"confidence": fmt.Sprintf("%.0f%%", *searchMeta.Confidence*100),
+					"threshold":  fmt.Sprintf("%.0f%%", threshold*100),
+					"book":       book.Title,
+				})
+				continue
+			}
+			log.Info("enricher auto-applying result", logger.Data{
+				"plugin":     rt.PluginID(),
+				"confidence": fmt.Sprintf("%.0f%%", *searchMeta.Confidence*100),
+				"book":       book.Title,
+			})
+		}
 
 		// Get effective field settings for this library + plugin
 		declaredFields := enricherCap.Fields
@@ -2941,139 +3010,6 @@ func filterMetadataFields(
 	return &result
 }
 
-// buildFileContext converts a File model to a map for plugin enrichment context.
-func buildFileContext(file *models.File) map[string]interface{} {
-	if file == nil {
-		return nil
-	}
-
-	ctx := map[string]interface{}{
-		"id":            file.ID,
-		"filepath":      file.Filepath,
-		"fileType":      file.FileType,
-		"fileRole":      file.FileRole,
-		"filesizeBytes": file.FilesizeBytes,
-	}
-
-	if file.Name != nil {
-		ctx["name"] = *file.Name
-	}
-
-	if file.URL != nil {
-		ctx["url"] = *file.URL
-	}
-
-	return ctx
-}
-
-// buildBookContext converts a Book model to a map for plugin enrichment context.
-// It provides the current DB state of the book, including manually-edited fields.
-// The file parameter is used to find the specific file's identifiers and publisher.
-func buildBookContext(book *models.Book, file *models.File) map[string]interface{} {
-	if book == nil {
-		return nil
-	}
-
-	ctx := map[string]interface{}{
-		"id":    book.ID,
-		"title": book.Title,
-	}
-
-	if book.Subtitle != nil {
-		ctx["subtitle"] = *book.Subtitle
-	}
-
-	if book.Description != nil {
-		ctx["description"] = *book.Description
-	}
-
-	// Series (from BookSeries relations)
-	if len(book.BookSeries) > 0 {
-		seriesList := make([]map[string]interface{}, 0, len(book.BookSeries))
-		for _, bs := range book.BookSeries {
-			if bs.Series == nil {
-				continue
-			}
-			entry := map[string]interface{}{
-				"name": bs.Series.Name,
-			}
-			if bs.SeriesNumber != nil {
-				entry["number"] = *bs.SeriesNumber
-			}
-			seriesList = append(seriesList, entry)
-		}
-		if len(seriesList) > 0 {
-			ctx["series"] = seriesList
-		}
-	}
-
-	// Authors
-	if len(book.Authors) > 0 {
-		authors := make([]map[string]interface{}, 0, len(book.Authors))
-		for _, a := range book.Authors {
-			if a.Person == nil {
-				continue
-			}
-			entry := map[string]interface{}{
-				"name": a.Person.Name,
-			}
-			if a.Role != nil {
-				entry["role"] = *a.Role
-			}
-			authors = append(authors, entry)
-		}
-		if len(authors) > 0 {
-			ctx["authors"] = authors
-		}
-	}
-
-	// Genres
-	if len(book.BookGenres) > 0 {
-		genres := make([]string, 0, len(book.BookGenres))
-		for _, bg := range book.BookGenres {
-			if bg.Genre != nil {
-				genres = append(genres, bg.Genre.Name)
-			}
-		}
-		if len(genres) > 0 {
-			ctx["genres"] = genres
-		}
-	}
-
-	// Tags
-	if len(book.BookTags) > 0 {
-		tags := make([]string, 0, len(book.BookTags))
-		for _, bt := range book.BookTags {
-			if bt.Tag != nil {
-				tags = append(tags, bt.Tag.Name)
-			}
-		}
-		if len(tags) > 0 {
-			ctx["tags"] = tags
-		}
-	}
-
-	// File-level fields: identifiers and publisher from the specific file being enriched
-	if file != nil {
-		if len(file.Identifiers) > 0 {
-			identifiers := make([]map[string]interface{}, len(file.Identifiers))
-			for i, id := range file.Identifiers {
-				identifiers[i] = map[string]interface{}{
-					"type":  id.Type,
-					"value": id.Value,
-				}
-			}
-			ctx["identifiers"] = identifiers
-		}
-
-		if file.Publisher != nil {
-			ctx["publisher"] = file.Publisher.Name
-		}
-	}
-
-	return ctx
-}
-
 // convertSidecarChapters converts sidecar ChapterMetadata to mediafile ParsedChapter.
 func convertSidecarChapters(chapters []sidecar.ChapterMetadata) []mediafile.ParsedChapter {
 	if len(chapters) == 0 {
@@ -3340,4 +3276,16 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	}
 
 	return coverBaseName + ext, mimeType, nil
+}
+
+// getConfidenceThresholdFromCache returns the effective confidence threshold
+// using a pre-loaded plugin threshold value, falling back to global config or default.
+func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float64 {
+	if pluginThreshold != nil {
+		return *pluginThreshold
+	}
+	if w.config != nil {
+		return w.config.EnrichmentConfidenceThreshold
+	}
+	return 0.85
 }

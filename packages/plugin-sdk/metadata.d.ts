@@ -46,9 +46,17 @@ export interface ParsedMetadata {
   releaseDate?: string;
   /** MIME type of cover image (e.g., "image/jpeg"). */
   coverMimeType?: string;
-  /** Public URL for cover image. Server downloads at apply time. Lower precedence than coverData. Domain must be in httpAccess.domains. */
+  /**
+   * URL to download the cover image from. The server handles downloading and validates
+   * the domain against the plugin's httpAccess.domains. This is the recommended way for
+   * enricher plugins to provide covers.
+   */
   coverUrl?: string;
-  /** Cover image data as ArrayBuffer. */
+  /**
+   * Raw cover image data as an ArrayBuffer. Use this for file parsers that extract
+   * embedded covers, or enrichers that generate/composite images. If both coverData
+   * and coverUrl are set, coverData takes precedence (no download occurs).
+   */
   coverData?: ArrayBuffer;
   /** 0-indexed page number for CBZ cover. */
   coverPage?: number;
@@ -60,4 +68,10 @@ export interface ParsedMetadata {
   pageCount?: number;
   identifiers?: ParsedIdentifier[];
   chapters?: ParsedChapter[];
+  /**
+   * Confidence score (0-1) indicating how well this result matches the search query.
+   * Used by the scan pipeline to decide whether to auto-apply enrichment.
+   * If omitted, the result is always applied (backwards compatible).
+   */
+  confidence?: number;
 }

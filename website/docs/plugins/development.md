@@ -13,18 +13,18 @@ A plugin consists of two files:
 - **`manifest.json`** — declares the plugin's identity, capabilities, permissions, and configuration schema
 - **`main.js`** — the JavaScript code that implements the plugin's hooks
 
-### TypeScript Types Package
+### TypeScript SDK
 
-The `@shisho/plugin-types` npm package provides TypeScript type definitions for all plugin APIs. Install it for IDE autocompletion and type checking:
+The `@shisho/plugin-sdk` npm package provides TypeScript type definitions for all plugin APIs. Install it for IDE autocompletion and type checking:
 
 ```bash
-npm install @shisho/plugin-types
+npm install @shisho/plugin-sdk
 ```
 
 You can write plugins in TypeScript and compile to JavaScript, or use plain JavaScript with JSDoc annotations for type hints:
 
 ```javascript
-/// <reference types="@shisho/plugin-types" />
+/// <reference types="@shisho/plugin-sdk" />
 
 /** @type {ShishoPlugin} */
 var plugin = {
@@ -311,17 +311,49 @@ Searches external APIs for book metadata. The enricher implements a single `sear
 
 #### Search Results
 
-The `search()` hook returns results with all metadata fields populated:
+The `search()` hook returns `{ results: ParsedMetadata[] }` — the same metadata structure used by file parsers, with all fields populated:
 
 ```javascript
 var plugin = (function() {
   return {
     metadataEnricher: {
       search: function(context) {
+        // context.query       — search query (title or free text)
+        // context.author      — author name (optional)
+        // context.identifiers — [{ type, value }] (optional)
+
+        // context.file — read-only file metadata for matching
+        // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+        // context.file.duration      — seconds (audiobooks only)
+        // context.file.pageCount     — CBZ/PDF page count
+        // context.file.filesizeBytes — file size in bytes
+
         var apiKey = shisho.config.get("apiKey");
-        var query = shisho.url.encodeURIComponent(context.query);
+
+        // Check for ISBN in query (users may paste ISBNs into the search box)
+        var isbnMatch = context.query.match(/^97[89]\d{10}$/);
+        if (isbnMatch) {
+          // Direct ISBN lookup
+        }
+
+        // Use author to narrow results
+        var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+        if (context.author) {
+          searchUrl += "&author=" + shisho.url.encodeURIComponent(context.author);
+        }
+
+        // Check for known identifiers
+        if (context.identifiers) {
+          for (var i = 0; i < context.identifiers.length; i++) {
+            var id = context.identifiers[i];
+            if (id.type === "isbn_13") {
+              // Direct lookup by ISBN
+            }
+          }
+        }
+
         var resp = shisho.http.fetch(
-          "https://api.example.com/search?q=" + query,
+          searchUrl,
           { headers: { "Authorization": "Bearer " + apiKey } }
         );
 
@@ -340,13 +372,13 @@ var plugin = (function() {
               genres: item.genres,
               tags: item.tags,
               description: item.description,
-              imageUrl: item.coverUrl,
               coverUrl: item.coverUrl,
               releaseDate: item.publishDate,
               publisher: item.publisher,
               imprint: item.imprint,
               url: item.url,
-              identifiers: [{ type: "isbn_13", value: item.isbn }]
+              identifiers: [{ type: "isbn_13", value: item.isbn }],
+              confidence: item.matchScore  // optional, 0-1
             };
           })
         };
@@ -369,24 +401,77 @@ var plugin = (function() {
 | `genres` | `string[]` | Genre classification |
 | `tags` | `string[]` | Freeform labels |
 | `description` | `string` | Book description |
-| `imageUrl` | `string` | Cover thumbnail URL for display in search results |
-| `coverUrl` | `string` | Cover image URL for download (falls back to `imageUrl` if empty) |
+| `coverUrl` | `string` | Cover image URL. Server downloads at apply time. Domain must be in `httpAccess.domains`. |
 | `releaseDate` | `string` | Publication date (`YYYY-MM-DD` or ISO 8601) |
 | `publisher` | `string` | Publisher name |
 | `imprint` | `string` | Imprint name |
 | `url` | `string` | Web URL for the book |
 | `identifiers` | `Array<{type, value}>` | ISBNs, ASINs, etc. |
+| `confidence` | `number` | Optional match confidence score, 0–1 |
 
 All fields except `title` are optional. The more fields you provide, the easier it is for users to pick the correct match and the more metadata can be applied.
 
 #### Cover Images
 
-Search results support two cover-related fields:
+Set `coverUrl` on your search results — the server handles downloading and domain validation automatically. The URL's domain must be in your manifest's `httpAccess.domains` list.
 
-- **`imageUrl`** — Used to display a thumbnail in search results
-- **`coverUrl`** — Used when applying the result. If empty, falls back to `imageUrl`
+```javascript
+return {
+  results: [{
+    title: "Book Title",
+    coverUrl: "https://covers.example.com/book.jpg"
+  }]
+};
+```
 
-**Domain requirement:** When the server downloads a cover URL, it validates the domain against the plugin's `httpAccess.domains` allowlist — the same restriction that applies to `shisho.http.fetch()`. If the domain isn't allowed, the download is rejected. Redirects are also validated.
+For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
+
+#### File Hints
+
+The `context.file` object provides read-only metadata about the file being enriched. Use it to narrow your search — for example, filtering audiobook results by duration or distinguishing a comic from a novel by page count:
+
+```javascript
+search: function(context) {
+  // context.file — read-only file metadata for matching
+  // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+  // context.file.duration      — seconds (audiobooks only)
+  // context.file.pageCount     — CBZ/PDF page count
+  // context.file.filesizeBytes — file size in bytes
+
+  var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+
+  // Narrow to audiobooks when enriching an M4B
+  if (context.file && context.file.fileType === "m4b") {
+    searchUrl += "&type=audiobook";
+    if (context.file.duration) {
+      searchUrl += "&minDuration=" + Math.floor(context.file.duration);
+    }
+  }
+
+  // ...
+}
+```
+
+#### Confidence Scores
+
+Return a `confidence` value (0–1) on each result to tell Shisho how confident you are in the match:
+
+```javascript
+return {
+  results: [{
+    title: "The Great Book",
+    confidence: 0.92,  // optional, 0-1
+    // ... other metadata fields
+  }]
+};
+```
+
+**Auto-apply behavior during automatic scans:**
+
+- Results with `confidence >= threshold` are auto-applied
+- Results with `confidence` below threshold are skipped (logged as a warning)
+- Results without a `confidence` field are always applied (backwards compatible)
+- The threshold defaults to 85% and is configurable globally via `enrichment_confidence_threshold` in your server config, and per-plugin in the plugin settings
 
 #### Enrichment Behavior
 
@@ -563,6 +648,43 @@ title.attributes;  // { "attr": "value" }
 title.children;    // child elements
 ```
 
+### HTML
+
+HTML parsing with full CSS selector support. Uses a two-step parse-then-query pattern (same as `shisho.xml`). Use this instead of regex for scraping HTML content.
+
+```javascript
+// Parse once, query many times
+var doc = shisho.html.parse(html);
+
+// Find a single element
+var meta = shisho.html.querySelector(doc, 'meta[name="description"]');
+var description = meta ? meta.attributes.content : "";
+
+// Find all matching elements
+var items = shisho.html.querySelectorAll(doc, '.book-item');
+
+// Extract JSON-LD (common pattern for metadata enrichers)
+var scripts = shisho.html.querySelectorAll(doc, 'script[type="application/ld+json"]');
+if (scripts.length > 0) {
+  var jsonLd = JSON.parse(scripts[0].text);
+}
+
+// Extract Open Graph data
+var ogTitle = shisho.html.querySelector(doc, 'meta[property="og:title"]');
+var title = ogTitle ? ogTitle.attributes.content : "";
+
+// You can also query child elements returned by previous queries
+var section = shisho.html.querySelector(doc, "section.content");
+var links = shisho.html.querySelectorAll(section, "a");
+```
+
+Each returned element has:
+- `tag` — element tag name (e.g., `"div"`, `"meta"`)
+- `attributes` — key-value pairs (e.g., `{ name: "description", content: "..." }`)
+- `text` — recursive inner text content
+- `innerHTML` — raw inner HTML string
+- `children` — child elements
+
 ### FFmpeg
 
 Requires the `ffmpegAccess` capability:
@@ -605,3 +727,45 @@ The default plugin directory is `plugins/` relative to the Shisho data directory
 ### Hot Reload
 
 During development, you can modify your plugin's files and click **Reload** in the admin interface to pick up changes without restarting the server.
+
+## Testing Plugins
+
+The SDK includes test utilities at `@shisho/plugin-sdk/testing` that eliminate mock boilerplate.
+
+### Setup
+
+```typescript
+import { createMockShisho } from "@shisho/plugin-sdk/testing";
+
+const mockShisho = createMockShisho({
+  fetch: {
+    "https://api.example.com/search?q=test": {
+      status: 200,
+      body: JSON.stringify({ results: [{ title: "Test Book" }] }),
+    },
+  },
+  config: {
+    api_key: "test-key",
+  },
+});
+
+globalThis.shisho = mockShisho;
+```
+
+### What's Included
+
+| API | Behavior |
+|-----|----------|
+| `log.*` | Silent no-ops |
+| `url.*` | Real implementations (encodeURIComponent, searchParams, parse) |
+| `config.*` | Returns values from the config map you provide |
+| `http.fetch` | Route-based mock — matches URLs, throws on unmatched |
+| `fs.*` | Path-based mock — virtual filesystem from the map you provide |
+| `xml.*` | Real implementation (parse, querySelector, querySelectorAll) |
+| `html.*` | Real implementation (parse, querySelector, querySelectorAll with CSS selectors) |
+
+Unmatched fetch URLs and missing fs paths throw descriptive errors so you know exactly what mock data to add.
+
+:::warning[Runtime Differences]
+Plugins run in a **goja** runtime (ES5.1), but tests run in **Node.js**. Your tests may pass using ES6+ features (arrow functions, `const`/`let`, template literals, destructuring) that will fail in the actual plugin runtime. Always write your `main.js` using ES5.1 syntax (var, function expressions, string concatenation) — the test utilities mock the `shisho.*` APIs, not the JavaScript runtime itself.
+:::

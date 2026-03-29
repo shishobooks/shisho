@@ -52,6 +52,9 @@ type Config struct {
 	PluginDir     string `koanf:"plugin_dir" json:"plugin_dir"`
 	PluginDataDir string `koanf:"plugin_data_dir" json:"plugin_data_dir"`
 
+	// Enrichment settings
+	EnrichmentConfidenceThreshold float64 `koanf:"enrichment_confidence_threshold" json:"enrichment_confidence_threshold"`
+
 	// Library monitor settings
 	LibraryMonitorEnabled      bool `koanf:"library_monitor_enabled" json:"library_monitor_enabled"`
 	LibraryMonitorDelaySeconds int  `koanf:"library_monitor_delay_seconds" json:"library_monitor_delay_seconds"`
@@ -84,28 +87,29 @@ func (c *Config) IsTestMode() bool {
 // defaults returns a Config with default values.
 func defaults() *Config {
 	return &Config{
-		DatabaseConnectRetryCount:  5,
-		DatabaseConnectRetryDelay:  2 * time.Second,
-		DatabaseDebug:              false,
-		DatabaseFilePath:           "/config/shisho.db",
-		DatabaseBusyTimeout:        5 * time.Second,
-		DatabaseMaxRetries:         5,
-		ServerHost:                 "0.0.0.0",
-		ServerPort:                 3689,
-		SyncIntervalMinutes:        60,
-		WorkerProcesses:            2,
-		JobRetentionDays:           30,
-		CacheDir:                   "/config/cache",
-		PluginDir:                  "/config/plugins/installed",
-		PluginDataDir:              "/config/plugins/data",
-		DownloadCacheMaxSizeGB:     5,
-		PDFRenderDPI:               200,
-		PDFRenderQuality:           85,
-		LibraryMonitorEnabled:      true,
-		LibraryMonitorDelaySeconds: 60,
-		SupplementExcludePatterns:  []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
-		SessionDurationDays:        30,
-		JWTSecret:                  "", // Must be set via config or env var
+		DatabaseConnectRetryCount:     5,
+		DatabaseConnectRetryDelay:     2 * time.Second,
+		DatabaseDebug:                 false,
+		DatabaseFilePath:              "/config/shisho.db",
+		DatabaseBusyTimeout:           5 * time.Second,
+		DatabaseMaxRetries:            5,
+		ServerHost:                    "0.0.0.0",
+		ServerPort:                    3689,
+		SyncIntervalMinutes:           60,
+		WorkerProcesses:               2,
+		JobRetentionDays:              30,
+		CacheDir:                      "/config/cache",
+		PluginDir:                     "/config/plugins/installed",
+		PluginDataDir:                 "/config/plugins/data",
+		EnrichmentConfidenceThreshold: 0.85,
+		DownloadCacheMaxSizeGB:        5,
+		PDFRenderDPI:                  200,
+		PDFRenderQuality:              85,
+		LibraryMonitorEnabled:         true,
+		LibraryMonitorDelaySeconds:    60,
+		SupplementExcludePatterns:     []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
+		SessionDurationDays:           30,
+		JWTSecret:                     "", // Must be set via config or env var
 	}
 }
 

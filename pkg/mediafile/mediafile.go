@@ -56,6 +56,8 @@ type ParsedMetadata struct {
 	// "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate",
 	// "cover", "identifiers".
 	FieldDataSources map[string]string `json:"-"`
+	PluginScope      string            `json:"-"`
+	PluginID         string            `json:"-"`
 	// Duration is the length of the audiobook (M4B files only)
 	Duration time.Duration `json:"duration"`
 	// BitrateBps is the audio bitrate in bits per second (M4B files only)
@@ -68,6 +70,10 @@ type ParsedMetadata struct {
 	Identifiers []ParsedIdentifier `json:"identifiers"`
 	// Chapters contains chapter information parsed from file metadata
 	Chapters []ParsedChapter `json:"chapters"`
+	// Confidence is an optional score (0-1) indicating how confident the plugin
+	// is that this result matches the search query. Used by the scan pipeline
+	// to decide whether to auto-apply enrichment results.
+	Confidence *float64 `json:"confidence,omitempty"`
 }
 
 func (m *ParsedMetadata) String() string {

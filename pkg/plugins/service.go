@@ -330,6 +330,16 @@ func (s *Service) UpsertIdentifierTypes(ctx context.Context, scope, pluginID str
 	})
 }
 
+// UpdateConfidenceThreshold sets the per-plugin confidence threshold.
+func (s *Service) UpdateConfidenceThreshold(ctx context.Context, scope, pluginID string, threshold *float64) error {
+	_, err := s.db.NewUpdate().Model((*models.Plugin)(nil)).
+		Set("confidence_threshold = ?", threshold).
+		Where("scope = ?", scope).
+		Where("id = ?", pluginID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // GetPlugin returns a single plugin by scope and ID, or nil if not found.
 func (s *Service) GetPlugin(ctx context.Context, scope, id string) (*models.Plugin, error) {
 	plugin := new(models.Plugin)

@@ -1,11 +1,11 @@
-# @shisho/plugin-types
+# @shisho/plugin-sdk
 
-TypeScript type definitions for [Shisho](https://github.com/shishobooks/shisho) plugin development. Provides IDE autocompletion and type checking for the `shisho.*` host APIs, hook contexts, metadata structures, and manifest schema.
+TypeScript SDK for [Shisho](https://github.com/shishobooks/shisho) plugin development. Provides IDE autocompletion and type checking for the `shisho.*` host APIs, hook contexts, metadata structures, and manifest schema.
 
 ## Installation
 
 ```bash
-npm install --save-dev @shisho/plugin-types
+npm install --save-dev @shisho/plugin-sdk
 ```
 
 ## Usage
@@ -28,7 +28,7 @@ import type {
   SearchContext,
   SearchResponse,
   ShishoPlugin,
-} from "@shisho/plugin-types";
+} from "@shisho/plugin-sdk";
 
 const plugin: ShishoPlugin = {
   fileParser: {
@@ -68,7 +68,7 @@ const plugin: ShishoPlugin = {
 Add a triple-slash reference at the top of your `main.js` and use JSDoc annotations for type checking:
 
 ```javascript
-/// <reference types="@shisho/plugin-types" />
+/// <reference types="@shisho/plugin-sdk" />
 
 var plugin = (function () {
   return {

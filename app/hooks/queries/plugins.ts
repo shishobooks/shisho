@@ -66,6 +66,7 @@ export interface PluginConfigResponse {
   values: Record<string, unknown>;
   declaredFields?: string[];
   fieldSettings?: Record<string, boolean>;
+  confidence_threshold?: number | null;
 }
 
 export enum QueryKey {
@@ -327,13 +328,19 @@ export const useSavePluginConfig = () => {
       scope,
       id,
       config,
+      confidence_threshold,
+      clear_confidence_threshold,
     }: {
       scope: string;
       id: string;
       config: Record<string, string>;
+      confidence_threshold?: number | null;
+      clear_confidence_threshold?: boolean;
     }) => {
       return API.request<Plugin>("PATCH", `/plugins/installed/${scope}/${id}`, {
         config,
+        confidence_threshold,
+        clear_confidence_threshold,
       });
     },
     onSuccess: (_data, variables) => {
@@ -520,6 +527,7 @@ export interface PluginSearchResult {
   plugin_scope: string;
   plugin_id: string;
   disabled_fields?: string[];
+  confidence?: number;
 }
 
 export interface PluginSearchResponse {
@@ -530,12 +538,19 @@ export const usePluginSearch = () => {
   return useMutation<
     PluginSearchResponse,
     ShishoAPIError,
-    { query: string; bookId: number }
+    {
+      query: string;
+      bookId: number;
+      author?: string;
+      identifiers?: Array<{ type: string; value: string }>;
+    }
   >({
-    mutationFn: ({ query, bookId }) => {
+    mutationFn: ({ query, bookId, author, identifiers }) => {
       return API.request<PluginSearchResponse>("POST", "/plugins/search", {
         query,
         book_id: bookId,
+        author: author || undefined,
+        identifiers: identifiers?.length ? identifiers : undefined,
       });
     },
   });

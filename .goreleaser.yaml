@@ -44,4 +44,4 @@ release:
   footer: |
     **Full Changelog**: https://github.com/shishobooks/shisho/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-    **npm package**: `npm install @shisho/plugin-types@{{ trimprefix .Tag "v" }}`
+    **npm package**: `npm install @shisho/plugin-sdk@{{ trimprefix .Tag "v" }}`

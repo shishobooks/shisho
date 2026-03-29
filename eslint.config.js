@@ -17,6 +17,8 @@ export default tseslint.config(
       "app/components/ui",
       "test-results",
       "pkg/plugins/testdata/*",
+      "packages/plugin-sdk/testing/index.js",
+      "packages/plugin-sdk/testing/index.d.ts",
       "tmp",
     ],
   },
@@ -57,6 +59,12 @@ export default tseslint.config(
   },
   {
     files: ["website/*.{js,ts}"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ["packages/**/*.ts"],
     languageOptions: {
       globals: globals.node,
     },

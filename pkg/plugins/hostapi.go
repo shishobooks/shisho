@@ -66,6 +66,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 		return err
 	}
 
+	// Set up html namespace
+	if err := injectHTMLNamespace(vm, shishoObj); err != nil {
+		return err
+	}
+
 	// Set up ffmpeg namespace
 	if err := injectFFmpegNamespace(vm, shishoObj, rt); err != nil {
 		return err

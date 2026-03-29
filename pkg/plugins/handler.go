@@ -118,9 +118,11 @@ type installPayload struct {
 }
 
 type updatePayload struct {
-	Enabled    *bool             `json:"enabled"`
-	AutoUpdate *bool             `json:"auto_update"`
-	Config     map[string]string `json:"config"`
+	Enabled                  *bool             `json:"enabled"`
+	AutoUpdate               *bool             `json:"auto_update"`
+	Config                   map[string]string `json:"config"`
+	ConfidenceThreshold      *float64          `json:"confidence_threshold"`
+	ClearConfidenceThreshold *bool             `json:"clear_confidence_threshold"`
 }
 
 type orderEntry struct {
@@ -133,8 +135,10 @@ type setOrderPayload struct {
 }
 
 type searchPayload struct {
-	Query  string `json:"query" validate:"required"`
-	BookID int    `json:"book_id" validate:"required"`
+	Query       string                       `json:"query" validate:"required"`
+	BookID      int                          `json:"book_id" validate:"required"`
+	Author      string                       `json:"author"`
+	Identifiers []mediafile.ParsedIdentifier `json:"identifiers"`
 }
 
 type applyPayload struct {
@@ -416,6 +420,21 @@ func (h *handler) update(c echo.Context) error {
 				return errors.WithStack(err)
 			}
 		}
+	}
+
+	if payload.ClearConfidenceThreshold != nil && *payload.ClearConfidenceThreshold {
+		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, nil); err != nil {
+			return errors.WithStack(err)
+		}
+		plugin.ConfidenceThreshold = nil
+	} else if payload.ConfidenceThreshold != nil {
+		if *payload.ConfidenceThreshold < 0 || *payload.ConfidenceThreshold > 1 {
+			return errcodes.ValidationError("confidence_threshold must be between 0 and 1")
+		}
+		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, payload.ConfidenceThreshold); err != nil {
+			return errors.WithStack(err)
+		}
+		plugin.ConfidenceThreshold = payload.ConfidenceThreshold
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))
@@ -798,10 +817,11 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 }
 
 type pluginConfigResponse struct {
-	Schema         ConfigSchema           `json:"schema"`
-	Values         map[string]interface{} `json:"values"`
-	DeclaredFields []string               `json:"declaredFields"`
-	FieldSettings  map[string]bool        `json:"fieldSettings"`
+	Schema              ConfigSchema           `json:"schema"`
+	Values              map[string]interface{} `json:"values"`
+	DeclaredFields      []string               `json:"declaredFields"`
+	FieldSettings       map[string]bool        `json:"fieldSettings"`
+	ConfidenceThreshold *float64               `json:"confidence_threshold"`
 }
 
 func (h *handler) getConfig(c echo.Context) error {
@@ -838,11 +858,23 @@ func (h *handler) getConfig(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Get plugin for confidence threshold
+	plugin, err := h.service.GetPlugin(ctx, scope, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var confidenceThreshold *float64
+	if plugin != nil {
+		confidenceThreshold = plugin.ConfidenceThreshold
+	}
+
 	return c.JSON(http.StatusOK, pluginConfigResponse{
-		Schema:         schema,
-		Values:         values,
-		DeclaredFields: declaredFields,
-		FieldSettings:  fieldSettings,
+		Schema:              schema,
+		Values:              values,
+		DeclaredFields:      declaredFields,
+		FieldSettings:       fieldSettings,
+		ConfidenceThreshold: confidenceThreshold,
 	})
 }
 
@@ -1247,6 +1279,15 @@ func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// EnrichSearchResult wraps ParsedMetadata with server-added fields for the
+// search HTTP response (sent to the frontend, not used by plugins).
+type EnrichSearchResult struct {
+	mediafile.ParsedMetadata
+	PluginScope    string   `json:"plugin_scope"`
+	PluginID       string   `json:"plugin_id"`
+	DisabledFields []string `json:"disabled_fields,omitempty"`
+}
+
 // searchMetadata runs search() across all enabled enricher plugins and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -1263,7 +1304,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 	if len(runtimes) == 0 {
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"results": []SearchResult{},
+			"results": []EnrichSearchResult{},
 		})
 	}
 
@@ -1275,12 +1316,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		var b models.Book
 		err = h.db.NewSelect().Model(&b).
 			Where("b.id = ?", payload.BookID).
-			Relation("Authors").
-			Relation("Authors.Person").
-			Relation("BookSeries").
-			Relation("BookSeries.Series").
 			Relation("Files").
-			Relation("Files.Identifiers").
 			Scan(ctx)
 		if err == nil {
 			book = &b
@@ -1301,23 +1337,42 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errcodes.Forbidden("You don't have access to this library")
 	}
 
-	// Build context objects
-	bookCtx := buildSearchBookContext(book)
-	fileCtx := map[string]interface{}{} // Minimal file context for search
-	if len(book.Files) > 0 {
-		f := book.Files[0]
-		fileCtx["fileType"] = f.FileType
-		fileCtx["filePath"] = f.Filepath
+	// Build flat search context from payload
+	searchCtx := map[string]interface{}{
+		"query": payload.Query,
+	}
+	if payload.Author != "" {
+		searchCtx["author"] = payload.Author
+	}
+	if len(payload.Identifiers) > 0 {
+		ids := make([]map[string]interface{}, len(payload.Identifiers))
+		for i, id := range payload.Identifiers {
+			ids[i] = map[string]interface{}{
+				"type":  id.Type,
+				"value": id.Value,
+			}
+		}
+		searchCtx["identifiers"] = ids
 	}
 
-	var allResults []SearchResult
-	for _, rt := range runtimes {
-		searchCtx := map[string]interface{}{
-			"query": payload.Query,
-			"book":  bookCtx,
-			"file":  fileCtx,
+	// Add file hints from the book's first file (non-modifiable context)
+	if len(book.Files) > 0 {
+		f := book.Files[0]
+		fileCtx := map[string]interface{}{
+			"fileType": f.FileType,
 		}
+		if f.AudiobookDurationSeconds != nil {
+			fileCtx["duration"] = *f.AudiobookDurationSeconds
+		}
+		if f.PageCount != nil {
+			fileCtx["pageCount"] = *f.PageCount
+		}
+		fileCtx["filesizeBytes"] = f.FilesizeBytes
+		searchCtx["file"] = fileCtx
+	}
 
+	var allResults []EnrichSearchResult
+	for _, rt := range runtimes {
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
 			continue // Skip failed plugins
@@ -1341,10 +1396,14 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			}
 		}
 
-		for i := range resp.Results {
-			resp.Results[i].DisabledFields = disabledFields
+		for _, md := range resp.Results {
+			allResults = append(allResults, EnrichSearchResult{
+				ParsedMetadata: md,
+				PluginScope:    md.PluginScope,
+				PluginID:       md.PluginID,
+				DisabledFields: disabledFields,
+			})
 		}
-		allResults = append(allResults, resp.Results...)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -1705,71 +1764,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	return nil
-}
-
-// buildSearchBookContext builds a context map for search/enrich from a book model.
-func buildSearchBookContext(book *models.Book) map[string]interface{} {
-	ctx := map[string]interface{}{
-		"id":    book.ID,
-		"title": book.Title,
-	}
-
-	if book.Subtitle != nil {
-		ctx["subtitle"] = *book.Subtitle
-	}
-	if book.Description != nil {
-		ctx["description"] = *book.Description
-	}
-
-	if len(book.Authors) > 0 {
-		authors := make([]map[string]interface{}, 0, len(book.Authors))
-		for _, a := range book.Authors {
-			author := map[string]interface{}{}
-			if a.Person != nil {
-				author["name"] = a.Person.Name
-			}
-			if a.Role != nil {
-				author["role"] = *a.Role
-			}
-			authors = append(authors, author)
-		}
-		ctx["authors"] = authors
-	}
-
-	if len(book.BookSeries) > 0 {
-		series := make([]map[string]interface{}, 0, len(book.BookSeries))
-		for _, bs := range book.BookSeries {
-			if bs.Series == nil {
-				continue
-			}
-			s := map[string]interface{}{
-				"name": bs.Series.Name,
-			}
-			if bs.SeriesNumber != nil {
-				s["number"] = *bs.SeriesNumber
-			}
-			series = append(series, s)
-		}
-		if len(series) > 0 {
-			ctx["series"] = series
-		}
-	}
-
-	// Collect identifiers from all files
-	var identifiers []map[string]interface{}
-	for _, f := range book.Files {
-		for _, id := range f.Identifiers {
-			identifiers = append(identifiers, map[string]interface{}{
-				"type":  id.Type,
-				"value": id.Value,
-			})
-		}
-	}
-	if len(identifiers) > 0 {
-		ctx["identifiers"] = identifiers
-	}
-
-	return ctx
 }
 
 // convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.

@@ -16,6 +16,7 @@ pkg/plugins/
   hostapi_url.go    - URL utilities (encode/decode/searchParams/parse)
   hostapi_archive.go - ZIP operations
   hostapi_xml.go    - XML parsing
+  hostapi_html.go   - HTML parsing with CSS selectors (cascadia)
   hostapi_ffmpeg.go - FFmpeg transcode/probe/version
   hostapi_shell.go  - Shell exec with command allowlist
   generator.go      - PluginGenerator (filegen.Generator interface)
@@ -26,18 +27,18 @@ pkg/plugins/
   routes.go         - Echo route registration
 ```
 
-## Plugin Types SDK (`@shisho/plugin-types`)
+## Plugin SDK (`@shisho/plugin-sdk`)
 
-The `packages/plugin-types/` directory contains a TypeScript type definitions package that plugin developers install for IDE autocompletion and type checking. It is the public API contract for plugin authors.
+The `packages/plugin-sdk/` directory contains a TypeScript type definitions package that plugin developers install for IDE autocompletion and type checking. It is the public API contract for plugin authors.
 
 **CRITICAL: The SDK must always be kept in sync with the Go implementation.** Any change to host APIs, hook contexts/return types, manifest schema, or metadata structures MUST be reflected in the corresponding `.d.ts` files. Breaking changes to the SDK should be avoided whenever possible — prefer additive changes (new optional fields) over removals or type changes.
 
 ```
-packages/plugin-types/
-├── package.json       # @shisho/plugin-types
+packages/plugin-sdk/
+├── package.json       # @shisho/plugin-sdk
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
-├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, ffmpeg, shell)
+├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, ffmpeg, shell)
 ├── hooks.d.ts         # Hook contexts, return types, ShishoPlugin interface
 ├── metadata.d.ts      # ParsedMetadata, ParsedAuthor, ParsedIdentifier, ParsedChapter
 └── manifest.d.ts      # PluginManifest, Capabilities, ConfigSchema, ConfigField
@@ -192,10 +193,22 @@ Searches external sources for metadata. No file access beyond plugin dir. Search
 ```javascript
 metadataEnricher: {
   search: function(context) {
-    // context.book  - { title, authors, identifiers, ... }
-    // context.file  - { fileType }
+    // context.query       - search query (title or free text)
+    // context.author      - author name (optional)
+    // context.identifiers - [{ type, value }] (optional)
+
+    // context.file        - read-only file hints (non-modifiable)
+    // context.file.fileType      - "epub", "cbz", "m4b", "pdf"
+    // context.file.duration      - seconds (audiobooks only, float)
+    // context.file.pageCount     - CBZ/PDF page count (integer)
+    // context.file.filesizeBytes - file size in bytes (integer)
+
     var apiKey = shisho.config.get("apiKey");
-    var resp = shisho.http.fetch("https://api.example.com/search?q=" + context.book.title, {});
+    var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+    if (context.author) {
+      searchUrl += "&author=" + shisho.url.encodeURIComponent(context.author);
+    }
+    var resp = shisho.http.fetch(searchUrl, {});
     var data = resp.json();
     return {
       results: data.items.map(function(item) {
@@ -206,7 +219,8 @@ metadataEnricher: {
           releaseDate: item.date,
           genres: item.genres,
           coverUrl: item.image,
-          identifiers: [{ type: "isbn_13", value: item.isbn }]
+          identifiers: [{ type: "isbn_13", value: item.isbn }],
+          confidence: item.matchScore  // optional, 0-1
         };
       })
     };
@@ -216,7 +230,7 @@ metadataEnricher: {
 
 **Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx) → *SearchResponse`
 
-**SearchResult → ParsedMetadata:** Use `SearchResultToMetadata(sr)` (in `hooks.go`) to convert a `SearchResult` into a `*mediafile.ParsedMetadata`. Parses `releaseDate` strings in `"2006-01-02"` or RFC3339 format.
+**Search results are `ParsedMetadata` directly** — `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
 
 **Field filtering:** Search results are filtered before merging:
 - Fields not declared in manifest → stripped + warning logged
@@ -348,6 +362,26 @@ node.attributes   // Record<string, string>
 node.children     // XMLElement[]
 ```
 
+### shisho.html
+
+```javascript
+// Two-step parse-then-query pattern (consistent with shisho.xml)
+var doc = shisho.html.parse(htmlString)                                    // → HtmlElement (with __node)
+var elem = shisho.html.querySelector(doc, "script[type='application/ld+json']")  // → HtmlElement | null
+var elems = shisho.html.querySelectorAll(doc, "li.item")                         // → HtmlElement[]
+
+// Can also query child elements from previous results
+var section = shisho.html.querySelector(doc, "section")
+var links = shisho.html.querySelectorAll(section, "a")
+
+// HtmlElement properties:
+elem.tag          // string — element tag name
+elem.text         // string — recursive text content (all descendant text nodes)
+elem.innerHTML    // string — raw inner HTML of the element
+elem.attributes   // Record<string, string>
+elem.children     // HtmlElement[]
+```
+
 ### shisho.ffmpeg
 
 ```javascript
@@ -444,7 +478,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook returns `SearchResponse`; the first result is converted to `ParsedMetadata` via `SearchResultToMetadata()`. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getEnrichmentConfidenceThreshold` returns the per-plugin override if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
@@ -563,8 +597,8 @@ Repositories provide a `repository.json` manifest:
 2. Add call in `hostapi.go`'s `InjectHostAPIs()`
 3. Add manifest capability type if needed (in `manifest.go`)
 4. Add tests in `hostapi_newapi_test.go`
-5. **Update `packages/plugin-types/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
-6. If a new manifest capability was added, update `packages/plugin-types/manifest.d.ts`
+5. **Update `packages/plugin-sdk/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
+6. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
 
 ### Adding a new hook type
 
@@ -575,8 +609,8 @@ Repositories provide a `repository.json` manifest:
 5. Create `RunNewHook()` method on Manager
 6. Add result parsing function
 7. Integrate in scan pipeline or relevant service
-8. **Update `packages/plugin-types/hooks.d.ts`** — add context/result interfaces and include the hook in `ShishoPlugin`
-9. **Update `packages/plugin-types/manifest.d.ts`** if a new capability type was added
+8. **Update `packages/plugin-sdk/hooks.d.ts`** — add context/result interfaces and include the hook in `ShishoPlugin`
+9. **Update `packages/plugin-sdk/manifest.d.ts`** if a new capability type was added
 
 ### Modifying ParsedMetadata or related structs
 
@@ -584,7 +618,7 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 
 1. Update the Go struct in `pkg/mediafile/mediafile.go`
 2. Update parsing in `pkg/plugins/hooks.go` (`parseParsedMetadata` and related functions)
-3. **Update `packages/plugin-types/metadata.d.ts`** to match
+3. **Update `packages/plugin-sdk/metadata.d.ts`** to match
 4. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
 
 ### Writing a test plugin

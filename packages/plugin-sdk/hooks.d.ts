@@ -1,4 +1,4 @@
-import { ParsedAuthor, ParsedMetadata } from "./metadata";
+import { ParsedMetadata } from "./metadata";
 
 /** Context passed to inputConverter.convert(). */
 export interface InputConverterContext {
@@ -26,51 +26,28 @@ export interface FileParserContext {
 
 /** Context passed to metadataEnricher.search(). */
 export interface SearchContext {
-  /** Search query (book title for auto, user input for manual). */
+  /** Search query — title or free-text. Always present. */
   query: string;
-  /** Current book state from the database. */
-  book: {
-    id?: number;
-    title?: string;
-    subtitle?: string;
-    description?: string;
-    series?: Array<{ name: string; number?: number }>;
-    authors?: Array<{ name: string; role?: string }>;
-    genres?: string[];
-    tags?: string[];
-    identifiers?: Array<{ type: string; value: string }>;
-    publisher?: string;
-  };
-  /** File information. */
-  file: {
-    fileType?: string;
-    filePath?: string;
-  };
-}
-
-/** A single search result from metadataEnricher.search(). */
-export interface SearchResult {
-  title: string;
-  authors?: ParsedAuthor[];
-  description?: string;
-  imageUrl?: string;
-  releaseDate?: string;
-  publisher?: string;
-  imprint?: string;
-  url?: string;
-  coverUrl?: string;
-  subtitle?: string;
-  series?: string;
-  seriesNumber?: number;
-  genres?: string[];
-  tags?: string[];
-  narrators?: string[];
+  /** Author name to narrow results. Optional. */
+  author?: string;
+  /** Structured identifiers for direct lookup (ISBN, ASIN, etc.). Optional. */
   identifiers?: Array<{ type: string; value: string }>;
+  /** Read-only file metadata for matching hints. Not user-editable. */
+  file?: {
+    /** File type extension (e.g., "epub", "cbz", "m4b", "pdf"). */
+    fileType?: string;
+    /** Audiobook duration in seconds. */
+    duration?: number;
+    /** Number of pages (CBZ/PDF). */
+    pageCount?: number;
+    /** File size in bytes. */
+    filesizeBytes?: number;
+  };
 }
 
 /** Result returned from metadataEnricher.search(). */
 export interface SearchResponse {
-  results: SearchResult[];
+  results: ParsedMetadata[];
 }
 
 /** Context passed to outputGenerator.generate(). */
