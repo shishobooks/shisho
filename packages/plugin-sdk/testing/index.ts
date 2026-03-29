@@ -1,13 +1,19 @@
 import type {
   FetchResponse,
+  HtmlElement,
   ParsedURL,
   ShishoConfig,
   ShishoFS,
   ShishoHostAPI,
+  ShishoHTML,
   ShishoHTTP,
   ShishoLog,
   ShishoURL,
+  ShishoXML,
+  XMLElement,
 } from "../index";
+import { XMLParser } from "fast-xml-parser";
+import { parseHTML } from "linkedom";
 
 /** Configuration for a mock fetch response. */
 export interface MockFetchResponse {
@@ -85,11 +91,243 @@ function createMockFetchResponse(
   };
 }
 
+// ---------------------------------------------------------------------------
+// XML implementation (pure JS, matches Go's namespace-aware tag matching)
+// ---------------------------------------------------------------------------
+
+function parseXML(content: string): XMLElement {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "",
+    preserveOrder: true,
+    textNodeName: "#text",
+    cdataPropName: "#cdata",
+    commentPropName: "#comment",
+  });
+  const parsed = parser.parse(content);
+  return convertXMLNode(parsed[0] ?? {});
+}
+
+function convertXMLNode(node: Record<string, unknown>): XMLElement {
+  const keys = Object.keys(node).filter(
+    (k) => k !== ":@" && k !== "#text" && k !== "#cdata" && k !== "#comment",
+  );
+  const tagWithNs = keys[0] ?? "";
+  const colonIdx = tagWithNs.indexOf(":");
+  const tag = colonIdx >= 0 ? tagWithNs.slice(colonIdx + 1) : tagWithNs;
+  const nsPrefix = colonIdx >= 0 ? tagWithNs.slice(0, colonIdx) : "";
+
+  const attrs: Record<string, unknown> =
+    (node[":@"] as Record<string, unknown>) ?? {};
+  const attributes: Record<string, string> = {};
+  let namespace = "";
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === `xmlns:${nsPrefix}` && nsPrefix) {
+      namespace = String(v);
+    } else if (k === "xmlns" && !nsPrefix) {
+      namespace = String(v);
+    }
+    attributes[k] = String(v);
+  }
+
+  const childNodes = (node[tagWithNs] as unknown[]) ?? [];
+  let text = "";
+  const children: XMLElement[] = [];
+  for (const child of childNodes) {
+    if (typeof child === "object" && child !== null) {
+      const c = child as Record<string, unknown>;
+      if ("#text" in c) {
+        text += String(c["#text"]);
+      } else {
+        children.push(convertXMLNode(c));
+      }
+    }
+  }
+
+  return { tag, namespace, text, attributes, children };
+}
+
+function xmlQuerySelector(
+  root: XMLElement,
+  selector: string,
+  namespaces?: Record<string, string>,
+): XMLElement | null {
+  const { nsURI, tagName, hasNS } = parseXMLSelector(selector, namespaces);
+  if (matchesXMLSelector(root, nsURI, tagName, hasNS)) return root;
+  for (const child of root.children) {
+    const result = xmlQuerySelector(child, selector, namespaces);
+    if (result) return result;
+  }
+  return null;
+}
+
+function xmlQuerySelectorAll(
+  root: XMLElement,
+  selector: string,
+  namespaces?: Record<string, string>,
+): XMLElement[] {
+  const results: XMLElement[] = [];
+  const { nsURI, tagName, hasNS } = parseXMLSelector(selector, namespaces);
+  xmlCollectMatches(root, nsURI, tagName, hasNS, results);
+  return results;
+}
+
+function xmlCollectMatches(
+  elem: XMLElement,
+  nsURI: string,
+  tagName: string,
+  hasNS: boolean,
+  results: XMLElement[],
+): void {
+  if (matchesXMLSelector(elem, nsURI, tagName, hasNS)) results.push(elem);
+  for (const child of elem.children) {
+    xmlCollectMatches(child, nsURI, tagName, hasNS, results);
+  }
+}
+
+function parseXMLSelector(
+  selector: string,
+  namespaces?: Record<string, string>,
+): { nsURI: string; tagName: string; hasNS: boolean } {
+  const idx = selector.indexOf("|");
+  if (idx >= 0) {
+    const prefix = selector.slice(0, idx);
+    const tagName = selector.slice(idx + 1);
+    const nsURI = namespaces?.[prefix] ?? "";
+    return { nsURI, tagName, hasNS: true };
+  }
+  return { nsURI: "", tagName: selector, hasNS: false };
+}
+
+function matchesXMLSelector(
+  elem: XMLElement,
+  nsURI: string,
+  tagName: string,
+  hasNS: boolean,
+): boolean {
+  if (elem.tag !== tagName) return false;
+  if (hasNS) return elem.namespace === nsURI;
+  return true;
+}
+
+function createXMLImpl(): ShishoXML {
+  return {
+    parse(content: string): XMLElement {
+      return parseXML(content);
+    },
+    querySelector(
+      doc: XMLElement,
+      selector: string,
+      namespaces?: Record<string, string>,
+    ): XMLElement | null {
+      return xmlQuerySelector(doc, selector, namespaces);
+    },
+    querySelectorAll(
+      doc: XMLElement,
+      selector: string,
+      namespaces?: Record<string, string>,
+    ): XMLElement[] {
+      return xmlQuerySelectorAll(doc, selector, namespaces);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// HTML implementation (linkedom for DOM parsing + CSS selectors)
+// ---------------------------------------------------------------------------
+
+function nodeToHtmlElement(node: Element): HtmlElement {
+  const attributes: Record<string, string> = {};
+  for (const attr of node.attributes) {
+    attributes[attr.name] = attr.value;
+  }
+  const children: HtmlElement[] = [];
+  for (const child of node.children) {
+    children.push(nodeToHtmlElement(child));
+  }
+  return {
+    tag: node.tagName.toLowerCase(),
+    attributes,
+    text: node.textContent ?? "",
+    innerHTML: node.innerHTML,
+    children,
+  };
+}
+
+function createHTMLImpl(): ShishoHTML {
+  return {
+    parse(html: string): HtmlElement {
+      const { document } = parseHTML(html);
+      const root = document.documentElement;
+      const elem = nodeToHtmlElement(root);
+      // Store the original document for querySelector reuse
+      Object.defineProperty(elem, "__document", {
+        value: document,
+        enumerable: false,
+      });
+      Object.defineProperty(elem, "__node", {
+        value: root,
+        enumerable: false,
+      });
+      return elem;
+    },
+
+    querySelector(doc: HtmlElement, selector: string): HtmlElement | null {
+      // Try to use stored DOM node for efficient querying
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const node = (doc as any)["__node"] as Element | undefined;
+      if (node) {
+        const match = node.querySelector(selector);
+        if (!match) return null;
+        const elem = nodeToHtmlElement(match);
+        Object.defineProperty(elem, "__node", {
+          value: match,
+          enumerable: false,
+        });
+        return elem;
+      }
+      // Fallback: re-parse innerHTML (for elements not from parse())
+      const { document } = parseHTML(
+        `<html><body>${doc.innerHTML}</body></html>`,
+      );
+      const match = document.querySelector(selector);
+      if (!match) return null;
+      return nodeToHtmlElement(match);
+    },
+
+    querySelectorAll(doc: HtmlElement, selector: string): HtmlElement[] {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const node = (doc as any)["__node"] as Element | undefined;
+      if (node) {
+        const matches = node.querySelectorAll(selector);
+        return Array.from(matches).map((m) => {
+          const elem = nodeToHtmlElement(m);
+          Object.defineProperty(elem, "__node", {
+            value: m,
+            enumerable: false,
+          });
+          return elem;
+        });
+      }
+      // Fallback: re-parse
+      const { document } = parseHTML(
+        `<html><body>${doc.innerHTML}</body></html>`,
+      );
+      const matches = document.querySelectorAll(selector);
+      return Array.from(matches).map((m) => nodeToHtmlElement(m));
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main factory
+// ---------------------------------------------------------------------------
+
 /**
  * Create a mock `shisho` host API object for testing plugins.
  *
  * Provides mock implementations of log, config, http, url, and fs.
- * Archive, XML, HTML, FFmpeg, and Shell are not mocked (they throw if called).
+ * Provides real implementations of xml and html (backed by fast-xml-parser and linkedom).
  *
  * @example
  * ```ts
@@ -331,16 +569,8 @@ export function createMockShisho(
       readZipEntry: notImplemented("archive.readZipEntry") as never,
       listZipEntries: notImplemented("archive.listZipEntries") as never,
     },
-    xml: {
-      parse: notImplemented("xml.parse") as never,
-      querySelector: notImplemented("xml.querySelector") as never,
-      querySelectorAll: notImplemented("xml.querySelectorAll") as never,
-    },
-    html: {
-      parse: notImplemented("html.parse") as never,
-      querySelector: notImplemented("html.querySelector") as never,
-      querySelectorAll: notImplemented("html.querySelectorAll") as never,
-    },
+    xml: createXMLImpl(),
+    html: createHTMLImpl(),
     ffmpeg: {
       transcode: notImplemented("ffmpeg.transcode") as never,
       probe: notImplemented("ffmpeg.probe") as never,

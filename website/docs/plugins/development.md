@@ -761,6 +761,8 @@ globalThis.shisho = mockShisho;
 | `config.*` | Returns values from the config map you provide |
 | `http.fetch` | Route-based mock — matches URLs, throws on unmatched |
 | `fs.*` | Path-based mock — virtual filesystem from the map you provide |
+| `xml.*` | Real implementation (parse, querySelector, querySelectorAll) |
+| `html.*` | Real implementation (parse, querySelector, querySelectorAll with CSS selectors) |
 
 Unmatched fetch URLs and missing fs paths throw descriptive errors so you know exactly what mock data to add.
 
