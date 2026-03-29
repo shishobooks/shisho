@@ -242,7 +242,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		}
 	}
 
-	// Add cover page for CBZ files
+	// Add cover page for page-based files (CBZ, PDF)
 	if file.CoverPage != nil {
 		fp.CoverPage = file.CoverPage
 	}

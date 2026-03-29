@@ -64,6 +64,7 @@ func createTestCBZWithPages(t *testing.T, path string, numPages int) {
 func TestUpdateFileCoverPage(t *testing.T) {
 	t.Parallel()
 	t.Run("sets cover page and extracts cover image", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
@@ -154,6 +155,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 400 for invalid page number", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
@@ -226,6 +228,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 400 for negative page number", func(t *testing.T) {
+		t.Parallel()
 		db := setupTestDB(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
