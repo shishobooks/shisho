@@ -347,6 +347,13 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.SeriesNumber = &f
 		}
 
+		// confidence -> *float64 (0-1 score)
+		confidenceVal := itemObj.Get("confidence")
+		if confidenceVal != nil && !goja.IsUndefined(confidenceVal) && !goja.IsNull(confidenceVal) {
+			c := confidenceVal.ToFloat()
+			md.Confidence = &c
+		}
+
 		// genres -> []string
 		genresVal := itemObj.Get("genres")
 		if genresVal != nil && !goja.IsUndefined(genresVal) && !goja.IsNull(genresVal) {

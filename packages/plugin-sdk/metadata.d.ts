@@ -68,4 +68,10 @@ export interface ParsedMetadata {
   pageCount?: number;
   identifiers?: ParsedIdentifier[];
   chapters?: ParsedChapter[];
+  /**
+   * Confidence score (0-1) indicating how well this result matches the search query.
+   * Used by the scan pipeline to decide whether to auto-apply enrichment.
+   * If omitted, the result is always applied (backwards compatible).
+   */
+  confidence?: number;
 }

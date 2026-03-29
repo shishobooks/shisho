@@ -70,6 +70,10 @@ type ParsedMetadata struct {
 	Identifiers []ParsedIdentifier `json:"identifiers"`
 	// Chapters contains chapter information parsed from file metadata
 	Chapters []ParsedChapter `json:"chapters"`
+	// Confidence is an optional score (0-1) indicating how confident the plugin
+	// is that this result matches the search query. Used by the scan pipeline
+	// to decide whether to auto-apply enrichment results.
+	Confidence *float64 `json:"confidence,omitempty"`
 }
 
 func (m *ParsedMetadata) String() string {
