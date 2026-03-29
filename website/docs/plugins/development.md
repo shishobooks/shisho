@@ -650,7 +650,7 @@ title.attributes;  // { "attr": "value" }
 title.children;    // child elements
 ```
 
-### shisho.html
+### HTML
 
 HTML parsing with full CSS selector support. Use this instead of regex for scraping HTML content.
 
@@ -758,3 +758,7 @@ globalThis.shisho = mockShisho;
 | `fs.*` | Path-based mock — virtual filesystem from the map you provide |
 
 Unmatched fetch URLs and missing fs paths throw descriptive errors so you know exactly what mock data to add.
+
+:::warning[Runtime Differences]
+Plugins run in a **goja** runtime (ES5.1), but tests run in **Node.js**. Your tests may pass using ES6+ features (arrow functions, `const`/`let`, template literals, destructuring) that will fail in the actual plugin runtime. Always write your `main.js` using ES5.1 syntax (var, function expressions, string concatenation) — the test utilities mock the `shisho.*` APIs, not the JavaScript runtime itself.
+:::

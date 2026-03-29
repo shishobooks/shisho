@@ -165,6 +165,10 @@ jobs:
         working-directory: ./packages/plugin-sdk
         run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
 
+      - name: Build testing module
+        working-directory: ./packages/plugin-sdk
+        run: pnpm build
+
       - name: Publish to npm
         working-directory: ./packages/plugin-sdk
         run: npm publish --access public
