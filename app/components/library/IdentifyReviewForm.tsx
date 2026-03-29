@@ -25,7 +25,7 @@ import {
   usePluginIdentifierTypes,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
-import { cn } from "@/libraries/utils";
+import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
 
@@ -520,9 +520,9 @@ export function IdentifyReviewForm({
     defaults.identifiers.value,
   );
 
-  // Cover state — files with cover_page (CBZ, PDF) derive covers from page
+  // Cover state — page-based formats (CBZ, PDF) derive covers from page
   // content and shouldn't be overwritten by plugin images.
-  const coverEditable = file?.cover_page == null;
+  const coverEditable = !isPageBasedFileType(file?.file_type);
   const newCoverUrl = result.image_url || result.cover_url;
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`

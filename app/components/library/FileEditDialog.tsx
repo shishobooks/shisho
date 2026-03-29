@@ -61,7 +61,7 @@ import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { cn } from "@/libraries/utils";
+import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   FileRoleMain,
   FileRoleSupplement,
@@ -102,6 +102,7 @@ export function FileEditDialog({
   const [narratorSearch, setNarratorSearch] = useState("");
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
+  const isPageBased = isPageBasedFileType(file.file_type);
   const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
@@ -660,7 +661,7 @@ export function FileEditDialog({
                       )}
                     >
                       {/* Non-page-based: Show pending preview or current cover */}
-                      {file.cover_page == null && (
+                      {!isPageBased && (
                         <>
                           {pendingCoverPreview ? (
                             <img
@@ -686,7 +687,7 @@ export function FileEditDialog({
                         </>
                       )}
                       {/* Page-based: Show pending page or current cover */}
-                      {file.cover_page != null && (
+                      {isPageBased && (
                         <>
                           {pendingCoverPage !== null &&
                           pendingCoverPage !== file.cover_page ? (
@@ -712,7 +713,7 @@ export function FileEditDialog({
                       )}
                     </div>
                     {/* Page number badge */}
-                    {file.cover_page != null &&
+                    {isPageBased &&
                       (pendingCoverPage ?? file.cover_page) != null && (
                         <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
                           Page {(pendingCoverPage ?? file.cover_page)! + 1}
@@ -723,7 +724,7 @@ export function FileEditDialog({
                   {/* Action buttons and status */}
                   <div className="flex flex-col gap-2 pt-1">
                     {/* Upload button — hidden for files with page-derived covers */}
-                    {file.cover_page == null && (
+                    {!isPageBased && (
                       <>
                         <input
                           accept="image/jpeg,image/png,image/webp"
@@ -753,7 +754,7 @@ export function FileEditDialog({
                       </>
                     )}
                     {/* Select page button */}
-                    {file.cover_page != null && (
+                    {isPageBased && (
                       <Button
                         disabled={setCoverPageMutation.isPending}
                         onClick={() => setCoverPagePickerOpen(true)}
@@ -770,8 +771,8 @@ export function FileEditDialog({
                       </Button>
                     )}
                     {/* Unsaved indicator */}
-                    {((file.cover_page == null && pendingCoverFile) ||
-                      (file.cover_page != null &&
+                    {((!isPageBased && pendingCoverFile) ||
+                      (isPageBased &&
                         pendingCoverPage !== null &&
                         pendingCoverPage !== file.cover_page)) && (
                       <span className="text-xs text-orange-500 font-medium">
@@ -783,7 +784,7 @@ export function FileEditDialog({
               </div>
 
               {/* Page Picker Dialog */}
-              {file.cover_page != null && file.page_count != null && (
+              {isPageBased && file.page_count != null && (
                 <PagePicker
                   currentPage={pendingCoverPage ?? file.cover_page ?? null}
                   fileId={file.id}
