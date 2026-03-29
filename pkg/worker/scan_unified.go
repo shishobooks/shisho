@@ -2633,6 +2633,16 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 	}
 
+	// Pre-load confidence thresholds for all enricher runtimes to avoid per-file DB queries
+	thresholdCache := make(map[string]*float64) // key: "scope/pluginID"
+	for _, rt := range runtimes {
+		key := rt.Scope() + "/" + rt.PluginID()
+		plugin, err := w.pluginService.GetPlugin(ctx, rt.Scope(), rt.PluginID())
+		if err == nil && plugin != nil {
+			thresholdCache[key] = plugin.ConfidenceThreshold
+		}
+	}
+
 	var enrichedMeta mediafile.ParsedMetadata
 	modified := false
 
@@ -2697,7 +2707,8 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 
 		// Check confidence threshold (if result provides a score)
 		if searchMeta.Confidence != nil {
-			threshold := w.getEnrichmentConfidenceThreshold(ctx, rt)
+			key := rt.Scope() + "/" + rt.PluginID()
+			threshold := w.getConfidenceThresholdFromCache(thresholdCache[key])
 			if *searchMeta.Confidence < threshold {
 				logWarn("enricher result below confidence threshold, skipping", logger.Data{
 					"plugin":     rt.PluginID(),
@@ -3267,22 +3278,14 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	return coverBaseName + ext, mimeType, nil
 }
 
-// getEnrichmentConfidenceThreshold returns the effective confidence threshold for a plugin.
-// Priority: per-plugin threshold > global config > default (0.85).
-func (w *Worker) getEnrichmentConfidenceThreshold(ctx context.Context, rt *plugins.Runtime) float64 {
-	// Check per-plugin threshold
-	if w.pluginService != nil {
-		plugin, err := w.pluginService.GetPlugin(ctx, rt.Scope(), rt.PluginID())
-		if err == nil && plugin != nil && plugin.ConfidenceThreshold != nil {
-			return *plugin.ConfidenceThreshold
-		}
+// getConfidenceThresholdFromCache returns the effective confidence threshold
+// using a pre-loaded plugin threshold value, falling back to global config or default.
+func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float64 {
+	if pluginThreshold != nil {
+		return *pluginThreshold
 	}
-
-	// Fall back to global config (default is 0.85, set in config defaults)
 	if w.config != nil {
 		return w.config.EnrichmentConfidenceThreshold
 	}
-
-	// Default
 	return 0.85
 }

@@ -108,7 +108,25 @@ function parseXML(content: string): XMLElement {
   return convertXMLNode(parsed[0] ?? {});
 }
 
-function convertXMLNode(node: Record<string, unknown>): XMLElement {
+function convertXMLNode(
+  node: Record<string, unknown>,
+  inheritedNamespaces?: Record<string, string>,
+): XMLElement {
+  // Inherit parent namespace map and add any new declarations from this element
+  const namespaces = { ...(inheritedNamespaces ?? {}) };
+
+  const attrs: Record<string, unknown> =
+    (node[":@"] as Record<string, unknown>) ?? {};
+  const attributes: Record<string, string> = {};
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("xmlns:")) {
+      namespaces[k.slice(6)] = String(v);
+    } else if (k === "xmlns") {
+      namespaces[""] = String(v);
+    }
+    attributes[k] = String(v);
+  }
+
   const keys = Object.keys(node).filter(
     (k) => k !== ":@" && k !== "#text" && k !== "#cdata" && k !== "#comment",
   );
@@ -116,19 +134,7 @@ function convertXMLNode(node: Record<string, unknown>): XMLElement {
   const colonIdx = tagWithNs.indexOf(":");
   const tag = colonIdx >= 0 ? tagWithNs.slice(colonIdx + 1) : tagWithNs;
   const nsPrefix = colonIdx >= 0 ? tagWithNs.slice(0, colonIdx) : "";
-
-  const attrs: Record<string, unknown> =
-    (node[":@"] as Record<string, unknown>) ?? {};
-  const attributes: Record<string, string> = {};
-  let namespace = "";
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === `xmlns:${nsPrefix}` && nsPrefix) {
-      namespace = String(v);
-    } else if (k === "xmlns" && !nsPrefix) {
-      namespace = String(v);
-    }
-    attributes[k] = String(v);
-  }
+  const namespace = namespaces[nsPrefix] ?? "";
 
   const childNodes = (node[tagWithNs] as unknown[]) ?? [];
   let text = "";
@@ -139,7 +145,7 @@ function convertXMLNode(node: Record<string, unknown>): XMLElement {
       if ("#text" in c) {
         text += String(c["#text"]);
       } else {
-        children.push(convertXMLNode(c));
+        children.push(convertXMLNode(c, namespaces));
       }
     }
   }
@@ -417,7 +423,7 @@ export function createMockShisho(
         }
       }
 
-      return parts.join("&");
+      return parts.join("&").replace(/%20/g, "+");
     },
 
     parse(urlStr: string): ParsedURL {
