@@ -66,6 +66,7 @@ export interface PluginConfigResponse {
   values: Record<string, unknown>;
   declaredFields?: string[];
   fieldSettings?: Record<string, boolean>;
+  confidence_threshold?: number | null;
 }
 
 export enum QueryKey {
@@ -327,13 +328,16 @@ export const useSavePluginConfig = () => {
       scope,
       id,
       config,
+      confidence_threshold,
     }: {
       scope: string;
       id: string;
       config: Record<string, string>;
+      confidence_threshold?: number | null;
     }) => {
       return API.request<Plugin>("PATCH", `/plugins/installed/${scope}/${id}`, {
         config,
+        confidence_threshold,
       });
     },
     onSuccess: (_data, variables) => {

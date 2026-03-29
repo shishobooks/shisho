@@ -52,11 +52,15 @@ export const PluginConfigDialog = ({
   const [fieldSettings, setFieldSettings] = useState<Record<string, boolean>>(
     {},
   );
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number | null>(
+    null,
+  );
 
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
     formValues: Record<string, string>;
     fieldSettings: Record<string, boolean>;
+    confidenceThreshold: number | null;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -100,10 +104,18 @@ export const PluginConfigDialog = ({
     const initialFieldSettings = data.fieldSettings ?? {};
     setFieldSettings(initialFieldSettings);
 
+    // Initialize confidence threshold (API returns 0-1, convert to percentage)
+    const threshold =
+      data.confidence_threshold != null
+        ? Math.round(data.confidence_threshold * 100)
+        : null;
+    setConfidenceThreshold(threshold);
+
     // Store initial values for comparison
     setInitialValues({
       formValues: { ...initial },
       fieldSettings: { ...initialFieldSettings },
+      confidenceThreshold: threshold,
     });
   }, [open, data]);
 
@@ -112,9 +124,10 @@ export const PluginConfigDialog = ({
     if (!initialValues) return false;
     return (
       !equal(formValues, initialValues.formValues) ||
-      !equal(fieldSettings, initialValues.fieldSettings)
+      !equal(fieldSettings, initialValues.fieldSettings) ||
+      confidenceThreshold !== initialValues.confidenceThreshold
     );
-  }, [formValues, fieldSettings, initialValues]);
+  }, [formValues, fieldSettings, confidenceThreshold, initialValues]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
@@ -159,7 +172,13 @@ export const PluginConfigDialog = ({
     }
 
     saveConfig.mutate(
-      { scope, id: pluginId, config },
+      {
+        scope,
+        id: pluginId,
+        config,
+        confidence_threshold:
+          confidenceThreshold != null ? confidenceThreshold / 100 : null,
+      },
       {
         onSuccess: () => {
           toast.success("Plugin configuration saved.");
@@ -167,6 +186,7 @@ export const PluginConfigDialog = ({
           setInitialValues({
             formValues: { ...formValues },
             fieldSettings: { ...fieldSettings },
+            confidenceThreshold,
           });
           requestClose();
         },
@@ -300,6 +320,31 @@ export const PluginConfigDialog = ({
                   />
                 </div>
               ))}
+            </div>
+
+            {/* Confidence threshold - only for enricher plugins */}
+            <div className="space-y-2 border-t pt-4">
+              <Label>Auto-identify confidence threshold</Label>
+              <p className="text-xs text-muted-foreground">
+                During automatic scans, results with confidence below this
+                threshold will be skipped. Leave empty to use the global
+                default.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="w-24"
+                  max={100}
+                  min={0}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setConfidenceThreshold(val === "" ? null : Number(val));
+                  }}
+                  placeholder="85"
+                  type="number"
+                  value={confidenceThreshold ?? ""}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
             </div>
           </>
         )}
