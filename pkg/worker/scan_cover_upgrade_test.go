@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
-	"image/png"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/fileutils"
@@ -23,13 +22,6 @@ func makeJPEG(width, height int) []byte {
 	}
 	var buf bytes.Buffer
 	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
-	return buf.Bytes()
-}
-
-func makePNG(width, height int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	var buf bytes.Buffer
-	png.Encode(&buf, img)
 	return buf.Bytes()
 }
 
@@ -58,7 +50,7 @@ func TestEnricherCoverResolutionGate(t *testing.T) {
 		enricherRes := fileutils.ImageResolution(enricher)
 
 		// enricherResolution <= currentResolution → skip
-		assert.False(t, enricherRes > currentRes)
+		assert.LessOrEqual(t, enricherRes, currentRes)
 	})
 
 	t.Run("enricher cover smaller than current is rejected", func(t *testing.T) {
@@ -69,7 +61,7 @@ func TestEnricherCoverResolutionGate(t *testing.T) {
 		currentRes := fileutils.ImageResolution(current)
 		enricherRes := fileutils.ImageResolution(enricher)
 
-		assert.False(t, enricherRes > currentRes)
+		assert.LessOrEqual(t, enricherRes, currentRes)
 	})
 
 	t.Run("no current cover — enricher always accepted", func(t *testing.T) {
@@ -128,7 +120,7 @@ func TestEnricherCoverPluginSourceCheck(t *testing.T) {
 			},
 		}
 		source := md.SourceForField("cover")
-		assert.True(t, len(source) > len(models.DataSourcePluginPrefix))
+		assert.Greater(t, len(source), len(models.DataSourcePluginPrefix))
 		assert.Equal(t, "plugin:", source[:7])
 	})
 
