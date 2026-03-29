@@ -322,6 +322,12 @@ var plugin = (function() {
         // context.author      — author name (optional)
         // context.identifiers — [{ type, value }] (optional)
 
+        // context.file — read-only file metadata for matching
+        // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+        // context.file.duration      — seconds (audiobooks only)
+        // context.file.pageCount     — CBZ/PDF page count
+        // context.file.filesizeBytes — file size in bytes
+
         var apiKey = shisho.config.get("apiKey");
 
         // Check for ISBN in query (users may paste ISBNs into the search box)
@@ -372,7 +378,8 @@ var plugin = (function() {
               publisher: item.publisher,
               imprint: item.imprint,
               url: item.url,
-              identifiers: [{ type: "isbn_13", value: item.isbn }]
+              identifiers: [{ type: "isbn_13", value: item.isbn }],
+              confidence: item.matchScore  // optional, 0-1
             };
           })
         };
@@ -402,6 +409,7 @@ var plugin = (function() {
 | `imprint` | `string` | Imprint name |
 | `url` | `string` | Web URL for the book |
 | `identifiers` | `Array<{type, value}>` | ISBNs, ASINs, etc. |
+| `confidence` | `number` | Optional match confidence score, 0–1 |
 
 All fields except `title` are optional. The more fields you provide, the easier it is for users to pick the correct match and the more metadata can be applied.
 
@@ -421,6 +429,53 @@ return {
 For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
 
 Search results also support `imageUrl` for displaying a thumbnail in the search results UI. If `coverUrl` is empty, `imageUrl` is used as the fallback for downloading the cover.
+
+#### File Hints
+
+The `context.file` object provides read-only metadata about the file being enriched. Use it to narrow your search — for example, filtering audiobook results by duration or distinguishing a comic from a novel by page count:
+
+```javascript
+search: function(context) {
+  // context.file — read-only file metadata for matching
+  // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+  // context.file.duration      — seconds (audiobooks only)
+  // context.file.pageCount     — CBZ/PDF page count
+  // context.file.filesizeBytes — file size in bytes
+
+  var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
+
+  // Narrow to audiobooks when enriching an M4B
+  if (context.file && context.file.fileType === "m4b") {
+    searchUrl += "&type=audiobook";
+    if (context.file.duration) {
+      searchUrl += "&minDuration=" + Math.floor(context.file.duration);
+    }
+  }
+
+  // ...
+}
+```
+
+#### Confidence Scores
+
+Return a `confidence` value (0–1) on each result to tell Shisho how confident you are in the match:
+
+```javascript
+return {
+  results: [{
+    title: "The Great Book",
+    confidence: 0.92,  // optional, 0-1
+    // ... other metadata fields
+  }]
+};
+```
+
+**Auto-apply behavior during automatic scans:**
+
+- Results with `confidence >= threshold` are auto-applied
+- Results with `confidence` below threshold are skipped (logged as a warning)
+- Results without a `confidence` field are always applied (backwards compatible)
+- The threshold defaults to 85% and is configurable globally via `enrichment_confidence_threshold` in your server config, and per-plugin in the plugin settings
 
 #### Enrichment Behavior
 

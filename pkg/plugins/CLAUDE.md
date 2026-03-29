@@ -196,6 +196,13 @@ metadataEnricher: {
     // context.query       - search query (title or free text)
     // context.author      - author name (optional)
     // context.identifiers - [{ type, value }] (optional)
+
+    // context.file        - read-only file hints (non-modifiable)
+    // context.file.fileType      - "epub", "cbz", "m4b", "pdf"
+    // context.file.duration      - seconds (audiobooks only, float)
+    // context.file.pageCount     - CBZ/PDF page count (integer)
+    // context.file.filesizeBytes - file size in bytes (integer)
+
     var apiKey = shisho.config.get("apiKey");
     var searchUrl = "https://api.example.com/search?q=" + shisho.url.encodeURIComponent(context.query);
     if (context.author) {
@@ -212,7 +219,8 @@ metadataEnricher: {
           releaseDate: item.date,
           genres: item.genres,
           coverUrl: item.image,
-          identifiers: [{ type: "isbn_13", value: item.isbn }]
+          identifiers: [{ type: "isbn_13", value: item.isbn }],
+          confidence: item.matchScore  // optional, 0-1
         };
       })
     };
@@ -465,7 +473,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), and file identifiers (as `identifiers`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getEnrichmentConfidenceThreshold` returns the per-plugin override if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
