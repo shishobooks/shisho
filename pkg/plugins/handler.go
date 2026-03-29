@@ -1654,8 +1654,8 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Apply cover data (caller is responsible for downloading cover URLs before calling persistMetadata).
-	// Skip for files with page-derived covers: CBZ uses cover_page, PDF renders from page content.
-	if len(md.CoverData) > 0 && targetFile != nil && targetFile.CoverPage == nil && targetFile.FileType != models.FileTypePDF {
+	// Skip for files with cover_page — their covers are derived from page content (CBZ, PDF).
+	if len(md.CoverData) > 0 && targetFile != nil && targetFile.CoverPage == nil {
 		coverDir := book.Filepath
 		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 

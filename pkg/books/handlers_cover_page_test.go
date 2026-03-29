@@ -588,7 +588,8 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 	_, err = db.NewInsert().Model(book).Exec(ctx)
 	require.NoError(t, err)
 
-	// Create PDF file (no CoverPage set — PDFs don't use cover_page)
+	// Create PDF file with CoverPage set (scanner sets cover_page=0 for PDFs)
+	pdfCoverPage := 0
 	file := &models.File{
 		LibraryID:     library.ID,
 		BookID:        book.ID,
@@ -596,6 +597,7 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 		FileRole:      models.FileRoleMain,
 		Filepath:      filepath.Join(bookDir, "test.pdf"),
 		FilesizeBytes: 1000,
+		CoverPage:     &pdfCoverPage,
 	}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)

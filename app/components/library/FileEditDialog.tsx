@@ -68,7 +68,6 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
-  FileTypePDF,
   type File,
   type FileRole,
 } from "@/types";
@@ -723,37 +722,36 @@ export function FileEditDialog({
 
                   {/* Action buttons and status */}
                   <div className="flex flex-col gap-2 pt-1">
-                    {/* Upload button — hidden for page-derived covers (CBZ via cover_page, PDF) */}
-                    {file.cover_page == null &&
-                      file.file_type !== FileTypePDF && (
-                        <>
-                          <input
-                            accept="image/jpeg,image/png,image/webp"
-                            className="hidden"
-                            onChange={handleCoverUpload}
-                            ref={fileInputRef}
-                            type="file"
-                          />
-                          <Button
-                            disabled={uploadCoverMutation.isPending}
-                            onClick={() => fileInputRef.current?.click()}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            {uploadCoverMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <Upload className="h-4 w-4 mr-2" />
-                            )}
-                            {file.cover_mime_type ||
-                            file.cover_image_filename ||
-                            pendingCoverFile
-                              ? "Replace cover"
-                              : "Upload cover"}
-                          </Button>
-                        </>
-                      )}
+                    {/* Upload button — hidden for files with page-derived covers */}
+                    {file.cover_page == null && (
+                      <>
+                        <input
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={handleCoverUpload}
+                          ref={fileInputRef}
+                          type="file"
+                        />
+                        <Button
+                          disabled={uploadCoverMutation.isPending}
+                          onClick={() => fileInputRef.current?.click()}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          {uploadCoverMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          {file.cover_mime_type ||
+                          file.cover_image_filename ||
+                          pendingCoverFile
+                            ? "Replace cover"
+                            : "Upload cover"}
+                        </Button>
+                      </>
+                    )}
                     {/* CBZ: Select page button */}
                     {file.file_type === FileTypeCBZ && (
                       <Button
