@@ -42,7 +42,7 @@ export const PluginConfigDialog = ({
   pluginName,
   scope,
 }: PluginConfigDialogProps) => {
-  const { data, isLoading } = usePluginConfig(
+  const { data, isLoading, dataUpdatedAt } = usePluginConfig(
     open ? scope : undefined,
     open ? pluginId : undefined,
   );
@@ -70,6 +70,7 @@ export const PluginConfigDialog = ({
   // Track whether we've initialized for this dialog session.
   // This allows data to load after open transition (async fetch).
   const initializedRef = useRef(false);
+  const lastDataUpdatedAtRef = useRef(0);
 
   // Initialize form values from fetched data, only when dialog opens
   // This preserves user edits when data is refetched while dialog is open
@@ -82,10 +83,20 @@ export const PluginConfigDialog = ({
       initializedRef.current = false;
     }
 
+    // Re-initialize if data has been refetched since we last initialized
+    // (handles stale cache after query invalidation on save)
+    if (
+      initializedRef.current &&
+      dataUpdatedAt > lastDataUpdatedAtRef.current
+    ) {
+      initializedRef.current = false;
+    }
+
     // Only initialize once per dialog session, and only when data is available
     if (!open || !data || initializedRef.current) return;
 
     initializedRef.current = true;
+    lastDataUpdatedAtRef.current = dataUpdatedAt;
 
     const initial: Record<string, string> = {};
     for (const [key, field] of Object.entries(data.schema)) {
@@ -117,7 +128,9 @@ export const PluginConfigDialog = ({
       fieldSettings: { ...initialFieldSettings },
       confidenceThreshold: threshold,
     });
-  }, [open, data]);
+    // dataUpdatedAt ensures we re-initialize when fresh data arrives after
+    // query invalidation (e.g., reopening dialog after save).
+  }, [open, data, dataUpdatedAt]);
 
   // Compute hasChanges by comparing current values to initial values
   const hasChanges = useMemo(() => {
