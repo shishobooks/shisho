@@ -15,7 +15,7 @@ import AddToListPopover from "@/components/library/AddToListPopover";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
-import { ResyncConfirmDialog } from "@/components/library/ResyncConfirmDialog";
+import { RescanDialog } from "@/components/library/RescanDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
+import { type RescanMode } from "@/hooks/queries/resync";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -145,7 +146,7 @@ const BookItem = ({
   const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
-  const [showRefreshDialog, setShowRefreshDialog] = useState(false);
+  const [showRescanDialog, setShowRescanDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showIdentifyDialog, setShowIdentifyDialog] = useState(false);
   const resyncBookMutation = useResyncBook();
@@ -159,30 +160,16 @@ const BookItem = ({
     setCoverLoaded(true);
   };
 
-  const handleScanMetadata = async () => {
+  const handleRescan = async (mode: RescanMode) => {
     try {
       await resyncBookMutation.mutateAsync({
         bookId: book.id,
-        payload: { refresh: false },
+        payload: { mode },
       });
-      toast.success("Metadata scanned");
+      toast.success("Book rescanned");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to scan metadata",
-      );
-    }
-  };
-
-  const handleRefreshMetadata = async () => {
-    try {
-      await resyncBookMutation.mutateAsync({
-        bookId: book.id,
-        payload: { refresh: true },
-      });
-      toast.success("Metadata refreshed");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to refresh metadata",
+        error instanceof Error ? error.message : "Failed to rescan book",
       );
     }
   };
@@ -264,14 +251,10 @@ const BookItem = ({
             >
               <DropdownMenuItem
                 disabled={resyncBookMutation.isPending}
-                onClick={handleScanMetadata}
+                onClick={() => setShowRescanDialog(true)}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Scan for new metadata
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowRefreshDialog(true)}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh all metadata
+                Rescan book
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowIdentifyDialog(true)}>
                 <Search className="h-4 w-4 mr-2" />
@@ -382,13 +365,13 @@ const BookItem = ({
           Added by {addedByUsername}
         </div>
       )}
-      <ResyncConfirmDialog
+      <RescanDialog
         entityName={book.title}
         entityType="book"
         isPending={resyncBookMutation.isPending}
-        onConfirm={handleRefreshMetadata}
-        onOpenChange={setShowRefreshDialog}
-        open={showRefreshDialog}
+        onConfirm={handleRescan}
+        onOpenChange={setShowRescanDialog}
+        open={showRescanDialog}
       />
       <DeleteConfirmationDialog
         files={book.files}
