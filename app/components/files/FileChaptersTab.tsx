@@ -25,6 +25,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  FileTypePDF,
   type Chapter,
   type ChapterInput,
   type File,
@@ -59,7 +60,7 @@ const createNewChapter = (fileType: string): ChapterInput => {
     children: [],
   };
 
-  if (fileType === FileTypeCBZ) {
+  if (fileType === FileTypeCBZ || fileType === FileTypePDF) {
     chapter.start_page = 0;
   } else if (fileType === FileTypeM4B) {
     chapter.start_timestamp_ms = 0;
@@ -581,11 +582,14 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Empty state (or edit mode with new chapters from empty state)
     if (chapters.length === 0) {
       const canAddChapters =
-        file.file_type === FileTypeCBZ || file.file_type === FileTypeM4B;
+        file.file_type === FileTypeCBZ ||
+        file.file_type === FileTypePDF ||
+        file.file_type === FileTypeM4B;
 
       // When editing with chapters (entered via Add Chapter button), show edit UI
       if (isEditing && editedChapters.length > 0) {
-        const isCbz = file.file_type === FileTypeCBZ;
+        const isPageBased =
+          file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
         const isM4b = file.file_type === FileTypeM4B;
         const maxDurationMs = file.audiobook_duration_seconds
           ? file.audiobook_duration_seconds * 1000
@@ -612,7 +616,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                 key={`edit-${index}`}
                 maxDurationMs={isM4b ? maxDurationMs : undefined}
                 onBlur={
-                  isCbz
+                  isPageBased
                     ? handleBlurReorder
                     : isM4b
                       ? handleTimestampBlurReorder
@@ -623,7 +627,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                 }
                 onPlay={isM4b ? handleChapterPlay : undefined}
                 onStartPageChange={
-                  isCbz
+                  isPageBased
                     ? (page) =>
                         setEditedChapters((prev) =>
                           updateChapterStartPage(prev, index, page),
@@ -650,13 +654,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                         handleValidationChange(index, hasError)
                     : undefined
                 }
-                pageCount={isCbz ? (file.page_count ?? 0) : undefined}
+                pageCount={isPageBased ? (file.page_count ?? 0) : undefined}
                 playingChapterIndex={isM4b ? playingChapterIndex : undefined}
               />
             ))}
 
-            {/* Add Chapter button for CBZ */}
-            {isCbz && (
+            {/* Add Chapter button for page-based files */}
+            {isPageBased && (
               <Button
                 className="mt-2"
                 onClick={handleAddChapter}
@@ -698,11 +702,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       );
     }
 
-    // Check for CBZ uncovered pages (first chapter starts after page 0)
+    // Check for uncovered pages (first chapter starts after page 0)
+    const isPageBased =
+      file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
     const firstChapterStartPage =
-      file.file_type === FileTypeCBZ && chapters.length > 0
-        ? chapters[0].start_page
-        : null;
+      isPageBased && chapters.length > 0 ? chapters[0].start_page : null;
     const hasUncoveredPages =
       firstChapterStartPage != null && firstChapterStartPage > 0;
 
@@ -712,7 +716,6 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Edit mode rendering
     if (isEditing) {
       const isEpub = file.file_type === FileTypeEPUB;
-      const isCbz = file.file_type === FileTypeCBZ;
       const isM4b = file.file_type === FileTypeM4B;
       const maxDurationMs = file.audiobook_duration_seconds
         ? file.audiobook_duration_seconds * 1000
@@ -745,7 +748,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               key={`edit-${index}`}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
               onBlur={
-                isCbz
+                isPageBased
                   ? handleBlurReorder
                   : isM4b
                     ? handleTimestampBlurReorder
@@ -762,7 +765,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               }
               onPlay={isM4b ? handleChapterPlay : undefined}
               onStartPageChange={
-                isCbz
+                isPageBased
                   ? (page) =>
                       setEditedChapters((prev) =>
                         updateChapterStartPage(prev, index, page),
@@ -789,13 +792,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                       handleValidationChange(index, hasError)
                   : undefined
               }
-              pageCount={isCbz ? (file.page_count ?? 0) : undefined}
+              pageCount={isPageBased ? (file.page_count ?? 0) : undefined}
               playingChapterIndex={isM4b ? playingChapterIndex : undefined}
             />
           ))}
 
-          {/* Add Chapter button for CBZ */}
-          {isCbz && (
+          {/* Add Chapter button for page-based files */}
+          {isPageBased && (
             <Button
               className="mt-2"
               onClick={handleAddChapter}

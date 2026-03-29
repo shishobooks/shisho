@@ -38,6 +38,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  FileTypePDF,
   type Chapter,
   type FileType,
 } from "@/types";
@@ -153,10 +154,10 @@ export interface ChapterRowProps {
   playingChapterIndex?: number | null;
   onPlay?: (chapterIndex: number, timestampMs: number) => void;
   onStop?: () => void;
-  // CBZ view mode: navigation to reader
+  // Page-based view mode: navigation to reader
   libraryId?: number;
   bookId?: number;
-  // CBZ
+  // Page-based (CBZ, PDF)
   fileId?: number;
   pageCount?: number;
   // M4B
@@ -190,6 +191,8 @@ const ChapterRow = (props: ChapterRowProps) => {
   const hasChildren = children.length > 0;
   const isEpub = fileType === FileTypeEPUB;
   const isCbz = fileType === FileTypeCBZ;
+  const isPdf = fileType === FileTypePDF;
+  const isPageBased = isCbz || isPdf;
   const isM4b = fileType === FileTypeM4B;
   const isPlaying =
     chapterIndex != null && playingChapterIndex === chapterIndex;
@@ -439,8 +442,8 @@ const ChapterRow = (props: ChapterRowProps) => {
     );
   }
 
-  // CBZ edit mode
-  if (isEditing && isCbz) {
+  // Page-based edit mode (CBZ, PDF)
+  if (isEditing && isPageBased) {
     return (
       <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
         {/* Small thumbnail with hover preview (clickable to open page picker) */}
@@ -629,7 +632,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         ) : null}
 
         {/* Page thumbnail with hover preview */}
-        {isCbz && chapter.start_page != null && fileId != null && (
+        {isPageBased && chapter.start_page != null && fileId != null && (
           <PagePreview
             fileId={fileId}
             page={chapter.start_page}
@@ -637,8 +640,8 @@ const ChapterRow = (props: ChapterRowProps) => {
           />
         )}
 
-        {/* Chapter title - clickable for CBZ to open reader at this chapter */}
-        {isCbz &&
+        {/* Chapter title - clickable for page-based files to open reader at this chapter */}
+        {isPageBased &&
         libraryId &&
         bookId &&
         fileId &&
@@ -654,7 +657,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         )}
 
         {/* Position display based on file type (1-indexed for user display) */}
-        {isCbz && chapter.start_page != null && (
+        {isPageBased && chapter.start_page != null && (
           <span className="text-muted-foreground text-sm">
             Page {chapter.start_page + 1}
           </span>
