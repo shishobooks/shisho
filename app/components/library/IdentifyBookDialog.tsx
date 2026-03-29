@@ -1,5 +1,5 @@
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
-import { ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,10 @@ export function IdentifyBookDialog({
 }: IdentifyBookDialogProps) {
   const [step, setStep] = useState<"search" | "review">("search");
   const [query, setQuery] = useState("");
+  const [author, setAuthor] = useState("");
+  const [identifiers, setIdentifiers] = useState<
+    Array<{ type: string; value: string }>
+  >([]);
   const [selectedResult, setSelectedResult] =
     useState<PluginSearchResult | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<number | undefined>(
@@ -68,17 +72,38 @@ export function IdentifyBookDialog({
     if (open) {
       setStep("search");
       setQuery(book.title);
+      // Pre-fill author from first author
+      const firstAuthor = book.authors?.[0]?.person?.name ?? "";
+      setAuthor(firstAuthor);
+      // Pre-fill identifiers from all files (deduplicated)
+      const allIds: Array<{ type: string; value: string }> = [];
+      const seen = new Set<string>();
+      for (const file of book.files ?? []) {
+        for (const id of file.identifiers ?? []) {
+          const key = `${id.type}:${id.value}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            allIds.push({ type: id.type, value: id.value });
+          }
+        }
+      }
+      setIdentifiers(allIds);
       setSelectedResult(null);
       setSelectedFileId(mainFiles.length > 1 ? mainFiles[0].id : undefined);
       hasSearchedRef.current = false;
     }
-  }, [open, book.title, mainFiles]);
+  }, [open, book.title, book.authors, book.files, mainFiles]);
 
   // Auto-search after query is set from dialog open
   useEffect(() => {
     if (open && query && !hasSearchedRef.current) {
       hasSearchedRef.current = true;
-      searchMutation.mutate({ query, bookId: book.id });
+      searchMutation.mutate({
+        query,
+        bookId: book.id,
+        author: author || undefined,
+        identifiers: identifiers.length > 0 ? identifiers : undefined,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, query]);
@@ -86,7 +111,12 @@ export function IdentifyBookDialog({
   const handleSearch = () => {
     if (!query.trim()) return;
     setSelectedResult(null);
-    searchMutation.mutate({ query: query.trim(), bookId: book.id });
+    searchMutation.mutate({
+      query: query.trim(),
+      bookId: book.id,
+      author: author.trim() || undefined,
+      identifiers: identifiers.length > 0 ? identifiers : undefined,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -226,6 +256,55 @@ export function IdentifyBookDialog({
                   <Search className="h-4 w-4" />
                 )}
               </Button>
+            </div>
+
+            {/* Author and identifier filters */}
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Author</Label>
+                <Input
+                  className="h-8 text-sm"
+                  onChange={(e) => setAuthor(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Author name (optional)"
+                  value={author}
+                />
+              </div>
+              {identifiers.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">
+                    Identifiers
+                  </Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {identifiers.map((id, i) => (
+                      <Badge
+                        className="max-w-full gap-1 pr-1"
+                        key={`${id.type}-${id.value}-${i}`}
+                        variant="secondary"
+                      >
+                        <span
+                          className="truncate"
+                          title={`${id.type}:${id.value}`}
+                        >
+                          {formatIdentifierType(id.type, pluginIdentifierTypes)}
+                          : {id.value}
+                        </span>
+                        <button
+                          className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
+                          onClick={() =>
+                            setIdentifiers(
+                              identifiers.filter((_, j) => j !== i),
+                            )
+                          }
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Results */}

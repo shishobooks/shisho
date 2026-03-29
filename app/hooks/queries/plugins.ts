@@ -530,12 +530,19 @@ export const usePluginSearch = () => {
   return useMutation<
     PluginSearchResponse,
     ShishoAPIError,
-    { query: string; bookId: number }
+    {
+      query: string;
+      bookId: number;
+      author?: string;
+      identifiers?: Array<{ type: string; value: string }>;
+    }
   >({
-    mutationFn: ({ query, bookId }) => {
+    mutationFn: ({ query, bookId, author, identifiers }) => {
       return API.request<PluginSearchResponse>("POST", "/plugins/search", {
         query,
         book_id: bookId,
+        author: author || undefined,
+        identifiers: identifiers?.length ? identifiers : undefined,
       });
     },
   });
