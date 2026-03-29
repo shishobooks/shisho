@@ -75,3 +75,10 @@ func (f *File) CoverExtension() string {
 	}
 	return ext
 }
+
+// IsPageBasedFileType returns true for file types that derive covers from page
+// content (CBZ, PDF). These formats should never have their covers replaced by
+// external sources (plugins, uploads).
+func IsPageBasedFileType(fileType string) bool {
+	return fileType == FileTypeCBZ || fileType == FileTypePDF
+}
