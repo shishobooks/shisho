@@ -426,6 +426,7 @@ func (h *handler) update(c echo.Context) error {
 		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, nil); err != nil {
 			return errors.WithStack(err)
 		}
+		plugin.ConfidenceThreshold = nil
 	} else if payload.ConfidenceThreshold != nil {
 		if *payload.ConfidenceThreshold < 0 || *payload.ConfidenceThreshold > 1 {
 			return errcodes.ValidationError("confidence_threshold must be between 0 and 1")
@@ -433,6 +434,7 @@ func (h *handler) update(c echo.Context) error {
 		if err := h.service.UpdateConfidenceThreshold(ctx, scope, id, payload.ConfidenceThreshold); err != nil {
 			return errors.WithStack(err)
 		}
+		plugin.ConfidenceThreshold = payload.ConfidenceThreshold
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))

@@ -426,8 +426,6 @@ return {
 
 For advanced use cases (file parsers extracting embedded covers, or enrichers that generate/composite images), you can set `coverData` as an `ArrayBuffer` instead. If both are set, `coverData` takes precedence.
 
-If both `coverUrl` and `coverData` are set, `coverData` takes precedence.
-
 #### File Hints
 
 The `context.file` object provides read-only metadata about the file being enriched. Use it to narrow your search — for example, filtering audiobook results by duration or distinguishing a comic from a novel by page count:

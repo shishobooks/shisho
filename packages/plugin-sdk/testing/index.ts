@@ -337,6 +337,7 @@ export function createMockShisho(
       querySelectorAll: notImplemented("xml.querySelectorAll") as never,
     },
     html: {
+      parse: notImplemented("html.parse") as never,
       querySelector: notImplemented("html.querySelector") as never,
       querySelectorAll: notImplemented("html.querySelectorAll") as never,
     },
