@@ -455,6 +455,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// Run metadata enrichers after parsing
 	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
 
+	// Apply enricher cover if it's higher resolution than the current cover
+	w.upgradeEnricherCover(ctx, metadata, file, book.Filepath, opts.JobLog)
+
 	// Use scanFileCore for all metadata updates, sidecars, and search index
 	// This is a resync (FileID mode), so pass isResync=true to enable book organization
 	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
@@ -2220,6 +2223,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 
 	// Run metadata enrichers after parsing
 	metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID, opts.JobLog)
+
+	// Apply enricher cover if it's higher resolution than the current cover
+	w.upgradeEnricherCover(ctx, metadata, file, bookPath, opts.JobLog)
 
 	// Use scanFileCore to handle all metadata updates (authors, series, etc.)
 	// This is a batch scan (FilePath mode), so pass isResync=false to skip book organization
