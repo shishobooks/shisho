@@ -144,4 +144,8 @@ Shisho tracks the **source** of every metadata field. When a scan encounters new
 | | **File metadata** | Embedded metadata from EPUB, CBZ, M4B, and PDF files |
 | Lowest | **Filepath** | Parsed from the filename and directory structure |
 
-This means your manual edits are never overwritten by scans. If you want to reset a field to the value from the file, use the **Resync with refresh** option, which re-reads embedded file metadata and ignores the priority system (but still preserves manual edits for fields where the embedded value is empty).
+This means your manual edits are never overwritten by a normal scan. If you need to override the priority system, the **Rescan** dialog offers three modes:
+
+- **Scan for new metadata** — Respects the priority system. Won't overwrite manual edits or higher-priority sources.
+- **Refresh all metadata** — Bypasses the priority system and overwrites all fields, including manual edits. Re-runs plugins.
+- **Reset to file metadata** — Bypasses the priority system and overwrites all fields using only metadata embedded in the source file(s), skipping plugins entirely. Use this when plugin enrichment is matching incorrectly.

@@ -4,8 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { API } from "@/libraries/api";
 import { Book, File } from "@/types";
 
+export type RescanMode = "scan" | "refresh" | "reset";
+
 export interface ResyncPayload {
-  refresh: boolean;
+  mode: RescanMode;
 }
 
 export interface ResyncFileResult {
