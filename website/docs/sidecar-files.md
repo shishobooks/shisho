@@ -134,9 +134,13 @@ This means:
 - Manual edits through the interface **override** sidecar values
 - When you make a manual edit, the sidecar is also updated to stay in sync
 
-### Resync with Refresh
+### Rescanning and Sidecars
 
-The **Resync with refresh** option on a book skips sidecar files and re-reads metadata directly from the embedded file data. This is useful if a sidecar has incorrect data and you want to reset to what's in the file. Manual edits are still preserved.
+The **Rescan** dialog on a book or file offers three modes that interact with sidecars differently:
+
+- **Scan for new metadata** — Reads file metadata and runs plugins. Sidecar values are applied as usual according to the priority system. Won't overwrite manual edits.
+- **Refresh all metadata** — Re-reads file metadata and runs plugins, bypassing the priority system. Sidecar values are skipped. Overwrites all fields including manual edits.
+- **Reset to file metadata** — Re-reads only the metadata embedded in the source file(s), skipping both plugins and sidecars. Use this when plugin enrichment has matched incorrectly and you want to start fresh with just what's in the file.
 
 ## When Sidecars Are Read
 
