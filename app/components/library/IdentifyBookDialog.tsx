@@ -343,11 +343,11 @@ export function IdentifyBookDialog({
                     >
                       <div className="flex gap-3">
                         {/* Cover thumbnail */}
-                        {result.image_url ? (
+                        {result.cover_url ? (
                           <img
                             alt=""
                             className="w-16 h-24 object-cover rounded shrink-0 bg-muted"
-                            src={result.image_url}
+                            src={result.cover_url}
                           />
                         ) : (
                           <div className="w-16 h-24 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs">

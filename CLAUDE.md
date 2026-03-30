@@ -67,14 +67,14 @@ var p payload
 c.Bind(&p)
 ```
 
-**CoverImagePath stores filename only** — `file.CoverImagePath` stores just the filename (e.g., `book.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime. Always use `filepath.Base()` when updating:
+**CoverImageFilename stores filename only** — `file.CoverImageFilename` stores just the filename (e.g., `book.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime. Always use `filepath.Base()` when updating:
 ```go
 // ❌ WRONG - stores full path, breaks cover serving
-file.CoverImagePath = &fullPath
+file.CoverImageFilename = &fullPath
 
 // ✅ CORRECT - stores filename only
 filename := filepath.Base(fullPath)
-file.CoverImagePath = &filename
+file.CoverImageFilename = &filename
 ```
 
 **JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`.

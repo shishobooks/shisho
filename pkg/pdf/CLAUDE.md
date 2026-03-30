@@ -67,6 +67,15 @@ Cover extraction uses a two-tier approach implemented in `pkg/pdf/cover.go`:
 - The pdfium WASM pool is lazily initialized via `sync.Once` (embeds ~15-25 MB PDFium binary)
 - Pool configured with `MaxTotal: 1` to limit memory usage
 
+### CoverPage Always Set
+
+`CoverPage` is always set to `0` for PDF files, even when cover extraction fails. This ensures:
+- The frontend shows the page picker (not the upload button)
+- File type guards consistently block external covers for PDFs
+- The data is consistent: PDFs are page-based formats
+
+Do NOT conditionally set `CoverPage` based on extraction success. The file type (`models.IsPageBasedFileType`) is the authoritative guard for cover protection, and `CoverPage` serves as page selection data.
+
 ### Error Handling
 
 Cover extraction is best-effort. If either tier fails, `Parse()` logs a warning and returns metadata without a cover (does not fail the parse).

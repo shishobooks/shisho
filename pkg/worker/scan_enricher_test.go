@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -465,8 +466,9 @@ func TestCoverPageProtection_EnricherCannotOverridePageCover(t *testing.T) {
 	require.NotNil(t, enrichedMeta.CoverPage)
 	assert.Equal(t, 0, *enrichedMeta.CoverPage)
 
-	// 3. Apply CoverPage protection (as runMetadataEnrichers does)
-	if fileMetadata.CoverPage != nil {
+	// 3. Apply page-based file type protection (as runMetadataEnrichers does)
+	fileType := models.FileTypeCBZ
+	if models.IsPageBasedFileType(fileType) {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
 		enrichedMeta.CoverPage = fileMetadata.CoverPage
@@ -509,8 +511,9 @@ func TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved(t *testing.T) {
 	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
 
-	// CoverPage protection should NOT trigger (no CoverPage)
-	if fileMetadata.CoverPage != nil {
+	// Page-based file type protection should NOT trigger (EPUB is not page-based)
+	fileType := models.FileTypeEPUB
+	if models.IsPageBasedFileType(fileType) {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
 		enrichedMeta.CoverPage = fileMetadata.CoverPage

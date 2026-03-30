@@ -511,7 +511,6 @@ export interface PluginSearchResult {
   title: string;
   authors?: Array<{ name: string; role?: string }>;
   description?: string;
-  image_url?: string;
   release_date?: string;
   publisher?: string;
   subtitle?: string;

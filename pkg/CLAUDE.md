@@ -78,28 +78,28 @@ Each book has an optional `PrimaryFileID` (`*int`) that designates which file is
 - Book model has `ResolveCoverImage()` method that finds covers dynamically
 - API endpoints: `/books/{id}/cover` and `/files/{id}/cover`
 
-**CRITICAL - CoverImagePath stores FILENAME ONLY:**
+**CRITICAL - CoverImageFilename stores FILENAME ONLY:**
 
-`file.CoverImagePath` stores just the filename (e.g., `MyBook.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime by joining the book directory with the filename.
+`file.CoverImageFilename` stores just the filename (e.g., `MyBook.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime by joining the book directory with the filename.
 
-When updating `CoverImagePath` (e.g., after renaming a file), always use `filepath.Base()` to extract just the filename:
+When updating `CoverImageFilename` (e.g., after renaming a file), always use `filepath.Base()` to extract just the filename:
 
 ```go
 // ❌ WRONG - stores full path, breaks cover serving
-newCoverPath := fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath)
-file.CoverImagePath = &newCoverPath
+newCoverPath := fileutils.ComputeNewCoverPath(*file.CoverImageFilename, newPath)
+file.CoverImageFilename = &newCoverPath
 
 // ✅ CORRECT - stores filename only
-newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImagePath, newPath))
-file.CoverImagePath = &newCoverPath
+newCoverPath := filepath.Base(fileutils.ComputeNewCoverPath(*file.CoverImageFilename, newPath))
+file.CoverImageFilename = &newCoverPath
 ```
 
 **Why this matters:** The `bookCover` handler constructs the full path as:
 ```go
-coverPath := filepath.Join(coverDir, *coverFile.CoverImagePath)
+coverPath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
 ```
 
-If `CoverImagePath` contains a full path, this results in an invalid doubled path like `/path/to/path/to/cover.jpg`.
+If `CoverImageFilename` contains a full path, this results in an invalid doubled path like `/path/to/path/to/cover.jpg`.
 
 ### Data Source Priority System
 

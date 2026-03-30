@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -14,6 +13,20 @@ import (
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
+
+var errJSPanic = errors.New("JS runtime panicked")
+
+// safeCallJS invokes a goja function with panic recovery. The goja runtime can
+// panic on certain JS exceptions (e.g., nil pointer in handleThrow). This wrapper
+// ensures plugin errors never crash the server.
+func safeCallJS(fn goja.Callable, this goja.Value, args ...goja.Value) (result goja.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Wrapf(errJSPanic, "%v", r)
+		}
+	}()
+	return fn(this, args...)
+}
 
 // ConvertResult is the result of an input converter hook.
 type ConvertResult struct {
@@ -31,8 +44,8 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -60,7 +73,7 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 	contextObj.Set("targetDir", targetDir)   //nolint:errcheck
 
 	// Call the hook
-	result, err := convertFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(convertFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return nil, errors.Wrap(err, "inputConverter.convert failed")
 	}
@@ -79,8 +92,8 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -108,7 +121,7 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	contextObj.Set("fileType", fileType) //nolint:errcheck
 
 	// Call the hook
-	result, err := parseFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(parseFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return nil, errors.Wrap(err, "fileParser.parse failed")
 	}
@@ -143,8 +156,8 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext (no extra allowed paths for enrichers)
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -167,7 +180,7 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	}
 
 	// Call the hook
-	result, err := searchFn(goja.Undefined(), rt.vm.ToValue(searchCtx))
+	result, err := safeCallJS(searchFn, goja.Undefined(), rt.vm.ToValue(searchCtx))
 	if err != nil {
 		return nil, errors.Wrap(err, "metadataEnricher.search failed")
 	}
@@ -186,8 +199,8 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 	defer cancel()
 	_ = ctx // reserved for future cancellation support
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -217,7 +230,7 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 	contextObj.Set("file", fileCtx)          //nolint:errcheck
 
 	// Call the hook
-	_, err := generateFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	_, err := safeCallJS(generateFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return errors.Wrap(err, "outputGenerator.generate failed")
 	}
@@ -231,8 +244,8 @@ func (m *Manager) RunFingerprint(rt *Runtime, bookCtx, fileCtx map[string]interf
 		return "", errors.New("plugin does not have an outputGenerator hook")
 	}
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Get the fingerprint method
 	generatorObj := rt.outputGenerator.ToObject(rt.vm)
@@ -251,7 +264,7 @@ func (m *Manager) RunFingerprint(rt *Runtime, bookCtx, fileCtx map[string]interf
 	contextObj.Set("file", fileCtx) //nolint:errcheck
 
 	// Call the hook
-	result, err := fingerprintFn(goja.Undefined(), rt.vm.ToValue(contextObj))
+	result, err := safeCallJS(fingerprintFn, goja.Undefined(), rt.vm.ToValue(contextObj))
 	if err != nil {
 		return "", errors.Wrap(err, "outputGenerator.fingerprint failed")
 	}
@@ -658,8 +671,8 @@ func (m *Manager) RunOnUninstalling(rt *Runtime) {
 		return
 	}
 
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	// Set up FSContext for the hook (plugin dir + data dir only)
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
@@ -670,17 +683,13 @@ func (m *Manager) RunOnUninstalling(rt *Runtime) {
 		fsCtx.Cleanup() //nolint:errcheck
 	}()
 
-	// Call the hook, recovering from panics (errors don't prevent uninstall)
+	// Call the hook — errors don't prevent uninstall
 	log := logger.New()
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Warn("onUninstalling hook panicked", logger.Data{
-					"plugin": rt.scope + "/" + rt.pluginID,
-					"panic":  fmt.Sprintf("%v", r),
-				})
-			}
-		}()
-		_, _ = rt.onUninstalling(goja.Undefined())
-	}()
+	_, err := safeCallJS(rt.onUninstalling, goja.Undefined())
+	if err != nil {
+		log.Warn("onUninstalling hook failed", logger.Data{
+			"plugin": rt.scope + "/" + rt.pluginID,
+			"error":  err.Error(),
+		})
+	}
 }
