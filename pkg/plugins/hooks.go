@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -684,17 +683,13 @@ func (m *Manager) RunOnUninstalling(rt *Runtime) {
 		fsCtx.Cleanup() //nolint:errcheck
 	}()
 
-	// Call the hook, recovering from panics (errors don't prevent uninstall)
+	// Call the hook — errors don't prevent uninstall
 	log := logger.New()
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Warn("onUninstalling hook panicked", logger.Data{
-					"plugin": rt.scope + "/" + rt.pluginID,
-					"panic":  fmt.Sprintf("%v", r),
-				})
-			}
-		}()
-		_, _ = rt.onUninstalling(goja.Undefined())
-	}()
+	_, err := safeCallJS(rt.onUninstalling, goja.Undefined())
+	if err != nil {
+		log.Warn("onUninstalling hook failed", logger.Data{
+			"plugin": rt.scope + "/" + rt.pluginID,
+			"error":  err.Error(),
+		})
+	}
 }
