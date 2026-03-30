@@ -229,6 +229,7 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
 				ForceRefresh: opts.ForceRefresh,
+				SkipPlugins:  opts.SkipPlugins,
 				JobLog:       opts.JobLog,
 			}, cache)
 		}
@@ -245,6 +246,7 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
 				ForceRefresh: opts.ForceRefresh,
+				SkipPlugins:  opts.SkipPlugins,
 				JobLog:       opts.JobLog,
 			}, cache)
 		}
