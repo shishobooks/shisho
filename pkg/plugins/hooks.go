@@ -15,13 +15,15 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+var errJSPanic = errors.New("JS runtime panicked")
+
 // safeCallJS invokes a goja function with panic recovery. The goja runtime can
 // panic on certain JS exceptions (e.g., nil pointer in handleThrow). This wrapper
 // ensures plugin errors never crash the server.
 func safeCallJS(fn goja.Callable, this goja.Value, args ...goja.Value) (result goja.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("JS runtime panicked: %v", r)
+			err = errors.Wrapf(errJSPanic, "%v", r)
 		}
 	}()
 	return fn(this, args...)
