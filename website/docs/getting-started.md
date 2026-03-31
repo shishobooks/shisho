@@ -17,7 +17,7 @@ services:
     container_name: shisho
     restart: unless-stopped
     ports:
-      - "5173:8080"
+      - "5173:5173"
     volumes:
       - ./data:/data
       - ./config:/config

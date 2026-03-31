@@ -131,7 +131,7 @@ If new icon directories are added under `src/theme/`, add corresponding exceptio
 
 ## Common Mistakes
 
-- **Editing versioned_docs directly** — These are snapshots. Edit `docs/` for unreleased content; versioned docs are regenerated on release.
+- **Editing versioned_docs directly** — These are point-in-time snapshots of how the app worked at that release. They should rarely be updated. For example, if the Docker container port changes, only update `docs/` — the old versioned docs correctly reflect what the port was at that version. Only edit versioned docs for factual errors that were wrong at the time of release (e.g., a broken link), not to backport current behavior.
 - **Forgetting `sidebar_position`** — Pages without it appear in alphabetical order. Always set explicit positions.
 - **Running `pnpm install` instead of `mise setup`** — In a new worktree, `mise setup` handles both root and website deps.
 - **Missing `.gitignore` exception for new Icon dirs** — New swizzled `Icon/` subdirectories won't be tracked without an exception.

@@ -4,7 +4,7 @@ services:
     container_name: shisho
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "5173:5173"
     volumes:
       # Persistent data (database)
       - shisho-data:/app/data
