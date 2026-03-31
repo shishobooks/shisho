@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.24] - 2026-03-31
+
+### Features
+- Change Docker container port from 8080 to 5173 (#40)
+- Unified rescan dialog with skip-plugins mode (#39)
+- Add enricher cover resolution gate and page-based format protection (#38)
+
+
 ## [0.0.23] - 2026-03-29
 
 
