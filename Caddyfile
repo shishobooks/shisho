@@ -1,7 +1,7 @@
 # Shisho Production Configuration
 # Serves frontend on / and proxies /api/* to the Go backend
 
-:8080 {
+:5173 {
     # Logging
     log {
         output stdout

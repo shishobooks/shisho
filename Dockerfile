@@ -110,10 +110,10 @@ ENV PGID=1000
 ENV STARTUP_TIMEOUT_SECONDS=120
 
 # Expose HTTP port
-EXPOSE 8080
+EXPOSE 5173
 
 # Health check (start-period allows time for initial migrations on slow storage)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=120s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/health || exit 1
+    CMD wget -q --spider http://localhost:5173/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
