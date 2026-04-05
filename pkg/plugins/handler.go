@@ -28,6 +28,12 @@ import (
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
 
+var validPluginModes = map[string]bool{
+	models.PluginModeEnabled:    true,
+	models.PluginModeManualOnly: true,
+	models.PluginModeDisabled:   true,
+}
+
 // enrichDeps holds dependencies for metadata persistence (apply/enrich).
 // Uses interfaces to avoid circular imports with the books package.
 type enrichDeps struct {
@@ -533,6 +539,9 @@ func (h *handler) setOrder(c echo.Context) error {
 		mode := entry.Mode
 		if mode == "" {
 			mode = models.PluginModeEnabled
+		}
+		if !validPluginModes[mode] {
+			return errcodes.ValidationError(fmt.Sprintf("invalid mode %q for plugin %s/%s", mode, entry.Scope, entry.ID))
 		}
 		orderEntries[i] = models.PluginHookConfig{
 			Scope:    entry.Scope,
@@ -1079,6 +1088,9 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 		mode := p.Mode
 		if mode == "" {
 			mode = models.PluginModeEnabled
+		}
+		if !validPluginModes[mode] {
+			return errcodes.ValidationError(fmt.Sprintf("invalid mode %q for plugin %s/%s", mode, p.Scope, p.ID))
 		}
 		entries[i] = models.LibraryPluginHookConfig{
 			Scope:    p.Scope,
