@@ -230,3 +230,59 @@ func TestAnnotateVersionCompatibility_AllIncompatible(t *testing.T) {
 	require.Len(t, annotated, 1)
 	assert.False(t, annotated[0].Compatible)
 }
+
+func TestFetchRepository_WithCapabilities(t *testing.T) {
+	manifest := RepositoryManifest{
+		RepositoryVersion: 1,
+		Scope:             "test",
+		Name:              "Test Plugins",
+		Plugins: []AvailablePlugin{
+			{
+				ID:   "enricher",
+				Name: "Enricher",
+				Versions: []PluginVersion{
+					{
+						Version:         "1.0.0",
+						ManifestVersion: 1,
+						DownloadURL:     "https://github.com/test/releases/download/v1.0.0/plugin.zip",
+						SHA256:          "abc123",
+						Capabilities: &Capabilities{
+							MetadataEnricher: &MetadataEnricherCap{
+								FileTypes: []string{"epub", "m4b"},
+								Fields:    []string{"title", "authors"},
+							},
+							HTTPAccess: &HTTPAccessCap{
+								Domains: []string{"*.example.com"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(manifest)
+	}))
+	defer server.Close()
+
+	origHosts := AllowedFetchHosts
+	AllowedFetchHosts = []string{server.URL}
+	defer func() { AllowedFetchHosts = origHosts }()
+
+	result, err := FetchRepository(server.URL + "/plugins.json")
+	require.NoError(t, err)
+	require.Len(t, result.Plugins, 1)
+	require.Len(t, result.Plugins[0].Versions, 1)
+
+	caps := result.Plugins[0].Versions[0].Capabilities
+	require.NotNil(t, caps)
+	require.NotNil(t, caps.MetadataEnricher)
+	assert.Equal(t, []string{"epub", "m4b"}, caps.MetadataEnricher.FileTypes)
+	assert.Equal(t, []string{"title", "authors"}, caps.MetadataEnricher.Fields)
+	require.NotNil(t, caps.HTTPAccess)
+	assert.Equal(t, []string{"*.example.com"}, caps.HTTPAccess.Domains)
+	assert.Nil(t, caps.FFmpegAccess)
+	assert.Nil(t, caps.ShellAccess)
+}
