@@ -512,13 +512,12 @@ export function IdentifyReviewForm({
     !!newCoverDims &&
     currentCoverDims.w === newCoverDims.w &&
     currentCoverDims.h === newCoverDims.h;
-  const [coverDimsApplied, setCoverDimsApplied] = useState(false);
+  const [coverUserTouched, setCoverUserTouched] = useState(false);
   useEffect(() => {
-    if (coverDimsMatch && !coverDimsApplied) {
+    if (coverDimsMatch && !coverUserTouched) {
       setCoverSelection("current");
-      setCoverDimsApplied(true);
     }
-  }, [coverDimsMatch, coverDimsApplied]);
+  }, [coverDimsMatch, coverUserTouched]);
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -660,7 +659,10 @@ export function IdentifyReviewForm({
                   isDisabled("cover") && "opacity-60 cursor-not-allowed",
                 )}
                 disabled={isDisabled("cover")}
-                onClick={() => setCoverSelection("current")}
+                onClick={() => {
+                  setCoverSelection("current");
+                  setCoverUserTouched(true);
+                }}
                 type="button"
               >
                 <img
@@ -683,7 +685,10 @@ export function IdentifyReviewForm({
                 isDisabled("cover") && "opacity-60 cursor-not-allowed",
               )}
               disabled={isDisabled("cover")}
-              onClick={() => setCoverSelection("new")}
+              onClick={() => {
+                setCoverSelection("new");
+                setCoverUserTouched(true);
+              }}
               type="button"
             >
               <img
