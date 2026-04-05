@@ -497,7 +497,8 @@ const OrderTab = () => {
       localOrder.some(
         (item, i) =>
           item.scope !== order?.[i]?.scope ||
-          item.plugin_id !== order?.[i]?.plugin_id,
+          item.plugin_id !== order?.[i]?.plugin_id ||
+          item.mode !== order?.[i]?.mode,
       ));
 
   const handleMove = (index: number, direction: "up" | "down") => {
@@ -511,11 +512,21 @@ const OrderTab = () => {
     setLocalOrder(newOrder);
   };
 
+  const handleModeChange = (index: number, mode: string) => {
+    const newOrder = [...displayOrder];
+    newOrder[index] = { ...newOrder[index], mode };
+    setLocalOrder(newOrder);
+  };
+
   const handleSave = () => {
     setPluginOrder.mutate(
       {
         hookType: selectedHookType,
-        order: displayOrder.map((o) => ({ scope: o.scope, id: o.plugin_id })),
+        order: displayOrder.map((o) => ({
+          scope: o.scope,
+          id: o.plugin_id,
+          mode: o.mode,
+        })),
       },
       {
         onSuccess: () => {
@@ -580,7 +591,13 @@ const OrderTab = () => {
         <div className="space-y-2">
           {displayOrder.map((item, index) => (
             <div
-              className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+              className={`flex items-center justify-between gap-3 rounded-md border p-3 ${
+                item.mode === "disabled"
+                  ? "border-border/50 opacity-60"
+                  : item.mode === "manual_only"
+                    ? "border-border/70 opacity-80"
+                    : "border-border"
+              }`}
               key={`${item.scope}/${item.plugin_id}`}
             >
               <div className="flex items-center gap-3">
@@ -594,6 +611,21 @@ const OrderTab = () => {
               </div>
               {canWrite && (
                 <div className="flex items-center gap-1">
+                  <Select
+                    onValueChange={(value) => handleModeChange(index, value)}
+                    value={item.mode}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="enabled">Enabled</SelectItem>
+                      {selectedHookType === "metadataEnricher" && (
+                        <SelectItem value="manual_only">Manual Only</SelectItem>
+                      )}
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     disabled={index === 0}
                     onClick={() => handleMove(index, "up")}
