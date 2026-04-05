@@ -169,7 +169,7 @@ func (inst *Installer) downloadToTemp(ctx context.Context, url string) (string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.Errorf("failed to download plugin: HTTP %d from %s", resp.StatusCode, url)
+		return "", errors.Errorf("failed to download plugin: HTTP %d", resp.StatusCode)
 	}
 
 	tmpFile, err := os.CreateTemp("", "plugin-download-*.zip")
