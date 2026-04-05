@@ -127,10 +127,10 @@ Shisho can be configured via a YAML config file or environment variables. Enviro
 
 ### Required Settings
 
-| Setting                 | Env Variable            | Description                          |
-| ----------------------- | ----------------------- | ------------------------------------ |
-| `database_file_path`    | `DATABASE_FILE_PATH`    | Path to the SQLite database          |
-| `jwt_secret`            | `JWT_SECRET`            | Secret key for authentication tokens |
+| Setting              | Env Variable         | Description                          |
+| -------------------- | -------------------- | ------------------------------------ |
+| `database_file_path` | `DATABASE_FILE_PATH` | Path to the SQLite database          |
+| `jwt_secret`         | `JWT_SECRET`         | Secret key for authentication tokens |
 
 For a complete reference of all configuration options, see [`shisho.example.yaml`](shisho.example.yaml).
 
