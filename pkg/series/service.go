@@ -177,7 +177,7 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		q = q.Where("s.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("s.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("s.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

@@ -65,7 +65,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 	var files []*models.File
 	err := svc.db.NewSelect().
 		Model(&files).
-		Where("id IN (?)", bun.In(opts.FileIDs)).
+		Where("id IN (?)", bun.List(opts.FileIDs)).
 		Where("library_id = ?", opts.LibraryID).
 		Scan(ctx)
 	if err != nil {
@@ -128,7 +128,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		var sourceBooks []*models.Book
 		err = svc.db.NewSelect().
 			Model(&sourceBooks).
-			Where("id IN (?)", bun.In(sourceIDs)).
+			Where("id IN (?)", bun.List(sourceIDs)).
 			Scan(ctx)
 		if err != nil {
 			log.Warn("failed to fetch source book paths for cleanup", logger.Data{"error": err.Error()})

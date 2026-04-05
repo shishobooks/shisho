@@ -141,7 +141,7 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 		q = q.Where("deleted_at IS NULL")
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("l.id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("l.id IN (?)", bun.List(opts.LibraryIDs))
 	}
 
 	if opts.includeTotal {

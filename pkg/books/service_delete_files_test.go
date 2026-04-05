@@ -111,7 +111,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	// Verify file records are gone
 	var fileCount int
 	err = db.NewSelect().TableExpr("files").
-		Where("id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		Where("id IN (?)", bun.List([]int{file1.ID, file2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &fileCount)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	// Verify narrators are gone
 	var narratorCount int
 	err = db.NewSelect().TableExpr("narrators").
-		Where("file_id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		Where("file_id IN (?)", bun.List([]int{file1.ID, file2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &narratorCount)
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	// Verify identifiers are gone
 	var identifierCount int
 	err = db.NewSelect().TableExpr("file_identifiers").
-		Where("file_id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		Where("file_id IN (?)", bun.List([]int{file1.ID, file2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &identifierCount)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	// Verify chapters are gone
 	var chapterCount int
 	err = db.NewSelect().TableExpr("chapters").
-		Where("file_id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		Where("file_id IN (?)", bun.List([]int{file1.ID, file2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &chapterCount)
 	require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify book records are gone
 	var bookCount int
 	err = db.NewSelect().TableExpr("books").
-		Where("id IN (?)", bun.In(bookIDs)).
+		Where("id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &bookCount)
 	require.NoError(t, err)
@@ -334,7 +334,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify file records are gone
 	var fileCount int
 	err = db.NewSelect().TableExpr("files").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &fileCount)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify narrators are gone
 	var narratorCount int
 	err = db.NewSelect().TableExpr("narrators").
-		Where("file_id IN (?)", bun.In(fileIDs)).
+		Where("file_id IN (?)", bun.List(fileIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &narratorCount)
 	require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify identifiers are gone
 	var identifierCount int
 	err = db.NewSelect().TableExpr("file_identifiers").
-		Where("file_id IN (?)", bun.In(fileIDs)).
+		Where("file_id IN (?)", bun.List(fileIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &identifierCount)
 	require.NoError(t, err)
@@ -361,7 +361,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify chapters are gone
 	var chapterCount int
 	err = db.NewSelect().TableExpr("chapters").
-		Where("file_id IN (?)", bun.In(fileIDs)).
+		Where("file_id IN (?)", bun.List(fileIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &chapterCount)
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify authors are gone
 	var authorCount int
 	err = db.NewSelect().TableExpr("authors").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &authorCount)
 	require.NoError(t, err)
@@ -379,7 +379,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify book genres are gone
 	var bookGenreCount int
 	err = db.NewSelect().TableExpr("book_genres").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &bookGenreCount)
 	require.NoError(t, err)
@@ -388,7 +388,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify book tags are gone
 	var bookTagCount int
 	err = db.NewSelect().TableExpr("book_tags").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &bookTagCount)
 	require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify book series associations are gone
 	var bookSeriesCount int
 	err = db.NewSelect().TableExpr("book_series").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		ColumnExpr("count(*)").
 		Scan(ctx, &bookSeriesCount)
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	// Verify Person records still exist (orphaned entities cleaned up separately)
 	var personCount int
 	err = db.NewSelect().TableExpr("persons").
-		Where("id IN (?)", bun.In([]int{person1.ID, person2.ID})).
+		Where("id IN (?)", bun.List([]int{person1.ID, person2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &personCount)
 	require.NoError(t, err)
@@ -544,7 +544,7 @@ func TestDeleteBook_DeletesChapters(t *testing.T) {
 	// Verify all chapters are gone
 	var chapterCount int
 	err = db.NewSelect().TableExpr("chapters").
-		Where("file_id IN (?)", bun.In([]int{file1.ID, file2.ID})).
+		Where("file_id IN (?)", bun.List([]int{file1.ID, file2.ID})).
 		ColumnExpr("count(*)").
 		Scan(ctx, &chapterCount)
 	require.NoError(t, err)

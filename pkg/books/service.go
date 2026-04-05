@@ -317,27 +317,27 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("b.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("b.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 
 	// Filter by specific book IDs
 	if len(opts.IDs) > 0 {
-		q = q.Where("b.id IN (?)", bun.In(opts.IDs))
+		q = q.Where("b.id IN (?)", bun.List(opts.IDs))
 	}
 
 	// Filter by file types
 	if len(opts.FileTypes) > 0 {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(opts.FileTypes))
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(opts.FileTypes))
 	}
 
 	// Filter by genre IDs
 	if len(opts.GenreIDs) > 0 {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_genres WHERE genre_id IN (?))", bun.In(opts.GenreIDs))
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_genres WHERE genre_id IN (?))", bun.List(opts.GenreIDs))
 	}
 
 	// Filter by tag IDs
 	if len(opts.TagIDs) > 0 {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_tags WHERE tag_id IN (?))", bun.In(opts.TagIDs))
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_tags WHERE tag_id IN (?))", bun.List(opts.TagIDs))
 	}
 
 	// Search using FTS5
@@ -1368,7 +1368,7 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 		// Delete narrators for all files
 		_, err := tx.NewDelete().
 			Model((*models.Narrator)(nil)).
-			Where("file_id IN (?)", bun.In(fileIDs)).
+			Where("file_id IN (?)", bun.List(fileIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1377,7 +1377,7 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 		// Delete identifiers for all files
 		_, err = tx.NewDelete().
 			Model((*models.FileIdentifier)(nil)).
-			Where("file_id IN (?)", bun.In(fileIDs)).
+			Where("file_id IN (?)", bun.List(fileIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1386,7 +1386,7 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 		// Delete chapters for all files
 		_, err = tx.NewDelete().
 			Model((*models.Chapter)(nil)).
-			Where("file_id IN (?)", bun.In(fileIDs)).
+			Where("file_id IN (?)", bun.List(fileIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1395,7 +1395,7 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 		// Delete the file records
 		_, err = tx.NewDelete().
 			Model((*models.File)(nil)).
-			Where("id IN (?)", bun.In(fileIDs)).
+			Where("id IN (?)", bun.List(fileIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1447,7 +1447,7 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 		if len(fileIDs) > 0 {
 			_, err = tx.NewDelete().
 				Model((*models.Narrator)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1456,7 +1456,7 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 			// Delete identifiers for all files
 			_, err = tx.NewDelete().
 				Model((*models.FileIdentifier)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1465,7 +1465,7 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 			// Delete chapters for all files
 			_, err = tx.NewDelete().
 				Model((*models.Chapter)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1543,7 +1543,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		err := tx.NewSelect().
 			Model((*models.File)(nil)).
 			Column("id").
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Scan(ctx, &fileIDs)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1553,7 +1553,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		if len(fileIDs) > 0 {
 			_, err = tx.NewDelete().
 				Model((*models.Narrator)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1561,7 +1561,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 
 			_, err = tx.NewDelete().
 				Model((*models.FileIdentifier)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1569,7 +1569,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 
 			_, err = tx.NewDelete().
 				Model((*models.Chapter)(nil)).
-				Where("file_id IN (?)", bun.In(fileIDs)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
@@ -1579,7 +1579,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete files
 		_, err = tx.NewDelete().
 			Model((*models.File)(nil)).
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1588,7 +1588,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete authors
 		_, err = tx.NewDelete().
 			Model((*models.Author)(nil)).
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1597,7 +1597,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete book series associations
 		_, err = tx.NewDelete().
 			Model((*models.BookSeries)(nil)).
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1606,7 +1606,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete book genres
 		_, err = tx.NewDelete().
 			Model((*models.BookGenre)(nil)).
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1615,7 +1615,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete book tags
 		_, err = tx.NewDelete().
 			Model((*models.BookTag)(nil)).
-			Where("book_id IN (?)", bun.In(bookIDs)).
+			Where("book_id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1624,7 +1624,7 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 		// Delete book records
 		_, err = tx.NewDelete().
 			Model((*models.Book)(nil)).
-			Where("id IN (?)", bun.In(bookIDs)).
+			Where("id IN (?)", bun.List(bookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
