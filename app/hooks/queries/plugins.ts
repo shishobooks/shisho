@@ -26,11 +26,13 @@ export {
 
 export interface PluginVersion {
   version: string;
-  min_app_version: string;
+  minShishoVersion: string;
+  compatible: boolean;
   changelog: string;
-  download_url: string;
+  downloadUrl: string;
   sha256: string;
-  manifest_version: number;
+  manifestVersion: number;
+  releaseDate: string;
 }
 
 export interface AvailablePlugin {
@@ -43,6 +45,7 @@ export interface AvailablePlugin {
   homepage: string;
   imageUrl: string;
   versions: PluginVersion[];
+  compatible: boolean;
 }
 
 // --- Query Keys ---

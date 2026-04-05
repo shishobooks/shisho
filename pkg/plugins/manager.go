@@ -475,7 +475,7 @@ func (m *Manager) CheckForUpdates(ctx context.Context) error {
 				if available.ID != plugin.ID {
 					continue
 				}
-				compatible := FilterCompatibleVersions(available.Versions)
+				compatible := FilterVersionCompatibleVersions(FilterCompatibleVersions(available.Versions))
 				if len(compatible) == 0 {
 					continue
 				}

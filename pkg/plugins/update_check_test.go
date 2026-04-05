@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -405,4 +406,64 @@ func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
 	updated, err := service.RetrievePlugin(ctx, "community", "my-plugin")
 	require.NoError(t, err)
 	assert.Nil(t, updated.UpdateAvailableVersion)
+}
+
+func TestManager_CheckForUpdates_MinShishoVersionFiltered(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	mgr := NewManager(service, t.TempDir(), "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "official",
+		ID:          "my-plugin",
+		Name:        "My Plugin",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	repo := &models.PluginRepository{
+		URL:        "https://raw.githubusercontent.com/test/repo/main/manifest.json",
+		Scope:      "official",
+		Name:       strPtr("Official Repo"),
+		IsOfficial: true,
+		Enabled:    true,
+	}
+	err = service.AddRepository(ctx, repo)
+	require.NoError(t, err)
+
+	mgr.fetchRepo = func(_ string) (*RepositoryManifest, error) {
+		return &RepositoryManifest{
+			RepositoryVersion: 1,
+			Scope:             "official",
+			Name:              "Official Repo",
+			Plugins: []AvailablePlugin{
+				{
+					ID:   "my-plugin",
+					Name: "My Plugin",
+					Versions: []PluginVersion{
+						{Version: "1.0.0", ManifestVersion: 1, MinShishoVersion: "0.1.0"},
+						{Version: "1.5.0", ManifestVersion: 1, MinShishoVersion: "0.5.0"},
+						{Version: "2.0.0", ManifestVersion: 1, MinShishoVersion: "99.0.0"},
+					},
+				},
+			},
+		}, nil
+	}
+
+	err = mgr.CheckForUpdates(ctx)
+	require.NoError(t, err)
+
+	// Should flag 1.5.0 as available, not 2.0.0 (incompatible minShishoVersion)
+	updated, err := service.RetrievePlugin(ctx, "official", "my-plugin")
+	require.NoError(t, err)
+	require.NotNil(t, updated.UpdateAvailableVersion)
+	assert.Equal(t, "1.5.0", *updated.UpdateAvailableVersion)
 }

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -152,4 +153,80 @@ func TestFilterCompatibleVersions_NoMatch(t *testing.T) {
 func TestFilterCompatibleVersions_Empty(t *testing.T) {
 	compatible := FilterCompatibleVersions(nil)
 	assert.Empty(t, compatible)
+}
+
+func TestFilterVersionCompatibleVersions(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "0.1.0", ManifestVersion: 1},
+		{Version: "2.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+		{Version: "1.1.0", MinShishoVersion: "", ManifestVersion: 1},
+	}
+
+	compatible := FilterVersionCompatibleVersions(versions)
+	require.Len(t, compatible, 2)
+	assert.Equal(t, "1.0.0", compatible[0].Version)
+	assert.Equal(t, "1.1.0", compatible[1].Version)
+}
+
+func TestFilterVersionCompatibleVersions_AllIncompatible(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+		{Version: "2.0.0", MinShishoVersion: "100.0.0", ManifestVersion: 1},
+	}
+
+	compatible := FilterVersionCompatibleVersions(versions)
+	assert.Empty(t, compatible)
+}
+
+func TestFilterVersionCompatibleVersions_Empty(t *testing.T) {
+	t.Parallel()
+
+	compatible := FilterVersionCompatibleVersions(nil)
+	assert.Empty(t, compatible)
+}
+
+func TestAnnotateVersionCompatibility(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "0.5.0", ManifestVersion: 1},
+		{Version: "2.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+		{Version: "1.1.0", MinShishoVersion: "", ManifestVersion: 1},
+	}
+
+	annotated := AnnotateVersionCompatibility(versions)
+	require.Len(t, annotated, 3)
+
+	assert.True(t, annotated[0].Compatible)  // 0.5.0 <= 1.0.0
+	assert.False(t, annotated[1].Compatible) // 99.0.0 > 1.0.0
+	assert.True(t, annotated[2].Compatible)  // empty = compatible
+
+	// Verify original fields preserved
+	assert.Equal(t, "1.0.0", annotated[0].Version)
+	assert.Equal(t, "2.0.0", annotated[1].Version)
+	assert.Equal(t, "1.1.0", annotated[2].Version)
+}
+
+func TestAnnotateVersionCompatibility_AllIncompatible(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+	}
+
+	annotated := AnnotateVersionCompatibility(versions)
+	require.Len(t, annotated, 1)
+	assert.False(t, annotated[0].Compatible)
 }

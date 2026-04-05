@@ -56,7 +56,8 @@ export const CapabilitiesWarning = ({
 }: CapabilitiesWarningProps) => {
   if (!plugin) return null;
 
-  const latestVersion = plugin.versions[0];
+  const latestVersion =
+    plugin.versions.find((v) => v.compatible) ?? plugin.versions[0];
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -101,7 +102,7 @@ export const CapabilitiesWarning = ({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>Version: {latestVersion.version}</span>
             <Badge variant="outline">
-              Manifest v{latestVersion.manifest_version}
+              Manifest v{latestVersion.manifestVersion}
             </Badge>
           </div>
         )}
