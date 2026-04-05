@@ -40,15 +40,25 @@ Many plugins have configuration options, such as API keys for external services.
 3. Fill in the required configuration fields
 4. Save
 
-### Execution Order
+### Execution Order and Plugin Modes
 
-When multiple plugins of the same type are installed (e.g., two metadata enrichers), you can control the order they run in. Go to **Admin > Plugins** and drag plugins to reorder them within each hook type.
+When multiple plugins of the same type are installed (e.g., two metadata enrichers), you can control the order they run in and set their mode. Go to **Admin > Plugins** and use the **Order** tab to drag plugins to reorder them within each hook type.
+
+Each plugin can be set to one of three modes:
+
+| Mode | Automated Scans | Manual Identification | Use Case |
+|------|----------------|----------------------|----------|
+| **Enabled** | Runs automatically | Available | Default — plugin participates fully |
+| **Manual Only** | Skipped | Available | Rate-limited APIs, pay-per-use enrichers |
+| **Disabled** | Skipped | Unavailable | Temporarily turn off without uninstalling |
+
+**Manual Only** mode is only available for metadata enrichers. It lets you keep a plugin available for on-demand use (e.g., clicking "Identify" on a specific book) without having it run on every file during a library scan.
 
 ### Per-Library Settings
 
 Plugins can be customized on a per-library basis. In the library settings, you can:
 
-- **Enable or disable** specific plugins for that library
+- **Set the mode** for specific plugins in that library (enabled, manual only, or disabled)
 - **Reorder** plugin execution for that library
 - **Toggle individual fields** for metadata enrichers (e.g., allow a plugin to set genres but not the description)
 
