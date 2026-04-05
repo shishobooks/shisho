@@ -196,7 +196,7 @@ func (h *handler) install(c echo.Context) error {
 		// Install from provided download URL
 		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, payload.DownloadURL, payload.SHA256)
 		if err != nil {
-			return errors.WithStack(err)
+			return errcodes.BadRequest(err.Error())
 		}
 
 		plugin = &models.Plugin{
@@ -225,7 +225,7 @@ func (h *handler) install(c echo.Context) error {
 
 		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, downloadURL, sha256Hash)
 		if err != nil {
-			return errors.WithStack(err)
+			return errcodes.BadRequest(err.Error())
 		}
 
 		// Download plugin icon (non-fatal)
