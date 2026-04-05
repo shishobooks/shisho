@@ -121,13 +121,16 @@ description = "Run all checks, suppress output on success"
 depends = ["tygo"]
 run = '''
 tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
 for step in lint test test:js lint:js; do
+  echo 1 >"$tmpdir/$step.rc"
+  touch "$tmpdir/$step.out"
   ( mise "$step" >"$tmpdir/$step.out" 2>&1; echo $? >"$tmpdir/$step.rc" ) &
 done
 wait
 failed=0
 for step in lint test test:js lint:js; do
-  rc=$(cat "$tmpdir/$step.rc")
+  rc=$(cat "$tmpdir/$step.rc" 2>/dev/null || echo 1)
   if [ "$rc" -eq 0 ]; then
     printf '  \033[32mPASS\033[0m  %s\n' "$step"
   else
@@ -136,7 +139,6 @@ for step in lint test test:js lint:js; do
     failed=1
   fi
 done
-rm -rf "$tmpdir"
 if [ "$failed" -eq 1 ]; then
   printf '\n\033[31mcheck:quiet FAILED\033[0m\n'; exit 1
 else
