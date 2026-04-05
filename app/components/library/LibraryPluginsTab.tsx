@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   useLibraryPluginOrder,
   useResetLibraryPluginOrder,
@@ -58,7 +57,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
         (item, i) =>
           item.scope !== data?.plugins?.[i]?.scope ||
           item.id !== data?.plugins?.[i]?.id ||
-          item.enabled !== data?.plugins?.[i]?.enabled,
+          item.mode !== data?.plugins?.[i]?.mode,
       ));
 
   // Notify parent of changes
@@ -77,12 +76,12 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
     setLocalPlugins(newPlugins);
   };
 
-  const handleToggle = (index: number) => {
+  const handleModeChange = (
+    index: number,
+    mode: LibraryPluginOrderPlugin["mode"],
+  ) => {
     const newPlugins = [...displayPlugins];
-    newPlugins[index] = {
-      ...newPlugins[index],
-      enabled: !newPlugins[index].enabled,
-    };
+    newPlugins[index] = { ...newPlugins[index], mode };
     setLocalPlugins(newPlugins);
   };
 
@@ -98,7 +97,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
         plugins: displayPlugins.map((p) => ({
           scope: p.scope,
           id: p.id,
-          enabled: p.enabled,
+          mode: p.mode,
         })),
       },
       {
@@ -184,7 +183,11 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           {displayPlugins.map((plugin, index) => (
             <div
               className={`flex items-center justify-between gap-3 rounded-md border p-3 ${
-                plugin.enabled ? "border-border" : "border-border/50 opacity-60"
+                plugin.mode === "disabled"
+                  ? "border-border/50 opacity-60"
+                  : plugin.mode === "manual_only"
+                    ? "border-border/70 opacity-80"
+                    : "border-border"
               }`}
               key={`${plugin.scope}/${plugin.id}`}
             >
@@ -197,10 +200,26 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
               </div>
               {(isCustomized || localPlugins) && (
                 <div className="flex items-center gap-2">
-                  <Switch
-                    checked={plugin.enabled}
-                    onCheckedChange={() => handleToggle(index)}
-                  />
+                  <Select
+                    onValueChange={(value) =>
+                      handleModeChange(
+                        index,
+                        value as LibraryPluginOrderPlugin["mode"],
+                      )
+                    }
+                    value={plugin.mode}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="enabled">Enabled</SelectItem>
+                      {selectedHookType === "metadataEnricher" && (
+                        <SelectItem value="manual_only">Manual Only</SelectItem>
+                      )}
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     disabled={index === 0}
                     onClick={() => handleMove(index, "up")}
