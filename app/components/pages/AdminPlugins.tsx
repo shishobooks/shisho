@@ -1,4 +1,3 @@
-import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowDown,
@@ -38,8 +37,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PluginStatusActive,
-  QueryKey,
   useAddRepository,
+  useAllPluginOrders,
   useInstallPlugin,
   usePluginOrder,
   usePluginRepositories,
@@ -60,7 +59,6 @@ import {
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { API } from "@/libraries/api";
 
 // --- Installed Tab ---
 
@@ -473,33 +471,20 @@ const OrderTab = () => {
   const { data: plugins } = usePluginsInstalled();
 
   // Prefetch all hook type orders to find the first non-empty one
-  const allOrders = useQueries({
-    queries: HOOK_TYPES.map((ht) => ({
-      queryKey: [QueryKey.PluginOrder, ht.value],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        API.request<PluginOrder[]>(
-          "GET",
-          `/plugins/order/${ht.value}`,
-          null,
-          null,
-          signal,
-        ),
-    })),
-  });
+  const allOrders = useAllPluginOrders(HOOK_TYPES.map((ht) => ht.value));
+  const firstNonEmptyHookType = allOrders.every((q) => q.isSuccess)
+    ? (HOOK_TYPES.find((_, i) => (allOrders[i].data?.length ?? 0) > 0)?.value ??
+      null)
+    : undefined; // undefined = still loading, null = all empty
 
   // Auto-select the first non-empty hook type once data loads
   useEffect(() => {
-    if (hasAutoSelected) return;
-    const allLoaded = allOrders.every((q) => q.isSuccess);
-    if (!allLoaded) return;
-    const firstNonEmpty = HOOK_TYPES.find(
-      (_, i) => (allOrders[i].data?.length ?? 0) > 0,
-    );
-    if (firstNonEmpty) {
-      setSelectedHookType(firstNonEmpty.value);
+    if (hasAutoSelected || firstNonEmptyHookType === undefined) return;
+    if (firstNonEmptyHookType) {
+      setSelectedHookType(firstNonEmptyHookType);
     }
     setHasAutoSelected(true);
-  }, [allOrders, hasAutoSelected]);
+  }, [firstNonEmptyHookType, hasAutoSelected]);
 
   const [localOrder, setLocalOrder] = useState<PluginOrder[] | null>(null);
 
