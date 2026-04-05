@@ -13,11 +13,11 @@ Your all-in-one solution for ebooks, audiobooks, and comics.
 
 ## Why Shisho?
 
-There is currently no great self-hosted solution to manage all book types. While there are some excellent options for specific formats—Audiobookshelf for audiobooks, Komga for comics—all other file types end up as second-class citizens. There's no way to manage all of your books in a single, unified system.
+There is currently no great self-hosted solution to manage all digital book types. While there are some excellent options for specific formats like Audiobookshelf for audiobooks and Komga for comics, all other file types end up as second-class citizens. There's no way to manage all of your books in a single, unified system.
 
-Calibre is the de facto standard for ebook management, but it doesn't work well as a self-hosted system. Calibre-web helps bridge some of the gap, and calibre-web-automated adds some automation, but I never found anything that worked with how I wanted to manage my files. As an active user of Jellyfin, I essentially wanted Jellyfin, but for all my books.
+Calibre is the de facto standard for ebook management, but it doesn't work well as a self-hosted system. Calibre-web helps bridge some of the gap, and calibre-web-automated adds some automation, but I never found anything that worked with how I wanted to manage my files. As an active user of Jellyfin, I essentially wanted Jellyfin, but for all my books. And that's what this project ended up being.
 
-So that's what I set out to create.
+I wanted a way where all book types can be displayed and organized as first-class citizens. I wanted to build a robust plugin system that enables automated fetching of metadata. I wanted a manual identification flow to correct any mistakes that the automated workflow made. I wanted it to work seamlessly with my Kobo and my phone. I wanted user management to be core to the platform so that I can share my digital library with friends and family. And I have so many other ideas for what this could be (e.g. track reading progress, allow book ratings, support more file formats, etc.).
 
 ## Getting Started
 
@@ -125,16 +125,12 @@ If you prefer to manage your own file organization, you can leave this disabled 
 
 Shisho can be configured via a YAML config file or environment variables. Environment variables take precedence over config file values.
 
-### Notable Settings
+### Required Settings
 
-| Setting                 | Env Variable            | Default         | Description                                        |
-| ----------------------- | ----------------------- | --------------- | -------------------------------------------------- |
-| `database_file_path`    | `DATABASE_FILE_PATH`    | -               | **Required.** Path to the SQLite database          |
-| `jwt_secret`            | `JWT_SECRET`            | -               | **Required.** Secret key for authentication tokens |
-| `server_port`           | `SERVER_PORT`           | `3689`          | Port the server listens on                         |
-| `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60`            | How often to scan libraries for changes            |
-| `worker_processes`      | `WORKER_PROCESSES`      | `2`             | Number of background worker processes              |
-| `cache_dir`             | `CACHE_DIR`             | `/config/cache` | Directory for cached files                         |
+| Setting                 | Env Variable            | Description                          |
+| ----------------------- | ----------------------- | ------------------------------------ |
+| `database_file_path`    | `DATABASE_FILE_PATH`    | Path to the SQLite database          |
+| `jwt_secret`            | `JWT_SECRET`            | Secret key for authentication tokens |
 
 For a complete reference of all configuration options, see [`shisho.example.yaml`](shisho.example.yaml).
 
@@ -154,7 +150,7 @@ If you'd like to contribute code, you're more than welcome to! I'd recommend cre
 
 ## Support
 
-If you'd like to support the project, I have a [Patreon](https://www.patreon.com/shishobooks). No pressure—the project will always be open-source and self-hosted. That was always the goal.
+If you'd like to support the project, I have a [Patreon](https://www.patreon.com/shishobooks). No pressure though. The project will always be open-source and available for self-hosting. That was always the goal and will always be the goal.
 
 ## License
 
