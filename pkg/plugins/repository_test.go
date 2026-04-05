@@ -156,8 +156,6 @@ func TestFilterCompatibleVersions_Empty(t *testing.T) {
 }
 
 func TestFilterVersionCompatibleVersions(t *testing.T) {
-	t.Parallel()
-
 	origVersion := version.Version
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()
@@ -175,8 +173,6 @@ func TestFilterVersionCompatibleVersions(t *testing.T) {
 }
 
 func TestFilterVersionCompatibleVersions_AllIncompatible(t *testing.T) {
-	t.Parallel()
-
 	origVersion := version.Version
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()
@@ -198,8 +194,6 @@ func TestFilterVersionCompatibleVersions_Empty(t *testing.T) {
 }
 
 func TestAnnotateVersionCompatibility(t *testing.T) {
-	t.Parallel()
-
 	origVersion := version.Version
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()
@@ -224,8 +218,6 @@ func TestAnnotateVersionCompatibility(t *testing.T) {
 }
 
 func TestAnnotateVersionCompatibility_AllIncompatible(t *testing.T) {
-	t.Parallel()
-
 	origVersion := version.Version
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()

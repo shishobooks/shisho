@@ -371,7 +371,8 @@ const BrowseTab = () => {
       <div className="space-y-3">
         {available.map((plugin) => {
           const alreadyInstalled = isInstalled(plugin.scope, plugin.id);
-          const latestVersion = plugin.versions[0];
+          const latestVersion =
+            plugin.versions.find((v) => v.compatible) ?? plugin.versions[0];
 
           return (
             <div
