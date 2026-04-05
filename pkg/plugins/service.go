@@ -186,6 +186,9 @@ func (s *Service) SetOrder(ctx context.Context, hookType string, entries []model
 		for i := range entries {
 			entries[i].HookType = hookType
 			entries[i].Position = i
+			if entries[i].Mode == "" {
+				entries[i].Mode = models.PluginModeEnabled
+			}
 		}
 
 		if len(entries) > 0 {
@@ -409,6 +412,9 @@ func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType s
 			entries[i].LibraryID = libraryID
 			entries[i].HookType = hookType
 			entries[i].Position = i
+			if entries[i].Mode == "" {
+				entries[i].Mode = models.PluginModeEnabled
+			}
 		}
 		if len(entries) > 0 {
 			_, err = tx.NewInsert().Model(&entries).Exec(ctx)

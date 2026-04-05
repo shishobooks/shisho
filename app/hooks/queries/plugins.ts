@@ -427,13 +427,17 @@ export const useSyncRepository = () => {
   });
 };
 
+// --- Plugin Mode ---
+
+export type PluginMode = "enabled" | "manual_only" | "disabled";
+
 // --- Per-Library Plugin Order ---
 
 export interface LibraryPluginOrderPlugin {
   scope: string;
   id: string;
   name: string;
-  mode: "enabled" | "manual_only" | "disabled";
+  mode: PluginMode;
 }
 
 export interface LibraryPluginOrderResponse {

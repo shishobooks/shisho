@@ -55,6 +55,7 @@ import {
   type AvailablePlugin,
   type Plugin,
   type PluginHookType,
+  type PluginMode,
   type PluginOrder,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
@@ -512,7 +513,7 @@ const OrderTab = () => {
     setLocalOrder(newOrder);
   };
 
-  const handleModeChange = (index: number, mode: string) => {
+  const handleModeChange = (index: number, mode: PluginMode) => {
     const newOrder = [...displayOrder];
     newOrder[index] = { ...newOrder[index], mode };
     setLocalOrder(newOrder);
@@ -612,7 +613,9 @@ const OrderTab = () => {
               {canWrite && (
                 <div className="flex items-center gap-1">
                   <Select
-                    onValueChange={(value) => handleModeChange(index, value)}
+                    onValueChange={(value) =>
+                      handleModeChange(index, value as PluginMode)
+                    }
                     value={item.mode}
                   >
                     <SelectTrigger className="w-[140px] h-8 text-xs">
