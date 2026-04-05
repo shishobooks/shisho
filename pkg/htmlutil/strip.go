@@ -8,8 +8,11 @@ import (
 // tagPattern matches HTML tags including self-closing tags.
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
-// multipleSpacesPattern matches multiple consecutive whitespace characters.
-var multipleSpacesPattern = regexp.MustCompile(`\s{2,}`)
+// multipleSpacesPattern matches multiple consecutive spaces/tabs (not newlines).
+var multipleSpacesPattern = regexp.MustCompile(`[^\S\n]{2,}`)
+
+// threeOrMoreNewlines matches 3+ consecutive newlines (with optional whitespace-only lines between them).
+var threeOrMoreNewlines = regexp.MustCompile(`\n(\s*\n){2,}`)
 
 // StripTags removes all HTML tags from a string and normalizes whitespace.
 // It converts block-level tags (p, div, br, etc.) to newlines to preserve
@@ -19,10 +22,14 @@ func StripTags(html string) string {
 		return ""
 	}
 
-	// Replace block-level elements with newlines to preserve paragraph structure
-	// This includes common block tags that typically create visual breaks
-	blockTags := []string{"</p>", "</div>", "<br>", "<br/>", "<br />", "</li>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>"}
+	// Replace paragraph close tags with double newlines to preserve paragraph breaks
 	result := html
+	for _, tag := range []string{"</p>", "</P>"} {
+		result = strings.ReplaceAll(result, tag, "\n\n")
+	}
+
+	// Replace other block-level elements with single newlines
+	blockTags := []string{"</div>", "<br>", "<br/>", "<br />", "</li>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>"}
 	for _, tag := range blockTags {
 		result = strings.ReplaceAll(result, tag, "\n")
 		// Also handle uppercase variants
@@ -35,24 +42,18 @@ func StripTags(html string) string {
 	// Decode common HTML entities
 	result = decodeHTMLEntities(result)
 
-	// Normalize whitespace: collapse multiple spaces/tabs to single space
-	// but preserve intentional newlines (from block tags)
+	// Normalize whitespace: collapse multiple spaces/tabs to single space per line
 	lines := strings.Split(result, "\n")
 	for i, line := range lines {
-		// Collapse multiple spaces within each line
 		line = multipleSpacesPattern.ReplaceAllString(line, " ")
 		lines[i] = strings.TrimSpace(line)
 	}
+	result = strings.Join(lines, "\n")
 
-	// Rejoin lines, removing empty ones and collapsing multiple newlines
-	var nonEmptyLines []string
-	for _, line := range lines {
-		if line != "" {
-			nonEmptyLines = append(nonEmptyLines, line)
-		}
-	}
+	// Collapse 3+ consecutive newlines to double newlines (preserve paragraph breaks)
+	result = threeOrMoreNewlines.ReplaceAllString(result, "\n\n")
 
-	return strings.Join(nonEmptyLines, "\n")
+	return strings.TrimSpace(result)
 }
 
 // decodeHTMLEntities decodes common HTML entities to their character equivalents.

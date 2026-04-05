@@ -32,7 +32,7 @@ func TestStripTags(t *testing.T) {
 		{
 			name:     "multiple paragraphs",
 			input:    "<p>First paragraph</p><p>Second paragraph</p>",
-			expected: "First paragraph\nSecond paragraph",
+			expected: "First paragraph\n\nSecond paragraph",
 		},
 		{
 			name:     "div with content",
@@ -57,7 +57,7 @@ func TestStripTags(t *testing.T) {
 		{
 			name:     "complex html from screenshot",
 			input:    `<div><p style="font-weight: 600">The apocalypse <em>will</em> be televised!</p><p>A man. His ex-girlfriend's cat.</p></div>`,
-			expected: "The apocalypse will be televised!\nA man. His ex-girlfriend's cat.",
+			expected: "The apocalypse will be televised!\n\nA man. His ex-girlfriend's cat.",
 		},
 		{
 			name:     "html entities",
@@ -98,6 +98,26 @@ func TestStripTags(t *testing.T) {
 			name:     "preserves content between inline tags",
 			input:    "This is <strong>very</strong> important",
 			expected: "This is very important",
+		},
+		{
+			name:     "preserves double newlines in plain text",
+			input:    "First paragraph\n\nSecond paragraph",
+			expected: "First paragraph\n\nSecond paragraph",
+		},
+		{
+			name:     "preserves multiple paragraph breaks in plain text",
+			input:    "Paragraph one\n\nParagraph two\n\nParagraph three",
+			expected: "Paragraph one\n\nParagraph two\n\nParagraph three",
+		},
+		{
+			name:     "collapses three or more newlines to double",
+			input:    "First\n\n\nSecond\n\n\n\nThird",
+			expected: "First\n\nSecond\n\nThird",
+		},
+		{
+			name:     "html paragraphs produce double newlines",
+			input:    "<p>First paragraph</p><p>Second paragraph</p><p>Third paragraph</p>",
+			expected: "First paragraph\n\nSecond paragraph\n\nThird paragraph",
 		},
 	}
 

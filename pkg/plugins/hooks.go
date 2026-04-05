@@ -330,7 +330,7 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 
 		md := mediafile.ParsedMetadata{
 			Title:       getStringField(itemObj, "title"),
-			Description: getStringField(itemObj, "description"),
+			Description: htmlutil.StripTags(getStringField(itemObj, "description")),
 			Publisher:   getStringField(itemObj, "publisher"),
 			Subtitle:    getStringField(itemObj, "subtitle"),
 			Series:      getStringField(itemObj, "series"),
