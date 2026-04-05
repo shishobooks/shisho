@@ -39,7 +39,7 @@ func TestService_IsLibraryCustomized(t *testing.T) {
 	assert.False(t, customized)
 
 	// Mark as customized
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{})
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{})
 	require.NoError(t, err)
 
 	customized, err = svc.IsLibraryCustomized(ctx, library.ID, "metadataEnricher")
@@ -64,9 +64,9 @@ func TestService_GetLibraryOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set library order with two plugins
-	entries := []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher2", Enabled: true},
-		{Scope: "test", PluginID: "enricher", Enabled: false},
+	entries := []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher2", Mode: models.PluginModeEnabled},
+		{Scope: "test", PluginID: "enricher", Mode: models.PluginModeDisabled},
 	}
 	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", entries)
 	require.NoError(t, err)
@@ -76,10 +76,10 @@ func TestService_GetLibraryOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, order, 2)
 	assert.Equal(t, "enricher2", order[0].PluginID)
-	assert.True(t, order[0].Enabled)
+	assert.Equal(t, models.PluginModeEnabled, order[0].Mode)
 	assert.Equal(t, 0, order[0].Position)
 	assert.Equal(t, "enricher", order[1].PluginID)
-	assert.False(t, order[1].Enabled)
+	assert.Equal(t, models.PluginModeDisabled, order[1].Mode)
 	assert.Equal(t, 1, order[1].Position)
 }
 
@@ -95,8 +95,8 @@ func TestService_ResetLibraryOrder(t *testing.T) {
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
 
@@ -125,12 +125,12 @@ func TestService_ResetAllLibraryOrders(t *testing.T) {
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
 
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
-	err = svc.SetLibraryOrder(ctx, library.ID, "fileParser", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "fileParser", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
 

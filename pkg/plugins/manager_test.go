@@ -418,7 +418,7 @@ func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set global order
-	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginOrder{
+	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginHookConfig{
 		{Scope: "test", PluginID: "enricher1"},
 		{Scope: "test", PluginID: "enricher2"},
 	})
@@ -438,9 +438,9 @@ func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 	assert.Equal(t, "enricher2", runtimes[1].pluginID)
 
 	// Set library-specific order (enricher1 disabled, enricher2 enabled)
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher2", Enabled: true},
-		{Scope: "test", PluginID: "enricher1", Enabled: false},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher2", Mode: models.PluginModeEnabled},
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeDisabled},
 	})
 	require.NoError(t, err)
 
@@ -480,7 +480,7 @@ func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set global order with both plugins
-	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginOrder{
+	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginHookConfig{
 		{Scope: "test", PluginID: "enricher1"},
 		{Scope: "test", PluginID: "enricher2"},
 	})
@@ -491,9 +491,9 @@ func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
 	mgr.plugins["test/enricher1"] = rt1
 
 	// Set library order with both enabled
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher1", Enabled: true},
-		{Scope: "test", PluginID: "enricher2", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
+		{Scope: "test", PluginID: "enricher2", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
 
@@ -644,4 +644,103 @@ func TestManager_LoadPlugin_NoMinVersion(t *testing.T) {
 
 	rt := mgr.GetRuntime("test", "simple-enricher")
 	require.NotNil(t, rt)
+}
+
+func TestManager_GetManualRuntimes(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	mgr := &Manager{
+		service: svc,
+		plugins: make(map[string]*Runtime),
+	}
+
+	library := insertTestLibrary(t, db, "Test Library")
+
+	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Status: models.PluginStatusActive}
+	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
+	p3 := &models.Plugin{Scope: "test", ID: "enricher3", Name: "Enricher 3", Version: "1.0.0", Status: models.PluginStatusActive}
+	_, err := db.NewInsert().Model(p1).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(p2).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(p3).Exec(ctx)
+	require.NoError(t, err)
+
+	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginHookConfig{
+		{Scope: "test", PluginID: "enricher1"},
+		{Scope: "test", PluginID: "enricher2"},
+		{Scope: "test", PluginID: "enricher3"},
+	})
+	require.NoError(t, err)
+
+	rt1 := &Runtime{scope: "test", pluginID: "enricher1"}
+	rt2 := &Runtime{scope: "test", pluginID: "enricher2"}
+	rt3 := &Runtime{scope: "test", pluginID: "enricher3"}
+	mgr.plugins["test/enricher1"] = rt1
+	mgr.plugins["test/enricher2"] = rt2
+	mgr.plugins["test/enricher3"] = rt3
+
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
+		{Scope: "test", PluginID: "enricher2", Mode: models.PluginModeManualOnly},
+		{Scope: "test", PluginID: "enricher3", Mode: models.PluginModeDisabled},
+	})
+	require.NoError(t, err)
+
+	// GetOrderedRuntimes: only "enabled" — enricher1
+	runtimes, err := mgr.GetOrderedRuntimes(ctx, "metadataEnricher", library.ID)
+	require.NoError(t, err)
+	require.Len(t, runtimes, 1)
+	assert.Equal(t, "enricher1", runtimes[0].pluginID)
+
+	// GetManualRuntimes: "enabled" + "manual_only" — enricher1, enricher2
+	runtimes, err = mgr.GetManualRuntimes(ctx, "metadataEnricher", library.ID)
+	require.NoError(t, err)
+	require.Len(t, runtimes, 2)
+	assert.Equal(t, "enricher1", runtimes[0].pluginID)
+	assert.Equal(t, "enricher2", runtimes[1].pluginID)
+}
+
+func TestManager_GetOrderedRuntimes_GlobalModeFiltering(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	mgr := &Manager{
+		service: svc,
+		plugins: make(map[string]*Runtime),
+	}
+
+	p1 := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Enricher 1", Version: "1.0.0", Status: models.PluginStatusActive}
+	p2 := &models.Plugin{Scope: "test", ID: "enricher2", Name: "Enricher 2", Version: "1.0.0", Status: models.PluginStatusActive}
+	_, err := db.NewInsert().Model(p1).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(p2).Exec(ctx)
+	require.NoError(t, err)
+
+	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
+		{Scope: "test", PluginID: "enricher2", Mode: models.PluginModeManualOnly},
+	})
+	require.NoError(t, err)
+
+	rt1 := &Runtime{scope: "test", pluginID: "enricher1"}
+	rt2 := &Runtime{scope: "test", pluginID: "enricher2"}
+	mgr.plugins["test/enricher1"] = rt1
+	mgr.plugins["test/enricher2"] = rt2
+
+	// Auto-scan: only enricher1
+	runtimes, err := mgr.GetOrderedRuntimes(ctx, "metadataEnricher", 0)
+	require.NoError(t, err)
+	require.Len(t, runtimes, 1)
+	assert.Equal(t, "enricher1", runtimes[0].pluginID)
+
+	// Manual: enricher1 + enricher2
+	runtimes, err = mgr.GetManualRuntimes(ctx, "metadataEnricher", 0)
+	require.NoError(t, err)
+	require.Len(t, runtimes, 2)
+	assert.Equal(t, "enricher1", runtimes[0].pluginID)
+	assert.Equal(t, "enricher2", runtimes[1].pluginID)
 }
