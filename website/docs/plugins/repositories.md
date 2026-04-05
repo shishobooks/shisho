@@ -36,7 +36,7 @@ Each plugin version in a repository includes:
 - A **minimum Shisho version** for compatibility filtering
 - A **changelog** describing what changed
 
-Shisho only shows plugin versions that are compatible with your current server version.
+Plugin versions that require a newer version of Shisho are marked as **Incompatible** in the Browse tab and cannot be installed. Compatible versions remain installable as normal.
 
 ## Creating a Plugin Repository
 
