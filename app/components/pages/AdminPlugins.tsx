@@ -364,7 +364,12 @@ const BrowseTab = () => {
         name: installTarget.name,
         version: compatibleVersion.version,
       },
-      { onSuccess: () => setInstallTarget(null) },
+      {
+        onSuccess: () => setInstallTarget(null),
+        onError: (err) => {
+          toast.error(`Failed to install plugin: ${err.message}`);
+        },
+      },
     );
   };
 
