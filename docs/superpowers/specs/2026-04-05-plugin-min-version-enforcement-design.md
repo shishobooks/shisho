@@ -51,11 +51,9 @@ Both `listAvailable` and `getAvailable` handlers use this response format.
 
 The `overview` field is also added to the response (it was previously missing from `availablePluginResponse` despite being present on `AvailablePlugin`).
 
-#### 3. Install endpoint guard
+#### 3. Install endpoint — no payload changes needed
 
-The install handler (`handler.install`) should reject requests for specific versions that fail the `minShishoVersion` check. When the frontend sends a `download_url` + `sha256` for a specific version, the backend currently trusts it. Add a `min_shisho_version` field to `installPayload` so the backend can verify compatibility before downloading. If incompatible, return a 400 validation error.
-
-When no explicit download URL is provided (install by scope+id), the `findPluginInRepos` path already handles this via the filtering in point 1.
+The frontend's install flow always goes through the `findPluginInRepos` path (scope+id lookup), which gets minShishoVersion filtering from point 1. The `download_url`/`sha256` fields in `installPayload` exist for direct-URL installs but the Browse UI doesn't use them. The runtime version check in `LoadPlugin()` remains as a safety net for any direct-URL installs.
 
 ### Frontend
 
@@ -66,12 +64,13 @@ Update `PluginVersion` interface to include `compatible`:
 ```typescript
 export interface PluginVersion {
   version: string;
-  min_app_version: string;
+  minShishoVersion: string;
   compatible: boolean;
   changelog: string;
-  download_url: string;
+  downloadUrl: string;
   sha256: string;
-  manifest_version: number;
+  manifestVersion: number;
+  releaseDate: string;
 }
 ```
 
@@ -88,7 +87,7 @@ export interface AvailablePlugin {
 
 **Fully incompatible plugins** (`plugin.compatible === false`):
 - Show an "Incompatible" badge (destructive variant) where the Install button would be
-- Add explanatory text: "Requires Shisho vX.Y.Z+" (using the lowest `min_app_version` across all versions, since that's the "closest" to being reachable)
+- Add explanatory text: "Requires a newer version of Shisho"
 
 **Partially compatible plugins** (some versions compatible, some not):
 - Show the Install button as normal — the install flow will pick the latest compatible version
@@ -113,7 +112,7 @@ export interface AvailablePlugin {
 - `findPluginInRepos` with all incompatible versions: returns not-found error
 - `CheckForUpdates` skips incompatible versions when determining latest update
 - `listAvailable` response includes `compatible` field on both plugin and version levels
-- Install endpoint rejects incompatible `min_shisho_version`
+- Install via `findPluginInRepos` skips incompatible versions
 
 ### Frontend
 
@@ -127,7 +126,6 @@ export interface AvailablePlugin {
 - `pkg/plugins/repository.go` — no changes to `FilterCompatibleVersions`, but may add a helper
 - `pkg/plugins/handler.go` — `listAvailable`, `getAvailable`, `findPluginInRepos`, `install` handlers; `availablePluginResponse` type
 - `pkg/plugins/manager.go` — `CheckForUpdates` filtering
-- `pkg/plugins/handler.go` — `installPayload` struct (add `min_shisho_version`)
 
 ### Frontend
 - `app/hooks/queries/plugins.ts` — `PluginVersion` and `AvailablePlugin` types
