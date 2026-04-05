@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/version"
 )
 
 // AllowedFetchHosts lists the allowed host prefixes for repository manifest URLs.
@@ -107,6 +108,18 @@ func FilterCompatibleVersions(versions []PluginVersion) []PluginVersion {
 				compatible = append(compatible, v)
 				break
 			}
+		}
+	}
+	return compatible
+}
+
+// FilterVersionCompatibleVersions returns only versions whose minShishoVersion
+// is satisfied by the running Shisho version.
+func FilterVersionCompatibleVersions(versions []PluginVersion) []PluginVersion {
+	var compatible []PluginVersion
+	for _, v := range versions {
+		if version.IsCompatible(v.MinShishoVersion) {
+			compatible = append(compatible, v)
 		}
 	}
 	return compatible

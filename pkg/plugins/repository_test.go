@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -151,5 +152,47 @@ func TestFilterCompatibleVersions_NoMatch(t *testing.T) {
 
 func TestFilterCompatibleVersions_Empty(t *testing.T) {
 	compatible := FilterCompatibleVersions(nil)
+	assert.Empty(t, compatible)
+}
+
+func TestFilterVersionCompatibleVersions(t *testing.T) {
+	t.Parallel()
+
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "0.1.0", ManifestVersion: 1},
+		{Version: "2.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+		{Version: "1.1.0", MinShishoVersion: "", ManifestVersion: 1},
+	}
+
+	compatible := FilterVersionCompatibleVersions(versions)
+	require.Len(t, compatible, 2)
+	assert.Equal(t, "1.0.0", compatible[0].Version)
+	assert.Equal(t, "1.1.0", compatible[1].Version)
+}
+
+func TestFilterVersionCompatibleVersions_AllIncompatible(t *testing.T) {
+	t.Parallel()
+
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	versions := []PluginVersion{
+		{Version: "1.0.0", MinShishoVersion: "99.0.0", ManifestVersion: 1},
+		{Version: "2.0.0", MinShishoVersion: "100.0.0", ManifestVersion: 1},
+	}
+
+	compatible := FilterVersionCompatibleVersions(versions)
+	assert.Empty(t, compatible)
+}
+
+func TestFilterVersionCompatibleVersions_Empty(t *testing.T) {
+	t.Parallel()
+
+	compatible := FilterVersionCompatibleVersions(nil)
 	assert.Empty(t, compatible)
 }

@@ -298,7 +298,7 @@ func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version str
 				continue
 			}
 
-			compatible := FilterCompatibleVersions(p.Versions)
+			compatible := FilterVersionCompatibleVersions(FilterCompatibleVersions(p.Versions))
 			if len(compatible) == 0 {
 				continue
 			}
