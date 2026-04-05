@@ -20,11 +20,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "saturday"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
