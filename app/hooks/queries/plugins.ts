@@ -9,16 +9,17 @@ import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
   Plugin,
+  PluginHookConfig,
   PluginIdentifierType,
-  PluginOrder,
   PluginRepository,
 } from "@/types/generated/models";
 
 // Re-export generated types so consumers can import from this module
+// PluginHookConfig is re-exported as PluginOrder for backward compatibility
 export type {
   Plugin,
+  PluginHookConfig as PluginOrder,
   PluginHookType,
-  PluginOrder,
   PluginRepository,
   PluginStatus,
 } from "@/types/generated/models";
@@ -109,7 +110,7 @@ export const usePluginsAvailable = () => {
 const pluginOrderQuery = (hookType: string) => ({
   queryKey: [QueryKey.PluginOrder, hookType],
   queryFn: ({ signal }: { signal: AbortSignal }) => {
-    return API.request<PluginOrder[]>(
+    return API.request<PluginHookConfig[]>(
       "GET",
       `/plugins/order/${hookType}`,
       null,
@@ -120,7 +121,9 @@ const pluginOrderQuery = (hookType: string) => ({
 });
 
 export const usePluginOrder = (hookType: string) => {
-  return useQuery<PluginOrder[], ShishoAPIError>(pluginOrderQuery(hookType));
+  return useQuery<PluginHookConfig[], ShishoAPIError>(
+    pluginOrderQuery(hookType),
+  );
 };
 
 export const useAllPluginOrders = (hookTypes: string[]) => {
@@ -291,7 +294,7 @@ export const useSetPluginOrder = () => {
   return useMutation<
     void,
     ShishoAPIError,
-    { hookType: string; order: { scope: string; id: string }[] }
+    { hookType: string; order: { scope: string; id: string; mode: string }[] }
   >({
     mutationFn: ({ hookType, order }) => {
       return API.request("PUT", `/plugins/order/${hookType}`, { order });
@@ -430,7 +433,7 @@ export interface LibraryPluginOrderPlugin {
   scope: string;
   id: string;
   name: string;
-  enabled: boolean;
+  mode: "enabled" | "manual_only" | "disabled";
 }
 
 export interface LibraryPluginOrderResponse {
@@ -465,7 +468,7 @@ export const useSetLibraryPluginOrder = () => {
     {
       libraryId: string;
       hookType: string;
-      plugins: { scope: string; id: string; enabled: boolean }[];
+      plugins: { scope: string; id: string; mode: string }[];
     }
   >({
     mutationFn: ({ libraryId, hookType, plugins }) => {
