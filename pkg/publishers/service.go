@@ -144,7 +144,7 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 		q = q.Where("pub.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("pub.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("pub.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 	// Search using LIKE (no FTS for publishers)
 	if opts.Search != nil && *opts.Search != "" {

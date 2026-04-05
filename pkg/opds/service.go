@@ -457,7 +457,7 @@ func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, author
 		Where("b.library_id = ? AND p.name = ?", libraryID, authorName)
 
 	if len(fileTypes) > 0 {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
 	}
 
 	err := q.Scan(ctx, &bookIDs)

@@ -285,7 +285,7 @@ func (svc *Service) GetListBookCount(ctx context.Context, listID int, libraryIDs
 		Where("lb.list_id = ?", listID)
 
 	if libraryIDs != nil {
-		q = q.Where("b.library_id IN (?)", bun.In(libraryIDs))
+		q = q.Where("b.library_id IN (?)", bun.List(libraryIDs))
 	}
 
 	count, err := q.Count(ctx)
@@ -331,7 +331,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by library access
 	if opts.LibraryIDs != nil {
 		q = q.Join("JOIN books b ON b.id = lb.book_id").
-			Where("b.library_id IN (?)", bun.In(opts.LibraryIDs))
+			Where("b.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 
 	// Apply sort
@@ -452,7 +452,7 @@ func (svc *Service) RemoveBooks(ctx context.Context, opts RemoveBooksOptions) er
 		_, err := tx.NewDelete().
 			Model((*models.ListBook)(nil)).
 			Where("list_id = ?", opts.ListID).
-			Where("book_id IN (?)", bun.In(opts.BookIDs)).
+			Where("book_id IN (?)", bun.List(opts.BookIDs)).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -735,7 +735,7 @@ func (svc *Service) CanEdit(ctx context.Context, listID, userID int) (bool, erro
 	count, err := svc.db.NewSelect().
 		Model((*models.ListShare)(nil)).
 		Where("list_id = ? AND user_id = ?", listID, userID).
-		Where("permission IN (?)", bun.In([]string{models.ListPermissionEditor, models.ListPermissionManager})).
+		Where("permission IN (?)", bun.List([]string{models.ListPermissionEditor, models.ListPermissionManager})).
 		Count(ctx)
 	return count > 0, errors.WithStack(err)
 }
@@ -866,7 +866,7 @@ func (svc *Service) CheckBookVisibility(ctx context.Context, listID int, targetU
 		Where("lb.list_id = ?", listID)
 
 	if targetUserLibraryIDs != nil {
-		q = q.Where("b.library_id IN (?)", bun.In(targetUserLibraryIDs))
+		q = q.Where("b.library_id IN (?)", bun.List(targetUserLibraryIDs))
 	}
 
 	visible, err = q.Count(ctx)

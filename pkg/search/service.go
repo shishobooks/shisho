@@ -150,7 +150,7 @@ func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, li
 			Offset(offset)
 
 		if len(fileTypes) > 0 {
-			q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
+			q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
 		}
 
 		ftsResults := []BookSearchResult{}
@@ -197,7 +197,7 @@ func (svc *Service) populateBookFileTypes(ctx context.Context, results []BookSea
 	err := svc.db.NewSelect().
 		TableExpr("files").
 		Column("book_id", "file_type").
-		Where("book_id IN (?)", bun.In(bookIDs)).
+		Where("book_id IN (?)", bun.List(bookIDs)).
 		GroupExpr("book_id, file_type").
 		Scan(ctx, &fileTypes)
 	if err != nil {
@@ -226,7 +226,7 @@ func (svc *Service) countBooksInternal(ctx context.Context, ftsQuery string, lib
 		Where("library_id = ?", libraryID)
 
 	if len(fileTypes) > 0 {
-		q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.In(fileTypes))
+		q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
 	}
 
 	var count int
@@ -253,7 +253,7 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 		Limit(limit)
 
 	if len(fileTypes) > 0 {
-		q = q.Where("f.file_type IN (?)", bun.In(fileTypes))
+		q = q.Where("f.file_type IN (?)", bun.List(fileTypes))
 	}
 
 	results := []BookSearchResult{}

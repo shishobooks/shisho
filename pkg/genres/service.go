@@ -144,7 +144,7 @@ func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOpti
 		q = q.Where("g.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("g.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("g.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

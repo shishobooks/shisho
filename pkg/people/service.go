@@ -157,7 +157,7 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 		q = q.Where("p.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("p.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("p.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

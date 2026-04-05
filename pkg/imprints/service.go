@@ -144,7 +144,7 @@ func (svc *Service) listImprintsWithTotal(ctx context.Context, opts ListImprints
 		q = q.Where("imp.library_id = ?", *opts.LibraryID)
 	}
 	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("imp.library_id IN (?)", bun.In(opts.LibraryIDs))
+		q = q.Where("imp.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 	// Search using LIKE (no FTS for imprints)
 	if opts.Search != nil && *opts.Search != "" {

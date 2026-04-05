@@ -870,7 +870,7 @@ func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 	assert.Equal(t, 3, result.FilesDeleted)
 
 	// Verify all books deleted
-	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.In([]int{book1.ID, book2.ID})).Count(ctx)
+	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.List([]int{book1.ID, book2.ID})).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 

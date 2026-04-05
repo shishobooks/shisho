@@ -56,7 +56,7 @@ func (svc *Service) ListJobLogs(ctx context.Context, opts ListJobLogsOptions) ([
 	}
 
 	if len(opts.Levels) > 0 {
-		q = q.Where("jl.level IN (?)", bun.In(opts.Levels))
+		q = q.Where("jl.level IN (?)", bun.List(opts.Levels))
 	}
 
 	if opts.Search != nil && *opts.Search != "" {

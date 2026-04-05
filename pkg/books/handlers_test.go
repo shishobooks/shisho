@@ -657,7 +657,7 @@ func TestListBooks_FiltersByIDs(t *testing.T) {
 	var filteredBooks []*models.Book
 	err = db.NewSelect().
 		Model(&filteredBooks).
-		Where("id IN (?)", bun.In([]int{book1.ID, book3.ID})).
+		Where("id IN (?)", bun.List([]int{book1.ID, book3.ID})).
 		Order("sort_title ASC").
 		Scan(ctx)
 	require.NoError(t, err)
@@ -772,7 +772,7 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	assert.Equal(t, 2, resp.FilesDeleted)
 
 	// Verify books deleted
-	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.In([]int{book1.ID, book2.ID})).Count(ctx)
+	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.List([]int{book1.ID, book2.ID})).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
