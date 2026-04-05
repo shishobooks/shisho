@@ -1,9 +1,10 @@
+import { Github } from "../../components/GithubIcon";
 import isInternalUrl from "@docusaurus/isInternalUrl";
 import Link from "@docusaurus/Link";
 import { isRegexpStringMatch } from "@docusaurus/theme-common";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import IconExternalLink from "@theme/Icon/ExternalLink";
-import { BookOpenText, ChevronDown, Github } from "lucide-react";
+import { BookOpenText, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 interface NavbarNavLinkProps {

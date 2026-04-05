@@ -1,3 +1,4 @@
+import { Github } from "../components/GithubIcon";
 import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
@@ -5,7 +6,6 @@ import {
   Blocks,
   BookOpen,
   FolderOpen,
-  Github,
   Grid2x2,
   Layers,
   MonitorSmartphone,
