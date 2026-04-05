@@ -128,6 +128,7 @@ type updatePayload struct {
 type orderEntry struct {
 	Scope string `json:"scope" validate:"required"`
 	ID    string `json:"id" validate:"required"`
+	Mode  string `json:"mode"`
 }
 
 type setOrderPayload struct {
@@ -527,11 +528,16 @@ func (h *handler) setOrder(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	orderEntries := make([]models.PluginOrder, len(payload.Order))
+	orderEntries := make([]models.PluginHookConfig, len(payload.Order))
 	for i, entry := range payload.Order {
-		orderEntries[i] = models.PluginOrder{
+		mode := entry.Mode
+		if mode == "" {
+			mode = models.PluginModeEnabled
+		}
+		orderEntries[i] = models.PluginHookConfig{
 			Scope:    entry.Scope,
 			PluginID: entry.ID,
+			Mode:     mode,
 		}
 	}
 
@@ -975,9 +981,9 @@ func (h *handler) scan(c echo.Context) error {
 }
 
 type libraryOrderEntry struct {
-	Scope   string `json:"scope" validate:"required"`
-	ID      string `json:"id" validate:"required"`
-	Enabled bool   `json:"enabled"`
+	Scope string `json:"scope" validate:"required"`
+	ID    string `json:"id" validate:"required"`
+	Mode  string `json:"mode"`
 }
 
 type setLibraryOrderPayload struct {
@@ -990,10 +996,10 @@ type libraryOrderResponse struct {
 }
 
 type libraryOrderPlugin struct {
-	Scope   string `json:"scope"`
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
+	Scope string `json:"scope"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Mode  string `json:"mode"`
 }
 
 func (h *handler) getLibraryOrder(c echo.Context) error {
@@ -1023,10 +1029,10 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 				name = p.Name
 			}
 			plugins = append(plugins, libraryOrderPlugin{
-				Scope:   entry.Scope,
-				ID:      entry.PluginID,
-				Name:    name,
-				Enabled: entry.Enabled,
+				Scope: entry.Scope,
+				ID:    entry.PluginID,
+				Name:  name,
+				Mode:  entry.Mode,
 			})
 		}
 	} else {
@@ -1040,10 +1046,10 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 				name = p.Name
 			}
 			plugins = append(plugins, libraryOrderPlugin{
-				Scope:   order.Scope,
-				ID:      order.PluginID,
-				Name:    name,
-				Enabled: true,
+				Scope: order.Scope,
+				ID:    order.PluginID,
+				Name:  name,
+				Mode:  order.Mode,
 			})
 		}
 	}
@@ -1068,12 +1074,16 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	entries := make([]models.LibraryPlugin, len(payload.Plugins))
+	entries := make([]models.LibraryPluginHookConfig, len(payload.Plugins))
 	for i, p := range payload.Plugins {
-		entries[i] = models.LibraryPlugin{
+		mode := p.Mode
+		if mode == "" {
+			mode = models.PluginModeEnabled
+		}
+		entries[i] = models.LibraryPluginHookConfig{
 			Scope:    p.Scope,
 			PluginID: p.ID,
-			Enabled:  p.Enabled,
+			Mode:     mode,
 		}
 	}
 
@@ -1312,7 +1322,8 @@ type EnrichSearchResult struct {
 	DisabledFields []string `json:"disabled_fields,omitempty"`
 }
 
-// searchMetadata runs search() across all enabled enricher plugins and returns aggregated results.
+// searchMetadata runs search() across all enricher plugins available for manual invocation
+// and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -1321,19 +1332,9 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errcodes.ValidationError(err.Error())
 	}
 
-	// Get all enricher runtimes first — if none exist, return empty results immediately
-	runtimes, err := h.manager.GetOrderedRuntimes(ctx, models.PluginHookMetadataEnricher, 0)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if len(runtimes) == 0 {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"results": []EnrichSearchResult{},
-		})
-	}
-
-	// Look up the book with relations
+	// Look up the book with relations first (needed for library access check and libraryID)
 	var book *models.Book
+	var err error
 	if h.enrich != nil {
 		book, err = h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 	} else if h.db != nil {
@@ -1359,6 +1360,17 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 	if !user.HasLibraryAccess(book.LibraryID) {
 		return errcodes.Forbidden("You don't have access to this library")
+	}
+
+	// Get enricher runtimes available for manual invocation using the book's library
+	runtimes, err := h.manager.GetManualRuntimes(ctx, models.PluginHookMetadataEnricher, book.LibraryID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if len(runtimes) == 0 {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"results": []EnrichSearchResult{},
+		})
 	}
 
 	// Build flat search context from payload
