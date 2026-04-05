@@ -25,7 +25,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 	plugin := &models.Plugin{Scope: "test", ID: "enricher1", Name: "Test Enricher", Version: "1.0.0", Status: models.PluginStatusActive}
 	_, err := db.NewInsert().Model(plugin).Exec(ctx)
 	require.NoError(t, err)
-	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginOrder{
+	err = svc.SetOrder(ctx, "metadataEnricher", []models.PluginHookConfig{
 		{Scope: "test", PluginID: "enricher1"},
 	})
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 	require.Len(t, resp.Plugins, 1)
 	assert.Equal(t, "enricher1", resp.Plugins[0].ID)
 	assert.Equal(t, "Test Enricher", resp.Plugins[0].Name)
-	assert.True(t, resp.Plugins[0].Enabled)
+	assert.Equal(t, models.PluginModeEnabled, resp.Plugins[0].Mode)
 }
 
 func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
@@ -70,7 +70,7 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 
 	// PUT - set custom order
 	e := echo.New()
-	payload := `{"plugins":[{"scope":"test","id":"enricher2","enabled":true},{"scope":"test","id":"enricher1","enabled":false}]}`
+	payload := `{"plugins":[{"scope":"test","id":"enricher2","mode":"enabled"},{"scope":"test","id":"enricher1","mode":"disabled"}]}`
 	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -100,9 +100,9 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 	assert.True(t, resp.Customized)
 	require.Len(t, resp.Plugins, 2)
 	assert.Equal(t, "enricher2", resp.Plugins[0].ID)
-	assert.True(t, resp.Plugins[0].Enabled)
+	assert.Equal(t, models.PluginModeEnabled, resp.Plugins[0].Mode)
 	assert.Equal(t, "enricher1", resp.Plugins[1].ID)
-	assert.False(t, resp.Plugins[1].Enabled)
+	assert.Equal(t, models.PluginModeDisabled, resp.Plugins[1].Mode)
 }
 
 func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
@@ -118,8 +118,8 @@ func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set custom order first
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher1", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
 
@@ -155,12 +155,12 @@ func TestLibraryPluginOrder_ResetAll(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set custom orders for multiple hook types
-	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher1", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "metadataEnricher", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
-	err = svc.SetLibraryOrder(ctx, library.ID, "fileParser", []models.LibraryPlugin{
-		{Scope: "test", PluginID: "enricher1", Enabled: true},
+	err = svc.SetLibraryOrder(ctx, library.ID, "fileParser", []models.LibraryPluginHookConfig{
+		{Scope: "test", PluginID: "enricher1", Mode: models.PluginModeEnabled},
 	})
 	require.NoError(t, err)
 

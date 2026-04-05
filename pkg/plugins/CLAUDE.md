@@ -459,7 +459,8 @@ Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads
 | `UnloadPlugin(scope, id)` | Uninstall/Disable | Remove from memory |
 | `ReloadPlugin(ctx, scope, id)` | Update/Hot-reload | Write-lock old runtime, swap new, wait for in-progress hooks |
 | `GetRuntime(scope, id)` | Any | Get loaded runtime (nil if not loaded) |
-| `GetOrderedRuntimes(ctx, hookType)` | Scan pipeline | Get runtimes for hook in user-defined order |
+| `GetOrderedRuntimes(ctx, hookType, libraryID)` | Scan pipeline | Get runtimes with mode "enabled" in user-defined order (per-library or global) |
+| `GetManualRuntimes(ctx, hookType, libraryID)` | Manual identification | Get runtimes with mode "enabled" or "manual_only" (per-library or global) |
 | `GetParserForType(fileType)` | File scanning | First runtime with fileParser for type |
 | `GetOutputGenerator(formatID)` | Output generation | PluginGenerator wrapping runtime |
 | `CheckForUpdates(ctx)` | Periodic/on-demand | Check repos for newer versions |
@@ -480,7 +481,7 @@ In `pkg/worker/scan_unified.go`:
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
 4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher")` runs enrichers in order. Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getEnrichmentConfidenceThreshold` returns the per-plugin override if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher", libraryID)` runs enrichers in order (only mode "enabled"; "manual_only" and "disabled" are skipped). Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getEnrichmentConfidenceThreshold` returns the per-plugin override if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
@@ -524,9 +525,18 @@ Repositories provide a `repository.json` manifest:
 | `plugin_configs` | `(scope, plugin_id, key)` | Configuration values (CASCADE delete) |
 | `plugin_repositories` | `url` (unique `scope`) | Repository sources |
 | `plugin_identifier_types` | `id` | Custom identifier types |
-| `plugin_order` | `(hook_type, scope, plugin_id)` | Execution order per hook |
+| `plugin_hook_config` | `(hook_type, scope, plugin_id)` | Execution order and mode per hook |
+| `library_plugin_hook_config` | `(library_id, hook_type, scope, plugin_id)` | Per-library execution order and mode per hook |
+| `library_plugin_customizations` | `(library_id, hook_type)` | Tracks which libraries have customized a hook type |
 | `plugin_field_settings` | `(scope, plugin_id, field)` | Global field enabled/disabled state |
 | `library_plugin_field_settings` | `(library_id, scope, plugin_id, field)` | Per-library field overrides |
+
+**Plugin mode (three-state):**
+- `enabled` — Plugin runs during automated scans and is available for manual identification
+- `manual_only` — Plugin is skipped during automated scans but remains available for manual identification (metadata enrichers only)
+- `disabled` — Plugin is completely unavailable for this context
+- Mode is stored in both `plugin_hook_config` (global) and `library_plugin_hook_config` (per-library)
+- `GetOrderedRuntimes` returns only `enabled` plugins; `GetManualRuntimes` returns `enabled` + `manual_only`
 
 **Field settings behavior:**
 - No rows = all declared fields enabled by default

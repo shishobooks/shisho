@@ -282,7 +282,7 @@ func (m *Manager) GetOrderedRuntimes(ctx context.Context, hookType string, libra
 			var runtimes []*Runtime
 			m.mu.RLock()
 			for _, entry := range entries {
-				if !entry.Enabled {
+				if entry.Mode != models.PluginModeEnabled {
 					continue
 				}
 				key := pluginKey(entry.Scope, entry.PluginID)
@@ -304,6 +304,62 @@ func (m *Manager) GetOrderedRuntimes(ctx context.Context, hookType string, libra
 	var runtimes []*Runtime
 	m.mu.RLock()
 	for _, order := range orders {
+		if order.Mode != models.PluginModeEnabled {
+			continue
+		}
+		key := pluginKey(order.Scope, order.PluginID)
+		if rt, ok := m.plugins[key]; ok {
+			runtimes = append(runtimes, rt)
+		}
+	}
+	m.mu.RUnlock()
+
+	return runtimes, nil
+}
+
+// GetManualRuntimes returns runtimes for a hook type that are available for manual invocation.
+// Both "enabled" and "manual_only" plugins are returned; only "disabled" are excluded.
+// If libraryID > 0 and the library has customized the order for this hook type,
+// uses the per-library order. Otherwise falls back to global order.
+func (m *Manager) GetManualRuntimes(ctx context.Context, hookType string, libraryID int) ([]*Runtime, error) {
+	if libraryID > 0 {
+		customized, err := m.service.IsLibraryCustomized(ctx, libraryID, hookType)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to check library customization for hook type %s", hookType)
+		}
+		if customized {
+			entries, err := m.service.GetLibraryOrder(ctx, libraryID, hookType)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to get library order for hook type %s", hookType)
+			}
+			var runtimes []*Runtime
+			m.mu.RLock()
+			for _, entry := range entries {
+				if entry.Mode == models.PluginModeDisabled {
+					continue
+				}
+				key := pluginKey(entry.Scope, entry.PluginID)
+				if rt, ok := m.plugins[key]; ok {
+					runtimes = append(runtimes, rt)
+				}
+			}
+			m.mu.RUnlock()
+			return runtimes, nil
+		}
+	}
+
+	// Fall back to global order
+	orders, err := m.service.GetOrder(ctx, hookType)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get order for hook type %s", hookType)
+	}
+
+	var runtimes []*Runtime
+	m.mu.RLock()
+	for _, order := range orders {
+		if order.Mode == models.PluginModeDisabled {
+			continue
+		}
 		key := pluginKey(order.Scope, order.PluginID)
 		if rt, ok := m.plugins[key]; ok {
 			runtimes = append(runtimes, rt)

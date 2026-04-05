@@ -29,6 +29,13 @@ const (
 	PluginStatusNotSupported PluginStatus = -3
 )
 
+// Plugin mode constants for hook config entries.
+const (
+	PluginModeEnabled    = "enabled"
+	PluginModeManualOnly = "manual_only"
+	PluginModeDisabled   = "disabled"
+)
+
 type PluginRepository struct {
 	bun.BaseModel `bun:"table:plugin_repositories,alias:pr" tstype:"-"`
 
@@ -82,13 +89,14 @@ type PluginIdentifierType struct {
 	Pattern     *string `json:"pattern"`
 }
 
-type PluginOrder struct {
-	bun.BaseModel `bun:"table:plugin_order,alias:po" tstype:"-"`
+type PluginHookConfig struct {
+	bun.BaseModel `bun:"table:plugin_hook_config,alias:phc" tstype:"-"`
 
 	HookType string `bun:",pk" json:"hook_type" tstype:"PluginHookType"`
 	Scope    string `bun:",pk" json:"scope"`
 	PluginID string `bun:",pk" json:"plugin_id"`
 	Position int    `bun:",notnull" json:"position"`
+	Mode     string `bun:",notnull,default:'enabled'" json:"mode"`
 }
 
 type LibraryPluginCustomization struct {
@@ -98,15 +106,15 @@ type LibraryPluginCustomization struct {
 	HookType  string `bun:",pk" json:"hook_type" tstype:"PluginHookType"`
 }
 
-type LibraryPlugin struct {
-	bun.BaseModel `bun:"table:library_plugins,alias:lp" tstype:"-"`
+type LibraryPluginHookConfig struct {
+	bun.BaseModel `bun:"table:library_plugin_hook_config,alias:lphc" tstype:"-"`
 
 	LibraryID int    `bun:",pk" json:"library_id"`
 	HookType  string `bun:",pk" json:"hook_type" tstype:"PluginHookType"`
 	Scope     string `bun:",pk" json:"scope"`
 	PluginID  string `bun:",pk" json:"plugin_id"`
-	Enabled   bool   `bun:",notnull" json:"enabled"`
 	Position  int    `bun:",notnull" json:"position"`
+	Mode      string `bun:",notnull,default:'enabled'" json:"mode"`
 }
 
 // PluginFieldSetting stores global field enable/disable settings for a plugin.

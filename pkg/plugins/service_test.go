@@ -270,7 +270,7 @@ func TestService_GetOrder_SetOrder(t *testing.T) {
 	assert.Empty(t, orders)
 
 	// Set order
-	entries := []models.PluginOrder{
+	entries := []models.PluginHookConfig{
 		{Scope: "community", PluginID: "plugin-b"},
 		{Scope: "community", PluginID: "plugin-a"},
 		{Scope: "shisho", PluginID: "plugin-c"},
@@ -290,7 +290,7 @@ func TestService_GetOrder_SetOrder(t *testing.T) {
 	assert.Equal(t, 2, orders[2].Position)
 
 	// Reorder by setting a new order
-	newEntries := []models.PluginOrder{
+	newEntries := []models.PluginHookConfig{
 		{Scope: "shisho", PluginID: "plugin-c"},
 		{Scope: "community", PluginID: "plugin-a"},
 	}
@@ -321,6 +321,7 @@ func TestService_AppendToOrder(t *testing.T) {
 	require.Len(t, orders, 1)
 	assert.Equal(t, "plugin-a", orders[0].PluginID)
 	assert.Equal(t, 0, orders[0].Position)
+	assert.Equal(t, models.PluginModeEnabled, orders[0].Mode)
 
 	// Append second
 	err = svc.AppendToOrder(ctx, models.PluginHookOutputGenerator, "community", "plugin-b")
@@ -331,8 +332,10 @@ func TestService_AppendToOrder(t *testing.T) {
 	require.Len(t, orders, 2)
 	assert.Equal(t, "plugin-a", orders[0].PluginID)
 	assert.Equal(t, 0, orders[0].Position)
+	assert.Equal(t, models.PluginModeEnabled, orders[0].Mode)
 	assert.Equal(t, "plugin-b", orders[1].PluginID)
 	assert.Equal(t, 1, orders[1].Position)
+	assert.Equal(t, models.PluginModeEnabled, orders[1].Mode)
 }
 
 func TestService_ListRepositories(t *testing.T) {
@@ -709,4 +712,27 @@ func TestService_GetEffectiveFieldSettings_EmptyDeclaredFields(t *testing.T) {
 	effective, err = svc.GetEffectiveFieldSettings(ctx, library.ID, "community", "test-plugin", []string{})
 	require.NoError(t, err)
 	assert.Empty(t, effective)
+}
+
+func TestService_SetOrder_WithMode(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "community", "plugin-a")
+	insertTestPlugin(t, db, "community", "plugin-b")
+
+	entries := []models.PluginHookConfig{
+		{Scope: "community", PluginID: "plugin-a", Mode: models.PluginModeEnabled},
+		{Scope: "community", PluginID: "plugin-b", Mode: models.PluginModeManualOnly},
+	}
+	err := svc.SetOrder(ctx, models.PluginHookMetadataEnricher, entries)
+	require.NoError(t, err)
+
+	orders, err := svc.GetOrder(ctx, models.PluginHookMetadataEnricher)
+	require.NoError(t, err)
+	require.Len(t, orders, 2)
+	assert.Equal(t, models.PluginModeEnabled, orders[0].Mode)
+	assert.Equal(t, models.PluginModeManualOnly, orders[1].Mode)
 }

@@ -160,9 +160,9 @@ func (s *Service) GetConfigRaw(ctx context.Context, scope, pluginID, key string)
 	return cfg.Value, nil
 }
 
-// GetOrder returns the plugin order entries for a hook type, sorted by position.
-func (s *Service) GetOrder(ctx context.Context, hookType string) ([]*models.PluginOrder, error) {
-	var orders []*models.PluginOrder
+// GetOrder returns the plugin hook config entries for a hook type, sorted by position.
+func (s *Service) GetOrder(ctx context.Context, hookType string) ([]*models.PluginHookConfig, error) {
+	var orders []*models.PluginHookConfig
 	err := s.db.NewSelect().Model(&orders).
 		Where("hook_type = ?", hookType).
 		OrderExpr("position ASC").
@@ -173,10 +173,10 @@ func (s *Service) GetOrder(ctx context.Context, hookType string) ([]*models.Plug
 	return orders, nil
 }
 
-// SetOrder replaces all order entries for a hook type in a transaction.
-func (s *Service) SetOrder(ctx context.Context, hookType string, entries []models.PluginOrder) error {
+// SetOrder replaces all hook config entries for a hook type in a transaction.
+func (s *Service) SetOrder(ctx context.Context, hookType string, entries []models.PluginHookConfig) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := tx.NewDelete().Model((*models.PluginOrder)(nil)).
+		_, err := tx.NewDelete().Model((*models.PluginHookConfig)(nil)).
 			Where("hook_type = ?", hookType).
 			Exec(ctx)
 		if err != nil {
@@ -186,6 +186,9 @@ func (s *Service) SetOrder(ctx context.Context, hookType string, entries []model
 		for i := range entries {
 			entries[i].HookType = hookType
 			entries[i].Position = i
+			if entries[i].Mode == "" {
+				entries[i].Mode = models.PluginModeEnabled
+			}
 		}
 
 		if len(entries) > 0 {
@@ -198,10 +201,10 @@ func (s *Service) SetOrder(ctx context.Context, hookType string, entries []model
 	})
 }
 
-// AppendToOrder appends a plugin to the end of the order for a hook type.
+// AppendToOrder appends a plugin to the end of the hook config for a hook type.
 func (s *Service) AppendToOrder(ctx context.Context, hookType, scope, pluginID string) error {
 	var maxPos int
-	err := s.db.NewSelect().Model((*models.PluginOrder)(nil)).
+	err := s.db.NewSelect().Model((*models.PluginHookConfig)(nil)).
 		ColumnExpr("COALESCE(MAX(position), -1)").
 		Where("hook_type = ?", hookType).
 		Scan(ctx, &maxPos)
@@ -209,11 +212,12 @@ func (s *Service) AppendToOrder(ctx context.Context, hookType, scope, pluginID s
 		return errors.WithStack(err)
 	}
 
-	order := &models.PluginOrder{
+	order := &models.PluginHookConfig{
 		HookType: hookType,
 		Scope:    scope,
 		PluginID: pluginID,
 		Position: maxPos + 1,
+		Mode:     models.PluginModeEnabled,
 	}
 	_, err = s.db.NewInsert().Model(order).Exec(ctx)
 	if err != nil {
@@ -366,9 +370,9 @@ func (s *Service) IsLibraryCustomized(ctx context.Context, libraryID int, hookTy
 	return exists, nil
 }
 
-// GetLibraryOrder returns the per-library plugin order for a hook type, sorted by position.
-func (s *Service) GetLibraryOrder(ctx context.Context, libraryID int, hookType string) ([]*models.LibraryPlugin, error) {
-	var entries []*models.LibraryPlugin
+// GetLibraryOrder returns the per-library plugin hook config for a hook type, sorted by position.
+func (s *Service) GetLibraryOrder(ctx context.Context, libraryID int, hookType string) ([]*models.LibraryPluginHookConfig, error) {
+	var entries []*models.LibraryPluginHookConfig
 	err := s.db.NewSelect().Model(&entries).
 		Where("library_id = ? AND hook_type = ?", libraryID, hookType).
 		OrderExpr("position ASC").
@@ -379,9 +383,9 @@ func (s *Service) GetLibraryOrder(ctx context.Context, libraryID int, hookType s
 	return entries, nil
 }
 
-// SetLibraryOrder replaces all per-library plugin order entries for a hook type.
+// SetLibraryOrder replaces all per-library plugin hook config entries for a hook type.
 // Also creates the customization record if it doesn't exist.
-func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType string, entries []models.LibraryPlugin) error {
+func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType string, entries []models.LibraryPluginHookConfig) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		// Upsert customization record
 		customization := &models.LibraryPluginCustomization{
@@ -396,7 +400,7 @@ func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType s
 		}
 
 		// Delete existing entries
-		_, err = tx.NewDelete().Model((*models.LibraryPlugin)(nil)).
+		_, err = tx.NewDelete().Model((*models.LibraryPluginHookConfig)(nil)).
 			Where("library_id = ? AND hook_type = ?", libraryID, hookType).
 			Exec(ctx)
 		if err != nil {
@@ -408,6 +412,9 @@ func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType s
 			entries[i].LibraryID = libraryID
 			entries[i].HookType = hookType
 			entries[i].Position = i
+			if entries[i].Mode == "" {
+				entries[i].Mode = models.PluginModeEnabled
+			}
 		}
 		if len(entries) > 0 {
 			_, err = tx.NewInsert().Model(&entries).Exec(ctx)
@@ -422,7 +429,7 @@ func (s *Service) SetLibraryOrder(ctx context.Context, libraryID int, hookType s
 // ResetLibraryOrder removes per-library customization for a specific hook type.
 func (s *Service) ResetLibraryOrder(ctx context.Context, libraryID int, hookType string) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := tx.NewDelete().Model((*models.LibraryPlugin)(nil)).
+		_, err := tx.NewDelete().Model((*models.LibraryPluginHookConfig)(nil)).
 			Where("library_id = ? AND hook_type = ?", libraryID, hookType).
 			Exec(ctx)
 		if err != nil {
@@ -438,7 +445,7 @@ func (s *Service) ResetLibraryOrder(ctx context.Context, libraryID int, hookType
 // ResetAllLibraryOrders removes all per-library plugin customizations for a library.
 func (s *Service) ResetAllLibraryOrders(ctx context.Context, libraryID int) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := tx.NewDelete().Model((*models.LibraryPlugin)(nil)).
+		_, err := tx.NewDelete().Model((*models.LibraryPluginHookConfig)(nil)).
 			Where("library_id = ?", libraryID).
 			Exec(ctx)
 		if err != nil {
