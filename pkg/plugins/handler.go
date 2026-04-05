@@ -648,13 +648,15 @@ func (h *handler) syncRepository(c echo.Context) error {
 
 // availablePluginResponse is the response format for available plugins.
 type availablePluginResponse struct {
-	Scope       string          `json:"scope"`
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Author      string          `json:"author"`
-	Homepage    string          `json:"homepage"`
-	Versions    []PluginVersion `json:"versions"`
+	Scope       string                   `json:"scope"`
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name"`
+	Overview    string                   `json:"overview"`
+	Description string                   `json:"description"`
+	Author      string                   `json:"author"`
+	Homepage    string                   `json:"homepage"`
+	Versions    []AnnotatedPluginVersion `json:"versions"`
+	Compatible  bool                     `json:"compatible"`
 }
 
 // listAvailable aggregates plugins from all enabled repositories.
@@ -684,14 +686,25 @@ func (h *handler) listAvailable(c echo.Context) error {
 				continue
 			}
 
+			annotated := AnnotateVersionCompatibility(compatible)
+			hasCompatible := false
+			for _, v := range annotated {
+				if v.Compatible {
+					hasCompatible = true
+					break
+				}
+			}
+
 			result = append(result, availablePluginResponse{
 				Scope:       manifest.Scope,
 				ID:          p.ID,
 				Name:        p.Name,
+				Overview:    p.Overview,
 				Description: p.Description,
 				Author:      p.Author,
 				Homepage:    p.Homepage,
-				Versions:    compatible,
+				Versions:    annotated,
+				Compatible:  hasCompatible,
 			})
 		}
 	}
@@ -801,14 +814,25 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 				continue
 			}
 
+			annotated := AnnotateVersionCompatibility(compatible)
+			hasCompatible := false
+			for _, v := range annotated {
+				if v.Compatible {
+					hasCompatible = true
+					break
+				}
+			}
+
 			return errors.WithStack(c.JSON(http.StatusOK, availablePluginResponse{
 				Scope:       manifest.Scope,
 				ID:          p.ID,
 				Name:        p.Name,
+				Overview:    p.Overview,
 				Description: p.Description,
 				Author:      p.Author,
 				Homepage:    p.Homepage,
-				Versions:    compatible,
+				Versions:    annotated,
+				Compatible:  hasCompatible,
 			}))
 		}
 	}

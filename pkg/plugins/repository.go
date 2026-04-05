@@ -113,6 +113,25 @@ func FilterCompatibleVersions(versions []PluginVersion) []PluginVersion {
 	return compatible
 }
 
+// AnnotatedPluginVersion extends PluginVersion with a compatibility flag.
+type AnnotatedPluginVersion struct {
+	PluginVersion
+	Compatible bool `json:"compatible"`
+}
+
+// AnnotateVersionCompatibility annotates each version with whether it is
+// compatible with the running Shisho version based on minShishoVersion.
+func AnnotateVersionCompatibility(versions []PluginVersion) []AnnotatedPluginVersion {
+	result := make([]AnnotatedPluginVersion, len(versions))
+	for i, v := range versions {
+		result[i] = AnnotatedPluginVersion{
+			PluginVersion: v,
+			Compatible:    version.IsCompatible(v.MinShishoVersion),
+		}
+	}
+	return result
+}
+
 // FilterVersionCompatibleVersions returns only versions whose minShishoVersion
 // is satisfied by the running Shisho version.
 func FilterVersionCompatibleVersions(versions []PluginVersion) []PluginVersion {
