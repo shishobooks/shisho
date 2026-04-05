@@ -130,7 +130,7 @@ export default function DocsVersionDropdownNavbarItem({
     const targetDoc = getVersionTargetDoc(version, activeDocContext);
     return {
       label,
-      to: `${targetDoc.path}${search}${hash}`,
+      to: `${targetDoc?.path ?? ""}${search}${hash}`,
       isActive: () => version === activeDocContext.activeVersion,
       onClick: () => savePreferredVersionName(version.name),
     };
@@ -155,7 +155,7 @@ export default function DocsVersionDropdownNavbarItem({
     mobile && items.length > 1
       ? undefined
       : getVersionTargetDoc(displayedVersionItem.version, activeDocContext)
-          .path;
+          ?.path;
 
   if (items.length <= 1) {
     return (
