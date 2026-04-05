@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ChevronDown,
@@ -352,15 +353,14 @@ const BrowseTab = () => {
 
   const handleInstall = () => {
     if (!installTarget) return;
-    const latestVersion = installTarget.versions[0];
+    const compatibleVersion = installTarget.versions.find((v) => v.compatible);
+    if (!compatibleVersion) return;
     installPlugin.mutate(
       {
         scope: installTarget.scope,
         id: installTarget.id,
         name: installTarget.name,
-        version: latestVersion?.version,
-        download_url: latestVersion?.download_url,
-        sha256: latestVersion?.sha256,
+        version: compatibleVersion.version,
       },
       { onSuccess: () => setInstallTarget(null) },
     );
@@ -388,6 +388,9 @@ const BrowseTab = () => {
                   {alreadyInstalled && (
                     <Badge variant="subtle">Installed</Badge>
                   )}
+                  {!plugin.compatible && (
+                    <Badge variant="destructive">Incompatible</Badge>
+                  )}
                 </div>
                 {plugin.description && (
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -399,10 +402,16 @@ const BrowseTab = () => {
                     by {plugin.author}
                   </p>
                 )}
+                {!plugin.compatible && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
+                    <AlertTriangle className="h-3 w-3" />
+                    Requires a newer version of Shisho
+                  </p>
+                )}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {canWrite && !alreadyInstalled && (
+                {canWrite && !alreadyInstalled && plugin.compatible && (
                   <Button
                     onClick={() => setInstallTarget(plugin)}
                     size="sm"
