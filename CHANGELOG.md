@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-04-05
+
+### Features
+- Show dynamic capabilities in plugin install dialog (#57)
+- Add three-state plugin mode (Enabled / Manual Only / Disabled) (#56)
+- Improve plugin settings order tab UX (#55)
+- Enforce plugin minShishoVersion with UI compatibility indicators (#54)
+
+### Documentation
+- Refine README a bit (#53)
+
+### CI/CD
+- Add Dependabot configuration for automated dependency updates (#44)
+
+
 ## [0.0.25] - 2026-04-05
 
 ### Bug Fixes
