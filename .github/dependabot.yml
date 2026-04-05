@@ -4,15 +4,34 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "saturday"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "saturday"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "saturday"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "saturday"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
