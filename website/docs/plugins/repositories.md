@@ -35,6 +35,7 @@ Each plugin version in a repository includes:
 - A **SHA256 hash** for verifying the download integrity
 - A **minimum Shisho version** for compatibility filtering
 - A **changelog** describing what changed
+- An optional **capabilities** object declaring what the plugin can do (shown during install)
 
 Plugin versions that require a newer version of Shisho are marked as **Incompatible** in the Browse tab and cannot be installed. Compatible versions remain installable as normal.
 
@@ -66,7 +67,16 @@ Create a `repository.json` file with this structure:
           "releaseDate": "2025-06-15",
           "changelog": "Initial release.",
           "downloadUrl": "https://github.com/my-org/my-plugin/releases/download/v1.0.0/my-plugin.zip",
-          "sha256": "abc123..."
+          "sha256": "abc123...",
+          "capabilities": {
+            "metadataEnricher": {
+              "fileTypes": ["epub", "m4b"],
+              "fields": ["title", "authors", "description", "cover"]
+            },
+            "httpAccess": {
+              "domains": ["*.example.com"]
+            }
+          }
         }
       ]
     }
@@ -81,6 +91,25 @@ Create a `repository.json` file with this structure:
 - **SHA256 hashes** are required and verified on install
 - **Scope** must be unique across all repositories — it acts as a namespace for the plugins
 - **`manifestVersion`** in each version entry must match the plugin's actual `manifest.json` version
+
+### Capabilities
+
+The optional `capabilities` object in each version mirrors the plugin's `manifest.json` capabilities. It tells users what the plugin can do before they install it. When present, the install dialog shows only the declared capabilities instead of a generic list.
+
+Supported capability keys:
+
+| Key | Description | Detail Shown |
+|-----|-------------|--------------|
+| `metadataEnricher` | Searches external sources for book metadata | File types |
+| `inputConverter` | Converts files between formats | Source → target types |
+| `fileParser` | Extracts metadata from files | File types |
+| `outputGenerator` | Generates files in additional formats | Source types → format name |
+| `httpAccess` | May make network requests to external services | Approved domains |
+| `fileAccess` | Can access files beyond its sandboxed plugin directory | Access level |
+| `ffmpegAccess` | May invoke FFmpeg for media processing | — |
+| `shellAccess` | May execute shell commands on your system | Allowed commands |
+
+See the [Development](./development) page for the full capability schema.
 
 ### Hosting
 

@@ -38,13 +38,14 @@ type AvailablePlugin struct {
 
 // PluginVersion describes a specific version of an available plugin.
 type PluginVersion struct {
-	Version          string `json:"version"`
-	MinShishoVersion string `json:"minShishoVersion"`
-	ManifestVersion  int    `json:"manifestVersion"`
-	ReleaseDate      string `json:"releaseDate"`
-	Changelog        string `json:"changelog"`
-	DownloadURL      string `json:"downloadUrl"`
-	SHA256           string `json:"sha256"`
+	Version          string        `json:"version"`
+	MinShishoVersion string        `json:"minShishoVersion"`
+	ManifestVersion  int           `json:"manifestVersion"`
+	ReleaseDate      string        `json:"releaseDate"`
+	Changelog        string        `json:"changelog"`
+	DownloadURL      string        `json:"downloadUrl"`
+	SHA256           string        `json:"sha256"`
+	Capabilities     *Capabilities `json:"capabilities,omitempty"`
 }
 
 // FetchRepository downloads and parses a repository manifest from the given URL.

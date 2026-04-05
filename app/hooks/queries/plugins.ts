@@ -30,6 +30,17 @@ export {
   PluginStatusNotSupported,
 } from "@/types/generated/models";
 
+export interface PluginCapabilities {
+  metadataEnricher?: { fileTypes?: string[]; fields?: string[] };
+  inputConverter?: { sourceTypes?: string[]; targetType?: string };
+  fileParser?: { types?: string[] };
+  outputGenerator?: { sourceTypes?: string[]; name?: string };
+  httpAccess?: { domains?: string[] };
+  fileAccess?: { level?: string };
+  ffmpegAccess?: Record<string, never>;
+  shellAccess?: { commands?: string[] };
+}
+
 export interface PluginVersion {
   version: string;
   minShishoVersion: string;
@@ -39,6 +50,7 @@ export interface PluginVersion {
   sha256: string;
   manifestVersion: number;
   releaseDate: string;
+  capabilities?: PluginCapabilities;
 }
 
 export interface AvailablePlugin {
