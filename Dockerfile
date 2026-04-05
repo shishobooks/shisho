@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Generate TypeScript Types
 # =============================================================================
-FROM golang:1.25.5-alpine AS typegen
+FROM golang:1.26.1-alpine AS typegen
 
 WORKDIR /app
 
@@ -49,7 +49,7 @@ RUN NODE_ENV=production pnpm build
 # =============================================================================
 # Stage 3: Build Backend
 # =============================================================================
-FROM golang:1.25.5-alpine AS backend-builder
+FROM golang:1.26.1-alpine AS backend-builder
 
 ARG VERSION=dev
 
