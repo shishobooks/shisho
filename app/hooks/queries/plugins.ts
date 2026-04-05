@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { API, type ShishoAPIError } from "@/libraries/api";
@@ -101,18 +106,26 @@ export const usePluginsAvailable = () => {
   });
 };
 
+const pluginOrderQuery = (hookType: string) => ({
+  queryKey: [QueryKey.PluginOrder, hookType],
+  queryFn: ({ signal }: { signal: AbortSignal }) => {
+    return API.request<PluginOrder[]>(
+      "GET",
+      `/plugins/order/${hookType}`,
+      null,
+      null,
+      signal,
+    );
+  },
+});
+
 export const usePluginOrder = (hookType: string) => {
-  return useQuery<PluginOrder[], ShishoAPIError>({
-    queryKey: [QueryKey.PluginOrder, hookType],
-    queryFn: ({ signal }) => {
-      return API.request(
-        "GET",
-        `/plugins/order/${hookType}`,
-        null,
-        null,
-        signal,
-      );
-    },
+  return useQuery<PluginOrder[], ShishoAPIError>(pluginOrderQuery(hookType));
+};
+
+export const useAllPluginOrders = (hookTypes: string[]) => {
+  return useQueries({
+    queries: hookTypes.map((ht) => pluginOrderQuery(ht)),
   });
 };
 

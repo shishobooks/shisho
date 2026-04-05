@@ -2,10 +2,10 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  ChevronDown,
   Download,
   ExternalLink,
   FolderSearch,
+  ListOrdered,
   Loader2,
   Package,
   Plus,
@@ -14,7 +14,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PluginStatusActive,
   useAddRepository,
+  useAllPluginOrders,
   useInstallPlugin,
   usePluginOrder,
   usePluginRepositories,
@@ -453,20 +454,37 @@ const BrowseTab = () => {
 // --- Order Tab ---
 
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
-  { label: "Input Converter", value: "inputConverter" },
-  { label: "File Parser", value: "fileParser" },
-  { label: "Output Generator", value: "outputGenerator" },
   { label: "Metadata Enricher", value: "metadataEnricher" },
+  { label: "File Parser", value: "fileParser" },
+  { label: "Input Converter", value: "inputConverter" },
+  { label: "Output Generator", value: "outputGenerator" },
 ];
 
 const OrderTab = () => {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission("config", "write");
   const [selectedHookType, setSelectedHookType] =
-    useState<PluginHookType>("fileParser");
+    useState<PluginHookType>("metadataEnricher");
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const { data: order, isLoading, error } = usePluginOrder(selectedHookType);
   const setPluginOrder = useSetPluginOrder();
   const { data: plugins } = usePluginsInstalled();
+
+  // Prefetch all hook type orders to find the first non-empty one
+  const allOrders = useAllPluginOrders(HOOK_TYPES.map((ht) => ht.value));
+  const firstNonEmptyHookType = allOrders.every((q) => q.isSuccess)
+    ? (HOOK_TYPES.find((_, i) => (allOrders[i].data?.length ?? 0) > 0)?.value ??
+      null)
+    : undefined; // undefined = still loading, null = all empty
+
+  // Auto-select the first non-empty hook type once data loads
+  useEffect(() => {
+    if (hasAutoSelected || firstNonEmptyHookType === undefined) return;
+    if (firstNonEmptyHookType) {
+      setSelectedHookType(firstNonEmptyHookType);
+    }
+    setHasAutoSelected(true);
+  }, [firstNonEmptyHookType, hasAutoSelected]);
 
   const [localOrder, setLocalOrder] = useState<PluginOrder[] | null>(null);
 
@@ -553,7 +571,7 @@ const OrderTab = () => {
 
       {displayOrder.length === 0 ? (
         <div className="py-8 text-center">
-          <ChevronDown className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+          <ListOrdered className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             No plugins registered for this hook type.
           </p>
