@@ -1,3 +1,8 @@
+import {
+  resolveIdentifiers,
+  type FieldStatus,
+  type IdentifierEntry,
+} from "./identify-utils";
 import equal from "fast-deep-equal";
 import {
   ArrowLeft,
@@ -42,16 +47,9 @@ interface IdentifyReviewFormProps {
   onHasChangesChange?: (hasChanges: boolean) => void;
 }
 
-type FieldStatus = "unchanged" | "changed" | "new";
-
 interface AuthorEntry {
   name: string;
   role?: string;
-}
-
-interface IdentifierEntry {
-  type: string;
-  value: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,32 +135,6 @@ function resolveAuthors(
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
-}
-
-function resolveIdentifiers(
-  current: IdentifierEntry[],
-  incoming: IdentifierEntry[],
-): { value: IdentifierEntry[]; status: FieldStatus } {
-  if (current.length === 0 && incoming.length > 0)
-    return { value: incoming, status: "new" };
-  if (current.length > 0 && incoming.length === 0)
-    return { value: current, status: "unchanged" };
-  const key = (id: IdentifierEntry) => `${id.type}:${id.value}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
-    return { value: current, status: "unchanged" };
-  }
-  // Merge: keep all current, add new incoming identifiers
-  const existingKeys = new Set(current.map(key));
-  const merged = [
-    ...current,
-    ...incoming.filter((id) => !existingKeys.has(key(id))),
-  ];
-  return { value: merged, status: "changed" };
 }
 
 /** Extract current file from book. */
@@ -534,6 +506,19 @@ export function IdentifyReviewForm({
   const currentCoverDims = useImageDimensions(currentCoverUrl);
   const newCoverDims = useImageDimensions(newCoverUrl);
 
+  // When both cover dimensions are loaded and match exactly, default to keeping current
+  const coverDimsMatch =
+    !!currentCoverDims &&
+    !!newCoverDims &&
+    currentCoverDims.w === newCoverDims.w &&
+    currentCoverDims.h === newCoverDims.h;
+  const [coverUserTouched, setCoverUserTouched] = useState(false);
+  useEffect(() => {
+    if (coverDimsMatch && !coverUserTouched) {
+      setCoverSelection("current");
+    }
+  }, [coverDimsMatch, coverUserTouched]);
+
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
     return (
@@ -552,7 +537,9 @@ export function IdentifyReviewForm({
       url !== defaults.url.value ||
       !equal(identifiers, defaults.identifiers.value) ||
       coverSelection !==
-        (newCoverUrl && !disabledFields.has("cover") ? "new" : "current")
+        (newCoverUrl && !disabledFields.has("cover") && !coverDimsMatch
+          ? "new"
+          : "current")
     );
   }, [
     title,
@@ -573,6 +560,7 @@ export function IdentifyReviewForm({
     defaults,
     newCoverUrl,
     disabledFields,
+    coverDimsMatch,
   ]);
 
   useEffect(() => {
@@ -651,7 +639,7 @@ export function IdentifyReviewForm({
             <Label>{formatMetadataFieldLabel("cover")}</Label>
             <StatusBadge
               status={
-                isDisabled("cover")
+                isDisabled("cover") || coverDimsMatch
                   ? "unchanged"
                   : currentCoverUrl
                     ? "changed"
@@ -671,7 +659,10 @@ export function IdentifyReviewForm({
                   isDisabled("cover") && "opacity-60 cursor-not-allowed",
                 )}
                 disabled={isDisabled("cover")}
-                onClick={() => setCoverSelection("current")}
+                onClick={() => {
+                  setCoverSelection("current");
+                  setCoverUserTouched(true);
+                }}
                 type="button"
               >
                 <img
@@ -694,7 +685,10 @@ export function IdentifyReviewForm({
                 isDisabled("cover") && "opacity-60 cursor-not-allowed",
               )}
               disabled={isDisabled("cover")}
-              onClick={() => setCoverSelection("new")}
+              onClick={() => {
+                setCoverSelection("new");
+                setCoverUserTouched(true);
+              }}
               type="button"
             >
               <img

@@ -154,6 +154,25 @@ func TestParseSearchResponse_Confidence(t *testing.T) {
 	assert.Nil(t, resp.Results[2].Confidence)
 }
 
+func TestParseSearchResponse_DescriptionHTMLStripped(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Test Book",
+			description: "<p>First paragraph.</p><p>Second paragraph.</p>"
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	// Description should have HTML stripped, with paragraph breaks preserved
+	assert.Equal(t, "First paragraph.\n\nSecond paragraph.", resp.Results[0].Description)
+}
+
 func TestParseSearchResponse_NilInput(t *testing.T) {
 	t.Parallel()
 
