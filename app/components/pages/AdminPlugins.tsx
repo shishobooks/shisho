@@ -1,11 +1,12 @@
+import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  ChevronDown,
   Download,
   ExternalLink,
   FolderSearch,
+  ListOrdered,
   Loader2,
   Package,
   Plus,
@@ -14,7 +15,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -37,6 +38,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PluginStatusActive,
+  QueryKey,
   useAddRepository,
   useInstallPlugin,
   usePluginOrder,
@@ -58,6 +60,7 @@ import {
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { API } from "@/libraries/api";
 
 // --- Installed Tab ---
 
@@ -453,20 +456,50 @@ const BrowseTab = () => {
 // --- Order Tab ---
 
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
-  { label: "Input Converter", value: "inputConverter" },
-  { label: "File Parser", value: "fileParser" },
-  { label: "Output Generator", value: "outputGenerator" },
   { label: "Metadata Enricher", value: "metadataEnricher" },
+  { label: "File Parser", value: "fileParser" },
+  { label: "Input Converter", value: "inputConverter" },
+  { label: "Output Generator", value: "outputGenerator" },
 ];
 
 const OrderTab = () => {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission("config", "write");
   const [selectedHookType, setSelectedHookType] =
-    useState<PluginHookType>("fileParser");
+    useState<PluginHookType>("metadataEnricher");
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const { data: order, isLoading, error } = usePluginOrder(selectedHookType);
   const setPluginOrder = useSetPluginOrder();
   const { data: plugins } = usePluginsInstalled();
+
+  // Prefetch all hook type orders to find the first non-empty one
+  const allOrders = useQueries({
+    queries: HOOK_TYPES.map((ht) => ({
+      queryKey: [QueryKey.PluginOrder, ht.value],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<PluginOrder[]>(
+          "GET",
+          `/plugins/order/${ht.value}`,
+          null,
+          null,
+          signal,
+        ),
+    })),
+  });
+
+  // Auto-select the first non-empty hook type once data loads
+  useEffect(() => {
+    if (hasAutoSelected) return;
+    const allLoaded = allOrders.every((q) => q.isSuccess);
+    if (!allLoaded) return;
+    const firstNonEmpty = HOOK_TYPES.find(
+      (_, i) => (allOrders[i].data?.length ?? 0) > 0,
+    );
+    if (firstNonEmpty) {
+      setSelectedHookType(firstNonEmpty.value);
+    }
+    setHasAutoSelected(true);
+  }, [allOrders, hasAutoSelected]);
 
   const [localOrder, setLocalOrder] = useState<PluginOrder[] | null>(null);
 
@@ -553,7 +586,7 @@ const OrderTab = () => {
 
       {displayOrder.length === 0 ? (
         <div className="py-8 text-center">
-          <ChevronDown className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+          <ListOrdered className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             No plugins registered for this hook type.
           </p>
