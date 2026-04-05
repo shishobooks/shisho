@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-04-05
+
+### Bug Fixes
+- Resolve false "Changed" badges in identify workflow (#42)
+
+
 ## [0.0.24] - 2026-03-31
 
 ### Features
