@@ -535,7 +535,7 @@ Repositories provide a `repository.json` manifest:
 - `enabled` — Plugin runs during automated scans and is available for manual identification
 - `manual_only` — Plugin is skipped during automated scans but remains available for manual identification (metadata enrichers only)
 - `disabled` — Plugin is completely unavailable for this context
-- Mode is stored in both `plugin_hook_config` (global) and `library_plugin_hook_config` (per-library)
+- Mode is stored in both `plugin_hook_configs` (global) and `library_plugin_hook_configs` (per-library)
 - `GetOrderedRuntimes` returns only `enabled` plugins; `GetManualRuntimes` returns `enabled` + `manual_only`
 
 **Field settings behavior:**
