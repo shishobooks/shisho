@@ -98,6 +98,14 @@ func init() {
 		}
 
 		_, err = db.Exec(`CREATE INDEX ix_library_plugin_hook_configs_order ON library_plugin_hook_configs(library_id, hook_type, position)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Drop unused book_identifiers table. Identifiers are stored at the
+		// file level (file_identifiers) and this table was never populated.
+		// Its non-cascading FK to books would block book deletion.
+		_, err = db.Exec(`DROP TABLE IF EXISTS book_identifiers`)
 		return errors.WithStack(err)
 	}
 
@@ -170,6 +178,26 @@ func init() {
 		}
 
 		_, err = db.Exec(`CREATE INDEX ix_plugin_identifier_types_plugin ON plugin_identifier_types(scope, plugin_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Recreate book_identifiers table
+		_, err = db.Exec(`
+			CREATE TABLE book_identifiers (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				book_id TEXT REFERENCES books (id) NOT NULL,
+				type TEXT NOT NULL,
+				value TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = db.Exec(`CREATE INDEX ix_book_identifiers_book_id ON book_identifiers (book_id)`)
 		return errors.WithStack(err)
 	}
 
