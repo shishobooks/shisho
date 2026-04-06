@@ -1392,6 +1392,17 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 			return errors.WithStack(err)
 		}
 
+		// Clear primary_file_id references to avoid FK violation
+		// (books.primary_file_id REFERENCES files(id) without CASCADE)
+		_, err = tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = NULL").
+			Where("primary_file_id IN (?)", bun.List(fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete the file records
 		_, err = tx.NewDelete().
 			Model((*models.File)(nil)).
