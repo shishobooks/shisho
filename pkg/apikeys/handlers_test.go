@@ -27,6 +27,10 @@ func newHandlerTestDB(t *testing.T) *bun.DB {
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
+	// Enable foreign keys to match production behavior
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
 	_, err = migrations.BringUpToDate(context.Background(), db)
 	require.NoError(t, err)
 

@@ -48,6 +48,12 @@ func newTestContext(t *testing.T) *testContext {
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
+	// Enable foreign keys to match production behavior
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		t.Fatalf("failed to enable foreign keys: %v", err)
+	}
+
 	// Run migrations
 	_, err = migrations.BringUpToDate(context.Background(), db)
 	if err != nil {

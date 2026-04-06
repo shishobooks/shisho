@@ -618,14 +618,8 @@ func TestPromoteNextPrimaryFile_NoFiles(t *testing.T) {
 
 	_, book := setupTestLibraryAndBook(t, db)
 
-	// Manually set a primary_file_id on the book (simulating a stale pointer)
-	fakeID := 9999
-	book.PrimaryFileID = &fakeID
-	_, err := db.NewUpdate().Model(book).Column("primary_file_id").Where("id = ?", book.ID).Exec(ctx)
-	require.NoError(t, err)
-
-	// Call promote with no files in the book
-	err = svc.PromoteNextPrimaryFile(ctx, book.ID)
+	// Call promote with no files in the book (primary_file_id is already NULL)
+	err := svc.PromoteNextPrimaryFile(ctx, book.ID)
 	require.NoError(t, err)
 
 	// Verify primary_file_id is now NULL

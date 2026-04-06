@@ -1310,6 +1310,17 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 			return errors.WithStack(err)
 		}
 
+		// Clear primary_file_id if it points to this file, then promote after deletion.
+		// Must happen before DELETE to avoid FK violation (books.primary_file_id REFERENCES files(id)).
+		_, err = tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = NULL").
+			Where("primary_file_id = ?", fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete the file record
 		_, err = tx.NewDelete().
 			Model((*models.File)(nil)).
@@ -1319,38 +1330,24 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 			return errors.WithStack(err)
 		}
 
-		// Check if this was the primary file and promote another if needed
-		var book models.Book
+		// Promote a new primary file for the book
+		var newPrimary models.File
 		err = tx.NewSelect().
-			Model(&book).
-			Where("id = ?", file.BookID).
+			Model(&newPrimary).
+			Where("book_id = ?", file.BookID).
+			OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+			Order("created_at ASC").
+			Limit(1).
 			Scan(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		if book.PrimaryFileID != nil && *book.PrimaryFileID == fileID {
-			// Find the next primary: prefer main files, then oldest
-			var newPrimary models.File
-			err = tx.NewSelect().
-				Model(&newPrimary).
-				Where("book_id = ?", file.BookID).
-				OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
-				Order("created_at ASC").
-				Limit(1).
-				Scan(ctx)
-			if err == nil {
-				// Found a file to promote
-				_, err = tx.NewUpdate().
-					Model(&book).
-					Set("primary_file_id = ?", newPrimary.ID).
-					Where("id = ?", book.ID).
-					Exec(ctx)
-				if err != nil {
-					return errors.WithStack(err)
-				}
+		if err == nil {
+			_, err = tx.NewUpdate().
+				Model((*models.Book)(nil)).
+				Set("primary_file_id = ?", newPrimary.ID).
+				Where("id = ?", file.BookID).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
 			}
-			// If no files remain, the book deletion cascade will handle cleanup
 		}
 
 		return nil
@@ -1483,6 +1480,17 @@ func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
 			}
 		}
 
+		// Clear primary_file_id before deleting files to avoid FK violation
+		// (books.primary_file_id REFERENCES files(id) without CASCADE)
+		_, err = tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = NULL").
+			Where("id = ?", bookID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete files
 		_, err = tx.NewDelete().
 			Model((*models.File)(nil)).
@@ -1585,6 +1593,17 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
+		}
+
+		// Clear primary_file_id before deleting files to avoid FK violation
+		// (books.primary_file_id REFERENCES files(id) without CASCADE)
+		_, err = tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("primary_file_id = NULL").
+			Where("id IN (?)", bun.List(bookIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
 		}
 
 		// Delete files

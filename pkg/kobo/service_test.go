@@ -22,14 +22,45 @@ func setupTestDB(t *testing.T) *bun.DB {
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
+	// Enable foreign keys to match production behavior
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
 	_, err = migrations.BringUpToDate(context.Background(), db)
 	require.NoError(t, err)
+
+	// Insert a test API key that all sync point tests reference
+	insertTestAPIKey(t, db, "api-key-1")
 
 	t.Cleanup(func() {
 		db.Close()
 	})
 
 	return db
+}
+
+// insertTestAPIKey creates a user and API key for FK-valid test data.
+func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
+	t.Helper()
+
+	// Get admin role ID (seeded by migrations)
+	var roleID int
+	err := db.QueryRow("SELECT id FROM roles WHERE name = 'admin'").Scan(&roleID)
+	require.NoError(t, err)
+
+	// Insert a user (use unique name to avoid conflicts with test-specific users)
+	_, err = db.Exec("INSERT INTO users (username, password_hash, role_id, is_active) VALUES (?, ?, ?, ?)",
+		"_apikey_owner", "fakehash", roleID, true)
+	require.NoError(t, err)
+
+	var userID int
+	err = db.QueryRow("SELECT id FROM users WHERE username = '_apikey_owner'").Scan(&userID)
+	require.NoError(t, err)
+
+	// Insert API key
+	_, err = db.Exec("INSERT INTO api_keys (id, user_id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+		keyID, userID, "test-key", "ak_test_"+keyID)
+	require.NoError(t, err)
 }
 
 func TestCreateSyncPoint(t *testing.T) {
