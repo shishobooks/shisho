@@ -1273,7 +1273,7 @@ func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (i
 // If the deleted file was the book's primary file (auto-nulled via ON DELETE SET NULL), promotes another.
 func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		// Get the file to find its book_id for primary file promotion
+		// Get the file to find its book_id and check if it's the primary
 		var file models.File
 		err := tx.NewSelect().
 			Model(&file).
@@ -1282,6 +1282,17 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+
+		// Check if this file is the book's primary before deleting
+		var book models.Book
+		err = tx.NewSelect().Model(&book).
+			Column("primary_file_id").
+			Where("id = ?", file.BookID).
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		wasPrimary := book.PrimaryFileID != nil && *book.PrimaryFileID == fileID
 
 		// Delete the file — narrators, identifiers, and chapters cascade via FK.
 		// books.primary_file_id is auto-nulled via ON DELETE SET NULL.
@@ -1293,23 +1304,25 @@ func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
 			return errors.WithStack(err)
 		}
 
-		// Promote a new primary file for the book
-		var newPrimary models.File
-		err = tx.NewSelect().
-			Model(&newPrimary).
-			Where("book_id = ?", file.BookID).
-			OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
-			Order("created_at ASC").
-			Limit(1).
-			Scan(ctx)
-		if err == nil {
-			_, err = tx.NewUpdate().
-				Model((*models.Book)(nil)).
-				Set("primary_file_id = ?", newPrimary.ID).
-				Where("id = ?", file.BookID).
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
+		// Promote a new primary file only if we just deleted the primary
+		if wasPrimary {
+			var newPrimary models.File
+			err = tx.NewSelect().
+				Model(&newPrimary).
+				Where("book_id = ?", file.BookID).
+				OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
+				Order("created_at ASC").
+				Limit(1).
+				Scan(ctx)
+			if err == nil {
+				_, err = tx.NewUpdate().
+					Model((*models.Book)(nil)).
+					Set("primary_file_id = ?", newPrimary.ID).
+					Where("id = ?", file.BookID).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
 			}
 		}
 
