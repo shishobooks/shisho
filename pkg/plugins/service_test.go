@@ -473,6 +473,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 }
 
 func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -492,10 +493,11 @@ func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 	err = svc.UpsertIdentifierTypes(ctx, "shisho", "goodreads-enricher", goodreadsType)
 	require.NoError(t, err)
 
-	// Both should exist
+	// ListIdentifierTypes deduplicates by ID — should return one entry
 	types, err := svc.ListIdentifierTypes(ctx)
 	require.NoError(t, err)
-	require.Len(t, types, 2)
+	require.Len(t, types, 1)
+	assert.Equal(t, "goodreads", types[0].ID)
 
 	// Uninstalling one plugin should leave the other's type intact
 	err = svc.UninstallPlugin(ctx, "local", "goodreads-enricher")

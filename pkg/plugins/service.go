@@ -282,14 +282,25 @@ func (s *Service) UpdateRepository(ctx context.Context, repo *models.PluginRepos
 	return nil
 }
 
-// ListIdentifierTypes returns all plugin-registered identifier types.
+// ListIdentifierTypes returns plugin-registered identifier types, deduplicated by ID.
+// Multiple plugins can register the same type (e.g., local and published versions);
+// only the first by scope/plugin ordering is returned.
 func (s *Service) ListIdentifierTypes(ctx context.Context) ([]*models.PluginIdentifierType, error) {
 	var types []*models.PluginIdentifierType
 	err := s.db.NewSelect().Model(&types).OrderExpr("scope ASC, plugin_id ASC, id ASC").Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return types, nil
+
+	seen := make(map[string]bool, len(types))
+	deduped := make([]*models.PluginIdentifierType, 0, len(types))
+	for _, t := range types {
+		if !seen[t.ID] {
+			seen[t.ID] = true
+			deduped = append(deduped, t)
+		}
+	}
+	return deduped, nil
 }
 
 // UpsertIdentifierTypes replaces all identifier types for a plugin in a transaction.
