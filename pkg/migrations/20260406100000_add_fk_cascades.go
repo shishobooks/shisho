@@ -46,6 +46,13 @@ func init() {
 	up := func(_ context.Context, db *bun.DB) error {
 		// Add ON DELETE CASCADE / SET NULL to all FK constraints that are missing them.
 		// SQLite cannot ALTER constraints, so each table must be recreated.
+		// Disable FK enforcement during recreation to avoid ordering issues
+		// (can't drop a table while others reference it). This is the official
+		// SQLite recommendation for schema changes.
+		if _, err := db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+			return errors.WithStack(err)
+		}
+		defer db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
 
 		// 1. library_paths: library_id → ON DELETE CASCADE
 		if err := recreateTable(db, "library_paths",
@@ -258,6 +265,10 @@ func init() {
 	down := func(_ context.Context, db *bun.DB) error {
 		// Reverse all CASCADE/SET NULL changes back to bare REFERENCES.
 		// This is safe because removing CASCADE just means the DB won't auto-delete children.
+		if _, err := db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+			return errors.WithStack(err)
+		}
+		defer db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
 
 		if err := recreateTable(db, "jobs",
 			`CREATE TABLE jobs_new (
