@@ -15,6 +15,7 @@ test.describe("Setup Flow", () => {
   test.beforeAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
+    await apiContext.delete("/test/ereader");
     await apiContext.delete("/test/users");
     await apiContext.dispose();
   });

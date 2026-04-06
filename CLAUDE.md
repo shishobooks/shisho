@@ -241,3 +241,5 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
 - **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
+- **Table names must be plural** — All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
+- **Foreign key enforcement is enabled** — `PRAGMA foreign_keys=ON` is set in production. All DELETE operations must clear or delete child references before deleting parent rows. Be especially careful with `books.primary_file_id REFERENCES files(id)` (circular FK) — null it out before deleting files. Test DB helpers must also enable this pragma.

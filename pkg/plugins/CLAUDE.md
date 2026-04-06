@@ -524,9 +524,9 @@ Repositories provide a `repository.json` manifest:
 | `plugins` | `(scope, id)` | Installed plugin records |
 | `plugin_configs` | `(scope, plugin_id, key)` | Configuration values (CASCADE delete) |
 | `plugin_repositories` | `url` (unique `scope`) | Repository sources |
-| `plugin_identifier_types` | `id` | Custom identifier types |
-| `plugin_hook_config` | `(hook_type, scope, plugin_id)` | Execution order and mode per hook |
-| `library_plugin_hook_config` | `(library_id, hook_type, scope, plugin_id)` | Per-library execution order and mode per hook |
+| `plugin_identifier_types` | `(id, scope, plugin_id)` | Custom identifier types (multiple plugins can register same type) |
+| `plugin_hook_configs` | `(hook_type, scope, plugin_id)` | Execution order and mode per hook |
+| `library_plugin_hook_configs` | `(library_id, hook_type, scope, plugin_id)` | Per-library execution order and mode per hook |
 | `library_plugin_customizations` | `(library_id, hook_type)` | Tracks which libraries have customized a hook type |
 | `plugin_field_settings` | `(scope, plugin_id, field)` | Global field enabled/disabled state |
 | `library_plugin_field_settings` | `(library_id, scope, plugin_id, field)` | Per-library field overrides |
@@ -535,7 +535,7 @@ Repositories provide a `repository.json` manifest:
 - `enabled` — Plugin runs during automated scans and is available for manual identification
 - `manual_only` — Plugin is skipped during automated scans but remains available for manual identification (metadata enrichers only)
 - `disabled` — Plugin is completely unavailable for this context
-- Mode is stored in both `plugin_hook_config` (global) and `library_plugin_hook_config` (per-library)
+- Mode is stored in both `plugin_hook_configs` (global) and `library_plugin_hook_configs` (per-library)
 - `GetOrderedRuntimes` returns only `enabled` plugins; `GetManualRuntimes` returns `enabled` + `manual_only`
 
 **Field settings behavior:**

@@ -82,15 +82,15 @@ type PluginIdentifierType struct {
 	bun.BaseModel `bun:"table:plugin_identifier_types,alias:pit" tstype:"-"`
 
 	ID          string  `bun:",pk" json:"id"`
-	Scope       string  `bun:",notnull" json:"scope"`
-	PluginID    string  `bun:",notnull" json:"plugin_id"`
+	Scope       string  `bun:",pk" json:"scope"`
+	PluginID    string  `bun:",pk" json:"plugin_id"`
 	Name        string  `bun:",notnull" json:"name"`
 	URLTemplate *string `json:"url_template"`
 	Pattern     *string `json:"pattern"`
 }
 
 type PluginHookConfig struct {
-	bun.BaseModel `bun:"table:plugin_hook_config,alias:phc" tstype:"-"`
+	bun.BaseModel `bun:"table:plugin_hook_configs,alias:phc" tstype:"-"`
 
 	HookType string `bun:",pk" json:"hook_type" tstype:"PluginHookType"`
 	Scope    string `bun:",pk" json:"scope"`
@@ -107,7 +107,7 @@ type LibraryPluginCustomization struct {
 }
 
 type LibraryPluginHookConfig struct {
-	bun.BaseModel `bun:"table:library_plugin_hook_config,alias:lphc" tstype:"-"`
+	bun.BaseModel `bun:"table:library_plugin_hook_configs,alias:lphc" tstype:"-"`
 
 	LibraryID int    `bun:",pk" json:"library_id"`
 	HookType  string `bun:",pk" json:"hook_type" tstype:"PluginHookType"`

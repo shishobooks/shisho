@@ -14,6 +14,14 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
+func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
+	t.Helper()
+	lib := &models.Library{Name: name, CoverAspectRatio: "portrait", DownloadFormatPreference: models.DownloadFormatOriginal}
+	_, err := db.NewInsert().Model(lib).Exec(context.Background())
+	require.NoError(t, err)
+	return lib
+}
+
 func newTestDB(t *testing.T) *bun.DB {
 	t.Helper()
 
@@ -21,6 +29,10 @@ func newTestDB(t *testing.T) *bun.DB {
 	require.NoError(t, err)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	// Enable foreign keys to match production behavior
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
 
 	_, err = migrations.BringUpToDate(context.Background(), db)
 	require.NoError(t, err)
@@ -176,7 +188,8 @@ func TestHasActiveJob_WithLibraryID_MatchingLibrary(t *testing.T) {
 	svc := NewService(db)
 	ctx := context.Background()
 
-	libraryID := 1
+	lib := insertTestLibrary(t, db, "Test Library")
+	libraryID := lib.ID
 	job := &models.Job{
 		Type:       models.JobTypeScan,
 		Status:     models.JobStatusPending,
@@ -197,8 +210,10 @@ func TestHasActiveJob_WithLibraryID_DifferentLibrary(t *testing.T) {
 	svc := NewService(db)
 	ctx := context.Background()
 
-	libraryID1 := 1
-	libraryID2 := 2
+	lib1 := insertTestLibrary(t, db, "Library 1")
+	lib2 := insertTestLibrary(t, db, "Library 2")
+	libraryID1 := lib1.ID
+	libraryID2 := lib2.ID
 	job := &models.Job{
 		Type:       models.JobTypeScan,
 		Status:     models.JobStatusPending,
@@ -231,7 +246,8 @@ func TestHasActiveJob_WithLibraryID_GlobalJobBlocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should block any library-specific scan
-	libraryID := 1
+	lib := insertTestLibrary(t, db, "Test Library")
+	libraryID := lib.ID
 	hasActive, err := svc.HasActiveJob(ctx, models.JobTypeScan, &libraryID)
 	require.NoError(t, err)
 	assert.True(t, hasActive)
@@ -243,7 +259,8 @@ func TestHasActiveJob_NilLibraryID_ChecksAny(t *testing.T) {
 	svc := NewService(db)
 	ctx := context.Background()
 
-	libraryID := 1
+	lib := insertTestLibrary(t, db, "Test Library")
+	libraryID := lib.ID
 	job := &models.Job{
 		Type:       models.JobTypeScan,
 		Status:     models.JobStatusPending,
@@ -296,8 +313,10 @@ func TestListJobs_FilterByLibraryIDOrGlobal(t *testing.T) {
 	svc := NewService(db)
 	ctx := context.Background()
 
-	libraryID1 := 1
-	libraryID2 := 2
+	lib1 := insertTestLibrary(t, db, "Library 1")
+	lib2 := insertTestLibrary(t, db, "Library 2")
+	libraryID1 := lib1.ID
+	libraryID2 := lib2.ID
 
 	// Create jobs: global, library 1, library 2
 	globalJob := &models.Job{

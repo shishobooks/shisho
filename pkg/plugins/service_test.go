@@ -472,6 +472,44 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 	assert.Empty(t, idTypes)
 }
 
+func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	insertTestPlugin(t, db, "local", "goodreads-enricher")
+	insertTestPlugin(t, db, "shisho", "goodreads-enricher")
+
+	goodreadsType := []IdentifierTypeCap{
+		{ID: "goodreads", Name: "Goodreads", URLTemplate: "https://goodreads.com/book/show/{value}"},
+	}
+
+	// Local plugin registers "goodreads" identifier type
+	err := svc.UpsertIdentifierTypes(ctx, "local", "goodreads-enricher", goodreadsType)
+	require.NoError(t, err)
+
+	// Published plugin registers the same identifier type — must not conflict
+	err = svc.UpsertIdentifierTypes(ctx, "shisho", "goodreads-enricher", goodreadsType)
+	require.NoError(t, err)
+
+	// ListIdentifierTypes deduplicates by ID — should return one entry
+	types, err := svc.ListIdentifierTypes(ctx)
+	require.NoError(t, err)
+	require.Len(t, types, 1)
+	assert.Equal(t, "goodreads", types[0].ID)
+
+	// Uninstalling one plugin should leave the other's type intact
+	err = svc.UninstallPlugin(ctx, "local", "goodreads-enricher")
+	require.NoError(t, err)
+
+	types, err = svc.ListIdentifierTypes(ctx)
+	require.NoError(t, err)
+	require.Len(t, types, 1)
+	assert.Equal(t, "goodreads", types[0].ID)
+	assert.Equal(t, "shisho", types[0].Scope)
+}
+
 func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)
