@@ -41,6 +41,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Codec:         meta.Codec,   // from esds AudioSpecificConfig
 		Identifiers:   meta.Identifiers,
 		Chapters:      convertChaptersToParsed(meta.Chapters),
+		Language:      meta.Language,
+		Abridged:      meta.Abridged,
 	}, nil
 }
 

@@ -40,6 +40,8 @@ type Metadata struct {
 	MediaType     int                          // from stik (2 = audiobook)
 	Freeform      map[string]string            // freeform (----) atoms like com.apple.iTunes:ASIN
 	Identifiers   []mediafile.ParsedIdentifier // parsed identifiers from freeform atoms
+	Language      *string                      // from com.pilabor.tone:LANGUAGE or com.apple.iTunes:LANGUAGE freeform atom
+	Abridged      *bool                        // from com.pilabor.tone:ABRIDGED freeform atom
 	UnknownAtoms  []RawAtom                    // preserved unrecognized atoms from source
 }
 
@@ -145,6 +147,23 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		// Extract URL from freeform
 		if url, ok := raw.freeform["com.shisho:url"]; ok {
 			meta.URL = url
+		}
+		// Extract language from freeform
+		if lang, ok := raw.freeform["com.pilabor.tone:LANGUAGE"]; ok {
+			meta.Language = mediafile.NormalizeLanguage(lang)
+		} else if lang, ok := raw.freeform["com.apple.iTunes:LANGUAGE"]; ok {
+			meta.Language = mediafile.NormalizeLanguage(lang)
+		}
+		// Extract abridged from freeform
+		if abr, ok := raw.freeform["com.pilabor.tone:ABRIDGED"]; ok {
+			switch strings.ToLower(strings.TrimSpace(abr)) {
+			case "true":
+				b := true
+				meta.Abridged = &b
+			case "false":
+				b := false
+				meta.Abridged = &b
+			}
 		}
 		// Extract ASIN from freeform - check multiple possible locations
 		// com.apple.iTunes:ASIN is the standard iTunes format
