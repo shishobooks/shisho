@@ -13,7 +13,7 @@ Users want to see, edit, and filter by these fields. Plugins should be able to s
 
 ## Solution
 
-Add two new nullable fields to the `files` table — `language` (ISO 639-1 code) and `abridged` (nullable boolean) — with full stack support: parsing, editing, sidecar persistence, plugin SDK, file generation, and UI filtering.
+Add two new nullable fields to the `files` table — `language` (BCP 47 tag) and `abridged` (nullable boolean) — with full stack support: parsing, editing, sidecar persistence, plugin SDK, file generation, and UI filtering.
 
 ## Data Model
 
@@ -23,7 +23,7 @@ New columns on `files`:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `language` | `TEXT` | ISO 639-1 code (e.g., `"en"`, `"fr"`, `"ja"`), nullable |
+| `language` | `TEXT` | BCP 47 tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`), nullable |
 | `language_source` | `TEXT` | Data source tracking |
 | `abridged` | `INTEGER` | Nullable boolean (0=unabridged, 1=abridged, NULL=unknown) |
 | `abridged_source` | `TEXT` | Data source tracking |
@@ -40,7 +40,7 @@ AbridgedSource *string `bun:"abridged_source" json:"abridged_source"`
 ### ParsedMetadata (`pkg/mediafile/mediafile.go`)
 
 ```go
-Language *string `json:"language,omitempty"` // ISO 639-1 code
+Language *string `json:"language,omitempty"` // BCP 47 tag
 Abridged *bool   `json:"abridged,omitempty"`
 ```
 
@@ -52,13 +52,13 @@ Add `"language"` and `"abridged"` to the `FieldDataSources` key documentation co
 
 ### EPUB (`pkg/epub/opf.go`)
 
-**Language**: Already parsed from `<dc:language>` into `pkg.Metadata.Language`. Wire it through to `ParsedMetadata.Language`. Normalize to ISO 639-1 (EPUB may contain ISO 639-2/T codes like `"eng"` or BCP 47 tags like `"en-US"` — extract the 2-letter prefix where possible).
+**Language**: Already parsed from `<dc:language>` into `pkg.Metadata.Language`. Wire it through to `ParsedMetadata.Language`. EPUB 3 uses BCP 47 natively, so pass through as-is. For EPUB 2 files that may use ISO 639-2/T codes (e.g., `"eng"`), normalize to the BCP 47 equivalent (`"en"`).
 
 **Abridged**: No standard OPF element. Do not extract.
 
 ### CBZ (`pkg/cbz/cbz.go`)
 
-**Language**: Already parsed from `<LanguageISO>` into `comicInfo.LanguageISO`. Wire through to `ParsedMetadata.Language`. ComicInfo uses ISO 639-1 natively, so no normalization needed.
+**Language**: Already parsed from `<LanguageISO>` into `comicInfo.LanguageISO`. Wire through to `ParsedMetadata.Language`. ComicInfo uses ISO 639-1 natively, which is valid BCP 47 — no normalization needed.
 
 **Abridged**: No ComicInfo.xml field. Do not extract.
 
@@ -76,15 +76,15 @@ Add `"language"` and `"abridged"` to the `FieldDataSources` key documentation co
 
 **Abridged**: No standard field. Do not extract.
 
-### Language Normalization
+### Language Validation and Normalization
 
-Create a shared utility (e.g., `pkg/mediafile/language.go`) that:
-1. Validates ISO 639-1 codes against a known list
-2. Converts ISO 639-2/T codes (3-letter like `"eng"`) to ISO 639-1 (`"en"`)
-3. Extracts the language subtag from BCP 47 tags (`"en-US"` → `"en"`)
-4. Returns `nil` for unrecognized values
+Create a shared utility (e.g., `pkg/mediafile/language.go`) using `golang.org/x/text/language` that:
+1. Parses and validates BCP 47 tags via `language.Parse()` — rejects structurally invalid tags
+2. Converts ISO 639-2/T codes (3-letter like `"eng"`) to their BCP 47 equivalent (`"en"`) for EPUB 2 compatibility
+3. Canonicalizes tags (e.g., `"EN-us"` → `"en-US"`)
+4. Returns `nil` for unrecognized/invalid values
 
-This utility is also used for API input validation.
+This utility is used by all parsers (to normalize extracted values) and by the API (to validate user input and custom free-text tags).
 
 ## Scanner Integration (`pkg/worker/scan_unified.go`)
 
@@ -122,7 +122,8 @@ Note: `Abridged` is a `*string` in the payload (not `*bool`) to distinguish betw
 ### Handler Logic (`pkg/books/handlers.go`)
 
 **Language**:
-- Validate against the ISO 639-1 list using the shared utility
+- Validate using `language.Parse()` from the shared utility — accepts any valid BCP 47 tag
+- Canonicalize the tag before storing (e.g., `"en-us"` → `"en-US"`)
 - Empty string clears the value (sets to nil)
 - Set source to `DataSourceManual`
 
@@ -173,7 +174,7 @@ Add `Language *string` and `Abridged *bool` to the `Fingerprint` struct and `Com
 Add to the TypeScript SDK types:
 
 ```typescript
-language?: string;  // ISO 639-1 code
+language?: string;  // BCP 47 tag (e.g., "en", "en-US", "zh-Hans")
 abridged?: boolean; // true=abridged, false=unabridged, undefined=unknown
 ```
 
@@ -184,9 +185,10 @@ Plugins can set these fields in file parser results and metadata enricher result
 ### FileEditDialog (`app/components/library/FileEditDialog.tsx`)
 
 **Language field**:
-- Combobox with client-side search over a static ISO 639-1 list
-- Display format: "English (en)", "French (fr)", etc.
+- Combobox with client-side search over a curated list of ~200-300 common BCP 47 tags
+- Display format: "English (en)", "English - United States (en-US)", "Chinese - Simplified (zh-Hans)", etc.
 - Searchable by both name and code
+- **Free-text fallback**: If the user types a tag not in the curated list, show a "Use custom tag: {input}" option (similar to publisher/imprint "Create: ..." pattern). Backend validates the tag structure via `language.Parse()`.
 - Clearable (selecting nothing sets to nil)
 - Available for all file types
 
@@ -204,18 +206,25 @@ Show language (as human-readable name) and abridged status in the file metadata 
 **Conditional filter**: Only show a language filter dropdown on the gallery/library page when the library has files with 2+ distinct non-null language values.
 
 **Backend support**: Add an endpoint or extend existing library stats to return distinct languages for a library:
-- `GET /libraries/:id/languages` → `["en", "fr", "ja"]`
+- `GET /libraries/:id/languages` → `["en", "en-US", "fr", "ja"]`
 - Or include in existing library metadata response
 
 **Frontend**: Query distinct languages on library page load. If the result has fewer than 2 entries, hide the filter. Otherwise, show a dropdown that filters the book list by language.
 
-**Filter logic**: A book matches the language filter if any of its files have the selected language.
+**Filter grouping**: Group by base language subtag in the filter dropdown. If a library has both `en` and `en-US`, show a single "English" option that matches both. If it has `en-US` and `en-GB` (but no bare `en`), show separate "English - United States" and "English - United Kingdom" options since the user distinguished them.
 
-## ISO 639-1 Language List
+**Filter logic**: A book matches the language filter if any of its files have the selected language (or a language with the same base subtag, when grouped).
 
-A static list of ~184 ISO 639-1 codes with English names, stored client-side for the combobox. Also used server-side for validation. Shared as a Go map and a TypeScript constant.
+## Curated BCP 47 Language List
 
-Place the Go list in `pkg/mediafile/language.go` and the TypeScript list in `app/constants/languages.ts` (or similar). The Go map is authoritative; the TS list can be a simple array of `{ code, name }` objects.
+A curated list of ~200-300 common BCP 47 tags with English display names, used client-side for the combobox. Includes:
+- All ISO 639-1 languages (the base ~184 codes like `en`, `fr`, `ja`)
+- Common script variants (`zh-Hans`, `zh-Hant`, `sr-Latn`, `sr-Cyrl`)
+- Common regional variants where the distinction matters for books (`en-US`, `en-GB`, `pt-BR`, `pt-PT`, `es-419`, `fr-CA`)
+
+**Server-side validation** uses `golang.org/x/text/language` to validate any BCP 47 tag — it is NOT restricted to the curated list. The curated list is purely a UI convenience.
+
+Place the curated list in `app/constants/languages.ts` as an array of `{ tag, name }` objects. The Go side does not need the list since it validates structurally via `language.Parse()`.
 
 ## Documentation Updates
 
