@@ -60,12 +60,18 @@ export function IdentifyBookDialog({
   const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
   const inputRef = useRef<HTMLInputElement>(null);
   const hasSearchedRef = useRef(false);
+  const queryUserTouched = useRef(false);
 
   const mainFiles = useMemo(
     () => book.files?.filter((f) => f.file_role === "main") ?? [],
     [book.files],
   );
   const hasMultipleFiles = mainFiles.length > 1;
+
+  const selectedFile = selectedFileId
+    ? mainFiles.find((f) => f.id === selectedFileId)
+    : mainFiles[0];
+  const isAudiobook = selectedFile?.file_type === "m4b";
 
   // Pre-fill query and auto-search when dialog opens
   useEffect(() => {
@@ -75,22 +81,17 @@ export function IdentifyBookDialog({
       // Pre-fill author from first author
       const firstAuthor = book.authors?.[0]?.person?.name ?? "";
       setAuthor(firstAuthor);
-      // Pre-fill identifiers from all files (deduplicated)
-      const allIds: Array<{ type: string; value: string }> = [];
-      const seen = new Set<string>();
-      for (const file of book.files ?? []) {
-        for (const id of file.identifiers ?? []) {
-          const key = `${id.type}:${id.value}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            allIds.push({ type: id.type, value: id.value });
-          }
-        }
-      }
-      setIdentifiers(allIds);
+      // Pre-fill identifiers from the initially selected file
+      const initialFile = mainFiles[0];
+      const fileIds = (initialFile?.identifiers ?? []).map((id) => ({
+        type: id.type,
+        value: id.value,
+      }));
+      setIdentifiers(fileIds);
       setSelectedResult(null);
       setSelectedFileId(mainFiles.length > 1 ? mainFiles[0].id : undefined);
       hasSearchedRef.current = false;
+      queryUserTouched.current = false;
     }
   }, [open, book.title, book.authors, book.files, mainFiles]);
 
@@ -101,6 +102,7 @@ export function IdentifyBookDialog({
       searchMutation.mutate({
         query,
         bookId: book.id,
+        fileId: selectedFileId,
         author: author || undefined,
         identifiers: identifiers.length > 0 ? identifiers : undefined,
       });
@@ -114,6 +116,7 @@ export function IdentifyBookDialog({
     searchMutation.mutate({
       query: query.trim(),
       bookId: book.id,
+      fileId: selectedFileId,
       author: author.trim() || undefined,
       identifiers: identifiers.length > 0 ? identifiers : undefined,
     });
@@ -165,7 +168,7 @@ export function IdentifyBookDialog({
       onOpenChange={onOpenChange}
       open={open}
     >
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden [&>*]:min-w-0">
+      <DialogContent className="max-w-2xl overflow-x-hidden [&>*]:min-w-0">
         <DialogHeader className="pr-8">
           <DialogTitle>Identify Book</DialogTitle>
           <DialogDescription>
@@ -195,7 +198,27 @@ export function IdentifyBookDialog({
                       : "border-border",
                   )}
                   key={file.id}
-                  onClick={() => setSelectedFileId(file.id)}
+                  onClick={() => {
+                    setSelectedFileId(file.id);
+                    // Update identifiers to the selected file's identifiers
+                    const fileIds = (file.identifiers ?? []).map((id) => ({
+                      type: id.type,
+                      value: id.value,
+                    }));
+                    setIdentifiers(fileIds);
+                    if (!queryUserTouched.current) {
+                      const fileTitle = file.name || getFilename(file.filepath);
+                      setQuery(fileTitle);
+                      setSelectedResult(null);
+                      searchMutation.mutate({
+                        query: fileTitle,
+                        bookId: book.id,
+                        fileId: file.id,
+                        author: author.trim() || undefined,
+                        identifiers: fileIds.length > 0 ? fileIds : undefined,
+                      });
+                    }
+                  }}
                   type="button"
                 >
                   <div className="flex items-center gap-2">
@@ -239,7 +262,10 @@ export function IdentifyBookDialog({
             <div className="flex gap-2">
               <Input
                 className="flex-1"
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  queryUserTouched.current = true;
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder="Search by title, author, ISBN..."
                 ref={inputRef}
@@ -346,11 +372,19 @@ export function IdentifyBookDialog({
                         {result.cover_url ? (
                           <img
                             alt=""
-                            className="w-16 h-24 object-cover rounded shrink-0 bg-muted"
+                            className={cn(
+                              "w-16 object-cover rounded shrink-0 bg-muted",
+                              isAudiobook ? "h-16" : "h-24",
+                            )}
                             src={result.cover_url}
                           />
                         ) : (
-                          <div className="w-16 h-24 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs">
+                          <div
+                            className={cn(
+                              "w-16 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs",
+                              isAudiobook ? "h-16" : "h-24",
+                            )}
+                          >
                             No cover
                           </div>
                         )}

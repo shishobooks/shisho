@@ -575,14 +575,16 @@ export const usePluginSearch = () => {
     {
       query: string;
       bookId: number;
+      fileId?: number;
       author?: string;
       identifiers?: Array<{ type: string; value: string }>;
     }
   >({
-    mutationFn: ({ query, bookId, author, identifiers }) => {
+    mutationFn: ({ query, bookId, fileId, author, identifiers }) => {
       return API.request<PluginSearchResponse>("POST", "/plugins/search", {
         query,
         book_id: bookId,
+        file_id: fileId,
         author: author || undefined,
         identifiers: identifiers?.length ? identifiers : undefined,
       });
