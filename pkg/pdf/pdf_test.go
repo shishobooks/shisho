@@ -42,6 +42,9 @@ func TestMain(m *testing.M) {
 	if err := createWithEmbeddedImage(dir); err != nil {
 		panic("failed to create with-image.pdf: " + err.Error())
 	}
+	if err := createWithLanguage(dir); err != nil {
+		panic("failed to create with-language.pdf: " + err.Error())
+	}
 
 	code := m.Run()
 
@@ -233,6 +236,17 @@ func TestParse_Keywords(t *testing.T) {
 	assert.Equal(t, "sci-fi", meta.Tags[1])
 }
 
+func TestParse_Language(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(testdataDir, "with-language.pdf")
+	meta, err := Parse(path)
+	require.NoError(t, err)
+
+	require.NotNil(t, meta.Language, "Language should be extracted from PDF catalog Lang entry")
+	assert.Equal(t, "en-US", *meta.Language)
+}
+
 func TestParse_InvalidPDF(t *testing.T) {
 	t.Parallel()
 
@@ -265,6 +279,41 @@ func TestParse_CoverFromRenderedPage(t *testing.T) {
 	assert.NotEmpty(t, meta.CoverData, "CoverData should be non-empty from rendered page")
 	assert.Equal(t, "image/jpeg", meta.CoverMimeType,
 		"Rendered page cover should be JPEG")
+}
+
+// createWithLanguage creates a minimal PDF with /Lang (en-US) in the catalog dict.
+func createWithLanguage(dir string) error {
+	var b strings.Builder
+	var offsets []int
+
+	b.WriteString("%PDF-1.4\n")
+
+	// Obj 1: Catalog with Lang entry
+	offsets = append(offsets, b.Len())
+	b.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Lang (en-US) >>\nendobj\n")
+
+	// Obj 2: Pages
+	offsets = append(offsets, b.Len())
+	b.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >>\nendobj\n")
+
+	// Obj 3: Page
+	offsets = append(offsets, b.Len())
+	b.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n")
+
+	xrefOffset := b.Len()
+	b.WriteString("xref\n")
+	b.WriteString(fmt.Sprintf("0 %d\n", 4))
+	b.WriteString("0000000000 65535 f \n")
+	for _, off := range offsets {
+		b.WriteString(fmt.Sprintf("%010d 00000 n \n", off))
+	}
+	b.WriteString("trailer\n")
+	b.WriteString("<< /Size 4 /Root 1 0 R >>\n")
+	b.WriteString("startxref\n")
+	b.WriteString(fmt.Sprintf("%d\n", xrefOffset))
+	b.WriteString("%%EOF\n")
+
+	return os.WriteFile(filepath.Join(dir, "with-language.pdf"), []byte(b.String()), 0644)
 }
 
 // createWithEmbeddedImage creates a PDF with a JPEG image embedded on page 1.
