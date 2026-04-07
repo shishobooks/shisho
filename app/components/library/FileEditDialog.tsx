@@ -50,12 +50,14 @@ import {
   SortableList,
   type DragHandleProps,
 } from "@/components/ui/SortableList";
+import { getLanguageName, LANGUAGES } from "@/constants/languages";
 import {
   useSetFileCoverPage,
   useUpdateFile,
   useUploadFileCover,
 } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
+import { useLibraryLanguages } from "@/hooks/queries/libraries";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
@@ -137,6 +139,12 @@ export function FileEditDialog({
   );
   const [fileRole, setFileRole] = useState(file.file_role ?? FileRoleMain);
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
+  const [language, setLanguage] = useState(file.language || "");
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [languageSearch, setLanguageSearch] = useState("");
+  const [abridged, setAbridged] = useState<string>(
+    file.abridged === true ? "true" : file.abridged === false ? "false" : "",
+  );
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
@@ -176,6 +184,11 @@ export function FileEditDialog({
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
+  // Query for library languages (for language combobox)
+  const { data: libraryLanguages } = useLibraryLanguages(file.library_id, {
+    enabled: open,
+  });
+
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
     if (pendingCoverPreviewRef.current) {
@@ -205,6 +218,8 @@ export function FileEditDialog({
     identifiers: Array<{ type: string; value: string }>;
     fileRole: string;
     coverPage: number | null;
+    language: string;
+    abridged: string;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -238,6 +253,9 @@ export function FileEditDialog({
     const initialIdentifiers =
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
     const initialFileRole = file.file_role ?? FileRoleMain;
+    const initialLanguage = file.language || "";
+    const initialAbridged =
+      file.abridged === true ? "true" : file.abridged === false ? "false" : "";
 
     setNarrators(initialNarrators);
     setNarratorSearch("");
@@ -253,6 +271,9 @@ export function FileEditDialog({
     setNewIdentifierValue("");
     setFileRole(initialFileRole);
     setShowDowngradeConfirm(false);
+    setLanguage(initialLanguage);
+    setLanguageSearch("");
+    setAbridged(initialAbridged);
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
@@ -268,6 +289,8 @@ export function FileEditDialog({
       identifiers: initialIdentifiers,
       fileRole: initialFileRole,
       coverPage: file.cover_page ?? null,
+      language: initialLanguage,
+      abridged: initialAbridged,
     });
   }, [open, file, updatePendingCoverPreview]);
 
@@ -283,6 +306,8 @@ export function FileEditDialog({
       releaseDate !== initialValues.releaseDate ||
       !equal(identifiers, initialValues.identifiers) ||
       fileRole !== initialValues.fileRole ||
+      language !== initialValues.language ||
+      abridged !== initialValues.abridged ||
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
         pendingCoverPage !== initialValues.coverPage)
@@ -296,6 +321,8 @@ export function FileEditDialog({
     releaseDate,
     identifiers,
     fileRole,
+    language,
+    abridged,
     pendingCoverFile,
     pendingCoverPage,
     initialValues,
@@ -422,6 +449,60 @@ export function FileEditDialog({
       (i) => i.name.toLowerCase() === imprintSearch.toLowerCase(),
     );
 
+  // Merged language list: curated LANGUAGES + any library-specific tags not already in the list
+  const mergedLanguages = useMemo(() => {
+    const curatedTags = new Set(LANGUAGES.map((l) => l.tag));
+    const extras: { tag: string; name: string }[] = [];
+    if (libraryLanguages) {
+      for (const tag of libraryLanguages) {
+        if (!curatedTags.has(tag)) {
+          extras.push({ tag, name: tag });
+        }
+      }
+    }
+    return [...LANGUAGES, ...extras];
+  }, [libraryLanguages]);
+
+  // Filter languages by search text (match both name and tag)
+  const filteredLanguages = useMemo(() => {
+    if (!languageSearch.trim()) return mergedLanguages;
+    const searchLower = languageSearch.trim().toLowerCase();
+    return mergedLanguages.filter(
+      (l) =>
+        l.name.toLowerCase().includes(searchLower) ||
+        l.tag.toLowerCase().includes(searchLower),
+    );
+  }, [mergedLanguages, languageSearch]);
+
+  // Show "use custom tag" option if search text doesn't exactly match a known tag or name
+  const showCustomLanguageOption = useMemo(() => {
+    if (!languageSearch.trim()) return false;
+    const searchLower = languageSearch.trim().toLowerCase();
+    return !mergedLanguages.some(
+      (l) =>
+        l.tag.toLowerCase() === searchLower ||
+        l.name.toLowerCase() === searchLower,
+    );
+  }, [languageSearch, mergedLanguages]);
+
+  const handleSelectLanguage = (tag: string) => {
+    setLanguage(tag);
+    setLanguageOpen(false);
+    setLanguageSearch("");
+  };
+
+  const handleCreateLanguage = () => {
+    if (languageSearch.trim()) {
+      setLanguage(languageSearch.trim());
+    }
+    setLanguageOpen(false);
+    setLanguageSearch("");
+  };
+
+  const handleClearLanguage = () => {
+    setLanguage("");
+  };
+
   const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
@@ -453,6 +534,8 @@ export function FileEditDialog({
       publisher?: string;
       imprint?: string;
       release_date?: string;
+      language?: string;
+      abridged?: string;
       identifiers?: Array<{ type: string; value: string }>;
     } = {};
 
@@ -502,6 +585,16 @@ export function FileEditDialog({
     const originalReleaseDate = formatDateForInput(file.release_date);
     if (releaseDate !== originalReleaseDate) {
       payload.release_date = releaseDate;
+    }
+
+    // Check if language changed
+    if (language !== initialValues?.language) {
+      payload.language = language;
+    }
+
+    // Check if abridged changed
+    if (abridged !== initialValues?.abridged) {
+      payload.abridged = abridged;
     }
 
     // Check if identifiers changed
@@ -555,6 +648,8 @@ export function FileEditDialog({
       identifiers: [...identifiers],
       fileRole,
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
+      language,
+      abridged,
     });
     requestClose();
   };
@@ -926,6 +1021,111 @@ export function FileEditDialog({
                   type="url"
                   value={url}
                 />
+              </div>
+
+              {/* Language */}
+              <div className="space-y-2">
+                <Label>Language</Label>
+                {language ? (
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className="flex items-center gap-1 max-w-full"
+                      variant="secondary"
+                    >
+                      <span className="truncate" title={language}>
+                        {getLanguageName(language) || language}
+                      </span>
+                      <button
+                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                        onClick={handleClearLanguage}
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  </div>
+                ) : (
+                  <Popover
+                    modal
+                    onOpenChange={setLanguageOpen}
+                    open={languageOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        aria-expanded={languageOpen}
+                        className="w-full justify-between"
+                        role="combobox"
+                        variant="outline"
+                      >
+                        Select language...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-full p-0">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          onValueChange={setLanguageSearch}
+                          placeholder="Search languages..."
+                          value={languageSearch}
+                        />
+                        <CommandList>
+                          {filteredLanguages.length === 0 &&
+                            !showCustomLanguageOption && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                No matching languages.
+                              </div>
+                            )}
+                          <CommandGroup>
+                            {filteredLanguages.map((l) => (
+                              <CommandItem
+                                key={l.tag}
+                                onSelect={() => handleSelectLanguage(l.tag)}
+                                value={l.tag}
+                              >
+                                <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
+                                <span className="truncate" title={l.name}>
+                                  {l.name}
+                                </span>
+                                <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                  {l.tag}
+                                </span>
+                              </CommandItem>
+                            ))}
+                            {showCustomLanguageOption && (
+                              <CommandItem
+                                onSelect={handleCreateLanguage}
+                                value={`create-${languageSearch}`}
+                              >
+                                <Plus className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="truncate">
+                                  Use custom tag: &quot;{languageSearch}&quot;
+                                </span>
+                              </CommandItem>
+                            )}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+
+              {/* Abridged */}
+              <div className="space-y-2">
+                <Label>Abridged</Label>
+                <Select
+                  onValueChange={(v) => setAbridged(v === "unknown" ? "" : v)}
+                  value={abridged || "unknown"}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                    <SelectItem value="false">Unabridged</SelectItem>
+                    <SelectItem value="true">Abridged</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Publisher */}
