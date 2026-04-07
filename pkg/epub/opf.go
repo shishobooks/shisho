@@ -35,6 +35,7 @@ type OPF struct {
 	CoverData     []byte
 	Identifiers   []mediafile.ParsedIdentifier
 	Chapters      []mediafile.ParsedChapter
+	Language      *string
 }
 
 type Package struct {
@@ -216,6 +217,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		DataSource:    models.DataSourceEPUBMetadata,
 		Identifiers:   opf.Identifiers,
 		Chapters:      opf.Chapters,
+		Language:      opf.Language,
 	}, nil
 }
 
@@ -395,6 +397,12 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 		}
 	}
 
+	// Extract language from dc:language
+	var language *string
+	if pkg.Metadata.Language != "" {
+		language = mediafile.NormalizeLanguage(pkg.Metadata.Language)
+	}
+
 	// Parse identifiers from dc:identifier elements
 	var identifiersList []mediafile.ParsedIdentifier
 	for _, identifier := range pkg.Metadata.Identifier {
@@ -430,6 +438,7 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 			CoverFilepath: coverFilepath,
 			CoverMimeType: coverMimeType,
 			Identifiers:   identifiersList,
+			Language:      language,
 		},
 		Package:  pkg,
 		BasePath: basePath,
