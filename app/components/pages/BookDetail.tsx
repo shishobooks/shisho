@@ -58,6 +58,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getLanguageName } from "@/constants/languages";
 import {
   useBook,
   useDeleteBook,
@@ -663,6 +664,22 @@ const FileRow = ({
                   </a>
                 </>
               )}
+              {file.language && (
+                <>
+                  <span className="text-muted-foreground">Language</span>
+                  <span>
+                    {getLanguageName(file.language)
+                      ? `${getLanguageName(file.language)} (${file.language})`
+                      : file.language}
+                  </span>
+                </>
+              )}
+              {file.abridged !== undefined && (
+                <>
+                  <span className="text-muted-foreground">Abridged</span>
+                  <span>{file.abridged ? "Abridged" : "Unabridged"}</span>
+                </>
+              )}
             </div>
 
             {/* Identifiers */}
@@ -785,6 +802,8 @@ const BookDetail = () => {
       file.imprint ||
       file.release_date ||
       file.url ||
+      file.language ||
+      file.abridged !== undefined ||
       (file.identifiers && file.identifiers.length > 0)
     );
   };
