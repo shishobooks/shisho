@@ -1512,6 +1512,23 @@ type DeleteBooksAndFilesResult struct {
 	FilesDeleted int
 }
 
+// DistinctFileLanguages returns distinct non-null language values for files in a library.
+func (svc *Service) DistinctFileLanguages(ctx context.Context, libraryID int) ([]string, error) {
+	var languages []string
+	err := svc.db.NewSelect().
+		TableExpr("files AS f").
+		ColumnExpr("DISTINCT f.language").
+		Where("f.library_id = ?", libraryID).
+		Where("f.language IS NOT NULL").
+		Where("f.language != ''").
+		OrderExpr("f.language ASC").
+		Scan(ctx, &languages)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return languages, nil
+}
+
 // DeleteBooksAndFiles deletes multiple books and all their files from disk and database.
 func (svc *Service) DeleteBooksAndFiles(ctx context.Context, bookIDs []int, library *models.Library) (*DeleteBooksAndFilesResult, error) {
 	result := &DeleteBooksAndFilesResult{}

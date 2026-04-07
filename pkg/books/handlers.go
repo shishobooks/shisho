@@ -2478,3 +2478,17 @@ func (h *handler) deleteBooks(c echo.Context) error {
 		FilesDeleted: result.FilesDeleted,
 	})
 }
+
+func (h *handler) listLibraryLanguages(c echo.Context) error {
+	libraryID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+	}
+
+	languages, err := h.bookService.DistinctFileLanguages(c.Request().Context(), libraryID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return c.JSON(http.StatusOK, languages)
+}

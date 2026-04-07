@@ -16,6 +16,7 @@ import type {
 export enum QueryKey {
   RetrieveLibrary = "RetrieveLibrary",
   ListLibraries = "ListLibraries",
+  LibraryLanguages = "LibraryLanguages",
 }
 
 export const useLibrary = (
@@ -89,6 +90,30 @@ export const useUpdateLibrary = () => {
     onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.setQueryData([QueryKey.RetrieveLibrary, data.id], data);
+    },
+  });
+};
+
+export const useLibraryLanguages = (
+  libraryId?: number,
+  options: Omit<
+    UseQueryOptions<string[], ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<string[], ShishoAPIError>({
+    enabled:
+      options.enabled !== undefined ? options.enabled : Boolean(libraryId),
+    ...options,
+    queryKey: [QueryKey.LibraryLanguages, libraryId],
+    queryFn: ({ signal }) => {
+      return API.request(
+        "GET",
+        `/libraries/${libraryId}/languages`,
+        null,
+        null,
+        signal,
+      );
     },
   });
 };
