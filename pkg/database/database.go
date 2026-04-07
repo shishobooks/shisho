@@ -142,5 +142,13 @@ func New(cfg *config.Config) (*bun.DB, error) {
 		return nil, errors.Wrap(err, "failed to set temp_store")
 	}
 
+	// Enable foreign key constraint enforcement.
+	// SQLite has foreign keys OFF by default; without this, ON DELETE CASCADE
+	// and other FK actions are silently ignored.
+	_, err = db.Exec("PRAGMA foreign_keys=ON")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to enable foreign keys")
+	}
+
 	return db, nil
 }

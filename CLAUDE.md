@@ -241,3 +241,7 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
 - **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
+- **Table names must be plural** — All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
+- **Foreign key enforcement is enabled** — `PRAGMA foreign_keys=ON` is set in production. Test DB helpers must also enable this pragma.
+- **All FK constraints must specify ON DELETE behavior** — Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `books.primary_file_id`, `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
+- **CASCADE does not clean up FTS indexes** — When deleting books/series/persons/etc., their FTS entries (`books_fts`, `series_fts`, `persons_fts`) are NOT automatically removed by CASCADE. Callers that delete searchable entities must also remove from the FTS index via the search service.
