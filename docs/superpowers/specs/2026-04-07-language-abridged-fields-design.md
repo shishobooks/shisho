@@ -185,10 +185,10 @@ Plugins can set these fields in file parser results and metadata enricher result
 ### FileEditDialog (`app/components/library/FileEditDialog.tsx`)
 
 **Language field**:
-- Combobox with client-side search over a curated list of ~200-300 common BCP 47 tags
-- Display format: "English (en)", "English - United States (en-US)", "Chinese - Simplified (zh-Hans)", etc.
+- Combobox with client-side search over a merged list: the curated common tags PLUS any languages already in use in the library (from the `GET /libraries/:id/languages` endpoint). This ensures that if someone sets a non-standard tag like `oc` (Occitan) on one file, it appears as a selectable option for all other files without re-typing.
+- Display format: "English (en)", "English - United States (en-US)", "Chinese - Simplified (zh-Hans)", etc. Tags from the library that aren't in the curated list show as just the tag code (e.g., "oc") since we don't have a display name for them.
 - Searchable by both name and code
-- **Free-text fallback**: If the user types a tag not in the curated list, show a "Use custom tag: {input}" option (similar to publisher/imprint "Create: ..." pattern). Backend validates the tag structure via `language.Parse()`.
+- **Free-text fallback**: If the user types a tag not in the merged list, show a "Use custom tag: {input}" option (similar to publisher/imprint "Create: ..." pattern). Backend validates the tag structure via `language.Parse()`.
 - Clearable (selecting nothing sets to nil)
 - Available for all file types
 
