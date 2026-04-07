@@ -42,6 +42,10 @@ export interface ParsedMetadata {
   publisher?: string;
   imprint?: string;
   url?: string;
+  /** BCP 47 language tag (e.g., "en", "en-US", "zh-Hans"). */
+  language?: string;
+  /** Whether this is an abridged edition. true=abridged, false=unabridged, undefined=unknown. */
+  abridged?: boolean;
   /** ISO 8601 date string (e.g., "2023-06-15T00:00:00Z"). */
   releaseDate?: string;
   /** MIME type of cover image (e.g., "image/jpeg"). */
