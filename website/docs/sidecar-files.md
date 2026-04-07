@@ -35,7 +35,7 @@ library/
 There are two types of sidecar files, corresponding to the two levels of [metadata](./metadata) in Shisho:
 
 - **Book sidecars** store book-level metadata: title, authors, series, genres, tags
-- **File sidecars** store file-level metadata: narrators, publisher, identifiers, chapters
+- **File sidecars** store file-level metadata: narrators, publisher, identifiers, chapters, language, abridged
 
 ## Book Sidecar Format
 
@@ -108,7 +108,9 @@ Valid roles: `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_arti
       ]
     }
   ],
-  "cover_page": 0
+  "cover_page": 0,
+  "language": "en-US",
+  "abridged": true
 }
 ```
 
@@ -116,6 +118,10 @@ Chapter position fields are mutually exclusive based on file type:
 - **CBZ**: `start_page` (0-indexed page number)
 - **M4B**: `start_timestamp_ms` (milliseconds from start)
 - **EPUB**: `href` (content document reference)
+
+The `language` field stores a BCP 47 language tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`).
+
+The `abridged` field is a nullable boolean: `true` (abridged), `false` (unabridged), or omitted (unknown).
 
 ## Priority System
 
