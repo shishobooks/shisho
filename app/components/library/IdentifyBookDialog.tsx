@@ -73,42 +73,41 @@ export function IdentifyBookDialog({
     : mainFiles[0];
   const isAudiobook = selectedFile?.file_type === "m4b";
 
-  // Pre-fill query and auto-search when dialog opens
+  // Pre-fill form and auto-search when dialog opens
   useEffect(() => {
     if (open) {
       setStep("search");
-      setQuery(book.title);
-      // Pre-fill author from first author
-      const firstAuthor = book.authors?.[0]?.person?.name ?? "";
-      setAuthor(firstAuthor);
-      // Pre-fill identifiers from the initially selected file
+      setSelectedResult(null);
+      hasSearchedRef.current = false;
+      queryUserTouched.current = false;
+
+      const initialQuery = book.title;
+      const initialAuthor = book.authors?.[0]?.person?.name ?? "";
+      const initialFileId = mainFiles.length > 1 ? mainFiles[0].id : undefined;
       const initialFile = mainFiles[0];
-      const fileIds = (initialFile?.identifiers ?? []).map((id) => ({
+      const initialIds = (initialFile?.identifiers ?? []).map((id) => ({
         type: id.type,
         value: id.value,
       }));
-      setIdentifiers(fileIds);
-      setSelectedResult(null);
-      setSelectedFileId(mainFiles.length > 1 ? mainFiles[0].id : undefined);
-      hasSearchedRef.current = false;
-      queryUserTouched.current = false;
-    }
-  }, [open, book.title, book.authors, book.files, mainFiles]);
 
-  // Auto-search after query is set from dialog open
-  useEffect(() => {
-    if (open && query && !hasSearchedRef.current) {
-      hasSearchedRef.current = true;
-      searchMutation.mutate({
-        query,
-        bookId: book.id,
-        fileId: selectedFileId,
-        author: author || undefined,
-        identifiers: identifiers.length > 0 ? identifiers : undefined,
-      });
+      setQuery(initialQuery);
+      setAuthor(initialAuthor);
+      setIdentifiers(initialIds);
+      setSelectedFileId(initialFileId);
+
+      if (initialQuery) {
+        hasSearchedRef.current = true;
+        searchMutation.mutate({
+          query: initialQuery,
+          bookId: book.id,
+          fileId: initialFileId,
+          author: initialAuthor || undefined,
+          identifiers: initialIds.length > 0 ? initialIds : undefined,
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, query]);
+  }, [open, book.title, book.authors, book.files, mainFiles]);
 
   const handleSearch = () => {
     if (!query.trim()) return;
@@ -210,6 +209,7 @@ export function IdentifyBookDialog({
                       const fileTitle = file.name || getFilename(file.filepath);
                       setQuery(fileTitle);
                       setSelectedResult(null);
+                      searchMutation.reset();
                       searchMutation.mutate({
                         query: fileTitle,
                         bookId: book.id,
