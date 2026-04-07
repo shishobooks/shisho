@@ -123,6 +123,7 @@ func (h *handler) list(c echo.Context) error {
 		FileTypes: params.FileTypes,
 		GenreIDs:  params.GenreIDs,
 		TagIDs:    params.TagIDs,
+		Language:  params.Language,
 		IDs:       params.IDs,
 	}
 

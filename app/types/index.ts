@@ -23,6 +23,7 @@ export interface ListBooksQuery {
   file_types?: string[];
   genre_ids?: number[];
   tag_ids?: number[];
+  language?: string;
   ids?: number[];
 }
 export * from "./generated/filesystem";
