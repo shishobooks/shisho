@@ -1,6 +1,8 @@
 package mediafile
 
 import (
+	"strings"
+
 	"golang.org/x/text/language"
 )
 
@@ -9,6 +11,7 @@ import (
 // tags (e.g., "en-US", "zh-Hans-CN"). Case is normalized (e.g., "EN-us" → "en-US").
 // Returns nil for empty input, unrecognized tags, or the undetermined language ("und").
 func NormalizeLanguage(s string) *string {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}

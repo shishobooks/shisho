@@ -69,6 +69,11 @@ func TestNormalizeLanguage(t *testing.T) {
 			input:    "und",
 			expected: nil,
 		},
+		{
+			name:     "whitespace-padded input normalized",
+			input:    "  en  ",
+			expected: strPtr("en"),
+		},
 	}
 
 	for _, tt := range tests {
