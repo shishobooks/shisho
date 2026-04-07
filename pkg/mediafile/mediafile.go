@@ -54,7 +54,7 @@ type ParsedMetadata struct {
 	// Used when multiple enrichers contribute different fields (per-field first-wins tracking).
 	// Keys are field names: "title", "subtitle", "authors", "narrators", "series",
 	// "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate",
-	// "cover", "identifiers".
+	// "cover", "identifiers", "language", "abridged".
 	FieldDataSources map[string]string `json:"-"`
 	PluginScope      string            `json:"-"`
 	PluginID         string            `json:"-"`
@@ -64,6 +64,10 @@ type ParsedMetadata struct {
 	BitrateBps int `json:"bitrate_bps"`
 	// Codec is the audio codec with profile (M4B files only), e.g. "AAC-LC", "xHE-AAC"
 	Codec string `json:"-"`
+	// Language is a BCP 47 language tag (e.g., "en", "en-US", "zh-Hans")
+	Language *string `json:"language,omitempty"`
+	// Abridged indicates whether this is an abridged edition
+	Abridged *bool `json:"abridged,omitempty"`
 	// PageCount is the number of pages (CBZ and PDF files)
 	PageCount *int `json:"page_count,omitempty"`
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata
