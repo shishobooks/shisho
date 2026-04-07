@@ -144,6 +144,7 @@ type setOrderPayload struct {
 type searchPayload struct {
 	Query       string                       `json:"query" validate:"required"`
 	BookID      int                          `json:"book_id" validate:"required"`
+	FileID      *int                         `json:"file_id"`
 	Author      string                       `json:"author"`
 	Identifiers []mediafile.ParsedIdentifier `json:"identifiers"`
 }
@@ -1405,9 +1406,26 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		searchCtx["identifiers"] = ids
 	}
 
-	// Add file hints from the book's first file (non-modifiable context)
-	if len(book.Files) > 0 {
-		f := book.Files[0]
+	// Select the target file — use the explicitly requested file if provided,
+	// otherwise fall back to the first file on the book.
+	var targetFile *models.File
+	if payload.FileID != nil {
+		for _, f := range book.Files {
+			if f.ID == *payload.FileID {
+				targetFile = f
+				break
+			}
+		}
+	}
+	if targetFile == nil && len(book.Files) > 0 {
+		targetFile = book.Files[0]
+	}
+
+	// Add file hints from the target file (non-modifiable context)
+	var fileType string
+	if targetFile != nil {
+		f := targetFile
+		fileType = f.FileType
 		fileCtx := map[string]interface{}{
 			"fileType": f.FileType,
 		}
@@ -1423,6 +1441,24 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 	var allResults []EnrichSearchResult
 	for _, rt := range runtimes {
+		// Skip plugins that don't handle this file type
+		if fileType != "" {
+			enricherCap := rt.Manifest().Capabilities.MetadataEnricher
+			if enricherCap == nil {
+				continue
+			}
+			handles := false
+			for _, ft := range enricherCap.FileTypes {
+				if ft == fileType {
+					handles = true
+					break
+				}
+			}
+			if !handles {
+				continue
+			}
+		}
+
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
 			continue // Skip failed plugins

@@ -495,6 +495,7 @@ export function IdentifyReviewForm({
   // Cover state — page-based formats (CBZ, PDF) derive covers from page
   // content and shouldn't be overwritten by plugin images.
   const coverEditable = !isPageBasedFileType(file?.file_type);
+  const isAudiobook = file?.file_type === "m4b";
   const newCoverUrl = result.cover_url;
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`
@@ -667,7 +668,10 @@ export function IdentifyReviewForm({
               >
                 <img
                   alt="Current cover"
-                  className="w-24 h-36 object-cover bg-muted"
+                  className={cn(
+                    "w-24 object-cover bg-muted",
+                    isAudiobook ? "h-24" : "h-36",
+                  )}
                   src={currentCoverUrl}
                 />
                 <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[0.6rem] text-center py-0.5">
@@ -693,7 +697,10 @@ export function IdentifyReviewForm({
             >
               <img
                 alt="New cover"
-                className="w-24 h-36 object-cover bg-muted"
+                className={cn(
+                  "w-24 object-cover bg-muted",
+                  isAudiobook ? "h-24" : "h-36",
+                )}
                 src={newCoverUrl}
               />
               <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[0.6rem] text-center py-0.5">
