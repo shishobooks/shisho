@@ -446,6 +446,11 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo.Day = strconv.Itoa(file.ReleaseDate.Day())
 	}
 
+	// Update language (LanguageISO in ComicInfo.xml)
+	if file.Language != nil && *file.Language != "" {
+		comicInfo.LanguageISO = *file.Language
+	}
+
 	// Update cover page in Pages section
 	if file.CoverPage != nil {
 		updateCoverPage(&comicInfo, *file.CoverPage)
