@@ -24,6 +24,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -769,6 +770,11 @@ func (h *handler) updateFile(c echo.Context) error {
 			file.URLSource = nil
 			opts.Columns = append(opts.Columns, "url", "url_source")
 
+			// Clear abridged (language is preserved — it's intrinsic to file content)
+			file.Abridged = nil
+			file.AbridgedSource = nil
+			opts.Columns = append(opts.Columns, "abridged", "abridged_source")
+
 			// Clear narrator source (narrators will be handled separately)
 			file.NarratorSource = nil
 			opts.Columns = append(opts.Columns, "narrator_source")
@@ -1063,6 +1069,55 @@ func (h *handler) updateFile(c echo.Context) error {
 			}
 			file.ReleaseDateSource = strPtr(models.DataSourceManual)
 			opts.Columns = append(opts.Columns, "release_date", "release_date_source")
+		}
+	}
+
+	// Update language
+	if params.Language != nil {
+		currentLanguage := ""
+		if file.Language != nil {
+			currentLanguage = *file.Language
+		}
+		if *params.Language != currentLanguage {
+			if *params.Language == "" {
+				file.Language = nil
+				file.LanguageSource = nil
+			} else {
+				normalized := mediafile.NormalizeLanguage(*params.Language)
+				if normalized == nil {
+					return echo.NewHTTPError(http.StatusBadRequest, "invalid language tag: "+*params.Language)
+				}
+				file.Language = normalized
+				file.LanguageSource = strPtr(models.DataSourceManual)
+			}
+			opts.Columns = append(opts.Columns, "language", "language_source")
+		}
+	}
+
+	// Update abridged
+	if params.Abridged != nil {
+		switch *params.Abridged {
+		case "":
+			// Clear
+			if file.Abridged != nil {
+				file.Abridged = nil
+				file.AbridgedSource = nil
+				opts.Columns = append(opts.Columns, "abridged", "abridged_source")
+			}
+		case "true":
+			if file.Abridged == nil || !*file.Abridged {
+				b := true
+				file.Abridged = &b
+				file.AbridgedSource = strPtr(models.DataSourceManual)
+				opts.Columns = append(opts.Columns, "abridged", "abridged_source")
+			}
+		case "false":
+			if file.Abridged == nil || *file.Abridged {
+				b := false
+				file.Abridged = &b
+				file.AbridgedSource = strPtr(models.DataSourceManual)
+				opts.Columns = append(opts.Columns, "abridged", "abridged_source")
+			}
 		}
 	}
 

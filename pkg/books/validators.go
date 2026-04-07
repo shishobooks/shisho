@@ -52,6 +52,8 @@ type UpdateFilePayload struct {
 	Publisher   *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
 	Imprint     *string              `json:"imprint,omitempty" validate:"omitempty,max=200"`
 	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
+	Language    *string              `json:"language,omitempty" validate:"omitempty,max=35"`
+	Abridged    *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
 	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
 }
 
