@@ -111,6 +111,7 @@ Multiple creators per role are comma-separated:
 | Publisher | `<Publisher>` | Direct extraction |
 | Imprint | `<Imprint>` | Direct extraction |
 | Release Date | `<Year>/<Month>/<Day>` | Combined into time.Time |
+| Language | `<LanguageISO>` | ISO 639-1 code (valid BCP 47), normalized via `NormalizeLanguage` |
 | Cover Page | `<Pages>` | Index of page with Type="FrontCover" |
 | Page Count | Image files | Counted from actual images in ZIP |
 
@@ -152,6 +153,7 @@ When generating CBZ files, Shisho:
 | Publisher | `<Publisher>` | file.Publisher.Name |
 | Imprint | `<Imprint>` | file.Imprint.Name |
 | Release Date | `<Year>/<Month>/<Day>` | file.ReleaseDate |
+| Language | `<LanguageISO>` | file.Language |
 
 **Author Role Mapping:**
 

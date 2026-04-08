@@ -85,6 +85,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Imprint | `<meta property="ibooks:imprint">` | Falls back to `<meta name="imprint">` |
 | URL | `<dc:relation>` or `<dc:source>` | First URL starting with http:// or https:// |
 | Release Date | `<dc:date>` | Tries 4 date formats in order |
+| Language | `<dc:language>` | BCP 47 tag, normalized via `NormalizeLanguage` (handles ISO 639-2/T like "eng" → "en") |
 | Cover Image | Via manifest + meta reference | Found by `<meta name="cover" content="ID"/>` |
 
 **Data Source:** All extracted metadata tagged with `models.DataSourceEPUBMetadata` (priority 2)
@@ -106,6 +107,7 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 | URL | `<meta name="shisho:url" content="..."/>` |
 | Imprint | `<meta name="shisho:imprint" content="..."/>` |
 | Description | `<dc:description>` |
+| Language | `<dc:language>` (from file.Language) |
 | Cover | Replaces image file and updates manifest MIME type |
 
 **Series Dual Format Example:**
