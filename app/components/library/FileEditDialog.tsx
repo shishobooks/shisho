@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -1026,32 +1027,33 @@ export function FileEditDialog({
               {/* Language */}
               <div className="space-y-2">
                 <Label>Language</Label>
-                {language ? (
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      className="flex items-center gap-1 max-w-full cursor-pointer"
-                      onClick={() => setLanguageOpen(true)}
-                      variant="secondary"
-                    >
-                      <span className="truncate" title={language}>
-                        {getLanguageName(language) || language}
-                      </span>
-                    </Badge>
-                    <button
-                      className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={handleClearLanguage}
-                      type="button"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ) : null}
                 <Popover
                   modal
                   onOpenChange={setLanguageOpen}
                   open={languageOpen}
                 >
-                  {!language && (
+                  {language ? (
+                    <PopoverAnchor asChild>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          className="flex items-center gap-1 max-w-full cursor-pointer"
+                          onClick={() => setLanguageOpen(true)}
+                          variant="secondary"
+                        >
+                          <span className="truncate" title={language}>
+                            {getLanguageName(language) || language}
+                          </span>
+                        </Badge>
+                        <button
+                          className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={handleClearLanguage}
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </PopoverAnchor>
+                  ) : (
                     <PopoverTrigger asChild>
                       <Button
                         aria-expanded={languageOpen}

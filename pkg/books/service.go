@@ -33,7 +33,7 @@ type ListBooksOptions struct {
 	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
 	GenreIDs   []int    // Filter by genre IDs
 	TagIDs     []int    // Filter by tag IDs
-	Language   *string  // Filter by language tag (exact match on files.language)
+	Language   *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
 	IDs        []int    // Filter by specific book IDs
 	Search     *string  // Search query for title/author
 

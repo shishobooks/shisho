@@ -37,7 +37,8 @@ type CBZMetadata struct {
 	Imprint     *string
 	ReleaseDate *time.Time
 	Chapters    []CBZChapter
-	CoverPage   *int // 0-indexed page number for cover (nil = first page)
+	CoverPage   *int    // 0-indexed page number for cover (nil = first page)
+	Language    *string // BCP 47 language tag
 }
 
 // CBZAuthor represents an author/creator for CBZ metadata.
@@ -341,7 +342,13 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
     <dc:title>`)
 	buf.WriteString(html.EscapeString(title))
 	buf.WriteString(`</dc:title>
-    <dc:language>en</dc:language>
+    <dc:language>`)
+	lang := "en"
+	if metadata != nil && metadata.Language != nil && *metadata.Language != "" {
+		lang = *metadata.Language
+	}
+	buf.WriteString(html.EscapeString(lang))
+	buf.WriteString(`</dc:language>
 `)
 
 	// Add authors/creators with roles and file-as metadata

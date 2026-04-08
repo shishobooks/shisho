@@ -51,9 +51,12 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 		Subtitle: book.Subtitle,
 	}
 
-	// Set Name from file if available (takes precedence over Title in the converter)
-	if file != nil && file.Name != nil {
-		metadata.Name = file.Name
+	// Set Name and Language from file if available
+	if file != nil {
+		if file.Name != nil {
+			metadata.Name = file.Name
+		}
+		metadata.Language = file.Language
 	}
 
 	// Add authors with their roles and sort names
