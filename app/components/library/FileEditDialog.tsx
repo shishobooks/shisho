@@ -1029,27 +1029,29 @@ export function FileEditDialog({
                 {language ? (
                   <div className="flex items-center gap-2">
                     <Badge
-                      className="flex items-center gap-1 max-w-full"
+                      className="flex items-center gap-1 max-w-full cursor-pointer"
+                      onClick={() => setLanguageOpen(true)}
                       variant="secondary"
                     >
                       <span className="truncate" title={language}>
                         {getLanguageName(language) || language}
                       </span>
-                      <button
-                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={handleClearLanguage}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
                     </Badge>
+                    <button
+                      className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={handleClearLanguage}
+                      type="button"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
-                ) : (
-                  <Popover
-                    modal
-                    onOpenChange={setLanguageOpen}
-                    open={languageOpen}
-                  >
+                ) : null}
+                <Popover
+                  modal
+                  onOpenChange={setLanguageOpen}
+                  open={languageOpen}
+                >
+                  {!language && (
                     <PopoverTrigger asChild>
                       <Button
                         aria-expanded={languageOpen}
@@ -1061,53 +1063,59 @@ export function FileEditDialog({
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" className="w-full p-0">
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          onValueChange={setLanguageSearch}
-                          placeholder="Search languages..."
-                          value={languageSearch}
-                        />
-                        <CommandList>
-                          {filteredLanguages.length === 0 &&
-                            !showCustomLanguageOption && (
-                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                No matching languages.
-                              </div>
-                            )}
-                          <CommandGroup>
-                            {filteredLanguages.map((l) => (
-                              <CommandItem
-                                key={l.tag}
-                                onSelect={() => handleSelectLanguage(l.tag)}
-                                value={l.tag}
-                              >
-                                <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
-                                <span className="truncate" title={l.name}>
-                                  {l.name}
-                                </span>
-                                <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                                  {l.tag}
-                                </span>
-                              </CommandItem>
-                            ))}
-                            {showCustomLanguageOption && (
-                              <CommandItem
-                                onSelect={handleCreateLanguage}
-                                value={`create-${languageSearch}`}
-                              >
-                                <Plus className="mr-2 h-4 w-4 shrink-0" />
-                                <span className="truncate">
-                                  Use custom tag: &quot;{languageSearch}&quot;
-                                </span>
-                              </CommandItem>
-                            )}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                )}
+                  )}
+                  <PopoverContent align="start" className="w-full p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        onValueChange={setLanguageSearch}
+                        placeholder="Search languages..."
+                        value={languageSearch}
+                      />
+                      <CommandList>
+                        {filteredLanguages.length === 0 &&
+                          !showCustomLanguageOption && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              No matching languages.
+                            </div>
+                          )}
+                        <CommandGroup>
+                          {filteredLanguages.map((l) => (
+                            <CommandItem
+                              key={l.tag}
+                              onSelect={() => handleSelectLanguage(l.tag)}
+                              value={l.tag}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 shrink-0 ${
+                                  language === l.tag
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                }`}
+                              />
+                              <span className="truncate" title={l.name}>
+                                {l.name}
+                              </span>
+                              <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                {l.tag}
+                              </span>
+                            </CommandItem>
+                          ))}
+                          {showCustomLanguageOption && (
+                            <CommandItem
+                              onSelect={handleCreateLanguage}
+                              value={`create-${languageSearch}`}
+                            >
+                              <Plus className="mr-2 h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                Use custom tag: &quot;{languageSearch}&quot;
+                              </span>
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Abridged */}

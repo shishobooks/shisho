@@ -104,6 +104,7 @@ export const useLibraryLanguages = (
   return useQuery<string[], ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(libraryId),
+    staleTime: 5 * 60 * 1000, // Languages change infrequently; avoid refetching on every page visit
     ...options,
     queryKey: [QueryKey.LibraryLanguages, libraryId],
     queryFn: ({ signal }) => {
