@@ -63,6 +63,7 @@ var ValidMetadataFields = []string{
 	"series", "seriesNumber", "genres", "tags",
 	"description", "publisher", "imprint", "url",
 	"releaseDate", "cover", "identifiers",
+	"language", "abridged",
 }
 
 // IsValidMetadataField returns true if the field name is a valid enricher field.

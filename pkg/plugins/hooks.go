@@ -512,6 +512,19 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 		md.Chapters = parseChapters(vm, chaptersVal)
 	}
 
+	// language -> *string (BCP 47 tag, normalized)
+	languageStr := getStringField(obj, "language")
+	if languageStr != "" {
+		md.Language = mediafile.NormalizeLanguage(languageStr)
+	}
+
+	// abridged -> *bool
+	abridgedVal := obj.Get("abridged")
+	if abridgedVal != nil && !goja.IsUndefined(abridgedVal) && !goja.IsNull(abridgedVal) {
+		b := abridgedVal.ToBoolean()
+		md.Abridged = &b
+	}
+
 	return md, nil
 }
 

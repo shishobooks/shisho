@@ -1950,6 +1950,16 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		}
 	}
 
+	// Language
+	if v, ok := fields["language"].(string); ok && v != "" {
+		md.Language = mediafile.NormalizeLanguage(v)
+	}
+
+	// Abridged
+	if v, ok := fields["abridged"].(bool); ok {
+		md.Abridged = &v
+	}
+
 	return md
 }
 
