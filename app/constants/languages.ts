@@ -182,7 +182,7 @@ export const LANGUAGES: { tag: string; name: string }[] = [
   { tag: "uk", name: "Ukrainian" },
   { tag: "ur", name: "Urdu" },
   { tag: "uz", name: "Uzbek" },
-  { tag: "va", name: "Valencian" },
+  { tag: "ca-valencia", name: "Valencian" },
   { tag: "ve", name: "Venda" },
   { tag: "vi", name: "Vietnamese" },
   { tag: "vo", name: "Volapük" },
