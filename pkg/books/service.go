@@ -341,9 +341,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_tags WHERE tag_id IN (?))", bun.List(opts.TagIDs))
 	}
 
-	// Filter by language
+	// Filter by language (exact match + subtag variants, e.g., "en" matches "en-US", "en-GB")
 	if opts.Language != nil && *opts.Language != "" {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE language = ?)", *opts.Language)
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE language = ? OR language LIKE ?)", *opts.Language, *opts.Language+"-%")
 	}
 
 	// Search using FTS5

@@ -1,3 +1,4 @@
+import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as SearchQueryKey } from "./search";
 import {
   useMutation,
@@ -101,6 +102,10 @@ export const useUpdateFile = () => {
       // Invalidate book queries to refresh file data
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Invalidate library languages in case a new language was set
+      queryClient.invalidateQueries({
+        queryKey: [LibrariesQueryKey.LibraryLanguages],
+      });
     },
   });
 };

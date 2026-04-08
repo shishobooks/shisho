@@ -674,7 +674,7 @@ const FileRow = ({
                   </span>
                 </>
               )}
-              {file.abridged !== undefined && (
+              {file.abridged != null && (
                 <>
                   <span className="text-muted-foreground">Abridged</span>
                   <span>{file.abridged ? "Abridged" : "Unabridged"}</span>
@@ -803,7 +803,7 @@ const BookDetail = () => {
       file.release_date ||
       file.url ||
       file.language ||
-      file.abridged !== undefined ||
+      file.abridged != null ||
       (file.identifiers && file.identifiers.length > 0)
     );
   };

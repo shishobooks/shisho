@@ -157,10 +157,10 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		// Extract abridged from freeform
 		if abr, ok := raw.freeform["com.pilabor.tone:ABRIDGED"]; ok {
 			switch strings.ToLower(strings.TrimSpace(abr)) {
-			case "true":
+			case "true", "1":
 				b := true
 				meta.Abridged = &b
-			case "false":
+			case "false", "0":
 				b := false
 				meta.Abridged = &b
 			}
