@@ -198,6 +198,22 @@ export const LANGUAGES: { tag: string; name: string }[] = [
   { tag: "zu", name: "Zulu" },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
+/**
+ * Look up a BCP 47 language tag in the curated list and return its display
+ * name. Falls back to the base language subtag if the full tag isn't in the
+ * list — e.g., `getLanguageName("en-AU")` returns "English" because `en-AU`
+ * isn't a curated entry but `en` is. Returns undefined for completely unknown
+ * tags, so callers can fall back to displaying the raw tag.
+ */
 export function getLanguageName(tag: string): string | undefined {
-  return LANGUAGES.find((l) => l.tag === tag)?.name;
+  const exact = LANGUAGES.find((l) => l.tag === tag)?.name;
+  if (exact) {
+    return exact;
+  }
+  const dashIdx = tag.indexOf("-");
+  if (dashIdx > 0) {
+    const base = tag.slice(0, dashIdx);
+    return LANGUAGES.find((l) => l.tag === base)?.name;
+  }
+  return undefined;
 }

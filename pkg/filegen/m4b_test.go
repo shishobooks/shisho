@@ -967,6 +967,32 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.True(t, *meta.Abridged)
 	})
 
+	t.Run("writes abridged=false via freeform atoms", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Source",
+			Duration: 1.0,
+		})
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		abridged := false
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Abridged: &abridged,
+		}
+
+		gen := &M4BGenerator{}
+		require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		require.NotNil(t, meta.Abridged, "abridged=false should survive round trip")
+		assert.False(t, *meta.Abridged)
+	})
+
 	t.Run("preserves existing freeform atoms from source file", func(t *testing.T) {
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")

@@ -625,11 +625,26 @@ export function FileEditDialog({
     }
 
     // Only submit if something changed
+    let updatedFile: File | undefined;
     if (Object.keys(payload).length > 0) {
-      await updateFileMutation.mutateAsync({
+      updatedFile = await updateFileMutation.mutateAsync({
         id: file.id,
         payload,
       });
+
+      // The backend canonicalizes the language tag (e.g. "en-us" → "en-US")
+      // and the abridged value. Sync local state with the server's response
+      // so the dialog reflects the canonical form without needing a reopen.
+      if (updatedFile) {
+        const canonicalLanguage = updatedFile.language || "";
+        if (canonicalLanguage !== language) {
+          setLanguage(canonicalLanguage);
+        }
+        const canonicalAbridged = updatedFile.abridged === true ? "true" : "";
+        if (canonicalAbridged !== abridged) {
+          setAbridged(canonicalAbridged);
+        }
+      }
     }
 
     // Apply pending cover changes
@@ -656,8 +671,18 @@ export function FileEditDialog({
       setPendingCoverPage(null);
     }
 
-    // Reset initial values so hasChanges becomes false, then close via effect
-    // For coverPage, use pendingCoverPage if set, otherwise keep the current initial value
+    // Reset initial values so hasChanges becomes false, then close via effect.
+    // For coverPage, use pendingCoverPage if set, otherwise keep the current
+    // initial value. For language/abridged, use the canonicalized values
+    // from the server response when available so hasChanges correctly
+    // reflects what's actually persisted.
+    const canonicalLanguage = updatedFile?.language || language;
+    const canonicalAbridged =
+      updatedFile !== undefined
+        ? updatedFile.abridged === true
+          ? "true"
+          : ""
+        : abridged;
     setInitialValues({
       narrators: [...narrators],
       name,
@@ -668,8 +693,8 @@ export function FileEditDialog({
       identifiers: [...identifiers],
       fileRole,
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
-      language,
-      abridged,
+      language: canonicalLanguage,
+      abridged: canonicalAbridged,
     });
     requestClose();
   };
