@@ -144,10 +144,23 @@ export function FileEditDialog({
   const [language, setLanguage] = useState(file.language || "");
   const [languageOpen, setLanguageOpen] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
-  // Normalize both `false` and `null` to the empty "clear" state so that
-  // accidentally toggling the checkbox off and on doesn't clobber a plugin's
-  // explicit `false` value. The backend only receives an update when the user
-  // actively checks the box (to set it to true) or unchecks after checking.
+  // Abridged is intentionally a binary checkbox in the UI, not a three-state
+  // control, even though the data model supports true/false/null. Rationale:
+  // most books are unabridged, so showing an "Unknown" default on every book
+  // would be noisy and users would feel pressure to set it. Marking something
+  // as explicitly unabridged through the UI is not exposed — parsers and
+  // plugins can still set `false` at the data layer, and those values survive
+  // round-trips, but UI-driven edits are opt-in to `true` only.
+  //
+  // Both `false` and `null` are normalized to the empty "clear" state at
+  // init so that accidentally toggling the checkbox off and on doesn't clobber
+  // a plugin's explicit `false` value. The backend only receives an update
+  // when the user actively checks the box (to set it to `true`) or unchecks
+  // after checking (which sends `""` to clear to `null`).
+  //
+  // If you're tempted to "fix" this by adding a three-state dropdown, please
+  // read the design spec at docs/superpowers/specs/2026-04-07-language-
+  // abridged-fields-design.md first — this was a deliberate UX simplification.
   const [abridged, setAbridged] = useState<string>(
     file.abridged === true ? "true" : "",
   );

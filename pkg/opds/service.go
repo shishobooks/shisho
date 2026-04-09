@@ -739,6 +739,21 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		}
 	}
 
+	// Dublin Core metadata - pick the first file that has each field set.
+	// OPDS entries are per-book but language/publisher are file-level in our
+	// model; using the first non-empty value is a reasonable approximation.
+	for _, file := range book.Files {
+		if entry.Language == "" && file.Language != nil && *file.Language != "" {
+			entry.Language = *file.Language
+		}
+		if entry.Publisher == "" && file.Publisher != nil {
+			entry.Publisher = file.Publisher.Name
+		}
+		if entry.Language != "" && entry.Publisher != "" {
+			break
+		}
+	}
+
 	// Extract API base from the URL.
 	// URL format is "http://host/opds/v1" or "http://host/opds/v1/kepub"
 	apiBase := strings.TrimSuffix(baseURL, "/opds/v1/kepub")

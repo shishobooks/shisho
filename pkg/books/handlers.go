@@ -114,6 +114,19 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Normalize the language filter tag (e.g., "en-us" → "en-US") so the LIKE
+	// query matches consistently regardless of how the user passed the tag.
+	// Invalid tags are ignored (treated as no filter) rather than returning an
+	// error, so a malformed query param doesn't break the gallery page.
+	languageFilter := params.Language
+	if languageFilter != nil && *languageFilter != "" {
+		if normalized := mediafile.NormalizeLanguage(*languageFilter); normalized != nil {
+			languageFilter = normalized
+		} else {
+			languageFilter = nil
+		}
+	}
+
 	opts := ListBooksOptions{
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
@@ -123,7 +136,7 @@ func (h *handler) list(c echo.Context) error {
 		FileTypes: params.FileTypes,
 		GenreIDs:  params.GenreIDs,
 		TagIDs:    params.TagIDs,
-		Language:  params.Language,
+		Language:  languageFilter,
 		IDs:       params.IDs,
 	}
 
