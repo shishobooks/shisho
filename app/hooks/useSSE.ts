@@ -7,6 +7,7 @@ import {
 } from "@/contexts/BulkDownload";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
+import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 
 export function useSSE() {
@@ -60,6 +61,10 @@ export function useSSE() {
         if (data.status === "completed" && data.type === "scan") {
           queryClient.invalidateQueries({
             queryKey: [BooksQueryKey.ListBooks],
+          });
+          // Also invalidate library languages in case scanned files introduced new languages
+          queryClient.invalidateQueries({
+            queryKey: [LibrariesQueryKey.LibraryLanguages],
           });
         }
 
