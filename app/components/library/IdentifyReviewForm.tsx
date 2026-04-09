@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getLanguageName } from "@/constants/languages";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
@@ -92,6 +94,21 @@ function resolveScalar(
 
   if (!cur && inc) return { value: inc, status: "new" };
   if (cur && !inc) return { value: cur, status: "unchanged" };
+  if (cur === inc) return { value: cur, status: "unchanged" };
+  // Both populated, values differ => use plugin value
+  return { value: inc, status: "changed" };
+}
+
+/** Determine field status and default value for the abridged bool field. */
+function resolveAbridged(
+  current: boolean | undefined | null,
+  incoming: boolean | undefined | null,
+): { value: boolean | null; status: FieldStatus } {
+  const cur = current ?? null;
+  const inc = incoming ?? null;
+
+  if (cur === null && inc !== null) return { value: inc, status: "new" };
+  if (cur !== null && inc === null) return { value: cur, status: "unchanged" };
   if (cur === inc) return { value: cur, status: "unchanged" };
   // Both populated, values differ => use plugin value
   return { value: inc, status: "changed" };
@@ -457,6 +474,8 @@ export function IdentifyReviewForm({
         result.release_date ? result.release_date.split("T")[0] : undefined,
       ),
       url: resolveScalar(file?.url, result.url),
+      language: resolveScalar(file?.language, result.language),
+      abridged: resolveAbridged(file?.abridged, result.abridged),
       identifiers: resolveIdentifiers(currentIdentifiers, incomingIdentifiers),
     };
   }, [
@@ -488,6 +507,10 @@ export function IdentifyReviewForm({
   const [imprint, setImprint] = useState(defaults.imprint.value);
   const [releaseDate, setReleaseDate] = useState(defaults.releaseDate.value);
   const [url, setUrl] = useState(defaults.url.value);
+  const [language, setLanguage] = useState(defaults.language.value);
+  const [abridged, setAbridged] = useState<boolean | null>(
+    defaults.abridged.value,
+  );
   const [identifiers, setIdentifiers] = useState<IdentifierEntry[]>(
     defaults.identifiers.value,
   );
@@ -536,6 +559,8 @@ export function IdentifyReviewForm({
       imprint !== defaults.imprint.value ||
       releaseDate !== defaults.releaseDate.value ||
       url !== defaults.url.value ||
+      language !== defaults.language.value ||
+      abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
       coverSelection !==
         (newCoverUrl && !disabledFields.has("cover") && !coverDimsMatch
@@ -556,6 +581,8 @@ export function IdentifyReviewForm({
     imprint,
     releaseDate,
     url,
+    language,
+    abridged,
     identifiers,
     coverSelection,
     defaults,
@@ -584,6 +611,10 @@ export function IdentifyReviewForm({
       imprint,
       release_date: releaseDate,
       url,
+      language,
+      // Only include abridged when explicitly set (non-null) so we don't
+      // clobber a prior explicit value with an unknown state.
+      ...(abridged !== null && { abridged }),
       identifiers: identifiers.map((id) => ({
         type: id.type,
         value: id.value,
@@ -996,6 +1027,58 @@ export function IdentifyReviewForm({
               </span>
             )}
           </Button>
+        </div>
+      </FieldWrapper>
+
+      {/* Language */}
+      <FieldWrapper
+        currentValue={
+          file?.language
+            ? getLanguageName(file.language)
+              ? `${getLanguageName(file.language)} (${file.language})`
+              : file.language
+            : undefined
+        }
+        disabled={isDisabled("language")}
+        field="language"
+        onUseCurrent={() => setLanguage(file?.language ?? "")}
+        status={defaults.language.status}
+      >
+        <Input
+          disabled={isDisabled("language")}
+          onChange={(e) => setLanguage(e.target.value)}
+          placeholder="e.g. en, en-US, zh-Hans"
+          value={language}
+        />
+      </FieldWrapper>
+
+      {/* Abridged */}
+      <FieldWrapper
+        currentValue={
+          file?.abridged != null
+            ? file.abridged
+              ? "Abridged"
+              : "Unabridged"
+            : undefined
+        }
+        disabled={isDisabled("abridged")}
+        field="abridged"
+        onUseCurrent={() => setAbridged(file?.abridged ?? null)}
+        status={defaults.abridged.status}
+      >
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={abridged === true}
+            disabled={isDisabled("abridged")}
+            id="identify-abridged"
+            onCheckedChange={(checked) => setAbridged(checked ? true : null)}
+          />
+          <Label
+            className="cursor-pointer font-normal text-muted-foreground"
+            htmlFor="identify-abridged"
+          >
+            This is an abridged edition
+          </Label>
         </div>
       </FieldWrapper>
 

@@ -98,6 +98,8 @@ export const METADATA_FIELD_LABELS: Record<string, string> = {
   releaseDate: "Release Date",
   cover: "Cover Image",
   identifiers: "Identifiers",
+  language: "Language",
+  abridged: "Abridged",
 };
 
 /**

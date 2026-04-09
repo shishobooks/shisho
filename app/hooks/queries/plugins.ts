@@ -557,6 +557,8 @@ export interface PluginSearchResult {
   identifiers?: Array<{ type: string; value: string }>;
   imprint?: string;
   url?: string;
+  language?: string;
+  abridged?: boolean;
   cover_url?: string;
   plugin_scope: string;
   plugin_id: string;
