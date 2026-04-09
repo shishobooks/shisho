@@ -936,4 +936,68 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, 3*time.Second, meta.Chapters[1].Start)
 		assert.Equal(t, 7*time.Second, meta.Chapters[2].Start)
 	})
+
+	t.Run("writes language and abridged via freeform atoms", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Source",
+			Duration: 1.0,
+		})
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		lang := "en-US"
+		abridged := true
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Language: &lang,
+			Abridged: &abridged,
+		}
+
+		gen := &M4BGenerator{}
+		require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		require.NotNil(t, meta.Language, "language should survive round trip")
+		assert.Equal(t, "en-US", *meta.Language)
+		require.NotNil(t, meta.Abridged, "abridged should survive round trip")
+		assert.True(t, *meta.Abridged)
+	})
+
+	t.Run("preserves existing freeform atoms from source file", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Generate a source with freeform atoms, then rewrite them via the generator
+		// to make sure unrelated atoms survive a write.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Source",
+			Duration: 1.0,
+		})
+		// Seed the source with extra freeform atoms by editing it through mp4.Write.
+		srcMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		if srcMeta.Freeform == nil {
+			srcMeta.Freeform = map[string]string{}
+		}
+		srcMeta.Freeform["com.apple.iTunes:SERIES"] = "My Series"
+		srcMeta.Freeform["com.apple.iTunes:SERIES-PART"] = "3"
+		seededPath := filepath.Join(dir, "seeded.m4b")
+		require.NoError(t, mp4.WriteToFile(srcPath, seededPath, srcMeta))
+
+		destPath := filepath.Join(dir, "dest.m4b")
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		require.NoError(t, gen.Generate(context.Background(), seededPath, destPath, book, file))
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "My Series", meta.Freeform["com.apple.iTunes:SERIES"])
+		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+	})
 }

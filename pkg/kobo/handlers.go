@@ -402,6 +402,10 @@ const dummyCategoryID = "00000000-0000-0000-0000-000000000001"
 func buildBookMetadata(book *models.Book, file *models.File, baseURL string) *BookMetadata {
 	bookID := ShishoID(file.ID)
 
+	language := "en"
+	if file.Language != nil && *file.Language != "" {
+		language = *file.Language
+	}
 	metadata := &BookMetadata{
 		Categories:      []string{dummyCategoryID},
 		CoverImageID:    bookID,
@@ -412,7 +416,7 @@ func buildBookMetadata(book *models.Book, file *models.File, baseURL string) *Bo
 		},
 		EntitlementID: bookID,
 		Genre:         dummyCategoryID,
-		Language:      "en",
+		Language:      language,
 		RevisionID:    bookID,
 		Title:         book.Title,
 		WorkID:        bookID,
