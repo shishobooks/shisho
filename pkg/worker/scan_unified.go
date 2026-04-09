@@ -3089,6 +3089,14 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.ReleaseDate = enrichment.ReleaseDate
 		target.FieldDataSources["releaseDate"] = source
 	}
+	if target.Language == nil && enrichment.Language != nil {
+		target.Language = enrichment.Language
+		target.FieldDataSources["language"] = source
+	}
+	if target.Abridged == nil && enrichment.Abridged != nil {
+		target.Abridged = enrichment.Abridged
+		target.FieldDataSources["abridged"] = source
+	}
 	if len(target.CoverData) == 0 && len(enrichment.CoverData) > 0 {
 		target.CoverData = enrichment.CoverData
 		target.CoverMimeType = enrichment.CoverMimeType
@@ -3247,6 +3255,14 @@ func filterMetadataFields(
 	if !isFieldAllowed("identifiers") {
 		warnIfUndeclared("identifiers", len(result.Identifiers) > 0)
 		result.Identifiers = nil
+	}
+	if !isFieldAllowed("language") {
+		warnIfUndeclared("language", result.Language != nil)
+		result.Language = nil
+	}
+	if !isFieldAllowed("abridged") {
+		warnIfUndeclared("abridged", result.Abridged != nil)
+		result.Abridged = nil
 	}
 
 	return &result

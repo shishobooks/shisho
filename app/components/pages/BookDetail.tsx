@@ -674,14 +674,20 @@ const FileRow = ({
                   </span>
                 </>
               )}
-              {/* For M4B, always show abridged/unabridged status (audiobooks
-                  historically had abridged versions, so the distinction is
-                  meaningful). For other formats, only show when explicitly
-                  marked as abridged. */}
+              {/* For M4B, always show abridged status (audiobooks historically
+                  had abridged versions, so the distinction is meaningful).
+                  For other formats, only show when explicitly marked as
+                  abridged. */}
               {(file.file_type === "m4b" || file.abridged === true) && (
                 <>
                   <span className="text-muted-foreground">Abridged</span>
-                  <span>{file.abridged ? "Abridged" : "Unabridged"}</span>
+                  <span>
+                    {file.abridged == null
+                      ? "Unknown"
+                      : file.abridged
+                        ? "Abridged"
+                        : "Unabridged"}
+                  </span>
                 </>
               )}
             </div>

@@ -132,7 +132,11 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
         <div>
           <p className="font-semibold">Abridged</p>
           <p className="text-muted-foreground">
-            {file.abridged === true ? "Abridged" : "Unabridged"}
+            {file.abridged == null
+              ? "Unknown"
+              : file.abridged
+                ? "Abridged"
+                : "Unabridged"}
           </p>
         </div>
       </div>

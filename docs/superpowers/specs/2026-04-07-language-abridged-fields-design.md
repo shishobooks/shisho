@@ -193,13 +193,21 @@ Plugins can set these fields in file parser results and metadata enricher result
 - Available for all file types
 
 **Abridged field**:
-- Dropdown with three options: "Unknown" (nil), "Unabridged" (false), "Abridged" (true)
-- Default: "Unknown"
-- Available for all file types
+- Single checkbox: "This is an abridged edition"
+- Checked = `true`, unchecked = clear (nil). The UI does not expose an explicit `false` state — the data model still supports it (parsers and plugins can set it), but the common case is "most books are unabridged, only mark abridged ones" so a binary opt-in is less noisy than a three-state dropdown.
+- At initialization, both `false` and `nil` are normalized to unchecked so that accidentally toggling the checkbox on a file where a plugin set explicit `false` doesn't clobber the value. Only an explicit check (→ `true`) or check-then-uncheck on a previously-true file (→ clear) results in a write.
+- Available for all file types.
 
 ### BookDetail Display (`app/components/pages/BookDetail.tsx`)
 
-Show language (as human-readable name) and abridged status in the file metadata section. Only display if the value is set (non-nil).
+Show language (as human-readable name) and abridged status in the file metadata section.
+
+- **Language**: Only display if set (non-nil).
+- **Abridged**: For M4B files, always show the row (audiobooks historically had abridged versions, so the distinction is meaningful at a glance). For other file types, only show when explicitly `true`. In both cases, a nil value is rendered as "Unknown", not "Unabridged".
+
+### FileDetailsTab Display (`app/components/files/FileDetailsTab.tsx`)
+
+The dedicated file details page enumerates every field, so Language and Abridged are always shown for all file types. Nil values render as "Unknown".
 
 ### Language Filter on Gallery Page
 

@@ -1778,6 +1778,20 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		fileColumns = append(fileColumns, "release_date", "release_date_source")
 	}
 
+	// Language (file-level, applied to target file)
+	if md.Language != nil && *md.Language != "" && targetFile != nil {
+		targetFile.Language = md.Language
+		targetFile.LanguageSource = &pluginSource
+		fileColumns = append(fileColumns, "language", "language_source")
+	}
+
+	// Abridged (file-level, applied to target file)
+	if md.Abridged != nil && targetFile != nil {
+		targetFile.Abridged = md.Abridged
+		targetFile.AbridgedSource = &pluginSource
+		fileColumns = append(fileColumns, "abridged", "abridged_source")
+	}
+
 	// Identifiers (file-level, applied to target file)
 	if len(md.Identifiers) > 0 && targetFile != nil {
 		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {

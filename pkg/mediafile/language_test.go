@@ -74,6 +74,16 @@ func TestNormalizeLanguage(t *testing.T) {
 			input:    "  en  ",
 			expected: strPtr("en"),
 		},
+		{
+			name:     "Valencian ca-valencia parses and canonicalizes",
+			input:    "ca-valencia",
+			expected: strPtr("ca-valencia"),
+		},
+		{
+			name:     "legacy va subtag is rejected",
+			input:    "va",
+			expected: nil,
+		},
 	}
 
 	for _, tt := range tests {
