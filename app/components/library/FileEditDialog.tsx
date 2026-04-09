@@ -144,8 +144,12 @@ export function FileEditDialog({
   const [language, setLanguage] = useState(file.language || "");
   const [languageOpen, setLanguageOpen] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
+  // Normalize both `false` and `null` to the empty "clear" state so that
+  // accidentally toggling the checkbox off and on doesn't clobber a plugin's
+  // explicit `false` value. The backend only receives an update when the user
+  // actively checks the box (to set it to true) or unchecks after checking.
   const [abridged, setAbridged] = useState<string>(
-    file.abridged === true ? "true" : file.abridged === false ? "false" : "",
+    file.abridged === true ? "true" : "",
   );
 
   const updateFileMutation = useUpdateFile();
@@ -256,8 +260,9 @@ export function FileEditDialog({
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
     const initialFileRole = file.file_role ?? FileRoleMain;
     const initialLanguage = file.language || "";
-    const initialAbridged =
-      file.abridged === true ? "true" : file.abridged === false ? "false" : "";
+    // Normalize both `false` and `null` to "" — see the useState init above
+    // for the reasoning.
+    const initialAbridged = file.abridged === true ? "true" : "";
 
     setNarrators(initialNarrators);
     setNarratorSearch("");
