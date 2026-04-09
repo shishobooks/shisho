@@ -29,6 +29,8 @@ var plugin = (function() {
             { type: "isbn_13", value: "9781234567890" },
             { type: "asin", value: "B01ABCDEFG" }
           ],
+          language: "en-US",
+          abridged: true,
           chapters: [
             {
               title: "Chapter 1",

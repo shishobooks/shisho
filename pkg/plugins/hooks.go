@@ -397,6 +397,19 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.Identifiers = parseIdentifiers(vm, identifiersVal)
 		}
 
+		// language -> *string (BCP 47 tag, normalized)
+		languageStr := getStringField(itemObj, "language")
+		if languageStr != "" {
+			md.Language = mediafile.NormalizeLanguage(languageStr)
+		}
+
+		// abridged -> *bool
+		abridgedVal := itemObj.Get("abridged")
+		if abridgedVal != nil && !goja.IsUndefined(abridgedVal) && !goja.IsNull(abridgedVal) {
+			b := abridgedVal.ToBoolean()
+			md.Abridged = &b
+		}
+
 		results = append(results, md)
 	}
 

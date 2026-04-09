@@ -272,3 +272,24 @@ func TestParseManifest_FileParserReservedExtensions(t *testing.T) {
 	assert.Equal(t, []string{"epub"}, m.Capabilities.FileParser.Types)
 	assert.Equal(t, []string{"application/epub+zip"}, m.Capabilities.FileParser.MIMETypes)
 }
+
+func TestIsValidMetadataField(t *testing.T) {
+	t.Parallel()
+
+	// All expected fields are valid
+	expected := []string{
+		"title", "subtitle", "authors", "narrators",
+		"series", "seriesNumber", "genres", "tags",
+		"description", "publisher", "imprint", "url",
+		"releaseDate", "cover", "identifiers",
+		"language", "abridged",
+	}
+	for _, field := range expected {
+		assert.True(t, IsValidMetadataField(field), "expected %q to be valid", field)
+	}
+
+	// Unknown fields are rejected
+	assert.False(t, IsValidMetadataField("unknown"))
+	assert.False(t, IsValidMetadataField(""))
+	assert.False(t, IsValidMetadataField("Language")) // case-sensitive
+}
