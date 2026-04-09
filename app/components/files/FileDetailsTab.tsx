@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
+import { getLanguageName } from "@/constants/languages";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import {
   FileRoleMain,
@@ -114,6 +115,26 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
             <p className="text-muted-foreground">{file.audiobook_codec}</p>
           </div>
         )}
+
+        {/* Language - all file types */}
+        <div>
+          <p className="font-semibold">Language</p>
+          <p className="text-muted-foreground">
+            {file.language
+              ? getLanguageName(file.language)
+                ? `${getLanguageName(file.language)} (${file.language})`
+                : file.language
+              : "Unknown"}
+          </p>
+        </div>
+
+        {/* Abridged - all file types */}
+        <div>
+          <p className="font-semibold">Abridged</p>
+          <p className="text-muted-foreground">
+            {file.abridged === true ? "Abridged" : "Unabridged"}
+          </p>
+        </div>
       </div>
 
       {/* Narrators - M4B only */}

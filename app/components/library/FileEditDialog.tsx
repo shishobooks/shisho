@@ -16,6 +16,7 @@ import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandGroup,
@@ -1121,21 +1122,17 @@ export function FileEditDialog({
               </div>
 
               {/* Abridged */}
-              <div className="space-y-2">
-                <Label>Abridged</Label>
-                <Select
-                  onValueChange={(v) => setAbridged(v === "unknown" ? "" : v)}
-                  value={abridged || "unknown"}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unknown">Unknown</SelectItem>
-                    <SelectItem value="false">Unabridged</SelectItem>
-                    <SelectItem value="true">Abridged</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={abridged === "true"}
+                  id="abridged"
+                  onCheckedChange={(checked) =>
+                    setAbridged(checked ? "true" : "")
+                  }
+                />
+                <Label className="cursor-pointer" htmlFor="abridged">
+                  Abridged edition
+                </Label>
               </div>
 
               {/* Publisher */}

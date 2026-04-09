@@ -674,7 +674,11 @@ const FileRow = ({
                   </span>
                 </>
               )}
-              {file.abridged != null && (
+              {/* For M4B, always show abridged/unabridged status (audiobooks
+                  historically had abridged versions, so the distinction is
+                  meaningful). For other formats, only show when explicitly
+                  marked as abridged. */}
+              {(file.file_type === "m4b" || file.abridged === true) && (
                 <>
                   <span className="text-muted-foreground">Abridged</span>
                   <span>{file.abridged ? "Abridged" : "Unabridged"}</span>
@@ -803,7 +807,8 @@ const BookDetail = () => {
       file.release_date ||
       file.url ||
       file.language ||
-      file.abridged != null ||
+      file.file_type === "m4b" || // M4B always shows abridged status
+      file.abridged === true ||
       (file.identifiers && file.identifiers.length > 0)
     );
   };
