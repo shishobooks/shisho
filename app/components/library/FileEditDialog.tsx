@@ -1127,17 +1127,23 @@ export function FileEditDialog({
               </div>
 
               {/* Abridged */}
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={abridged === "true"}
-                  id="abridged"
-                  onCheckedChange={(checked) =>
-                    setAbridged(checked ? "true" : "")
-                  }
-                />
-                <Label className="cursor-pointer" htmlFor="abridged">
-                  Abridged edition
-                </Label>
+              <div className="space-y-2">
+                <Label>Abridged</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={abridged === "true"}
+                    id="abridged"
+                    onCheckedChange={(checked) =>
+                      setAbridged(checked ? "true" : "")
+                    }
+                  />
+                  <Label
+                    className="cursor-pointer font-normal text-muted-foreground"
+                    htmlFor="abridged"
+                  >
+                    This is an abridged edition
+                  </Label>
+                </div>
               </div>
 
               {/* Publisher */}
