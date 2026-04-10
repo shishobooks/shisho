@@ -28,61 +28,72 @@ Work through these in order. Do not skip ahead — Phase 1 discovery informs Pha
 
 **Pick a proxy field.** Choose an existing field that's as similar as possible to the one you're adding. This is the most important decision in the skill — a good proxy gives you a comprehensive checklist automatically; a bad proxy misses touchpoints.
 
+**`language` is the best general-purpose proxy.** It's the most recent nullable file-level field and it touches the broadest surface area: every parser, every generator, sidecar, fingerprint, scanner (metadata + sidecar + merge + filter paths), edit API with supplement-downgrade clearing, plugin bridge (both JS→Go parsers + both identify-apply functions + the manifest validation list), plugin SDK (both `metadata.d.ts` and `manifest.d.ts`), eReader UI, OPDS, AND it's a gallery filter facet in `Home.tsx`. Most other proxies miss at least one of these. Default to `language` unless you have a specific reason to pick something else.
+
 Proxy selection guide:
-- **New nullable string on files** (e.g., language, description) → use `publisher` or `url`
-- **New nullable boolean on files** → use something nullable like a future feature. If none exists, use a nullable scalar like `release_date` and manually add the bool-specific branches
+- **New nullable string on files** (e.g., description, edition_note) → use `language` (best coverage). For fields that won't be filterable, `publisher` is also fine but **does not appear in the gallery filter** in `Home.tsx` — only `language`, `genres`, `tags`, and `fileTypes` do, so a `publisher`-only sweep will miss `Home.tsx` entirely. If your field could ever be a filter facet, use `language`.
+- **New nullable boolean on files** → use `abridged` (added with language, similar shape, plugin-settable, has source tracking)
+- **New nullable integer on files** → cross-check `abridged` (for plugin/source/scanner coverage) AND `page_count` (for the integer comparison patterns and `goja.ToInteger()`). Note that `page_count` is NOT plugin-settable today, so don't trust its plugin-bridge coverage.
 - **New date on files** → use `release_date`
 - **New relation (many-to-many or belongs-to)** → use `publisher` (belongs-to) or `narrators` (has-many)
 - **New book-level field** → use `subtitle` or `description`
 - **New audiobook-specific field** → use `audiobook_codec` or similar
 
-**Run discovery greps.** Replace `PROXY` with your chosen proxy field name (both the Go `PascalCase` and the JSON `snake_case` form). Paste the output into your notes — you'll need it for Phase 2.
+**When in doubt, cross-check with two proxies.** If your field has an unusual shape (e.g., a nullable bool that's also filterable), pick the closest structural match AND `language`, then take the union of both discovery passes. The cost is a few extra greps; the benefit is catching paths a single proxy misses.
+
+**Run discovery greps.** The examples below use `language` (the recommended default proxy). Replace it with your chosen proxy if different — use both the Go `PascalCase` form (`Language`) and the JSON `snake_case` form (`language`) since they appear in different files. The grep is case-insensitive (`-i`) so you don't need to enumerate variants by hand.
 
 ```bash
 # 1. Find every Go file that references the proxy field. This is the master
 # list of backend touchpoints. Anywhere the proxy appears, the new field
 # probably needs to appear too.
-git grep -il 'Publisher\|publisher' pkg/
+git grep -il 'language' pkg/
 
 # 2. Narrow by layer:
-git grep -l 'publisher' pkg/mediafile/        # ParsedMetadata struct
-git grep -l 'Publisher' pkg/models/           # File/Book model
-git grep -l 'Publisher\|publisher' pkg/migrations/
-git grep -l 'Publisher' pkg/sidecar/          # Sidecar types + conversion
-git grep -l 'Publisher' pkg/downloadcache/    # Fingerprint
-git grep -l 'Publisher\|publisher' pkg/worker/ # Scanner (multiple merge/filter funcs)
-git grep -l 'Publisher\|publisher' pkg/books/ # Edit API + validators + handlers
-git grep -l 'Publisher' pkg/epub/ pkg/cbz/ pkg/mp4/ pkg/pdf/  # Parsers
-git grep -l 'Publisher\|publisher' pkg/filegen/  # File generators
-git grep -l 'Publisher' pkg/kepub/            # KePub CBZ path
-git grep -l 'Publisher' pkg/opds/             # OPDS feed
-git grep -l 'Publisher' pkg/kobo/             # Kobo sync
-git grep -l 'Publisher\|publisher' pkg/ereader/  # eReader server-rendered UI (metaParts builder in handlers.go)
+git grep -il 'language' pkg/mediafile/        # ParsedMetadata struct
+git grep -il 'language' pkg/models/           # File/Book model
+git grep -il 'language' pkg/migrations/
+git grep -il 'language' pkg/sidecar/          # Sidecar types + conversion
+git grep -il 'language' pkg/downloadcache/    # Fingerprint
+git grep -il 'language' pkg/worker/           # Scanner (multiple merge/filter funcs)
+git grep -il 'language' pkg/books/            # Edit API + validators + handlers
+git grep -il 'language' pkg/epub/ pkg/cbz/ pkg/mp4/ pkg/pdf/  # Parsers
+git grep -il 'language' pkg/filegen/          # File generators
+git grep -il 'language' pkg/kepub/            # KePub CBZ path
+git grep -il 'language' pkg/opds/             # OPDS feed
+git grep -il 'language' pkg/kobo/             # Kobo sync
+git grep -il 'language' pkg/ereader/          # eReader server-rendered UI (metaParts builder in handlers.go)
 
 # 3. Plugin bridge — there are THREE parallel JS→Go parsers plus several
 # merge/filter/persist functions. All must be updated in lockstep.
-git grep -l 'Publisher\|publisher' pkg/plugins/
+git grep -il 'language' pkg/plugins/
 git grep -n 'parseSearchResponse\|parseParsedMetadata\|convertFieldsToMetadata' pkg/plugins/hooks.go pkg/plugins/handler.go
 git grep -n 'persistMetadata\|mergeEnrichedMetadata\|filterMetadataFields' pkg/worker/scan_unified.go pkg/plugins/handler.go
 
-# 4. Frontend touchpoints.
-git grep -il 'publisher' app/
-git grep -l 'publisher' app/components/library/FileEditDialog.tsx
-git grep -l 'publisher' app/components/library/IdentifyReviewForm.tsx
-git grep -l 'publisher' app/components/files/FileDetailsTab.tsx
-git grep -l 'publisher' app/components/pages/BookDetail.tsx
-git grep -l 'publisher' app/components/pages/Home.tsx  # gallery filter
-git grep -l 'publisher' app/utils/format.ts            # METADATA_FIELD_LABELS
-git grep -l 'publisher' app/hooks/queries/             # query types
-git grep -l 'publisher' app/types/                     # TypeScript types (tygo-generated + custom)
+# 4. Frontend touchpoints. NB: Home.tsx is the gallery filter — only shows
+# 'language', 'genres', 'tags', and 'fileTypes' as facets today, so a
+# `publisher` proxy will MISS it entirely. This is why language is the
+# recommended default proxy.
+git grep -il 'language' app/
+git grep -l 'language' app/components/library/FileEditDialog.tsx
+git grep -l 'language' app/components/library/IdentifyReviewForm.tsx
+git grep -l 'language' app/components/files/FileDetailsTab.tsx
+git grep -l 'language' app/components/pages/BookDetail.tsx
+git grep -l 'language' app/components/pages/Home.tsx  # gallery filter
+git grep -l 'language' app/utils/format.ts            # METADATA_FIELD_LABELS
+git grep -l 'language' app/hooks/queries/             # query types
+git grep -l 'language' app/types/                     # TypeScript types (tygo-generated + custom)
 
-# 5. Plugin SDK + manifest validation.
-git grep -l 'publisher' packages/plugin-sdk/
+# 5. Plugin SDK + manifest validation. Both metadata.d.ts AND manifest.d.ts
+# must be updated — they live in the same package but cover different
+# concerns (runtime data shape vs. manifest enum validation).
+git grep -il 'language' packages/plugin-sdk/
 git grep -n 'ValidMetadataFields' pkg/plugins/manifest.go
 
-# 6. Documentation.
-git grep -l 'publisher' website/docs/
-git grep -l 'publisher' pkg/*/CLAUDE.md
+# 6. Documentation. Update website/docs/ but NOT website/versioned_docs/
+# (those are historical snapshots — never backport current behavior).
+git grep -il 'language' website/docs/
+git grep -l 'language' pkg/*/CLAUDE.md
 
 # 7. Find every ParsedMetadata constructor (any place that builds the struct
 # from scratch is a place that might need your new field set).
@@ -92,7 +103,7 @@ git grep -n 'ParsedMetadata{' pkg/
 git grep -l 'models\.File{' pkg/ --include='*_test.go'
 ```
 
-Save the union of everything these commands return. That's your implementation surface area. If it surprises you, investigate before continuing — there may be recently-added touchpoints not covered by the proxy.
+Save the union of everything these commands return as a deduplicated flat list of absolute paths. That's your implementation surface area. As a sanity check: if the union is fewer than ~10 entries you probably picked too narrow a proxy; if it's more than ~50 your grep is probably too broad. For a good proxy like `language`, expect roughly 25-40 entries. If the result surprises you, investigate before continuing — there may be recently-added touchpoints not covered by the proxy.
 
 **Check for the M4B Freeform write-back trap.** If your field lives in `mp4.Metadata.Freeform` (e.g., `com.shisho:*` or `com.pilabor.tone:*` atoms), verify that `pkg/mp4/writer.go` `buildIlst` actually iterates the Freeform map. Historically the writer dropped freeform atoms silently.
 
@@ -140,12 +151,12 @@ The only places that use `snake_case` for the field name are the database column
 - Supplement downgrade clearing (preserve or clear?)
 - Validation normalization
 
-**Plugin bridge (the easy-to-miss trio)**
-- `pkg/plugins/manifest.go` `ValidMetadataFields`
-- `pkg/plugins/hooks.go` `parseParsedMetadata` (fileParser hook path)
-- `pkg/plugins/hooks.go` `parseSearchResponse` (metadataEnricher hook path)
-- `pkg/plugins/handler.go` `convertFieldsToMetadata` (identify apply path)
-- `pkg/plugins/handler.go` `persistMetadata` — the apply actually writes the field
+**Plugin bridge (multiple parallel paths — easy to miss)**
+- `pkg/plugins/manifest.go` `ValidMetadataFields` — backend validation list
+- `pkg/plugins/hooks.go` `parseParsedMetadata` (fileParser hook path) — JS→Go #1
+- `pkg/plugins/hooks.go` `parseSearchResponse` (metadataEnricher hook path) — JS→Go #2
+- `pkg/plugins/handler.go` `convertFieldsToMetadata` (identify apply path) — JS→Go #3
+- `pkg/plugins/handler.go` `persistMetadata` — the apply path that actually writes the field to the file model
 - `packages/plugin-sdk/metadata.d.ts` — `ParsedMetadata` interface (the runtime data shape)
 - `packages/plugin-sdk/manifest.d.ts` — the `MetadataField` string union (the manifest validation type, separate from `ParsedMetadata`). It's easy to update one and forget the other; both must list the new field.
 
@@ -172,6 +183,7 @@ The only places that use `snake_case` for the field name are the database column
 - `website/docs/supported-formats.md`
 - `website/docs/plugins/development.md`
 - Relevant `pkg/*/CLAUDE.md` files
+- **Do NOT update `website/versioned_docs/`** — those are historical snapshots that document past behavior. Backporting current behavior into them is wrong.
 
 **Tests**
 - Parser extraction tests per format
