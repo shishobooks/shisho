@@ -220,6 +220,12 @@ func TestRunFileParser_AllFields(t *testing.T) {
 	assert.Equal(t, "Chapter 2", md.Chapters[1].Title)
 	require.NotNil(t, md.Chapters[1].StartPage)
 	assert.Equal(t, 10, *md.Chapters[1].StartPage)
+
+	// Language and Abridged
+	require.NotNil(t, md.Language)
+	assert.Equal(t, "en-US", *md.Language)
+	require.NotNil(t, md.Abridged)
+	assert.True(t, *md.Abridged)
 }
 
 func TestRunFileParser_MinimalFields(t *testing.T) {

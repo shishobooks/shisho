@@ -1323,6 +1323,94 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Language (from metadata)
+	if metadata.Language != nil && *metadata.Language != "" {
+		existingLanguage := ""
+		existingLanguageSource := ""
+		if file.Language != nil {
+			existingLanguage = *file.Language
+		}
+		if file.LanguageSource != nil {
+			existingLanguageSource = *file.LanguageSource
+		}
+		langSource := metadata.SourceForField("language")
+		if shouldUpdateScalar(*metadata.Language, existingLanguage, langSource, existingLanguageSource, forceRefresh) {
+			logInfo("updating file language", logger.Data{"from": existingLanguage, "to": *metadata.Language})
+			file.Language = metadata.Language
+			file.LanguageSource = &langSource
+			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "language", "language_source")
+		}
+	}
+	// Language (from sidecar)
+	if fileSidecarData != nil && fileSidecarData.Language != nil && *fileSidecarData.Language != "" {
+		existingLanguage := ""
+		existingLanguageSource := ""
+		if file.Language != nil {
+			existingLanguage = *file.Language
+		}
+		if file.LanguageSource != nil {
+			existingLanguageSource = *file.LanguageSource
+		}
+		if shouldApplySidecarScalar(*fileSidecarData.Language, existingLanguage, existingLanguageSource, forceRefresh) {
+			logInfo("updating file language from sidecar", logger.Data{"from": existingLanguage, "to": *fileSidecarData.Language})
+			file.Language = fileSidecarData.Language
+			file.LanguageSource = &sidecarSource
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "language", "language_source")
+		}
+	}
+
+	// Abridged (from metadata)
+	if metadata.Abridged != nil {
+		existingAbridgedSource := ""
+		if file.AbridgedSource != nil {
+			existingAbridgedSource = *file.AbridgedSource
+		}
+		newAbridgedStr := "false"
+		if *metadata.Abridged {
+			newAbridgedStr = "true"
+		}
+		existingAbridgedStr := ""
+		if file.Abridged != nil {
+			if *file.Abridged {
+				existingAbridgedStr = "true"
+			} else {
+				existingAbridgedStr = "false"
+			}
+		}
+		abridgedSource := metadata.SourceForField("abridged")
+		if shouldUpdateScalar(newAbridgedStr, existingAbridgedStr, abridgedSource, existingAbridgedSource, forceRefresh) {
+			logInfo("updating file abridged", logger.Data{"from": existingAbridgedStr, "to": newAbridgedStr})
+			file.Abridged = metadata.Abridged
+			file.AbridgedSource = &abridgedSource
+			fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "abridged", "abridged_source")
+		}
+	}
+	// Abridged (from sidecar)
+	if fileSidecarData != nil && fileSidecarData.Abridged != nil {
+		existingAbridgedSource := ""
+		if file.AbridgedSource != nil {
+			existingAbridgedSource = *file.AbridgedSource
+		}
+		newAbridgedStr := "false"
+		if *fileSidecarData.Abridged {
+			newAbridgedStr = "true"
+		}
+		existingAbridgedStr := ""
+		if file.Abridged != nil {
+			if *file.Abridged {
+				existingAbridgedStr = "true"
+			} else {
+				existingAbridgedStr = "false"
+			}
+		}
+		if shouldApplySidecarScalar(newAbridgedStr, existingAbridgedStr, existingAbridgedSource, forceRefresh) {
+			logInfo("updating file abridged from sidecar", logger.Data{"from": existingAbridgedStr, "to": newAbridgedStr})
+			file.Abridged = fileSidecarData.Abridged
+			file.AbridgedSource = &sidecarSource
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "abridged", "abridged_source")
+		}
+	}
+
 	// Publisher (from metadata)
 	publisherName := strings.TrimSpace(metadata.Publisher)
 	if publisherName != "" {
@@ -3001,6 +3089,14 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.ReleaseDate = enrichment.ReleaseDate
 		target.FieldDataSources["releaseDate"] = source
 	}
+	if target.Language == nil && enrichment.Language != nil {
+		target.Language = enrichment.Language
+		target.FieldDataSources["language"] = source
+	}
+	if target.Abridged == nil && enrichment.Abridged != nil {
+		target.Abridged = enrichment.Abridged
+		target.FieldDataSources["abridged"] = source
+	}
 	if len(target.CoverData) == 0 && len(enrichment.CoverData) > 0 {
 		target.CoverData = enrichment.CoverData
 		target.CoverMimeType = enrichment.CoverMimeType
@@ -3159,6 +3255,14 @@ func filterMetadataFields(
 	if !isFieldAllowed("identifiers") {
 		warnIfUndeclared("identifiers", len(result.Identifiers) > 0)
 		result.Identifiers = nil
+	}
+	if !isFieldAllowed("language") {
+		warnIfUndeclared("language", result.Language != nil)
+		result.Language = nil
+	}
+	if !isFieldAllowed("abridged") {
+		warnIfUndeclared("abridged", result.Abridged != nil)
+		result.Abridged = nil
 	}
 
 	return &result

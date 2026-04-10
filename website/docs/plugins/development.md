@@ -283,6 +283,8 @@ The full set of fields you can return:
 | `duration` | `number` | Audiobook duration in seconds |
 | `bitrateBps` | `number` | Audio bitrate in bits per second |
 | `pageCount` | `number` | Page count |
+| `language` | `string` | BCP 47 language tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`) |
+| `abridged` | `boolean` | `true` if abridged, `false` if unabridged |
 | `identifiers` | `[{ type, value }]` | Identifiers (isbn_10, isbn_13, asin, uuid, etc.) |
 | `chapters` | `[{ title, startPage?, startTimestampMs?, href?, children? }]` | Chapter list |
 
@@ -406,6 +408,8 @@ var plugin = (function() {
 | `publisher` | `string` | Publisher name |
 | `imprint` | `string` | Imprint name |
 | `url` | `string` | Web URL for the book |
+| `language` | `string` | BCP 47 language tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`) |
+| `abridged` | `boolean` | `true` if abridged, `false` if unabridged |
 | `identifiers` | `Array<{type, value}>` | ISBNs, ASINs, etc. |
 | `confidence` | `number` | Optional match confidence score, 0–1 |
 

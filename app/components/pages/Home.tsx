@@ -28,10 +28,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useLibrary, useLibraryLanguages } from "@/hooks/queries/libraries";
 import { useSeries } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
@@ -62,6 +70,7 @@ const HomeContent = () => {
   const fileTypesParam = searchParams.get("file_types") ?? "";
   const genreIdsParam = searchParams.get("genre_ids") ?? "";
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
+  const languageParam = searchParams.get("language") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
@@ -106,6 +115,44 @@ const HomeContent = () => {
         .filter(Boolean)
         .map((id) => parseInt(id, 10))
     : [];
+
+  // Fetch distinct languages for the library
+  const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
+  const languagesQuery = useLibraryLanguages(libraryIdNum);
+
+  // Group languages by base subtag for the filter dropdown.
+  // If a library has both "en" and "en-US", show only "English" (the bare "en" subsumes variants).
+  // If it has "en-US" and "en-GB" (but no bare "en"), show them separately.
+  const languageOptions = useMemo(() => {
+    const rawLanguages = languagesQuery.data ?? [];
+    if (rawLanguages.length < 2) return [];
+
+    // Group tags by their base language subtag
+    const groups = new Map<string, string[]>();
+    for (const tag of rawLanguages) {
+      const base = tag.split("-")[0];
+      const existing = groups.get(base) ?? [];
+      existing.push(tag);
+      groups.set(base, existing);
+    }
+
+    const options: { value: string; label: string }[] = [];
+    for (const [base, tags] of groups) {
+      if (tags.includes(base)) {
+        // Bare base tag exists — collapse all variants under it
+        const label = getLanguageName(base) ?? base;
+        options.push({ value: base, label });
+      } else {
+        // No bare base tag — show each variant separately
+        for (const tag of tags) {
+          const label = getLanguageName(tag) ?? tag;
+          options.push({ value: tag, label });
+        }
+      }
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [languagesQuery.data]);
 
   // State for filter popovers
   const [fileTypePopoverOpen, setFileTypePopoverOpen] = useState(false);
@@ -228,6 +275,20 @@ const HomeContent = () => {
     setSearchParams(newParams);
   };
 
+  // Set language filter
+  const setLanguageFilter = (value: string) => {
+    setSearchParams((prev) => {
+      const newParams = new URLSearchParams(prev);
+      if (value && value !== "all") {
+        newParams.set("language", value);
+      } else {
+        newParams.delete("language");
+      }
+      newParams.set("page", "1");
+      return newParams;
+    });
+  };
+
   // Build query with search and file types
   const booksQueryParams: Parameters<typeof useBooks>[0] = {
     limit,
@@ -256,6 +317,11 @@ const HomeContent = () => {
     booksQueryParams.tag_ids = selectedTagIds;
   }
 
+  // Add language filter if present
+  if (languageParam) {
+    booksQueryParams.language = languageParam;
+  }
+
   const booksQuery = useBooks(booksQueryParams);
 
   // Track the filter state that produced the currently displayed data
@@ -265,6 +331,7 @@ const HomeContent = () => {
     fileTypes: selectedFileTypes,
     genreIds: selectedGenreIds,
     tagIds: selectedTagIds,
+    language: languageParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
     null,
@@ -280,7 +347,8 @@ const HomeContent = () => {
         debouncedSearch !== "" ||
           selectedFileTypes.length > 0 ||
           selectedGenreIds.length > 0 ||
-          selectedTagIds.length > 0,
+          selectedTagIds.length > 0 ||
+          languageParam !== "",
       );
     }
   }, [
@@ -291,6 +359,7 @@ const HomeContent = () => {
     selectedFileTypes.length,
     selectedGenreIds.length,
     selectedTagIds.length,
+    languageParam,
   ]);
 
   // Data is stale if filters changed but query hasn't completed yet
@@ -500,6 +569,25 @@ const HomeContent = () => {
             </Command>
           </PopoverContent>
         </Popover>
+        {/* Language Filter - only shown when 2+ distinct languages */}
+        {languageOptions.length > 0 && (
+          <Select
+            onValueChange={setLanguageFilter}
+            value={languageParam || "all"}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Languages</SelectItem>
+              {languageOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {isSelectionMode ? (
           <Button onClick={exitSelectionMode} variant="outline">
             Cancel
@@ -515,7 +603,8 @@ const HomeContent = () => {
       {/* Active Filters */}
       {(selectedFileTypes.length > 0 ||
         selectedGenres.length > 0 ||
-        selectedTags.length > 0) && (
+        selectedTags.length > 0 ||
+        languageParam) && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Filtering by:</span>
           {selectedFileTypes.map((fileType) => {
@@ -554,6 +643,16 @@ const HomeContent = () => {
               <X className="h-3 w-3" />
             </Badge>
           ))}
+          {languageParam && (
+            <Badge
+              className="cursor-pointer gap-1"
+              onClick={() => setLanguageFilter("all")}
+              variant="secondary"
+            >
+              Language: {getLanguageName(languageParam) ?? languageParam}
+              <X className="h-3 w-3" />
+            </Badge>
+          )}
         </div>
       )}
 

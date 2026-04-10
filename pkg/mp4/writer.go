@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	gomp4 "github.com/abema/go-mp4"
 	"github.com/pkg/errors"
@@ -339,6 +340,31 @@ func buildIlst(metadata *Metadata) []byte {
 		}
 	}
 
+	// Write any remaining freeform atoms from the Freeform map. This preserves
+	// atoms that aren't explicitly handled above (e.g., com.pilabor.tone:LANGUAGE,
+	// com.pilabor.tone:ABRIDGED, com.apple.iTunes:SERIES) plus anything carried
+	// over from the source file via src.Freeform.
+	//
+	// Keys that are already written by an explicit branch above are skipped to
+	// avoid duplicate atoms.
+	explicitFreeformKeys := map[string]bool{
+		"com.apple.iTunes:SUBTITLE":     true,
+		"com.pilabor.tone:SUBTITLE":     true,
+		"com.shisho:tags":               true,
+		"com.apple.iTunes:ASIN":         true,
+		"com.pilabor.tone:AUDIBLE_ASIN": true,
+	}
+	for key, value := range metadata.Freeform {
+		if value == "" || explicitFreeformKeys[key] {
+			continue
+		}
+		namespace, name, ok := splitFreeformKey(key)
+		if !ok {
+			continue
+		}
+		content.Write(buildFreeformAtom(namespace, name, value))
+	}
+
 	// Cover
 	if len(metadata.CoverData) > 0 {
 		dataType := DataTypeJPEG
@@ -458,6 +484,17 @@ func buildFreeformAtom(namespace, name, value string) []byte {
 	content.Write(buildBox("data", dataContent.Bytes()))
 
 	return buildBoxWithType(AtomFreeform, content.Bytes())
+}
+
+// splitFreeformKey splits a freeform atom key of the form "namespace:name"
+// into its parts. Splits on the LAST ":" to handle namespaces like
+// "com.apple.iTunes" that themselves contain dots but not colons.
+func splitFreeformKey(key string) (namespace, name string, ok bool) {
+	idx := strings.LastIndex(key, ":")
+	if idx <= 0 || idx == len(key)-1 {
+		return "", "", false
+	}
+	return key[:idx], key[idx+1:], true
 }
 
 // formatAlbumFromSeries formats series info as album: "Series Name #N".

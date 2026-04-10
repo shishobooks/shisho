@@ -16,6 +16,7 @@ import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandGroup,
@@ -36,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -50,12 +52,14 @@ import {
   SortableList,
   type DragHandleProps,
 } from "@/components/ui/SortableList";
+import { getLanguageName, LANGUAGES } from "@/constants/languages";
 import {
   useSetFileCoverPage,
   useUpdateFile,
   useUploadFileCover,
 } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
+import { useLibraryLanguages } from "@/hooks/queries/libraries";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
@@ -137,6 +141,29 @@ export function FileEditDialog({
   );
   const [fileRole, setFileRole] = useState(file.file_role ?? FileRoleMain);
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
+  const [language, setLanguage] = useState(file.language || "");
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [languageSearch, setLanguageSearch] = useState("");
+  // Abridged is intentionally a binary checkbox in the UI, not a three-state
+  // control, even though the data model supports true/false/null. Rationale:
+  // most books are unabridged, so showing an "Unknown" default on every book
+  // would be noisy and users would feel pressure to set it. Marking something
+  // as explicitly unabridged through the UI is not exposed — parsers and
+  // plugins can still set `false` at the data layer, and those values survive
+  // round-trips, but UI-driven edits are opt-in to `true` only.
+  //
+  // Both `false` and `null` are normalized to the empty "clear" state at
+  // init so that accidentally toggling the checkbox off and on doesn't clobber
+  // a plugin's explicit `false` value. The backend only receives an update
+  // when the user actively checks the box (to set it to `true`) or unchecks
+  // after checking (which sends `""` to clear to `null`).
+  //
+  // If you're tempted to "fix" this by adding a three-state dropdown, please
+  // read the design spec at docs/superpowers/specs/2026-04-07-language-
+  // abridged-fields-design.md first — this was a deliberate UX simplification.
+  const [abridged, setAbridged] = useState<string>(
+    file.abridged === true ? "true" : "",
+  );
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
@@ -176,6 +203,11 @@ export function FileEditDialog({
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
+  // Query for library languages (for language combobox)
+  const { data: libraryLanguages } = useLibraryLanguages(file.library_id, {
+    enabled: open,
+  });
+
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
     if (pendingCoverPreviewRef.current) {
@@ -205,6 +237,8 @@ export function FileEditDialog({
     identifiers: Array<{ type: string; value: string }>;
     fileRole: string;
     coverPage: number | null;
+    language: string;
+    abridged: string;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -238,6 +272,10 @@ export function FileEditDialog({
     const initialIdentifiers =
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
     const initialFileRole = file.file_role ?? FileRoleMain;
+    const initialLanguage = file.language || "";
+    // Normalize both `false` and `null` to "" — see the useState init above
+    // for the reasoning.
+    const initialAbridged = file.abridged === true ? "true" : "";
 
     setNarrators(initialNarrators);
     setNarratorSearch("");
@@ -253,6 +291,9 @@ export function FileEditDialog({
     setNewIdentifierValue("");
     setFileRole(initialFileRole);
     setShowDowngradeConfirm(false);
+    setLanguage(initialLanguage);
+    setLanguageSearch("");
+    setAbridged(initialAbridged);
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
@@ -268,6 +309,8 @@ export function FileEditDialog({
       identifiers: initialIdentifiers,
       fileRole: initialFileRole,
       coverPage: file.cover_page ?? null,
+      language: initialLanguage,
+      abridged: initialAbridged,
     });
   }, [open, file, updatePendingCoverPreview]);
 
@@ -283,6 +326,8 @@ export function FileEditDialog({
       releaseDate !== initialValues.releaseDate ||
       !equal(identifiers, initialValues.identifiers) ||
       fileRole !== initialValues.fileRole ||
+      language !== initialValues.language ||
+      abridged !== initialValues.abridged ||
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
         pendingCoverPage !== initialValues.coverPage)
@@ -296,6 +341,8 @@ export function FileEditDialog({
     releaseDate,
     identifiers,
     fileRole,
+    language,
+    abridged,
     pendingCoverFile,
     pendingCoverPage,
     initialValues,
@@ -422,6 +469,60 @@ export function FileEditDialog({
       (i) => i.name.toLowerCase() === imprintSearch.toLowerCase(),
     );
 
+  // Merged language list: curated LANGUAGES + any library-specific tags not already in the list
+  const mergedLanguages = useMemo(() => {
+    const curatedTags = new Set(LANGUAGES.map((l) => l.tag));
+    const extras: { tag: string; name: string }[] = [];
+    if (libraryLanguages) {
+      for (const tag of libraryLanguages) {
+        if (!curatedTags.has(tag)) {
+          extras.push({ tag, name: tag });
+        }
+      }
+    }
+    return [...LANGUAGES, ...extras];
+  }, [libraryLanguages]);
+
+  // Filter languages by search text (match both name and tag)
+  const filteredLanguages = useMemo(() => {
+    if (!languageSearch.trim()) return mergedLanguages;
+    const searchLower = languageSearch.trim().toLowerCase();
+    return mergedLanguages.filter(
+      (l) =>
+        l.name.toLowerCase().includes(searchLower) ||
+        l.tag.toLowerCase().includes(searchLower),
+    );
+  }, [mergedLanguages, languageSearch]);
+
+  // Show "use custom tag" option if search text doesn't exactly match a known tag or name
+  const showCustomLanguageOption = useMemo(() => {
+    if (!languageSearch.trim()) return false;
+    const searchLower = languageSearch.trim().toLowerCase();
+    return !mergedLanguages.some(
+      (l) =>
+        l.tag.toLowerCase() === searchLower ||
+        l.name.toLowerCase() === searchLower,
+    );
+  }, [languageSearch, mergedLanguages]);
+
+  const handleSelectLanguage = (tag: string) => {
+    setLanguage(tag);
+    setLanguageOpen(false);
+    setLanguageSearch("");
+  };
+
+  const handleCreateLanguage = () => {
+    if (languageSearch.trim()) {
+      setLanguage(languageSearch.trim());
+    }
+    setLanguageOpen(false);
+    setLanguageSearch("");
+  };
+
+  const handleClearLanguage = () => {
+    setLanguage("");
+  };
+
   const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
@@ -453,6 +554,8 @@ export function FileEditDialog({
       publisher?: string;
       imprint?: string;
       release_date?: string;
+      language?: string;
+      abridged?: string;
       identifiers?: Array<{ type: string; value: string }>;
     } = {};
 
@@ -504,6 +607,16 @@ export function FileEditDialog({
       payload.release_date = releaseDate;
     }
 
+    // Check if language changed
+    if (language !== initialValues?.language) {
+      payload.language = language;
+    }
+
+    // Check if abridged changed
+    if (abridged !== initialValues?.abridged) {
+      payload.abridged = abridged;
+    }
+
     // Check if identifiers changed
     const originalIdentifiers =
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
@@ -512,11 +625,26 @@ export function FileEditDialog({
     }
 
     // Only submit if something changed
+    let updatedFile: File | undefined;
     if (Object.keys(payload).length > 0) {
-      await updateFileMutation.mutateAsync({
+      updatedFile = await updateFileMutation.mutateAsync({
         id: file.id,
         payload,
       });
+
+      // The backend canonicalizes the language tag (e.g. "en-us" → "en-US")
+      // and the abridged value. Sync local state with the server's response
+      // so the dialog reflects the canonical form without needing a reopen.
+      if (updatedFile) {
+        const canonicalLanguage = updatedFile.language || "";
+        if (canonicalLanguage !== language) {
+          setLanguage(canonicalLanguage);
+        }
+        const canonicalAbridged = updatedFile.abridged === true ? "true" : "";
+        if (canonicalAbridged !== abridged) {
+          setAbridged(canonicalAbridged);
+        }
+      }
     }
 
     // Apply pending cover changes
@@ -543,8 +671,18 @@ export function FileEditDialog({
       setPendingCoverPage(null);
     }
 
-    // Reset initial values so hasChanges becomes false, then close via effect
-    // For coverPage, use pendingCoverPage if set, otherwise keep the current initial value
+    // Reset initial values so hasChanges becomes false, then close via effect.
+    // For coverPage, use pendingCoverPage if set, otherwise keep the current
+    // initial value. For language/abridged, use the canonicalized values
+    // from the server response when available so hasChanges correctly
+    // reflects what's actually persisted.
+    const canonicalLanguage = updatedFile?.language || language;
+    const canonicalAbridged =
+      updatedFile !== undefined
+        ? updatedFile.abridged === true
+          ? "true"
+          : ""
+        : abridged;
     setInitialValues({
       narrators: [...narrators],
       name,
@@ -555,6 +693,8 @@ export function FileEditDialog({
       identifiers: [...identifiers],
       fileRole,
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
+      language: canonicalLanguage,
+      abridged: canonicalAbridged,
     });
     requestClose();
   };
@@ -926,6 +1066,122 @@ export function FileEditDialog({
                   type="url"
                   value={url}
                 />
+              </div>
+
+              {/* Language */}
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <Popover
+                  modal
+                  onOpenChange={setLanguageOpen}
+                  open={languageOpen}
+                >
+                  {language ? (
+                    <PopoverAnchor asChild>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          className="flex items-center gap-1 max-w-full cursor-pointer"
+                          onClick={() => setLanguageOpen(true)}
+                          variant="secondary"
+                        >
+                          <span className="truncate" title={language}>
+                            {getLanguageName(language) || language}
+                          </span>
+                        </Badge>
+                        <button
+                          className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={handleClearLanguage}
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </PopoverAnchor>
+                  ) : (
+                    <PopoverTrigger asChild>
+                      <Button
+                        aria-expanded={languageOpen}
+                        className="w-full justify-between"
+                        role="combobox"
+                        variant="outline"
+                      >
+                        Select language...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                  )}
+                  <PopoverContent align="start" className="w-full p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        onValueChange={setLanguageSearch}
+                        placeholder="Search languages..."
+                        value={languageSearch}
+                      />
+                      <CommandList>
+                        {filteredLanguages.length === 0 &&
+                          !showCustomLanguageOption && (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              No matching languages.
+                            </div>
+                          )}
+                        <CommandGroup>
+                          {filteredLanguages.map((l) => (
+                            <CommandItem
+                              key={l.tag}
+                              onSelect={() => handleSelectLanguage(l.tag)}
+                              value={l.tag}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 shrink-0 ${
+                                  language === l.tag
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                }`}
+                              />
+                              <span className="truncate" title={l.name}>
+                                {l.name}
+                              </span>
+                              <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                {l.tag}
+                              </span>
+                            </CommandItem>
+                          ))}
+                          {showCustomLanguageOption && (
+                            <CommandItem
+                              onSelect={handleCreateLanguage}
+                              value={`create-${languageSearch}`}
+                            >
+                              <Plus className="mr-2 h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                Use custom tag: &quot;{languageSearch}&quot;
+                              </span>
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Abridged */}
+              <div className="space-y-2">
+                <Label>Abridged</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={abridged === "true"}
+                    id="abridged"
+                    onCheckedChange={(checked) =>
+                      setAbridged(checked ? "true" : "")
+                    }
+                  />
+                  <Label
+                    className="cursor-pointer font-normal text-muted-foreground"
+                    htmlFor="abridged"
+                  >
+                    This is an abridged edition
+                  </Label>
+                </div>
               </div>
 
               {/* Publisher */}

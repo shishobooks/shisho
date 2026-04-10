@@ -233,3 +233,88 @@ func TestConvertFieldsToMetadata_IdentifiersWithMissingTypeOrValue(t *testing.T)
 	assert.Equal(t, "isbn_13", md.Identifiers[0].Type)
 	assert.Equal(t, "9781234567890", md.Identifiers[0].Value)
 }
+
+func TestConvertFieldsToMetadata_Language(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"language": "en-US",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.Language)
+	assert.Equal(t, "en-US", *md.Language)
+}
+
+func TestConvertFieldsToMetadata_LanguageNormalized(t *testing.T) {
+	t.Parallel()
+	// ISO 639-2/T three-letter code should be normalized to BCP 47
+	fields := map[string]any{
+		"language": "eng",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.Language)
+	assert.Equal(t, "en", *md.Language)
+}
+
+func TestConvertFieldsToMetadata_LanguageInvalid(t *testing.T) {
+	t.Parallel()
+	// Invalid tags should be dropped (nil)
+	fields := map[string]any{
+		"language": "not-a-language",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	assert.Nil(t, md.Language)
+}
+
+func TestConvertFieldsToMetadata_LanguageEmpty(t *testing.T) {
+	t.Parallel()
+	// Empty string should be ignored (nil)
+	fields := map[string]any{
+		"language": "",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	assert.Nil(t, md.Language)
+}
+
+func TestConvertFieldsToMetadata_AbridgedTrue(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"abridged": true,
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.Abridged)
+	assert.True(t, *md.Abridged)
+}
+
+func TestConvertFieldsToMetadata_AbridgedFalse(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"abridged": false,
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.Abridged)
+	assert.False(t, *md.Abridged)
+}
+
+func TestConvertFieldsToMetadata_AbridgedMissing(t *testing.T) {
+	t.Parallel()
+	// Absent key should result in nil
+	fields := map[string]any{
+		"title": "My Book",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	assert.Nil(t, md.Abridged)
+}

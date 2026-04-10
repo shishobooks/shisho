@@ -18,7 +18,7 @@ A book is the central entity in Shisho. It groups one or more files together (e.
 
 Each book contains one or more files. Files hold format-specific metadata that may differ between editions.
 
-**File-level fields:** name, narrators (M4B only), publisher, imprint, release date, URL, identifiers, chapters
+**File-level fields:** name, narrators (M4B only), publisher, imprint, release date, URL, identifiers, chapters, language, abridged
 
 ### People
 
@@ -72,6 +72,8 @@ Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple 
 - Release date
 - URL
 - Identifiers
+- Language
+- Abridged status
 - File role (promote a [supplement](./supplement-files) to a main file or vice versa)
 
 **On a person:**
@@ -92,7 +94,7 @@ During library scans, Shisho reads embedded metadata from each file format:
 
 Extracted from the OPF package document (`content.opf`):
 
-- **Dublin Core**: title, authors (with roles), description, publisher, release date, identifiers, genres (from subjects), language
+- **Dublin Core**: title, authors (with roles), description, publisher, release date, identifiers, genres (from subjects), language (BCP 47 tag from `<dc:language>`)
 - **Calibre metadata**: series name and number, subtitle
 - **Cover**: from manifest item with `properties="cover-image"` or the `cover` meta tag
 - **Chapters**: from EPUB 3 nav document, falling back to NCX table of contents
@@ -101,7 +103,7 @@ Extracted from the OPF package document (`content.opf`):
 
 Extracted from `ComicInfo.xml`:
 
-- **Basic**: title, series, number, summary, publisher, imprint, URL, release date
+- **Basic**: title, series, number, summary, publisher, imprint, URL, release date, language (`LanguageISO` field, BCP 47 tag)
 - **Creators**: writer, penciller, inker, colorist, letterer, cover artist, editor, translator (each as a distinct role)
 - **Categorization**: genres and tags (comma-separated)
 - **Identifiers**: GTIN
@@ -116,6 +118,8 @@ Extracted from iTunes-style MP4 atoms:
 - **Narrators**: from the `©nrt` atom, falling back to `©cmp` (composer) then `©wrt` (writer)
 - **Series**: parsed from the album name (patterns like "Series Name, Book 1")
 - **Identifiers**: ASIN from freeform iTunes atoms
+- **Language**: from freeform iTunes atoms
+- **Abridged**: from the Tone freeform atom `com.pilabor.tone:ABRIDGED` (`true`/`false`, or `1`/`0`)
 - **Technical**: duration, bitrate, codec from media stream data
 - **Cover**: from the `covr` atom
 - **Chapters**: from the `chpl` chapter list atom
@@ -124,7 +128,7 @@ Extracted from iTunes-style MP4 atoms:
 
 Extracted from the PDF info dictionary:
 
-- **Basic**: title, description (from Subject), tags (from Keywords), release date (from CreationDate), page count
+- **Basic**: title, description (from Subject), tags (from Keywords), release date (from CreationDate), page count, language (from catalog `Lang` property, BCP 47 tag)
 - **Authors**: split from the Author field on commas, ampersands, and semicolons
 - **Cover**: largest embedded image from page 1, falling back to a rendered image of the first page
 

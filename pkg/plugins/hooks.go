@@ -397,6 +397,19 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.Identifiers = parseIdentifiers(vm, identifiersVal)
 		}
 
+		// language -> *string (BCP 47 tag, normalized)
+		languageStr := getStringField(itemObj, "language")
+		if languageStr != "" {
+			md.Language = mediafile.NormalizeLanguage(languageStr)
+		}
+
+		// abridged -> *bool
+		abridgedVal := itemObj.Get("abridged")
+		if abridgedVal != nil && !goja.IsUndefined(abridgedVal) && !goja.IsNull(abridgedVal) {
+			b := abridgedVal.ToBoolean()
+			md.Abridged = &b
+		}
+
 		results = append(results, md)
 	}
 
@@ -455,12 +468,16 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 		md.Tags = parseStringArray(vm, tagsVal)
 	}
 
-	// releaseDate -> *time.Time (ISO 8601 string)
+	// releaseDate -> *time.Time (tries "2006-01-02" and RFC3339 formats for
+	// consistency with parseSearchResponse)
 	releaseDateVal := obj.Get("releaseDate")
 	if releaseDateVal != nil && !goja.IsUndefined(releaseDateVal) && !goja.IsNull(releaseDateVal) {
 		dateStr := releaseDateVal.String()
 		if dateStr != "" {
-			t, err := time.Parse(time.RFC3339, dateStr)
+			t, err := time.Parse("2006-01-02", dateStr)
+			if err != nil {
+				t, err = time.Parse(time.RFC3339, dateStr)
+			}
 			if err == nil {
 				md.ReleaseDate = &t
 			}
@@ -510,6 +527,19 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 	chaptersVal := obj.Get("chapters")
 	if chaptersVal != nil && !goja.IsUndefined(chaptersVal) && !goja.IsNull(chaptersVal) {
 		md.Chapters = parseChapters(vm, chaptersVal)
+	}
+
+	// language -> *string (BCP 47 tag, normalized)
+	languageStr := getStringField(obj, "language")
+	if languageStr != "" {
+		md.Language = mediafile.NormalizeLanguage(languageStr)
+	}
+
+	// abridged -> *bool
+	abridgedVal := obj.Get("abridged")
+	if abridgedVal != nil && !goja.IsUndefined(abridgedVal) && !goja.IsNull(abridgedVal) {
+		b := abridgedVal.ToBoolean()
+		md.Abridged = &b
 	}
 
 	return md, nil

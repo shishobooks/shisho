@@ -16,8 +16,13 @@ Metadata is extracted from the PDF info dictionary via pdfcpu.
 | Tags | `Keywords` | Split on `,` / `;` into tag list |
 | Release Date | `CreationDate` | PDF date format `D:YYYYMMDDHHmmSSOHH'mm'` |
 | Page Count | Page tree | Total page count from PDF structure |
+| Language | Catalog `Lang` | BCP 47 language tag from document catalog |
 
 **Data Source:** `models.DataSourcePDFMetadata` ("pdf_metadata")
+
+### Language Extraction
+
+Language is read from the document catalog's `Lang` entry (not the info dict). The pdfcpu `XRefTable` does not expose `Lang` as a dedicated field, but the catalog dict is available via `xrt.RootDict` after `api.ReadAndValidate` populates it. The value is a `types.StringLiteral` and is passed through `mediafile.NormalizeLanguage` for BCP 47 validation/normalization.
 
 ### PDF Date Format
 

@@ -739,6 +739,37 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		}
 	}
 
+	// Dublin Core metadata. OPDS entries are per-book but language/publisher
+	// are file-level in our model. Prefer the primary file (the book's
+	// canonical reading copy), falling back to the first file with a
+	// non-empty value for each field.
+	filesInPriorityOrder := make([]*models.File, 0, len(book.Files))
+	if book.PrimaryFileID != nil {
+		for _, file := range book.Files {
+			if file.ID == *book.PrimaryFileID {
+				filesInPriorityOrder = append(filesInPriorityOrder, file)
+				break
+			}
+		}
+	}
+	for _, file := range book.Files {
+		if book.PrimaryFileID != nil && file.ID == *book.PrimaryFileID {
+			continue
+		}
+		filesInPriorityOrder = append(filesInPriorityOrder, file)
+	}
+	for _, file := range filesInPriorityOrder {
+		if entry.Language == "" && file.Language != nil && *file.Language != "" {
+			entry.Language = *file.Language
+		}
+		if entry.Publisher == "" && file.Publisher != nil {
+			entry.Publisher = file.Publisher.Name
+		}
+		if entry.Language != "" && entry.Publisher != "" {
+			break
+		}
+	}
+
 	// Extract API base from the URL.
 	// URL format is "http://host/opds/v1" or "http://host/opds/v1/kepub"
 	apiBase := strings.TrimSuffix(baseURL, "/opds/v1/kepub")

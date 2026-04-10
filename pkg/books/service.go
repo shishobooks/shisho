@@ -33,6 +33,7 @@ type ListBooksOptions struct {
 	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
 	GenreIDs   []int    // Filter by genre IDs
 	TagIDs     []int    // Filter by tag IDs
+	Language   *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
 	IDs        []int    // Filter by specific book IDs
 	Search     *string  // Search query for title/author
 
@@ -338,6 +339,11 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by tag IDs
 	if len(opts.TagIDs) > 0 {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM book_tags WHERE tag_id IN (?))", bun.List(opts.TagIDs))
+	}
+
+	// Filter by language (exact match + subtag variants, e.g., "en" matches "en-US", "en-GB")
+	if opts.Language != nil && *opts.Language != "" {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE language = ? OR language LIKE ?)", *opts.Language, *opts.Language+"-%")
 	}
 
 	// Search using FTS5
@@ -1510,6 +1516,23 @@ func deleteFileFromDisk(file *models.File) error {
 type DeleteBooksAndFilesResult struct {
 	BooksDeleted int
 	FilesDeleted int
+}
+
+// DistinctFileLanguages returns distinct non-null language values for files in a library.
+func (svc *Service) DistinctFileLanguages(ctx context.Context, libraryID int) ([]string, error) {
+	var languages []string
+	err := svc.db.NewSelect().
+		TableExpr("files AS f").
+		ColumnExpr("DISTINCT f.language").
+		Where("f.library_id = ?", libraryID).
+		Where("f.language IS NOT NULL").
+		Where("f.language != ''").
+		OrderExpr("f.language ASC").
+		Scan(ctx, &languages)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return languages, nil
 }
 
 // DeleteBooksAndFiles deletes multiple books and all their files from disk and database.

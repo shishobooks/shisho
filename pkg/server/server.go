@@ -132,6 +132,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 		OnLibraryChanged: w.RefreshMonitorWatches,
 	})
 	plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), pm, authMiddleware)
+	books.RegisterLibraryRoutes(librariesGroup, db, authMiddleware)
 
 	// Jobs routes
 	jobsGroup := e.Group("/jobs")

@@ -8,10 +8,11 @@ type ListBooksQuery struct {
 	LibraryID *int     `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	SeriesID  *int     `query:"series_id" json:"series_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string  `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
-	FileTypes []string `query:"file_types" json:"file_types,omitempty"` // Filter by file types (e.g., ["epub", "m4b"])
-	GenreIDs  []int    `query:"genre_ids" json:"genre_ids,omitempty"`   // Filter by genre IDs
-	TagIDs    []int    `query:"tag_ids" json:"tag_ids,omitempty"`       // Filter by tag IDs
-	IDs       []int    `query:"ids" json:"ids,omitempty"`               // Filter by specific book IDs
+	FileTypes []string `query:"file_types" json:"file_types,omitempty"`                                         // Filter by file types (e.g., ["epub", "m4b"])
+	GenreIDs  []int    `query:"genre_ids" json:"genre_ids,omitempty"`                                           // Filter by genre IDs
+	TagIDs    []int    `query:"tag_ids" json:"tag_ids,omitempty"`                                               // Filter by tag IDs
+	Language  *string  `query:"language" json:"language,omitempty" validate:"omitempty,max=35" tstype:"string"` // Filter by language tag
+	IDs       []int    `query:"ids" json:"ids,omitempty"`                                                       // Filter by specific book IDs
 }
 
 type UpdateBookPayload struct {
@@ -52,6 +53,8 @@ type UpdateFilePayload struct {
 	Publisher   *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
 	Imprint     *string              `json:"imprint,omitempty" validate:"omitempty,max=200"`
 	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
+	Language    *string              `json:"language,omitempty" validate:"omitempty,max=35"`
+	Abridged    *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
 	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
 }
 

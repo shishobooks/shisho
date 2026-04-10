@@ -295,6 +295,10 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	fileSeriesNum := float64(1)
 	coverPage := 2
 	fileCoverPage := 0
+	enricherLanguage := "en-US"
+	fileLanguage := "fr"
+	enricherAbridged := true
+	fileAbridged := false
 
 	enricherSource := "plugin:test/enricher"
 	fileSource := "epub_metadata"
@@ -314,6 +318,8 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 		Imprint:       "Enricher Imprint",
 		URL:           "https://enricher.example.com",
 		ReleaseDate:   &releaseDate,
+		Language:      &enricherLanguage,
+		Abridged:      &enricherAbridged,
 		CoverData:     []byte("enricher cover"),
 		CoverMimeType: "image/png",
 		CoverPage:     &coverPage,
@@ -336,6 +342,8 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 		Imprint:       "File Imprint",
 		URL:           "https://file.example.com",
 		ReleaseDate:   &fileReleaseDate,
+		Language:      &fileLanguage,
+		Abridged:      &fileAbridged,
 		CoverData:     []byte("file cover"),
 		CoverMimeType: "image/jpeg",
 		CoverPage:     &fileCoverPage,
@@ -371,6 +379,10 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	assert.Equal(t, "https://enricher.example.com", enrichedMeta.URL)
 	require.NotNil(t, enrichedMeta.ReleaseDate)
 	assert.Equal(t, 2025, enrichedMeta.ReleaseDate.Year())
+	require.NotNil(t, enrichedMeta.Language)
+	assert.Equal(t, "en-US", *enrichedMeta.Language)
+	require.NotNil(t, enrichedMeta.Abridged)
+	assert.True(t, *enrichedMeta.Abridged)
 	assert.Equal(t, []byte("enricher cover"), enrichedMeta.CoverData)
 	assert.Equal(t, "image/png", enrichedMeta.CoverMimeType)
 	require.NotNil(t, enrichedMeta.CoverPage)
@@ -394,6 +406,8 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["imprint"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["url"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["releaseDate"])
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["language"])
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["abridged"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["chapters"])
 }

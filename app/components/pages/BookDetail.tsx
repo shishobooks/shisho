@@ -58,6 +58,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getLanguageName } from "@/constants/languages";
 import {
   useBook,
   useDeleteBook,
@@ -663,6 +664,32 @@ const FileRow = ({
                   </a>
                 </>
               )}
+              {file.language && (
+                <>
+                  <span className="text-muted-foreground">Language</span>
+                  <span>
+                    {getLanguageName(file.language)
+                      ? `${getLanguageName(file.language)} (${file.language})`
+                      : file.language}
+                  </span>
+                </>
+              )}
+              {/* For M4B, always show abridged status (audiobooks historically
+                  had abridged versions, so the distinction is meaningful).
+                  For other formats, only show when explicitly marked as
+                  abridged. */}
+              {(file.file_type === "m4b" || file.abridged === true) && (
+                <>
+                  <span className="text-muted-foreground">Abridged</span>
+                  <span>
+                    {file.abridged == null
+                      ? "Unknown"
+                      : file.abridged
+                        ? "Abridged"
+                        : "Unabridged"}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Identifiers */}
@@ -785,6 +812,9 @@ const BookDetail = () => {
       file.imprint ||
       file.release_date ||
       file.url ||
+      file.language ||
+      file.file_type === "m4b" || // M4B always shows abridged status
+      file.abridged === true ||
       (file.identifiers && file.identifiers.length > 0)
     );
   };

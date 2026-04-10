@@ -117,6 +117,26 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		meta.URL = *file.URL
 	}
 
+	// Set language from file if available
+	if file.Language != nil && *file.Language != "" {
+		if meta.Freeform == nil {
+			meta.Freeform = make(map[string]string)
+		}
+		meta.Freeform["com.pilabor.tone:LANGUAGE"] = *file.Language
+	}
+
+	// Set abridged from file if available
+	if file.Abridged != nil {
+		if meta.Freeform == nil {
+			meta.Freeform = make(map[string]string)
+		}
+		if *file.Abridged {
+			meta.Freeform["com.pilabor.tone:ABRIDGED"] = "true"
+		} else {
+			meta.Freeform["com.pilabor.tone:ABRIDGED"] = "false"
+		}
+	}
+
 	// Set release date from file if available
 	if file.ReleaseDate != nil {
 		meta.ReleaseDate = file.ReleaseDate

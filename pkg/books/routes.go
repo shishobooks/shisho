@@ -20,6 +20,14 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// RegisterLibraryRoutes registers per-library book routes on a libraries group.
+// These routes are mounted under /libraries/:id/... alongside library management routes.
+func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+	bookService := NewService(db)
+	h := &handler{bookService: bookService}
+	g.GET("/:id/languages", h.listLibraryLanguages, authMiddleware.RequireLibraryAccess("id"))
+}
+
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache) {
 	bookService := NewService(db)

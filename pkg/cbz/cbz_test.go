@@ -87,6 +87,67 @@ func TestParseCBZ_GTINAsOther(t *testing.T) {
 	assert.Equal(t, "1234567890123", metadata.Identifiers[0].Value)
 }
 
+func TestParseCBZ_Language(t *testing.T) {
+	t.Parallel()
+
+	ptrStr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name      string
+		comicInfo string
+		wantLang  *string
+	}{
+		{
+			name: "language present",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+  <LanguageISO>en</LanguageISO>
+</ComicInfo>`,
+			wantLang: ptrStr("en"),
+		},
+		{
+			name: "no language",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+</ComicInfo>`,
+			wantLang: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			cbzPath := filepath.Join(tmpDir, "test.cbz")
+
+			f, err := os.Create(cbzPath)
+			require.NoError(t, err)
+
+			zw := zip.NewWriter(f)
+
+			imgWriter, err := zw.Create("page001.jpg")
+			require.NoError(t, err)
+			_, err = imgWriter.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // JPEG header
+			require.NoError(t, err)
+
+			comicInfoWriter, err := zw.Create("ComicInfo.xml")
+			require.NoError(t, err)
+			_, err = comicInfoWriter.Write([]byte(tt.comicInfo))
+			require.NoError(t, err)
+
+			require.NoError(t, zw.Close())
+			require.NoError(t, f.Close())
+
+			metadata, err := Parse(cbzPath)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantLang, metadata.Language)
+		})
+	}
+}
+
 func TestExtractSeriesNumberFromFilename(t *testing.T) {
 	t.Parallel()
 	floatPtr := func(f float64) *float64 { return &f }

@@ -78,6 +78,9 @@ Custom metadata uses freeform atoms with namespace:
 ----:com.shisho:tags               # Tags (comma-separated)
 ----:com.shisho:imprint            # Imprint name
 ----:com.shisho:url                # URL
+----:com.pilabor.tone:LANGUAGE     # Language (BCP 47 tag, preferred)
+----:com.apple.iTunes:LANGUAGE     # Language (BCP 47 tag, fallback)
+----:com.pilabor.tone:ABRIDGED     # Abridged status ("true"/"false")
 ```
 
 Freeform atom structure:
@@ -122,6 +125,8 @@ Freeform atom structure:
 | Chapters | `chpl` or `tref/chap` | Nero or QuickTime format |
 | Cover | `covr` atom | With MIME type detection |
 | Media Type | `stik` | Value 2 = audiobook |
+| Language | `com.pilabor.tone:LANGUAGE` → `com.apple.iTunes:LANGUAGE` | Validated BCP 47 tag via NormalizeLanguage |
+| Abridged | `com.pilabor.tone:ABRIDGED` | "true"/"false" (case-insensitive) → *bool |
 
 **Series Parsing from Album:**
 Regex patterns extract series from album field:
@@ -213,6 +218,8 @@ type Metadata struct {
     CoverData    []byte
     CoverMimeType string
     Freeform     map[string]string  // All freeform atoms
+    Language     *string            // BCP 47 tag from freeform
+    Abridged     *bool              // from com.pilabor.tone:ABRIDGED
     UnknownAtoms []RawAtom          // Preserved unrecognized atoms
 }
 

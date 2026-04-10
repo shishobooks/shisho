@@ -98,7 +98,7 @@ shisho/goodreads-metadata/
 - Invalid field names in `fields` → **load fails**
 
 **Valid metadata fields for enrichers:**
-`title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`
+`title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`, `language`, `abridged`
 
 **Logical field groupings:**
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`

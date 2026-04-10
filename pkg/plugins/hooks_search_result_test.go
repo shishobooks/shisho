@@ -35,7 +35,9 @@ func TestParseSearchResponse_AllFields(t *testing.T) {
 			identifiers: [
 				{ type: "isbn_13", value: "9781234567890" },
 				{ type: "asin", value: "B00TEST1234" }
-			]
+			],
+			language: "en-US",
+			abridged: true
 		}]
 	})`)
 	require.NoError(t, err)
@@ -78,6 +80,89 @@ func TestParseSearchResponse_AllFields(t *testing.T) {
 
 	assert.Equal(t, "test-scope", md.PluginScope)
 	assert.Equal(t, "test-plugin", md.PluginID)
+
+	require.NotNil(t, md.Language)
+	assert.Equal(t, "en-US", *md.Language)
+	require.NotNil(t, md.Abridged)
+	assert.True(t, *md.Abridged)
+}
+
+func TestParseSearchResponse_LanguageNormalized(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Book",
+			language: "eng"
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
+	require.NotNil(t, md.Language)
+	assert.Equal(t, "en", *md.Language)
+}
+
+func TestParseSearchResponse_LanguageInvalid(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Book",
+			language: "not-a-language"
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
+	assert.Nil(t, md.Language)
+}
+
+func TestParseSearchResponse_AbridgedFalse(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Book",
+			abridged: false
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
+	require.NotNil(t, md.Abridged)
+	assert.False(t, *md.Abridged)
+}
+
+func TestParseSearchResponse_AbridgedAbsent(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({
+		results: [{
+			title: "Book"
+		}]
+	})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+
+	md := resp.Results[0]
+	assert.Nil(t, md.Abridged)
+	assert.Nil(t, md.Language)
 }
 
 func TestParseSearchResponse_DateParsing_RFC3339(t *testing.T) {

@@ -107,5 +107,10 @@ func (g *PDFGenerator) buildProperties(book *models.Book, file *models.File) map
 		props["CreationDate"] = file.ReleaseDate.UTC().Format("D:20060102150405Z")
 	}
 
+	// Language — set in info dict if available.
+	if file != nil && file.Language != nil && *file.Language != "" {
+		props["Language"] = *file.Language
+	}
+
 	return props
 }

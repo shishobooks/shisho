@@ -39,6 +39,8 @@ type Fingerprint struct {
 	Format            string                  `json:"format,omitempty"`             // Download format: original, kepub, or plugin:<id>
 	Name              *string                 `json:"name,omitempty"`               // File name (edition name)
 	PluginFingerprint string                  `json:"plugin_fingerprint,omitempty"` // Plugin-specific fingerprint for cache invalidation
+	Language          *string                 `json:"language,omitempty"`
+	Abridged          *bool                   `json:"abridged,omitempty"`
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -128,6 +130,8 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		if file.Imprint != nil {
 			fp.Imprint = &file.Imprint.Name
 		}
+		fp.Language = file.Language
+		fp.Abridged = file.Abridged
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting

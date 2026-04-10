@@ -233,6 +233,12 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	// Extract language from LanguageISO
+	var language *string
+	if comicInfo != nil && comicInfo.LanguageISO != "" {
+		language = mediafile.NormalizeLanguage(comicInfo.LanguageISO)
+	}
+
 	// Parse GTIN as identifier
 	var identifiersList []mediafile.ParsedIdentifier
 	if comicInfo != nil && comicInfo.GTIN != "" {
@@ -260,6 +266,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Imprint:       imprint,
 		URL:           url,
 		ReleaseDate:   releaseDate,
+		Language:      language,
 		CoverMimeType: coverMimeType,
 		CoverData:     coverData,
 		CoverPage:     coverPage,

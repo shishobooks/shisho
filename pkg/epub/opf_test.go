@@ -119,3 +119,55 @@ func TestParseOPF_Subtitle_SingleTitle(t *testing.T) {
 	assert.Equal(t, "Simple Book Title", result.OPF.Title)
 	assert.Empty(t, result.OPF.Subtitle)
 }
+
+func TestParseOPF_Language_BCP47(t *testing.T) {
+	t.Parallel()
+	// BCP 47 tag (EPUB 3 native): en-US should pass through normalized
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:language>en-US</dc:language>
+  </metadata>
+</package>`
+
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	require.NotNil(t, result.OPF.Language)
+	assert.Equal(t, "en-US", *result.OPF.Language)
+}
+
+func TestParseOPF_Language_ISO6392T(t *testing.T) {
+	t.Parallel()
+	// ISO 639-2/T 3-letter code (common in EPUB 2): "eng" should normalize to "en"
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:language>eng</dc:language>
+  </metadata>
+</package>`
+
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	require.NotNil(t, result.OPF.Language)
+	assert.Equal(t, "en", *result.OPF.Language)
+}
+
+func TestParseOPF_Language_Missing(t *testing.T) {
+	t.Parallel()
+	// No dc:language element: Language should be nil
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	assert.Nil(t, result.OPF.Language)
+}

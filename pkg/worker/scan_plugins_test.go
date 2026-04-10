@@ -1550,6 +1550,8 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 	releaseDate := time.Now()
 	seriesNum := float64(1)
 	coverPage := 0
+	language := "en-US"
+	abridged := true
 	md := &mediafile.ParsedMetadata{
 		Title:         "Test Title",
 		Subtitle:      "Test Subtitle",
@@ -1564,6 +1566,8 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 		Imprint:       "Imprint",
 		URL:           "http://example.com",
 		ReleaseDate:   &releaseDate,
+		Language:      &language,
+		Abridged:      &abridged,
 		CoverData:     []byte("cover"),
 		CoverMimeType: "image/png",
 		CoverPage:     &coverPage,
@@ -1574,7 +1578,7 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 		"title", "subtitle", "authors", "narrators",
 		"series", "genres", "tags", "description",
 		"publisher", "imprint", "url", "releaseDate",
-		"cover", "identifiers",
+		"cover", "identifiers", "language", "abridged",
 	}
 	enabledFields := make(map[string]bool)
 	for _, f := range declaredFields {
@@ -1598,10 +1602,59 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 	assert.Equal(t, "Imprint", filtered.Imprint)
 	assert.Equal(t, "http://example.com", filtered.URL)
 	assert.NotNil(t, filtered.ReleaseDate)
+	require.NotNil(t, filtered.Language)
+	assert.Equal(t, "en-US", *filtered.Language)
+	require.NotNil(t, filtered.Abridged)
+	assert.True(t, *filtered.Abridged)
 	assert.NotEmpty(t, filtered.CoverData)
 	assert.Equal(t, "image/png", filtered.CoverMimeType)
 	assert.NotNil(t, filtered.CoverPage)
 	assert.Len(t, filtered.Identifiers, 1)
+}
+
+// TestFilterMetadataFields_LanguageAbridgedFiltering verifies that language and
+// abridged are zeroed out when undeclared or disabled by the user.
+func TestFilterMetadataFields_LanguageAbridgedFiltering(t *testing.T) {
+	t.Parallel()
+
+	language := "en-US"
+	abridged := true
+	md := &mediafile.ParsedMetadata{
+		Title:    "Test",
+		Language: &language,
+		Abridged: &abridged,
+	}
+
+	log := logger.New()
+	logFn := func(msg string, data logger.Data) { log.Warn(msg, data) }
+
+	// Case 1: Undeclared — both should be zeroed
+	filtered := filterMetadataFields(md, []string{"title"}, map[string]bool{"title": true}, "test", logFn)
+	assert.Equal(t, "Test", filtered.Title)
+	assert.Nil(t, filtered.Language)
+	assert.Nil(t, filtered.Abridged)
+
+	// Case 2: Declared but disabled — both should be zeroed
+	filtered = filterMetadataFields(md, []string{"title", "language", "abridged"}, map[string]bool{
+		"title":    true,
+		"language": false,
+		"abridged": false,
+	}, "test", logFn)
+	assert.Equal(t, "Test", filtered.Title)
+	assert.Nil(t, filtered.Language)
+	assert.Nil(t, filtered.Abridged)
+
+	// Case 3: Declared and enabled — both should be preserved
+	filtered = filterMetadataFields(md, []string{"title", "language", "abridged"}, map[string]bool{
+		"title":    true,
+		"language": true,
+		"abridged": true,
+	}, "test", logFn)
+	assert.Equal(t, "Test", filtered.Title)
+	require.NotNil(t, filtered.Language)
+	assert.Equal(t, "en-US", *filtered.Language)
+	require.NotNil(t, filtered.Abridged)
+	assert.True(t, *filtered.Abridged)
 }
 
 // TestFilterMetadataFields_NilMetadata verifies nil input returns nil.

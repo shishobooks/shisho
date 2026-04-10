@@ -97,6 +97,21 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		coverMime = cm
 	}
 
+	// Extract language from the PDF document catalog (Lang entry, BCP 47).
+	// The pdfcpu XRefTable does not expose Lang as a dedicated field, but the
+	// catalog dict is accessible via RootDict after ReadAndValidate populates it.
+	var language *string
+	if xrt.RootDict != nil {
+		if langObj, ok := xrt.RootDict["Lang"]; ok {
+			if langLit, ok := langObj.(types.StringLiteral); ok {
+				langStr := strings.TrimSpace(langLit.Value())
+				if langStr != "" {
+					language = mediafile.NormalizeLanguage(langStr)
+				}
+			}
+		}
+	}
+
 	// Extract outline (bookmarks) as chapters. Best-effort — don't fail Parse.
 	var chapters []mediafile.ParsedChapter
 	outlineEntries, outlineErr := ExtractOutline(path)
@@ -117,6 +132,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Tags:          tags,
 		ReleaseDate:   releaseDate,
 		PageCount:     pageCount,
+		Language:      language,
 		CoverData:     coverData,
 		CoverMimeType: coverMime,
 		CoverPage:     coverPage,

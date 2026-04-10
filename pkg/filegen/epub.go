@@ -283,6 +283,11 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 		pkg.Metadata.Date = file.ReleaseDate.Format("2006-01-02")
 	}
 
+	// Update language from file if available
+	if file != nil && file.Language != nil && *file.Language != "" {
+		pkg.Metadata.Language = *file.Language
+	}
+
 	// Update authors - replace all creators with role="aut"
 	var newCreators []opfCreator
 	// First, keep non-author creators

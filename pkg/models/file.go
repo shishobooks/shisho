@@ -60,6 +60,10 @@ type File struct {
 	ImprintSource            *string           `json:"imprint_source" tstype:"DataSource"`
 	Imprint                  *Imprint          `bun:"rel:belongs-to,join:imprint_id=id" json:"imprint,omitempty" tstype:"Imprint"`
 	ChapterSource            *string           `json:"chapter_source" tstype:"DataSource"`
+	Language                 *string           `json:"language"`
+	LanguageSource           *string           `json:"language_source" tstype:"DataSource"`
+	Abridged                 *bool             `json:"abridged"`
+	AbridgedSource           *string           `json:"abridged_source" tstype:"DataSource"`
 }
 
 func (f *File) CoverExtension() string {
