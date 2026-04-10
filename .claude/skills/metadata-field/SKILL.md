@@ -57,6 +57,7 @@ git grep -l 'Publisher\|publisher' pkg/filegen/  # File generators
 git grep -l 'Publisher' pkg/kepub/            # KePub CBZ path
 git grep -l 'Publisher' pkg/opds/             # OPDS feed
 git grep -l 'Publisher' pkg/kobo/             # Kobo sync
+git grep -l 'Publisher\|publisher' pkg/ereader/  # eReader server-rendered UI (metaParts builder in handlers.go)
 
 # 3. Plugin bridge — there are THREE parallel JS→Go parsers plus several
 # merge/filter/persist functions. All must be updated in lockstep.
@@ -99,6 +100,18 @@ Save the union of everything these commands return. That's your implementation s
 
 Produce a written plan that maps each discovered file to a specific change. Group by layer:
 
+**Naming conventions to watch for.** A new field touches code that uses several different casing conventions for the same logical name. Pick the canonical names up front and stay consistent — getting one wrong tends to cause silent bugs that don't show up until runtime:
+
+- **Go struct fields** are `PascalCase` (e.g., `EditionNote`)
+- **Database columns** are `snake_case` (e.g., `edition_note`, `edition_note_source`)
+- **JSON tags on the model and API** are `snake_case` (e.g., `json:"edition_note"`)
+- **`mediafile.ParsedMetadata.FieldDataSources` map keys are `camelCase`** (e.g., `"editionNote"`, NOT `"edition_note"`). This is because the same map is used for both Go-side bookkeeping and JS-side plugin field declarations, and the plugin SDK uses camelCase. Look at how `"releaseDate"` is keyed in this map for the canonical example.
+- **Plugin SDK TypeScript types** are `camelCase` (e.g., `editionNote?: string`)
+- **Plugin manifest `MetadataField` enum values** are `camelCase` (must match the SDK and `ValidMetadataFields`)
+- **`pkg/plugins/manifest.go` `ValidMetadataFields` strings are `camelCase`** to match the SDK
+
+The only places that use `snake_case` for the field name are the database column, the Go `json` tag on the model, and the API payload. Everywhere else (Go struct fields, FieldDataSources keys, plugin SDK types, manifest validation) is camelCase or PascalCase. When in doubt, grep for how an existing similar field is keyed in each location.
+
 **Data model**
 - Migration: `ALTER TABLE` + partial index if the field will be filtered/searched
 - Go model: field + `_source` tracking field
@@ -133,11 +146,13 @@ Produce a written plan that maps each discovered file to a specific change. Grou
 - `pkg/plugins/hooks.go` `parseSearchResponse` (metadataEnricher hook path)
 - `pkg/plugins/handler.go` `convertFieldsToMetadata` (identify apply path)
 - `pkg/plugins/handler.go` `persistMetadata` — the apply actually writes the field
-- `packages/plugin-sdk/metadata.d.ts` — TypeScript types
+- `packages/plugin-sdk/metadata.d.ts` — `ParsedMetadata` interface (the runtime data shape)
+- `packages/plugin-sdk/manifest.d.ts` — the `MetadataField` string union (the manifest validation type, separate from `ParsedMetadata`). It's easy to update one and forget the other; both must list the new field.
 
 **Other consumers**
 - OPDS entry population in `pkg/opds/service.go`
-- Kobo sync in `pkg/kobo/handlers.go`
+- Kobo sync in `pkg/kobo/handlers.go` (currently hardcodes some fields — check if your field needs special handling)
+- eReader server-rendered UI in `pkg/ereader/handlers.go` — look for the `metaParts` builder that emits page count, duration, etc. inline on file rows. New file-level display fields usually want a row here.
 - Any other format-adjacent subsystem
 
 **Frontend**
