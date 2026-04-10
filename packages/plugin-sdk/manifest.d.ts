@@ -45,7 +45,9 @@ export type MetadataField =
   | "url"
   | "releaseDate"
   | "cover"
-  | "identifiers";
+  | "identifiers"
+  | "language"
+  | "abridged";
 
 /** Metadata enricher capability declaration. */
 export interface MetadataEnricherCap {
