@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **When dispatching subagents (for implementation, code review, spec review, or any other task), always include this instruction in the prompt:**
 
-> Check the project's root CLAUDE.md and any relevant subdirectory CLAUDE.md files for rules that apply to your work. These contain critical project conventions, gotchas, and requirements (e.g., docs update requirements, testing conventions, naming rules, metadata sync checklists). Violations of these rules are review failures.
+> Check the project's root CLAUDE.md and any relevant subdirectory CLAUDE.md files for rules that apply to your work. These contain critical project conventions, gotchas, and requirements (e.g., docs update requirements, testing conventions, naming rules). Violations of these rules are review failures.
 
 Subdirectory CLAUDE.md files are loaded automatically when working on files in that directory, but cross-cutting rules (like "update website docs when changing user-facing behavior") live in this root file and are easy to overlook if not explicitly checked.
 
@@ -27,7 +27,7 @@ Project-specific conventions are documented in `CLAUDE.md` files within each sub
 
 | Location | Covers |
 |----------|--------|
-| `pkg/CLAUDE.md` | Go backend: Echo handlers, Bun ORM, workers, metadata sync checklist |
+| `pkg/CLAUDE.md` | Go backend: Echo handlers, Bun ORM, workers |
 | `app/CLAUDE.md` | React frontend: Tanstack Query, components, UI patterns |
 | `pkg/plugins/CLAUDE.md` | Plugin system: Goja runtime, hooks, host APIs, manifests |
 | `pkg/epub/CLAUDE.md` | EPUB format: OPF, Dublin Core, parsing/generation |
@@ -48,6 +48,7 @@ These workflow-based skills (in `.claude/skills/`) are invoked on demand:
 |-------|-------------|
 | `favicon` | Creating or updating favicon, app icons, PWA icons |
 | `splash` | Creating or updating the README splash image |
+| `metadata-field` | Adding, removing, or significantly modifying a metadata field on books or files |
 
 ## Critical Gotchas
 

@@ -1,0 +1,23 @@
+{
+  "skill_name": "metadata-field",
+  "evals": [
+    {
+      "id": 1,
+      "name": "edition-note-string-field",
+      "prompt": "I want to add a new `edition_note` field to files in this Shisho codebase. It's a nullable string for things like 'First Edition', 'Annotated Edition', 'Director's Cut'. It should be editable in the file edit dialog, displayable on the book detail and file detail views, settable by plugins (both file parsers and metadata enrichers), persisted in sidecars, and survive a download round-trip for EPUB and CBZ. Please give me a comprehensive plan of every file I'd need to touch and in what order. Don't actually write the implementation — just the plan. Include any non-obvious touchpoints.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "word-count-int-field",
+      "prompt": "Help me add a `word_count` integer field to files for ebook word counts. EPUB and PDF parsers should extract it (PDF can estimate from text extraction). It should be displayed on the file details page and queryable via the API. Plugins should be able to set it via the metadata enricher. Walk me through every file I'd need to update across the backend, frontend, plugin system, and docs.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "remove-chapter-source-field",
+      "prompt": "I want to remove the `chapter_source` field from the files table. It's no longer used. Help me find every place that references it so I can safely delete it without leaving dangling references or broken queries. Don't make the changes yet — just enumerate every file I'd need to touch and what change each one needs.",
+      "files": []
+    }
+  ]
+}
