@@ -358,32 +358,11 @@ for _, f := range book.Files {
 }
 ```
 
-## Metadata Sync Checklist
+## Adding or Modifying Metadata Fields
 
-When adding or modifying book/file metadata fields, ensure these files are updated:
+**Invoke the `metadata-field` skill when adding or significantly modifying a metadata field on books or files.** The skill walks you through discovery (finding existing touchpoints via grep, not a static list), planning, implementation order, and — most importantly — a verification phase that catches parallel code paths that would otherwise be missed.
 
-1. **Sidecar types** (`pkg/sidecar/types.go`) - Add field to `BookSidecar` or `FileSidecar` struct
-2. **Sidecar conversion** (`pkg/sidecar/sidecar.go`) - Update `BookSidecarFromModel()` or `FileSidecarFromModel()`
-3. **Download fingerprint** (`pkg/downloadcache/fingerprint.go`) - Add field to `Fingerprint` struct and `ComputeFingerprint()` so cache invalidates when metadata changes
-4. **Download filename** (`pkg/downloadcache/filename.go`) - If the field affects display names (like `file.Name`), update `FormatDownloadFilename()` and `FormatKepubDownloadFilename()` to use it
-5. **File parsers** - Update to extract the new field:
-   - EPUB: `pkg/epub/opf.go`
-   - CBZ: `pkg/cbz/cbz.go`
-   - M4B: `pkg/mp4/metadata.go`
-   - PDF: `pkg/pdf/pdf.go`
-6. **File generators** - Update to write the field back:
-   - EPUB: `pkg/filegen/epub.go`
-   - CBZ: `pkg/filegen/cbz.go`
-   - M4B: `pkg/filegen/m4b.go`
-   - PDF: `pkg/filegen/pdf.go`
-   - KePub: `pkg/kepub/cbz.go` (for CBZ-to-KePub conversion)
-7. **Scanner** (`pkg/worker/scan.go`) - Handle the new field during scanning
-8. **ParsedMetadata** (`pkg/mediafile/mediafile.go`) - Add field if it's parsed from files
-9. **API relations** (`pkg/books/service.go`) - If adding a relation to File (like Publisher, Imprint), add `.Relation("Files.NewRelation")` to all book query methods: `RetrieveBook`, `RetrieveBookByFilePath`, and `listBooksWithTotal`
-10. **File retrieval** (`pkg/books/service.go`) - If the new field is a File relation used by sidecar or fingerprint, add it to `RetrieveFileWithRelations()` and consider adding to `RetrieveFile()` if lightweight
-11. **File reorganization** (`pkg/books/handlers.go`) - If the field affects file organization (like `Name`), trigger reorganization when the field changes via the edit endpoint
-12. **Organization options** (`pkg/books/service.go`, `pkg/books/handlers.go`) - If the field should be used for file organization, update all places that build `fileutils.OrganizedNameOptions` to use the new file-level field
-13. **UI display** (`app/components/pages/BookDetail.tsx`) - Display the new field in the book detail view
+Do not rely on a static checklist here: the codebase has accumulated multiple parallel code paths (three separate JS→Go parsers in the plugin bridge, several merge/filter/persist functions in the scanner, per-format file generators, OPDS, Kobo sync, frontend edit/display/filter/identify-review paths) and a hand-maintained list drifts out of date. The skill uses grep against an existing similar field as the authoritative source of truth.
 
 ## File-Level vs Book-Level Fields
 
