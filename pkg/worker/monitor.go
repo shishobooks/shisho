@@ -20,9 +20,9 @@ type pendingEvent struct {
 	Op        fsnotify.Op
 	LibraryID int
 	// IsDirectory marks Remove/Rename events whose path is not a scannable file —
-	// typically a book folder that was removed or renamed. processEvent fans this
-	// out into per-file cleanup for every DB file whose filepath sits under the
-	// directory.
+	// typically a book folder that was removed or renamed. processPendingEvents
+	// dispatches these to processDirectoryEvent, which cascades cleanup to every
+	// DB file whose filepath sits under the directory.
 	IsDirectory bool
 }
 
@@ -373,9 +373,15 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 
 	// Directory-level Remove/Rename: fsnotify emits the event against the
 	// directory path (not the files inside), so the path is not scannable.
-	// Queue a synthetic directory event so processEvent can cascade cleanup
-	// to every DB file whose filepath sits under this directory.
+	// Queue a synthetic directory event so processDirectoryEvent can cascade
+	// cleanup to every DB file whose filepath sits under this directory.
+	// Skip shisho-owned files (covers, sidecars) so cover/sidecar removals
+	// don't trigger pointless prefix queries — they're already suppressed
+	// for creates/writes by isShishoSpecialFile below.
 	if (event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) && !m.isScannable(path) {
+		if isShishoSpecialFile(filepath.Base(path)) {
+			return
+		}
 		libID := m.findLibraryID(path)
 		if libID == 0 {
 			return
@@ -433,7 +439,10 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 	existing, ok := m.pending[path]
 	if ok {
 		// Merge operations so we don't lose information about what happened.
+		// Clear IsDirectory — this event is for a scannable file at this path,
+		// so any prior same-path directory event is superseded (latest wins).
 		existing.Op |= event.Op
+		existing.IsDirectory = false
 		m.pending[path] = existing
 	} else {
 		m.pending[path] = pendingEvent{
@@ -581,7 +590,7 @@ func (m *Monitor) processDirectoryEvent(ctx context.Context, path string, event 
 		return nil
 	}
 
-	log.Info("directory removed, cleaning up files", logger.Data{"count": len(files)})
+	log.Info("directory event, cleaning up files", logger.Data{"count": len(files)})
 
 	results := make([]*ScanResult, 0, len(files))
 	for _, file := range files {

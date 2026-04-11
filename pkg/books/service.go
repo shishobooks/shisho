@@ -610,9 +610,12 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 	}
 	if opts.FilepathPrefix != nil {
 		// Match the directory itself (should not happen for files) or any descendant.
-		// Escape LIKE wildcards so paths containing % or _ don't over-match.
-		escaped := escapeLikePattern(*opts.FilepathPrefix)
-		q = q.Where("f.filepath = ? OR f.filepath LIKE ? ESCAPE '\\'", *opts.FilepathPrefix, escaped+string(os.PathSeparator)+"%")
+		// Escape LIKE wildcards so paths containing % or _ don't over-match. The
+		// path separator is escaped too — on Windows it's `\`, which is our
+		// ESCAPE char, so an unescaped separator would turn the trailing % into
+		// a literal and silently match nothing.
+		escaped := escapeLikePattern(*opts.FilepathPrefix) + escapeLikePattern(string(os.PathSeparator)) + "%"
+		q = q.Where("f.filepath = ? OR f.filepath LIKE ? ESCAPE '\\'", *opts.FilepathPrefix, escaped)
 	}
 
 	if opts.includeTotal {

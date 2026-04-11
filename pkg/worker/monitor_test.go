@@ -573,6 +573,24 @@ func TestMonitor_HandleEvent_IgnoresDirectoryRemoveOutsideLibrary(t *testing.T) 
 	assert.Empty(t, m.pending)
 }
 
+func TestMonitor_HandleEvent_SkipsShishoSpecialFileRemove(t *testing.T) {
+	t.Parallel()
+	m := newTestMonitor(t)
+
+	// Shisho-owned files must NOT fall through to the directory-event branch
+	// on Remove/Rename — they're not directories, and issuing a DB prefix
+	// query for every cover/sidecar removal is wasted work.
+	m.handleEvent(nil, fsnotify.Event{
+		Name: "/library/books/book.epub.cover.jpg",
+		Op:   fsnotify.Remove,
+	})
+	m.handleEvent(nil, fsnotify.Event{
+		Name: "/library/books/book.epub.metadata.json",
+		Op:   fsnotify.Rename,
+	})
+	assert.Empty(t, m.pending)
+}
+
 func TestMonitor_ProcessEvent_DirectoryRemoveDeletesBookAndFile(t *testing.T) {
 	t.Parallel()
 
