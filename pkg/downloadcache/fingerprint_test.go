@@ -175,6 +175,9 @@ func TestComputeFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, fp.Cover)
+		// Path is still resolved via ResolveCoverPath even when stat fails —
+		// locks in the join contract.
+		assert.Equal(t, filepath.Join("/nonexistent", "missing.jpg"), fp.Cover.Path)
 		assert.True(t, fp.Cover.ModTime.IsZero())
 	})
 

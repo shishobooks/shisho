@@ -1490,22 +1490,20 @@ func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library 
 
 // deleteFileFromDisk deletes a file and its associated cover and sidecar from disk.
 func deleteFileFromDisk(file *models.File) error {
-	// Resolve the cover path before deleting the main file, because
-	// ResolveCoverDir stats file.Filepath to decide between filepath.Dir
-	// (the root-level case, where file.Filepath stats as a file) and using
-	// it as-is. Once the file is gone, that stat would fail.
-	var coverPath string
-	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath = fileutils.ResolveCoverPath(file.Filepath, *file.CoverImageFilename)
-	}
-
 	// Delete the main file
 	if err := os.Remove(file.Filepath); err != nil && !os.IsNotExist(err) {
 		return errors.Wrap(err, "failed to delete main file")
 	}
 
-	// Delete cover image if exists (best effort)
-	if coverPath != "" {
+	// Delete cover image if exists (best effort). Use a pure-string join
+	// rather than fileutils.ResolveCoverPath here: that helper stats the
+	// first argument, and file.Filepath may have been removed manually
+	// by the user before this function runs (or just now, above). For
+	// both root-level and directory-backed books, the cover lives
+	// alongside the file, so filepath.Dir(file.Filepath) is always the
+	// cover dir regardless of whether the main file exists on disk.
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 		_ = os.Remove(coverPath)
 	}
 

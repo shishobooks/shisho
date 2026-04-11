@@ -3328,12 +3328,10 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		}
 	}
 
-	// Determine cover directory. recoverMissingCover is called from
-	// scanFileByID only after confirming file.Filepath exists on disk, so
-	// ResolveCoverDir will stat it, see it's a file, and fall back to
-	// filepath.Dir — the correct cover dir for both root-level and
-	// directory-backed books.
-	coverDir := fileutils.ResolveCoverDir(file.Filepath)
+	// Determine cover directory. For both root-level and directory-backed
+	// books, the cover lives in the same directory as the file, so
+	// filepath.Dir(file.Filepath) is always correct — no stat needed.
+	coverDir := filepath.Dir(file.Filepath)
 
 	// Check if cover file exists on disk
 	filename := filepath.Base(file.Filepath)
