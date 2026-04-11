@@ -1326,17 +1326,7 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Determine cover directory
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
+	coverDir := fileutils.ResolveCoverDir(book.Filepath)
 
 	// Generate the cover filename: {filename}.cover.{ext}
 	filename := filepath.Base(file.Filepath)

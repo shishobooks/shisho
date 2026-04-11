@@ -886,6 +886,32 @@ func TestMoveFileWithAssociatedFiles(t *testing.T) {
 	}
 }
 
+func TestResolveCoverDir(t *testing.T) {
+	t.Parallel()
+
+	t.Run("directory-backed book returns book dir unchanged", func(t *testing.T) {
+		t.Parallel()
+		bookDir := t.TempDir()
+		assert.Equal(t, bookDir, ResolveCoverDir(bookDir))
+	})
+
+	t.Run("root-level book returns parent of file", func(t *testing.T) {
+		t.Parallel()
+		libraryDir := t.TempDir()
+		bookFilepath := filepath.Join(libraryDir, "book.epub")
+		if err := os.WriteFile(bookFilepath, []byte("epub"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		assert.Equal(t, libraryDir, ResolveCoverDir(bookFilepath))
+	})
+
+	t.Run("nonexistent path is treated as a directory path", func(t *testing.T) {
+		t.Parallel()
+		bookDir := filepath.Join(t.TempDir(), "missing")
+		assert.Equal(t, bookDir, ResolveCoverDir(bookDir))
+	})
+}
+
 func TestResolveCoverPath(t *testing.T) {
 	t.Parallel()
 

@@ -417,22 +417,27 @@ func getBaseNameWithoutExt(path string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
+// ResolveCoverDir resolves the directory that contains a book's cover images.
+// For directory-backed books (the common case), this is the book's filepath
+// itself. For root-level books (where book.Filepath is the file, not a
+// directory), it's the file's parent. If the path cannot be stat'd (e.g.,
+// because it was moved or deleted), falls back to treating it as a directory.
+func ResolveCoverDir(bookFilepath string) string {
+	if info, err := os.Stat(bookFilepath); err == nil && !info.IsDir() {
+		return filepath.Dir(bookFilepath)
+	}
+	return bookFilepath
+}
+
 // ResolveCoverPath resolves the full path to a file's cover image on disk.
 // CoverImageFilename in the database stores only the filename, so the full
 // path must be constructed at runtime by joining it with the book's cover
-// directory. For directory-backed books (the common case), the cover dir is
-// the book's filepath itself; for root-level books (where book.Filepath is
-// the file, not a directory), the cover dir is the file's parent.
-// Returns an empty string if coverFilename is empty.
+// directory. Returns an empty string if coverFilename is empty.
 func ResolveCoverPath(bookFilepath, coverFilename string) string {
 	if coverFilename == "" {
 		return ""
 	}
-	coverDir := bookFilepath
-	if info, err := os.Stat(bookFilepath); err == nil && !info.IsDir() {
-		coverDir = filepath.Dir(bookFilepath)
-	}
-	return filepath.Join(coverDir, coverFilename)
+	return filepath.Join(ResolveCoverDir(bookFilepath), coverFilename)
 }
 
 // ComputeNewCoverFilename computes the new cover filename after a file has been renamed.
