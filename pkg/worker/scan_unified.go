@@ -1930,8 +1930,10 @@ func (w *Worker) scanFileCore(
 			switch file.FileType {
 			case models.FileTypePDF:
 				coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
-			default:
+			case models.FileTypeCBZ:
 				coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
+			default:
+				err = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
 			}
 			if err != nil {
 				logWarn("failed to extract cover page from sidecar", logger.Data{

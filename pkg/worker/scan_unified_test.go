@@ -4199,6 +4199,9 @@ func TestScanFileCore_PDFCoverPageRestoredFromSidecar(t *testing.T) {
 	require.NotNil(t, updatedFile.CoverSource)
 	assert.Equal(t, models.DataSourceSidecar, *updatedFile.CoverSource)
 
+	require.NotNil(t, updatedFile.CoverMimeType)
+	assert.Equal(t, "image/jpeg", *updatedFile.CoverMimeType)
+
 	// The cover image should have been extracted and saved to disk.
 	require.NotNil(t, updatedFile.CoverImageFilename)
 	coverPath := filepath.Join(bookDir, *updatedFile.CoverImageFilename)
