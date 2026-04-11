@@ -10,7 +10,6 @@ import (
 	_ "image/png" // Register PNG decoder
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 	"golang.org/x/image/draw"
 )
@@ -245,15 +245,7 @@ func (h *handler) handleCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Determine cover directory (same logic as eReader handler)
-	var coverDir string
-	if info, statErr := os.Stat(book.Filepath); statErr == nil && !info.IsDir() {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	coverPath := filepath.Join(coverDir, *file.CoverImageFilename)
+	coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
 
 	// Parse requested dimensions
 	widthStr := c.Param("w")

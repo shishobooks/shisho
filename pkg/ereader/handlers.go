@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -720,21 +721,7 @@ func (h *handler) Cover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	// Determine if this is a root-level book by checking if book.Filepath is a file
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-
-	// Determine the directory where covers are located
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	coverPath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
+	coverPath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
 	return errors.WithStack(c.File(coverPath))
 }
 
