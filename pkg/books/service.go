@@ -1490,18 +1490,20 @@ func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library 
 
 // deleteFileFromDisk deletes a file and its associated cover and sidecar from disk.
 func deleteFileFromDisk(file *models.File) error {
+	// Resolve the cover path before deleting the main file, because
+	// ResolveCoverPath stats file.Filepath to locate the cover directory.
+	var coverPath string
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath = fileutils.ResolveCoverPath(file.Filepath, *file.CoverImageFilename)
+	}
+
 	// Delete the main file
 	if err := os.Remove(file.Filepath); err != nil && !os.IsNotExist(err) {
 		return errors.Wrap(err, "failed to delete main file")
 	}
 
 	// Delete cover image if exists (best effort)
-	// Cover filename may be stored as relative or absolute path
-	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := *file.CoverImageFilename
-		if !filepath.IsAbs(coverPath) {
-			coverPath = filepath.Join(filepath.Dir(file.Filepath), coverPath)
-		}
+	if coverPath != "" {
 		_ = os.Remove(coverPath)
 	}
 
