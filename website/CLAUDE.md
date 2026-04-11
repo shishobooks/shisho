@@ -8,7 +8,7 @@ Shisho's docs site is a Docusaurus 3 app in `website/` deployed to GitHub Pages.
 
 | Item | Value |
 |------|-------|
-| Framework | Docusaurus 3.9.2 |
+| Framework | Docusaurus 3 |
 | Location | `website/` |
 | Dev server | `mise docs` |
 | Build | `cd website && pnpm build` |
@@ -104,8 +104,8 @@ The docs site is integrated into the main project's tooling:
 GitHub Actions workflow (`.github/workflows/docs.yml`):
 - **Triggers**: Push to `master` when `website/**` changes, or manual `workflow_dispatch`
 - **Concurrency**: `docs-pages` group, cancels in-progress deploys
-- **Build**: Node.js 24, `pnpm install --frozen-lockfile`, `pnpm build`
-- **Deploy**: GitHub Pages via `actions/deploy-pages@v4`
+- **Build**: `pnpm install --frozen-lockfile`, `pnpm build`
+- **Deploy**: GitHub Pages via `actions/deploy-pages`
 
 The `baseUrl` is auto-detected: uses `DOCS_BASE_URL` env var if set, `/${projectName}/` in GitHub Actions, or `/` locally.
 
