@@ -75,7 +75,6 @@ Each book has an optional `PrimaryFileID` (`*int`) that designates which file is
 ### Cover Image System
 
 - Individual file covers: `{filename}.cover.{ext}`
-- Book model has `ResolveCoverImage()` method that finds covers dynamically
 - API endpoints: `/books/{id}/cover` and `/files/{id}/cover`
 
 **CRITICAL - CoverImageFilename stores FILENAME ONLY:**

@@ -493,7 +493,10 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 	err = os.WriteFile(mainFilePath, []byte("test content"), 0644)
 	require.NoError(t, err)
 
-	coverPath := filepath.Join(bookDir, "test.cover.jpg")
+	// CoverImageFilename stores just the filename; the full path is
+	// resolved at runtime relative to the book directory.
+	coverFilename := "test.cover.jpg"
+	coverPath := filepath.Join(bookDir, coverFilename)
 	err = os.WriteFile(coverPath, []byte("cover content"), 0644)
 	require.NoError(t, err)
 
@@ -509,7 +512,7 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 		FileRole:           models.FileRoleMain,
 		Filepath:           mainFilePath,
 		FilesizeBytes:      12,
-		CoverImageFilename: &coverPath,
+		CoverImageFilename: &coverFilename,
 	}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
