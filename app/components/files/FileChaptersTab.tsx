@@ -51,14 +51,50 @@ interface FileChaptersTabProps {
 }
 
 /**
+ * Chapter shape used inside edit mode. The `_editKey` is a stable client-side
+ * identifier assigned when a chapter enters edit state (either by loading from
+ * the server or by being added via an Add Chapter button). Using `_editKey` as
+ * the React `key` prevents index-based reconciliation bugs where editing one
+ * chapter could silently mutate a sibling after a reorder.
+ *
+ * `_editKey` is stripped before submitting to the server via `stripEditKeys`.
+ */
+interface EditedChapter extends ChapterInput {
+  _editKey: string;
+  children: EditedChapter[];
+}
+
+// Module-level counter for generating unique edit keys. Keys only need to be
+// unique within a single edit session, so a monotonic counter is sufficient.
+let editKeyCounter = 0;
+const nextEditKey = () => `ek-${++editKeyCounter}`;
+
+const toEditedChapters = (chapters: ChapterInput[]): EditedChapter[] =>
+  chapters.map((c) => ({
+    ...c,
+    _editKey: nextEditKey(),
+    children: toEditedChapters(c.children ?? []),
+  }));
+
+const stripEditKeys = (chapters: EditedChapter[]): ChapterInput[] =>
+  chapters.map((chapter) => ({
+    title: chapter.title,
+    start_page: chapter.start_page,
+    start_timestamp_ms: chapter.start_timestamp_ms,
+    href: chapter.href,
+    children: stripEditKeys(chapter.children),
+  }));
+
+/**
  * Creates a new chapter with appropriate defaults based on file type.
  * - CBZ/PDF: start_page defaults to 0
  * - M4B: start_timestamp_ms defaults to 0
  */
-const createNewChapter = (fileType: string): ChapterInput => {
-  const chapter: ChapterInput = {
+const createNewChapter = (fileType: string): EditedChapter => {
+  const chapter: EditedChapter = {
     title: "",
     children: [],
+    _editKey: nextEditKey(),
   };
 
   if (fileType === FileTypeCBZ || fileType === FileTypePDF) {
@@ -77,7 +113,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     const updateChaptersMutation = useUpdateFileChapters(file.id);
 
     // State for edited chapters (used in edit mode)
-    const [editedChapters, setEditedChapters] = useState<ChapterInput[]>([]);
+    const [editedChapters, setEditedChapters] = useState<EditedChapter[]>([]);
 
     // Track validation errors by chapter index (for M4B timestamp validation)
     const [validationErrors, setValidationErrors] = useState<
@@ -88,7 +124,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     const editInitializedRef = useRef(false);
 
     // Store initial chapters for change detection
-    const [initialChapters, setInitialChapters] = useState<ChapterInput[]>([]);
+    const [initialChapters, setInitialChapters] = useState<EditedChapter[]>([]);
 
     // M4B audio playback state
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -105,7 +141,9 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Initialize editedChapters when entering edit mode
     useEffect(() => {
       if (isEditing && !editInitializedRef.current && chapters.length > 0) {
-        const chaptersAsInput = chaptersToInputArray(chapters);
+        const chaptersAsInput = toEditedChapters(
+          chaptersToInputArray(chapters),
+        );
         setEditedChapters(chaptersAsInput);
         setInitialChapters(chaptersAsInput);
         editInitializedRef.current = true;
@@ -303,13 +341,16 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * Adds a new chapter at page 0 and enters edit mode.
      */
     const handleAddChapterAtPageZero = () => {
-      const newChapter: ChapterInput = {
+      const newChapter: EditedChapter = {
         title: "",
         start_page: 0,
         children: [],
+        _editKey: nextEditKey(),
       };
       // Prepend the new chapter to existing chapters
-      const existingChaptersAsInputs = chaptersToInputArray(chapters);
+      const existingChaptersAsInputs = toEditedChapters(
+        chaptersToInputArray(chapters),
+      );
       setEditedChapters([newChapter, ...existingChaptersAsInputs]);
       setInitialChapters(existingChaptersAsInputs); // Initial is the existing chapters
       editInitializedRef.current = true;
@@ -319,11 +360,14 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     /**
      * Handles saving edited chapters. Normalizes chapter order (page-based
      * sorted by start_page, M4B sorted by start_timestamp_ms) before the
-     * mutation fires so out-of-order edits can't land in the DB even when
-     * the user saves without triggering an input blur.
+     * mutation fires so out-of-order edits can't land in the DB, then strips
+     * client-only `_editKey` fields before sending to the server.
      */
     const handleSave = () => {
-      const normalized = normalizeChapterOrder(editedChapters, file.file_type);
+      const normalized = normalizeChapterOrder(
+        stripEditKeys(editedChapters),
+        file.file_type,
+      );
       updateChaptersMutation.mutate(
         { chapters: normalized },
         {
@@ -379,15 +423,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       onActionStateChange,
     ]);
 
-    /**
-     * Handles blur on page input - reorders chapters by start_page.
-     * The array position determines chapter order (API derives sort_order from array index).
-     */
-    const handleBlurReorder = () => {
-      setEditedChapters((prev) =>
-        [...prev].sort((a, b) => (a.start_page ?? 0) - (b.start_page ?? 0)),
-      );
-    };
+    // Note: chapters are intentionally NOT reordered during edit. Live
+    // sort-on-blur combined with React's stable keys caused a subtle bug
+    // where clicking a page +/- button could mutate a sibling chapter
+    // after the reorder swapped positions. Order normalization now happens
+    // only once, in `handleSave`, via `normalizeChapterOrder`.
 
     /**
      * Handles adding a new chapter for page-based files.
@@ -400,28 +440,15 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       const startPage = lastChapter ? (lastChapter.start_page ?? 0) + 1 : 0;
       const title = lastChapter ? getNextChapterTitle(lastChapter.title) : "";
 
-      const newChapter: ChapterInput = {
+      const newChapter: EditedChapter = {
         title,
         start_page: startPage,
         children: [],
+        _editKey: nextEditKey(),
       };
 
       setEditedChapters((prev) => [...prev, newChapter]);
     };
-
-    /**
-     * Handles blur on timestamp input - reorders chapters by start_timestamp_ms.
-     * The array position determines chapter order (API derives sort_order from array index).
-     * Stops any current playback since reordering invalidates the playing index.
-     */
-    const handleTimestampBlurReorder = useCallback(() => {
-      handleAudioStop();
-      setEditedChapters((prev) =>
-        [...prev].sort(
-          (a, b) => (a.start_timestamp_ms ?? 0) - (b.start_timestamp_ms ?? 0),
-        ),
-      );
-    }, [handleAudioStop]);
 
     /**
      * Handles adding a new chapter for M4B files.
@@ -436,10 +463,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         : 0;
       const title = lastChapter ? getNextChapterTitle(lastChapter.title) : "";
 
-      const newChapter: ChapterInput = {
+      const newChapter: EditedChapter = {
         title,
         start_timestamp_ms: startTimestampMs,
         children: [],
+        _editKey: nextEditKey(),
       };
 
       setEditedChapters((prev) => [...prev, newChapter]);
@@ -450,10 +478,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * For EPUB, chapters can be nested, so we need to handle the path.
      */
     const updateChapterTitle = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       index: number,
       title: string,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.map((chapter, i) => {
         if (i === index) {
           return { ...chapter, title };
@@ -466,10 +494,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * Updates a chapter's start_page at a specific index.
      */
     const updateChapterStartPage = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       index: number,
       startPage: number,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.map((chapter, i) => {
         if (i === index) {
           return { ...chapter, start_page: startPage };
@@ -482,10 +510,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * Updates a chapter's start_timestamp_ms at a specific index.
      */
     const updateChapterStartTimestamp = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       index: number,
       startTimestampMs: number,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.map((chapter, i) => {
         if (i === index) {
           return { ...chapter, start_timestamp_ms: startTimestampMs };
@@ -499,9 +527,9 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * For EPUB chapters with children, this also removes all descendants.
      */
     const deleteChapter = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       index: number,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.filter((_, i) => i !== index);
     };
 
@@ -509,11 +537,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * Updates a child chapter's title within a parent chapter.
      */
     const updateChildTitle = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       parentIndex: number,
       childIndex: number,
       title: string,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.map((chapter, i) => {
         if (i === parentIndex) {
           return {
@@ -533,10 +561,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * Deletes a child chapter from a parent chapter.
      */
     const deleteChildChapter = (
-      chapters: ChapterInput[],
+      chapters: EditedChapter[],
       parentIndex: number,
       childIndex: number,
-    ): ChapterInput[] => {
+    ): EditedChapter[] => {
       return chapters.map((chapter, i) => {
         if (i === parentIndex) {
           return {
@@ -612,21 +640,14 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
 
             {editedChapters.map((chapter, index) => (
               <ChapterRow
-                chapter={chapter as Chapter}
+                chapter={chapter as unknown as Chapter}
                 chapterIndex={isM4b ? index : undefined}
                 depth={0}
                 fileId={file.id}
                 fileType={file.file_type}
                 isEditing={true}
-                key={`edit-${index}`}
+                key={chapter._editKey}
                 maxDurationMs={isM4b ? maxDurationMs : undefined}
-                onBlur={
-                  isPageBased
-                    ? handleBlurReorder
-                    : isM4b
-                      ? handleTimestampBlurReorder
-                      : undefined
-                }
                 onDelete={() =>
                   setEditedChapters((prev) => deleteChapter(prev, index))
                 }
@@ -715,9 +736,6 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     const hasUncoveredPages =
       firstChapterStartPage != null && firstChapterStartPage > 0;
 
-    // Determine which chapters to display
-    const displayChapters = isEditing ? editedChapters : chapters;
-
     // Edit mode rendering
     if (isEditing) {
       const isEpub = file.file_type === FileTypeEPUB;
@@ -742,23 +760,16 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             <audio ref={audioRef} src={`/api/books/files/${file.id}/stream`} />
           )}
 
-          {displayChapters.map((chapter, index) => (
+          {editedChapters.map((chapter, index) => (
             <ChapterRow
-              chapter={chapter as Chapter}
+              chapter={chapter as unknown as Chapter}
               chapterIndex={isM4b ? index : undefined}
               depth={0}
               fileId={file.id}
               fileType={file.file_type}
               isEditing={true}
-              key={`edit-${index}`}
+              key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
-              onBlur={
-                isPageBased
-                  ? handleBlurReorder
-                  : isM4b
-                    ? handleTimestampBlurReorder
-                    : undefined
-              }
               onChildDelete={
                 isEpub ? createChildDeleteCallback(index) : undefined
               }
