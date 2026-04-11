@@ -748,10 +748,19 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// When downgrading from main to supplement, clear all main-file-only metadata
 		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
-			// Delete cover image file if it exists
-			if file.CoverImageFilename != nil {
-				if err := os.Remove(*file.CoverImageFilename); err != nil && !os.IsNotExist(err) {
-					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": *file.CoverImageFilename})
+			// Delete cover image file if it exists. CoverImageFilename stores just
+			// the filename; fileutils.ResolveCoverPath joins it with the book's
+			// cover directory (book dir, or its parent for root-level books).
+			if file.CoverImageFilename != nil && file.Book != nil {
+				coverPath := fileutils.ResolveCoverPath(file.Book.Filepath, *file.CoverImageFilename)
+				if coverPath != "" {
+					if err := os.Remove(coverPath); err != nil && !os.IsNotExist(err) {
+						log.Warn("failed to delete cover image on downgrade", logger.Data{
+							"error":   err.Error(),
+							"path":    coverPath,
+							"file_id": file.ID,
+						})
+					}
 				}
 			}
 
@@ -1249,26 +1258,14 @@ func (h *handler) fileCover(c echo.Context) error {
 		}
 	}
 
-	// Determine cover directory (same logic as scan worker)
-	isRootLevelBook := false
-	if info, err := os.Stat(file.Book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(file.Book.Filepath)
-	} else {
-		coverDir = file.Book.Filepath
-	}
-
-	// Cover filename is stored in CoverImageFilename, or fallback to {filename}.cover.{ext}
-	var coverPath string
+	// Cover filename is stored in CoverImageFilename, or fallback to {filename}.cover.{ext}.
+	coverFilename := ""
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath = filepath.Join(coverDir, *file.CoverImageFilename)
+		coverFilename = *file.CoverImageFilename
 	} else {
-		filename := filepath.Base(file.Filepath)
-		coverPath = filepath.Join(coverDir, filename+".cover"+file.CoverExtension())
+		coverFilename = filepath.Base(file.Filepath) + ".cover" + file.CoverExtension()
 	}
+	coverPath := fileutils.ResolveCoverPath(file.Book.Filepath, coverFilename)
 
 	return errors.WithStack(c.File(coverPath))
 }

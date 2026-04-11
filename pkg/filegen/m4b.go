@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
@@ -234,7 +235,10 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 
 // loadCover reads the cover image from the file system and sets it on the metadata.
 func (g *M4BGenerator) loadCover(book *models.Book, file *models.File, meta *mp4.Metadata) error {
-	coverPath := resolveCoverPath(book, file)
+	if file.CoverImageFilename == nil {
+		return nil
+	}
+	coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
 	if coverPath == "" {
 		return nil
 	}
