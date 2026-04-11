@@ -619,158 +619,19 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         );
       };
 
-    // Loading state
-    if (chaptersQuery.isLoading) {
-      return (
-        <div className="py-8 flex justify-center">
-          <LoadingSpinner />
-        </div>
-      );
-    }
-
-    // Error state
-    if (chaptersQuery.isError) {
-      return (
-        <div className="py-8 text-center">
-          <p className="text-destructive">Failed to load chapters</p>
-        </div>
-      );
-    }
-
-    // Empty state (or edit mode with new chapters from empty state)
-    if (chapters.length === 0) {
-      const canAddChapters =
-        file.file_type === FileTypeCBZ ||
-        file.file_type === FileTypePDF ||
-        file.file_type === FileTypeM4B;
-
-      // When editing with chapters (entered via Add Chapter button), show edit UI
-      if (isEditing && editedChapters.length > 0) {
-        const isPageBased =
-          file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
-        const isM4b = file.file_type === FileTypeM4B;
-        const maxDurationMs = file.audiobook_duration_seconds
-          ? file.audiobook_duration_seconds * 1000
-          : undefined;
-
-        return (
-          <div className="py-4">
-            {/* Hidden audio element for M4B playback */}
-            {isM4b && (
-              <audio
-                ref={audioRef}
-                src={`/api/books/files/${file.id}/stream`}
-              />
-            )}
-
-            {editedChapters.map((chapter, index) => (
-              <ChapterRow
-                chapter={chapter as unknown as Chapter}
-                chapterIndex={isM4b ? index : undefined}
-                depth={0}
-                fileId={file.id}
-                fileType={file.file_type}
-                isEditing={true}
-                key={chapter._editKey}
-                maxDurationMs={isM4b ? maxDurationMs : undefined}
-                onBlur={
-                  isPageBased
-                    ? handleBlurReorder
-                    : isM4b
-                      ? handleTimestampBlurReorder
-                      : undefined
-                }
-                onDelete={() =>
-                  setEditedChapters((prev) => deleteChapter(prev, index))
-                }
-                onPlay={isM4b ? handleChapterPlay : undefined}
-                onStartPageChange={
-                  isPageBased
-                    ? (page) =>
-                        setEditedChapters((prev) =>
-                          updateChapterStartPage(prev, index, page),
-                        )
-                    : undefined
-                }
-                onStartTimestampChange={
-                  isM4b
-                    ? (ms) =>
-                        setEditedChapters((prev) =>
-                          updateChapterStartTimestamp(prev, index, ms),
-                        )
-                    : undefined
-                }
-                onStop={isM4b ? handleAudioStop : undefined}
-                onTitleChange={(title) =>
-                  setEditedChapters((prev) =>
-                    updateChapterTitle(prev, index, title),
-                  )
-                }
-                onValidationChange={
-                  isM4b
-                    ? (_chapterId, hasError) =>
-                        handleValidationChange(index, hasError)
-                    : undefined
-                }
-                pageCount={isPageBased ? (file.page_count ?? 0) : undefined}
-                playingChapterIndex={isM4b ? playingChapterIndex : undefined}
-              />
-            ))}
-
-            {/* Add Chapter button for page-based files */}
-            {isPageBased && (
-              <Button
-                className="mt-2"
-                onClick={handleAddChapter}
-                type="button"
-                variant="outline"
-              >
-                Add Chapter
-              </Button>
-            )}
-
-            {/* Add Chapter button for M4B */}
-            {isM4b && (
-              <Button
-                className="mt-2"
-                onClick={handleAddChapterM4B}
-                type="button"
-                variant="outline"
-              >
-                Add Chapter
-              </Button>
-            )}
-          </div>
-        );
-      }
-
-      return (
-        <div className="py-8 text-center">
-          <p className="text-muted-foreground">No chapters</p>
-          {canAddChapters && (
-            <button
-              className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
-              onClick={handleAddChapterFromEmpty}
-              type="button"
-            >
-              Add Chapter
-            </button>
-          )}
-        </div>
-      );
-    }
-
-    // Check for uncovered pages (first chapter starts after page 0)
-    const isPageBased =
-      file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
-    const firstChapterStartPage =
-      isPageBased && chapters.length > 0 ? chapters[0].start_page : null;
-    const hasUncoveredPages =
-      firstChapterStartPage != null && firstChapterStartPage > 0;
-
-    // Edit mode rendering
-    if (isEditing) {
+    /**
+     * Renders the edit-mode UI: optional EPUB notice, hidden audio element for
+     * M4B, the mapped ChapterRow list, and the Add Chapter button. Shared
+     * between two call sites — the main `isEditing` branch and the empty-state
+     * "entered edit mode via Add Chapter" branch — so prop changes only need to
+     * land in one place. The EPUB notice and child callbacks are no-ops when
+     * the empty-state path invokes this (EPUB never reaches that path because
+     * `canAddChapters` excludes EPUB).
+     */
+    const renderEditedChapters = () => {
       const isEpub = file.file_type === FileTypeEPUB;
+      const isPageBased =
+        file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
       const isM4b = file.file_type === FileTypeM4B;
       const maxDurationMs = file.audiobook_duration_seconds
         ? file.audiobook_duration_seconds * 1000
@@ -877,6 +738,65 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
           )}
         </div>
       );
+    };
+
+    // Loading state
+    if (chaptersQuery.isLoading) {
+      return (
+        <div className="py-8 flex justify-center">
+          <LoadingSpinner />
+        </div>
+      );
+    }
+
+    // Error state
+    if (chaptersQuery.isError) {
+      return (
+        <div className="py-8 text-center">
+          <p className="text-destructive">Failed to load chapters</p>
+        </div>
+      );
+    }
+
+    // Empty state (or edit mode with new chapters from empty state)
+    if (chapters.length === 0) {
+      const canAddChapters =
+        file.file_type === FileTypeCBZ ||
+        file.file_type === FileTypePDF ||
+        file.file_type === FileTypeM4B;
+
+      // When editing with chapters (entered via Add Chapter button), show edit UI
+      if (isEditing && editedChapters.length > 0) {
+        return renderEditedChapters();
+      }
+
+      return (
+        <div className="py-8 text-center">
+          <p className="text-muted-foreground">No chapters</p>
+          {canAddChapters && (
+            <button
+              className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
+              onClick={handleAddChapterFromEmpty}
+              type="button"
+            >
+              Add Chapter
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // Check for uncovered pages (first chapter starts after page 0)
+    const isPageBased =
+      file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
+    const firstChapterStartPage =
+      isPageBased && chapters.length > 0 ? chapters[0].start_page : null;
+    const hasUncoveredPages =
+      firstChapterStartPage != null && firstChapterStartPage > 0;
+
+    // Edit mode rendering
+    if (isEditing) {
+      return renderEditedChapters();
     }
 
     const isM4bFile = file.file_type === FileTypeM4B;
