@@ -77,18 +77,7 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return errcodes.ValidationError("Failed to extract page from file")
 	}
 
-	// Determine cover directory (same logic as fileCover and uploadFileCover)
-	// Use file.Book which is already loaded by RetrieveFile
-	isRootLevelBook := false
-	if info, err := os.Stat(file.Book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(file.Book.Filepath)
-	} else {
-		coverDir = file.Book.Filepath
-	}
+	coverDir := fileutils.ResolveCoverDir(file.Book.Filepath)
 
 	// Generate the cover filename: {filename}.cover.{ext}
 	filename := filepath.Base(file.Filepath)
