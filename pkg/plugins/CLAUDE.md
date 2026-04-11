@@ -268,10 +268,12 @@ outputGenerator: {
 ```javascript
 shisho.sleep(1000)   // block for 1 second
 shisho.sleep(0)      // no-op
-// Throws on negative or NaN values
+// Throws on negative, NaN, Infinity, or values > 5 minutes (300000 ms)
 ```
 
 Synchronous delay backed by Go's `time.Sleep`. Goja has no `setTimeout` / Promise support, so this is the primitive plugins use for exponential backoff between retries (e.g. against rate-limited APIs).
+
+**Not interruptible by hook timeouts.** `time.Sleep` blocks in a Go syscall that the VM can't interrupt, and the existing hook `context.WithTimeout` in `hooks.go` is currently `_ = ctx // reserved for future cancellation support` — so a long sleep will outlive its deadline. The call also holds `Runtime.mu`, which serializes every other hook invocation on the same plugin. The 5-minute cap (`maxSleepMs` in `hostapi.go`) matches the longest existing hook timeout so a single sleep can't exceed any hook type's deadline by more than seconds of overhead. When real cancellation is wired up via `vm.Interrupt()`, this cap can be loosened.
 
 ### shisho.log
 
@@ -620,7 +622,9 @@ Repositories provide a `repository.json` manifest:
 3. Add manifest capability type if needed (in `manifest.go`)
 4. Add tests in `hostapi_newapi_test.go`
 5. **Update `packages/plugin-sdk/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
-6. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
+6. **Update `packages/plugin-sdk/testing/index.ts`** — `createMockShisho` returns a `ShishoHostAPI`, so any new required field must be provided (either as a working mock impl or a `notImplemented()` stub). Missing this breaks `tsc --noEmit` for every plugin author who upgrades the SDK.
+7. **Update `website/docs/plugins/development.md`** — add a section for the new API under "Host APIs" with an example and any gotchas
+8. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
 
 ### Adding a new hook type
 

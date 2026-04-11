@@ -127,6 +127,13 @@ func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 	return err
 }
 
+// maxSleepMs caps shisho.sleep at the longest hook timeout (inputConverter and
+// outputGenerator are 5 minutes; parsers and enrichers are 1 minute). Until
+// context cancellation is wired through to vm.Interrupt(), an unbounded sleep
+// would outlive the hook deadline while still holding Runtime.mu, blocking
+// every other invocation on the same plugin.
+const maxSleepMs = float64(5 * 60 * 1000)
+
 // injectSleepFunction sets up shisho.sleep(ms) as a blocking delay primitive.
 // Plugins use this to implement exponential backoff between retries, since
 // Goja has no Promise/setTimeout support.
@@ -136,8 +143,11 @@ func injectSleepFunction(vm *goja.Runtime, shishoObj *goja.Object) error {
 			panic(vm.ToValue("shisho.sleep: ms argument is required"))
 		}
 		ms := call.Argument(0).ToFloat()
-		if math.IsNaN(ms) || ms < 0 {
-			panic(vm.ToValue("shisho.sleep: ms must be a non-negative number"))
+		if math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
+			panic(vm.ToValue("shisho.sleep: ms must be a finite non-negative number"))
+		}
+		if ms > maxSleepMs {
+			panic(vm.ToValue(fmt.Sprintf("shisho.sleep: ms must be <= %.0f (5 minutes)", maxSleepMs)))
 		}
 		time.Sleep(time.Duration(ms * float64(time.Millisecond)))
 		return goja.Undefined()

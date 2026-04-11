@@ -562,8 +562,25 @@ export function createMockShisho(
     );
   };
 
+  const sleep: ShishoHostAPI["sleep"] = (ms: number): void => {
+    if (
+      typeof ms !== "number" ||
+      Number.isNaN(ms) ||
+      !Number.isFinite(ms) ||
+      ms < 0
+    ) {
+      throw new Error("shisho.sleep: ms must be a finite non-negative number");
+    }
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      // Synchronous busy-wait — matches goja's blocking semantics so plugin
+      // tests that assert backoff durations behave the same as production.
+    }
+  };
+
   return {
     dataDir: "/tmp/shisho-mock-data",
+    sleep,
     log,
     config,
     http,

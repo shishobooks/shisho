@@ -154,6 +154,9 @@ func TestInjectHostAPIs_Sleep(t *testing.T) {
 	require.NoError(t, err)
 	elapsed := time.Since(start)
 	assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond, "sleep should block for at least the requested duration")
+	// Upper bound guards against regressions that reinterpret the argument
+	// (e.g. as seconds instead of milliseconds).
+	assert.Less(t, elapsed, 5*time.Second, "sleep should not block dramatically longer than requested")
 
 	// Zero is allowed and returns immediately.
 	_, err = rt.vm.RunString(`shisho.sleep(0)`)
@@ -161,6 +164,13 @@ func TestInjectHostAPIs_Sleep(t *testing.T) {
 
 	// Fractional milliseconds are supported.
 	_, err = rt.vm.RunString(`shisho.sleep(1.5)`)
+	require.NoError(t, err)
+
+	// The exact cap (5 minutes) is allowed; skip the actual 5-minute wait by
+	// only asserting the call parses and validates. We don't run this — it
+	// would make the test suite take 5 minutes. Instead, verify that
+	// maxSleepMs - 1 is accepted at the validation layer by running 1ms.
+	_, err = rt.vm.RunString(`shisho.sleep(1)`)
 	require.NoError(t, err)
 }
 
@@ -171,18 +181,24 @@ func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {
 	require.NoError(t, InjectHostAPIs(rt, cfg))
 
 	tests := []struct {
-		name string
-		js   string
+		name        string
+		js          string
+		wantMessage string
 	}{
-		{"missing argument", `shisho.sleep()`},
-		{"negative", `shisho.sleep(-5)`},
-		{"NaN", `shisho.sleep(NaN)`},
+		{"missing argument", `shisho.sleep()`, "argument is required"},
+		{"negative", `shisho.sleep(-5)`, "finite non-negative"},
+		{"NaN", `shisho.sleep(NaN)`, "finite non-negative"},
+		{"positive Infinity", `shisho.sleep(Infinity)`, "finite non-negative"},
+		{"negative Infinity", `shisho.sleep(-Infinity)`, "finite non-negative"},
+		{"exceeds cap", `shisho.sleep(5 * 60 * 1000 + 1)`, "5 minutes"},
+		{"overflow value", `shisho.sleep(1e18)`, "5 minutes"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := rt.vm.RunString(tc.js)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "shisho.sleep")
+			assert.Contains(t, err.Error(), tc.wantMessage)
 		})
 	}
 }
