@@ -168,7 +168,16 @@ func injectSleepFunction(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) 
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
-			panic(vm.NewGoError(ctx.Err()))
+			// Call vm.Interrupt directly instead of relying on the hook
+			// runner's watcher goroutine. The watcher also races ctx.Done
+			// and would eventually fire, but there's a window where the
+			// select here unblocks first, JS resumes with the statement
+			// after shisho.sleep(...), and the function returns normally
+			// before the watcher gets scheduled. Calling Interrupt inline
+			// guarantees the very next JS instruction throws an uncatchable
+			// *goja.InterruptedError, giving callers one error type for
+			// every cancellation path.
+			rt.vm.Interrupt(ctx.Err())
 		}
 		return goja.Undefined()
 	}

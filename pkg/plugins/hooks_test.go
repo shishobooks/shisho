@@ -791,4 +791,10 @@ func TestRunFileParser_InterruptsLongSleep(t *testing.T) {
 
 	require.Error(t, err, "sleep should be interrupted by ctx, not complete normally")
 	assert.Less(t, elapsed, 1*time.Second, "shisho.sleep must honor the hook ctx and return near the deadline, not block for the full requested duration")
+
+	// After sleep unblocks on ctx.Done, the very next JS statement hits the
+	// watcher's vm.Interrupt() and throws *goja.InterruptedError — same error
+	// type as the while(true){} path, giving callers one shape to match on.
+	var ie *goja.InterruptedError
+	assert.True(t, errors.As(err, &ie), "expected *goja.InterruptedError in chain, got %T: %v", err, err)
 }
