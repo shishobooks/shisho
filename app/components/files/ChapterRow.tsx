@@ -257,21 +257,24 @@ const ChapterRow = (props: ChapterRowProps) => {
   };
 
   // Page handler: Decrement page
+  // Does NOT call props.onBlur — rapid clicking +/- must not trigger the
+  // parent's reorder, otherwise the DOM element at the user's click position
+  // can get swapped for a different chapter mid-click and the next click
+  // silently updates the wrong chapter. The parent's reorder still fires
+  // from the real input blur handler and from PagePicker selection below.
   const handleDecrementPage = () => {
     const newPage = Math.max(0, currentPage - 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
     setHasPageError(false);
     props.onStartPageChange?.(newPage);
-    props.onBlur?.();
   };
 
-  // Page handler: Increment page
+  // Page handler: Increment page (see handleDecrementPage for onBlur rationale)
   const handleIncrementPage = () => {
     const newPage = Math.min(pageCount - 1, currentPage + 1);
     setLocalPageValue(String(newPage + 1)); // Display is 1-indexed
     setHasPageError(false);
     props.onStartPageChange?.(newPage);
-    props.onBlur?.();
   };
 
   // Page handler: Page selection from picker (receives 0-indexed page)
@@ -316,23 +319,23 @@ const ChapterRow = (props: ChapterRowProps) => {
   };
 
   // M4B handler: Decrement timestamp by 1 second
+  // Does NOT call props.onBlur (see handleDecrementPage for rationale).
   const handleDecrementTimestamp = () => {
     const newMs = Math.max(0, currentTimestampMs - 1000);
     setLocalTimestampValue(formatTimestampMs(newMs));
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
-    props.onBlur?.();
   };
 
   // M4B handler: Increment timestamp by 1 second
+  // Does NOT call props.onBlur (see handleDecrementPage for rationale).
   const handleIncrementTimestamp = () => {
     const newMs = Math.min(maxDurationMs, currentTimestampMs + 1000);
     setLocalTimestampValue(formatTimestampMs(newMs));
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
-    props.onBlur?.();
   };
 
   // EPUB edit mode

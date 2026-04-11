@@ -423,11 +423,34 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       onActionStateChange,
     ]);
 
-    // Note: chapters are intentionally NOT reordered during edit. Live
-    // sort-on-blur combined with React's stable keys caused a subtle bug
-    // where clicking a page +/- button could mutate a sibling chapter
-    // after the reorder swapped positions. Order normalization now happens
-    // only once, in `handleSave`, via `normalizeChapterOrder`.
+    /**
+     * Reorders edited chapters by start_page. Fired from ChapterRow's `onBlur`
+     * only on "commit" actions — the page input's real onBlur, and picker
+     * selection. The +/- buttons intentionally do NOT trigger this, so rapid
+     * button clicks don't swap chapter positions mid-stream (which made the
+     * next click land on a different chapter — see the regression test).
+     */
+    const handleBlurReorder = useCallback(() => {
+      setEditedChapters((prev) => {
+        const sorted = [...prev].sort(
+          (a, b) => (a.start_page ?? 0) - (b.start_page ?? 0),
+        );
+        return sorted;
+      });
+    }, []);
+
+    /**
+     * Reorders edited chapters by start_timestamp_ms on M4B timestamp commit.
+     * Also stops playback since reordering invalidates playingChapterIndex.
+     */
+    const handleTimestampBlurReorder = useCallback(() => {
+      handleAudioStop();
+      setEditedChapters((prev) =>
+        [...prev].sort(
+          (a, b) => (a.start_timestamp_ms ?? 0) - (b.start_timestamp_ms ?? 0),
+        ),
+      );
+    }, [handleAudioStop]);
 
     /**
      * Handles adding a new chapter for page-based files.
@@ -648,6 +671,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                 isEditing={true}
                 key={chapter._editKey}
                 maxDurationMs={isM4b ? maxDurationMs : undefined}
+                onBlur={
+                  isPageBased
+                    ? handleBlurReorder
+                    : isM4b
+                      ? handleTimestampBlurReorder
+                      : undefined
+                }
                 onDelete={() =>
                   setEditedChapters((prev) => deleteChapter(prev, index))
                 }
@@ -770,6 +800,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               isEditing={true}
               key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
+              onBlur={
+                isPageBased
+                  ? handleBlurReorder
+                  : isM4b
+                    ? handleTimestampBlurReorder
+                    : undefined
+              }
               onChildDelete={
                 isEpub ? createChildDeleteCallback(index) : undefined
               }

@@ -707,4 +707,44 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     expect(pageInputs[0].value).toBe("8");
     expect(pageInputs[1].value).toBe("6");
   });
+
+  it("typing a new page number and blurring reorders the chapters", async () => {
+    // The companion behavior: typing a page number into an input and tabbing
+    // out is an explicit "commit" gesture, so the parent does reorder on
+    // blur. Only button clicks intentionally skip the reorder.
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <FileChaptersTab
+        file={mockPdfFile}
+        isEditing={true}
+        onEditingChange={vi.fn()}
+      />,
+    );
+
+    await screen.findByDisplayValue("Alpha");
+
+    const pageInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(pageInputs[0].value).toBe("1"); // Alpha at display 1 (0-indexed 0)
+    expect(pageInputs[1].value).toBe("6"); // Bravo at display 6 (0-indexed 5)
+
+    // Retarget Alpha to page 10 (display 10 → 0-indexed 9).
+    await user.clear(pageInputs[0]);
+    await user.type(pageInputs[0], "10");
+    await user.tab(); // Blur the input → parent sorts by start_page.
+
+    // After reorder, Bravo (page 5) should be first and Alpha (page 9)
+    // should be second. The title inputs and the page inputs both move.
+    const titleInputsAfter = screen.getAllByPlaceholderText(
+      "Chapter title",
+    ) as HTMLInputElement[];
+    expect(titleInputsAfter[0].value).toBe("Bravo");
+    expect(titleInputsAfter[1].value).toBe("Alpha");
+
+    const pageInputsAfter = screen.getAllByRole(
+      "spinbutton",
+    ) as HTMLInputElement[];
+    expect(pageInputsAfter[0].value).toBe("6");
+    expect(pageInputsAfter[1].value).toBe("10");
+  });
 });
