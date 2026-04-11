@@ -8,7 +8,7 @@ Shisho's docs site is a Docusaurus 3 app in `website/` deployed to GitHub Pages.
 
 | Item | Value |
 |------|-------|
-| Framework | Docusaurus 3.9.2 |
+| Framework | Docusaurus 3 |
 | Location | `website/` |
 | Dev server | `mise docs` |
 | Build | `cd website && pnpm build` |
