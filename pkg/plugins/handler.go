@@ -1815,7 +1815,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// Apply cover data (caller is responsible for downloading cover URLs before calling persistMetadata).
 	// Skip for files with cover_page — their covers are derived from page content (CBZ, PDF).
 	if len(md.CoverData) > 0 && targetFile != nil && targetFile.CoverPage == nil {
-		coverDir := book.Filepath
+		// Use the write-side helper so root-level files (whose book.Filepath
+		// may be a synthetic organized-folder path that does not yet exist
+		// on disk) land their cover next to the file instead of silently
+		// failing on os.WriteFile.
+		coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, targetFile.Filepath)
 		coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 
 		// Normalize the cover image
