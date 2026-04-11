@@ -132,11 +132,18 @@ func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 // context cancellation is wired through to vm.Interrupt(), an unbounded sleep
 // would outlive the hook deadline while still holding Runtime.mu, blocking
 // every other invocation on the same plugin.
+//
+// Must stay in sync with MAX_SLEEP_MS in packages/plugin-sdk/testing/index.ts.
+// If this changes to something other than 5 minutes, update the "5 minutes"
+// text in errSleepExceedsCap, this comment, and the plugin docs.
 const maxSleepMs = float64(5 * 60 * 1000)
 
 var (
-	errSleepNotFinite  = errors.New("shisho.sleep: ms must be a finite non-negative number")
-	errSleepExceedsCap = errors.New("shisho.sleep: ms must be <= 300000 (5 minutes)")
+	errSleepNotFinite = errors.New("shisho.sleep: ms must be a finite non-negative number")
+	// Built via fmt.Errorf once at package init so the numeric portion of the
+	// message is derived from maxSleepMs instead of duplicated. Still a static
+	// sentinel — comparable with errors.Is and allocated exactly once.
+	errSleepExceedsCap = fmt.Errorf("shisho.sleep: ms must be <= %d (5 minutes)", int(maxSleepMs)) //nolint:err113 // see comment above
 )
 
 // validateSleepMs enforces the rules for shisho.sleep's ms argument.

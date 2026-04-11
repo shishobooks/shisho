@@ -27,8 +27,9 @@ export interface MockFetchResponse {
 
 /**
  * Maximum value accepted by `shisho.sleep()` in production (5 minutes, in ms).
- * Mirrors `maxSleepMs` in `pkg/plugins/hostapi.go`. Plugin tests can reference
- * this constant instead of hardcoding `300000` when asserting the cap.
+ * Mirrors `maxSleepMs` in `pkg/plugins/hostapi.go` — must be kept in sync.
+ * Plugin tests can reference this constant instead of hardcoding `300000`
+ * when asserting the cap.
  */
 export const MAX_SLEEP_MS = 5 * 60 * 1000;
 
