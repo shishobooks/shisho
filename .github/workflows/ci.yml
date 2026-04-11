@@ -38,6 +38,11 @@ jobs:
       - run: mise tygo
       - run: mise lint:js
 
+  # Runs on every PR with no path filter. The Docusaurus build can break
+  # from dependency bumps that only touch the root pnpm-lock.yaml (e.g. a
+  # dependabot bump of @docusaurus/* that misses a new required peer), so
+  # filtering on website/** would reintroduce the gap this job exists to
+  # close. Do not add a paths-ignore here.
   docs-build:
     name: Docs Build
     runs-on: ubuntu-latest
