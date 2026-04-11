@@ -19,13 +19,61 @@ var errJSPanic = errors.New("JS runtime panicked")
 // safeCallJS invokes a goja function with panic recovery. The goja runtime can
 // panic on certain JS exceptions (e.g., nil pointer in handleThrow). This wrapper
 // ensures plugin errors never crash the server.
+//
+// Note on cancellation: when the hook runner calls rt.vm.Interrupt() (see
+// invokeHook), goja surfaces a *goja.InterruptedError as a normal return
+// value from fn — it does not panic. That typed error flows through unwrapped
+// so callers can detect it with errors.As. The recover() here is only for
+// truly-unexpected runtime panics, which are still wrapped as errJSPanic.
 func safeCallJS(fn goja.Callable, this goja.Value, args ...goja.Value) (result goja.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			// Belt-and-braces: in case goja ever panics with an
+			// *InterruptedError instead of returning it, surface the typed
+			// error so the caller can still distinguish cancellation from a
+			// real JS panic.
+			if ie, ok := r.(*goja.InterruptedError); ok {
+				err = ie
+				return
+			}
 			err = errors.Wrapf(errJSPanic, "%v", r)
 		}
 	}()
 	return fn(this, args...)
+}
+
+// invokeHook runs fn while watching ctx for cancellation. If ctx becomes Done
+// before fn returns, the goja VM is interrupted, causing any in-flight JS to
+// throw *goja.InterruptedError at the next safepoint. The hook ctx is also
+// stored on the runtime so blocking host APIs (sleep, http, ffmpeg, shell)
+// can thread cancellation into their native Go calls — vm.Interrupt only
+// fires between JS statements, not inside time.Sleep / http.Client.Do / etc.
+//
+// Callers must already hold rt.mu (the exclusive hook lock). invokeHook
+// guarantees rt.vm.ClearInterrupt() runs before it returns, so the next hook
+// invocation on the same runtime starts with a clean interrupt flag even if
+// this one was cancelled.
+func invokeHook(ctx context.Context, rt *Runtime, fn func()) {
+	rt.hookCtx = ctx
+	done := make(chan struct{})
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-ctx.Done():
+			rt.vm.Interrupt(ctx.Err())
+		case <-done:
+		}
+	}()
+	defer func() {
+		close(done)
+		// Wait for the watcher so a racing Interrupt() cannot land after we
+		// ClearInterrupt() and poison the next hook on this runtime.
+		<-watcherDone
+		rt.vm.ClearInterrupt()
+		rt.hookCtx = nil
+	}()
+	fn()
 }
 
 // ConvertResult is the result of an input converter hook.
@@ -42,7 +90,6 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	_ = ctx // reserved for future cancellation support
 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -72,10 +119,14 @@ func (m *Manager) RunInputConverter(ctx context.Context, rt *Runtime, sourcePath
 	contextObj.Set("sourcePath", sourcePath) //nolint:errcheck
 	contextObj.Set("targetDir", targetDir)   //nolint:errcheck
 
-	// Call the hook
-	result, err := safeCallJS(convertFn, goja.Undefined(), rt.vm.ToValue(contextObj))
-	if err != nil {
-		return nil, errors.Wrap(err, "inputConverter.convert failed")
+	// Call the hook under a watcher that forwards ctx cancellation into the VM.
+	var result goja.Value
+	var callErr error
+	invokeHook(ctx, rt, func() {
+		result, callErr = safeCallJS(convertFn, goja.Undefined(), rt.vm.ToValue(contextObj))
+	})
+	if callErr != nil {
+		return nil, errors.Wrap(callErr, "inputConverter.convert failed")
 	}
 
 	// Parse the result
@@ -90,7 +141,6 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	_ = ctx // reserved for future cancellation support
 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -120,10 +170,14 @@ func (m *Manager) RunFileParser(ctx context.Context, rt *Runtime, filePath, file
 	contextObj.Set("filePath", filePath) //nolint:errcheck
 	contextObj.Set("fileType", fileType) //nolint:errcheck
 
-	// Call the hook
-	result, err := safeCallJS(parseFn, goja.Undefined(), rt.vm.ToValue(contextObj))
-	if err != nil {
-		return nil, errors.Wrap(err, "fileParser.parse failed")
+	// Call the hook under a watcher that forwards ctx cancellation into the VM.
+	var result goja.Value
+	var callErr error
+	invokeHook(ctx, rt, func() {
+		result, callErr = safeCallJS(parseFn, goja.Undefined(), rt.vm.ToValue(contextObj))
+	})
+	if callErr != nil {
+		return nil, errors.Wrap(callErr, "fileParser.parse failed")
 	}
 
 	// Parse the result
@@ -154,7 +208,6 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	_ = ctx // reserved for future cancellation support
 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -179,10 +232,14 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 		return nil, errors.New("metadataEnricher.search is not a function")
 	}
 
-	// Call the hook
-	result, err := safeCallJS(searchFn, goja.Undefined(), rt.vm.ToValue(searchCtx))
-	if err != nil {
-		return nil, errors.Wrap(err, "metadataEnricher.search failed")
+	// Call the hook under a watcher that forwards ctx cancellation into the VM.
+	var result goja.Value
+	var callErr error
+	invokeHook(ctx, rt, func() {
+		result, callErr = safeCallJS(searchFn, goja.Undefined(), rt.vm.ToValue(searchCtx))
+	})
+	if callErr != nil {
+		return nil, errors.Wrap(callErr, "metadataEnricher.search failed")
 	}
 
 	// Parse the result
@@ -197,7 +254,6 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	_ = ctx // reserved for future cancellation support
 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -229,10 +285,13 @@ func (m *Manager) RunOutputGenerator(ctx context.Context, rt *Runtime, sourcePat
 	contextObj.Set("book", bookCtx)          //nolint:errcheck
 	contextObj.Set("file", fileCtx)          //nolint:errcheck
 
-	// Call the hook
-	_, err := safeCallJS(generateFn, goja.Undefined(), rt.vm.ToValue(contextObj))
-	if err != nil {
-		return errors.Wrap(err, "outputGenerator.generate failed")
+	// Call the hook under a watcher that forwards ctx cancellation into the VM.
+	var callErr error
+	invokeHook(ctx, rt, func() {
+		_, callErr = safeCallJS(generateFn, goja.Undefined(), rt.vm.ToValue(contextObj))
+	})
+	if callErr != nil {
+		return errors.Wrap(callErr, "outputGenerator.generate failed")
 	}
 
 	return nil

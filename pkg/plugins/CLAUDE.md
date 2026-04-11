@@ -268,12 +268,10 @@ outputGenerator: {
 ```javascript
 shisho.sleep(1000)   // block for 1 second
 shisho.sleep(0)      // no-op
-// Throws on negative, NaN, Infinity, or values > 5 minutes (300000 ms)
+// Throws on negative, NaN, or Infinity
 ```
 
-Synchronous delay backed by Go's `time.Sleep`. Goja has no `setTimeout` / Promise support, so this is the primitive plugins use for exponential backoff between retries (e.g. against rate-limited APIs).
-
-**Not interruptible by hook timeouts.** `time.Sleep` blocks in a Go syscall that the VM can't interrupt, and the existing hook `context.WithTimeout` in `hooks.go` is currently `_ = ctx // reserved for future cancellation support` — so a long sleep will outlive its deadline. The call also holds `Runtime.mu`, which serializes every other hook invocation on the same plugin. The 5-minute cap (`maxSleepMs` in `hostapi.go`) matches the longest existing hook timeout so a single sleep can't exceed any hook type's deadline by more than seconds of overhead. When real cancellation is wired up via `vm.Interrupt()`, this cap can be loosened.
+Synchronous delay used for exponential backoff between retries against rate-limited APIs (Goja has no `setTimeout` / Promise support). The sleep selects on both a timer and the current hook's `context.Context` (stashed on `Runtime.hookCtx` by `invokeHook`), so when the hook deadline fires the call unblocks immediately and the plugin throws — it does not hold `Runtime.mu` past the hook's timeout. `vm.Interrupt()` alone cannot cancel a native wait, which is why the ctx must also be threaded in.
 
 ### shisho.log
 

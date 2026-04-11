@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,6 +46,13 @@ type Runtime struct {
 	// fsCtx is the filesystem context for the current hook invocation.
 	// Set by hook execution code before invoking hooks, cleared after.
 	fsCtx *FSContext
+
+	// hookCtx is the Go context for the current hook invocation. Blocking
+	// host APIs (sleep, http, ffmpeg, shell) read this to thread cancellation
+	// into their native calls — goja's vm.Interrupt only fires between JS
+	// statements, not inside time.Sleep / http.Client.Do / exec.Cmd.Run.
+	// Set by invokeHook before calling JS, cleared after.
+	hookCtx context.Context //nolint:containedctx // see comment above
 
 	// loadWarning holds a non-fatal warning from plugin load (e.g., missing fields declaration).
 	// The Manager can check this after successful load and store it in Plugin.LoadError.

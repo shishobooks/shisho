@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dop251/goja"
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -658,4 +660,141 @@ func TestRunFingerprint_NoHook(t *testing.T) {
 	_, err := mgr.RunFingerprint(rt, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have an outputGenerator hook")
+}
+
+// installCancelTestPlugin writes a fileParser plugin whose parse() runs the
+// given JS body. It installs and loads the plugin and returns its runtime.
+func installCancelTestPlugin(t *testing.T, pluginID, parseBody string) (*Manager, *Runtime) {
+	t.Helper()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	destDir := filepath.Join(pluginDir, "test", pluginID)
+	require.NoError(t, os.MkdirAll(destDir, 0755))
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "` + pluginID + `",
+  "name": "Cancel Test",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Cancel test parser",
+      "types": ["bin"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(context) { ` + parseBody + ` }
+    }
+  };
+})();`
+
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644))
+
+	manager := NewManager(service, pluginDir, "")
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          pluginID,
+		Name:        "Cancel Test",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	require.NoError(t, service.InstallPlugin(context.Background(), plugin))
+	require.NoError(t, manager.LoadPlugin(context.Background(), "test", pluginID))
+
+	rt := manager.GetRuntime("test", pluginID)
+	require.NotNil(t, rt)
+	return manager, rt
+}
+
+// runWithDeadline runs fn and enforces that it returns within budget; otherwise
+// it fails the test instead of deadlocking the whole suite.
+func runWithDeadline(t *testing.T, budget time.Duration, fn func() error) error {
+	t.Helper()
+	ch := make(chan error, 1)
+	go func() { ch <- fn() }()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(budget):
+		t.Fatalf("hook did not return within %v — cancellation is not wired", budget)
+		return nil
+	}
+}
+
+// TestRunFileParser_InterruptsInfiniteLoop proves the hook runner's ctx
+// deadline actually fires: a plugin running `while(true){}` is killed by
+// vm.Interrupt() when the ctx expires, the error unwraps to
+// *goja.InterruptedError, and Runtime.mu is released so a follow-up
+// invocation isn't blocked.
+func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
+	t.Parallel()
+
+	mgr, rt := installCancelTestPlugin(t, "loop-parser", "while (true) {}")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := runWithDeadline(t, 5*time.Second, func() error {
+		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
+		return e
+	})
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Less(t, elapsed, 3*time.Second, "hook runner should return soon after ctx deadline fires")
+
+	var ie *goja.InterruptedError
+	assert.True(t, errors.As(err, &ie), "expected *goja.InterruptedError in chain, got %T: %v", err, err)
+
+	// A second invocation on the same runtime must not be blocked by a stale
+	// interrupt flag or an un-released mu from the first run.
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel2()
+	start2 := time.Now()
+	err2 := runWithDeadline(t, 5*time.Second, func() error {
+		_, e := mgr.RunFileParser(ctx2, rt, "/some/file.bin", "bin")
+		return e
+	})
+	assert.Less(t, time.Since(start2), 3*time.Second, "second invocation should not be blocked on Runtime.mu")
+	require.Error(t, err2, "second invocation should also time out via interrupt")
+}
+
+// TestRunFileParser_InterruptsLongSleep proves that hook ctx cancellation
+// also unblocks native-side waits: shisho.sleep() must respect the hook
+// context and return promptly when the deadline fires, not sit in time.Sleep
+// for the full requested duration.
+func TestRunFileParser_InterruptsLongSleep(t *testing.T) {
+	t.Parallel()
+
+	// 3000ms is short enough that a broken implementation only wastes 3s per
+	// run but long enough that a real cancellation is unambiguous.
+	mgr, rt := installCancelTestPlugin(t, "sleep-parser", "shisho.sleep(3000); return { title: \"done\" };")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := runWithDeadline(t, 5*time.Second, func() error {
+		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
+		return e
+	})
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "sleep should be interrupted by ctx, not complete normally")
+	assert.Less(t, elapsed, 1*time.Second, "shisho.sleep must honor the hook ctx and return near the deadline, not block for the full requested duration")
+
+	// After sleep unblocks on ctx.Done, the very next JS statement hits the
+	// watcher's vm.Interrupt() and throws *goja.InterruptedError — same error
+	// type as the while(true){} path, giving callers one shape to match on.
+	var ie *goja.InterruptedError
+	assert.True(t, errors.As(err, &ie), "expected *goja.InterruptedError in chain, got %T: %v", err, err)
 }

@@ -611,11 +611,7 @@ for (var attempt = 0; attempt < 3; attempt++) {
 return resp; // retries exhausted — return the last 503
 ```
 
-`shisho.sleep(ms)` throws if `ms` is negative, `NaN`, `Infinity`, or greater than 5 minutes (300000 ms). A value of `0` returns immediately.
-
-:::warning Not interruptible by hook timeouts
-`shisho.sleep` blocks in a Go syscall that the VM cannot interrupt, so the hook's deadline (1 minute for parsers and enrichers, 5 minutes for converters and output generators) will **not** fire until the sleep returns. While sleeping, the plugin's runtime mutex is held, so other goroutines waiting to invoke a hook on the same plugin are blocked as well. Keep total backoff well under the hook's timeout — if you exceed it, the worker will eventually kill the plugin and your cumulative sleeps become dead latency for every other caller.
-:::
+`shisho.sleep(ms)` throws if `ms` is negative, `NaN`, or `Infinity`. A value of `0` returns immediately. The sleep honors the hook's deadline — if the hook's context is cancelled while the plugin is sleeping, the call unblocks immediately and the hook throws.
 
 ### URL Utilities
 

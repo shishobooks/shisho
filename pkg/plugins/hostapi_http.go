@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,12 +75,18 @@ func injectHTTPNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) 
 			panic(vm.ToValue(fmt.Sprintf("shisho.http.fetch: %v", err)))
 		}
 
-		// Build the request
+		// Build the request. Thread the hook ctx in so cancellation cancels
+		// the in-flight request at the network layer — goja's vm.Interrupt
+		// only fires between JS statements, not while blocked on a read.
 		var bodyReader io.Reader
 		if hasBody {
 			bodyReader = strings.NewReader(body)
 		}
-		req, err := http.NewRequest(method, rawURL, bodyReader) //nolint:noctx
+		reqCtx := rt.hookCtx
+		if reqCtx == nil {
+			reqCtx = context.Background()
+		}
+		req, err := http.NewRequestWithContext(reqCtx, method, rawURL, bodyReader)
 		if err != nil {
 			panic(vm.ToValue(fmt.Sprintf("shisho.http.fetch: failed to create request: %v", err)))
 		}
