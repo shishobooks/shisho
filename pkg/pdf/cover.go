@@ -131,6 +131,12 @@ func PdfiumInstance(timeout time.Duration) (pdfium.Pdfium, error) {
 
 // renderPageCover renders page 1 of a PDF to JPEG using go-pdfium WASM.
 func renderPageCover(path string) ([]byte, string, error) {
+	return RenderPageJPEG(path, 0, 150, 85)
+}
+
+// RenderPageJPEG renders a single page of a PDF to JPEG using the shared
+// pdfium WASM pool. pageIdx is 0-indexed.
+func RenderPageJPEG(path string, pageIdx int, dpi int, quality int) ([]byte, string, error) {
 	instance, err := PdfiumInstance(30 * time.Second)
 	if err != nil {
 		return nil, "", err
@@ -150,11 +156,11 @@ func renderPageCover(path string) ([]byte, string, error) {
 	}()
 
 	render, err := instance.RenderPageInDPI(&requests.RenderPageInDPI{
-		DPI: 150,
+		DPI: dpi,
 		Page: requests.Page{
 			ByIndex: &requests.PageByIndex{
 				Document: doc.Document,
-				Index:    0,
+				Index:    pageIdx,
 			},
 		},
 	})
@@ -163,9 +169,8 @@ func renderPageCover(path string) ([]byte, string, error) {
 	}
 	defer render.Cleanup()
 
-	// Encode the rendered RGBA image to JPEG.
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, render.Result.Image, &jpeg.Options{Quality: 85}); err != nil {
+	if err := jpeg.Encode(&buf, render.Result.Image, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, "", err
 	}
 

@@ -4132,3 +4132,76 @@ func TestScanFileCore_Chapters_EmptyChapters_Skipped(t *testing.T) {
 	require.Len(t, chapters, 1)
 	assert.Equal(t, "Existing Chapter", chapters[0].Title)
 }
+
+// TestScanFileCore_PDFCoverPageRestoredFromSidecar is a regression test for a
+// bug where the sidecar `cover_page` restore path was gated on file type ==
+// CBZ, silently dropping user-selected PDF cover pages on rescan. The sidecar
+// should be the source of truth for both CBZ and PDF.
+func TestScanFileCore_PDFCoverPageRestoredFromSidecar(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Test PDF Book")
+
+	// Create a real PDF on disk so cover page rendering can succeed.
+	pdfPath := testgen.GeneratePDF(t, bookDir, "book.pdf", testgen.PDFOptions{PageCount: 5})
+
+	// Create book and file records simulating a prior scan where CoverPage
+	// started at 0 (the default from pdf.Parse).
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     bookDir,
+		Title:        "Test PDF Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test PDF Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	zero := 0
+	filepathSource := models.DataSourceFilepath
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      pdfPath,
+		FileType:      models.FileTypePDF,
+		FilesizeBytes: 1000,
+		CoverPage:     &zero,
+		CoverSource:   &filepathSource,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	// Write a sidecar with a user-selected cover page (2) that differs from
+	// the default (0). On rescan, the scanner should honor this.
+	sidecarPath := pdfPath + ".metadata.json"
+	sidecarContent := `{"version":1,"cover_page":2}`
+	require.NoError(t, os.WriteFile(sidecarPath, []byte(sidecarContent), 0644))
+
+	// Fresh metadata from a re-parse: pdf.Parse always returns CoverPage=0.
+	reparsedCoverPage := 0
+	metadata := &mediafile.ParsedMetadata{
+		DataSource: models.DataSourcePDFMetadata,
+		CoverPage:  &reparsedCoverPage,
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	updatedFile, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &file.ID})
+	require.NoError(t, err)
+
+	require.NotNil(t, updatedFile.CoverPage)
+	assert.Equal(t, 2, *updatedFile.CoverPage, "PDF cover_page should be restored from sidecar")
+
+	require.NotNil(t, updatedFile.CoverSource)
+	assert.Equal(t, models.DataSourceSidecar, *updatedFile.CoverSource)
+
+	// The cover image should have been extracted and saved to disk.
+	require.NotNil(t, updatedFile.CoverImageFilename)
+	coverPath := filepath.Join(bookDir, *updatedFile.CoverImageFilename)
+	_, statErr := os.Stat(coverPath)
+	assert.NoError(t, statErr, "extracted cover image should exist on disk at %s", coverPath)
+}

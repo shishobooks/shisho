@@ -1887,9 +1887,9 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
-	// Update cover page (from sidecar) for CBZ files
-	// This restores user-selected cover page from sidecar after library rescans
-	if fileSidecarData != nil && fileSidecarData.CoverPage != nil && file.FileType == models.FileTypeCBZ {
+	// Update cover page (from sidecar) for page-based formats (CBZ, PDF).
+	// This restores user-selected cover page from sidecar after library rescans.
+	if fileSidecarData != nil && fileSidecarData.CoverPage != nil && models.IsPageBasedFileType(file.FileType) {
 		existingCoverSource := ""
 		if file.CoverSource != nil {
 			existingCoverSource = *file.CoverSource
@@ -1925,8 +1925,14 @@ func (w *Worker) scanFileCore(
 			filename := filepath.Base(file.Filepath)
 			coverBaseName := filename + ".cover"
 
-			// Extract the cover page from CBZ
-			coverFilename, coverMimeType, err := extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
+			// Extract the cover page from the source file.
+			var coverFilename, coverMimeType string
+			switch file.FileType {
+			case models.FileTypePDF:
+				coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
+			default:
+				coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
+			}
 			if err != nil {
 				logWarn("failed to extract cover page from sidecar", logger.Data{
 					"error":      err.Error(),
@@ -3535,6 +3541,32 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	}
 
 	return coverBaseName + ext, mimeType, nil
+}
+
+// extractPDFPageCover renders a specific page from a PDF file via pdfium and
+// saves it as the cover image. Returns the cover filename (relative to
+// coverDir), mime type, and any error. pageNum is 0-indexed.
+func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+	data, mimeType, err := pdf.RenderPageJPEG(pdfPath, pageNum, 150, 85)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to render pdf page")
+	}
+
+	// Delete any existing cover with this base name (regardless of extension).
+	for _, existingExt := range fileutils.CoverImageExtensions {
+		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
+		if _, statErr := os.Stat(existingPath); statErr == nil {
+			_ = os.Remove(existingPath)
+		}
+	}
+
+	coverFilename := coverBaseName + ".jpg"
+	coverFilePath := filepath.Join(coverDir, coverFilename)
+	if err := os.WriteFile(coverFilePath, data, 0644); err != nil { //nolint:gosec // Cover files need to be readable by the HTTP server
+		return "", "", errors.WithStack(err)
+	}
+
+	return coverFilename, mimeType, nil
 }
 
 // getConfidenceThresholdFromCache returns the effective confidence threshold
