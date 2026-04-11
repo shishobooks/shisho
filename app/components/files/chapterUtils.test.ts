@@ -1,9 +1,18 @@
 import {
   formatTimestampMs,
   getNextChapterTitle,
+  normalizeChapterOrder,
   parseTimestampMs,
 } from "./chapterUtils";
 import { describe, expect, it } from "vitest";
+
+import {
+  FileTypeCBZ,
+  FileTypeEPUB,
+  FileTypeM4B,
+  FileTypePDF,
+  type ChapterInput,
+} from "@/types";
 
 describe("getNextChapterTitle", () => {
   it('detects "Chapter N" pattern', () => {
@@ -143,5 +152,96 @@ describe("parseTimestampMs", () => {
       const parsed = parseTimestampMs(formatted);
       expect(parsed).toBe(ms);
     }
+  });
+});
+
+describe("normalizeChapterOrder", () => {
+  const makePageChapter = (
+    title: string,
+    start_page: number,
+  ): ChapterInput => ({
+    title,
+    start_page,
+    children: [],
+  });
+
+  const makeTimestampChapter = (
+    title: string,
+    start_timestamp_ms: number,
+  ): ChapterInput => ({
+    title,
+    start_timestamp_ms,
+    children: [],
+  });
+
+  it("sorts CBZ chapters by start_page", () => {
+    const input = [
+      makePageChapter("C", 10),
+      makePageChapter("A", 0),
+      makePageChapter("B", 5),
+    ];
+    const result = normalizeChapterOrder(input, FileTypeCBZ);
+    expect(result.map((c) => c.title)).toEqual(["A", "B", "C"]);
+  });
+
+  it("sorts PDF chapters by start_page", () => {
+    const input = [
+      makePageChapter("C", 10),
+      makePageChapter("A", 0),
+      makePageChapter("B", 5),
+    ];
+    const result = normalizeChapterOrder(input, FileTypePDF);
+    expect(result.map((c) => c.title)).toEqual(["A", "B", "C"]);
+  });
+
+  it("sorts M4B chapters by start_timestamp_ms", () => {
+    const input = [
+      makeTimestampChapter("C", 7000),
+      makeTimestampChapter("A", 0),
+      makeTimestampChapter("B", 3000),
+    ];
+    const result = normalizeChapterOrder(input, FileTypeM4B);
+    expect(result.map((c) => c.title)).toEqual(["A", "B", "C"]);
+  });
+
+  it("treats missing start_page as 0 for page-based files", () => {
+    const input: ChapterInput[] = [
+      { title: "at page 5", start_page: 5, children: [] },
+      { title: "no page", children: [] },
+    ];
+    const result = normalizeChapterOrder(input, FileTypeCBZ);
+    expect(result.map((c) => c.title)).toEqual(["no page", "at page 5"]);
+  });
+
+  it("treats missing start_timestamp_ms as 0 for M4B", () => {
+    const input: ChapterInput[] = [
+      { title: "at 5s", start_timestamp_ms: 5000, children: [] },
+      { title: "no timestamp", children: [] },
+    ];
+    const result = normalizeChapterOrder(input, FileTypeM4B);
+    expect(result.map((c) => c.title)).toEqual(["no timestamp", "at 5s"]);
+  });
+
+  it("leaves EPUB chapters in their original order", () => {
+    const input: ChapterInput[] = [
+      { title: "Z", href: "z.xhtml", children: [] },
+      { title: "A", href: "a.xhtml", children: [] },
+      { title: "M", href: "m.xhtml", children: [] },
+    ];
+    const result = normalizeChapterOrder(input, FileTypeEPUB);
+    expect(result.map((c) => c.title)).toEqual(["Z", "A", "M"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const input = [makePageChapter("B", 5), makePageChapter("A", 0)];
+    const snapshot = input.map((c) => c.title);
+    normalizeChapterOrder(input, FileTypeCBZ);
+    expect(input.map((c) => c.title)).toEqual(snapshot);
+  });
+
+  it("returns an empty array unchanged", () => {
+    expect(normalizeChapterOrder([], FileTypeCBZ)).toEqual([]);
+    expect(normalizeChapterOrder([], FileTypeM4B)).toEqual([]);
+    expect(normalizeChapterOrder([], FileTypeEPUB)).toEqual([]);
   });
 });

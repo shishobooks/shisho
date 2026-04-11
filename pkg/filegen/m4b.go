@@ -268,15 +268,31 @@ func (g *M4BGenerator) loadCover(book *models.Book, file *models.File, meta *mp4
 // convertModelChaptersToMP4 converts database chapters to MP4 format.
 // M4B doesn't support nested chapters, so only top-level chapters are used.
 // duration is the total file duration, used to calculate the End time of the last chapter.
+//
+// Sorts by StartTimestampMs so the generated file plays chapters in temporal
+// order even if the DB's SortOrder disagrees with the timestamps (e.g. a user
+// reordered chapters in the UI without re-normalizing). Ties break on SortOrder
+// for stability.
 func convertModelChaptersToMP4(chapters []*models.Chapter, duration time.Duration) []mp4.Chapter {
 	if len(chapters) == 0 {
 		return nil
 	}
 
-	// Sort by SortOrder
+	// Sort by StartTimestampMs (nil == 0), fall back to SortOrder for ties.
 	sorted := make([]*models.Chapter, len(chapters))
 	copy(sorted, chapters)
-	sort.Slice(sorted, func(i, j int) bool {
+	sort.SliceStable(sorted, func(i, j int) bool {
+		ai := int64(0)
+		if sorted[i].StartTimestampMs != nil {
+			ai = *sorted[i].StartTimestampMs
+		}
+		aj := int64(0)
+		if sorted[j].StartTimestampMs != nil {
+			aj = *sorted[j].StartTimestampMs
+		}
+		if ai != aj {
+			return ai < aj
+		}
 		return sorted[i].SortOrder < sorted[j].SortOrder
 	})
 

@@ -382,26 +382,70 @@ func TestPDFGenerator_Generate_Chapters(t *testing.T) {
 	assert.Equal(t, 4, entries[2].StartPage)
 }
 
-func TestPDFGenerator_Generate_Chapters_SortOrder(t *testing.T) {
+func TestPDFGenerator_Generate_Chapters_OutOfOrder(t *testing.T) {
 	t.Parallel()
 
+	// Regression: pdfcpu rejects sibling bookmarks whose PageFrom is not
+	// monotonically non-decreasing, which made Generate fatally error for
+	// any DB state where SortOrder disagreed with StartPage order. The
+	// converter now sorts by StartPage, so this must round-trip in page
+	// order regardless of the input ordering.
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "source.pdf")
+	writeTestPDFWithPages(t, srcPath, 10, nil)
+
+	destPath := filepath.Join(tmpDir, "dest.pdf")
+
+	startPage5 := 5
+	startPage0 := 0
+	startPage2 := 2
+	book := &models.Book{Title: "Test"}
+	file := &models.File{
+		FileType: models.FileTypePDF,
+		Chapters: []*models.Chapter{
+			// Provided in SortOrder that disagrees with page order.
+			{Title: "at page 5", SortOrder: 0, StartPage: &startPage5},
+			{Title: "at page 0", SortOrder: 1, StartPage: &startPage0},
+			{Title: "at page 2", SortOrder: 2, StartPage: &startPage2},
+		},
+	}
+
+	err := (&PDFGenerator{}).Generate(context.Background(), srcPath, destPath, book, file)
+	require.NoError(t, err, "Generate must not fail when SortOrder disagrees with StartPage")
+
+	entries, err := pdf.ExtractOutline(destPath)
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+	assert.Equal(t, "at page 0", entries[0].Title)
+	assert.Equal(t, 0, entries[0].StartPage)
+	assert.Equal(t, "at page 2", entries[1].Title)
+	assert.Equal(t, 2, entries[1].StartPage)
+	assert.Equal(t, "at page 5", entries[2].Title)
+	assert.Equal(t, 5, entries[2].StartPage)
+}
+
+func TestPDFGenerator_Generate_Chapters_EmptyAndDuplicateTitles(t *testing.T) {
+	t.Parallel()
+
+	// pdfcpu must accept empty-title and duplicate-title bookmarks — it
+	// disambiguates duplicates internally. We just pin that they round-trip
+	// without errors and all three bookmarks appear in the output.
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "source.pdf")
 	writeTestPDFWithPages(t, srcPath, 5, nil)
 
 	destPath := filepath.Join(tmpDir, "dest.pdf")
 
-	// Chapters provided in the wrong order should be written in SortOrder order.
 	startPage0 := 0
-	startPage2 := 2
-	startPage4 := 4
+	startPage1 := 1
+	startPage3 := 3
 	book := &models.Book{Title: "Test"}
 	file := &models.File{
 		FileType: models.FileTypePDF,
 		Chapters: []*models.Chapter{
-			{Title: "Third", SortOrder: 2, StartPage: &startPage4},
-			{Title: "First", SortOrder: 0, StartPage: &startPage0},
-			{Title: "Second", SortOrder: 1, StartPage: &startPage2},
+			{Title: "", SortOrder: 0, StartPage: &startPage0},
+			{Title: "Chapter", SortOrder: 1, StartPage: &startPage1},
+			{Title: "Chapter", SortOrder: 2, StartPage: &startPage3},
 		},
 	}
 
@@ -410,10 +454,12 @@ func TestPDFGenerator_Generate_Chapters_SortOrder(t *testing.T) {
 
 	entries, err := pdf.ExtractOutline(destPath)
 	require.NoError(t, err)
-	require.Len(t, entries, 3)
-	assert.Equal(t, "First", entries[0].Title)
-	assert.Equal(t, "Second", entries[1].Title)
-	assert.Equal(t, "Third", entries[2].Title)
+	require.Len(t, entries, 3, "all three bookmarks must be written")
+	// The three target pages should appear in order, regardless of how pdfcpu
+	// disambiguated the duplicate/empty titles.
+	assert.Equal(t, 0, entries[0].StartPage)
+	assert.Equal(t, 1, entries[1].StartPage)
+	assert.Equal(t, 3, entries[2].StartPage)
 }
 
 func TestPDFGenerator_Generate_Chapters_Nested(t *testing.T) {
@@ -564,8 +610,8 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 
 	t.Run("empty input returns nil", func(t *testing.T) {
 		t.Parallel()
-		assert.Nil(t, convertModelChaptersToPDFBookmarks(nil, 10))
-		assert.Nil(t, convertModelChaptersToPDFBookmarks([]*models.Chapter{}, 10))
+		assert.Nil(t, convertModelChaptersToPDFBookmarks(nil, 10, noParentPage))
+		assert.Nil(t, convertModelChaptersToPDFBookmarks([]*models.Chapter{}, 10, noParentPage))
 	})
 
 	t.Run("converts 0-indexed to 1-indexed pages", func(t *testing.T) {
@@ -573,7 +619,7 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "A", SortOrder: 0, StartPage: &startPage0},
 			{Title: "B", SortOrder: 1, StartPage: &startPage2},
-		}, 10)
+		}, 10, noParentPage)
 		require.Len(t, result, 2)
 		assert.Equal(t, "A", result[0].Title)
 		assert.Equal(t, 1, result[0].PageFrom)
@@ -586,7 +632,7 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "A", SortOrder: 0, StartPage: &startPage0},
 			{Title: "B", SortOrder: 1, StartPage: nil},
-		}, 10)
+		}, 10, noParentPage)
 		require.Len(t, result, 1)
 		assert.Equal(t, "A", result[0].Title)
 	})
@@ -596,7 +642,7 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "Bad", SortOrder: 0, StartPage: &startPageNeg},
 			{Title: "Good", SortOrder: 1, StartPage: &startPage0},
-		}, 10)
+		}, 10, noParentPage)
 		require.Len(t, result, 1)
 		assert.Equal(t, "Good", result[0].Title)
 	})
@@ -606,16 +652,27 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "In range", SortOrder: 0, StartPage: &startPage2},
 			{Title: "Out of range", SortOrder: 1, StartPage: &startPage5},
-		}, 3)
+		}, 3, noParentPage)
 		require.Len(t, result, 1)
 		assert.Equal(t, "In range", result[0].Title)
+	})
+
+	t.Run("boundary StartPage == pageCount is dropped", func(t *testing.T) {
+		t.Parallel()
+		startPage3 := 3
+		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
+			{Title: "Just in", SortOrder: 0, StartPage: &startPage2},
+			{Title: "Boundary", SortOrder: 1, StartPage: &startPage3}, // pageCount is 3 → page index 3 is out
+		}, 3, noParentPage)
+		require.Len(t, result, 1)
+		assert.Equal(t, "Just in", result[0].Title)
 	})
 
 	t.Run("pageCount 0 disables upper-bound filter", func(t *testing.T) {
 		t.Parallel()
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "A", SortOrder: 0, StartPage: &startPage5},
-		}, 0)
+		}, 0, noParentPage)
 		require.Len(t, result, 1)
 		assert.Equal(t, 6, result[0].PageFrom)
 	})
@@ -631,7 +688,7 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 					{Title: "Child", SortOrder: 0, StartPage: &startPage2},
 				},
 			},
-		}, 10)
+		}, 10, noParentPage)
 		require.Len(t, result, 1)
 		assert.Equal(t, "Parent", result[0].Title)
 		require.Len(t, result[0].Kids, 1)
@@ -639,17 +696,53 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		assert.Equal(t, 3, result[0].Kids[0].PageFrom)
 	})
 
-	t.Run("sorts by SortOrder", func(t *testing.T) {
+	t.Run("sorts siblings by StartPage even when SortOrder disagrees", func(t *testing.T) {
+		t.Parallel()
+		// SortOrder says First, Second, Third but pages are 5, 0, 2 — the
+		// PDF outline must be in page order to satisfy pdfcpu's constraint.
+		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
+			{Title: "page 5", SortOrder: 0, StartPage: &startPage5},
+			{Title: "page 0", SortOrder: 1, StartPage: &startPage0},
+			{Title: "page 2", SortOrder: 2, StartPage: &startPage2},
+		}, 10, noParentPage)
+		require.Len(t, result, 3)
+		assert.Equal(t, "page 0", result[0].Title)
+		assert.Equal(t, 1, result[0].PageFrom)
+		assert.Equal(t, "page 2", result[1].Title)
+		assert.Equal(t, 3, result[1].PageFrom)
+		assert.Equal(t, "page 5", result[2].Title)
+		assert.Equal(t, 6, result[2].PageFrom)
+	})
+
+	t.Run("breaks StartPage ties by SortOrder", func(t *testing.T) {
 		t.Parallel()
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
-			{Title: "Third", SortOrder: 2, StartPage: &startPage5},
-			{Title: "First", SortOrder: 0, StartPage: &startPage0},
-			{Title: "Second", SortOrder: 1, StartPage: &startPage2},
-		}, 10)
-		require.Len(t, result, 3)
-		assert.Equal(t, "First", result[0].Title)
-		assert.Equal(t, "Second", result[1].Title)
-		assert.Equal(t, "Third", result[2].Title)
+			{Title: "B", SortOrder: 1, StartPage: &startPage2},
+			{Title: "A", SortOrder: 0, StartPage: &startPage2},
+		}, 10, noParentPage)
+		require.Len(t, result, 2)
+		assert.Equal(t, "A", result[0].Title)
+		assert.Equal(t, "B", result[1].Title)
+	})
+
+	t.Run("drops children whose StartPage is before their parent", func(t *testing.T) {
+		t.Parallel()
+		// pdfcpu rejects a nested bookmark whose PageFrom is less than the
+		// parent's, so we drop such children.
+		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
+			{
+				Title:     "Parent",
+				SortOrder: 0,
+				StartPage: &startPage2,
+				Children: []*models.Chapter{
+					{Title: "Bad child (before parent)", SortOrder: 0, StartPage: &startPage0},
+					{Title: "Good child", SortOrder: 1, StartPage: &startPage5},
+				},
+			},
+		}, 10, noParentPage)
+		require.Len(t, result, 1)
+		require.Len(t, result[0].Kids, 1)
+		assert.Equal(t, "Good child", result[0].Kids[0].Title)
 	})
 }
 

@@ -778,6 +778,48 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Third Chapter", meta.Chapters[2].Title, "chapter 2 should be 'Third Chapter' (SortOrder 2)")
 	})
 
+	t.Run("chapter order follows StartTimestampMs when SortOrder disagrees", func(t *testing.T) {
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Regression: SortOrder and timestamps disagree. The generated file
+		// must play chapters in temporal order, not SortOrder order, so the
+		// listener hears chapters lining up with the audio.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 10.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		ts0 := int64(0)
+		ts3 := int64(3000)
+		ts7 := int64(7000)
+		book := &models.Book{
+			Title:   "Test Book",
+			Authors: []*models.Author{{SortOrder: 0, Person: &models.Person{Name: "Author"}}},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				// SortOrder ascending but timestamps NOT in ascending order.
+				{Title: "plays at 7s", SortOrder: 0, StartTimestampMs: &ts7},
+				{Title: "plays at 0s", SortOrder: 1, StartTimestampMs: &ts0},
+				{Title: "plays at 3s", SortOrder: 2, StartTimestampMs: &ts3},
+			},
+		}
+
+		err := (&M4BGenerator{}).Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		require.Len(t, meta.Chapters, 3)
+		assert.Equal(t, "plays at 0s", meta.Chapters[0].Title)
+		assert.Equal(t, "plays at 3s", meta.Chapters[1].Title)
+		assert.Equal(t, "plays at 7s", meta.Chapters[2].Title)
+	})
+
 	t.Run("chapters with missing StartTimestampMs use zero", func(t *testing.T) {
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")

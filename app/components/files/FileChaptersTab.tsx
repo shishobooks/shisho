@@ -14,6 +14,7 @@ import ChapterRow from "@/components/files/ChapterRow";
 import {
   chaptersToInputArray,
   getNextChapterTitle,
+  normalizeChapterOrder,
 } from "@/components/files/chapterUtils";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
@@ -316,11 +317,15 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Handles saving edited chapters.
+     * Handles saving edited chapters. Normalizes chapter order (page-based
+     * sorted by start_page, M4B sorted by start_timestamp_ms) before the
+     * mutation fires so out-of-order edits can't land in the DB even when
+     * the user saves without triggering an input blur.
      */
     const handleSave = () => {
+      const normalized = normalizeChapterOrder(editedChapters, file.file_type);
       updateChaptersMutation.mutate(
-        { chapters: editedChapters },
+        { chapters: normalized },
         {
           onSuccess: () => {
             toast.success("Chapters saved");

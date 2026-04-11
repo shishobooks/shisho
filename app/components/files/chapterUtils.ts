@@ -1,4 +1,10 @@
-import type { Chapter, ChapterInput } from "@/types";
+import {
+  FileTypeCBZ,
+  FileTypeM4B,
+  FileTypePDF,
+  type Chapter,
+  type ChapterInput,
+} from "@/types";
 import { formatTimestamp } from "@/utils/format";
 
 /**
@@ -134,6 +140,40 @@ export const chaptersToInputArray = (chapters: Chapter[]): ChapterInput[] => {
       ? chaptersToInputArray(chapter.children.filter(Boolean) as Chapter[])
       : [],
   }));
+};
+
+/**
+ * Normalizes chapter order before saving so that downstream consumers (the
+ * API, file generators, readers) receive chapters in their natural order.
+ *
+ * - CBZ/PDF: top-level chapters sorted ascending by `start_page`. Chapters
+ *   without a page fall to 0. Children are left alone — the current UI
+ *   doesn't produce nested chapters for page-based formats.
+ * - M4B: top-level chapters sorted ascending by `start_timestamp_ms`.
+ *   Chapters without a timestamp fall to 0.
+ * - EPUB (or any other type): returned as-is. EPUB ordering is user-intent
+ *   driven (spine/nav hierarchy) and has no natural numeric order.
+ *
+ * Normalizing on save is defense-in-depth: `handleBlurReorder` already
+ * re-sorts on input blur, but programmatic saves, keyboard shortcuts, and
+ * saves triggered without an intervening blur would otherwise submit the
+ * array in its unsorted edit-time order.
+ */
+export const normalizeChapterOrder = (
+  chapters: ChapterInput[],
+  fileType: string,
+): ChapterInput[] => {
+  if (fileType === FileTypeCBZ || fileType === FileTypePDF) {
+    return [...chapters].sort(
+      (a, b) => (a.start_page ?? 0) - (b.start_page ?? 0),
+    );
+  }
+  if (fileType === FileTypeM4B) {
+    return [...chapters].sort(
+      (a, b) => (a.start_timestamp_ms ?? 0) - (b.start_timestamp_ms ?? 0),
+    );
+  }
+  return chapters;
 };
 
 /**

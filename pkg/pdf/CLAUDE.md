@@ -96,7 +96,17 @@ PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` AP
 
 ### Writing Chapters Back
 
-`pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects, and out-of-range / nil-StartPage chapters are filtered out. When `file.Chapters` is empty, the bookmark write is skipped entirely so existing source bookmarks are left untouched. `AddBookmarksFile` requires distinct input/output paths, so the generator writes to a sibling `.bookmarks.tmp` file and renames over the destination.
+`pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects. When `file.Chapters` is empty, the bookmark write is skipped entirely so existing source bookmarks are left untouched. `AddBookmarksFile` requires distinct input/output paths, so the generator writes to a sibling `.bookmarks.tmp` file and renames over the destination.
+
+**Filtering and ordering.** pdfcpu rejects bookmark trees where siblings are not monotonically non-decreasing by page, or where a child's page is less than its parent's. `convertModelChaptersToPDFBookmarks` enforces both constraints rather than trusting `SortOrder` from the database:
+
+- nil / negative / `>= pageCount` StartPage → dropped
+- Child StartPage < parent StartPage → dropped
+- Siblings sorted by `StartPage` (ties broken by `SortOrder` for stability)
+
+This is belt-and-suspenders with the frontend's `normalizeChapterOrder` in `app/components/files/chapterUtils.ts`, which already sorts on save. The backend fallback matters because plugins, sidecar imports, or external API callers can introduce out-of-order state without touching the UI.
+
+**Best-effort error handling.** Bookmark writing is best-effort: if `AddBookmarksFile` or the subsequent rename fails, the generator logs a warning and returns the properties-only `destPath` rather than failing the whole download. This matches the cover-extraction pattern in `pdf.go` Parse and prevents a bookmark-write quirk from blocking an otherwise-valid file.
 
 ### Key Types
 
