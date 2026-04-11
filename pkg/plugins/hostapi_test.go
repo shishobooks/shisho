@@ -2,6 +2,8 @@ package plugins
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -165,13 +167,41 @@ func TestInjectHostAPIs_Sleep(t *testing.T) {
 	// Fractional milliseconds are supported.
 	_, err = rt.vm.RunString(`shisho.sleep(1.5)`)
 	require.NoError(t, err)
+}
 
-	// The exact cap (5 minutes) is allowed; skip the actual 5-minute wait by
-	// only asserting the call parses and validates. We don't run this — it
-	// would make the test suite take 5 minutes. Instead, verify that
-	// maxSleepMs - 1 is accepted at the validation layer by running 1ms.
-	_, err = rt.vm.RunString(`shisho.sleep(1)`)
-	require.NoError(t, err)
+// TestValidateSleepMs exercises the boundary cases directly without paying
+// the time.Sleep cost — notably the exact cap and cap - 1, which would add
+// 5 minutes of wall-clock time if driven through the JS layer.
+func TestValidateSleepMs(t *testing.T) {
+	t.Parallel()
+
+	valid := []float64{0, 0.5, 1, 1000, maxSleepMs - 1, maxSleepMs}
+	for _, ms := range valid {
+		t.Run(fmt.Sprintf("valid/%v", ms), func(t *testing.T) {
+			assert.NoError(t, validateSleepMs(ms))
+		})
+	}
+
+	cases := []struct {
+		name    string
+		ms      float64
+		message string
+	}{
+		{"negative", -1, "finite non-negative"},
+		{"NaN", math.NaN(), "finite non-negative"},
+		{"+Inf", math.Inf(1), "finite non-negative"},
+		{"-Inf", math.Inf(-1), "finite non-negative"},
+		{"cap + 1", maxSleepMs + 1, "5 minutes"},
+		{"1e18 overflow", 1e18, "5 minutes"},
+	}
+	for _, tc := range cases {
+		t.Run("invalid/"+tc.name, func(t *testing.T) {
+			err := validateSleepMs(tc.ms)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "shisho.sleep")
+			assert.Contains(t, err.Error(), tc.message)
+		})
+	}
 }
 
 func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {

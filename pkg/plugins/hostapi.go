@@ -134,6 +134,23 @@ func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 // every other invocation on the same plugin.
 const maxSleepMs = float64(5 * 60 * 1000)
 
+var (
+	errSleepNotFinite  = errors.New("shisho.sleep: ms must be a finite non-negative number")
+	errSleepExceedsCap = errors.New("shisho.sleep: ms must be <= 300000 (5 minutes)")
+)
+
+// validateSleepMs enforces the rules for shisho.sleep's ms argument.
+// Extracted so boundary cases can be unit-tested without actually sleeping.
+func validateSleepMs(ms float64) error {
+	if math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
+		return errSleepNotFinite
+	}
+	if ms > maxSleepMs {
+		return errSleepExceedsCap
+	}
+	return nil
+}
+
 // injectSleepFunction sets up shisho.sleep(ms) as a blocking delay primitive.
 // Plugins use this to implement exponential backoff between retries, since
 // Goja has no Promise/setTimeout support.
@@ -143,11 +160,8 @@ func injectSleepFunction(vm *goja.Runtime, shishoObj *goja.Object) error {
 			panic(vm.ToValue("shisho.sleep: ms argument is required"))
 		}
 		ms := call.Argument(0).ToFloat()
-		if math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
-			panic(vm.ToValue("shisho.sleep: ms must be a finite non-negative number"))
-		}
-		if ms > maxSleepMs {
-			panic(vm.ToValue(fmt.Sprintf("shisho.sleep: ms must be <= %.0f (5 minutes)", maxSleepMs)))
+		if err := validateSleepMs(ms); err != nil {
+			panic(vm.ToValue(err.Error()))
 		}
 		time.Sleep(time.Duration(ms * float64(time.Millisecond)))
 		return goja.Undefined()
