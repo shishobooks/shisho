@@ -61,8 +61,9 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	//
 	// This block is best-effort: if bookmark writing fails for any reason, we
 	// log a warning and keep the properties-only destPath rather than failing
-	// the whole download. This matches the cover-extraction pattern in
-	// pkg/pdf/pdf.go and ensures a metadata quirk can never block a download.
+	// the whole download. This matches the best-effort cover-extraction pattern
+	// in pkg/pdf/cover.go (invoked from pkg/pdf/pdf.go's Parse) and ensures a
+	// metadata quirk can never block a download.
 	// Skipped entirely when the DB has no chapters so we don't touch existing
 	// bookmarks in the source PDF.
 	//

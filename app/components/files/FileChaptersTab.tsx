@@ -76,14 +76,20 @@ const toEditedChapters = (chapters: ChapterInput[]): EditedChapter[] =>
     children: toEditedChapters(c.children ?? []),
   }));
 
+// Destructure-based strip so any future ChapterInput field flows through
+// automatically — only _editKey is removed, everything else rides in ...rest.
+// children is named explicitly because EditedChapter.children is EditedChapter[]
+// while ChapterInput.children is ChapterInput[], so the child list needs its
+// own recursive strip to produce a ChapterInput-compatible shape.
 const stripEditKeys = (chapters: EditedChapter[]): ChapterInput[] =>
-  chapters.map((chapter) => ({
-    title: chapter.title,
-    start_page: chapter.start_page,
-    start_timestamp_ms: chapter.start_timestamp_ms,
-    href: chapter.href,
-    children: stripEditKeys(chapter.children),
-  }));
+  chapters.map((chapter) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { _editKey, children, ...rest } = chapter;
+    return {
+      ...rest,
+      children: stripEditKeys(children),
+    };
+  });
 
 /**
  * Creates a new chapter with appropriate defaults based on file type.
@@ -569,11 +575,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         if (i === parentIndex) {
           return {
             ...chapter,
-            children: updateChapterTitle(
-              chapter.children ?? [],
-              childIndex,
-              title,
-            ),
+            children: updateChapterTitle(chapter.children, childIndex, title),
           };
         }
         return chapter;
@@ -592,7 +594,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         if (i === parentIndex) {
           return {
             ...chapter,
-            children: deleteChapter(chapter.children ?? [], childIndex),
+            children: deleteChapter(chapter.children, childIndex),
           };
         }
         return chapter;

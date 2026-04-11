@@ -232,9 +232,10 @@ func TestComputeFingerprint(t *testing.T) {
 		assert.Empty(t, fp.Tags)
 	})
 
-	t.Run("chapters sorted by sort_order for consistent fingerprinting", func(t *testing.T) {
+	t.Run("M4B chapters sorted by StartTimestampMs for consistent fingerprinting", func(t *testing.T) {
 		book := &models.Book{Title: "Book with Chapters"}
 		file := &models.File{
+			FileType: models.FileTypeM4B,
 			Chapters: []*models.Chapter{
 				{Title: "Third Chapter", SortOrder: 2, StartTimestampMs: int64Ptr(120000)},
 				{Title: "First Chapter", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
@@ -245,7 +246,9 @@ func TestComputeFingerprint(t *testing.T) {
 		fp, err := ComputeFingerprint(book, file)
 		require.NoError(t, err)
 
-		// Chapters should be sorted by SortOrder (0, 1, 2)
+		// Chapters should be sorted by StartTimestampMs, matching the order
+		// the file generator will emit. SortOrder is re-derived from the
+		// sorted position so the fingerprint is stable against DB drift.
 		require.Len(t, fp.Chapters, 3)
 		assert.Equal(t, "First Chapter", fp.Chapters[0].Title)
 		assert.Equal(t, 0, fp.Chapters[0].SortOrder)
@@ -713,7 +716,11 @@ func TestComputeFingerprint_ChaptersWithNilOptionalFieldsFingerprintCorrectly(t 
 	book := &models.Book{
 		Title: "Test Book with Minimal Chapters",
 	}
+	// FileType: EPUB so chapters sort by SortOrder (EPUB has no natural
+	// position field). This pins the input array order in the fingerprint
+	// output regardless of which nil optional fields are set.
 	file := &models.File{
+		FileType: models.FileTypeEPUB,
 		Chapters: []*models.Chapter{
 			{
 				Title:            "Chapter with all nil optional fields",
@@ -764,8 +771,11 @@ func TestComputeFingerprint_NestedChaptersAreIncluded(t *testing.T) {
 	book := &models.Book{
 		Title: "Test Book with Nested Chapters",
 	}
-	// Create a parent chapter with nested children
+	// Create a parent chapter with nested children. FileType: M4B so the
+	// sort uses StartTimestampMs; the fixture data is already in timestamp
+	// order, so sorted output matches the input array.
 	file := &models.File{
+		FileType: models.FileTypeM4B,
 		Chapters: []*models.Chapter{
 			{
 				Title:            "Part 1",

@@ -751,6 +751,46 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		require.Len(t, result[0].Kids, 1)
 		assert.Equal(t, "Good child", result[0].Kids[0].Title)
 	})
+
+	t.Run("dropping a parent with invalid StartPage drops its entire subtree", func(t *testing.T) {
+		t.Parallel()
+		// When a parent's StartPage is nil we drop the parent — and we do NOT
+		// re-parent its grandchildren to the root. This pins the documented
+		// subtree-drop behavior and prevents accidental reparenting in a
+		// future refactor.
+		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
+			{Title: "Good sibling", SortOrder: 0, StartPage: &startPage0},
+			{
+				Title:     "Invalid parent (nil page)",
+				SortOrder: 1,
+				StartPage: nil,
+				Children: []*models.Chapter{
+					{Title: "Orphaned child", SortOrder: 0, StartPage: &startPage2},
+					{
+						Title:     "Orphaned child with grandchild",
+						SortOrder: 1,
+						StartPage: &startPage2,
+						Children: []*models.Chapter{
+							{Title: "Orphaned grandchild", SortOrder: 0, StartPage: &startPage5},
+						},
+					},
+				},
+			},
+			{Title: "Another good sibling", SortOrder: 2, StartPage: &startPage5},
+		}, 10, noParentPage)
+
+		require.Len(t, result, 2, "only the two valid top-level siblings should survive")
+		assert.Equal(t, "Good sibling", result[0].Title)
+		assert.Equal(t, "Another good sibling", result[1].Title)
+		// Neither orphan from the dropped subtree should appear anywhere in
+		// the output, at any depth.
+		for _, bm := range result {
+			assert.NotContains(t, bm.Title, "Orphaned")
+			for _, kid := range bm.Kids {
+				assert.NotContains(t, kid.Title, "Orphaned")
+			}
+		}
+	})
 }
 
 func TestPDFGenerator_Generate_CancelledContext(t *testing.T) {
