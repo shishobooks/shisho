@@ -115,7 +115,7 @@ const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
 
 ### Testing
 - `mise test` - Run all Go tests with coverage
-- `mise test:race` - Run all Go tests with race detection and coverage (used in CI)
+- `mise test:race` - Run all Go tests with race detection and coverage (local; CI runs the same `-race` tests but sharded across parallel jobs in `.github/workflows/ci.yml`)
 - `mise test:js` - Run all JS tests (unit + E2E) in parallel
 - `mise test:unit` - Run JS unit tests only
 - `mise test:e2e` - Run E2E tests (Chromium + Firefox) in parallel
