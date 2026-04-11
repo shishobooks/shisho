@@ -897,4 +897,34 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 			return book, libraryDir, epubPath
 		})
 	})
+
+	// Regression: for root-level files in non-organized libraries,
+	// scanFileCreateNew stores a synthetic organized-folder path in
+	// book.Filepath (e.g. /library/Author/Title) that never gets created
+	// on disk. Resolving the cover via book.Filepath would stat that
+	// junk path, fall back to using it as a directory, and silently
+	// miss the real cover that lives next to the file at
+	// /library/root-book.epub.cover.jpg.
+	t.Run("root-level file with synthetic book path", func(t *testing.T) {
+		t.Parallel()
+		runDowngrade(t, func(t *testing.T, libraryID int) (*models.Book, string, string) {
+			t.Helper()
+			libraryDir := t.TempDir()
+			epubPath := filepath.Join(libraryDir, "root-book.epub")
+			// Synthetic organized-folder path — this is what scanFileCreateNew
+			// computes at pkg/worker/scan_unified.go:2106 for root-level files,
+			// regardless of whether OrganizeFileStructure is enabled.
+			syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+			book := &models.Book{
+				LibraryID:       libraryID,
+				Title:           "Root Book",
+				TitleSource:     models.DataSourceFilepath,
+				SortTitle:       "Root Book",
+				SortTitleSource: models.DataSourceFilepath,
+				AuthorSource:    models.DataSourceFilepath,
+				Filepath:        syntheticBookPath,
+			}
+			return book, libraryDir, epubPath
+		})
+	})
 }
