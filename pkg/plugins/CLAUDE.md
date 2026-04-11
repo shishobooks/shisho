@@ -263,6 +263,16 @@ outputGenerator: {
 
 ## Host APIs (shisho.*)
 
+### shisho.sleep
+
+```javascript
+shisho.sleep(1000)   // block for 1 second
+shisho.sleep(0)      // no-op
+// Throws on negative or NaN values
+```
+
+Synchronous delay backed by Go's `time.Sleep`. Goja has no `setTimeout` / Promise support, so this is the primitive plugins use for exponential backoff between retries (e.g. against rate-limited APIs).
+
 ### shisho.log
 
 ```javascript

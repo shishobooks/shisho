@@ -3,7 +3,9 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
@@ -38,6 +40,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 
 	// Set up log namespace
 	if err := injectLogNamespace(vm, shishoObj, pluginTag); err != nil {
+		return err
+	}
+
+	// Set up top-level sleep function
+	if err := injectSleepFunction(vm, shishoObj); err != nil {
 		return err
 	}
 
@@ -118,6 +125,27 @@ func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 
 	_, err := defineProperty(objectVal, shishoObj, vm.ToValue("dataDir"), descriptor)
 	return err
+}
+
+// injectSleepFunction sets up shisho.sleep(ms) as a blocking delay primitive.
+// Plugins use this to implement exponential backoff between retries, since
+// Goja has no Promise/setTimeout support.
+func injectSleepFunction(vm *goja.Runtime, shishoObj *goja.Object) error {
+	sleepFn := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) < 1 {
+			panic(vm.ToValue("shisho.sleep: ms argument is required"))
+		}
+		ms := call.Argument(0).ToFloat()
+		if math.IsNaN(ms) || ms < 0 {
+			panic(vm.ToValue("shisho.sleep: ms must be a non-negative number"))
+		}
+		time.Sleep(time.Duration(ms * float64(time.Millisecond)))
+		return goja.Undefined()
+	}
+	if err := shishoObj.Set("sleep", sleepFn); err != nil {
+		return fmt.Errorf("failed to set shisho.sleep: %w", err)
+	}
+	return nil
 }
 
 // injectLogNamespace sets up shisho.log with debug/info/warn/error methods.

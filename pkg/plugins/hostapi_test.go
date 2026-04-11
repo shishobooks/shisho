@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/stretchr/testify/assert"
@@ -140,6 +141,50 @@ func TestInjectHostAPIs_LogPluginTag(t *testing.T) {
 	// The log calls should not panic (they log internally with the plugin tag)
 	_, err = rt.vm.RunString(`shisho.log.info("test with tag")`)
 	assert.NoError(t, err)
+}
+
+func TestInjectHostAPIs_Sleep(t *testing.T) {
+	t.Parallel()
+	rt := newTestRuntime("official", "test-plugin")
+	cfg := &mockConfigGetter{configs: map[string]*string{}}
+	require.NoError(t, InjectHostAPIs(rt, cfg))
+
+	start := time.Now()
+	_, err := rt.vm.RunString(`shisho.sleep(50)`)
+	require.NoError(t, err)
+	elapsed := time.Since(start)
+	assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond, "sleep should block for at least the requested duration")
+
+	// Zero is allowed and returns immediately.
+	_, err = rt.vm.RunString(`shisho.sleep(0)`)
+	require.NoError(t, err)
+
+	// Fractional milliseconds are supported.
+	_, err = rt.vm.RunString(`shisho.sleep(1.5)`)
+	require.NoError(t, err)
+}
+
+func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {
+	t.Parallel()
+	rt := newTestRuntime("official", "test-plugin")
+	cfg := &mockConfigGetter{configs: map[string]*string{}}
+	require.NoError(t, InjectHostAPIs(rt, cfg))
+
+	tests := []struct {
+		name string
+		js   string
+	}{
+		{"missing argument", `shisho.sleep()`},
+		{"negative", `shisho.sleep(-5)`},
+		{"NaN", `shisho.sleep(NaN)`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := rt.vm.RunString(tc.js)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "shisho.sleep")
+		})
+	}
 }
 
 func TestInjectHostAPIs_ConfigGetAll_Empty(t *testing.T) {

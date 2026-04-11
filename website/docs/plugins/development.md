@@ -596,6 +596,21 @@ var bytes = resp.arrayBuffer(); // response body as ArrayBuffer
 
 Domain patterns support wildcards: `"*.example.com"` matches `example.com`, `api.example.com`, and `a.b.example.com`.
 
+### Sleep
+
+Block the plugin for a number of milliseconds. Goja has no `setTimeout` or `Promise` support, so this is the primitive to use for exponential backoff when retrying rate-limited APIs:
+
+```javascript
+// Exponential backoff between retries
+for (var attempt = 0; attempt < 3; attempt++) {
+  var resp = shisho.http.fetch(url, {});
+  if (resp.status !== 503) return resp;
+  shisho.sleep(1000 * Math.pow(2, attempt));  // 1s, 2s, 4s
+}
+```
+
+`shisho.sleep(ms)` throws if `ms` is negative or `NaN`. A value of `0` returns immediately.
+
 ### URL Utilities
 
 Helpers for URL manipulation that aren't available in the ES5.1 runtime:
