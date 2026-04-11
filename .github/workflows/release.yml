@@ -141,7 +141,7 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
 
       - name: Get Node version from mise
         id: node
