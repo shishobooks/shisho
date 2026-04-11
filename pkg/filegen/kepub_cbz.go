@@ -113,14 +113,28 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 
 // convertModelChaptersToCBZ converts model chapters to CBZ chapters.
 // Only top-level chapters are included (children are flattened/ignored).
-// Chapters are sorted by SortOrder.
+//
+// Sorts by StartPage so the generated KePub's chapter navigation is in page
+// order even if the DB's SortOrder disagrees. Ties break on SortOrder for
+// stability. Chapters with nil StartPage are treated as page 0.
 func convertModelChaptersToCBZ(chapters []*models.Chapter) []kepub.CBZChapter {
 	// Copy to avoid modifying the original slice
 	sorted := make([]*models.Chapter, len(chapters))
 	copy(sorted, chapters)
 
-	// Sort by SortOrder
-	sort.Slice(sorted, func(i, j int) bool {
+	// Sort by StartPage (nil == 0), fall back to SortOrder for ties.
+	sort.SliceStable(sorted, func(i, j int) bool {
+		ai := 0
+		if sorted[i].StartPage != nil {
+			ai = *sorted[i].StartPage
+		}
+		aj := 0
+		if sorted[j].StartPage != nil {
+			aj = *sorted[j].StartPage
+		}
+		if ai != aj {
+			return ai < aj
+		}
 		return sorted[i].SortOrder < sorted[j].SortOrder
 	})
 

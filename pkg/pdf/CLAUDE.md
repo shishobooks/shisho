@@ -94,6 +94,20 @@ PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` AP
 - **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
 - **No DestInfo = skipped**: bookmarks without a page destination are omitted
 
+### Writing Chapters Back
+
+`pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects, and the generator writes to a sibling `.bookmarks.tmp` file (pdfcpu requires distinct input/output paths) and renames over the destination. When `file.Chapters` is empty the bookmark write is skipped entirely so existing source bookmarks are left untouched. The entire block is **best-effort**: if `AddBookmarksFile` or the rename fails, the generator logs a warning (with `category=pdf_bookmark_write` for aggregation) and returns the properties-only `destPath` rather than failing the whole download — matching the cover-extraction pattern in `pdf.go` Parse, so a metadata quirk can never block an otherwise-valid file.
+
+**Filtering and ordering.** pdfcpu rejects bookmark trees where siblings are not monotonically non-decreasing by page, or where a child's page is less than its parent's. `convertModelChaptersToPDFBookmarks` enforces both constraints rather than trusting `SortOrder` from the database:
+
+- nil / negative / `>= pageCount` StartPage → dropped
+- Child StartPage < parent StartPage → dropped
+- Siblings sorted by `StartPage` (ties broken by `SortOrder` for stability)
+
+If a parent's StartPage is invalid, the entire subtree is dropped — we do not re-parent grandchildren. In practice the UI produces flat PDF chapters today, so this only matters for sidecar- or plugin-supplied nested chapters.
+
+This is belt-and-suspenders with the frontend's `normalizeChapterOrder` in `app/components/files/chapterUtils.ts`, which already sorts on save. The backend fallback matters because plugins, sidecar imports, or external API callers can introduce out-of-order state without touching the UI.
+
 ### Key Types
 
 ```go

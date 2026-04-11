@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFileChapters } from "@/hooks/queries/chapters";
-import { FileTypeM4B, type Chapter, type File } from "@/types";
+import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
 
 // Mock the API hooks
 vi.mock("@/hooks/queries/chapters", () => ({
@@ -620,18 +620,18 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
   });
 });
 
-describe("FileChaptersTab - Timestamp reorder stops playback", () => {
-  const mockM4bFile: File = {
+describe("FileChaptersTab - PDF chapter page increment regression", () => {
+  const mockPdfFile: File = {
     id: 1,
     created_at: "2024-01-01T00:00:00Z",
     updated_at: "2024-01-01T00:00:00Z",
     book_id: 1,
     library_id: 1,
-    file_type: FileTypeM4B,
+    file_type: FileTypePDF,
     file_role: "main",
-    filepath: "/test/book.m4b",
+    filepath: "/test/book.pdf",
     filesize_bytes: 1000000,
-    audiobook_duration_seconds: 3600,
+    page_count: 100,
   };
 
   const mockChapters: Chapter[] = [
@@ -640,9 +640,9 @@ describe("FileChaptersTab - Timestamp reorder stops playback", () => {
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-01T00:00:00Z",
       file_id: 1,
-      title: "Chapter 1",
+      title: "Alpha",
       sort_order: 0,
-      start_timestamp_ms: 0,
+      start_page: 0,
       children: [],
     },
     {
@@ -650,9 +650,9 @@ describe("FileChaptersTab - Timestamp reorder stops playback", () => {
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-01T00:00:00Z",
       file_id: 1,
-      title: "Chapter 2",
+      title: "Bravo",
       sort_order: 1,
-      start_timestamp_ms: 60000,
+      start_page: 5,
       children: [],
     },
   ];
@@ -666,50 +666,85 @@ describe("FileChaptersTab - Timestamp reorder stops playback", () => {
     } as ReturnType<typeof useFileChapters>);
   });
 
-  it("stops playback when timestamp input loses focus (triggers reorder)", async () => {
+  it("clicking next-page on the first chapter past the second's page does not mutate the second chapter", async () => {
+    // Regression: live sort-on-blur combined with index-based React keys
+    // meant that once the first chapter's page crossed the second's, the DOM
+    // element at screen position 0 got reused for the (now-first) second
+    // chapter, and the user's next click on that position silently
+    // incremented the wrong chapter.
     const user = userEvent.setup();
 
     renderWithProviders(
       <FileChaptersTab
-        file={mockM4bFile}
+        file={mockPdfFile}
         isEditing={true}
         onEditingChange={vi.fn()}
       />,
     );
 
-    // Find play buttons in edit mode - they're part of the timestamp controls
-    // In edit mode, there are multiple buttons per row (play, -, +, delete)
-    const allButtons = screen.getAllByRole("button");
+    // Wait for edit mode to initialize from the mocked chapters.
+    await screen.findByDisplayValue("Alpha");
 
-    // Find a play button by looking for one that doesn't have specific text
-    // Play buttons are the ones without visible text content
-    const playButtons = allButtons.filter((btn) => {
-      const svg = btn.querySelector("svg");
-      return svg?.classList.contains("lucide-play");
-    });
+    // Find the "Next page" buttons — one per chapter row.
+    const nextButtons = screen.getAllByRole("button", { name: /next page/i });
+    expect(nextButtons.length).toBe(2);
 
-    if (playButtons.length > 0) {
-      // Play the first chapter
-      await user.click(playButtons[0]);
-      expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();
-
-      // Find timestamp inputs
-      const timestampInputs = screen.getAllByRole("textbox");
-      const chapterTimestampInputs = timestampInputs.filter((input) =>
-        (input as HTMLInputElement).value.includes(":"),
-      );
-
-      if (chapterTimestampInputs.length > 0) {
-        // Change timestamp and blur to trigger reorder
-        await user.clear(chapterTimestampInputs[0]);
-        await user.type(chapterTimestampInputs[0], "00:02:00.000");
-        await user.tab(); // Blur the input
-
-        // Playback should be stopped due to reorder
-        await waitFor(() => {
-          expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled();
-        });
-      }
+    // Click Alpha's + button 7 times. This would push Alpha from page 0 to
+    // page 7, crossing Bravo's page 5.
+    for (let i = 0; i < 7; i++) {
+      await user.click(nextButtons[0]);
     }
+
+    // The first row should still be Alpha with its page advanced to 8
+    // (0-indexed 7 + 1 for display). Bravo should be untouched at display 6.
+    const titleInputs = screen.getAllByPlaceholderText(
+      "Chapter title",
+    ) as HTMLInputElement[];
+    expect(titleInputs[0].value).toBe("Alpha");
+    expect(titleInputs[1].value).toBe("Bravo");
+
+    const pageInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(pageInputs[0].value).toBe("8");
+    expect(pageInputs[1].value).toBe("6");
+  });
+
+  it("typing a new page number and blurring reorders the chapters", async () => {
+    // The companion behavior: typing a page number into an input and tabbing
+    // out is an explicit "commit" gesture, so the parent does reorder on
+    // blur. Only button clicks intentionally skip the reorder.
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <FileChaptersTab
+        file={mockPdfFile}
+        isEditing={true}
+        onEditingChange={vi.fn()}
+      />,
+    );
+
+    await screen.findByDisplayValue("Alpha");
+
+    const pageInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(pageInputs[0].value).toBe("1"); // Alpha at display 1 (0-indexed 0)
+    expect(pageInputs[1].value).toBe("6"); // Bravo at display 6 (0-indexed 5)
+
+    // Retarget Alpha to page 10 (display 10 → 0-indexed 9).
+    await user.clear(pageInputs[0]);
+    await user.type(pageInputs[0], "10");
+    await user.tab(); // Blur the input → parent sorts by start_page.
+
+    // After reorder, Bravo (page 5) should be first and Alpha (page 9)
+    // should be second. The title inputs and the page inputs both move.
+    const titleInputsAfter = screen.getAllByPlaceholderText(
+      "Chapter title",
+    ) as HTMLInputElement[];
+    expect(titleInputsAfter[0].value).toBe("Bravo");
+    expect(titleInputsAfter[1].value).toBe("Alpha");
+
+    const pageInputsAfter = screen.getAllByRole(
+      "spinbutton",
+    ) as HTMLInputElement[];
+    expect(pageInputsAfter[0].value).toBe("6");
+    expect(pageInputsAfter[1].value).toBe("10");
   });
 });

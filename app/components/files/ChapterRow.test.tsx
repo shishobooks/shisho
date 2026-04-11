@@ -271,8 +271,12 @@ describe("ChapterRow - M4B Playback", () => {
     });
   });
 
-  describe("edit mode timestamp buttons trigger reorder", () => {
-    it("calls onBlur after clicking decrement timestamp button", async () => {
+  describe("edit mode timestamp buttons commit but do not reorder", () => {
+    // Button clicks intentionally do NOT fire onBlur so rapid clicking can't
+    // swap the chapter row under the user's cursor. onBlur reorder is
+    // reserved for explicit commit actions (input blur, page picker).
+
+    it("commits but does not reorder after clicking decrement timestamp button", async () => {
       const user = userEvent.setup();
       const onBlur = vi.fn();
       const onStartTimestampChange = vi.fn();
@@ -305,10 +309,10 @@ describe("ChapterRow - M4B Playback", () => {
       await user.click(minusButton);
 
       expect(onStartTimestampChange).toHaveBeenCalledWith(59000);
-      expect(onBlur).toHaveBeenCalled();
+      expect(onBlur).not.toHaveBeenCalled();
     });
 
-    it("calls onBlur after clicking increment timestamp button", async () => {
+    it("commits but does not reorder after clicking increment timestamp button", async () => {
       const user = userEvent.setup();
       const onBlur = vi.fn();
       const onStartTimestampChange = vi.fn();
@@ -341,7 +345,7 @@ describe("ChapterRow - M4B Playback", () => {
       await user.click(plusButton);
 
       expect(onStartTimestampChange).toHaveBeenCalledWith(61000);
-      expect(onBlur).toHaveBeenCalled();
+      expect(onBlur).not.toHaveBeenCalled();
     });
   });
 });
@@ -407,8 +411,12 @@ describe("ChapterRow - CBZ", () => {
     expect(screen.getByText("Chapter 1")).toBeInTheDocument();
   });
 
-  describe("edit mode page arrows trigger reorder", () => {
-    it("calls onBlur after clicking decrement page button", async () => {
+  describe("edit mode page arrows commit but do not reorder", () => {
+    // Button clicks intentionally do NOT fire onBlur so rapid clicking can't
+    // swap the chapter row under the user's cursor. onBlur reorder is
+    // reserved for explicit commit actions (input blur, page picker).
+
+    it("commits but does not reorder after clicking decrement page button", async () => {
       const user = userEvent.setup();
       const onBlur = vi.fn();
       const onStartPageChange = vi.fn();
@@ -437,10 +445,10 @@ describe("ChapterRow - CBZ", () => {
       await user.click(prevButton);
 
       expect(onStartPageChange).toHaveBeenCalledWith(4);
-      expect(onBlur).toHaveBeenCalled();
+      expect(onBlur).not.toHaveBeenCalled();
     });
 
-    it("calls onBlur after clicking increment page button", async () => {
+    it("commits but does not reorder after clicking increment page button", async () => {
       const user = userEvent.setup();
       const onBlur = vi.fn();
       const onStartPageChange = vi.fn();
@@ -469,7 +477,7 @@ describe("ChapterRow - CBZ", () => {
       await user.click(nextButton);
 
       expect(onStartPageChange).toHaveBeenCalledWith(6);
-      expect(onBlur).toHaveBeenCalled();
+      expect(onBlur).not.toHaveBeenCalled();
     });
   });
 });

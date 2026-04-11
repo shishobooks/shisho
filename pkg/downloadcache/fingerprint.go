@@ -86,20 +86,71 @@ type FingerprintCover struct {
 	ModTime  time.Time `json:"mod_time"`
 }
 
-// convertChaptersToFingerprint recursively converts model chapters to fingerprint format.
-func convertChaptersToFingerprint(chapters []*models.Chapter) []FingerprintChapter {
+// chapterNaturalLess returns a less function for sorting chapters by their
+// natural position field, matching how pkg/filegen writes chapters on download:
+// CBZ/PDF by StartPage, M4B by StartTimestampMs, everything else by SortOrder.
+// Ties break on SortOrder so the result is stable.
+func chapterNaturalLess(chapters []*models.Chapter, fileType string) func(i, j int) bool {
+	switch fileType {
+	case models.FileTypeCBZ, models.FileTypePDF:
+		return func(i, j int) bool {
+			ai := 0
+			if chapters[i].StartPage != nil {
+				ai = *chapters[i].StartPage
+			}
+			aj := 0
+			if chapters[j].StartPage != nil {
+				aj = *chapters[j].StartPage
+			}
+			if ai != aj {
+				return ai < aj
+			}
+			return chapters[i].SortOrder < chapters[j].SortOrder
+		}
+	case models.FileTypeM4B:
+		return func(i, j int) bool {
+			var ai int64
+			if chapters[i].StartTimestampMs != nil {
+				ai = *chapters[i].StartTimestampMs
+			}
+			var aj int64
+			if chapters[j].StartTimestampMs != nil {
+				aj = *chapters[j].StartTimestampMs
+			}
+			if ai != aj {
+				return ai < aj
+			}
+			return chapters[i].SortOrder < chapters[j].SortOrder
+		}
+	default:
+		return func(i, j int) bool {
+			return chapters[i].SortOrder < chapters[j].SortOrder
+		}
+	}
+}
+
+// convertChaptersToFingerprint recursively converts model chapters to fingerprint
+// format, sorting by the natural position field for the given file type so the
+// fingerprint reflects the same order the file generator will emit. The
+// FingerprintChapter.SortOrder field is re-derived from the sorted index so it
+// matches the array position regardless of drift in the DB's sort_order column.
+func convertChaptersToFingerprint(chapters []*models.Chapter, fileType string) []FingerprintChapter {
 	if len(chapters) == 0 {
 		return []FingerprintChapter{}
 	}
-	result := make([]FingerprintChapter, len(chapters))
-	for i, ch := range chapters {
+	sorted := make([]*models.Chapter, len(chapters))
+	copy(sorted, chapters)
+	sort.SliceStable(sorted, chapterNaturalLess(sorted, fileType))
+
+	result := make([]FingerprintChapter, len(sorted))
+	for i, ch := range sorted {
 		result[i] = FingerprintChapter{
 			Title:            ch.Title,
-			SortOrder:        ch.SortOrder,
+			SortOrder:        i, // re-derive from sorted position for stability
 			StartPage:        ch.StartPage,
 			StartTimestampMs: ch.StartTimestampMs,
 			Href:             ch.Href,
-			Children:         convertChaptersToFingerprint(ch.Children),
+			Children:         convertChaptersToFingerprint(ch.Children, fileType),
 		}
 	}
 	return result
@@ -251,14 +302,14 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		fp.CoverPage = file.CoverPage
 	}
 
-	// Add chapters (sorted by SortOrder for consistent fingerprinting)
+	// Add chapters, sorted by natural position so the fingerprint matches
+	// the order the file generator will emit on download.
+	fileType := ""
+	if file != nil {
+		fileType = file.FileType
+	}
 	if file != nil && len(file.Chapters) > 0 {
-		chapters := make([]*models.Chapter, len(file.Chapters))
-		copy(chapters, file.Chapters)
-		sort.Slice(chapters, func(i, j int) bool {
-			return chapters[i].SortOrder < chapters[j].SortOrder
-		})
-		fp.Chapters = convertChaptersToFingerprint(chapters)
+		fp.Chapters = convertChaptersToFingerprint(file.Chapters, fileType)
 	} else {
 		fp.Chapters = []FingerprintChapter{}
 	}

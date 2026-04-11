@@ -263,7 +263,7 @@ func TestBuildCBZMetadata_Chapters(t *testing.T) {
 		assert.Equal(t, 0, metadata.Chapters[0].StartPage) // Defaults to 0
 	})
 
-	t.Run("sorts chapters by SortOrder", func(t *testing.T) {
+	t.Run("sorts chapters by StartPage", func(t *testing.T) {
 		startPage0 := 0
 		startPage5 := 5
 		startPage10 := 10
@@ -272,6 +272,8 @@ func TestBuildCBZMetadata_Chapters(t *testing.T) {
 		}
 		file := &models.File{
 			Chapters: []*models.Chapter{
+				// Provided in SortOrder ascending but StartPage ascending too,
+				// so both orderings give the same result — this is the baseline.
 				{Title: "Chapter 3", StartPage: &startPage10, SortOrder: 2},
 				{Title: "Chapter 1", StartPage: &startPage0, SortOrder: 0},
 				{Title: "Chapter 2", StartPage: &startPage5, SortOrder: 1},
@@ -285,6 +287,34 @@ func TestBuildCBZMetadata_Chapters(t *testing.T) {
 		assert.Equal(t, "Chapter 1", metadata.Chapters[0].Title)
 		assert.Equal(t, "Chapter 2", metadata.Chapters[1].Title)
 		assert.Equal(t, "Chapter 3", metadata.Chapters[2].Title)
+	})
+
+	t.Run("chapter order follows StartPage when SortOrder disagrees", func(t *testing.T) {
+		// Regression: SortOrder and StartPage disagree. The generated KePub
+		// must render chapters in page order, not SortOrder order, so the
+		// reader's navigation lines up with the pages.
+		startPage0 := 0
+		startPage3 := 3
+		startPage7 := 7
+		book := &models.Book{Title: "Comic Book"}
+		file := &models.File{
+			Chapters: []*models.Chapter{
+				{Title: "at page 7", StartPage: &startPage7, SortOrder: 0},
+				{Title: "at page 0", StartPage: &startPage0, SortOrder: 1},
+				{Title: "at page 3", StartPage: &startPage3, SortOrder: 2},
+			},
+		}
+
+		metadata := buildCBZMetadata(book, file)
+
+		require.NotNil(t, metadata)
+		require.Len(t, metadata.Chapters, 3)
+		assert.Equal(t, "at page 0", metadata.Chapters[0].Title)
+		assert.Equal(t, 0, metadata.Chapters[0].StartPage)
+		assert.Equal(t, "at page 3", metadata.Chapters[1].Title)
+		assert.Equal(t, 3, metadata.Chapters[1].StartPage)
+		assert.Equal(t, "at page 7", metadata.Chapters[2].Title)
+		assert.Equal(t, 7, metadata.Chapters[2].StartPage)
 	})
 }
 
