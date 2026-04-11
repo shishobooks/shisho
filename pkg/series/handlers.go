@@ -2,8 +2,6 @@ package series
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +9,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -271,21 +270,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 		return errcodes.NotFound("Series cover")
 	}
 
-	// Determine if this is a root-level book by checking if book.Filepath is a file
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-
-	// Determine the directory where covers are located
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	coverImagePath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
+	coverImagePath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
 
 	// Set appropriate headers
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")

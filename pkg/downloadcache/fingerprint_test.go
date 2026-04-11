@@ -136,21 +136,22 @@ func TestComputeFingerprint(t *testing.T) {
 		assert.Empty(t, fp.Narrators)
 	})
 
-	t.Run("cover information is included", func(t *testing.T) {
-		// Create a temp file to simulate a cover image
+	t.Run("cover information is resolved against book directory", func(t *testing.T) {
+		// CoverImageFilename stores just the filename; the full path is
+		// resolved at runtime against book.Filepath.
 		tmpDir := t.TempDir()
-		coverPath := filepath.Join(tmpDir, "cover.jpg")
-		err := os.WriteFile(coverPath, []byte("fake cover data"), 0644)
+		coverFilename := "book.epub.cover.jpg"
+		coverAbsPath := filepath.Join(tmpDir, coverFilename)
+		err := os.WriteFile(coverAbsPath, []byte("fake cover data"), 0644)
 		require.NoError(t, err)
 
-		// Get the mod time
-		info, err := os.Stat(coverPath)
+		info, err := os.Stat(coverAbsPath)
 		require.NoError(t, err)
 		modTime := info.ModTime()
 
-		book := &models.Book{Title: "Book with Cover"}
+		book := &models.Book{Title: "Book with Cover", Filepath: tmpDir}
 		file := &models.File{
-			CoverImageFilename: strPtr(coverPath),
+			CoverImageFilename: strPtr(coverFilename),
 			CoverMimeType:      strPtr("image/jpeg"),
 		}
 
@@ -158,15 +159,15 @@ func TestComputeFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, fp.Cover)
-		assert.Equal(t, coverPath, fp.Cover.Path)
+		assert.Equal(t, coverAbsPath, fp.Cover.Path)
 		assert.Equal(t, "image/jpeg", fp.Cover.MimeType)
 		assert.Equal(t, modTime.Unix(), fp.Cover.ModTime.Unix())
 	})
 
-	t.Run("cover with non-existent path uses zero time", func(t *testing.T) {
-		book := &models.Book{Title: "Book"}
+	t.Run("cover with non-existent filename uses zero time", func(t *testing.T) {
+		book := &models.Book{Title: "Book", Filepath: "/nonexistent"}
 		file := &models.File{
-			CoverImageFilename: strPtr("/nonexistent/cover.jpg"),
+			CoverImageFilename: strPtr("missing.jpg"),
 			CoverMimeType:      strPtr("image/jpeg"),
 		}
 
@@ -174,6 +175,9 @@ func TestComputeFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, fp.Cover)
+		// Path is still resolved via ResolveCoverPath even when stat fails —
+		// locks in the join contract.
+		assert.Equal(t, filepath.Join("/nonexistent", "missing.jpg"), fp.Cover.Path)
 		assert.True(t, fp.Cover.ModTime.IsZero())
 	})
 

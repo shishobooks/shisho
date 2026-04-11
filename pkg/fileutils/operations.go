@@ -417,22 +417,56 @@ func getBaseNameWithoutExt(path string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
+// ResolveCoverDir resolves the directory that contains a book's cover images.
+// Accepts either the book's filepath or any file inside the book directory
+// (e.g. file.Filepath). For directory-backed books (the common case), the
+// book filepath is the cover dir itself. For root-level books (where
+// book.Filepath is the file, not a directory) or when given a file path,
+// the cover dir is the file's parent. If the path cannot be stat'd, returns
+// it unchanged — safe for read-side callers that are resolving a path the
+// DB already tells us exists, but NOT safe for write-side callers whose
+// bookFilepath may be a synthetic path that hasn't been created yet. Those
+// callers must use ResolveCoverDirForWrite.
+func ResolveCoverDir(bookFilepath string) string {
+	if info, err := os.Stat(bookFilepath); err == nil && !info.IsDir() {
+		return filepath.Dir(bookFilepath)
+	}
+	return bookFilepath
+}
+
+// ResolveCoverDirForWrite resolves the directory where a cover image should
+// be written. Unlike ResolveCoverDir (the read-side helper), this handles
+// the case where bookFilepath may be a synthetic organized-folder path that
+// does not yet exist on disk — common when scanning root-level files in
+// libraries with OrganizeFileStructure enabled, where the organized
+// directory is created later in the batch. In that case the cover must
+// land alongside the file at filepath.Dir(fileFilepath), which is where
+// extractAndSaveCover wrote the file-embedded cover.
+//
+// If bookFilepath resolves to a real directory, it's used. Otherwise (stat
+// fails, or bookFilepath is a file), falls back to filepath.Dir(fileFilepath).
+// This is correct for all three scenarios:
+//   - directory-backed books: bookFilepath is a real dir, use it
+//   - root-level books (rescan): bookFilepath == fileFilepath, fall back
+//     gives filepath.Dir(fileFilepath) = library dir, same as before
+//   - root-level books (new file, synthetic path): stat fails, fall back
+//     gives filepath.Dir(fileFilepath) = library dir where the file lives
+func ResolveCoverDirForWrite(bookFilepath, fileFilepath string) string {
+	if info, err := os.Stat(bookFilepath); err == nil && info.IsDir() {
+		return bookFilepath
+	}
+	return filepath.Dir(fileFilepath)
+}
+
 // ResolveCoverPath resolves the full path to a file's cover image on disk.
 // CoverImageFilename in the database stores only the filename, so the full
 // path must be constructed at runtime by joining it with the book's cover
-// directory. For directory-backed books (the common case), the cover dir is
-// the book's filepath itself; for root-level books (where book.Filepath is
-// the file, not a directory), the cover dir is the file's parent.
-// Returns an empty string if coverFilename is empty.
+// directory. Returns an empty string if coverFilename is empty.
 func ResolveCoverPath(bookFilepath, coverFilename string) string {
 	if coverFilename == "" {
 		return ""
 	}
-	coverDir := bookFilepath
-	if info, err := os.Stat(bookFilepath); err == nil && !info.IsDir() {
-		coverDir = filepath.Dir(bookFilepath)
-	}
-	return filepath.Join(coverDir, coverFilename)
+	return filepath.Join(ResolveCoverDir(bookFilepath), coverFilename)
 }
 
 // ComputeNewCoverFilename computes the new cover filename after a file has been renamed.

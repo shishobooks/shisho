@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -276,15 +277,16 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		sort.Strings(fp.Tags)
 	}
 
-	// Add cover information if present
+	// Add cover information if present. CoverImageFilename stores only the
+	// filename; resolve it against the book's cover directory so Path is
+	// usable and Stat sees the real file for modtime.
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := *file.CoverImageFilename
+		coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
 		mimeType := ""
 		if file.CoverMimeType != nil {
 			mimeType = *file.CoverMimeType
 		}
 
-		// Get file modification time for the cover
 		var modTime time.Time
 		if info, err := os.Stat(coverPath); err == nil {
 			modTime = info.ModTime()

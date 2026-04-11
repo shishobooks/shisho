@@ -748,19 +748,22 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// When downgrading from main to supplement, clear all main-file-only metadata
 		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
-			// Delete cover image file if it exists. CoverImageFilename stores just
-			// the filename; fileutils.ResolveCoverPath joins it with the book's
-			// cover directory (book dir, or its parent for root-level books).
-			if file.CoverImageFilename != nil && file.Book != nil {
-				coverPath := fileutils.ResolveCoverPath(file.Book.Filepath, *file.CoverImageFilename)
-				if coverPath != "" {
-					if err := os.Remove(coverPath); err != nil && !os.IsNotExist(err) {
-						log.Warn("failed to delete cover image on downgrade", logger.Data{
-							"error":   err.Error(),
-							"path":    coverPath,
-							"file_id": file.ID,
-						})
-					}
+			// Delete cover image file if it exists. CoverImageFilename stores
+			// just the filename — use a pure-string join against
+			// filepath.Dir(file.Filepath) rather than stat'ing book.Filepath.
+			// book.Filepath may be a synthetic organized-folder path that
+			// never exists on disk for root-level files, and ResolveCoverPath
+			// would fall back to that junk path. The cover always lives
+			// alongside the file for both root-level and directory-backed
+			// books, so filepath.Dir(file.Filepath) is always correct.
+			if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+				coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+				if err := os.Remove(coverPath); err != nil && !os.IsNotExist(err) {
+					log.Warn("failed to delete cover image on downgrade", logger.Data{
+						"error":   err.Error(),
+						"path":    coverPath,
+						"file_id": file.ID,
+					})
 				}
 			}
 
@@ -1326,17 +1329,7 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Determine cover directory
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
+	coverDir := fileutils.ResolveCoverDir(book.Filepath)
 
 	// Generate the cover filename: {filename}.cover.{ext}
 	filename := filepath.Base(file.Filepath)
@@ -1479,23 +1472,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	// Determine if this is a root-level book by checking if book.Filepath is a file
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-
-	// Determine the directory where covers are located
-	var coverDir string
-	if isRootLevelBook {
-		// For root-level books, covers are in the same directory as the file
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		// For directory-based books, covers are in the book directory
-		coverDir = book.Filepath
-	}
-
-	coverPath := filepath.Join(coverDir, *coverFile.CoverImageFilename)
+	coverPath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
 	return errors.WithStack(c.File(coverPath))
 }
 

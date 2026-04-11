@@ -336,7 +336,10 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 	err = os.WriteFile(mainFilePath, []byte("test content"), 0644)
 	require.NoError(t, err)
 
-	coverPath := filepath.Join(tmpDir, "test.cover.jpg")
+	// CoverImageFilename stores just the filename; the full path is
+	// resolved at runtime relative to the book directory.
+	coverFilename := "test.cover.jpg"
+	coverPath := filepath.Join(tmpDir, coverFilename)
 	err = os.WriteFile(coverPath, []byte("cover content"), 0644)
 	require.NoError(t, err)
 
@@ -352,7 +355,7 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 		FileRole:           models.FileRoleMain,
 		Filepath:           mainFilePath,
 		FilesizeBytes:      12,
-		CoverImageFilename: &coverPath,
+		CoverImageFilename: &coverFilename,
 	}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
@@ -381,6 +384,72 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "cover should be deleted")
 	_, err = os.Stat(sidecarPath)
 	assert.True(t, os.IsNotExist(err), "sidecar should be deleted")
+}
+
+// TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing is a
+// regression test for a bug where deleteFileFromDisk resolved the cover
+// path by stat'ing file.Filepath. If the main file had already been
+// removed from disk (e.g. the user manually deleted it before triggering
+// the app's delete), the stat would fail, ResolveCoverDir would fall
+// back to treating file.Filepath as a directory, and the resulting
+// cover path would be a junk location — silently leaving the cover file
+// orphaned on disk.
+func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		OrganizeFileStructure:    false,
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        filepath.Join(tmpDir, "test-book"),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Write the cover but NOT the main file, to simulate a user who has
+	// already manually deleted the main file before running the app's
+	// delete.
+	mainFilePath := filepath.Join(tmpDir, "test.epub")
+	coverFilename := "test.cover.jpg"
+	coverPath := filepath.Join(tmpDir, coverFilename)
+	require.NoError(t, os.WriteFile(coverPath, []byte("cover content"), 0644))
+
+	file := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           mainFilePath,
+		FilesizeBytes:      12,
+		CoverImageFilename: &coverFilename,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Call DeleteBookAndFiles — main file absence is expected and fine.
+	bookSvc := NewService(db)
+	_, err = bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
+	require.NoError(t, err)
+
+	// The orphaned cover file must be cleaned up even though the main
+	// file was already missing when the delete ran.
+	_, err = os.Stat(coverPath)
+	assert.True(t, os.IsNotExist(err), "cover should be deleted even when main file was already missing")
 }
 
 func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing.T) {
@@ -424,7 +493,10 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 	err = os.WriteFile(mainFilePath, []byte("test content"), 0644)
 	require.NoError(t, err)
 
-	coverPath := filepath.Join(bookDir, "test.cover.jpg")
+	// CoverImageFilename stores just the filename; the full path is
+	// resolved at runtime relative to the book directory.
+	coverFilename := "test.cover.jpg"
+	coverPath := filepath.Join(bookDir, coverFilename)
 	err = os.WriteFile(coverPath, []byte("cover content"), 0644)
 	require.NoError(t, err)
 
@@ -440,7 +512,7 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 		FileRole:           models.FileRoleMain,
 		Filepath:           mainFilePath,
 		FilesizeBytes:      12,
-		CoverImageFilename: &coverPath,
+		CoverImageFilename: &coverFilename,
 	}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
