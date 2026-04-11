@@ -418,9 +418,11 @@ func getBaseNameWithoutExt(path string) string {
 }
 
 // ResolveCoverDir resolves the directory that contains a book's cover images.
-// For directory-backed books (the common case), this is the book's filepath
-// itself. For root-level books (where book.Filepath is the file, not a
-// directory), it's the file's parent. If the path cannot be stat'd (e.g.,
+// Accepts either the book's filepath or any file inside the book directory
+// (e.g. file.Filepath). For directory-backed books (the common case), the
+// book filepath is the cover dir itself. For root-level books (where
+// book.Filepath is the file, not a directory) or when given a file path,
+// the cover dir is the file's parent. If the path cannot be stat'd (e.g.,
 // because it was moved or deleted), falls back to treating it as a directory.
 func ResolveCoverDir(bookFilepath string) string {
 	if info, err := os.Stat(bookFilepath); err == nil && !info.IsDir() {

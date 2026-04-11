@@ -1909,17 +1909,7 @@ func (w *Worker) scanFileCore(
 		isDifferent := file.CoverPage == nil || *file.CoverPage != *fileSidecarData.CoverPage
 
 		if shouldApply && isDifferent {
-			// Determine cover directory
-			var coverDir string
-			if file.Book != nil {
-				if info, statErr := os.Stat(file.Book.Filepath); statErr == nil && info.IsDir() {
-					coverDir = file.Book.Filepath
-				} else {
-					coverDir = filepath.Dir(file.Book.Filepath)
-				}
-			} else {
-				coverDir = filepath.Dir(file.Filepath)
-			}
+			coverDir := fileutils.ResolveCoverDir(book.Filepath)
 
 			// Generate cover filename
 			filename := filepath.Base(file.Filepath)
@@ -2690,11 +2680,8 @@ func (w *Worker) upgradeEnricherCover(
 		return
 	}
 
-	// 4. Determine the cover directory (same logic as recoverMissingCover)
-	coverDir := bookFilepath
-	if info, err := os.Stat(bookFilepath); err != nil || !info.IsDir() {
-		coverDir = filepath.Dir(file.Filepath)
-	}
+	// 4. Determine the cover directory
+	coverDir := fileutils.ResolveCoverDir(bookFilepath)
 
 	coverBaseName := filepath.Base(file.Filepath) + ".cover"
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
@@ -3335,18 +3322,12 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		}
 	}
 
-	// Determine cover directory
-	var coverDir string
-	if file.Book != nil {
-		// Check if book filepath is a directory or file
-		if info, err := os.Stat(file.Book.Filepath); err == nil && info.IsDir() {
-			coverDir = file.Book.Filepath
-		} else {
-			coverDir = filepath.Dir(file.Book.Filepath)
-		}
-	} else {
-		coverDir = filepath.Dir(file.Filepath)
-	}
+	// Determine cover directory. recoverMissingCover is called from
+	// scanFileByID only after confirming file.Filepath exists on disk, so
+	// ResolveCoverDir will stat it, see it's a file, and fall back to
+	// filepath.Dir — the correct cover dir for both root-level and
+	// directory-backed books.
+	coverDir := fileutils.ResolveCoverDir(file.Filepath)
 
 	// Check if cover file exists on disk
 	filename := filepath.Base(file.Filepath)
