@@ -55,9 +55,11 @@ type RetrieveFileOptions struct {
 }
 
 type ListFilesOptions struct {
-	Limit  *int
-	Offset *int
-	BookID *int
+	Limit          *int
+	Offset         *int
+	BookID         *int
+	LibraryID      *int
+	FilepathPrefix *string // Matches files whose filepath equals this value or is a descendant (prefix + "/")
 
 	includeTotal bool
 }
@@ -492,6 +494,14 @@ func (svc *Service) DeleteFileIdentifiers(ctx context.Context, fileID int) error
 	return errors.WithStack(err)
 }
 
+// escapeLikePattern escapes the SQLite LIKE wildcards (%, _) and the escape
+// character (\) so a raw filesystem path can be used as a literal prefix in a
+// LIKE clause via `ESCAPE '\'`.
+func escapeLikePattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(s)
+}
+
 func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) (*models.File, error) {
 	file := &models.File{}
 
@@ -594,6 +604,18 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 	}
 	if opts.BookID != nil {
 		q = q.Where("f.book_id = ?", *opts.BookID)
+	}
+	if opts.LibraryID != nil {
+		q = q.Where("f.library_id = ?", *opts.LibraryID)
+	}
+	if opts.FilepathPrefix != nil {
+		// Match the directory itself (should not happen for files) or any descendant.
+		// Escape LIKE wildcards so paths containing % or _ don't over-match. The
+		// path separator is escaped too — on Windows it's `\`, which is our
+		// ESCAPE char, so an unescaped separator would turn the trailing % into
+		// a literal and silently match nothing.
+		escaped := escapeLikePattern(*opts.FilepathPrefix) + escapeLikePattern(string(os.PathSeparator)) + "%"
+		q = q.Where("f.filepath = ? OR f.filepath LIKE ? ESCAPE '\\'", *opts.FilepathPrefix, escaped)
 	}
 
 	if opts.includeTotal {
