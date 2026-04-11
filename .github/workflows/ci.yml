@@ -38,6 +38,15 @@ jobs:
       - run: mise tygo
       - run: mise lint:js
 
+  docs-build:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C website build
+
   test-js:
     name: JS Test
     runs-on: ubuntu-latest
