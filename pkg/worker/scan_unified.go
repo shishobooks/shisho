@@ -1909,7 +1909,10 @@ func (w *Worker) scanFileCore(
 		isDifferent := file.CoverPage == nil || *file.CoverPage != *fileSidecarData.CoverPage
 
 		if shouldApply && isDifferent {
-			coverDir := fileutils.ResolveCoverDir(book.Filepath)
+			// book.Filepath may be a synthetic organized-folder path that
+			// does not yet exist for root-level new files, so use the
+			// write-side helper that falls back to the file's parent dir.
+			coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
 
 			// Generate cover filename
 			filename := filepath.Base(file.Filepath)
@@ -2680,8 +2683,11 @@ func (w *Worker) upgradeEnricherCover(
 		return
 	}
 
-	// 4. Determine the cover directory
-	coverDir := fileutils.ResolveCoverDir(bookFilepath)
+	// 4. Determine the cover directory. bookFilepath may be a synthetic
+	// organized-folder path that does not yet exist for root-level new
+	// files (see scanFileCreateNew around line 2106), so use the
+	// write-side helper that falls back to the file's parent dir.
+	coverDir := fileutils.ResolveCoverDirForWrite(bookFilepath, file.Filepath)
 
 	coverBaseName := filepath.Base(file.Filepath) + ".cover"
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)

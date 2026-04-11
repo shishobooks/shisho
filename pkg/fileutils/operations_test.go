@@ -912,6 +912,44 @@ func TestResolveCoverDir(t *testing.T) {
 	})
 }
 
+func TestResolveCoverDirForWrite(t *testing.T) {
+	t.Parallel()
+
+	t.Run("directory-backed book returns book dir unchanged", func(t *testing.T) {
+		t.Parallel()
+		bookDir := t.TempDir()
+		filePath := filepath.Join(bookDir, "book.epub")
+		if err := os.WriteFile(filePath, []byte("epub"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		assert.Equal(t, bookDir, ResolveCoverDirForWrite(bookDir, filePath))
+	})
+
+	t.Run("root-level book (rescan) returns library dir", func(t *testing.T) {
+		t.Parallel()
+		libraryDir := t.TempDir()
+		bookFilepath := filepath.Join(libraryDir, "book.epub")
+		if err := os.WriteFile(bookFilepath, []byte("epub"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		// Root-level rescan: bookFilepath == fileFilepath, both point at the file.
+		assert.Equal(t, libraryDir, ResolveCoverDirForWrite(bookFilepath, bookFilepath))
+	})
+
+	t.Run("synthetic (nonexistent) bookFilepath falls back to file's parent", func(t *testing.T) {
+		t.Parallel()
+		libraryDir := t.TempDir()
+		filePath := filepath.Join(libraryDir, "book.epub")
+		if err := os.WriteFile(filePath, []byte("epub"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		// Synthetic bookPath (never created on disk), e.g. for a root-level
+		// new file in a library with OrganizeFileStructure enabled.
+		syntheticBookPath := filepath.Join(libraryDir, "Author", "Title")
+		assert.Equal(t, libraryDir, ResolveCoverDirForWrite(syntheticBookPath, filePath))
+	})
+}
+
 func TestResolveCoverPath(t *testing.T) {
 	t.Parallel()
 
