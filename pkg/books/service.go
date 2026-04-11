@@ -1376,6 +1376,19 @@ func (svc *Service) ListFilesForLibrary(ctx context.Context, libraryID int) ([]*
 	return files, errors.WithStack(err)
 }
 
+// ListAllFilesForLibrary returns all files (main and supplement) for a library.
+// Used to preload the scan cache so the path-based scan walk can detect
+// supplement files that share scannable extensions (e.g. .pdf) with main files
+// and skip them instead of trying to re-create them as main files.
+func (svc *Service) ListAllFilesForLibrary(ctx context.Context, libraryID int) ([]*models.File, error) {
+	var files []*models.File
+	err := svc.db.NewSelect().
+		Model(&files).
+		Where("library_id = ?", libraryID).
+		Scan(ctx)
+	return files, errors.WithStack(err)
+}
+
 // DeleteBook deletes a book and all its associated records.
 // All child records (files, authors, book_series, book_genres, book_tags) cascade via FK.
 // File children (narrators, identifiers, chapters) cascade from files via FK.

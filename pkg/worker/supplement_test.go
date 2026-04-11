@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -200,4 +201,87 @@ func TestProcessScanJob_RootLevelSupplements(t *testing.T) {
 	}
 	assert.Equal(t, 1, mainCount)
 	assert.Equal(t, 1, suppCount)
+}
+
+// TestProcessScanJob_ScannableSupplementNotRescannedAsMain reproduces the bug
+// where a supplement sharing a scannable extension (e.g. .pdf next to .epub)
+// is walked by the scan loop and re-created as a main file, hitting the
+// UNIQUE constraint on (filepath, library_id).
+//
+// Repro path: main EPUB is scanned normally, then a PDF is added to the book
+// directory and registered directly in the DB as a supplement (simulating a
+// user demoting a file via the file-role update endpoint). A subsequent scan
+// must not try to recreate the PDF as a main file.
+func TestProcessScanJob_ScannableSupplementNotRescannedAsMain(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Book dir with main EPUB.
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Emily Oster] Cribsheet")
+	testgen.GenerateEPUB(t, bookDir, "Cribsheet.epub", testgen.EPUBOptions{
+		Title:   "Cribsheet",
+		Authors: []string{"Emily Oster"},
+	})
+
+	// First scan: creates book + main EPUB.
+	require.NoError(t, tc.runScan())
+
+	booksList := tc.listBooks()
+	require.Len(t, booksList, 1)
+	bookID := booksList[0].ID
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	// Now add a PDF to disk and register it as a supplement directly in the DB
+	// (matches what the file-role update handler does).
+	pdfPath := testgen.GeneratePDF(t, bookDir, "Cribsheet.pdf", testgen.PDFOptions{})
+	pdfStat, err := os.Stat(pdfPath)
+	require.NoError(t, err)
+
+	supplementFile := &models.File{
+		LibraryID:     1,
+		BookID:        bookID,
+		Filepath:      pdfPath,
+		FileType:      "pdf",
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: pdfStat.Size(),
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplementFile))
+	suppID := supplementFile.ID
+
+	require.Len(t, tc.listFiles(), 2)
+
+	// Second scan: the PDF already exists as a supplement. The scan walk
+	// previously walked the PDF, missed it in the cache (cache is main-only),
+	// and tried to recreate it as a main file — hitting UNIQUE(filepath, library_id).
+	log := logger.FromContext(tc.ctx)
+	rescanLog := tc.jobLogService.NewJobLogger(tc.ctx, 1, log)
+	require.NoError(t, tc.worker.ProcessScanJob(tc.ctx, nil, rescanLog))
+
+	// State should be unchanged: same files with same roles and same IDs.
+	afterFiles := tc.listFiles()
+	require.Len(t, afterFiles, 2, "rescan should not add or lose any files")
+
+	var foundSupp bool
+	for _, f := range afterFiles {
+		if filepath.Base(f.Filepath) == "Cribsheet.pdf" {
+			assert.Equal(t, models.FileRoleSupplement, f.FileRole, "PDF should still be a supplement after rescan")
+			assert.Equal(t, suppID, f.ID, "supplement row should not have been recreated")
+			foundSupp = true
+		}
+	}
+	assert.True(t, foundSupp, "supplement PDF row should still exist after rescan")
+
+	// When the bug is present, the scan walks Cribsheet.pdf, calls scanFileCreateNew,
+	// parses PDF metadata, and writes Cribsheet.pdf.cover.jpg to disk before the
+	// CreateFile UNIQUE constraint aborts the insert. A correct scan must early
+	// return for supplements without touching the cover file.
+	coverPath := filepath.Join(bookDir, "Cribsheet.pdf.cover.jpg")
+	_, err = os.Stat(coverPath)
+	assert.True(t, os.IsNotExist(err),
+		"rescan should not extract a cover for an existing supplement PDF (cover file at %s)", coverPath)
 }

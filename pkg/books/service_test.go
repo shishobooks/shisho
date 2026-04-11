@@ -1245,3 +1245,51 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.FileRoleSupplement, updatedNewer.FileRole, "newer supplement should remain as supplement")
 }
+
+func TestListAllFilesForLibrary_IncludesSupplements(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library, book := setupTestLibraryAndBook(t, db)
+
+	mainFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/main.epub",
+		FilesizeBytes: 100,
+	}
+	_, err := db.NewInsert().Model(mainFile).Exec(ctx)
+	require.NoError(t, err)
+
+	supplementFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      "pdf",
+		FileRole:      models.FileRoleSupplement,
+		Filepath:      "/test/supplement.pdf",
+		FilesizeBytes: 200,
+	}
+	_, err = db.NewInsert().Model(supplementFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// ListFilesForLibrary keeps returning main-only (unchanged invariant for orphan cleanup)
+	mainOnly, err := svc.ListFilesForLibrary(ctx, library.ID)
+	require.NoError(t, err)
+	require.Len(t, mainOnly, 1)
+	assert.Equal(t, mainFile.ID, mainOnly[0].ID)
+
+	// New method returns both main and supplement files for the library
+	all, err := svc.ListAllFilesForLibrary(ctx, library.ID)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	roles := map[string]struct{}{}
+	for _, f := range all {
+		roles[f.FileRole] = struct{}{}
+	}
+	assert.Contains(t, roles, models.FileRoleMain)
+	assert.Contains(t, roles, models.FileRoleSupplement)
+}

@@ -263,14 +263,26 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		jobLog.Info("processing library", logger.Data{"library_id": library.ID})
 		filesToScan := make([]string, 0)
 
-		// Pre-load all known files for fast lookup during discovery and scan
+		// Pre-load all known files (main + supplement) for fast lookup during
+		// discovery and scan. The cache must include supplements so the scan
+		// walk can detect a supplement sharing a scannable extension (e.g. a
+		// .pdf companion next to a .epub) and skip it instead of trying to
+		// recreate it as a main file and hitting UNIQUE(filepath, library_id).
 		cache := NewScanCache()
-		existingFiles, err := w.bookService.ListFilesForLibrary(ctx, library.ID)
+		allFiles, err := w.bookService.ListAllFilesForLibrary(ctx, library.ID)
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
 		} else {
-			cache.LoadKnownFiles(existingFiles)
-			jobLog.Info("pre-loaded known files", logger.Data{"count": len(existingFiles)})
+			cache.LoadKnownFiles(allFiles)
+			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
+		}
+		// Orphan cleanup only considers main files — supplements don't need
+		// orphan cleanup (their lifecycle follows the parent book).
+		var existingFiles []*models.File
+		for _, f := range allFiles {
+			if f.FileRole == models.FileRoleMain {
+				existingFiles = append(existingFiles, f)
+			}
 		}
 
 		// Go through all the library paths to find all the .cbz files.
