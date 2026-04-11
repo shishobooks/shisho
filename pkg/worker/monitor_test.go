@@ -519,3 +519,255 @@ func TestMonitor_SkipsWhenScanJobActive(t *testing.T) {
 	m.timer.Stop()
 	m.mu.Unlock()
 }
+
+func TestMonitor_HandleEvent_QueuesDirectoryRemoveAsDirectoryEvent(t *testing.T) {
+	t.Parallel()
+	m := newTestMonitor(t)
+	defer func() {
+		m.mu.Lock()
+		if m.timer != nil {
+			m.timer.Stop()
+		}
+		m.mu.Unlock()
+	}()
+
+	dirPath := "/library/books/author-title"
+	m.handleEvent(nil, fsnotify.Event{Name: dirPath, Op: fsnotify.Remove})
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ev, ok := m.pending[dirPath]
+	require.True(t, ok, "directory remove event should be queued")
+	assert.True(t, ev.IsDirectory)
+	assert.Equal(t, fsnotify.Remove, ev.Op)
+	assert.Equal(t, 1, ev.LibraryID)
+}
+
+func TestMonitor_HandleEvent_QueuesDirectoryRenameAsDirectoryEvent(t *testing.T) {
+	t.Parallel()
+	m := newTestMonitor(t)
+	defer func() {
+		m.mu.Lock()
+		if m.timer != nil {
+			m.timer.Stop()
+		}
+		m.mu.Unlock()
+	}()
+
+	dirPath := "/library/books/old-name"
+	m.handleEvent(nil, fsnotify.Event{Name: dirPath, Op: fsnotify.Rename})
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ev, ok := m.pending[dirPath]
+	require.True(t, ok, "directory rename event should be queued")
+	assert.True(t, ev.IsDirectory)
+	assert.Equal(t, fsnotify.Rename, ev.Op)
+}
+
+func TestMonitor_HandleEvent_IgnoresDirectoryRemoveOutsideLibrary(t *testing.T) {
+	t.Parallel()
+	m := newTestMonitor(t)
+
+	m.handleEvent(nil, fsnotify.Event{Name: "/other/path/folder", Op: fsnotify.Remove})
+	assert.Empty(t, m.pending)
+}
+
+func TestMonitor_ProcessEvent_DirectoryRemoveDeletesBookAndFile(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create and scan a book in its own directory.
+	bookDir := testgen.CreateSubDir(t, libDir, "Author - Title")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Dir Delete Me",
+		Authors: []string{"Test Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	// Seed the DB.
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{Op: fsnotify.Create, LibraryID: 1})
+	require.NotNil(t, result)
+	require.Len(t, tc.listFiles(), 1)
+	require.Len(t, tc.listBooks(), 1)
+
+	// Remove the whole directory from disk, then fire a directory remove event.
+	require.NoError(t, os.RemoveAll(bookDir))
+
+	results := m.processDirectoryEvent(tc.ctx, bookDir, pendingEvent{
+		Op:          fsnotify.Remove,
+		LibraryID:   1,
+		IsDirectory: true,
+	})
+	require.Len(t, results, 1)
+	assert.True(t, results[0].FileDeleted)
+
+	assert.Empty(t, tc.listFiles())
+	assert.Empty(t, tc.listBooks())
+}
+
+func TestMonitor_ProcessEvent_DirectoryRemoveCascadesToNestedBooks(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Two books in sibling subdirs under a common parent.
+	parentDir := testgen.CreateSubDir(t, libDir, "Author")
+	bookDirA := testgen.CreateSubDir(t, parentDir, "Title A")
+	bookDirB := testgen.CreateSubDir(t, parentDir, "Title B")
+	epubA := testgen.GenerateEPUB(t, bookDirA, "a.epub", testgen.EPUBOptions{
+		Title: "A", Authors: []string{"Author"},
+	})
+	epubB := testgen.GenerateEPUB(t, bookDirB, "b.epub", testgen.EPUBOptions{
+		Title: "B", Authors: []string{"Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	require.NotNil(t, m.processEvent(tc.ctx, epubA, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.NotNil(t, m.processEvent(tc.ctx, epubB, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.Len(t, tc.listFiles(), 2)
+	require.Len(t, tc.listBooks(), 2)
+
+	// Remove the entire parent subtree from disk.
+	require.NoError(t, os.RemoveAll(parentDir))
+
+	results := m.processDirectoryEvent(tc.ctx, parentDir, pendingEvent{
+		Op:          fsnotify.Remove,
+		LibraryID:   1,
+		IsDirectory: true,
+	})
+	assert.Len(t, results, 2)
+
+	assert.Empty(t, tc.listFiles())
+	assert.Empty(t, tc.listBooks())
+}
+
+func TestMonitor_ProcessEvent_DirectoryRemoveDoesNotMatchSiblingPrefix(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Two sibling directories whose names share a prefix: "Author" and "Author Two".
+	// Removing "Author" must not cascade into "Author Two".
+	keepDir := testgen.CreateSubDir(t, libDir, "Author Two")
+	goDir := testgen.CreateSubDir(t, libDir, "Author")
+	keepEpub := testgen.GenerateEPUB(t, keepDir, "keep.epub", testgen.EPUBOptions{
+		Title: "Keep", Authors: []string{"Keep"},
+	})
+	goEpub := testgen.GenerateEPUB(t, goDir, "go.epub", testgen.EPUBOptions{
+		Title: "Go", Authors: []string{"Go"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	require.NotNil(t, m.processEvent(tc.ctx, keepEpub, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.NotNil(t, m.processEvent(tc.ctx, goEpub, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.Len(t, tc.listBooks(), 2)
+
+	// Only remove the "Author" subtree from disk; "Author Two" stays intact.
+	require.NoError(t, os.RemoveAll(goDir))
+
+	results := m.processDirectoryEvent(tc.ctx, goDir, pendingEvent{
+		Op:          fsnotify.Remove,
+		LibraryID:   1,
+		IsDirectory: true,
+	})
+	assert.Len(t, results, 1, "only files under the removed directory should be touched")
+
+	remaining := tc.listFiles()
+	require.Len(t, remaining, 1)
+	assert.Equal(t, keepEpub, remaining[0].Filepath)
+	assert.Len(t, tc.listBooks(), 1)
+}
+
+func TestMonitor_ProcessEvent_DirectoryRenameCleansOldRows(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Seed a book in its folder.
+	oldDir := testgen.CreateSubDir(t, libDir, "Old Name")
+	epubPath := testgen.GenerateEPUB(t, oldDir, "book.epub", testgen.EPUBOptions{
+		Title: "Renamed", Authors: []string{"Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	require.NotNil(t, m.processEvent(tc.ctx, epubPath, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.Len(t, tc.listBooks(), 1)
+
+	// Simulate the directory being renamed away on disk (move it to a new name).
+	newDir := filepath.Join(libDir, "New Name")
+	require.NoError(t, os.Rename(oldDir, newDir))
+
+	// Fire the Rename event for the old directory path. The file no longer
+	// exists at the old path, so scanInternal should delete the old rows.
+	results := m.processDirectoryEvent(tc.ctx, oldDir, pendingEvent{
+		Op:          fsnotify.Rename,
+		LibraryID:   1,
+		IsDirectory: true,
+	})
+	require.Len(t, results, 1)
+	assert.True(t, results[0].FileDeleted)
+
+	// The stale book row is gone. (The new book row is created by the
+	// separate Create event on the new path, which is tested elsewhere.)
+	assert.Empty(t, tc.listBooks())
+	assert.Empty(t, tc.listFiles())
+}
+
+func TestMonitor_ProcessEvent_DirectoryRemoveWithMultipleFilesKeepsBookUntilLast(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Two files inside the same book folder.
+	bookDir := testgen.CreateSubDir(t, libDir, "Multi")
+	epub1 := testgen.GenerateEPUB(t, bookDir, "one.epub", testgen.EPUBOptions{
+		Title: "Multi", Authors: []string{"Multi"},
+	})
+	epub2 := testgen.GenerateEPUB(t, bookDir, "two.epub", testgen.EPUBOptions{
+		Title: "Multi", Authors: []string{"Multi"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	require.NotNil(t, m.processEvent(tc.ctx, epub1, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.NotNil(t, m.processEvent(tc.ctx, epub2, pendingEvent{Op: fsnotify.Create, LibraryID: 1}))
+	require.Len(t, tc.listFiles(), 2)
+
+	require.NoError(t, os.RemoveAll(bookDir))
+
+	results := m.processDirectoryEvent(tc.ctx, bookDir, pendingEvent{
+		Op:          fsnotify.Remove,
+		LibraryID:   1,
+		IsDirectory: true,
+	})
+	assert.Len(t, results, 2)
+
+	assert.Empty(t, tc.listFiles())
+	assert.Empty(t, tc.listBooks())
+}

@@ -19,6 +19,11 @@ import (
 type pendingEvent struct {
 	Op        fsnotify.Op
 	LibraryID int
+	// IsDirectory marks Remove/Rename events whose path is not a scannable file —
+	// typically a book folder that was removed or renamed. processEvent fans this
+	// out into per-file cleanup for every DB file whose filepath sits under the
+	// directory.
+	IsDirectory bool
 }
 
 // Monitor watches library paths for filesystem changes and triggers targeted rescans
@@ -366,6 +371,44 @@ func (m *Monitor) handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
 		}
 	}
 
+	// Directory-level Remove/Rename: fsnotify emits the event against the
+	// directory path (not the files inside), so the path is not scannable.
+	// Queue a synthetic directory event so processEvent can cascade cleanup
+	// to every DB file whose filepath sits under this directory.
+	if (event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) && !m.isScannable(path) {
+		libID := m.findLibraryID(path)
+		if libID == 0 {
+			return
+		}
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		existing, ok := m.pending[path]
+		if ok {
+			existing.Op |= event.Op
+			existing.IsDirectory = true
+			m.pending[path] = existing
+		} else {
+			m.pending[path] = pendingEvent{
+				Op:          event.Op,
+				LibraryID:   libID,
+				IsDirectory: true,
+			}
+		}
+
+		m.log.Debug("filesystem directory event queued", logger.Data{
+			"path": path,
+			"op":   event.Op.String(),
+		})
+
+		if m.timer != nil {
+			m.timer.Stop()
+		}
+		m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
+		return
+	}
+
 	// Only care about files with scannable extensions.
 	// For Remove/Rename the file no longer exists so we can't stat it,
 	// but we can still check the extension from the path.
@@ -451,10 +494,9 @@ func (m *Monitor) processPendingEvents() {
 	hadDeletes := false
 	booksToOrganize := make(map[int]struct{})
 	affectedBookIDs := make(map[int]struct{})
-	for path, event := range events {
-		result := m.processEvent(ctx, path, event)
+	applyResult := func(result *ScanResult) {
 		if result == nil {
-			continue
+			return
 		}
 		if result.FileDeleted || result.BookDeleted {
 			hadDeletes = true
@@ -466,6 +508,15 @@ func (m *Monitor) processPendingEvents() {
 		if result.Book != nil {
 			affectedBookIDs[result.Book.ID] = struct{}{}
 		}
+	}
+	for path, event := range events {
+		if event.IsDirectory {
+			for _, result := range m.processDirectoryEvent(ctx, path, event) {
+				applyResult(result)
+			}
+			continue
+		}
+		applyResult(m.processEvent(ctx, path, event))
 	}
 
 	// Organize new books — scanInternal with FilePath mode defers organization,
@@ -506,6 +557,45 @@ func (m *Monitor) requeue(events map[string]pendingEvent) {
 	}
 	m.timer = time.AfterFunc(m.delay, m.processPendingEvents)
 	m.mu.Unlock()
+}
+
+// processDirectoryEvent handles a Remove/Rename event that landed on a
+// directory path. It lists every DB file whose filepath sits at or under that
+// directory in the given library and delegates cleanup to the existing
+// per-file missing-on-disk path via scanInternal(FileID). This covers both
+// "directory removed" and "directory renamed away" — in the rename case the
+// corresponding Create event on the new path is handled independently and may
+// create a fresh book row.
+func (m *Monitor) processDirectoryEvent(ctx context.Context, path string, event pendingEvent) []*ScanResult {
+	log := m.log.Root(logger.Data{"path": path, "op": event.Op.String()})
+
+	files, err := m.worker.bookService.ListFiles(ctx, books.ListFilesOptions{
+		LibraryID:      &event.LibraryID,
+		FilepathPrefix: &path,
+	})
+	if err != nil {
+		log.Err(err).Warn("failed to list files under removed directory")
+		return nil
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	log.Info("directory removed, cleaning up files", logger.Data{"count": len(files)})
+
+	results := make([]*ScanResult, 0, len(files))
+	for _, file := range files {
+		result, err := m.worker.scanInternal(ctx, ScanOptions{FileID: file.ID}, nil)
+		if err != nil {
+			log.Err(err).Warn("failed to cleanup file under removed directory", logger.Data{
+				"file_id":       file.ID,
+				"file_filepath": file.Filepath,
+			})
+			continue
+		}
+		results = append(results, result)
+	}
+	return results
 }
 
 // processEvent handles a single accumulated event for a file path.

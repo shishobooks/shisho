@@ -35,7 +35,7 @@ Each domain (books, jobs, libraries, chapters) has:
 - Main job type: scan job that processes ebook/audiobook files
 - Extracts metadata from EPUB (via `pkg/epub/`) and M4B files (via `pkg/mp4/`)
 - Generates cover images with filename-based storage strategy
-- **Library monitor** (`monitor.go`): watches library paths for filesystem changes via fsnotify, debounces events, and triggers targeted single-file rescans
+- **Library monitor** (`monitor.go`): watches library paths for filesystem changes via fsnotify, debounces events, and triggers targeted single-file rescans. Remove/Rename events landing on a directory path (which fsnotify emits for the directory itself, not the files inside) are queued as `pendingEvent{IsDirectory: true}` and fan out to per-file cleanup for every DB file whose filepath sits under that directory, so removing or renaming a book folder cleans up its book/file rows instead of leaving them orphaned. File-identity across directory renames is not preserved — the old book row is deleted and a new one is created by the Create event on the new path; content-hash-based move detection is a separate ticket.
 
 ### scanInternal and File Organization
 
