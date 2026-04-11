@@ -730,54 +730,6 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Source Chapter 3", meta.Chapters[2].Title)
 	})
 
-	t.Run("chapter order in generated M4B matches SortOrder", func(t *testing.T) {
-		testgen.SkipIfNoFFmpeg(t)
-		dir := testgen.TempDir(t, "m4b-gen-*")
-
-		// Create source M4B (with no chapters in source)
-		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
-			Title:    "Test Book",
-			Duration: 10.0, // 10 seconds to accommodate chapter timestamps
-		})
-
-		destPath := filepath.Join(dir, "dest.m4b")
-
-		// Create file model with chapters in WRONG sort order (2, 0, 1)
-		// The generator should sort them by SortOrder before writing
-		ts1 := int64(0)    // 0ms for chapter with SortOrder 0
-		ts2 := int64(3000) // 3000ms for chapter with SortOrder 1
-		ts3 := int64(7000) // 7000ms for chapter with SortOrder 2
-		book := &models.Book{
-			Title: "Test Book",
-			Authors: []*models.Author{
-				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
-			},
-		}
-		file := &models.File{
-			FileType: models.FileTypeM4B,
-			Chapters: []*models.Chapter{
-				// Deliberately out of order: SortOrder 2, 0, 1
-				{Title: "Third Chapter", SortOrder: 2, StartTimestampMs: &ts3},
-				{Title: "First Chapter", SortOrder: 0, StartTimestampMs: &ts1},
-				{Title: "Second Chapter", SortOrder: 1, StartTimestampMs: &ts2},
-			},
-		}
-
-		gen := &M4BGenerator{}
-		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
-		require.NoError(t, err)
-
-		// Parse result and verify chapters are in sorted order (0, 1, 2)
-		meta, err := mp4.ParseFull(destPath)
-		require.NoError(t, err)
-
-		// Should have 3 chapters sorted by SortOrder, not insertion order
-		require.Len(t, meta.Chapters, 3, "expected 3 chapters from file model")
-		assert.Equal(t, "First Chapter", meta.Chapters[0].Title, "chapter 0 should be 'First Chapter' (SortOrder 0)")
-		assert.Equal(t, "Second Chapter", meta.Chapters[1].Title, "chapter 1 should be 'Second Chapter' (SortOrder 1)")
-		assert.Equal(t, "Third Chapter", meta.Chapters[2].Title, "chapter 2 should be 'Third Chapter' (SortOrder 2)")
-	})
-
 	t.Run("chapter order follows StartTimestampMs when SortOrder disagrees", func(t *testing.T) {
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")

@@ -853,6 +853,146 @@ func TestComputeFingerprint_NestedChaptersAreIncluded(t *testing.T) {
 	assert.Equal(t, 0, fp.Chapters[1].Children[0].SortOrder)
 }
 
+func TestComputeFingerprint_ChapterOrderStableAgainstSortOrderDrift(t *testing.T) {
+	t.Parallel()
+
+	// Regression: the fingerprint used to sort chapters by SortOrder. After
+	// the file generators started sorting by natural position (StartPage /
+	// StartTimestampMs), the fingerprint must also sort by natural position
+	// so that two DB states representing the same produced file hash to the
+	// same fingerprint.
+
+	book := &models.Book{Title: "Book"}
+
+	t.Run("PDF: sort_order drift does not change the fingerprint", func(t *testing.T) {
+		t.Parallel()
+		startPage0 := 0
+		startPage3 := 3
+		startPage7 := 7
+
+		// "Normalized" state: SortOrder matches StartPage order.
+		normalized := &models.File{
+			FileType: models.FileTypePDF,
+			Chapters: []*models.Chapter{
+				{Title: "A", SortOrder: 0, StartPage: &startPage0},
+				{Title: "B", SortOrder: 1, StartPage: &startPage3},
+				{Title: "C", SortOrder: 2, StartPage: &startPage7},
+			},
+		}
+
+		// "Drifted" state: same chapters, same pages, but SortOrder is
+		// reversed. The file generator produces the same output for both.
+		drifted := &models.File{
+			FileType: models.FileTypePDF,
+			Chapters: []*models.Chapter{
+				{Title: "C", SortOrder: 0, StartPage: &startPage7},
+				{Title: "B", SortOrder: 1, StartPage: &startPage3},
+				{Title: "A", SortOrder: 2, StartPage: &startPage0},
+			},
+		}
+
+		fpNorm, err := ComputeFingerprint(book, normalized)
+		require.NoError(t, err)
+		fpDrift, err := ComputeFingerprint(book, drifted)
+		require.NoError(t, err)
+
+		hNorm, err := fpNorm.Hash()
+		require.NoError(t, err)
+		hDrift, err := fpDrift.Hash()
+		require.NoError(t, err)
+		assert.Equal(t, hNorm, hDrift, "PDF fingerprint must be stable against SortOrder drift")
+
+		// Also pin the expected output order explicitly.
+		require.Len(t, fpDrift.Chapters, 3)
+		assert.Equal(t, "A", fpDrift.Chapters[0].Title)
+		assert.Equal(t, 0, fpDrift.Chapters[0].SortOrder)
+		assert.Equal(t, "B", fpDrift.Chapters[1].Title)
+		assert.Equal(t, 1, fpDrift.Chapters[1].SortOrder)
+		assert.Equal(t, "C", fpDrift.Chapters[2].Title)
+		assert.Equal(t, 2, fpDrift.Chapters[2].SortOrder)
+	})
+
+	t.Run("M4B: sort_order drift does not change the fingerprint", func(t *testing.T) {
+		t.Parallel()
+		normalized := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "A", SortOrder: 0, StartTimestampMs: int64Ptr(0)},
+				{Title: "B", SortOrder: 1, StartTimestampMs: int64Ptr(3000)},
+				{Title: "C", SortOrder: 2, StartTimestampMs: int64Ptr(7000)},
+			},
+		}
+		drifted := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "C", SortOrder: 0, StartTimestampMs: int64Ptr(7000)},
+				{Title: "A", SortOrder: 1, StartTimestampMs: int64Ptr(0)},
+				{Title: "B", SortOrder: 2, StartTimestampMs: int64Ptr(3000)},
+			},
+		}
+
+		fpNorm, _ := ComputeFingerprint(book, normalized)
+		fpDrift, _ := ComputeFingerprint(book, drifted)
+		hNorm, _ := fpNorm.Hash()
+		hDrift, _ := fpDrift.Hash()
+		assert.Equal(t, hNorm, hDrift, "M4B fingerprint must be stable against SortOrder drift")
+	})
+
+	t.Run("CBZ: sort_order drift does not change the fingerprint", func(t *testing.T) {
+		t.Parallel()
+		startPage0 := 0
+		startPage3 := 3
+		normalized := &models.File{
+			FileType: models.FileTypeCBZ,
+			Chapters: []*models.Chapter{
+				{Title: "A", SortOrder: 0, StartPage: &startPage0},
+				{Title: "B", SortOrder: 1, StartPage: &startPage3},
+			},
+		}
+		drifted := &models.File{
+			FileType: models.FileTypeCBZ,
+			Chapters: []*models.Chapter{
+				{Title: "B", SortOrder: 0, StartPage: &startPage3},
+				{Title: "A", SortOrder: 1, StartPage: &startPage0},
+			},
+		}
+
+		fpNorm, _ := ComputeFingerprint(book, normalized)
+		fpDrift, _ := ComputeFingerprint(book, drifted)
+		hNorm, _ := fpNorm.Hash()
+		hDrift, _ := fpDrift.Hash()
+		assert.Equal(t, hNorm, hDrift, "CBZ fingerprint must be stable against SortOrder drift")
+	})
+
+	t.Run("EPUB: still sorts by SortOrder (no natural position field)", func(t *testing.T) {
+		t.Parallel()
+		// EPUB chapters use href; there's no natural numeric order, so
+		// SortOrder remains the source of truth — different SortOrder
+		// values do produce different fingerprints.
+		a := "a.xhtml"
+		b := "b.xhtml"
+		state1 := &models.File{
+			FileType: models.FileTypeEPUB,
+			Chapters: []*models.Chapter{
+				{Title: "A", SortOrder: 0, Href: &a},
+				{Title: "B", SortOrder: 1, Href: &b},
+			},
+		}
+		state2 := &models.File{
+			FileType: models.FileTypeEPUB,
+			Chapters: []*models.Chapter{
+				{Title: "B", SortOrder: 0, Href: &b},
+				{Title: "A", SortOrder: 1, Href: &a},
+			},
+		}
+		fp1, _ := ComputeFingerprint(book, state1)
+		fp2, _ := ComputeFingerprint(book, state2)
+		h1, _ := fp1.Hash()
+		h2, _ := fp2.Hash()
+		assert.NotEqual(t, h1, h2, "EPUB fingerprint must reflect SortOrder changes")
+	})
+}
+
 func strPtr(s string) *string {
 	return &s
 }

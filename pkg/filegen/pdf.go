@@ -57,11 +57,21 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 		return NewGenerationError(models.FileTypePDF, err, "failed to write PDF metadata")
 	}
 
-	// Write chapters back to the destination as a bookmark outline. This is
-	// best-effort: a failure here leaves the properties-only destPath in place
-	// rather than failing the whole download (matches the cover-extraction
-	// pattern in pkg/pdf/pdf.go). Skipped entirely when the DB has no chapters
-	// so we don't touch existing bookmarks in the source PDF.
+	// Write chapters back to the destination as a bookmark outline.
+	//
+	// This block is best-effort: if bookmark writing fails for any reason, we
+	// log a warning and keep the properties-only destPath rather than failing
+	// the whole download. This matches the cover-extraction pattern in
+	// pkg/pdf/pdf.go and ensures a metadata quirk can never block a download.
+	// Skipped entirely when the DB has no chapters so we don't touch existing
+	// bookmarks in the source PDF.
+	//
+	// The failure branches below are not exercised by tests: after the
+	// filter+sort in convertModelChaptersToPDFBookmarks, pdfcpu has no
+	// ordering reason to reject the input, and injecting a file-system
+	// failure without a mockable seam is intrusive. They exist as
+	// defense-in-depth against future pdfcpu changes, disk-state anomalies,
+	// and cross-filesystem rename quirks — do not remove them as dead code.
 	if file != nil && len(file.Chapters) > 0 {
 		pageCount := 0
 		if file.PageCount != nil {
@@ -75,23 +85,41 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 			// to a sibling tmp file and rename over destPath on success.
 			tmpPath := destPath + ".bookmarks.tmp"
 			if err := api.AddBookmarksFile(destPath, tmpPath, bookmarks, true, conf); err != nil {
-				_ = os.Remove(tmpPath)
+				removeErr := os.Remove(tmpPath)
 				logger.FromContext(ctx).Warn("failed to write PDF bookmarks, continuing without them", logger.Data{
-					"error":    err.Error(),
-					"dest":     destPath,
-					"chapters": len(bookmarks),
+					"category":       "pdf_bookmark_write",
+					"error":          err.Error(),
+					"dest":           destPath,
+					"chapter_count":  len(bookmarks),
+					"tmp_remove_err": removeErrString(removeErr),
 				})
 			} else if err := os.Rename(tmpPath, destPath); err != nil {
-				_ = os.Remove(tmpPath)
+				removeErr := os.Remove(tmpPath)
 				logger.FromContext(ctx).Warn("failed to finalize PDF with bookmarks, continuing without them", logger.Data{
-					"error": err.Error(),
-					"dest":  destPath,
+					"category":       "pdf_bookmark_write",
+					"error":          err.Error(),
+					"dest":           destPath,
+					"tmp_remove_err": removeErrString(removeErr),
 				})
 			}
 		}
 	}
 
 	return nil
+}
+
+// removeErrString renders an os.Remove error for structured logging. Returns
+// "ok" when the cleanup succeeded and "not_found" for ENOENT (a tmp file that
+// was never created is the common case), so dashboards aggregating by this
+// field aren't polluted with noise.
+func removeErrString(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if os.IsNotExist(err) {
+		return "not_found"
+	}
+	return err.Error()
 }
 
 // convertModelChaptersToPDFBookmarks converts database chapter models into
@@ -104,6 +132,17 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 //     are dropped
 //   - children whose StartPage is less than their parent's are dropped
 //   - siblings are sorted by StartPage (ties broken by SortOrder for stability)
+//
+// The child-before-parent filter is stricter than pdfcpu strictly requires —
+// pdfcpu only validates the first child against the parent and then walks
+// siblings — but rejecting *all* out-of-range children is simpler and avoids
+// surprising subtrees where child[0] passes the parent check but child[2]
+// would later fail sibling monotonicity after sorting.
+//
+// Chapters with invalid StartPage are dropped along with their entire subtree
+// — we do not re-parent grandchildren to a dropped parent's parent. In
+// practice, PDFs produced by the UI today are flat, so this only matters for
+// sidecar- or plugin-supplied nested chapters.
 //
 // Pages are converted from the 0-indexed storage format to the 1-indexed form
 // pdfcpu expects. pageCount == 0 disables the upper-bound filter (used when

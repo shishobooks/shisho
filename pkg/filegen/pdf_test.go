@@ -79,6 +79,13 @@ func writeTestPDFWithPages(t *testing.T, outPath string, pageCount int, infoEntr
 		var infoStr strings.Builder
 		infoStr.WriteString(fmt.Sprintf("%d 0 obj\n<< ", infoObj))
 		for k, v := range infoEntries {
+			// Keys in a PDF name object can't contain whitespace, delimiters,
+			// or PDF-special characters. Tests pass simple ASCII keys, so
+			// rather than implementing full name-escaping we fail loudly if
+			// someone introduces a problematic key.
+			if strings.ContainsAny(k, " \t\n\r()<>[]{}/\\%#") {
+				require.FailNowf(t, "invalid info dict key", "key %q contains PDF-special characters", k)
+			}
 			escaped := strings.ReplaceAll(v, "\\", "\\\\")
 			escaped = strings.ReplaceAll(escaped, "(", "\\(")
 			escaped = strings.ReplaceAll(escaped, ")", "\\)")
