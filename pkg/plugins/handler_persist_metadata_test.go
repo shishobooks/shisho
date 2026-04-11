@@ -102,6 +102,11 @@ func TestPersistMetadata_CoverWrite_RootLevelFile_SyntheticBookPath(t *testing.T
 		CoverMimeType: "image/jpeg",
 	}
 
+	// persistMetadata will also attempt to write book/file sidecars under
+	// the synthetic bookPath and log warnings when those writes fail. That
+	// is expected: the test deliberately uses a nonexistent bookPath, and
+	// sidecar failures are non-fatal. The assertions below only cover the
+	// cover-write path.
 	err = h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
 	require.NoError(t, err)
 
