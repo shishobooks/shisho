@@ -45,6 +45,13 @@ Each domain (books, jobs, libraries, chapters) has:
 - **`Monitor.processPendingEvents`** handles this by collecting book IDs from `FileCreated` results and calling `organizeBooks()` after processing all events.
 - **Any new caller of `scanInternal(FilePath)`** must also handle organization, or files will be left unorganized in the library root.
 
+### Scan Cache Must Include Supplements
+
+**CRITICAL — the `ScanCache.knownFiles` map preloaded in `ProcessScanJob` must contain BOTH main and supplement files.** Supplements can share scannable extensions (`.pdf`/`.epub`/`.cbz`/`.m4b`) with main files — e.g. a user-demoted `Cribsheet.pdf` sitting next to a main `Cribsheet.epub`. During the filesystem walk, every file with a scannable extension becomes a scan target, so a supplement at a tracked path must resolve via the cache and early-return in `scanFileByPath`. If the cache is main-only (the old behavior), the supplement falls through to `scanFileCreateNew`, which tries to insert a duplicate file row and hits `UNIQUE(filepath, library_id)` — warned-and-continued on every scan.
+
+- Preload via `ListAllFilesForLibrary`, not `ListFilesForLibrary` (which is still main-only, used for orphan cleanup).
+- `scanFileByPath` early-returns with `&ScanResult{File: existing}` when the cached file has `FileRole == FileRoleSupplement` — supplements have no metadata to rescan.
+
 ### File Types
 
 - To learn more about all the file types that we support, refer to:

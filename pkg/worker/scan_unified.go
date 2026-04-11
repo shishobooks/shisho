@@ -215,6 +215,15 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 	// Fast path: check pre-loaded cache for known file (avoids per-file DB query)
 	if cache != nil {
 		if existingFile := cache.GetKnownFile(opts.FilePath); existingFile != nil {
+			// Supplement files share scannable extensions (.pdf/.epub/.cbz/.m4b)
+			// with main files, so the walk picks them up — but they have no
+			// metadata to rescan and must not be routed through the main-file
+			// creation path (which would try to insert a duplicate row and hit
+			// UNIQUE(filepath, library_id)). Nothing to do: the supplement is
+			// already tracked.
+			if existingFile.FileRole == models.FileRoleSupplement {
+				return &ScanResult{File: existingFile}, nil
+			}
 			// File exists in DB — check if it changed on disk
 			if !opts.ForceRefresh && existingFile.FileModifiedAt != nil {
 				stat, err := os.Stat(opts.FilePath)
