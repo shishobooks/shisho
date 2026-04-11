@@ -164,26 +164,55 @@ func TestPDFGenerator_Generate(t *testing.T) {
 func TestPDFGenerator_Generate_PrefersFileName(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	srcPath := filepath.Join(tmpDir, "source.pdf")
-	writeTestPDF(t, srcPath, map[string]string{"Title": "Original Title"})
+	t.Run("uses file.Name when set", func(t *testing.T) {
+		t.Parallel()
 
-	destPath := filepath.Join(tmpDir, "dest.pdf")
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "source.pdf")
+		writeTestPDF(t, srcPath, map[string]string{"Title": "Original Title"})
 
-	customName := "Custom Name"
-	book := &models.Book{Title: "Book Title"}
-	file := &models.File{
-		FileType: models.FileTypePDF,
-		Name:     &customName,
-	}
+		destPath := filepath.Join(tmpDir, "dest.pdf")
 
-	gen := &PDFGenerator{}
-	err := gen.Generate(context.Background(), srcPath, destPath, book, file)
-	require.NoError(t, err)
+		customName := "Custom Name"
+		book := &models.Book{Title: "Book Title"}
+		file := &models.File{
+			FileType: models.FileTypePDF,
+			Name:     &customName,
+		}
 
-	meta, err := pdf.Parse(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, "Custom Name", meta.Title)
+		gen := &PDFGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := pdf.Parse(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Custom Name", meta.Title)
+	})
+
+	t.Run("falls back to book.Title when file.Name is empty string", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "source.pdf")
+		writeTestPDF(t, srcPath, map[string]string{"Title": "Original Title"})
+
+		destPath := filepath.Join(tmpDir, "dest.pdf")
+
+		emptyName := ""
+		book := &models.Book{Title: "Book Title"}
+		file := &models.File{
+			FileType: models.FileTypePDF,
+			Name:     &emptyName,
+		}
+
+		gen := &PDFGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := pdf.Parse(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Book Title", meta.Title)
+	})
 }
 
 func TestPDFGenerator_Generate_MultipleAuthors(t *testing.T) {
