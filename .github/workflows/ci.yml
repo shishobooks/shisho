@@ -21,50 +21,24 @@ jobs:
       - run: mise lint
 
   test:
-    name: Go Test (${{ matrix.name }})
+    name: Go Test (${{ matrix.shard }}/5)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: worker
-            packages: ./pkg/worker/...
-          - name: plugins
-            packages: ./pkg/plugins/...
-          - name: books
-            packages: ./pkg/books/...
-          - name: rest-1
-            shard: 1
-            shards: 2
-          - name: rest-2
-            shard: 2
-            shards: 2
+        shard: [1, 2, 3, 4, 5]
     env:
       TZ: America/Chicago
       CI: "true"
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v4
+      - name: Install gotesplit
+        run: curl -sfL https://raw.githubusercontent.com/Songmu/gotesplit/main/install.sh | sh -s -- -b /usr/local/bin v0.4.0
       - name: Run tests
         env:
-          PACKAGES: ${{ matrix.packages }}
           SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ matrix.shards }}
-        run: |
-          if [ -n "$PACKAGES" ]; then
-            packages="$PACKAGES"
-          else
-            packages=$(go list ./pkg/... \
-              | grep -vE '/pkg/(worker|plugins|books)$' \
-              | awk -v shard="$SHARD" -v shards="$SHARDS" 'NR % shards == shard % shards')
-          fi
-          if [ -z "$packages" ]; then
-            echo "No packages selected — skipping"
-            exit 0
-          fi
-          echo "Running $(echo "$packages" | wc -w) packages:"
-          echo "$packages"
-          go test -race $packages
+        run: gotesplit -total=5 -index=$((SHARD - 1)) ./pkg/... -- -race
 
   lint-js:
     name: JS Lint
