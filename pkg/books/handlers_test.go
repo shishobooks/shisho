@@ -783,60 +783,118 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 
 func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
-	ctx := context.Background()
-	library, book := setupTestLibraryAndBook(t, db)
 
-	// Create an EPUB file inside the book directory (book.Filepath is a directory).
-	epubPath := filepath.Join(book.Filepath, "test.epub")
-	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
-	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	// runDowngrade wires up the library/book/file, plants a cover file, hits the
+	// update endpoint to downgrade main → supplement, and asserts the cover file
+	// is gone from disk. The caller picks whether the book is directory-backed
+	// or a root-level file, since the cover dir resolution differs.
+	runDowngrade := func(t *testing.T, makeBook func(t *testing.T, libraryID int) (book *models.Book, bookDir string, filePath string)) {
+		t.Helper()
+		db := setupTestDB(t)
+		ctx := context.Background()
 
-	// Create a cover image next to the book on disk and wire it up in the DB.
-	// CoverImageFilename stores just the filename — the full path is constructed at runtime.
-	coverFilename := "test.epub.cover.jpg"
-	coverFullPath := filepath.Join(book.Filepath, coverFilename)
-	require.NoError(t, os.WriteFile(coverFullPath, []byte("cover data"), 0644))
+		library := &models.Library{
+			Name:                     "Test Library",
+			CoverAspectRatio:         "book",
+			DownloadFormatPreference: models.DownloadFormatOriginal,
+		}
+		_, err := db.NewInsert().Model(library).Exec(ctx)
+		require.NoError(t, err)
 
-	mimeType := "image/jpeg"
-	coverSource := models.DataSourceManual
-	file.CoverImageFilename = &coverFilename
-	file.CoverMimeType = &mimeType
-	file.CoverSource = &coverSource
-	_, err := db.NewUpdate().
-		Model(file).
-		Column("cover_image_filename", "cover_mime_type", "cover_source").
-		WherePK().
-		Exec(ctx)
-	require.NoError(t, err)
+		book, bookDir, epubPath := makeBook(t, library.ID)
+		_, err = db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
 
-	user := setupTestUser(t, db, library.ID, true)
-	// Load the Role with Permissions so RequirePermission middleware can pass.
-	err = db.NewSelect().
-		Model(user).
-		Relation("Role").
-		Relation("Role.Permissions").
-		Where("u.id = ?", user.ID).
-		Scan(ctx)
-	require.NoError(t, err)
+		require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+		file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
 
-	// Downgrade the file from main to supplement via the update endpoint.
-	e := setupTestServer(t, db)
-	body := `{"file_role": "supplement"}`
-	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rr := executeRequestWithUser(t, e, req, user)
-	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+		// Create a cover image in the resolved cover dir and wire it up in the
+		// DB. CoverImageFilename stores just the filename — the full path is
+		// constructed at runtime.
+		coverFilename := filepath.Base(epubPath) + ".cover.jpg"
+		coverFullPath := filepath.Join(bookDir, coverFilename)
+		require.NoError(t, os.WriteFile(coverFullPath, []byte("cover data"), 0644))
 
-	// The cover file must be removed from disk, not just cleared in the DB.
-	_, statErr := os.Stat(coverFullPath)
-	assert.True(t, os.IsNotExist(statErr),
-		"expected cover file to be deleted on downgrade, but os.Stat(%q) returned err=%v", coverFullPath, statErr)
+		mimeType := "image/jpeg"
+		coverSource := models.DataSourceManual
+		file.CoverImageFilename = &coverFilename
+		file.CoverMimeType = &mimeType
+		file.CoverSource = &coverSource
+		_, err = db.NewUpdate().
+			Model(file).
+			Column("cover_image_filename", "cover_mime_type", "cover_source").
+			WherePK().
+			Exec(ctx)
+		require.NoError(t, err)
 
-	// Sanity check: the DB row should also reflect the downgrade.
-	var updated models.File
-	err = db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, models.FileRoleSupplement, updated.FileRole)
-	assert.Nil(t, updated.CoverImageFilename)
+		user := setupTestUser(t, db, library.ID, true)
+		// Load the Role with Permissions so RequirePermission middleware can pass.
+		err = db.NewSelect().
+			Model(user).
+			Relation("Role").
+			Relation("Role.Permissions").
+			Where("u.id = ?", user.ID).
+			Scan(ctx)
+		require.NoError(t, err)
+
+		// Downgrade the file from main to supplement via the update endpoint.
+		e := setupTestServer(t, db)
+		body := `{"file_role": "supplement"}`
+		req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := executeRequestWithUser(t, e, req, user)
+		require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+		// The cover file must be removed from disk, not just cleared in the DB.
+		_, statErr := os.Stat(coverFullPath)
+		assert.True(t, os.IsNotExist(statErr),
+			"expected cover file to be deleted on downgrade, but os.Stat(%q) returned err=%v", coverFullPath, statErr)
+
+		// Sanity check: the DB row should also reflect the downgrade.
+		var updated models.File
+		err = db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, models.FileRoleSupplement, updated.FileRole)
+		assert.Nil(t, updated.CoverImageFilename)
+	}
+
+	t.Run("directory-backed book", func(t *testing.T) {
+		t.Parallel()
+		runDowngrade(t, func(t *testing.T, libraryID int) (*models.Book, string, string) {
+			t.Helper()
+			bookDir := t.TempDir()
+			book := &models.Book{
+				LibraryID:       libraryID,
+				Title:           "Test Book",
+				TitleSource:     models.DataSourceFilepath,
+				SortTitle:       "Test Book",
+				SortTitleSource: models.DataSourceFilepath,
+				AuthorSource:    models.DataSourceFilepath,
+				Filepath:        bookDir,
+			}
+			return book, bookDir, filepath.Join(bookDir, "test.epub")
+		})
+	})
+
+	t.Run("root-level book", func(t *testing.T) {
+		t.Parallel()
+		runDowngrade(t, func(t *testing.T, libraryID int) (*models.Book, string, string) {
+			t.Helper()
+			libraryDir := t.TempDir()
+			epubPath := filepath.Join(libraryDir, "root-book.epub")
+			// Root-level books have book.Filepath pointing at the file itself,
+			// not a containing directory. The cover lives alongside the file
+			// in the library dir.
+			book := &models.Book{
+				LibraryID:       libraryID,
+				Title:           "Root Book",
+				TitleSource:     models.DataSourceFilepath,
+				SortTitle:       "Root Book",
+				SortTitleSource: models.DataSourceFilepath,
+				AuthorSource:    models.DataSourceFilepath,
+				Filepath:        epubPath,
+			}
+			return book, libraryDir, epubPath
+		})
+	})
 }

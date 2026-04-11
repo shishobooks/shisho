@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -80,9 +81,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	var newCoverData []byte
 	var newCoverMimeType string
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		// Resolve the full cover path from the book's directory
-		// CoverImageFilename is just a filename, we need to find the cover directory
-		coverPath := resolveCoverPath(book, file)
+		coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
 		if coverPath != "" {
 			newCoverData, err = os.ReadFile(coverPath)
 			if err == nil {
@@ -506,31 +505,6 @@ func formatFloat(f float64) string {
 		return strconv.Itoa(int(f))
 	}
 	return fmt.Sprintf("%g", f)
-}
-
-// resolveCoverPath resolves the full path to a file's cover image.
-// CoverImageFilename in the model is just a filename, so we need to determine
-// the cover directory from the book's filepath.
-func resolveCoverPath(book *models.Book, file *models.File) string {
-	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
-		return ""
-	}
-
-	// Determine if this is a root-level book (book.Filepath is a file, not a directory)
-	isRootLevelBook := false
-	if info, err := os.Stat(book.Filepath); err == nil && !info.IsDir() {
-		isRootLevelBook = true
-	}
-
-	// Determine the cover directory
-	var coverDir string
-	if isRootLevelBook {
-		coverDir = filepath.Dir(book.Filepath)
-	} else {
-		coverDir = book.Filepath
-	}
-
-	return filepath.Join(coverDir, *file.CoverImageFilename)
 }
 
 // identifierTypeToScheme converts an identifier type to an OPF scheme attribute.
