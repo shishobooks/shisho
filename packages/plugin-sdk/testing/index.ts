@@ -25,14 +25,6 @@ export interface MockFetchResponse {
   headers?: Record<string, string>;
 }
 
-/**
- * Maximum value accepted by `shisho.sleep()` in production (5 minutes, in ms).
- * Mirrors `maxSleepMs` in `pkg/plugins/hostapi.go` — must be kept in sync.
- * Plugin tests can reference this constant instead of hardcoding `300000`
- * when asserting the cap.
- */
-export const MAX_SLEEP_MS = 5 * 60 * 1000;
-
 /** Options for createMockShisho(). */
 export interface MockShishoOptions {
   /** Route-based fetch mock. Keys are URL strings, values are mock responses. */
@@ -54,7 +46,7 @@ export interface MockShishoOptions {
    * arguments each retry passed.
    *
    * The override is still subject to the same validation rules as production
-   * (`MAX_SLEEP_MS` cap, no NaN/Infinity/negative).
+   * (no NaN/Infinity/negative).
    */
   sleep?: (ms: number) => void;
 }
@@ -595,11 +587,6 @@ export function createMockShisho(
       ms < 0
     ) {
       throw new Error("shisho.sleep: ms must be a finite non-negative number");
-    }
-    if (ms > MAX_SLEEP_MS) {
-      throw new Error(
-        `shisho.sleep: ms must be <= ${MAX_SLEEP_MS} (5 minutes)`,
-      );
     }
     sleepImpl(ms);
   };

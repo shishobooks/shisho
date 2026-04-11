@@ -170,12 +170,11 @@ func TestInjectHostAPIs_Sleep(t *testing.T) {
 }
 
 // TestValidateSleepMs exercises the boundary cases directly without paying
-// the time.Sleep cost — notably the exact cap and cap - 1, which would add
-// 5 minutes of wall-clock time if driven through the JS layer.
+// the time.Sleep cost.
 func TestValidateSleepMs(t *testing.T) {
 	t.Parallel()
 
-	valid := []float64{0, 0.5, 1, 1000, maxSleepMs - 1, maxSleepMs}
+	valid := []float64{0, 0.5, 1, 1000, 1e9}
 	for _, ms := range valid {
 		t.Run(fmt.Sprintf("valid/%v", ms), func(t *testing.T) {
 			assert.NoError(t, validateSleepMs(ms))
@@ -191,8 +190,6 @@ func TestValidateSleepMs(t *testing.T) {
 		{"NaN", math.NaN(), "finite non-negative"},
 		{"+Inf", math.Inf(1), "finite non-negative"},
 		{"-Inf", math.Inf(-1), "finite non-negative"},
-		{"cap + 1", maxSleepMs + 1, "5 minutes"},
-		{"1e18 overflow", 1e18, "5 minutes"},
 	}
 	for _, tc := range cases {
 		t.Run("invalid/"+tc.name, func(t *testing.T) {
@@ -220,8 +217,6 @@ func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {
 		{"NaN", `shisho.sleep(NaN)`, "finite non-negative"},
 		{"positive Infinity", `shisho.sleep(Infinity)`, "finite non-negative"},
 		{"negative Infinity", `shisho.sleep(-Infinity)`, "finite non-negative"},
-		{"exceeds cap", `shisho.sleep(5 * 60 * 1000 + 1)`, "5 minutes"},
-		{"overflow value", `shisho.sleep(1e18)`, "5 minutes"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

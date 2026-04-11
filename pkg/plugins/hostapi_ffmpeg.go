@@ -58,8 +58,14 @@ func injectFFmpegNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 			args = append(args, argsObj.Get(strconv.Itoa(i)).String())
 		}
 
-		// Create context with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), defaultFFmpegTimeout)
+		// Use the hook ctx if one is set — that carries the hook deadline and
+		// is the thing cancelled when a plugin gets stuck. Fall back to a
+		// fresh timeout for calls outside of a hook (e.g., direct tests).
+		baseCtx := rt.hookCtx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, defaultFFmpegTimeout)
 		defer cancel()
 
 		// Build command
@@ -114,8 +120,14 @@ func injectFFmpegNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 		}
 		args = append(args, "-print_format", "json", "-show_format", "-show_streams", "-show_chapters")
 
-		// Create context with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), defaultFFmpegTimeout)
+		// Use the hook ctx if one is set — that carries the hook deadline and
+		// is the thing cancelled when a plugin gets stuck. Fall back to a
+		// fresh timeout for calls outside of a hook (e.g., direct tests).
+		baseCtx := rt.hookCtx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, defaultFFmpegTimeout)
 		defer cancel()
 
 		// Build command
@@ -191,8 +203,13 @@ func injectFFmpegNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 			panic(vm.ToValue("shisho.ffmpeg.version: plugin does not declare ffmpegAccess capability"))
 		}
 
-		// Create context with timeout (shorter for version check)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// Create context with timeout (shorter for version check). Still
+		// derive from the hook ctx so a cancelled hook kills the subprocess.
+		baseCtx := rt.hookCtx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 		defer cancel()
 
 		// Run ffmpeg -version

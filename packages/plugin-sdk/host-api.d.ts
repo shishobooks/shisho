@@ -400,18 +400,12 @@ export interface ShishoHostAPI {
    *
    * Goja has no Promise/setTimeout support, so this is a synchronous delay
    * backed by Go's `time.Sleep`. Use it to implement exponential backoff
-   * between retries when calling rate-limited APIs.
+   * between retries when calling rate-limited APIs. The sleep honors the
+   * hook's deadline: if the ctx is cancelled while the plugin is sleeping,
+   * the call unblocks immediately and the hook throws.
    *
-   * **Not interruptible by hook timeouts.** Because sleep blocks in a Go
-   * syscall the VM cannot interrupt, the hook's deadline (1 minute for
-   * parsers and enrichers, 5 minutes for converters and output generators)
-   * will not fire until the sleep returns. While sleeping, the plugin's
-   * runtime mutex is held, so other goroutines waiting to invoke a hook on
-   * the same plugin are blocked as well. Keep total backoff well under the
-   * hook's timeout. Sleeps longer than 5 minutes are rejected.
-   *
-   * @param ms Finite non-negative milliseconds, capped at 5 minutes. Throws on
-   * negative, NaN, Infinity, or values exceeding the cap.
+   * @param ms Finite non-negative milliseconds. Throws on negative, NaN, or
+   * Infinity.
    * @example
    * // Exponential backoff: 1s, 2s, 4s
    * var resp;

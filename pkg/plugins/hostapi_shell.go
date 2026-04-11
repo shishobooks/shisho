@@ -60,8 +60,13 @@ func injectShellNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime)
 			args = append(args, argsObj.Get(strconv.Itoa(i)).String())
 		}
 
-		// Create context with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), defaultShellTimeout)
+		// Use the hook ctx if one is set — carries the hook deadline. Fall
+		// back to a fresh timeout for calls outside of a hook (e.g., tests).
+		baseCtx := rt.hookCtx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, defaultShellTimeout)
 		defer cancel()
 
 		// Build command - use exec.Command directly (no shell)
