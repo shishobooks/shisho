@@ -780,3 +780,63 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
+
+func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	library, book := setupTestLibraryAndBook(t, db)
+
+	// Create an EPUB file inside the book directory (book.Filepath is a directory).
+	epubPath := filepath.Join(book.Filepath, "test.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Create a cover image next to the book on disk and wire it up in the DB.
+	// CoverImageFilename stores just the filename — the full path is constructed at runtime.
+	coverFilename := "test.epub.cover.jpg"
+	coverFullPath := filepath.Join(book.Filepath, coverFilename)
+	require.NoError(t, os.WriteFile(coverFullPath, []byte("cover data"), 0644))
+
+	mimeType := "image/jpeg"
+	coverSource := models.DataSourceManual
+	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &mimeType
+	file.CoverSource = &coverSource
+	_, err := db.NewUpdate().
+		Model(file).
+		Column("cover_image_filename", "cover_mime_type", "cover_source").
+		WherePK().
+		Exec(ctx)
+	require.NoError(t, err)
+
+	user := setupTestUser(t, db, library.ID, true)
+	// Load the Role with Permissions so RequirePermission middleware can pass.
+	err = db.NewSelect().
+		Model(user).
+		Relation("Role").
+		Relation("Role.Permissions").
+		Where("u.id = ?", user.ID).
+		Scan(ctx)
+	require.NoError(t, err)
+
+	// Downgrade the file from main to supplement via the update endpoint.
+	e := setupTestServer(t, db)
+	body := `{"file_role": "supplement"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// The cover file must be removed from disk, not just cleared in the DB.
+	_, statErr := os.Stat(coverFullPath)
+	assert.True(t, os.IsNotExist(statErr),
+		"expected cover file to be deleted on downgrade, but os.Stat(%q) returned err=%v", coverFullPath, statErr)
+
+	// Sanity check: the DB row should also reflect the downgrade.
+	var updated models.File
+	err = db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, models.FileRoleSupplement, updated.FileRole)
+	assert.Nil(t, updated.CoverImageFilename)
+}

@@ -748,10 +748,17 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// When downgrading from main to supplement, clear all main-file-only metadata
 		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
-			// Delete cover image file if it exists
-			if file.CoverImageFilename != nil {
-				if err := os.Remove(*file.CoverImageFilename); err != nil && !os.IsNotExist(err) {
-					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": *file.CoverImageFilename})
+			// Delete cover image file if it exists. CoverImageFilename stores just
+			// the filename; the full path is resolved against the book's cover dir
+			// (the book directory, or its parent for root-level books).
+			if file.CoverImageFilename != nil && *file.CoverImageFilename != "" && file.Book != nil {
+				coverDir := file.Book.Filepath
+				if info, statErr := os.Stat(file.Book.Filepath); statErr == nil && !info.IsDir() {
+					coverDir = filepath.Dir(file.Book.Filepath)
+				}
+				coverPath := filepath.Join(coverDir, *file.CoverImageFilename)
+				if err := os.Remove(coverPath); err != nil && !os.IsNotExist(err) {
+					log.Warn("failed to delete cover image on downgrade", logger.Data{"error": err.Error(), "path": coverPath})
 				}
 			}
 
