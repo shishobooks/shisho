@@ -3,7 +3,9 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
@@ -38,6 +40,11 @@ func InjectHostAPIs(rt *Runtime, configGetter ConfigGetter) error {
 
 	// Set up log namespace
 	if err := injectLogNamespace(vm, shishoObj, pluginTag); err != nil {
+		return err
+	}
+
+	// Set up top-level sleep function
+	if err := injectSleepFunction(vm, shishoObj); err != nil {
 		return err
 	}
 
@@ -118,6 +125,58 @@ func injectDataDirProperty(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime
 
 	_, err := defineProperty(objectVal, shishoObj, vm.ToValue("dataDir"), descriptor)
 	return err
+}
+
+// maxSleepMs caps shisho.sleep at the longest hook timeout (inputConverter and
+// outputGenerator are 5 minutes; parsers and enrichers are 1 minute). Until
+// context cancellation is wired through to vm.Interrupt(), an unbounded sleep
+// would outlive the hook deadline while still holding Runtime.mu, blocking
+// every other invocation on the same plugin.
+//
+// Must stay in sync with MAX_SLEEP_MS in packages/plugin-sdk/testing/index.ts.
+// If this changes to something other than 5 minutes, update the "5 minutes"
+// text in errSleepExceedsCap, this comment, and the plugin docs.
+const maxSleepMs = float64(5 * 60 * 1000)
+
+var (
+	errSleepNotFinite = errors.New("shisho.sleep: ms must be a finite non-negative number")
+	// Built via fmt.Errorf once at package init so the numeric portion of the
+	// message is derived from maxSleepMs instead of duplicated. Still a static
+	// sentinel — comparable with errors.Is and allocated exactly once.
+	errSleepExceedsCap = fmt.Errorf("shisho.sleep: ms must be <= %d (5 minutes)", int(maxSleepMs)) //nolint:err113 // see comment above
+)
+
+// validateSleepMs enforces the rules for shisho.sleep's ms argument.
+// Extracted so boundary cases can be unit-tested without actually sleeping.
+func validateSleepMs(ms float64) error {
+	if math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
+		return errSleepNotFinite
+	}
+	if ms > maxSleepMs {
+		return errSleepExceedsCap
+	}
+	return nil
+}
+
+// injectSleepFunction sets up shisho.sleep(ms) as a blocking delay primitive.
+// Plugins use this to implement exponential backoff between retries, since
+// Goja has no Promise/setTimeout support.
+func injectSleepFunction(vm *goja.Runtime, shishoObj *goja.Object) error {
+	sleepFn := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) < 1 {
+			panic(vm.ToValue("shisho.sleep: ms argument is required"))
+		}
+		ms := call.Argument(0).ToFloat()
+		if err := validateSleepMs(ms); err != nil {
+			panic(vm.ToValue(err.Error()))
+		}
+		time.Sleep(time.Duration(ms * float64(time.Millisecond)))
+		return goja.Undefined()
+	}
+	if err := shishoObj.Set("sleep", sleepFn); err != nil {
+		return fmt.Errorf("failed to set shisho.sleep: %w", err)
+	}
+	return nil
 }
 
 // injectLogNamespace sets up shisho.log with debug/info/warn/error methods.

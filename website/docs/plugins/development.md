@@ -596,6 +596,27 @@ var bytes = resp.arrayBuffer(); // response body as ArrayBuffer
 
 Domain patterns support wildcards: `"*.example.com"` matches `example.com`, `api.example.com`, and `a.b.example.com`.
 
+### Sleep
+
+Block the plugin for a number of milliseconds. Goja has no `setTimeout` or `Promise` support, so this is the primitive to use for exponential backoff when retrying rate-limited APIs:
+
+```javascript
+// Exponential backoff between retries
+var resp;
+for (var attempt = 0; attempt < 3; attempt++) {
+  resp = shisho.http.fetch(url, {});
+  if (resp.status !== 503) return resp;
+  shisho.sleep(1000 * Math.pow(2, attempt));  // 1s, 2s, 4s
+}
+return resp; // retries exhausted — return the last 503
+```
+
+`shisho.sleep(ms)` throws if `ms` is negative, `NaN`, `Infinity`, or greater than 5 minutes (300000 ms). A value of `0` returns immediately.
+
+:::warning Not interruptible by hook timeouts
+`shisho.sleep` blocks in a Go syscall that the VM cannot interrupt, so the hook's deadline (1 minute for parsers and enrichers, 5 minutes for converters and output generators) will **not** fire until the sleep returns. While sleeping, the plugin's runtime mutex is held, so other goroutines waiting to invoke a hook on the same plugin are blocked as well. Keep total backoff well under the hook's timeout — if you exceed it, the worker will eventually kill the plugin and your cumulative sleeps become dead latency for every other caller.
+:::
+
 ### URL Utilities
 
 Helpers for URL manipulation that aren't available in the ES5.1 runtime:

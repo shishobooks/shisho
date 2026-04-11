@@ -395,6 +395,34 @@ export interface ShishoShell {
 export interface ShishoHostAPI {
   /** Persistent data directory for this plugin. Created lazily on first access. */
   readonly dataDir: string;
+  /**
+   * Block the plugin for the given number of milliseconds.
+   *
+   * Goja has no Promise/setTimeout support, so this is a synchronous delay
+   * backed by Go's `time.Sleep`. Use it to implement exponential backoff
+   * between retries when calling rate-limited APIs.
+   *
+   * **Not interruptible by hook timeouts.** Because sleep blocks in a Go
+   * syscall the VM cannot interrupt, the hook's deadline (1 minute for
+   * parsers and enrichers, 5 minutes for converters and output generators)
+   * will not fire until the sleep returns. While sleeping, the plugin's
+   * runtime mutex is held, so other goroutines waiting to invoke a hook on
+   * the same plugin are blocked as well. Keep total backoff well under the
+   * hook's timeout. Sleeps longer than 5 minutes are rejected.
+   *
+   * @param ms Finite non-negative milliseconds, capped at 5 minutes. Throws on
+   * negative, NaN, Infinity, or values exceeding the cap.
+   * @example
+   * // Exponential backoff: 1s, 2s, 4s
+   * var resp;
+   * for (var attempt = 0; attempt < 3; attempt++) {
+   *   resp = shisho.http.fetch(url, {});
+   *   if (resp.status !== 503) return resp;
+   *   shisho.sleep(1000 * Math.pow(2, attempt));
+   * }
+   * return resp; // retries exhausted — return the last 503
+   */
+  sleep(ms: number): void;
   log: ShishoLog;
   config: ShishoConfig;
   http: ShishoHTTP;

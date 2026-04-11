@@ -2,7 +2,10 @@ package plugins
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/stretchr/testify/assert"
@@ -140,6 +143,94 @@ func TestInjectHostAPIs_LogPluginTag(t *testing.T) {
 	// The log calls should not panic (they log internally with the plugin tag)
 	_, err = rt.vm.RunString(`shisho.log.info("test with tag")`)
 	assert.NoError(t, err)
+}
+
+func TestInjectHostAPIs_Sleep(t *testing.T) {
+	t.Parallel()
+	rt := newTestRuntime("official", "test-plugin")
+	cfg := &mockConfigGetter{configs: map[string]*string{}}
+	require.NoError(t, InjectHostAPIs(rt, cfg))
+
+	start := time.Now()
+	_, err := rt.vm.RunString(`shisho.sleep(50)`)
+	require.NoError(t, err)
+	elapsed := time.Since(start)
+	assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond, "sleep should block for at least the requested duration")
+	// Upper bound guards against regressions that reinterpret the argument
+	// (e.g. as seconds instead of milliseconds).
+	assert.Less(t, elapsed, 5*time.Second, "sleep should not block dramatically longer than requested")
+
+	// Zero is allowed and returns immediately.
+	_, err = rt.vm.RunString(`shisho.sleep(0)`)
+	require.NoError(t, err)
+
+	// Fractional milliseconds are supported.
+	_, err = rt.vm.RunString(`shisho.sleep(1.5)`)
+	require.NoError(t, err)
+}
+
+// TestValidateSleepMs exercises the boundary cases directly without paying
+// the time.Sleep cost — notably the exact cap and cap - 1, which would add
+// 5 minutes of wall-clock time if driven through the JS layer.
+func TestValidateSleepMs(t *testing.T) {
+	t.Parallel()
+
+	valid := []float64{0, 0.5, 1, 1000, maxSleepMs - 1, maxSleepMs}
+	for _, ms := range valid {
+		t.Run(fmt.Sprintf("valid/%v", ms), func(t *testing.T) {
+			assert.NoError(t, validateSleepMs(ms))
+		})
+	}
+
+	cases := []struct {
+		name    string
+		ms      float64
+		message string
+	}{
+		{"negative", -1, "finite non-negative"},
+		{"NaN", math.NaN(), "finite non-negative"},
+		{"+Inf", math.Inf(1), "finite non-negative"},
+		{"-Inf", math.Inf(-1), "finite non-negative"},
+		{"cap + 1", maxSleepMs + 1, "5 minutes"},
+		{"1e18 overflow", 1e18, "5 minutes"},
+	}
+	for _, tc := range cases {
+		t.Run("invalid/"+tc.name, func(t *testing.T) {
+			err := validateSleepMs(tc.ms)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "shisho.sleep")
+			assert.Contains(t, err.Error(), tc.message)
+		})
+	}
+}
+
+func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {
+	t.Parallel()
+	rt := newTestRuntime("official", "test-plugin")
+	cfg := &mockConfigGetter{configs: map[string]*string{}}
+	require.NoError(t, InjectHostAPIs(rt, cfg))
+
+	tests := []struct {
+		name        string
+		js          string
+		wantMessage string
+	}{
+		{"missing argument", `shisho.sleep()`, "argument is required"},
+		{"negative", `shisho.sleep(-5)`, "finite non-negative"},
+		{"NaN", `shisho.sleep(NaN)`, "finite non-negative"},
+		{"positive Infinity", `shisho.sleep(Infinity)`, "finite non-negative"},
+		{"negative Infinity", `shisho.sleep(-Infinity)`, "finite non-negative"},
+		{"exceeds cap", `shisho.sleep(5 * 60 * 1000 + 1)`, "5 minutes"},
+		{"overflow value", `shisho.sleep(1e18)`, "5 minutes"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := rt.vm.RunString(tc.js)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "shisho.sleep")
+			assert.Contains(t, err.Error(), tc.wantMessage)
+		})
+	}
 }
 
 func TestInjectHostAPIs_ConfigGetAll_Empty(t *testing.T) {
