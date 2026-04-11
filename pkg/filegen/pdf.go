@@ -2,10 +2,12 @@ package filegen
 
 import (
 	"context"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdf"
@@ -48,7 +50,71 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 		return NewGenerationError(models.FileTypePDF, err, "failed to write PDF metadata")
 	}
 
+	// Write chapters back to the destination as a bookmark outline. Skipped when
+	// the file has no chapters in the DB — we don't touch existing bookmarks in
+	// the source PDF in that case.
+	if file != nil && len(file.Chapters) > 0 {
+		pageCount := 0
+		if file.PageCount != nil {
+			pageCount = *file.PageCount
+		}
+		bookmarks := convertModelChaptersToPDFBookmarks(file.Chapters, pageCount)
+		if len(bookmarks) > 0 {
+			// AddBookmarksFile needs distinct input and output paths. Write to a
+			// sibling tmp file and rename over destPath on success.
+			tmpPath := destPath + ".bookmarks.tmp"
+			if err := api.AddBookmarksFile(destPath, tmpPath, bookmarks, true, conf); err != nil {
+				_ = os.Remove(tmpPath)
+				return NewGenerationError(models.FileTypePDF, err, "failed to write PDF bookmarks")
+			}
+			if err := os.Rename(tmpPath, destPath); err != nil {
+				_ = os.Remove(tmpPath)
+				return NewGenerationError(models.FileTypePDF, err, "failed to finalize PDF with bookmarks")
+			}
+		}
+	}
+
 	return nil
+}
+
+// convertModelChaptersToPDFBookmarks converts database chapter models into
+// pdfcpu bookmark entries, preserving nesting. Chapters with nil StartPage or
+// a StartPage outside [0, pageCount) are dropped. Pages are converted from the
+// 0-indexed storage format to the 1-indexed form pdfcpu expects. A pageCount
+// of 0 disables range filtering (used when the file's PageCount is unknown).
+func convertModelChaptersToPDFBookmarks(chapters []*models.Chapter, pageCount int) []pdfcpu.Bookmark {
+	if len(chapters) == 0 {
+		return nil
+	}
+
+	sorted := make([]*models.Chapter, len(chapters))
+	copy(sorted, chapters)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].SortOrder < sorted[j].SortOrder
+	})
+
+	result := make([]pdfcpu.Bookmark, 0, len(sorted))
+	for _, ch := range sorted {
+		if ch.StartPage == nil {
+			continue
+		}
+		page := *ch.StartPage
+		if page < 0 {
+			continue
+		}
+		if pageCount > 0 && page >= pageCount {
+			continue
+		}
+		bm := pdfcpu.Bookmark{
+			Title:    ch.Title,
+			PageFrom: page + 1, // pdfcpu is 1-indexed
+		}
+		if len(ch.Children) > 0 {
+			bm.Kids = convertModelChaptersToPDFBookmarks(ch.Children, pageCount)
+		}
+		result = append(result, bm)
+	}
+	return result
 }
 
 // buildProperties constructs the info dict map from book and file models.

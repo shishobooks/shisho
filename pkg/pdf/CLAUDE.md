@@ -94,6 +94,10 @@ PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` AP
 - **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
 - **No DestInfo = skipped**: bookmarks without a page destination are omitted
 
+### Writing Chapters Back
+
+`pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects, and out-of-range / nil-StartPage chapters are filtered out. When `file.Chapters` is empty, the bookmark write is skipped entirely so existing source bookmarks are left untouched. `AddBookmarksFile` requires distinct input/output paths, so the generator writes to a sibling `.bookmarks.tmp` file and renames over the destination.
+
 ### Key Types
 
 ```go

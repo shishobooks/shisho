@@ -131,6 +131,7 @@ Extracted from the PDF info dictionary:
 - **Basic**: title, description (from Subject), tags (from Keywords), release date (from CreationDate), page count, language (from catalog `Lang` property, BCP 47 tag)
 - **Authors**: split from the Author field on commas, ampersands, and semicolons
 - **Cover**: largest embedded image from page 1, falling back to a rendered image of the first page
+- **Chapters**: from the PDF document outline (bookmark tree), flattened to a linear list of page-anchored chapters
 
 ### Supplements
 
