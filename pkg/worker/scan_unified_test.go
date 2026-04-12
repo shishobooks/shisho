@@ -4791,3 +4791,278 @@ func TestResetBookFileState_PreservesIdentityFields(t *testing.T) {
 	assert.Equal(t, fileBookID, file.BookID, "book_id should be unchanged")
 	assert.Equal(t, primaryFileID, book.PrimaryFileID, "primary_file_id should be unchanged")
 }
+
+// =============================================================================
+// scanFileByID reset mode tests
+// =============================================================================
+
+func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with an EPUB file (has embedded title, author, and cover)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Reset Book")
+	testgen.GenerateEPUB(t, bookDir, "reset-book.epub", testgen.EPUBOptions{
+		Title:    "Reset Book",
+		Authors:  []string{"Test Author"},
+		HasCover: true,
+	})
+
+	// Run initial scan to create book and file in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify initial state
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Verify EPUB metadata was applied
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Equal(t, "Reset Book", book.Title)
+	require.True(t, len(book.Authors) > 0, "should have authors after initial scan")
+
+	file, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+	require.NotNil(t, file.CoverImageFilename, "should have cover after initial scan")
+
+	// Manually add extra metadata that should be cleared by reset
+	manualSource := models.DataSourceManual
+	subtitle := "Fake Subtitle"
+	description := "Fake Description"
+	book.Subtitle = &subtitle
+	book.SubtitleSource = &manualSource
+	book.Description = &description
+	book.DescriptionSource = &manualSource
+	err = tc.bookService.UpdateBook(tc.ctx, book, books.UpdateBookOptions{
+		Columns: []string{"subtitle", "subtitle_source", "description", "description_source"},
+	})
+	require.NoError(t, err)
+
+	// Add a genre to the book
+	genre, err := tc.worker.genreService.FindOrCreateGenre(tc.ctx, "Romance", 1)
+	require.NoError(t, err)
+	err = tc.bookService.CreateBookGenre(tc.ctx, &models.BookGenre{BookID: bookID, GenreID: genre.ID})
+	require.NoError(t, err)
+
+	// Set language and abridged on the file
+	lang := "fr"
+	abridged := true
+	file.Language = &lang
+	file.LanguageSource = &manualSource
+	file.Abridged = &abridged
+	file.AbridgedSource = &manualSource
+	err = tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{
+		Columns: []string{"language", "language_source", "abridged", "abridged_source"},
+	})
+	require.NoError(t, err)
+
+	// Verify manual metadata was applied before reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.NotNil(t, book.Subtitle)
+	require.NotNil(t, book.Description)
+	require.True(t, len(book.BookGenres) > 0, "should have genres before reset")
+
+	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+	require.NotNil(t, file.Language)
+	require.NotNil(t, file.Abridged)
+
+	// Run reset scan
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Reload book and file after reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	// Title should come back from EPUB metadata
+	assert.Equal(t, "Reset Book", book.Title, "title should be repopulated from EPUB")
+
+	// Authors should be repopulated from EPUB/filepath
+	assert.True(t, len(book.Authors) > 0, "authors should be repopulated after reset")
+
+	// Subtitle and description should be nil (they were manual, now wiped and EPUB has none)
+	assert.Nil(t, book.Subtitle, "subtitle should be nil after reset")
+	assert.Nil(t, book.Description, "description should be nil after reset")
+
+	// Genres should be empty (wiped by reset, EPUB has no genres)
+	assert.Empty(t, book.BookGenres, "genres should be empty after reset")
+
+	// Language should be "en" (wiped by reset, then repopulated from EPUB which has dc:language "en")
+	require.NotNil(t, file.Language, "language should be repopulated from EPUB after reset")
+	assert.Equal(t, "en", *file.Language, "language should be 'en' from EPUB, not 'fr' from manual edit")
+
+	// Abridged should be nil (wiped by reset, EPUB has no abridged field)
+	assert.Nil(t, file.Abridged, "abridged should be nil after reset")
+
+	// Cover should be re-extracted (CoverImageFilename not nil)
+	assert.NotNil(t, file.CoverImageFilename, "cover should be re-extracted after reset")
+}
+
+func TestScanFileByID_ResetMode_FilepathFallbackTitle(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with a CBZ that has no ComicInfo (no embedded metadata)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Filepath Title Book")
+	testgen.GenerateCBZ(t, bookDir, "filepath-title.cbz", testgen.CBZOptions{
+		PageCount:    3,
+		HasComicInfo: false,
+	})
+
+	// Run initial scan to create book and file in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Title should come from directory name
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Equal(t, "Filepath Title Book", book.Title, "title should come from directory name initially")
+
+	// Manually set wrong title with plugin source
+	pluginSource := models.DataSourcePluginPrefix + "wrong-plugin"
+	book.Title = "Wrong Plugin Title"
+	book.TitleSource = pluginSource
+	err = tc.bookService.UpdateBook(tc.ctx, book, books.UpdateBookOptions{
+		Columns: []string{"title", "title_source"},
+	})
+	require.NoError(t, err)
+
+	// Verify wrong title is set
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Equal(t, "Wrong Plugin Title", book.Title)
+
+	// Run reset scan
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Reload book after reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+
+	// Title should come from directory name (filepath fallback), not "Wrong Plugin Title"
+	assert.Equal(t, "Filepath Title Book", book.Title, "title should come from filepath fallback after reset, not plugin title")
+}
+
+// =============================================================================
+// scanBook reset mode tests
+// =============================================================================
+
+func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Create a library with temp directory
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with two EPUB files sharing the same author/title
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author Name] Multi File Book")
+	testgen.GenerateEPUB(t, bookDir, "file1.epub", testgen.EPUBOptions{
+		Title:   "Multi File Book",
+		Authors: []string{"Author Name"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "file2.epub", testgen.EPUBOptions{
+		Title:   "Multi File Book",
+		Authors: []string{"Author Name"},
+	})
+
+	// Run initial scan to create book and files in DB
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	// Verify exactly 1 book was created (both EPUBs grouped under same book)
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1, "both EPUBs should be grouped under one book")
+	bookID := allBooks[0].ID
+
+	// Verify initial metadata (title and authors from EPUB)
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Equal(t, "Multi File Book", book.Title)
+	require.True(t, len(book.Authors) > 0, "should have authors after initial scan")
+
+	// Manually add extra metadata that should be cleared by reset
+	manualSource := models.DataSourceManual
+	subtitle := "Should Be Cleared"
+	book.Subtitle = &subtitle
+	book.SubtitleSource = &manualSource
+	err = tc.bookService.UpdateBook(tc.ctx, book, books.UpdateBookOptions{
+		Columns: []string{"subtitle", "subtitle_source"},
+	})
+	require.NoError(t, err)
+
+	// Add a genre to the book
+	genre, err := tc.worker.genreService.FindOrCreateGenre(tc.ctx, "Thriller", 1)
+	require.NoError(t, err)
+	err = tc.bookService.CreateBookGenre(tc.ctx, &models.BookGenre{BookID: bookID, GenreID: genre.ID})
+	require.NoError(t, err)
+
+	// Verify manual metadata was applied before reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.NotNil(t, book.Subtitle, "subtitle should be set before reset")
+	require.True(t, len(book.BookGenres) > 0, "should have genres before reset")
+
+	// Run reset scan at the book level
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       bookID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Reload book after reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+
+	// Subtitle should be nil (wiped by book-level reset, EPUB has no subtitle)
+	assert.Nil(t, book.Subtitle, "subtitle should be nil after reset")
+
+	// Genres should be empty (wiped by book-level reset, EPUB has no genres)
+	assert.Empty(t, book.BookGenres, "genres should be empty after reset")
+
+	// Title should be repopulated from EPUB
+	assert.Equal(t, "Multi File Book", book.Title, "title should be repopulated from EPUB after reset")
+
+	// Authors should be repopulated from EPUB
+	assert.True(t, len(book.Authors) > 0, "authors should be repopulated after reset")
+}

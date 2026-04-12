@@ -466,6 +466,41 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		return nil, errors.Wrap(err, "failed to retrieve parent book")
 	}
 
+	// Reset mode: wipe metadata and apply filepath fallbacks
+	if opts.Reset {
+		// Determine if this is a root-level file.
+		// For directory-based books, the file's parent dir equals book.Filepath.
+		// For root-level files, the file's parent dir is a library path, not book.Filepath.
+		isRootLevelFile := filepath.Dir(file.Filepath) != book.Filepath
+
+		// Apply filepath fallbacks so title/authors are populated even if file has none
+		applyFilepathFallbacks(metadata, file.Filepath, book.Filepath, file.FileType, isRootLevelFile)
+
+		// Wipe book and file metadata.
+		// If BookResetDone is set (called from scanBook), skip the book-level wipe
+		// because scanBook already did it once for all files.
+		if err := w.resetBookFileState(ctx, book, file, opts.BookResetDone); err != nil {
+			return nil, errors.Wrap(err, "failed to reset book/file state")
+		}
+
+		// Reload book and file after wipe (relations were deleted)
+		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to reload book after reset")
+		}
+		file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to reload file after reset")
+		}
+
+		// Re-extract cover since resetBookFileState deleted it.
+		// recoverMissingCover ran earlier (before the reset block), so we must
+		// call it again now that the cover columns have been wiped.
+		if err := w.recoverMissingCover(ctx, file, opts.JobLog); err != nil {
+			logWarn("failed to recover cover after reset", logger.Data{"file_id": file.ID, "error": err.Error()})
+		}
+	}
+
 	// Run metadata enrichers after parsing
 	if !opts.SkipPlugins {
 		metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
@@ -560,6 +595,42 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		}
 
 		return &ScanResult{BookDeleted: true}, nil
+	}
+
+	// When resetting, wipe book-level metadata once before iterating files.
+	// Per-file calls below pass BookResetDone: opts.Reset so they skip the
+	// book-level wipe (which we've already done here).
+	if opts.Reset {
+		book.Subtitle = nil
+		book.SubtitleSource = nil
+		book.Description = nil
+		book.DescriptionSource = nil
+		// Note: AuthorSource is NOT NULL in the DB. Leave it unchanged; it will
+		// be overwritten when new authors are written during the scan.
+		book.GenreSource = nil
+		book.TagSource = nil
+
+		bookColumns := []string{
+			"subtitle", "subtitle_source",
+			"description", "description_source",
+			"genre_source", "tag_source",
+		}
+		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
+			return nil, errors.Wrap(err, "failed to clear book metadata for reset")
+		}
+
+		if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
+			return nil, errors.Wrap(err, "failed to delete book authors for reset")
+		}
+		if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
+			return nil, errors.Wrap(err, "failed to delete book series for reset")
+		}
+		if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
+			return nil, errors.Wrap(err, "failed to delete book genres for reset")
+		}
+		if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
+			return nil, errors.Wrap(err, "failed to delete book tags for reset")
+		}
 	}
 
 	// Initialize file results
