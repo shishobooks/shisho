@@ -55,6 +55,10 @@ func (s *stubBookStoreForPersist) CreateNarrator(_ context.Context, _ *models.Na
 	return nil
 }
 
+func (s *stubBookStoreForPersist) OrganizeBookFiles(_ context.Context, _ *models.Book) error {
+	return nil
+}
+
 // TestPersistMetadata_CoverWrite_RootLevelFile_SyntheticBookPath is a
 // regression test for a bug where persistMetadata wrote plugin-provided
 // cover data unconditionally to book.Filepath as the cover directory. For

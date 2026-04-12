@@ -55,6 +55,7 @@ type bookStore interface {
 	UpdateFile(ctx context.Context, file *models.File, columns []string) error
 	DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error)
 	CreateNarrator(ctx context.Context, narrator *models.Narrator) error
+	OrganizeBookFiles(ctx context.Context, book *models.Book) error
 }
 
 // relationStore provides book relationship CRUD operations.
@@ -2047,6 +2048,19 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Persist metadata (no field filtering — user already selected fields)
 	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, log); err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
+	}
+
+	// Organize files if title, authors, narrators, or series changed (these affect directory/file names).
+	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
+	if md.Title != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || md.Series != "" {
+		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+		if err != nil {
+			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})
+		} else {
+			if orgErr := h.enrich.bookStore.OrganizeBookFiles(ctx, freshBook); orgErr != nil {
+				log.Warn("failed to organize book files after metadata apply", logger.Data{"book_id": book.ID, "error": orgErr.Error()})
+			}
+		}
 	}
 
 	// Reload and return updated book
