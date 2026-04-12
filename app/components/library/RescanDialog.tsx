@@ -40,7 +40,7 @@ const modes: { value: RescanMode; label: string; description: string }[] = [
     value: "reset",
     label: "Reset to file metadata",
     description:
-      "Skip plugins and use only metadata embedded in the source file(s). Use when plugin enrichment is matching incorrectly.",
+      "Clear all metadata and re-scan as if this were a brand new file, without plugins. Manual edits and enricher data will be removed.",
   },
 ];
 
