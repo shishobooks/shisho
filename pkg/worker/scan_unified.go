@@ -3640,16 +3640,21 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	book.SubtitleSource = nil
 	book.Description = nil
 	book.DescriptionSource = nil
-	// Note: AuthorSource is NOT NULL in the DB (no zero-value allowed). We
-	// don't clear it here; it will be overwritten on the next scan when new
-	// authors are written.
 	book.GenreSource = nil
 	book.TagSource = nil
+
+	// Reset NOT NULL source fields to filepath (lowest priority) so that
+	// scanFileCore can correct them. Without this, a stale high-priority
+	// source (e.g., "plugin:foo") would prevent future scans from updating.
+	book.TitleSource = models.DataSourceFilepath
+	book.SortTitleSource = models.DataSourceFilepath
+	book.AuthorSource = models.DataSourceFilepath
 
 	bookColumns := []string{
 		"subtitle", "subtitle_source",
 		"description", "description_source",
 		"genre_source", "tag_source",
+		"title_source", "sort_title_source", "author_source",
 	}
 	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
 		return errors.Wrap(err, "failed to clear book metadata")

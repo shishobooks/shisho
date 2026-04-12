@@ -11,8 +11,14 @@ func shouldUpdateScalar(newValue, existingValue, newSource, existingSource strin
 		return false
 	}
 
-	// Never update if values are the same (even with forceRefresh - no point changing source if value is identical)
+	// Skip if values are the same — unless forceRefresh is true and the source
+	// changed, in which case we must update to keep source attribution correct.
+	// A stale source (e.g., "plugin:foo" after a reset) would cause future
+	// priority-based scans to make wrong overwrite decisions.
 	if newValue == existingValue {
+		if forceRefresh && newSource != existingSource {
+			return true
+		}
 		return false
 	}
 
@@ -42,8 +48,12 @@ func shouldUpdateRelationship(newItems, existingItems []string, newSource, exist
 		return false
 	}
 
-	// Never update if items are the same (even with forceRefresh - no point changing source if items are identical)
+	// Skip if items are the same — unless forceRefresh is true and the source
+	// changed, in which case we must update to keep source attribution correct.
 	if equalStringSlices(newItems, existingItems) {
+		if forceRefresh && newSource != existingSource {
+			return true
+		}
 		return false
 	}
 
