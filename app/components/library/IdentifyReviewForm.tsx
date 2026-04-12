@@ -3,6 +3,7 @@ import {
   type FieldStatus,
   type IdentifierEntry,
 } from "./identify-utils";
+import { LanguageCombobox } from "./LanguageCombobox";
 import equal from "fast-deep-equal";
 import {
   ArrowLeft,
@@ -1044,10 +1045,10 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setLanguage(file?.language ?? "")}
         status={defaults.language.status}
       >
-        <Input
+        <LanguageCombobox
           disabled={isDisabled("language")}
-          onChange={(e) => setLanguage(e.target.value)}
-          placeholder="e.g. en, en-US, zh-Hans"
+          libraryId={book.library_id}
+          onChange={setLanguage}
           value={language}
         />
       </FieldWrapper>

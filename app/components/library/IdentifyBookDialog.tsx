@@ -14,6 +14,7 @@ import {
 import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getLanguageName } from "@/constants/languages";
 import {
   usePluginIdentifierTypes,
   usePluginOrder,
@@ -393,45 +394,45 @@ export function IdentifyBookDialog({
                         <div className="flex-1 min-w-0">
                           {/* Zone 1: Identity */}
                           <div>
-                            {/* Title + subtitle */}
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
+                            {/* Title + subtitle + badges */}
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
                                 <p className="font-medium leading-tight">
                                   {result.title}
                                 </p>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {result.confidence != null && (
-                                    <Badge
-                                      className={cn(
-                                        "text-xs",
-                                        result.confidence >= 0.9
-                                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                          : result.confidence >= 0.7
-                                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-                                      )}
-                                      variant="secondary"
-                                    >
-                                      {Math.round(result.confidence * 100)}%
-                                    </Badge>
-                                  )}
-                                  <Badge className="text-xs" variant="outline">
-                                    {pluginLabel(result)}
-                                  </Badge>
-                                </div>
+                                {result.subtitle && (
+                                  <p className="text-sm text-muted-foreground/80 leading-tight mt-0.5">
+                                    {result.subtitle}
+                                  </p>
+                                )}
+                                {result.series && (
+                                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                                    {result.series}
+                                    {result.series_number != null &&
+                                      ` #${result.series_number}`}
+                                  </p>
+                                )}
                               </div>
-                              {result.subtitle && (
-                                <p className="text-sm text-muted-foreground/80 leading-tight">
-                                  {result.subtitle}
-                                </p>
-                              )}
-                              {result.series && (
-                                <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                                  {result.series}
-                                  {result.series_number != null &&
-                                    ` #${result.series_number}`}
-                                </p>
-                              )}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {result.confidence != null && (
+                                  <Badge
+                                    className={cn(
+                                      "text-xs",
+                                      result.confidence >= 0.9
+                                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                        : result.confidence >= 0.7
+                                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                                    )}
+                                    variant="secondary"
+                                  >
+                                    {Math.round(result.confidence * 100)}%
+                                  </Badge>
+                                )}
+                                <Badge className="text-xs" variant="outline">
+                                  {pluginLabel(result)}
+                                </Badge>
+                              </div>
                             </div>
 
                             {/* People */}
@@ -457,22 +458,44 @@ export function IdentifyBookDialog({
                               ) : null;
                             })()}
 
-                            {/* Date + publisher */}
-                            {(result.release_date || result.publisher) && (
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
-                                {result.release_date && (
-                                  <span>{formatDate(result.release_date)}</span>
-                                )}
-                                {result.release_date && result.publisher && (
-                                  <span className="text-muted-foreground/50">
-                                    ·
-                                  </span>
-                                )}
-                                {result.publisher && (
-                                  <span>{result.publisher}</span>
-                                )}
-                              </div>
-                            )}
+                            {/* Date + publisher + language + abridged */}
+                            {(() => {
+                              const metaItems: string[] = [];
+                              if (result.release_date) {
+                                metaItems.push(formatDate(result.release_date));
+                              }
+                              if (result.publisher) {
+                                metaItems.push(result.publisher);
+                              }
+                              if (result.language) {
+                                metaItems.push(
+                                  getLanguageName(result.language) ||
+                                    result.language,
+                                );
+                              }
+                              if (result.abridged != null) {
+                                metaItems.push(
+                                  result.abridged ? "Abridged" : "Unabridged",
+                                );
+                              }
+                              return metaItems.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
+                                  {metaItems.map((item, i) => (
+                                    <span
+                                      className="flex items-center gap-x-2"
+                                      key={`${i}-${item}`}
+                                    >
+                                      {i > 0 && (
+                                        <span className="text-muted-foreground/50">
+                                          ·
+                                        </span>
+                                      )}
+                                      <span>{item}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
 
                           {/* Zone 2: Identifiers */}
