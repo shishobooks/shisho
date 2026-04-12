@@ -25,6 +25,29 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 	return nil
 }
 
+// stubRelStoreForApply is a no-op relationStore for applyMetadata tests.
+type stubRelStoreForApply struct{}
+
+func (s *stubRelStoreForApply) DeleteAuthors(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) CreateAuthor(_ context.Context, _ *models.Author) error {
+	return nil
+}
+func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, _ *models.BookSeries) error {
+	return nil
+}
+func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, _ string, _ int, _ string) (*models.Series, error) {
+	return &models.Series{ID: 1}, nil
+}
+func (s *stubRelStoreForApply) DeleteBookGenres(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) CreateBookGenre(_ context.Context, _ *models.BookGenre) error {
+	return nil
+}
+func (s *stubRelStoreForApply) DeleteBookTags(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) CreateBookTag(_ context.Context, _ *models.BookTag) error {
+	return nil
+}
+
 // newApplyTestHandler creates a handler wired with stubs for applyMetadata testing.
 func newApplyTestHandler(store *stubBookStoreForApply) *handler {
 	mgr := &Manager{
@@ -40,6 +63,7 @@ func newApplyTestHandler(store *stubBookStoreForApply) *handler {
 		manager: mgr,
 		enrich: &enrichDeps{
 			bookStore: store,
+			relStore:  &stubRelStoreForApply{},
 		},
 	}
 }
@@ -122,6 +146,25 @@ func TestApplyMetadata_OrganizesFiles_WhenNarratorsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when narrators change")
+}
+
+func TestApplyMetadata_OrganizesFiles_WhenSeriesChanges(t *testing.T) {
+	t.Parallel()
+
+	book := &models.Book{ID: 1, LibraryID: 1, Title: "Book"}
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"series":        "My Series",
+		"series_number": 2,
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when series changes")
 }
 
 func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {

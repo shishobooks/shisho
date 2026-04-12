@@ -2050,11 +2050,13 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
 
-	// Organize files if title, authors, or narrators changed (these affect directory/file names).
+	// Organize files if title, authors, narrators, or series changed (these affect directory/file names).
 	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
-	if md.Title != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 {
+	if md.Title != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || md.Series != "" {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
-		if err == nil {
+		if err != nil {
+			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})
+		} else {
 			if orgErr := h.enrich.bookStore.OrganizeBookFiles(ctx, freshBook); orgErr != nil {
 				log.Warn("failed to organize book files after metadata apply", logger.Data{"book_id": book.ID, "error": orgErr.Error()})
 			}
