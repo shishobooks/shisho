@@ -306,11 +306,48 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 
 	coverFilepath := ""
 	coverMimeType := ""
+	// 1. Preferred: <meta name="cover" content="ID"/> pointing at a manifest item.
 	if metaContent["cover"] != "" {
 		for _, item := range pkg.Manifest.Item {
 			if item.ID == metaContent["cover"] {
 				coverFilepath = basePath + item.Href
 				coverMimeType = item.MediaType
+			}
+		}
+	}
+	// 2. EPUB 3: item with properties="cover-image". The properties
+	// attribute is a whitespace-separated token list per the spec, so
+	// match tokens rather than running a substring check.
+	if coverFilepath == "" {
+		for _, item := range pkg.Manifest.Item {
+			if !strings.HasPrefix(item.MediaType, "image/") {
+				continue
+			}
+			for _, prop := range strings.Fields(item.Properties) {
+				if prop == "cover-image" {
+					coverFilepath = basePath + item.Href
+					coverMimeType = item.MediaType
+					break
+				}
+			}
+			if coverFilepath != "" {
+				break
+			}
+		}
+	}
+	// 3. Fallback: image manifest item whose id matches a common cover convention
+	// (e.g. id="cover-image" or id="cover" with no explicit <meta>/properties hint).
+	// Some older EPUBs (notably legacy HarperCollins exports) ship only this.
+	if coverFilepath == "" {
+		for _, item := range pkg.Manifest.Item {
+			if !strings.HasPrefix(item.MediaType, "image/") {
+				continue
+			}
+			id := strings.ToLower(item.ID)
+			if id == "cover-image" || id == "cover" || id == "coverimage" {
+				coverFilepath = basePath + item.Href
+				coverMimeType = item.MediaType
+				break
 			}
 		}
 	}

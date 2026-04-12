@@ -156,6 +156,59 @@ func TestParseOPF_Language_ISO6392T(t *testing.T) {
 	assert.Equal(t, "en", *result.OPF.Language)
 }
 
+// TestParseOPF_Cover_ManifestIDFallback verifies that when an OPF has no
+// <meta name="cover" .../> element but the manifest contains an image item
+// with id="cover-image" (a common EPUB 2.x convention used by e.g. older
+// HarperCollins titles), the parser still discovers the cover.
+func TestParseOPF_Cover_ManifestIDFallback(t *testing.T) {
+	t.Parallel()
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>Test Book</dc:title>
+    <dc:language>en</dc:language>
+    <dc:identifier id="bookid">urn:uuid:test</dc:identifier>
+  </metadata>
+  <manifest>
+    <item href="chapter1.xhtml" id="ch1" media-type="application/xhtml+xml"/>
+    <item href="Images/Cover.jpg" id="cover-image" media-type="image/jpeg"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+  </spine>
+</package>`
+
+	result, err := ParseOPF("OEBPS/content.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+	assert.Equal(t, "OEBPS/Images/Cover.jpg", result.OPF.CoverFilepath)
+	assert.Equal(t, "image/jpeg", result.OPF.CoverMimeType)
+}
+
+// TestParseOPF_Cover_PropertiesFallback verifies EPUB 3's properties="cover-image"
+// attribute is discovered when there's no <meta name="cover"/> reference.
+func TestParseOPF_Cover_PropertiesFallback(t *testing.T) {
+	t.Parallel()
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:identifier id="bookid">urn:uuid:test</dc:identifier>
+  </metadata>
+  <manifest>
+    <item href="chapter1.xhtml" id="ch1" media-type="application/xhtml+xml"/>
+    <item href="cover.png" id="img1" media-type="image/png" properties="cover-image"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+  </spine>
+</package>`
+
+	result, err := ParseOPF("content.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+	assert.Equal(t, "cover.png", result.OPF.CoverFilepath)
+	assert.Equal(t, "image/png", result.OPF.CoverMimeType)
+}
+
 func TestParseOPF_Language_Missing(t *testing.T) {
 	t.Parallel()
 	// No dc:language element: Language should be nil

@@ -2217,32 +2217,32 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		}
 	}
 
-	// Handle cover extraction
+	// Handle cover extraction. extractAndSaveCover also adopts a cover file
+	// that already sits next to the source file on disk, so we always call
+	// it — even when the parser returned no cover data for the source.
 	var coverImagePath *string
 	var coverMimeType *string
 	var coverSource *string
 	var coverPage *int
 
-	if metadata != nil && len(metadata.CoverData) > 0 {
-		coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata, opts.JobLog)
-		if err != nil {
-			logWarn("failed to extract cover", logger.Data{"error": err.Error()})
-		} else if coverFilename != "" {
-			coverImagePath = &coverFilename
-			if extractedMimeType != "" {
-				coverMimeType = &extractedMimeType
-			}
-			if wasPreExisting {
-				existingCoverSource := models.DataSourceExistingCover
-				coverSource = &existingCoverSource
-			} else {
-				cs := metadata.SourceForField("cover")
-				coverSource = &cs
-			}
+	coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata, opts.JobLog)
+	if err != nil {
+		logWarn("failed to extract cover", logger.Data{"error": err.Error()})
+	} else if coverFilename != "" {
+		coverImagePath = &coverFilename
+		if extractedMimeType != "" {
+			coverMimeType = &extractedMimeType
 		}
-		if metadata.CoverPage != nil {
-			coverPage = metadata.CoverPage
+		if wasPreExisting {
+			existingCoverSource := models.DataSourceExistingCover
+			coverSource = &existingCoverSource
+		} else {
+			cs := metadata.SourceForField("cover")
+			coverSource = &cs
 		}
+	}
+	if metadata != nil && metadata.CoverPage != nil {
+		coverPage = metadata.CoverPage
 	}
 
 	// Create file record
@@ -2593,10 +2593,6 @@ func (w *Worker) extractAndSaveCover(
 		}
 	}
 
-	if metadata == nil || len(metadata.CoverData) == 0 {
-		return "", "", false, nil
-	}
-
 	// Determine cover directory
 	coverDir := bookPath
 	if isRootLevelFile {
@@ -2606,13 +2602,22 @@ func (w *Worker) extractAndSaveCover(
 	// Build cover base name: <filename>.cover
 	coverBaseName := filepath.Base(filePath) + ".cover"
 
-	// Check if cover already exists
+	// Check if a cover already exists alongside the file. A user may have
+	// dropped a `book.epub.cover.jpg` next to an EPUB that has no embedded
+	// cover; in that case we want to adopt the existing file instead of
+	// leaving the record without a cover, which would otherwise only get
+	// picked up on a later "Refresh all metadata".
 	existingCoverPath := fileutils.CoverExistsWithBaseName(coverDir, coverBaseName)
 	if existingCoverPath != "" {
 		logInfo("cover already exists, using existing", logger.Data{"path": existingCoverPath})
-		// Detect MIME type from file extension
 		existingMime := fileutils.MimeTypeFromExtension(filepath.Ext(existingCoverPath))
 		return filepath.Base(existingCoverPath), existingMime, true, nil
+	}
+
+	// No cover on disk — fall back to whatever the parser extracted from
+	// the file itself.
+	if metadata == nil || len(metadata.CoverData) == 0 {
+		return "", "", false, nil
 	}
 
 	// Normalize the cover image
@@ -3367,6 +3372,13 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		return nil
 	}
 
+	logWarn := func(msg string, data logger.Data) {
+		log.Warn(msg, data)
+		if jobLog != nil {
+			jobLog.Warn(msg, data)
+		}
+	}
+
 	// Cover doesn't exist on disk - check if we need to extract one
 	// This handles both: 1) missing cover that was previously extracted, and
 	// 2) file that never had a cover (e.g., promoted supplement)
@@ -3376,25 +3388,50 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		logInfo("no cover exists, extracting", nil)
 	}
 
-	// Extract cover from the media file
-	var metadata *mediafile.ParsedMetadata
-	var parseErr error
-
-	switch file.FileType {
-	case models.FileTypeM4B:
-		metadata, parseErr = mp4.Parse(file.Filepath)
-	case models.FileTypeEPUB:
-		metadata, parseErr = epub.Parse(file.Filepath)
-	case models.FileTypeCBZ:
-		metadata, parseErr = cbz.Parse(file.Filepath)
-	case models.FileTypePDF:
-		metadata, parseErr = pdf.Parse(file.Filepath)
-	default:
-		return nil // Unknown file type, skip
+	// Page-based formats (CBZ, PDF) may have a user-selected cover page in
+	// file.CoverPage (set via the page picker UI). Re-extract from that
+	// specific page so recovery preserves the user's choice instead of
+	// silently resetting to page 0. If the page extraction fails we bail
+	// out rather than falling through to the generic parser — otherwise
+	// we'd write a page-0 cover to disk while file.CoverPage still points
+	// at the user's selection, leaving the two out of sync.
+	if models.IsPageBasedFileType(file.FileType) && file.CoverPage != nil {
+		pageNum := *file.CoverPage
+		var coverFilename, coverMimeType string
+		var err error
+		switch file.FileType {
+		case models.FileTypeCBZ:
+			coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+		case models.FileTypePDF:
+			coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+		}
+		if err != nil {
+			logWarn("failed to extract cover from selected page", logger.Data{"page": pageNum, "error": err.Error()})
+			return nil
+		}
+		if coverFilename == "" {
+			return nil
+		}
+		logInfo("recovered cover from selected page", logger.Data{"page": pageNum})
+		file.CoverImageFilename = &coverFilename
+		file.CoverMimeType = &coverMimeType
+		// Leave CoverSource alone — the user's selection still stands.
+		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+			Columns: []string{"cover_image_filename", "cover_mime_type"},
+		}); err != nil {
+			return errors.WithStack(err)
+		}
+		return nil
 	}
 
+	// Delegate parsing to parseFileMetadata so plugin-registered file parsers
+	// are also consulted (previously a hard-coded switch left plugin types
+	// stuck with no cover after deletion). Unsupported file types return an
+	// error we treat as "nothing to recover".
+	metadata, parseErr := w.parseFileMetadata(ctx, file.Filepath, file.FileType)
 	if parseErr != nil {
-		return errors.WithStack(parseErr)
+		logInfo("cannot parse file for cover recovery", logger.Data{"error": parseErr.Error()})
+		return nil
 	}
 
 	if metadata == nil || len(metadata.CoverData) == 0 {

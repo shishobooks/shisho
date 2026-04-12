@@ -93,11 +93,19 @@ function CoverGalleryTabs({
     }
   }, [coverUrl]);
 
-  // Reset cover state when selection changes
+  // Reset loading state on tab change so the placeholder shows while the
+  // new file's cover loads.
   useEffect(() => {
     setCoverLoaded(false);
-    setCoverError(false);
   }, [selectedFileId]);
+
+  // Reset the error flag whenever the URL changes — either because the user
+  // picked a different tab, or because a rescan bumped the cache-buster. If
+  // we only reset on tab change, a previously-failed cover stays unmounted
+  // even after the underlying file gets a valid cover.
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverUrl]);
 
   const handleCoverLoad = () => {
     if (coverUrl) {
