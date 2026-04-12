@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -217,4 +219,118 @@ func TestMonitor_PathStillExists_TreatAsCopy(t *testing.T) {
 	}
 	assert.True(t, origFound, "original file row should still exist unchanged")
 	assert.True(t, copyFound, "copy file should have a new row")
+}
+
+// TestMonitor_DetectsFileMove_MultipleDisplacedCandidates verifies the
+// tiebreak behavior of tryDetectMove when multiple file rows share the same
+// sha256 AND all of their stored paths are missing on disk (i.e. the library
+// had byte-identical books at several locations and they all got moved or
+// deleted before the monitor reconciled them).
+//
+// Expected behavior: the candidate with the most recent FileModifiedAt wins
+// — its filepath is updated to the new path — and any other displaced
+// candidates are deleted so they don't linger as ghost rows with dead paths.
+func TestMonitor_DetectsFileMove_MultipleDisplacedCandidates(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create the real file at the NEW location — this is the file the monitor
+	// will scan. Both DB rows will point at old paths that never existed on
+	// disk (we create them purely in the DB) so both pass the "path is gone"
+	// check in tryDetectMove.
+	newDir := testgen.CreateSubDir(t, libDir, "Author - Destination")
+	newPath := testgen.GenerateEPUB(t, newDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Shared Content",
+		Authors: []string{"Author"},
+	})
+
+	hash, err := computeFileSHA256(newPath)
+	require.NoError(t, err)
+
+	// Resolve the library ID.
+	libs, err := tc.libraryService.ListLibraries(tc.ctx, libraries.ListLibrariesOptions{})
+	require.NoError(t, err)
+	require.Len(t, libs, 1)
+	libID := libs[0].ID
+
+	// Create two books with phantom files that share the same content hash.
+	// Each row's Filepath points at a location that doesn't exist on disk.
+	olderTime := time.Now().Add(-2 * time.Hour)
+	newerTime := time.Now().Add(-1 * time.Hour)
+
+	stat, err := os.Stat(newPath)
+	require.NoError(t, err)
+	size := stat.Size()
+
+	olderBook := &models.Book{
+		LibraryID:    libID,
+		Filepath:     filepath.Join(libDir, "older-ghost-dir"),
+		Title:        "Older Ghost",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Older Ghost",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, olderBook))
+
+	olderFile := &models.File{
+		LibraryID:      libID,
+		BookID:         olderBook.ID,
+		Filepath:       filepath.Join(libDir, "older-ghost-dir", "book.epub"),
+		FileType:       models.FileTypeEPUB,
+		FileRole:       models.FileRoleMain,
+		FilesizeBytes:  size,
+		FileModifiedAt: &olderTime,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, olderFile))
+	require.NoError(t,
+		tc.fingerprintService.Insert(tc.ctx, olderFile.ID, models.FingerprintAlgorithmSHA256, hash),
+	)
+
+	newerBook := &models.Book{
+		LibraryID:    libID,
+		Filepath:     filepath.Join(libDir, "newer-ghost-dir"),
+		Title:        "Newer Ghost",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Newer Ghost",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, newerBook))
+
+	newerFile := &models.File{
+		LibraryID:      libID,
+		BookID:         newerBook.ID,
+		Filepath:       filepath.Join(libDir, "newer-ghost-dir", "book.epub"),
+		FileType:       models.FileTypeEPUB,
+		FileRole:       models.FileRoleMain,
+		FilesizeBytes:  size,
+		FileModifiedAt: &newerTime,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, newerFile))
+	require.NoError(t,
+		tc.fingerprintService.Insert(tc.ctx, newerFile.ID, models.FingerprintAlgorithmSHA256, hash),
+	)
+
+	m, _ := newTestMonitorWithWorker(tc, libDir)
+
+	// Trigger move detection directly — we're testing tryDetectMove's
+	// tiebreak logic in isolation.
+	moved, err := m.tryDetectMove(tc.ctx, newPath, libID)
+	require.NoError(t, err)
+	require.NotNil(t, moved, "move should be detected")
+
+	// The newer candidate should have won the tiebreak.
+	assert.Equal(t, newerFile.ID, moved.ID, "tiebreak should pick the most recently modified candidate")
+	assert.Equal(t, newPath, moved.Filepath, "winner's filepath should point to the new location")
+
+	// The older candidate should have been deleted as a ghost.
+	_, err = tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &olderFile.ID})
+	require.Error(t, err, "older ghost file row should have been deleted")
+
+	// Verify the winner's row is still present at the new path.
+	winnerAfter, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &newerFile.ID})
+	require.NoError(t, err)
+	assert.Equal(t, newPath, winnerAfter.Filepath)
 }

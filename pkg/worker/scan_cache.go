@@ -93,10 +93,13 @@ type ScanCache struct {
 
 // NewScanCache creates a new ScanCache.
 func NewScanCache() *ScanCache {
-	return &ScanCache{}
+	return &ScanCache{
+		knownFiles: make(map[string]*models.File),
+	}
 }
 
 // LoadKnownFiles populates the known files cache from a list of existing files.
+// Replaces any previously-set knownFiles map (e.g. from NewScanCache).
 func (c *ScanCache) LoadKnownFiles(files []*models.File) {
 	c.knownFiles = make(map[string]*models.File, len(files))
 	for _, f := range files {
@@ -389,9 +392,7 @@ func (c *ScanCache) MovedBookIDs() map[int]struct{} {
 // AddKnownFile adds a file to the known-files cache at its new path. Used after
 // move reconciliation updates a file's filepath so the parallel processing loop
 // treats the new path as already known (skipping it instead of creating a duplicate).
+// NewScanCache guarantees the map is initialized, so no nil check is needed.
 func (c *ScanCache) AddKnownFile(f *models.File) {
-	if c.knownFiles == nil {
-		c.knownFiles = make(map[string]*models.File)
-	}
 	c.knownFiles[f.Filepath] = f
 }
