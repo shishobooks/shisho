@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 - Cache build:sdk mise task with sources/outputs (#86)
+- Gate plugin-sdk and docs builds on PRs via mise tasks (#85)
 
 
 ## [0.0.27] - 2026-04-11
@@ -42,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 - Shard Go tests across 5 parallel jobs with gotesplit (#75)
+- Remove Docker ecosystem from Dependabot config (#58)
 
 ### Other
 - Consolidate file cover path resolution via fileutils.ResolveCoverPath (#79)
@@ -71,11 +73,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### CI/CD
 - Add Dependabot configuration for automated dependency updates (#44)
 
+### Other
+- Bump lodash from 4.17.23 to 4.18.1 (#43)
+
 
 ## [0.0.25] - 2026-04-05
 
 ### Bug Fixes
 - Resolve false "Changed" badges in identify workflow (#42)
+
+### Other
+- Bump golang.org/x/image from 0.35.0 to 0.38.0 (#41)
 
 
 ## [0.0.24] - 2026-03-31
@@ -85,8 +93,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified rescan dialog with skip-plugins mode (#39)
 - Add enricher cover resolution gate and page-based format protection (#38)
 
+### Bug Fixes
+- Remove ajv override that broke docs build after workspace merge (#37)
+
 
 ## [0.0.23] - 2026-03-29
+
+### CI/CD
+- Add pnpm workspace config to fix plugin-sdk npm publish (#36)
 
 
 ## [0.0.22] - 2026-03-29
@@ -95,6 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refine plugin system: type unification, HTML API, search context, confidence scores (#35)
 - Add PDF cover page selection (#34)
 - Refine identify workflow with cover, date, identifier, and UI improvements (#33)
+
+### Bug Fixes
+- Fix chapter leaks in DeleteFile/DeleteBook and misleading orphan cleanup logs (#31)
 
 ### CI/CD
 - Upgrade GitHub Actions to Node.js 24 versions (#32)
@@ -113,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 - Validate and download cover URLs using plugin httpAccess domains (#18)
+- Clean up cover and sidecar files when deleting last file in a book (#17)
 
 ### Documentation
 - Add note about AI usage to README (#30)
@@ -133,11 +151,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add first-class PDF support with metadata extraction and cover generation (#12)
 - Add filesystem watcher with debounced rescans (#11)
 
+### Bug Fixes
+- Fix date/time display: UTC for dates, local timezone for timestamps (#13)
+
 
 ## [0.0.19] - 2026-03-10
 
 ### Features
 - Add plugin search and identify dialog with full metadata enrichment (#10)
+
+### Documentation
+- Remove outdated git workflow section from CLAUDE.md (#8)
 
 ### CI/CD
 - Cache Playwright browsers in CI to speed up JS tests (#9)
@@ -152,15 +176,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add manual Identify Book dialog (#4)
 - Move skills to subdirectory CLAUDE.md files for automatic context loading
 - Plugin System v2: UX and architecture revamp (#3)
+- Optimize scan performance with mod-time change detection (#2)
 
 
 ## [0.0.17] - 2026-02-07
+
+### Bug Fixes
+- Allow plugin-defined identifier types and fix truncated selector
 
 
 ## [0.0.16] - 2026-02-07
 
 ### Features
 - Give metadata enrichers priority over file-parsed metadata
+- Log version on server startup
 
 ### Documentation
 - Document enricher priority over file metadata
@@ -169,11 +198,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.15] - 2026-02-07
 
+### Documentation
+- Fix homepage gap and update site config
+
 
 ## [0.0.14] - 2026-02-07
 
+### Bug Fixes
+- Exclude versions.json from Prettier checks
+
 
 ## [0.0.13] - 2026-02-07
+
+### Bug Fixes
+- Exclude versioned docs from Prettier checks
 
 
 ## [0.0.12] - 2026-02-07
@@ -188,6 +226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevent SQLite database lock errors with single connection
 - Deduplicate author names in global search results
 - Show correct placeholder cover for audiobooks in global search
+- Use correct Docker tag format in release notes
 
 ### Documentation
 - Add metadata, plugins, users, sidecar, and supplement documentation pages
@@ -216,6 +255,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use replace navigation after merge to avoid 404 on back
 - Add numeric HTML entity decoding to description sanitizer
 - Add job logging to scan worker functions
+- Add cache busting to file cover thumbnails
 
 
 ## [0.0.10] - 2026-01-27
@@ -224,11 +264,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add per-field configuration for metadata enricher plugins
 - Compute dev library path dynamically
 
+### Documentation
+- Update plugin skill with FFmpeg and shell API changes
+
 
 ## [0.0.9] - 2026-01-27
 
 ### Features
 - Add FFmpeg probe/version APIs and shell.exec()
+
+### Documentation
+- Add plugin API design for FFmpeg enhancements and shell exec
 
 
 ## [0.0.8] - 2026-01-26
@@ -241,14 +287,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add e-reader image optimization to CBZ downloads
 - Add keyboard navigation to global search
 
+### Documentation
+- Add book merge and split design
+
 
 ## [0.0.7] - 2026-01-25
+
+### Features
+- Restore desktop layout for book/file detail pages
 
 
 ## [0.0.6] - 2026-01-25
 
 ### Bug Fixes
 - Book sidecar written to wrong location for root-level files with OrganizeFileStructure enabled
+- Include public directory in Docker build for favicons
 
 
 ## [0.0.5] - 2026-01-25
@@ -256,12 +309,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Bug Fixes
 - Remove 'api' from gitignore
 - Skip writing port file when tmp directory doesn't exist
+- Increase startup timeout for slow storage (NAS devices)
 
 
 ## [0.0.4] - 2026-01-25
 
+### Bug Fixes
+- Reuse existing groups when PGID is already taken in Docker entrypoint
+
 
 ## [0.0.3] - 2026-01-25
+
+### Bug Fixes
+- Fix PUID/PGID handling and health check timeout in Docker entrypoint
 
 
 ## [0.0.2] - 2026-01-25
@@ -271,6 +331,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 - Use correct table name 'persons' instead of 'people' in SQL queries
+
+### Documentation
+- Improve Docker Compose example in README
 
 
 ## [0.0.1] - 2026-01-25
