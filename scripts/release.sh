@@ -120,7 +120,7 @@ while IFS= read -r commit; do
     else
         COMMITS_OTHER+="- $commit"$'\n'
     fi
-done < <(git log --pretty=format:"%s" $COMMIT_RANGE)
+done < <(git log --pretty=tformat:"%s" $COMMIT_RANGE)
 
 # Build changelog section
 CHANGELOG_SECTION="## [$VERSION] - $(date +%Y-%m-%d)"$'\n'
