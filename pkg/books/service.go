@@ -679,6 +679,13 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 	return &book, nil
 }
 
+// OrganizeBookFiles is the public entry point for triggering file organization.
+// It checks the library's OrganizeFileStructure setting internally and returns
+// early if disabled.
+func (svc *Service) OrganizeBookFiles(ctx context.Context, book *models.Book) error {
+	return svc.organizeBookFiles(ctx, book)
+}
+
 // organizeBookFiles renames files and folders based on updated book metadata.
 func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) error {
 	log := logger.FromContext(ctx)

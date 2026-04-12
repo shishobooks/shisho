@@ -290,3 +290,7 @@ func (a *bookUpdaterAdapter) DeleteNarratorsForFile(ctx context.Context, fileID 
 func (a *bookUpdaterAdapter) CreateNarrator(ctx context.Context, narrator *models.Narrator) error {
 	return a.svc.CreateNarrator(ctx, narrator)
 }
+
+func (a *bookUpdaterAdapter) OrganizeBookFiles(ctx context.Context, book *models.Book) error {
+	return a.svc.OrganizeBookFiles(ctx, book)
+}
