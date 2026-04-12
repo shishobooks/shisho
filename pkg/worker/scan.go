@@ -458,6 +458,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 				}
 			}
 		}
+
+		// Queue async sha256 hash generation for files that still lack a fingerprint.
+		// Handles both initial backfill and newly-discovered files from this scan.
+		if err := EnsureHashGenerationJob(ctx, w.jobService, library.ID); err != nil {
+			jobLog.Warn("failed to ensure hash generation job", logger.Data{"error": err.Error()})
+		}
 	}
 
 	// Cleanup orphaned entities (series, people, genres, tags)
