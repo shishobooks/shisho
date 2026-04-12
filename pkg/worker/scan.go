@@ -438,6 +438,15 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"imprints_cached":   cache.ImprintCount(),
 		})
 
+		// Books whose files were reconciled as moves should also be organized
+		// so organize_file_structure can rename their folders back into the
+		// structured layout. The moved files themselves may not be in
+		// booksToOrganize above, because unchanged files return early from
+		// scanFileByPath without flagging their book.
+		for bookID := range cache.MovedBookIDs() {
+			booksToOrganize[bookID] = struct{}{}
+		}
+
 		// Cleanup orphaned files (in DB but not on disk) using batch operations.
 		// Uses the pre-loaded files from before the scan to avoid a second DB query.
 		// The cache is passed so that files already reconciled as moves are skipped.

@@ -74,6 +74,12 @@ type ScanCache struct {
 	// then read-only during orphan cleanup. Nil means reconciliation did not run.
 	movedOrphanIDs map[int]struct{}
 
+	// movedBookIDs holds book IDs whose files were matched by the move
+	// reconciliation phase. The parent scan loop merges this into its
+	// booksToOrganize set so organize_file_structure runs on these books
+	// after the scan (renaming folders back into the structured layout).
+	movedBookIDs map[int]struct{}
+
 	// Counters for cache hits/misses (atomic for thread safety)
 	personCount    atomic.Int64
 	genreCount     atomic.Int64
@@ -363,6 +369,19 @@ func (c *ScanCache) IsMovedOrphan(id int) bool {
 	}
 	_, ok := c.movedOrphanIDs[id]
 	return ok
+}
+
+// SetMovedBookIDs stores the set of book IDs whose files were matched by the
+// move reconciliation phase. The scan loop reads this after processing to
+// ensure organize_file_structure runs on the moved books.
+func (c *ScanCache) SetMovedBookIDs(ids map[int]struct{}) {
+	c.movedBookIDs = ids
+}
+
+// MovedBookIDs returns the set of book IDs whose files were matched as moves.
+// Returns nil if reconciliation did not run or found no matches.
+func (c *ScanCache) MovedBookIDs() map[int]struct{} {
+	return c.movedBookIDs
 }
 
 // AddKnownFile adds a file to the known-files cache at its new path. Used after

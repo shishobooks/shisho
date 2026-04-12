@@ -111,6 +111,7 @@ func (w *Worker) reconcileMoves(
 
 	// Walk unknown-new paths: paths on disk that are NOT in the known-files cache.
 	movedOrphanIDs := make(map[int]struct{})
+	movedBookIDs := make(map[int]struct{})
 
 	for _, newPath := range filesToScan {
 		if cache.GetKnownFile(newPath) != nil {
@@ -193,8 +194,13 @@ func (w *Worker) reconcileMoves(
 			"new_path": newPath,
 		})
 
-		// Record as moved orphan so cleanup skips it.
+		// Record as moved orphan so cleanup skips it, and record the book
+		// so the scan's post-processing can re-organize it into the
+		// structured layout (if organize_file_structure is enabled).
 		movedOrphanIDs[orphanFile.ID] = struct{}{}
+		if orphanFile.BookID != 0 {
+			movedBookIDs[orphanFile.BookID] = struct{}{}
+		}
 
 		// Register new path in the cache so the parallel processing loop sees
 		// the file as already-known and doesn't create a duplicate row.
@@ -207,8 +213,10 @@ func (w *Worker) reconcileMoves(
 
 	if len(movedOrphanIDs) > 0 {
 		cache.SetMovedOrphanIDs(movedOrphanIDs)
+		cache.SetMovedBookIDs(movedBookIDs)
 		jobLog.Info("reconcile: move reconciliation complete", logger.Data{
 			"moved_files": len(movedOrphanIDs),
+			"moved_books": len(movedBookIDs),
 		})
 	}
 

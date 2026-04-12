@@ -595,6 +595,12 @@ func (m *Monitor) processPendingEvents() {
 				// for the old path skips it, and track for search indexing.
 				movedFileIDs[movedFile.ID] = struct{}{}
 				affectedBookIDs[movedFile.BookID] = struct{}{}
+				// If the library has organize_file_structure enabled, the
+				// book should be re-organized back into the structured layout
+				// even though the user renamed the folder. organizeBooks
+				// re-checks the library setting and no-ops otherwise, so this
+				// is safe for libraries that don't organize.
+				booksToOrganize[movedFile.BookID] = struct{}{}
 				m.log.Info("monitor: detected file move via sha256", logger.Data{
 					"file_id":  movedFile.ID,
 					"new_path": path,
