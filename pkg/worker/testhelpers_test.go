@@ -286,6 +286,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	searchService := search.NewService(db)
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
+	fingerprintService := fingerprints.NewService(db)
 
 	// Create worker with search service
 	cfg := &config.Config{
@@ -293,39 +294,41 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 	}
 	w := &Worker{
-		config:           cfg,
-		log:              logger.New(),
-		db:               db,
-		bookService:      bookService,
-		chapterService:   chapterService,
-		libraryService:   libraryService,
-		jobService:       jobService,
-		jobLogService:    jobLogService,
-		personService:    personService,
-		seriesService:    seriesService,
-		genreService:     genreService,
-		tagService:       tagService,
-		searchService:    searchService,
-		publisherService: publisherService,
-		imprintService:   imprintService,
+		config:             cfg,
+		log:                logger.New(),
+		db:                 db,
+		bookService:        bookService,
+		chapterService:     chapterService,
+		libraryService:     libraryService,
+		jobService:         jobService,
+		jobLogService:      jobLogService,
+		personService:      personService,
+		seriesService:      seriesService,
+		genreService:       genreService,
+		tagService:         tagService,
+		searchService:      searchService,
+		publisherService:   publisherService,
+		imprintService:     imprintService,
+		fingerprintService: fingerprintService,
 	}
 
 	// Create context with logger
 	ctx := logger.New().WithContext(context.Background())
 
 	tc := &testContext{
-		t:              t,
-		ctx:            ctx,
-		db:             db,
-		worker:         w,
-		bookService:    bookService,
-		chapterService: chapterService,
-		libraryService: libraryService,
-		jobService:     jobService,
-		jobLogService:  jobLogService,
-		personService:  personService,
-		seriesService:  seriesService,
-		searchService:  searchService,
+		t:                  t,
+		ctx:                ctx,
+		db:                 db,
+		worker:             w,
+		bookService:        bookService,
+		chapterService:     chapterService,
+		libraryService:     libraryService,
+		jobService:         jobService,
+		jobLogService:      jobLogService,
+		personService:      personService,
+		seriesService:      seriesService,
+		searchService:      searchService,
+		fingerprintService: fingerprintService,
 	}
 
 	t.Cleanup(func() {

@@ -103,6 +103,8 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 // hashOneFile retrieves a single file, computes its sha256, and persists the
 // result. Per-file errors (missing on disk, permission denied, read error) are
 // logged as warnings and the function returns nil so the job continues.
+//
+//nolint:unparam // error return reserved for future hard-failure propagation
 func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.JobLogger) error {
 	file, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
 	if err != nil {

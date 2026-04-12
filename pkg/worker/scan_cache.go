@@ -69,6 +69,11 @@ type ScanCache struct {
 	// during the parallel scan, so a regular map is safe without synchronization.
 	knownFiles map[string]*models.File
 
+	// movedOrphanIDs holds file IDs matched by the move reconciliation phase.
+	// Written once (single-threaded) before the parallel worker pool starts,
+	// then read-only during orphan cleanup. Nil means reconciliation did not run.
+	movedOrphanIDs map[int]struct{}
+
 	// Counters for cache hits/misses (atomic for thread safety)
 	personCount    atomic.Int64
 	genreCount     atomic.Int64
@@ -342,4 +347,30 @@ func (c *ScanCache) LockBook(bookID int) func() {
 	mu := getMutex(&c.bookMu, bookID)
 	mu.Lock()
 	return mu.Unlock
+}
+
+// SetMovedOrphanIDs stores the set of file IDs identified as moved orphans.
+// Must be called before the parallel worker pool starts (not thread-safe for writes).
+func (c *ScanCache) SetMovedOrphanIDs(ids map[int]struct{}) {
+	c.movedOrphanIDs = ids
+}
+
+// IsMovedOrphan returns true if the given file ID was matched by the move
+// reconciliation phase and should be skipped by orphan cleanup.
+func (c *ScanCache) IsMovedOrphan(id int) bool {
+	if c.movedOrphanIDs == nil {
+		return false
+	}
+	_, ok := c.movedOrphanIDs[id]
+	return ok
+}
+
+// AddKnownFile adds a file to the known-files cache at its new path. Used after
+// move reconciliation updates a file's filepath so the parallel processing loop
+// treats the new path as already known (skipping it instead of creating a duplicate).
+func (c *ScanCache) AddKnownFile(f *models.File) {
+	if c.knownFiles == nil {
+		c.knownFiles = make(map[string]*models.File)
+	}
+	c.knownFiles[f.Filepath] = f
 }
