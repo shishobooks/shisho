@@ -4834,6 +4834,10 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, file.CoverImageFilename, "should have cover after initial scan")
 
+	// Record original cover path for later verification
+	originalCoverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+	require.FileExists(t, originalCoverPath, "cover file should exist on disk before reset")
+
 	// Manually add extra metadata that should be cleared by reset
 	manualSource := models.DataSourceManual
 	subtitle := "Fake Subtitle"
@@ -4915,6 +4919,10 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 
 	// Cover should be re-extracted (CoverImageFilename not nil)
 	assert.NotNil(t, file.CoverImageFilename, "cover should be re-extracted after reset")
+
+	// Verify new cover file exists on disk
+	newCoverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+	assert.FileExists(t, newCoverPath, "new cover file should exist on disk after reset")
 }
 
 func TestScanFileByID_ResetMode_FilepathFallbackTitle(t *testing.T) {

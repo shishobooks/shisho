@@ -601,35 +601,8 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 	// Per-file calls below pass BookResetDone: opts.Reset so they skip the
 	// book-level wipe (which we've already done here).
 	if opts.Reset {
-		book.Subtitle = nil
-		book.SubtitleSource = nil
-		book.Description = nil
-		book.DescriptionSource = nil
-		// Note: AuthorSource is NOT NULL in the DB. Leave it unchanged; it will
-		// be overwritten when new authors are written during the scan.
-		book.GenreSource = nil
-		book.TagSource = nil
-
-		bookColumns := []string{
-			"subtitle", "subtitle_source",
-			"description", "description_source",
-			"genre_source", "tag_source",
-		}
-		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
-			return nil, errors.Wrap(err, "failed to clear book metadata for reset")
-		}
-
-		if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to delete book authors for reset")
-		}
-		if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to delete book series for reset")
-		}
-		if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to delete book genres for reset")
-		}
-		if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to delete book tags for reset")
+		if err := w.resetBookState(ctx, book); err != nil {
+			return nil, errors.Wrap(err, "failed to reset book state")
 		}
 	}
 
@@ -3731,6 +3704,48 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 	return coverFilename, mimeType, nil
 }
 
+// resetBookState wipes book-level scanned metadata: subtitle, description,
+// genre_source, tag_source, and all associated authors, series, genres, and
+// tags. Identity fields (ID, title, filepath, etc.) and AuthorSource (NOT NULL)
+// are left unchanged.
+func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
+	// --- Book-level columns ---
+	book.Subtitle = nil
+	book.SubtitleSource = nil
+	book.Description = nil
+	book.DescriptionSource = nil
+	// Note: AuthorSource is NOT NULL in the DB (no zero-value allowed). We
+	// don't clear it here; it will be overwritten on the next scan when new
+	// authors are written.
+	book.GenreSource = nil
+	book.TagSource = nil
+
+	bookColumns := []string{
+		"subtitle", "subtitle_source",
+		"description", "description_source",
+		"genre_source", "tag_source",
+	}
+	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
+		return errors.Wrap(err, "failed to clear book metadata")
+	}
+
+	// --- Book-level relations ---
+	if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book authors")
+	}
+	if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book series")
+	}
+	if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book genres")
+	}
+	if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book tags")
+	}
+
+	return nil
+}
+
 // resetBookFileState wipes all scanned metadata from a book and its file,
 // preparing them for a fresh scan. It preserves identity fields (IDs, filepath,
 // file_type, file_role, library_id, book_id, primary_file_id, filesize, duration,
@@ -3741,38 +3756,8 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 // per-file.
 func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file *models.File, skipBookWipe bool) error {
 	if !skipBookWipe {
-		// --- Book-level columns ---
-		book.Subtitle = nil
-		book.SubtitleSource = nil
-		book.Description = nil
-		book.DescriptionSource = nil
-		// Note: AuthorSource is NOT NULL in the DB (no zero-value allowed). We
-		// don't clear it here; it will be overwritten on the next scan when new
-		// authors are written.
-		book.GenreSource = nil
-		book.TagSource = nil
-
-		bookColumns := []string{
-			"subtitle", "subtitle_source",
-			"description", "description_source",
-			"genre_source", "tag_source",
-		}
-		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
-			return errors.Wrap(err, "failed to clear book metadata")
-		}
-
-		// --- Book-level relations ---
-		if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete book authors")
-		}
-		if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete book series")
-		}
-		if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete book genres")
-		}
-		if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete book tags")
+		if err := w.resetBookState(ctx, book); err != nil {
+			return errors.Wrap(err, "failed to reset book state")
 		}
 	}
 
