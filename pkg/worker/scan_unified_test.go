@@ -3,6 +3,7 @@ package worker
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -21,8 +22,8 @@ import (
 )
 
 // writeCBZWithColoredPages creates a CBZ at path with len(colors) pages,
-// each page being a small solid-color PNG. Page order is 001.png, 002.png,
-// ... so page index matches the colors slice index.
+// each page being a small solid-color PNG. Entries are named page_000.png,
+// page_001.png, ... so the page index matches the colors slice index.
 func writeCBZWithColoredPages(t *testing.T, path string, colors []color.RGBA) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -43,7 +44,7 @@ func writeCBZWithColoredPages(t *testing.T, path string, colors []color.RGBA) {
 		}
 		var buf bytes.Buffer
 		require.NoError(t, png.Encode(&buf, img))
-		name := filepath.Base(path) + "_" + string(rune('0'+i/100)) + string(rune('0'+(i/10)%10)) + string(rune('0'+i%10)) + ".png"
+		name := fmt.Sprintf("page_%03d.png", i)
 		w, err := zw.Create(name)
 		require.NoError(t, err)
 		_, err = w.Write(buf.Bytes())

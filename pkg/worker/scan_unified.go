@@ -3391,7 +3391,10 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 	// Page-based formats (CBZ, PDF) may have a user-selected cover page in
 	// file.CoverPage (set via the page picker UI). Re-extract from that
 	// specific page so recovery preserves the user's choice instead of
-	// silently resetting to page 0.
+	// silently resetting to page 0. If the page extraction fails we bail
+	// out rather than falling through to the generic parser — otherwise
+	// we'd write a page-0 cover to disk while file.CoverPage still points
+	// at the user's selection, leaving the two out of sync.
 	if models.IsPageBasedFileType(file.FileType) && file.CoverPage != nil {
 		pageNum := *file.CoverPage
 		var coverFilename, coverMimeType string
@@ -3402,21 +3405,23 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		case models.FileTypePDF:
 			coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
 		}
-		if err == nil && coverFilename != "" {
-			logInfo("recovered cover from selected page", logger.Data{"page": pageNum})
-			file.CoverImageFilename = &coverFilename
-			file.CoverMimeType = &coverMimeType
-			// Leave CoverSource alone — the user's selection still stands.
-			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-				Columns: []string{"cover_image_filename", "cover_mime_type"},
-			}); err != nil {
-				return errors.WithStack(err)
-			}
+		if err != nil {
+			logWarn("failed to extract cover from selected page", logger.Data{"page": pageNum, "error": err.Error()})
 			return nil
 		}
-		if err != nil {
-			logWarn("failed to extract cover from selected page, falling back to parser", logger.Data{"page": pageNum, "error": err.Error()})
+		if coverFilename == "" {
+			return nil
 		}
+		logInfo("recovered cover from selected page", logger.Data{"page": pageNum})
+		file.CoverImageFilename = &coverFilename
+		file.CoverMimeType = &coverMimeType
+		// Leave CoverSource alone — the user's selection still stands.
+		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+			Columns: []string{"cover_image_filename", "cover_mime_type"},
+		}); err != nil {
+			return errors.WithStack(err)
+		}
+		return nil
 	}
 
 	// Delegate parsing to parseFileMetadata so plugin-registered file parsers

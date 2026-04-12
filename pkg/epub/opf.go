@@ -315,12 +315,22 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 			}
 		}
 	}
-	// 2. EPUB 3: item with properties="cover-image".
+	// 2. EPUB 3: item with properties="cover-image". The properties
+	// attribute is a whitespace-separated token list per the spec, so
+	// match tokens rather than running a substring check.
 	if coverFilepath == "" {
 		for _, item := range pkg.Manifest.Item {
-			if strings.Contains(item.Properties, "cover-image") && strings.HasPrefix(item.MediaType, "image/") {
-				coverFilepath = basePath + item.Href
-				coverMimeType = item.MediaType
+			if !strings.HasPrefix(item.MediaType, "image/") {
+				continue
+			}
+			for _, prop := range strings.Fields(item.Properties) {
+				if prop == "cover-image" {
+					coverFilepath = basePath + item.Href
+					coverMimeType = item.MediaType
+					break
+				}
+			}
+			if coverFilepath != "" {
 				break
 			}
 		}
