@@ -17,10 +17,11 @@ const (
 )
 
 const (
-	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload;
-	JobTypeExport       = "export"
-	JobTypeScan         = "scan"
-	JobTypeBulkDownload = "bulk_download"
+	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration;
+	JobTypeExport         = "export"
+	JobTypeScan           = "scan"
+	JobTypeBulkDownload   = "bulk_download"
+	JobTypeHashGeneration = "hash_generation"
 )
 
 type Job struct {
@@ -32,7 +33,7 @@ type Job struct {
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
-	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData"`
+	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
@@ -46,6 +47,8 @@ func (job *Job) UnmarshalData() error {
 		job.DataParsed = &JobScanData{}
 	case JobTypeBulkDownload:
 		job.DataParsed = &JobBulkDownloadData{}
+	case JobTypeHashGeneration:
+		job.DataParsed = &JobHashGenerationData{}
 	}
 
 	err := json.Unmarshal([]byte(job.Data), job.DataParsed)
@@ -59,6 +62,13 @@ func (job *Job) UnmarshalData() error {
 type JobExportData struct{}
 
 type JobScanData struct{}
+
+// JobHashGenerationData is the payload for a hash generation job.
+// The job processes all files in the given library that do not yet have
+// a sha256 fingerprint in file_fingerprints.
+type JobHashGenerationData struct {
+	LibraryID int `json:"library_id"`
+}
 
 type JobBulkDownloadData struct {
 	// Input (set on creation)
