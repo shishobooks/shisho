@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -29,18 +30,19 @@ import (
 
 // testContext holds all the dependencies needed for testing the worker.
 type testContext struct {
-	t              *testing.T
-	ctx            context.Context
-	db             *bun.DB
-	worker         *Worker
-	bookService    *books.Service
-	chapterService *chapters.Service
-	libraryService *libraries.Service
-	jobService     *jobs.Service
-	jobLogService  *joblogs.Service
-	personService  *people.Service
-	seriesService  *series.Service
-	searchService  *search.Service // may be nil if not initialized
+	t                  *testing.T
+	ctx                context.Context
+	db                 *bun.DB
+	worker             *Worker
+	bookService        *books.Service
+	chapterService     *chapters.Service
+	libraryService     *libraries.Service
+	jobService         *jobs.Service
+	jobLogService      *joblogs.Service
+	personService      *people.Service
+	seriesService      *series.Service
+	fingerprintService *fingerprints.Service
+	searchService      *search.Service // may be nil if not initialized
 }
 
 // newTestContext creates a new test context with an in-memory SQLite database
@@ -89,6 +91,7 @@ func newTestContext(t *testing.T) *testContext {
 	tagService := tags.NewService(db)
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
+	fingerprintService := fingerprints.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -96,37 +99,39 @@ func newTestContext(t *testing.T) *testContext {
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 	}
 	w := &Worker{
-		config:           cfg,
-		log:              logger.New(),
-		db:               db,
-		bookService:      bookService,
-		chapterService:   chapterService,
-		libraryService:   libraryService,
-		jobService:       jobService,
-		jobLogService:    jobLogService,
-		personService:    personService,
-		seriesService:    seriesService,
-		genreService:     genreService,
-		tagService:       tagService,
-		publisherService: publisherService,
-		imprintService:   imprintService,
+		config:             cfg,
+		log:                logger.New(),
+		db:                 db,
+		bookService:        bookService,
+		chapterService:     chapterService,
+		libraryService:     libraryService,
+		jobService:         jobService,
+		jobLogService:      jobLogService,
+		personService:      personService,
+		seriesService:      seriesService,
+		genreService:       genreService,
+		tagService:         tagService,
+		publisherService:   publisherService,
+		imprintService:     imprintService,
+		fingerprintService: fingerprintService,
 	}
 
 	// Create context with logger
 	ctx := logger.New().WithContext(context.Background())
 
 	tc := &testContext{
-		t:              t,
-		ctx:            ctx,
-		db:             db,
-		worker:         w,
-		bookService:    bookService,
-		chapterService: chapterService,
-		libraryService: libraryService,
-		jobService:     jobService,
-		jobLogService:  jobLogService,
-		personService:  personService,
-		seriesService:  seriesService,
+		t:                  t,
+		ctx:                ctx,
+		db:                 db,
+		worker:             w,
+		bookService:        bookService,
+		chapterService:     chapterService,
+		libraryService:     libraryService,
+		jobService:         jobService,
+		jobLogService:      jobLogService,
+		personService:      personService,
+		seriesService:      seriesService,
+		fingerprintService: fingerprintService,
 	}
 
 	t.Cleanup(func() {
