@@ -127,8 +127,10 @@ type ScanOptions struct {
 	LibraryID int
 
 	// Behavior
-	ForceRefresh bool // Bypass priority checks, overwrite all metadata
-	SkipPlugins  bool // Skip enricher plugins, use only file-embedded metadata
+	ForceRefresh  bool // Bypass priority checks, overwrite all metadata
+	SkipPlugins   bool // Skip enricher plugins, use only file-embedded metadata
+	Reset         bool // Wipe all metadata before scanning (reset to file-only state)
+	BookResetDone bool // Book-level wipe already done by scanBook (skip in scanFileByID)
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -566,10 +568,12 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 	// Loop through files and scan each
 	for _, file := range book.Files {
 		fileResult, err := w.scanFileByID(ctx, ScanOptions{
-			FileID:       file.ID,
-			ForceRefresh: opts.ForceRefresh,
-			SkipPlugins:  opts.SkipPlugins,
-			JobLog:       opts.JobLog,
+			FileID:        file.ID,
+			ForceRefresh:  opts.ForceRefresh,
+			SkipPlugins:   opts.SkipPlugins,
+			Reset:         opts.Reset,
+			BookResetDone: opts.Reset,
+			JobLog:        opts.JobLog,
 		}, cache)
 		if err != nil {
 			logWarn("failed to scan file in book, continuing", logger.Data{
@@ -3312,6 +3316,7 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 		BookID:       opts.BookID,
 		ForceRefresh: opts.ForceRefresh,
 		SkipPlugins:  opts.SkipPlugins,
+		Reset:        opts.Reset,
 	}
 
 	// Call internal unified Scan method (no cache for single-file rescans)

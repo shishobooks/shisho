@@ -64,20 +64,20 @@ type ResyncPayload struct {
 	Refresh bool   `json:"refresh"` // Deprecated: kept for backwards compatibility
 }
 
-// resolveScanMode converts a ResyncPayload into ForceRefresh and SkipPlugins flags.
+// resolveScanMode converts a ResyncPayload into ForceRefresh, SkipPlugins, and Reset flags.
 // Supports three modes: "scan" (default), "refresh", and "reset".
 // Falls back to the deprecated Refresh boolean if Mode is empty.
-func (p ResyncPayload) resolveScanMode() (forceRefresh, skipPlugins bool) {
+func (p ResyncPayload) resolveScanMode() (forceRefresh, skipPlugins, reset bool) {
 	switch p.Mode {
 	case "refresh":
-		return true, false
+		return true, false, false
 	case "reset":
-		return true, true
+		return true, true, true
 	case "scan", "":
 		// For empty mode, check deprecated Refresh field for backwards compatibility
-		return p.Refresh, false
+		return p.Refresh, false, false
 	default:
-		return false, false
+		return false, false, false
 	}
 }
 
