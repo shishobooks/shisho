@@ -24,6 +24,16 @@ run = "go build -o ./build/api/api-air ./cmd/api"
 [tasks."build:sdk"]
 description = "Build the @shisho/plugin-sdk testing module"
 run = "pnpm -C packages/plugin-sdk build"
+sources = [
+  "packages/plugin-sdk/package.json",
+  "packages/plugin-sdk/testing/index.ts",
+  "packages/plugin-sdk/testing/tsconfig.json",
+  "packages/plugin-sdk/*.d.ts",
+]
+outputs = [
+  "packages/plugin-sdk/testing/index.js",
+  "packages/plugin-sdk/testing/index.d.ts",
+]
 
 [tasks."build:docs"]
 description = "Build the Docusaurus documentation site"
