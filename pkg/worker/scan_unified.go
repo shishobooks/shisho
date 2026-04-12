@@ -3630,10 +3630,12 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 	return coverFilename, mimeType, nil
 }
 
-// resetBookState wipes book-level scanned metadata: subtitle, description,
-// genre_source, tag_source, and all associated authors, series, genres, and
-// tags. Identity fields (ID, title, filepath, etc.) and AuthorSource (NOT NULL)
-// are left unchanged.
+// resetBookState wipes book-level scanned metadata and all associated
+// authors, series, genres, and tags. Identity fields (ID, filepath,
+// library_id, primary_file_id) are preserved. Title and SortTitle values
+// are preserved (NOT NULL) but their source fields are reset to
+// DataSourceFilepath so scanFileCore can set the correct source from
+// the re-scanned metadata.
 func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	// --- Book-level columns ---
 	book.Subtitle = nil
