@@ -42,6 +42,7 @@ type ScanOptions struct {
 	BookID       int  // Book resync: scan all files in book
 	ForceRefresh bool // Bypass priority checks, overwrite all metadata
 	SkipPlugins  bool // Skip enricher plugins, use only file-embedded metadata
+	Reset        bool // Wipe all metadata before scanning (reset to file-only state)
 }
 
 // ScanResult contains the results of a scan operation.
@@ -1725,11 +1726,12 @@ func (h *handler) resyncFile(c echo.Context) error {
 	}
 
 	// Perform resync
-	forceRefresh, skipPlugins := params.resolveScanMode()
+	forceRefresh, skipPlugins, reset := params.resolveScanMode()
 	result, err := h.scanner.Scan(ctx, ScanOptions{
 		FileID:       id,
 		ForceRefresh: forceRefresh,
 		SkipPlugins:  skipPlugins,
+		Reset:        reset,
 	})
 	if err != nil {
 		log.Error("failed to resync file", logger.Data{"file_id": id, "error": err.Error()})
@@ -1778,11 +1780,12 @@ func (h *handler) resyncBook(c echo.Context) error {
 	}
 
 	// Perform resync
-	forceRefresh, skipPlugins := params.resolveScanMode()
+	forceRefresh, skipPlugins, reset := params.resolveScanMode()
 	result, err := h.scanner.Scan(ctx, ScanOptions{
 		BookID:       id,
 		ForceRefresh: forceRefresh,
 		SkipPlugins:  skipPlugins,
+		Reset:        reset,
 	})
 	if err != nil {
 		log.Error("failed to resync book", logger.Data{"book_id": id, "error": err.Error()})

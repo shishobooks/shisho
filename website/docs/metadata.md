@@ -153,4 +153,4 @@ This means your manual edits are never overwritten by a normal scan. If you need
 
 - **Scan for new metadata** — Respects the priority system. Won't overwrite manual edits or higher-priority sources.
 - **Refresh all metadata** — Bypasses the priority system and overwrites all fields, including manual edits. Re-runs plugins.
-- **Reset to file metadata** — Bypasses the priority system and overwrites all fields using only metadata embedded in the source file(s), skipping plugins entirely. Use this when plugin enrichment is matching incorrectly.
+- **Reset to file metadata** — Clears all existing metadata (including manual edits) and re-scans the file from scratch, without running plugins. Fields not present in the source file are removed. The title and authors will fall back to the filepath if the file has no embedded values. Use this when plugin enrichment has misidentified a book and you want a clean slate.

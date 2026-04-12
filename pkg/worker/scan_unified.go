@@ -127,8 +127,10 @@ type ScanOptions struct {
 	LibraryID int
 
 	// Behavior
-	ForceRefresh bool // Bypass priority checks, overwrite all metadata
-	SkipPlugins  bool // Skip enricher plugins, use only file-embedded metadata
+	ForceRefresh  bool // Bypass priority checks, overwrite all metadata
+	SkipPlugins   bool // Skip enricher plugins, use only file-embedded metadata
+	Reset         bool // Wipe all metadata before scanning (reset to file-only state)
+	BookResetDone bool // Book-level wipe already done by scanBook (skip in scanFileByID)
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -464,6 +466,56 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		return nil, errors.Wrap(err, "failed to retrieve parent book")
 	}
 
+	// Reset mode: wipe metadata and apply filepath fallbacks
+	if opts.Reset {
+		// Determine if this is a root-level file.
+		// For directory-based books, the file's parent dir equals book.Filepath.
+		// For root-level files, the file's parent dir is a library path, not book.Filepath.
+		isRootLevelFile := filepath.Dir(file.Filepath) != book.Filepath
+
+		// Apply filepath fallbacks so title/authors are populated even if file has none
+		applyFilepathFallbacks(metadata, file.Filepath, book.Filepath, file.FileType, isRootLevelFile)
+
+		// Wipe book and file metadata.
+		// If BookResetDone is set (called from scanBook), skip the book-level wipe
+		// because scanBook already did it once for all files.
+		if err := w.resetBookFileState(ctx, book, file, opts.BookResetDone); err != nil {
+			return nil, errors.Wrap(err, "failed to reset book/file state")
+		}
+
+		// Reload book and file after wipe (relations were deleted)
+		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to reload book after reset")
+		}
+		file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to reload file after reset")
+		}
+
+		// Re-extract cover from the already-parsed metadata (resetBookFileState
+		// deleted the cover file from disk and cleared the DB columns).
+		// We use extractAndSaveCover instead of recoverMissingCover to avoid
+		// re-parsing the file — metadata.CoverData is already populated.
+		coverFilename, coverMime, _, coverErr := w.extractAndSaveCover(ctx, file.Filepath, book.Filepath, isRootLevelFile, metadata, opts.JobLog)
+		if coverErr != nil {
+			logWarn("failed to extract cover after reset", logger.Data{"error": coverErr.Error()})
+		} else if coverFilename != "" {
+			coverSource := metadata.SourceForField("cover")
+			file.CoverImageFilename = &coverFilename
+			file.CoverMimeType = &coverMime
+			file.CoverSource = &coverSource
+			if metadata.CoverPage != nil {
+				file.CoverPage = metadata.CoverPage
+			}
+			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+				Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source", "cover_page"},
+			}); err != nil {
+				logWarn("failed to update cover after reset", logger.Data{"error": err.Error()})
+			}
+		}
+	}
+
 	// Run metadata enrichers after parsing
 	if !opts.SkipPlugins {
 		metadata = w.runMetadataEnrichers(ctx, metadata, file, book, file.LibraryID, opts.JobLog)
@@ -560,16 +612,27 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		return &ScanResult{BookDeleted: true}, nil
 	}
 
+	// When resetting, wipe book-level metadata once before iterating files.
+	// Per-file calls below pass BookResetDone: opts.Reset so they skip the
+	// book-level wipe (which we've already done here).
+	if opts.Reset {
+		if err := w.resetBookState(ctx, book); err != nil {
+			return nil, errors.Wrap(err, "failed to reset book state")
+		}
+	}
+
 	// Initialize file results
 	fileResults := make([]*ScanResult, 0, len(book.Files))
 
 	// Loop through files and scan each
 	for _, file := range book.Files {
 		fileResult, err := w.scanFileByID(ctx, ScanOptions{
-			FileID:       file.ID,
-			ForceRefresh: opts.ForceRefresh,
-			SkipPlugins:  opts.SkipPlugins,
-			JobLog:       opts.JobLog,
+			FileID:        file.ID,
+			ForceRefresh:  opts.ForceRefresh,
+			SkipPlugins:   opts.SkipPlugins,
+			Reset:         opts.Reset,
+			BookResetDone: opts.Reset,
+			JobLog:        opts.JobLog,
 		}, cache)
 		if err != nil {
 			logWarn("failed to scan file in book, continuing", logger.Data{
@@ -2095,6 +2158,15 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		}
 	}
 
+	// Populate empty metadata fields from filepath (authors, narrators, series).
+	// For root-level files, bookPath isn't computed yet so we pass the file path —
+	// extractAuthorsFromFilepath uses the filename when isRootLevelFile=true.
+	fpBookPath := tempBookPath
+	if isRootLevelFile {
+		fpBookPath = path
+	}
+	applyFilepathFallbacks(metadata, path, fpBookPath, fileType, isRootLevelFile)
+
 	// Determine book path
 	var bookPath string
 	if isRootLevelFile {
@@ -2103,12 +2175,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		// This ensures "Wind and Truth.epub" and "Wind and Truth.m4b" become one book.
 		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		var authorNames []string
-		if metadata != nil && len(metadata.Authors) > 0 {
-			for _, author := range metadata.Authors {
-				authorNames = append(authorNames, author.Name)
-			}
-		} else {
-			authorNames = extractAuthorsFromFilepath(path, isRootLevelFile)
+		for _, author := range metadata.Authors {
+			authorNames = append(authorNames, author.Name)
 		}
 		organizedFolderName := fileutils.GenerateOrganizedFolderName(fileutils.OrganizedNameOptions{
 			AuthorNames: authorNames,
@@ -2163,58 +2231,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		if err := w.bookService.CreateBook(ctx, book); err != nil {
 			return nil, errors.Wrap(err, "failed to create book")
 		}
-
-		// Extract and create authors from filepath if metadata doesn't have authors
-		// Format: [Author Name] in directory or filename
-		filepathAuthors := extractAuthorsFromFilepath(bookPath, isRootLevelFile)
-		if len(filepathAuthors) > 0 && (metadata == nil || len(metadata.Authors) == 0) {
-			for i, authorName := range filepathAuthors {
-				var person *models.Person
-				var err error
-				if cache != nil {
-					person, err = cache.GetOrCreatePerson(ctx, authorName, opts.LibraryID, w.personService)
-				} else {
-					person, err = w.personService.FindOrCreatePerson(ctx, authorName, opts.LibraryID)
-				}
-				if err != nil {
-					logWarn("failed to create person for filepath author", logger.Data{"author": authorName, "error": err.Error()})
-					continue
-				}
-				author := &models.Author{
-					BookID:    book.ID,
-					PersonID:  person.ID,
-					SortOrder: i + 1,
-				}
-				if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-					logWarn("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})
-				}
-			}
-		}
-		// Infer series from title if it contains a volume indicator and no series from metadata
-		if metadata == nil || metadata.Series == "" {
-			if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(book.Title, fileType); ok {
-				var seriesRecord *models.Series
-				var err error
-				if cache != nil {
-					seriesRecord, err = cache.GetOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath, w.seriesService)
-				} else {
-					seriesRecord, err = w.seriesService.FindOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath)
-				}
-				if err != nil {
-					logWarn("failed to create series for inferred title", logger.Data{"series": seriesName, "error": err.Error()})
-				} else {
-					bookSeries := &models.BookSeries{
-						BookID:       book.ID,
-						SeriesID:     seriesRecord.ID,
-						SeriesNumber: volumeNumber,
-						SortOrder:    1,
-					}
-					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						logWarn("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
+		// Authors, series, and narrators from filepath are already populated on metadata
+		// by applyFilepathFallbacks above. scanFileCore will create the DB records.
 	}
 
 	// Handle cover extraction. extractAndSaveCover also adopts a cover file
@@ -2280,38 +2298,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	if err := w.bookService.CreateFile(ctx, file); err != nil {
 		return nil, errors.Wrap(err, "failed to create file")
 	}
-
-	// Extract and create narrators from filepath if metadata doesn't have narrators
-	// Check both directory name and actual filename for {Narrator Name} pattern
-	filepathNarrators := extractNarratorsFromFilepath(path, bookPath, isRootLevelFile)
-	if len(filepathNarrators) > 0 && (metadata == nil || len(metadata.Narrators) == 0) {
-		narratorSource := models.DataSourceFilepath
-		for i, narratorName := range filepathNarrators {
-			var person *models.Person
-			var err error
-			if cache != nil {
-				person, err = cache.GetOrCreatePerson(ctx, narratorName, opts.LibraryID, w.personService)
-			} else {
-				person, err = w.personService.FindOrCreatePerson(ctx, narratorName, opts.LibraryID)
-			}
-			if err != nil {
-				logWarn("failed to create person for filepath narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
-				continue
-			}
-			narrator := &models.Narrator{
-				FileID:    file.ID,
-				PersonID:  person.ID,
-				SortOrder: i + 1,
-			}
-			if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-				logWarn("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
-			}
-		}
-		file.NarratorSource = &narratorSource
-		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"narrator_source"}}); err != nil {
-			logWarn("failed to update narrator source", logger.Data{"error": err.Error()})
-		}
-	}
+	// Narrators from filepath are already populated on metadata by
+	// applyFilepathFallbacks above. scanFileCore will create the DB records.
 
 	// Reload file with relations for scanFileCore
 	file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
@@ -2518,6 +2506,60 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	}
 
 	return title
+}
+
+// applyFilepathFallbacks populates empty metadata fields from the filepath.
+// This fills in title, authors, narrators, and series using the same logic
+// that scanFileCreateNew uses when creating a book for the first time.
+// Fields already present in metadata are not overwritten.
+func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPath, fileType string, isRootLevelFile bool) {
+	if metadata == nil {
+		return
+	}
+
+	setSource := func(field string) {
+		if metadata.FieldDataSources == nil {
+			metadata.FieldDataSources = make(map[string]string)
+		}
+		metadata.FieldDataSources[field] = models.DataSourceFilepath
+	}
+
+	// Title fallback
+	if strings.TrimSpace(metadata.Title) == "" {
+		// Pass nil metadata so deriveInitialTitle uses filepath only (we already confirmed Title is empty)
+		metadata.Title = deriveInitialTitle(filePath, isRootLevelFile, nil)
+		setSource("title")
+	}
+
+	// Authors fallback
+	if len(metadata.Authors) == 0 {
+		filepathAuthors := extractAuthorsFromFilepath(bookPath, isRootLevelFile)
+		for _, name := range filepathAuthors {
+			metadata.Authors = append(metadata.Authors, mediafile.ParsedAuthor{Name: name})
+		}
+		if len(metadata.Authors) > 0 {
+			setSource("authors")
+		}
+	}
+
+	// Narrators fallback
+	if len(metadata.Narrators) == 0 {
+		filepathNarrators := extractNarratorsFromFilepath(filePath, bookPath, isRootLevelFile)
+		metadata.Narrators = append(metadata.Narrators, filepathNarrators...)
+		if len(metadata.Narrators) > 0 {
+			setSource("narrators")
+		}
+	}
+
+	// Series fallback from title (e.g., "My Series v3" → series="My Series", number=3)
+	if metadata.Series == "" {
+		title := metadata.Title
+		if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
+			metadata.Series = seriesName
+			metadata.SeriesNumber = volumeNumber
+			setSource("series")
+		}
+	}
 }
 
 // extractAuthorsFromFilepath extracts author names from a filepath using the [Author Name] pattern.
@@ -3312,6 +3354,7 @@ func (w *Worker) Scan(ctx context.Context, opts books.ScanOptions) (*books.ScanR
 		BookID:       opts.BookID,
 		ForceRefresh: opts.ForceRefresh,
 		SkipPlugins:  opts.SkipPlugins,
+		Reset:        opts.Reset,
 	}
 
 	// Call internal unified Scan method (no cache for single-file rescans)
@@ -3600,6 +3643,133 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 	}
 
 	return coverFilename, mimeType, nil
+}
+
+// resetBookState wipes book-level scanned metadata and all associated
+// authors, series, genres, and tags. Identity fields (ID, filepath,
+// library_id, primary_file_id) are preserved. Title and SortTitle values
+// are preserved (NOT NULL) but their source fields are reset to
+// DataSourceFilepath so scanFileCore can set the correct source from
+// the re-scanned metadata.
+func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
+	// --- Book-level columns ---
+	book.Subtitle = nil
+	book.SubtitleSource = nil
+	book.Description = nil
+	book.DescriptionSource = nil
+	book.GenreSource = nil
+	book.TagSource = nil
+
+	// Reset NOT NULL source fields to filepath (lowest priority) so that
+	// scanFileCore can correct them. Without this, a stale high-priority
+	// source (e.g., "plugin:foo") would prevent future scans from updating.
+	book.TitleSource = models.DataSourceFilepath
+	book.SortTitleSource = models.DataSourceFilepath
+	book.AuthorSource = models.DataSourceFilepath
+
+	bookColumns := []string{
+		"subtitle", "subtitle_source",
+		"description", "description_source",
+		"genre_source", "tag_source",
+		"title_source", "sort_title_source", "author_source",
+	}
+	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
+		return errors.Wrap(err, "failed to clear book metadata")
+	}
+
+	// --- Book-level relations ---
+	if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book authors")
+	}
+	if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book series")
+	}
+	if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book genres")
+	}
+	if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
+		return errors.Wrap(err, "failed to delete book tags")
+	}
+
+	return nil
+}
+
+// resetBookFileState wipes all scanned metadata from a book and its file,
+// preparing them for a fresh scan. It preserves identity fields (IDs, filepath,
+// file_type, file_role, library_id, book_id, primary_file_id, filesize, duration,
+// bitrate, codec, page_count).
+//
+// When skipBookWipe is true, only file-level state is reset. This is used by
+// scanBook which handles the book-level wipe once for all files rather than
+// per-file.
+func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file *models.File, skipBookWipe bool) error {
+	if !skipBookWipe {
+		if err := w.resetBookState(ctx, book); err != nil {
+			return errors.Wrap(err, "failed to reset book state")
+		}
+	}
+
+	// --- File-level columns ---
+	file.Name = nil
+	file.NameSource = nil
+	file.URL = nil
+	file.URLSource = nil
+	file.ReleaseDate = nil
+	file.ReleaseDateSource = nil
+	file.PublisherID = nil
+	file.PublisherSource = nil
+	file.ImprintID = nil
+	file.ImprintSource = nil
+	file.Language = nil
+	file.LanguageSource = nil
+	file.Abridged = nil
+	file.AbridgedSource = nil
+	file.ChapterSource = nil
+	file.NarratorSource = nil
+	file.IdentifierSource = nil
+
+	fileColumns := []string{
+		"name", "name_source",
+		"url", "url_source",
+		"release_date", "release_date_source",
+		"publisher_id", "publisher_source",
+		"imprint_id", "imprint_source",
+		"language", "language_source",
+		"abridged", "abridged_source",
+		"chapter_source",
+		"narrator_source", "identifier_source",
+	}
+
+	// Delete cover from disk before clearing cover columns
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		_ = os.Remove(coverPath)
+	}
+
+	file.CoverImageFilename = nil
+	file.CoverMimeType = nil
+	file.CoverSource = nil
+	file.CoverPage = nil
+	fileColumns = append(fileColumns,
+		"cover_image_filename", "cover_mime_type", "cover_source", "cover_page",
+	)
+
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: fileColumns}); err != nil {
+		return errors.Wrap(err, "failed to clear file metadata")
+	}
+
+	// --- File-level relations ---
+	if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file narrators")
+	}
+	if _, err := w.bookService.DeleteIdentifiersForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file identifiers")
+	}
+	if err := w.chapterService.DeleteChaptersForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file chapters")
+	}
+
+	return nil
 }
 
 // getConfidenceThresholdFromCache returns the effective confidence threshold
