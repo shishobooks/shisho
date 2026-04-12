@@ -819,15 +819,19 @@ const BookDetail = () => {
     );
   };
 
-  useEffect(() => {
-    setCoverError(false);
-  }, [bookQuery.data?.id]);
-
   // Cache-busting parameter for cover images - computed early for hook ordering
   const coverCacheBuster = bookQuery.dataUpdatedAt;
   const coverUrl = bookQuery.data?.id
     ? `/api/books/${bookQuery.data.id}/cover?t=${coverCacheBuster}`
     : null;
+
+  // Reset the error flag whenever the URL changes — either because we
+  // navigated to a different book, or because a rescan bumped the
+  // cache-buster. If we only reset on book id, a previously-missing cover
+  // stays unmounted after a successful rescan until the user refreshes.
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverUrl]);
 
   // Check cache synchronously before paint to avoid placeholder flash
   // Must be called before early returns to maintain hook ordering

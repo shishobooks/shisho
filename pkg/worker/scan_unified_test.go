@@ -1,6 +1,11 @@
 package worker
 
 import (
+	"archive/zip"
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +19,37 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// writeCBZWithColoredPages creates a CBZ at path with len(colors) pages,
+// each page being a small solid-color PNG. Page order is 001.png, 002.png,
+// ... so page index matches the colors slice index.
+func writeCBZWithColoredPages(t *testing.T, path string, colors []color.RGBA) {
+	t.Helper()
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	defer func() {
+		require.NoError(t, zw.Close())
+	}()
+
+	for i, c := range colors {
+		img := image.NewRGBA(image.Rect(0, 0, 20, 20))
+		for y := 0; y < 20; y++ {
+			for x := 0; x < 20; x++ {
+				img.Set(x, y, c)
+			}
+		}
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		name := filepath.Base(path) + "_" + string(rune('0'+i/100)) + string(rune('0'+(i/10)%10)) + string(rune('0'+i%10)) + ".png"
+		w, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = w.Write(buf.Bytes())
+		require.NoError(t, err)
+	}
+}
 
 func TestScan_ZeroEntryPoints(t *testing.T) {
 	t.Parallel()
@@ -2643,6 +2679,286 @@ func TestScanFileByID_CoverRecovery(t *testing.T) {
 	// Verify cover file was recovered
 	recoveredCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
 	assert.NotEmpty(t, recoveredCoverPath, "cover file should be recovered after resync")
+}
+
+// TestRecoverMissingCover_RespectsCoverPage verifies that when a user has
+// selected a specific cover page for a CBZ (via the page picker) and the
+// cover file is subsequently deleted, the resync recovery path extracts
+// the cover from the user-selected page — not page 0.
+func TestRecoverMissingCover_RespectsCoverPage(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Page Picker Comic")
+	cbzPath := filepath.Join(bookDir, "comic.cbz")
+	// Three distinctively-colored pages so we can verify which one was used.
+	writeCBZWithColoredPages(t, cbzPath, []color.RGBA{
+		{R: 255, G: 0, B: 0, A: 255},   // page 0: red
+		{R: 0, G: 255, B: 0, A: 255},   // page 1: green
+		{R: 30, G: 40, B: 250, A: 255}, // page 2: blue
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	file := files[0]
+
+	// Simulate the user picking page 2 (blue) via the page picker.
+	coverPage := 2
+	file.CoverPage = &coverPage
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_page"},
+	}))
+	// Rewrite the on-disk cover to the blue page so initial state matches the
+	// selection — we're testing recovery, not the initial pick flow.
+	existingCoverPath := fileutils.CoverExistsWithBaseName(bookDir, "comic.cbz.cover")
+	require.NotEmpty(t, existingCoverPath)
+	require.NoError(t, os.Remove(existingCoverPath))
+	newCover, newMime, err := extractCBZPageCover(cbzPath, bookDir, "comic.cbz.cover", 2)
+	require.NoError(t, err)
+	file.CoverImageFilename = &newCover
+	file.CoverMimeType = &newMime
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_image_filename", "cover_mime_type"},
+	}))
+
+	// User now deletes the cover file off disk.
+	existingCoverPath = fileutils.CoverExistsWithBaseName(bookDir, "comic.cbz.cover")
+	require.NotEmpty(t, existingCoverPath)
+	require.NoError(t, os.Remove(existingCoverPath))
+
+	// Trigger the recovery path.
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       file.BookID,
+		ForceRefresh: true,
+	}, nil)
+	require.NoError(t, err)
+
+	// Cover should be back on disk and contain the blue page, not red.
+	recoveredCoverPath := fileutils.CoverExistsWithBaseName(bookDir, "comic.cbz.cover")
+	require.NotEmpty(t, recoveredCoverPath, "cover should be recovered")
+
+	coverBytes, err := os.ReadFile(recoveredCoverPath)
+	require.NoError(t, err)
+	img, _, err := image.Decode(bytes.NewReader(coverBytes))
+	require.NoError(t, err)
+
+	bounds := img.Bounds()
+	r, g, b, _ := img.At((bounds.Min.X+bounds.Max.X)/2, (bounds.Min.Y+bounds.Max.Y)/2).RGBA()
+	// 16-bit values; >> 8 to get 0-255 range.
+	assert.Less(t, int(r>>8), 80, "red channel should be low (page 2 is blue)")
+	assert.Less(t, int(g>>8), 80, "green channel should be low (page 2 is blue)")
+	assert.Greater(t, int(b>>8), 150, "blue channel should be high (page 2 is blue)")
+
+	// The user's selected cover page should be preserved in the DB.
+	refreshed, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, refreshed.CoverPage)
+	assert.Equal(t, 2, *refreshed.CoverPage)
+}
+
+// TestRecoverMissingCover_UnsupportedFileTypeDoesNotError verifies that
+// recoverMissingCover gracefully returns nil (not an error) for a file type
+// that isn't a built-in format and has no plugin parser registered — rather
+// than silently falling through and losing the chance to extract a cover.
+// Previously the function had a hard-coded switch over EPUB/CBZ/M4B/PDF with
+// `default: return nil`; it now delegates to parseFileMetadata, so the fix
+// is to make sure the "unsupported file type" error path is swallowed.
+func TestRecoverMissingCover_UnsupportedFileTypeDoesNotError(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Unsupported Type")
+	// Create a "file" with a made-up extension that no built-in parser
+	// handles and no plugin is registered for.
+	filePath := filepath.Join(bookDir, "book.xyz")
+	require.NoError(t, os.WriteFile(filePath, []byte("not a real book file"), 0o644))
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     bookDir,
+		Title:        "Unsupported",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Unsupported",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filePath,
+		FileType:      "xyz",
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: 20,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	err := tc.worker.recoverMissingCover(tc.ctx, file, nil)
+	assert.NoError(t, err, "recoverMissingCover should swallow unsupported-file-type errors")
+}
+
+// TestScanFileCreateNew_ExistingCoverOnDisk verifies that when an EPUB has
+// no embedded cover but a sibling cover file already lives next to it on
+// disk (e.g. user-placed `book.epub.cover.jpg`), the initial scan picks it
+// up instead of leaving the file with no cover. Previously the first scan
+// skipped cover handling whenever metadata.CoverData was empty, so users
+// had to run "Refresh all metadata" to have the existing cover detected.
+func TestScanFileCreateNew_ExistingCoverOnDisk(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] No Embedded Cover")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:    "No Embedded Cover",
+		Authors:  []string{"Test Author"},
+		HasCover: false,
+	})
+
+	// User drops a cover file next to the epub before the first scan.
+	existingCoverPath := filepath.Join(bookDir, "book.epub.cover.jpg")
+	require.NoError(t, os.WriteFile(existingCoverPath, []byte("\xff\xd8\xff\xe0fake-jpeg-bytes"), 0o644))
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	file := files[0]
+
+	require.NotNil(t, file.CoverImageFilename, "file should have a cover image filename after initial scan")
+	assert.Equal(t, "book.epub.cover.jpg", *file.CoverImageFilename)
+	require.NotNil(t, file.CoverSource)
+	assert.Equal(t, models.DataSourceExistingCover, *file.CoverSource)
+}
+
+// TestScanBook_CoverRecovery_RefreshMode verifies that the book-level resync
+// path (used by "Rescan > Refresh all metadata" from the UI) re-extracts a
+// cover whose file was removed from disk. This exercises scanBook → scanFileByID
+// with ForceRefresh=true, matching the real resync handler.
+func TestScanBook_CoverRecovery_RefreshMode(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Cover Book")
+	testgen.GenerateEPUB(t, bookDir, "test.epub", testgen.EPUBOptions{
+		Title:    "Cover Book",
+		Authors:  []string{"Test Author"},
+		HasCover: true,
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	bookID := files[0].BookID
+
+	coverBaseName := "test.epub.cover"
+	existingCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	require.NotEmpty(t, existingCoverPath, "cover file should exist after initial scan")
+
+	// Simulate the user deleting the cover file off disk.
+	require.NoError(t, os.Remove(existingCoverPath))
+	require.Empty(t, fileutils.CoverExistsWithBaseName(bookDir, coverBaseName))
+
+	// Trigger the same path the UI's "Refresh all metadata" uses: book-level
+	// resync with ForceRefresh=true.
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       bookID,
+		ForceRefresh: true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	recoveredCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	assert.NotEmpty(t, recoveredCoverPath, "cover file should be recovered after book-level refresh resync")
+}
+
+// TestScanBook_CoverRecovery_RefreshMode_CBZ verifies cover recovery on book-level
+// refresh resync for CBZ files.
+func TestScanBook_CoverRecovery_RefreshMode_CBZ(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Comic Book")
+	testgen.GenerateCBZ(t, bookDir, "test.cbz", testgen.CBZOptions{
+		Title:        "Comic Book",
+		HasComicInfo: true,
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	bookID := files[0].BookID
+
+	coverBaseName := "test.cbz.cover"
+	existingCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	require.NotEmpty(t, existingCoverPath, "cover file should exist after initial scan")
+
+	require.NoError(t, os.Remove(existingCoverPath))
+	require.Empty(t, fileutils.CoverExistsWithBaseName(bookDir, coverBaseName))
+
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       bookID,
+		ForceRefresh: true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	recoveredCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	assert.NotEmpty(t, recoveredCoverPath, "CBZ cover file should be recovered after book-level refresh resync")
+}
+
+// TestScanBook_CoverRecovery_RefreshMode_PDF verifies cover recovery on book-level
+// refresh resync for PDF files.
+func TestScanBook_CoverRecovery_RefreshMode_PDF(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] PDF Book")
+	testgen.GeneratePDF(t, bookDir, "test.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	bookID := files[0].BookID
+
+	coverBaseName := "test.pdf.cover"
+	existingCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	require.NotEmpty(t, existingCoverPath, "cover file should exist after initial scan")
+
+	require.NoError(t, os.Remove(existingCoverPath))
+	require.Empty(t, fileutils.CoverExistsWithBaseName(bookDir, coverBaseName))
+
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       bookID,
+		ForceRefresh: true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	recoveredCoverPath := fileutils.CoverExistsWithBaseName(bookDir, coverBaseName)
+	assert.NotEmpty(t, recoveredCoverPath, "PDF cover file should be recovered after book-level refresh resync")
 }
 
 // TestScanFileCore_SidecarReading_FileLevelFields verifies that file sidecar files
