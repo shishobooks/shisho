@@ -236,7 +236,11 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 					return &ScanResult{File: existingFile}, nil
 				}
 			}
-			// File changed or ForceRefresh — delegate to scanFileByID for full rescan
+			// File changed or ForceRefresh — invalidate stale fingerprints so the
+			// next hash generation job recomputes them against the new content.
+			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
+				return nil, errors.Wrap(err, "invalidate stale fingerprints")
+			}
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
 				ForceRefresh: opts.ForceRefresh,
@@ -254,6 +258,11 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			return nil, errors.Wrap(err, "failed to check if file exists")
 		}
 		if existingFile != nil {
+			// File content may have changed — invalidate stale fingerprints so
+			// the next hash generation job recomputes them against the new content.
+			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
+				return nil, errors.Wrap(err, "invalidate stale fingerprints")
+			}
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
 				ForceRefresh: opts.ForceRefresh,
