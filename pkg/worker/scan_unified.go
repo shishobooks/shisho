@@ -2524,6 +2524,59 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	return title
 }
 
+// applyFilepathFallbacks populates empty metadata fields from the filepath.
+// This fills in title, authors, narrators, and series using the same logic
+// that scanFileCreateNew uses when creating a book for the first time.
+// Fields already present in metadata are not overwritten.
+func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPath, fileType string, isRootLevelFile bool) {
+	if metadata == nil {
+		return
+	}
+
+	setSource := func(field, source string) {
+		if metadata.FieldDataSources == nil {
+			metadata.FieldDataSources = make(map[string]string)
+		}
+		metadata.FieldDataSources[field] = source
+	}
+
+	// Title fallback
+	if strings.TrimSpace(metadata.Title) == "" {
+		metadata.Title = deriveInitialTitle(filePath, isRootLevelFile, nil)
+		setSource("title", models.DataSourceFilepath)
+	}
+
+	// Authors fallback
+	if len(metadata.Authors) == 0 {
+		filepathAuthors := extractAuthorsFromFilepath(bookPath, isRootLevelFile)
+		for _, name := range filepathAuthors {
+			metadata.Authors = append(metadata.Authors, mediafile.ParsedAuthor{Name: name})
+		}
+		if len(metadata.Authors) > 0 {
+			setSource("authors", models.DataSourceFilepath)
+		}
+	}
+
+	// Narrators fallback
+	if len(metadata.Narrators) == 0 {
+		filepathNarrators := extractNarratorsFromFilepath(filePath, bookPath, isRootLevelFile)
+		metadata.Narrators = append(metadata.Narrators, filepathNarrators...)
+		if len(metadata.Narrators) > 0 {
+			setSource("narrators", models.DataSourceFilepath)
+		}
+	}
+
+	// Series fallback from title (e.g., "My Series v3" → series="My Series", number=3)
+	if metadata.Series == "" {
+		title := metadata.Title
+		if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
+			metadata.Series = seriesName
+			metadata.SeriesNumber = volumeNumber
+			setSource("series", models.DataSourceFilepath)
+		}
+	}
+}
+
 // extractAuthorsFromFilepath extracts author names from a filepath using the [Author Name] pattern.
 // For directory-based books, looks in the directory name.
 // For root-level files, looks in the filename.

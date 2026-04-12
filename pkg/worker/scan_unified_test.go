@@ -4525,3 +4525,81 @@ func TestScanFileCore_PDFCoverPageRestoredFromSidecar(t *testing.T) {
 	_, statErr := os.Stat(coverPath)
 	assert.NoError(t, statErr, "extracted cover image should exist on disk at %s", coverPath)
 }
+
+func TestApplyFilepathFallbacks_PopulatesTitleFromFilepath(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/[Author Name] Book Title.epub", "/library/[Author Name] Book Title", "epub", true)
+
+	assert.Equal(t, "Book Title", metadata.Title)
+	assert.Equal(t, models.DataSourceFilepath, metadata.SourceForField("title"))
+}
+
+func TestApplyFilepathFallbacks_PreservesExistingTitle(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Embedded Title",
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/[Author] Something.epub", "/library/[Author] Something", "epub", true)
+
+	assert.Equal(t, "Embedded Title", metadata.Title)
+}
+
+func TestApplyFilepathFallbacks_PopulatesAuthorsFromFilepath(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/[Jane Doe] Book.epub", "/library/[Jane Doe] Book", "epub", true)
+
+	require.Len(t, metadata.Authors, 1)
+	assert.Equal(t, "Jane Doe", metadata.Authors[0].Name)
+}
+
+func TestApplyFilepathFallbacks_PreservesExistingAuthors(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		Authors:    []mediafile.ParsedAuthor{{Name: "Embedded Author"}},
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/[Other Author] Book.epub", "/library/[Other Author] Book", "epub", true)
+
+	require.Len(t, metadata.Authors, 1)
+	assert.Equal(t, "Embedded Author", metadata.Authors[0].Name)
+}
+
+func TestApplyFilepathFallbacks_PopulatesNarratorsFromFilepath(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		DataSource: models.DataSourceM4BMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/[Author] Title {Narrator Name}.m4b", "/library/[Author] Title", "m4b", true)
+
+	require.Len(t, metadata.Narrators, 1)
+	assert.Equal(t, "Narrator Name", metadata.Narrators[0])
+}
+
+func TestApplyFilepathFallbacks_PopulatesSeriesFromTitle(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		DataSource: models.DataSourceCBZMetadata,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/My Series v3.cbz", "/library/My Series v3", "cbz", true)
+
+	assert.NotEmpty(t, metadata.Series)
+}
