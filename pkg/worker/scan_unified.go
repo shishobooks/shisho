@@ -3660,6 +3660,114 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 	return coverFilename, mimeType, nil
 }
 
+// resetBookFileState wipes all scanned metadata from a book and its file,
+// preparing them for a fresh scan. It preserves identity fields (IDs, filepath,
+// file_type, file_role, library_id, book_id, primary_file_id, filesize, duration,
+// bitrate, codec, page_count).
+//
+// When skipBookWipe is true, only file-level state is reset. This is used by
+// scanBook which handles the book-level wipe once for all files rather than
+// per-file.
+func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file *models.File, skipBookWipe bool) error {
+	if !skipBookWipe {
+		// --- Book-level columns ---
+		book.Subtitle = nil
+		book.SubtitleSource = nil
+		book.Description = nil
+		book.DescriptionSource = nil
+		// Note: AuthorSource is NOT NULL in the DB (no zero-value allowed). We
+		// don't clear it here; it will be overwritten on the next scan when new
+		// authors are written.
+		book.GenreSource = nil
+		book.TagSource = nil
+
+		bookColumns := []string{
+			"subtitle", "subtitle_source",
+			"description", "description_source",
+			"genre_source", "tag_source",
+		}
+		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
+			return errors.Wrap(err, "failed to clear book metadata")
+		}
+
+		// --- Book-level relations ---
+		if err := w.bookService.DeleteAuthors(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete book authors")
+		}
+		if err := w.bookService.DeleteBookSeries(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete book series")
+		}
+		if err := w.bookService.DeleteBookGenres(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete book genres")
+		}
+		if err := w.bookService.DeleteBookTags(ctx, book.ID); err != nil {
+			return errors.Wrap(err, "failed to delete book tags")
+		}
+	}
+
+	// --- File-level columns ---
+	file.Name = nil
+	file.NameSource = nil
+	file.URL = nil
+	file.URLSource = nil
+	file.ReleaseDate = nil
+	file.ReleaseDateSource = nil
+	file.PublisherID = nil
+	file.PublisherSource = nil
+	file.ImprintID = nil
+	file.ImprintSource = nil
+	file.Language = nil
+	file.LanguageSource = nil
+	file.Abridged = nil
+	file.AbridgedSource = nil
+	file.ChapterSource = nil
+	file.NarratorSource = nil
+	file.IdentifierSource = nil
+
+	fileColumns := []string{
+		"name", "name_source",
+		"url", "url_source",
+		"release_date", "release_date_source",
+		"publisher_id", "publisher_source",
+		"imprint_id", "imprint_source",
+		"language", "language_source",
+		"abridged", "abridged_source",
+		"chapter_source",
+		"narrator_source", "identifier_source",
+	}
+
+	// Delete cover from disk before clearing cover columns
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		_ = os.Remove(coverPath)
+	}
+
+	file.CoverImageFilename = nil
+	file.CoverMimeType = nil
+	file.CoverSource = nil
+	file.CoverPage = nil
+	fileColumns = append(fileColumns,
+		"cover_image_filename", "cover_mime_type", "cover_source", "cover_page",
+	)
+
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: fileColumns}); err != nil {
+		return errors.Wrap(err, "failed to clear file metadata")
+	}
+
+	// --- File-level relations ---
+	if _, err := w.bookService.DeleteNarratorsForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file narrators")
+	}
+	if _, err := w.bookService.DeleteIdentifiersForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file identifiers")
+	}
+	if err := w.chapterService.DeleteChaptersForFile(ctx, file.ID); err != nil {
+		return errors.Wrap(err, "failed to delete file chapters")
+	}
+
+	return nil
+}
+
 // getConfidenceThresholdFromCache returns the effective confidence threshold
 // using a pre-loaded plugin threshold value, falling back to global config or default.
 func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float64 {

@@ -4603,3 +4603,191 @@ func TestApplyFilepathFallbacks_PopulatesSeriesFromTitle(t *testing.T) {
 
 	assert.NotEmpty(t, metadata.Series)
 }
+
+// =============================================================================
+// resetBookFileState tests
+// =============================================================================
+
+func TestResetBookFileState_ClearsBookMetadata(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: create library, book dir, scan an EPUB
+	libraryPath := testgen.TempLibraryDir(t)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Reset Book")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Reset Book",
+		Authors: []string{"Test Author"},
+	})
+	tc.createLibrary([]string{libraryPath})
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+
+	allFiles := tc.listFiles()
+	require.Len(t, allFiles, 1)
+	fileID := allFiles[0].ID
+
+	// Manually add metadata to book and file to simulate existing state
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+
+	subtitle := "A Subtitle"
+	subtitleSrc := models.DataSourceManual
+	desc := "A Description"
+	descSrc := models.DataSourceManual
+	genreSrc := models.DataSourceManual
+	tagSrc := models.DataSourceManual
+
+	book.Subtitle = &subtitle
+	book.SubtitleSource = &subtitleSrc
+	book.Description = &desc
+	book.DescriptionSource = &descSrc
+	book.GenreSource = &genreSrc
+	book.TagSource = &tagSrc
+
+	err = tc.bookService.UpdateBook(tc.ctx, book, books.UpdateBookOptions{
+		Columns: []string{
+			"subtitle", "subtitle_source",
+			"description", "description_source",
+			"genre_source", "tag_source",
+		},
+	})
+	require.NoError(t, err)
+
+	file, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	lang := "en"
+	langSrc := models.DataSourceManual
+	abridged := true
+	abridgedSrc := models.DataSourceManual
+	nameSrc := models.DataSourceManual
+	urlSrc := models.DataSourceManual
+
+	file.Language = &lang
+	file.LanguageSource = &langSrc
+	file.Abridged = &abridged
+	file.AbridgedSource = &abridgedSrc
+	file.NameSource = &nameSrc
+	file.URLSource = &urlSrc
+
+	err = tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{
+		Columns: []string{
+			"language", "language_source",
+			"abridged", "abridged_source",
+			"name_source", "url_source",
+		},
+	})
+	require.NoError(t, err)
+
+	// Reload fresh copies
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	// Call resetBookFileState with skipBookWipe=false
+	err = tc.worker.resetBookFileState(tc.ctx, book, file, false)
+	require.NoError(t, err)
+
+	// Reload from DB to verify
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	// Book-level verifications
+	assert.Nil(t, book.Subtitle, "subtitle should be nil")
+	assert.Nil(t, book.SubtitleSource, "subtitle_source should be nil")
+	assert.Nil(t, book.Description, "description should be nil")
+	assert.Nil(t, book.DescriptionSource, "description_source should be nil")
+	// Note: AuthorSource is NOT NULL in the DB; it is not cleared but will be
+	// overwritten on the next scan when authors are written.
+	assert.Nil(t, book.GenreSource, "genre_source should be nil")
+	assert.Nil(t, book.TagSource, "tag_source should be nil")
+	assert.Empty(t, book.Authors, "authors should be empty")
+	assert.Empty(t, book.BookSeries, "series should be empty")
+	assert.Empty(t, book.BookGenres, "genres should be empty")
+	assert.Empty(t, book.BookTags, "tags should be empty")
+
+	// File-level verifications
+	assert.Nil(t, file.Language, "language should be nil")
+	assert.Nil(t, file.LanguageSource, "language_source should be nil")
+	assert.Nil(t, file.Abridged, "abridged should be nil")
+	assert.Nil(t, file.AbridgedSource, "abridged_source should be nil")
+	assert.Nil(t, file.Name, "name should be nil")
+	assert.Nil(t, file.NameSource, "name_source should be nil")
+	assert.Nil(t, file.URL, "url should be nil")
+	assert.Nil(t, file.URLSource, "url_source should be nil")
+	assert.Nil(t, file.ReleaseDate, "release_date should be nil")
+	assert.Nil(t, file.ReleaseDateSource, "release_date_source should be nil")
+	assert.Nil(t, file.PublisherID, "publisher_id should be nil")
+	assert.Nil(t, file.PublisherSource, "publisher_source should be nil")
+	assert.Nil(t, file.ImprintID, "imprint_id should be nil")
+	assert.Nil(t, file.ImprintSource, "imprint_source should be nil")
+	assert.Nil(t, file.ChapterSource, "chapter_source should be nil")
+	assert.Nil(t, file.NarratorSource, "narrator_source should be nil")
+	assert.Nil(t, file.IdentifierSource, "identifier_source should be nil")
+	assert.Empty(t, file.Narrators, "narrators should be empty")
+	assert.Empty(t, file.Identifiers, "identifiers should be empty")
+}
+
+func TestResetBookFileState_PreservesIdentityFields(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: create library, book dir, scan an EPUB
+	libraryPath := testgen.TempLibraryDir(t)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Identity Book")
+	testgen.GenerateEPUB(t, bookDir, "identity.epub", testgen.EPUBOptions{
+		Title:   "Identity Book",
+		Authors: []string{"Test Author"},
+	})
+	tc.createLibrary([]string{libraryPath})
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	allFiles := tc.listFiles()
+	require.Len(t, allFiles, 1)
+
+	// Record identity fields before reset
+	bookID := allBooks[0].ID
+	fileID := allFiles[0].ID
+	filePath := allFiles[0].Filepath
+	fileType := allFiles[0].FileType
+	fileRole := allFiles[0].FileRole
+	fileLibraryID := allFiles[0].LibraryID
+	fileBookID := allFiles[0].BookID
+	primaryFileID := allBooks[0].PrimaryFileID
+
+	// Load fresh copies
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	file, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	// Call resetBookFileState
+	err = tc.worker.resetBookFileState(tc.ctx, book, file, false)
+	require.NoError(t, err)
+
+	// Reload from DB
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
+	require.NoError(t, err)
+
+	// Verify identity fields are unchanged
+	assert.Equal(t, bookID, book.ID, "book ID should be unchanged")
+	assert.Equal(t, fileID, file.ID, "file ID should be unchanged")
+	assert.Equal(t, filePath, file.Filepath, "filepath should be unchanged")
+	assert.Equal(t, fileType, file.FileType, "file_type should be unchanged")
+	assert.Equal(t, fileRole, file.FileRole, "file_role should be unchanged")
+	assert.Equal(t, fileLibraryID, file.LibraryID, "library_id should be unchanged")
+	assert.Equal(t, fileBookID, file.BookID, "book_id should be unchanged")
+	assert.Equal(t, primaryFileID, book.PrimaryFileID, "primary_file_id should be unchanged")
+}
