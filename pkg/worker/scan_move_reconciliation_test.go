@@ -64,9 +64,12 @@ func TestScanReconciliation_DetectsMove(t *testing.T) {
 	assert.NotEqual(t, oldPath, filesAfter[0].Filepath, "filepath should have been updated away from old path")
 	assert.Equal(t, newPath, filesAfter[0].Filepath, "filepath should point to new location")
 
-	// Assert: exactly one book (no ghost books left over)
+	// Assert: exactly one book (no ghost books left over), and its filepath
+	// was updated to the new directory so cover serving / organize continue
+	// to resolve correctly.
 	booksAfter := tc.listBooks()
-	assert.Len(t, booksAfter, 1, "expected exactly one book after move")
+	require.Len(t, booksAfter, 1, "expected exactly one book after move")
+	assert.Equal(t, newDir, booksAfter[0].Filepath, "book filepath should follow the file to the new directory")
 }
 
 // TestScanReconciliation_SizeMismatch_Deletes verifies that when the old DB

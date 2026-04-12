@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -173,6 +174,19 @@ func (w *Worker) reconcileMoves(
 			continue
 		}
 
+		// Bring the book row along with the file so cover serving,
+		// supplement detection, and organize all resolve against the
+		// new directory. No-op for multi-file books where this single
+		// file's move doesn't reflect the whole book's new location.
+		if err := w.syncBookFilepathAfterMove(ctx, orphanFile, oldPath, newPath); err != nil {
+			jobLog.Warn("reconcile: failed to sync book filepath after move", logger.Data{
+				"file_id":  orphanFile.ID,
+				"old_path": oldPath,
+				"new_path": newPath,
+				"error":    err.Error(),
+			})
+		}
+
 		jobLog.Info("reconcile: detected file move", logger.Data{
 			"file_id":  orphanFile.ID,
 			"old_path": oldPath,
@@ -210,4 +224,49 @@ func computeFileSHA256(path string) (string, error) {
 		return "", errors.WithStack(err)
 	}
 	return hash, nil
+}
+
+// syncBookFilepathAfterMove updates a book's Filepath to match a moved file's
+// new directory so that cover serving, supplement detection, and file
+// organization keep resolving correctly after a rename.
+//
+// Books come in two flavors:
+//   - Directory-based: Book.Filepath is the directory that contains the book's
+//     files. When the folder is renamed, we update Book.Filepath to the new
+//     directory as long as it currently matches the old file's directory.
+//   - Root-level: Book.Filepath is the file path itself (the book has a single
+//     file sitting directly in a library path). When the file is moved, we
+//     update Book.Filepath to the new file path.
+//
+// For multi-file books where only one file moved, the book's Filepath will not
+// match either the old file's directory or the old file path, so this is a
+// no-op. The other files' moves can reconcile the book independently as they
+// get processed.
+func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.File, oldFilePath, newFilePath string) error {
+	if file.BookID == 0 {
+		return nil
+	}
+	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
+	if err != nil {
+		return errors.Wrap(err, "retrieve book for filepath sync")
+	}
+
+	oldDir := filepath.Dir(oldFilePath)
+	newDir := filepath.Dir(newFilePath)
+
+	switch {
+	case book.Filepath == oldDir && oldDir != newDir:
+		book.Filepath = newDir
+	case book.Filepath == oldFilePath:
+		book.Filepath = newFilePath
+	default:
+		return nil
+	}
+
+	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{
+		Columns: []string{"filepath"},
+	}); err != nil {
+		return errors.Wrap(err, "update book filepath")
+	}
+	return nil
 }

@@ -737,6 +737,18 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		return nil, errors.Wrap(err, "update filepath for moved file")
 	}
 
+	// Book.Filepath stores the book's directory, and cover serving,
+	// supplement detection, and file organization all resolve paths
+	// against it. If the move changed the directory, bring the book
+	// along to the new directory so those systems don't break.
+	if err := m.worker.syncBookFilepathAfterMove(ctx, best, oldPath, path); err != nil {
+		m.log.Err(err).Warn("monitor: failed to sync book filepath after move", logger.Data{
+			"file_id":  best.ID,
+			"old_path": oldPath,
+			"new_path": path,
+		})
+	}
+
 	m.log.Info("monitor: file move detected", logger.Data{
 		"file_id":  best.ID,
 		"old_path": oldPath,

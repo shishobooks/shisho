@@ -99,9 +99,12 @@ func TestMonitor_DetectsFileMove(t *testing.T) {
 	assert.Equal(t, originalFileID, files[0].ID, "same DB row should be reused (not deleted and recreated)")
 	assert.Equal(t, newPath, files[0].Filepath, "filepath should point to new location")
 
-	// Assert: exactly one book (no ghost books left over).
+	// Assert: exactly one book (no ghost books left over), AND the book's
+	// filepath was updated to the new directory so cover serving, supplement
+	// detection, and organize all continue to resolve correctly.
 	allBooks := tc.listBooks()
-	assert.Len(t, allBooks, 1, "expected exactly one book after move")
+	require.Len(t, allBooks, 1, "expected exactly one book after move")
+	assert.Equal(t, newDir, allBooks[0].Filepath, "book filepath should follow the file to the new directory")
 }
 
 // TestMonitor_CreateOnlyBatch_NoSyncHashing verifies that when a batch contains
