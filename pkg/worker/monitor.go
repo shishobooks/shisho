@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -500,9 +502,58 @@ func (m *Monitor) processPendingEvents() {
 
 	m.log.Info("processing filesystem events", logger.Data{"count": len(events)})
 
+	// Classify events into create and remove buckets for move detection.
+	// A "create" event is one that has Create or Write set (with or without
+	// Remove/Rename — mixed events are treated as creates).
+	// A "remove" event is one that has Remove or Rename with no Create/Write.
+	type eventClass int
+	const (
+		classCreate eventClass = iota
+		classRemove
+	)
+	classify := func(ev pendingEvent) eventClass {
+		hasCreate := ev.Op.Has(fsnotify.Create) || ev.Op.Has(fsnotify.Write)
+		hasRemove := ev.Op.Has(fsnotify.Remove) || ev.Op.Has(fsnotify.Rename)
+		if hasCreate || (!hasRemove) {
+			return classCreate
+		}
+		return classRemove
+	}
+
+	var createEvents, removeEvents []struct {
+		path  string
+		event pendingEvent
+	}
+	for path, event := range events {
+		if classify(event) == classCreate {
+			createEvents = append(createEvents, struct {
+				path  string
+				event pendingEvent
+			}{path, event})
+		} else {
+			removeEvents = append(removeEvents, struct {
+				path  string
+				event pendingEvent
+			}{path, event})
+		}
+	}
+
+	// needsSyncHash is true when there are remove events in the batch,
+	// meaning a file move is plausible and inline sha256 should be used for
+	// new create events to detect the move before the REMOVE is processed.
+	needsSyncHash := len(removeEvents) > 0
+
 	hadDeletes := false
 	booksToOrganize := make(map[int]struct{})
 	affectedBookIDs := make(map[int]struct{})
+	// librariesWithNewFiles tracks which libraries received genuinely new
+	// (non-move) files so we can queue hash generation jobs afterward.
+	librariesWithNewFiles := make(map[int]struct{})
+	// movedFileIDs holds the IDs of file rows that were repurposed as move
+	// targets; the corresponding REMOVE events for their old paths must be
+	// skipped so we don't delete the row we just updated.
+	movedFileIDs := make(map[int]struct{})
+
 	applyResult := func(result *ScanResult) {
 		if result == nil {
 			return
@@ -518,15 +569,77 @@ func (m *Monitor) processPendingEvents() {
 			affectedBookIDs[result.Book.ID] = struct{}{}
 		}
 	}
-	for path, event := range events {
+
+	// ── Step 1: process CREATE events first ──────────────────────────────────
+	// Processing creates before removes ensures the original file row still
+	// exists in the DB when tryDetectMove performs its fingerprint lookup.
+	for _, ce := range createEvents {
+		path, event := ce.path, ce.event
+
 		if event.IsDirectory {
+			// Directory creates are handled as-is via the existing path.
 			for _, result := range m.processDirectoryEvent(ctx, path, event) {
 				applyResult(result)
 			}
 			continue
 		}
+
+		if needsSyncHash && m.worker.fingerprintService != nil {
+			// Try to detect a move before falling through to the normal create path.
+			movedFile, err := m.tryDetectMove(ctx, path, event.LibraryID)
+			if err != nil {
+				m.log.Err(err).Warn("move detection failed, treating as new file", logger.Data{"path": path})
+			}
+			if movedFile != nil {
+				// Move detected — record the file ID so the REMOVE processing
+				// for the old path skips it, and track for search indexing.
+				movedFileIDs[movedFile.ID] = struct{}{}
+				affectedBookIDs[movedFile.BookID] = struct{}{}
+				m.log.Info("monitor: detected file move via sha256", logger.Data{
+					"file_id":  movedFile.ID,
+					"new_path": path,
+				})
+				continue
+			}
+		}
+
+		// No move detected (or needsSyncHash is false) — normal create path.
+		result := m.processEvent(ctx, path, event)
+		applyResult(result)
+		if result != nil && result.FileCreated {
+			librariesWithNewFiles[event.LibraryID] = struct{}{}
+		}
+	}
+
+	// ── Step 2: process REMOVE events second ────────────────────────────────
+	// Skip any file whose row was repurposed as a move target above.
+	for _, re := range removeEvents {
+		path, event := re.path, re.event
+
+		if event.IsDirectory {
+			for _, result := range m.processDirectoryEventSkipping(ctx, path, event, movedFileIDs) {
+				applyResult(result)
+			}
+			continue
+		}
+
+		// For file removes, check whether the row was already repurposed.
+		if len(movedFileIDs) > 0 {
+			file, err := m.worker.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+				Filepath: &path,
+			})
+			if err == nil {
+				if _, skip := movedFileIDs[file.ID]; skip {
+					// This row was already updated to the new path — skip deletion.
+					continue
+				}
+			}
+		}
+
 		applyResult(m.processEvent(ctx, path, event))
 	}
+
+	// ── Step 3: post-batch housekeeping ─────────────────────────────────────
 
 	// Organize new books — scanInternal with FilePath mode defers organization,
 	// so we must run it here (same as ProcessScanJob's post-scan organization).
@@ -537,6 +650,14 @@ func (m *Monitor) processPendingEvents() {
 	// Cleanup orphaned entities after deletes.
 	if hadDeletes {
 		m.runOrphanCleanup(ctx)
+	}
+
+	// Queue hash generation jobs for libraries that received genuinely new
+	// (non-move) files so their fingerprints are computed in the background.
+	for libID := range librariesWithNewFiles {
+		if err := EnsureHashGenerationJob(ctx, m.worker.jobService, libID); err != nil {
+			m.log.Err(err).Warn("failed to ensure hash generation job", logger.Data{"library_id": libID})
+		}
 	}
 
 	// Update search indexes for affected books only.
@@ -553,6 +674,117 @@ func (m *Monitor) processPendingEvents() {
 			}
 		}
 	}
+}
+
+// tryDetectMove computes sha256 for a newly-appeared path and checks whether
+// any existing file in the library has that fingerprint. If so, and the
+// matched file's stored path is gone from disk, repurpose the matched file's
+// filepath to the new path and return the updated file. Returns nil if no
+// move was detected.
+func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int) (*models.File, error) {
+	// Stat the file — if it's missing, we can't compute a hash.
+	if _, err := os.Stat(path); err != nil {
+		return nil, nil //nolint:nilerr // missing file is not an error
+	}
+
+	// Compute sha256 of the new file.
+	hash, err := fingerprint.ComputeSHA256(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "compute sha256 for move detection")
+	}
+
+	// Query the fingerprint service for files in this library with the same hash.
+	matches, err := m.worker.fingerprintService.FindFilesByHash(ctx, libraryID, models.FingerprintAlgorithmSHA256, hash)
+	if err != nil {
+		return nil, errors.Wrap(err, "find files by hash for move detection")
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	// Walk matches looking for one whose stored path is no longer on disk.
+	// Multiple matches can occur for duplicate-content files — we pick the
+	// one with the most recent FileModifiedAt among the displaced candidates.
+	var best *models.File
+	for _, candidate := range matches {
+		// If the stored path still exists, the file was copied, not moved.
+		if _, err := os.Stat(candidate.Filepath); err == nil {
+			continue // original path still present — treat as copy
+		}
+		// The stored path is gone — this is a displaced candidate.
+		if best == nil {
+			best = candidate
+			continue
+		}
+		// Prefer the candidate with the more recent FileModifiedAt.
+		if candidate.FileModifiedAt != nil && (best.FileModifiedAt == nil || candidate.FileModifiedAt.After(*best.FileModifiedAt)) {
+			best = candidate
+		}
+	}
+
+	if best == nil {
+		return nil, nil
+	}
+
+	// Repurpose the matched file row to point at the new path.
+	oldPath := best.Filepath
+	best.Filepath = path
+	if err := m.worker.bookService.UpdateFile(ctx, best, books.UpdateFileOptions{
+		Columns: []string{"filepath"},
+	}); err != nil {
+		// Revert in-memory change so we don't leave the struct in an inconsistent state.
+		best.Filepath = oldPath
+		return nil, errors.Wrap(err, "update filepath for moved file")
+	}
+
+	m.log.Info("monitor: file move detected", logger.Data{
+		"file_id":  best.ID,
+		"old_path": oldPath,
+		"new_path": path,
+	})
+
+	return best, nil
+}
+
+// processDirectoryEventSkipping is like processDirectoryEvent but skips any
+// file IDs that were repurposed as move targets earlier in this batch.
+func (m *Monitor) processDirectoryEventSkipping(ctx context.Context, path string, event pendingEvent, skipIDs map[int]struct{}) []*ScanResult {
+	if len(skipIDs) == 0 {
+		return m.processDirectoryEvent(ctx, path, event)
+	}
+
+	log := m.log.Root(logger.Data{"path": path, "op": event.Op.String()})
+
+	files, err := m.worker.bookService.ListFiles(ctx, books.ListFilesOptions{
+		LibraryID:      &event.LibraryID,
+		FilepathPrefix: &path,
+	})
+	if err != nil {
+		log.Err(err).Warn("failed to list files under removed directory")
+		return nil
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	log.Info("directory event, cleaning up files (with skip set)", logger.Data{"count": len(files)})
+
+	results := make([]*ScanResult, 0, len(files))
+	for _, file := range files {
+		if _, skip := skipIDs[file.ID]; skip {
+			continue
+		}
+		result, err := m.worker.scanInternal(ctx, ScanOptions{FileID: file.ID}, nil)
+		if err != nil {
+			log.Err(err).Warn("failed to cleanup file under removed directory", logger.Data{
+				"file_id":       file.ID,
+				"file_filepath": file.Filepath,
+			})
+			continue
+		}
+		results = append(results, result)
+	}
+	return results
 }
 
 // requeue puts events back into m.pending (merging with any new arrivals)
