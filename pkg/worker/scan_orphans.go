@@ -45,6 +45,10 @@ func (w *Worker) cleanupOrphanedFiles(
 			// Skip files that were already reconciled as moves — they have a
 			// valid updated filepath and must not be deleted.
 			if sc != nil && sc.IsMovedOrphan(file.ID) {
+				jobLog.Info("orphan cleanup: skipping moved file", logger.Data{
+					"file_id":  file.ID,
+					"filepath": file.Filepath,
+				})
 				continue
 			}
 			orphansByBook[file.BookID] = append(orphansByBook[file.BookID], file)

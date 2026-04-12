@@ -264,8 +264,10 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// File content changed (or we can't tell) — invalidate stale
 			// fingerprints so the next hash generation job recomputes them
 			// against the new content, then delegate to scanFileByID.
-			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
-				return nil, errors.Wrap(err, "invalidate stale fingerprints")
+			if w.fingerprintService != nil {
+				if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
+					return nil, errors.Wrap(err, "invalidate stale fingerprints")
+				}
 			}
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
@@ -293,8 +295,10 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			}
 			// File content changed (or we can't tell) — invalidate stale
 			// fingerprints before delegating.
-			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
-				return nil, errors.Wrap(err, "invalidate stale fingerprints")
+			if w.fingerprintService != nil {
+				if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
+					return nil, errors.Wrap(err, "invalidate stale fingerprints")
+				}
 			}
 			return w.scanFileByID(ctx, ScanOptions{
 				FileID:       existingFile.ID,
@@ -466,9 +470,20 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			}
 		}
 
+		// Return a minimal Book stub so callers (e.g. the monitor's
+		// search-index pruning loop) can track the deleted book's ID even
+		// though the row no longer exists. scanFileByID already pruned the
+		// search index above; callers that also look up RetrieveBook for
+		// this ID will get NotFound and fall through to DeleteFromBookIndex
+		// as a redundant safety net.
+		var bookStub *models.Book
+		if bookDeleted {
+			bookStub = &models.Book{ID: book.ID}
+		}
 		return &ScanResult{
 			FileDeleted: true,
 			BookDeleted: bookDeleted,
+			Book:        bookStub,
 		}, nil
 	}
 

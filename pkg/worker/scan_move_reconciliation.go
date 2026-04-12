@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/joblogs"
+	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -92,6 +93,10 @@ func (w *Worker) reconcileMoves(
 			continue
 		}
 
+		// UNIQUE(file_id, algorithm) guarantees at most one row per
+		// (file_id, sha256), so fps[0] is the only match. If a future
+		// caller ever passes a different algorithm via this service, it
+		// will still be a single row for that algorithm.
 		orphanIndex[file.FilesizeBytes] = append(orphanIndex[file.FilesizeBytes], orphanEntry{
 			fileID: file.ID,
 			hash:   fps[0].Value,
@@ -264,10 +269,16 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 		return errors.Wrap(err, "retrieve book for filepath sync")
 	}
 
+	// Normalize inputs so symlinks / trailing separators / stray "./" don't
+	// confuse the equality checks below.
+	oldFilePathClean := filepath.Clean(oldFilePath)
+	newFilePathClean := filepath.Clean(newFilePath)
+	bookFilepathClean := filepath.Clean(book.Filepath)
+
 	// Root-level single-file book: Book.Filepath points at the file itself.
 	// Bring it along to the new file path.
-	if book.Filepath == oldFilePath {
-		book.Filepath = newFilePath
+	if bookFilepathClean == oldFilePathClean {
+		book.Filepath = newFilePathClean
 		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{
 			Columns: []string{"filepath"},
 		}); err != nil {
@@ -295,9 +306,9 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 		// depending on transaction visibility.
 		fPath := f.Filepath
 		if f.ID == file.ID {
-			fPath = newFilePath
+			fPath = newFilePathClean
 		}
-		dir := filepath.Dir(fPath)
+		dir := filepath.Clean(filepath.Dir(fPath))
 		if commonDir == "" {
 			commonDir = dir
 			continue
@@ -308,8 +319,27 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 			return nil
 		}
 	}
-	if commonDir == "" || commonDir == book.Filepath {
+	if commonDir == "" || commonDir == bookFilepathClean {
 		return nil
+	}
+
+	// Refuse to set Book.Filepath to a library root — that would indicate
+	// a root-level single-file book, and the equality check above already
+	// handles that case. Falling here means the files happen to sit at a
+	// library root directly but the book isn't a root-level book (e.g.
+	// multiple files directly in the library root, which would be a weird
+	// state anyway). Setting Book.Filepath to the library root would break
+	// cover/sidecar resolution, so we decline and leave things alone.
+	library, err := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &file.LibraryID,
+	})
+	if err != nil {
+		return errors.Wrap(err, "retrieve library for filepath sync")
+	}
+	for _, lp := range library.LibraryPaths {
+		if filepath.Clean(lp.Filepath) == commonDir {
+			return nil
+		}
 	}
 
 	book.Filepath = commonDir

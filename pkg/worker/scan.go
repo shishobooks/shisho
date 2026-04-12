@@ -440,11 +440,13 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 		// Books whose files were reconciled as moves should also be organized
 		// so organize_file_structure can rename their folders back into the
-		// structured layout. The moved files themselves may not be in
-		// booksToOrganize above, because unchanged files return early from
-		// scanFileByPath without flagging their book.
-		for bookID := range cache.MovedBookIDs() {
-			booksToOrganize[bookID] = struct{}{}
+		// structured layout. Only merge these when the library actually has
+		// organize enabled — otherwise it's wasted work since the organize
+		// step below is gated on the same setting.
+		if library.OrganizeFileStructure {
+			for bookID := range cache.MovedBookIDs() {
+				booksToOrganize[bookID] = struct{}{}
+			}
 		}
 
 		// Cleanup orphaned files (in DB but not on disk) using batch operations.

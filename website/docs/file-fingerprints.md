@@ -57,6 +57,15 @@ The job is idempotent — running it multiple times does not produce duplicate
 fingerprints, and a pending job is never created if one is already pending or
 running for that library.
 
+## Fingerprint invalidation
+
+When Shisho detects that a file's size or modification time has changed since
+the last scan — an indication that its content was modified out-of-band —
+the stored fingerprint is deleted during the rescan. The next hash generation
+run will then recompute a fresh sha256 against the new content. Moves and
+renames where the content is unchanged do **not** invalidate fingerprints, so
+move detection continues to work immediately after a rename.
+
 ## Future fingerprint types
 
 The `file_fingerprints` table is designed to hold more than just sha256.

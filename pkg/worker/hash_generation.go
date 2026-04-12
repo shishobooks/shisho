@@ -35,11 +35,15 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 	jobLog.Info("processing hash generation job", logger.Data{"library_id": libraryID})
 
 	// maxPasses bounds the outer loop so a persistent failure (e.g. every
-	// remaining file is unreadable) cannot spin forever. Each pass that makes
-	// no progress exits early.
+	// remaining file is unreadable) cannot spin forever. Loop exit rule:
+	// stop when a pass makes zero progress AND the next ListFilesMissingAlgorithm
+	// returns only IDs we've already attempted. This lets files added by a
+	// concurrent monitor batch (during a no-progress pass whose own files
+	// were all unreadable) get picked up instead of being orphaned.
 	const maxPasses = 10
 	totalHashed := int64(0)
 	totalAttempted := 0
+	attempted := make(map[int]struct{})
 
 	for pass := 0; pass < maxPasses; pass++ {
 		fileIDs, err := w.fingerprintService.ListFilesMissingAlgorithm(ctx, libraryID, models.FingerprintAlgorithmSHA256)
@@ -50,7 +54,24 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 			break
 		}
 
-		batch := len(fileIDs)
+		// Filter out IDs we've already attempted this job so a failing file
+		// can't force us into the retry loop forever. If every pending file
+		// has already been attempted, we're done.
+		pending := make([]int, 0, len(fileIDs))
+		for _, id := range fileIDs {
+			if _, seen := attempted[id]; seen {
+				continue
+			}
+			pending = append(pending, id)
+		}
+		if len(pending) == 0 {
+			break
+		}
+		for _, id := range pending {
+			attempted[id] = struct{}{}
+		}
+
+		batch := len(pending)
 		totalAttempted += batch
 		jobLog.Info("files needing sha256 fingerprint", logger.Data{
 			"count":      batch,
@@ -91,7 +112,7 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 			}()
 		}
 
-		for _, id := range fileIDs {
+		for _, id := range pending {
 			select {
 			case <-ctx.Done():
 				close(workCh)
@@ -103,15 +124,7 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 		close(workCh)
 		wg.Wait()
 
-		passCount := atomic.LoadInt64(&passHashed)
-		totalHashed += passCount
-
-		// If this pass made no progress, don't loop forever. Either every
-		// remaining file is unreadable, or Insert is a no-op due to races —
-		// either way, additional passes won't help.
-		if passCount == 0 {
-			break
-		}
+		totalHashed += atomic.LoadInt64(&passHashed)
 	}
 
 	jobLog.Info("hash generation complete", logger.Data{

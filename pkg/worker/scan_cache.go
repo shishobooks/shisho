@@ -65,8 +65,10 @@ type ScanCache struct {
 	bookMu sync.Map // map[int]*sync.Mutex
 
 	// Pre-loaded file lookup for fast path during batch scans.
-	// Written once during LoadKnownFiles (single-threaded init), then read-only
-	// during the parallel scan, so a regular map is safe without synchronization.
+	// Written during LoadKnownFiles at init and again via AddKnownFile in the
+	// move reconciliation phase — both of which happen single-threaded before
+	// the parallel worker pool starts. During the parallel scan itself the
+	// map is read-only, so a regular map is safe without synchronization.
 	knownFiles map[string]*models.File
 
 	// movedOrphanIDs holds file IDs matched by the move reconciliation phase.

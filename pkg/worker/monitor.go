@@ -618,7 +618,16 @@ func (m *Monitor) processPendingEvents() {
 	}
 
 	// ── Step 2: process REMOVE events second ────────────────────────────────
-	// Skip any file whose row was repurposed as a move target above.
+	// File-level REMOVEs: tryDetectMove has already updated any moved file's
+	// Filepath to its new path, so a RetrieveFile by the old path will return
+	// NotFound and processEvent will no-op naturally — no explicit skip needed.
+	//
+	// Directory-level REMOVEs: we still have to filter explicitly, because
+	// processDirectoryEventSkipping lists files under the old directory
+	// prefix, and a moved file's stored path now starts with the NEW prefix
+	// (so it wouldn't be listed anyway). The skip set is defensive against
+	// any file rows whose paths might still include the old directory as a
+	// prefix due to partial-move edge cases.
 	for _, re := range removeEvents {
 		path, event := re.path, re.event
 
@@ -627,19 +636,6 @@ func (m *Monitor) processPendingEvents() {
 				applyResult(result)
 			}
 			continue
-		}
-
-		// For file removes, check whether the row was already repurposed.
-		if len(movedFileIDs) > 0 {
-			file, err := m.worker.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
-				Filepath: &path,
-			})
-			if err == nil {
-				if _, skip := movedFileIDs[file.ID]; skip {
-					// This row was already updated to the new path — skip deletion.
-					continue
-				}
-			}
 		}
 
 		applyResult(m.processEvent(ctx, path, event))
@@ -708,28 +704,29 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		return nil, nil
 	}
 
-	// Walk matches looking for one whose stored path is no longer on disk.
-	// Multiple matches can occur for duplicate-content files — we pick the
-	// one with the most recent FileModifiedAt among the displaced candidates.
-	var best *models.File
+	// Walk matches, collecting every candidate whose stored path is no longer
+	// on disk. Multiple displaced candidates can happen if the library has
+	// byte-identical files (e.g. the user dropped two copies of the same
+	// book). Pick one as the move target (most recently modified) and
+	// schedule the rest for deletion so we don't leave orphaned rows
+	// pointing at dead paths.
+	var displaced []*models.File
 	for _, candidate := range matches {
-		// If the stored path still exists, the file was copied, not moved.
 		if _, err := os.Stat(candidate.Filepath); err == nil {
 			continue // original path still present — treat as copy
 		}
-		// The stored path is gone — this is a displaced candidate.
-		if best == nil {
-			best = candidate
-			continue
-		}
-		// Prefer the candidate with the more recent FileModifiedAt.
+		displaced = append(displaced, candidate)
+	}
+
+	if len(displaced) == 0 {
+		return nil, nil
+	}
+
+	best := displaced[0]
+	for _, candidate := range displaced[1:] {
 		if candidate.FileModifiedAt != nil && (best.FileModifiedAt == nil || candidate.FileModifiedAt.After(*best.FileModifiedAt)) {
 			best = candidate
 		}
-	}
-
-	if best == nil {
-		return nil, nil
 	}
 
 	// Repurpose the matched file row to point at the new path.
@@ -741,6 +738,27 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		// Revert in-memory change so we don't leave the struct in an inconsistent state.
 		best.Filepath = oldPath
 		return nil, errors.Wrap(err, "update filepath for moved file")
+	}
+
+	// NOTE: FilesizeBytes and FileModifiedAt on `best` are now stale on the
+	// in-memory struct (the new file may have different metadata). A
+	// subsequent rescan triggered by the follow-up file event will call
+	// scanFileByID and refresh those columns from disk. We do not update
+	// them here because the monitor's move-detection path is best-effort
+	// and the scan path is authoritative for file metadata.
+
+	// Delete any other displaced candidates with the same content — they're
+	// ghosts pointing at dead paths and would confuse future move detection.
+	for _, ghost := range displaced {
+		if ghost.ID == best.ID {
+			continue
+		}
+		if _, err := m.worker.scanInternal(ctx, ScanOptions{FileID: ghost.ID}, nil); err != nil {
+			m.log.Err(err).Warn("monitor: failed to delete ghost move candidate", logger.Data{
+				"file_id": ghost.ID,
+				"path":    ghost.Filepath,
+			})
+		}
 	}
 
 	// Book.Filepath stores the book's directory, and cover serving,
