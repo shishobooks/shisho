@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-04-11
+
+### Features
+- Wire plugin hook context to vm.Interrupt() for real cancellation (#80)
+- Add shisho.sleep() host API for plugin retry backoff (#78)
+- Consolidate duplicate edit-mode render blocks in FileChaptersTab (#77)
+- Write edited PDF chapters back as bookmarks on download (#69)
+- Add language and abridged fields to files (#64)
+
+### Bug Fixes
+- Close several cover recovery and display gaps (#84)
+- Clean up DB rows when a book directory is removed or renamed (#83)
+- Preload supplements into scan cache to avoid UNIQUE rescans (#82)
+- Use ResolveCoverDirForWrite in plugin persistMetadata cover write (#81)
+- Prefer file.Name over book.Title for PDF info-dict Title (#76)
+- Restore Docusaurus 3.10 build and gate it in CI (#74)
+- Resolve cover path before deleting on file downgrade (#67)
+- Restore PDF cover_page from sidecar on rescan (#68)
+- Add language and abridged to plugin SDK MetadataField union (#66)
+- Improve identify workflow for audiobooks and multi-file books (#63)
+- Fix plugin identifier type conflicts between local and published plugins (#61)
+- Surface plugin install errors in the UI (#60)
+- Fix flaky check:quiet when subshell is killed before writing exit code (#59)
+
+### Documentation
+- Add metadata-field skill for cross-stack field changes (#65)
+
+### CI/CD
+- Shard Go tests across 5 parallel jobs with gotesplit (#75)
+
+### Other
+- Consolidate file cover path resolution via fileutils.ResolveCoverPath (#79)
+- Bump the minor-and-patch group with 17 updates (#72)
+- Bump the minor-and-patch group with 5 updates (#71)
+- Bump pnpm/action-setup from 5 to 6 (#70)
+- Bump vite from 8.0.3 to 8.0.5 (#62)
+- Bump lucide-react from 0.563.0 to 1.7.0 (#51)
+- Bump typescript from 5.6.3 to 5.9.3 (#50)
+- Bump the minor-and-patch group across 1 directory with 12 updates (#47)
+- Bump jsdom from 27.4.0 to 29.0.1 (#52)
+- Bump vite from 7.3.1 to 8.0.3 (#49)
+- Bump the minor-and-patch group across 1 directory with 9 updates (#48)
+
+
 ## [0.0.26] - 2026-04-05
 
 ### Features
