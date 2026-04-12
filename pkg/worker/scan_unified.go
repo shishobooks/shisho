@@ -204,6 +204,34 @@ func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions, cache *Scan
 	}
 }
 
+// fileContentChanged reports whether a file's on-disk content differs from
+// what was last scanned into the DB. It compares size + mtime (truncated to
+// seconds, since SQLite drops sub-second precision). ForceRefresh forces a
+// "changed" result so the caller re-parses metadata; a missing
+// FileModifiedAt on the existing row also forces "changed" since we can't
+// reason about it.
+//
+// Returns an error only if stat fails for a reason other than "not exists".
+func fileContentChanged(path string, existing *models.File, forceRefresh bool) (bool, error) {
+	if forceRefresh {
+		return true, nil
+	}
+	if existing.FileModifiedAt == nil {
+		return true, nil
+	}
+	stat, err := os.Stat(path)
+	if err != nil {
+		return true, err
+	}
+	if stat.Size() != existing.FilesizeBytes {
+		return true, nil
+	}
+	if !stat.ModTime().Truncate(time.Second).Equal(existing.FileModifiedAt.Truncate(time.Second)) {
+		return true, nil
+	}
+	return false, nil
+}
+
 // scanFileByPath handles batch scan mode - discovering or creating file/book records by path.
 // If the file already exists in DB, delegates to scanFileByID.
 // If the file doesn't exist on disk, returns nil (skip silently).
@@ -226,18 +254,16 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			if existingFile.FileRole == models.FileRoleSupplement {
 				return &ScanResult{File: existingFile}, nil
 			}
-			// File exists in DB — check if it changed on disk
-			if !opts.ForceRefresh && existingFile.FileModifiedAt != nil {
-				stat, err := os.Stat(opts.FilePath)
-				// Truncate to seconds for comparison — SQLite loses sub-second precision
-				if err == nil && stat.Size() == existingFile.FilesizeBytes &&
-					stat.ModTime().Truncate(time.Second).Equal(existingFile.FileModifiedAt.Truncate(time.Second)) {
-					// File unchanged — skip re-parsing entirely
-					return &ScanResult{File: existingFile}, nil
-				}
+			// File exists in DB — check if it changed on disk. If size/mtime
+			// match what's stored, the content hasn't changed and we can skip
+			// both re-parsing and fingerprint invalidation.
+			changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh)
+			if changedErr == nil && !changed {
+				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
 			}
-			// File changed or ForceRefresh — invalidate stale fingerprints so the
-			// next hash generation job recomputes them against the new content.
+			// File content changed (or we can't tell) — invalidate stale
+			// fingerprints so the next hash generation job recomputes them
+			// against the new content, then delegate to scanFileByID.
 			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
 				return nil, errors.Wrap(err, "invalidate stale fingerprints")
 			}
@@ -258,8 +284,15 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			return nil, errors.Wrap(err, "failed to check if file exists")
 		}
 		if existingFile != nil {
-			// File content may have changed — invalidate stale fingerprints so
-			// the next hash generation job recomputes them against the new content.
+			// Same change-detection shortcut as the cache-hit path: if the
+			// file's size/mtime match what's in the DB, the content is
+			// unchanged and we must not invalidate its fingerprint.
+			changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh)
+			if changedErr == nil && !changed {
+				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
+			}
+			// File content changed (or we can't tell) — invalidate stale
+			// fingerprints before delegating.
 			if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
 				return nil, errors.Wrap(err, "invalidate stale fingerprints")
 			}

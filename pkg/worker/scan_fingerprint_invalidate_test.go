@@ -74,3 +74,45 @@ func TestScanFileByPath_InvalidatesFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "stale fingerprint should have been deleted when file content changed")
 }
+
+// TestScanFileByPath_UnchangedFile_PreservesFingerprint verifies that when
+// scanFileByPath is called for an unchanged file (same size and mtime),
+// its fingerprint is NOT deleted. This protects against spurious monitor
+// events (e.g. organize-generated CREATE events that slip past IgnorePath)
+// from wiping fingerprints for files whose content hasn't actually changed.
+func TestScanFileByPath_UnchangedFile_PreservesFingerprint(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	epubPath := testgen.GenerateEPUB(t, libraryPath, "unchanged.epub", testgen.EPUBOptions{
+		Title:   "Unchanged Book",
+		Authors: []string{"Some Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Store a fingerprint as if the hash gen job had already run.
+	err = tc.fingerprintService.Insert(tc.ctx, fileID, models.FingerprintAlgorithmSHA256, "existing-hash-value")
+	require.NoError(t, err)
+
+	// Rescan by path WITHOUT touching the file on disk — size and mtime
+	// match what's in the DB, so the rescan should short-circuit without
+	// invalidating the fingerprint.
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FilePath:  epubPath,
+		LibraryID: 1,
+	}, nil)
+	require.NoError(t, err)
+
+	count, err := tc.fingerprintService.CountForFile(tc.ctx, fileID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "fingerprint must survive a rescan of an unchanged file")
+}

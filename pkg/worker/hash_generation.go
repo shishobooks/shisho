@@ -19,6 +19,12 @@ import (
 // ProcessHashGenerationJob computes and stores sha256 fingerprints for all
 // files in a library that don't yet have one. Per-file errors are logged and
 // skipped so a single unreadable file cannot fail the whole job.
+//
+// The job loops until ListFilesMissingAlgorithm returns an empty list, so
+// files added to the library while the job is running (either by a monitor
+// batch in parallel, or because a spurious rescan invalidated an existing
+// fingerprint) get picked up in a subsequent pass instead of being orphaned
+// by job dedup in EnsureHashGenerationJob.
 func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error {
 	data, ok := job.DataParsed.(*models.JobHashGenerationData)
 	if !ok || data == nil {
@@ -28,73 +34,89 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 	libraryID := data.LibraryID
 	jobLog.Info("processing hash generation job", logger.Data{"library_id": libraryID})
 
-	fileIDs, err := w.fingerprintService.ListFilesMissingAlgorithm(ctx, libraryID, models.FingerprintAlgorithmSHA256)
-	if err != nil {
-		return errors.Wrap(err, "list files missing sha256")
-	}
+	// maxPasses bounds the outer loop so a persistent failure (e.g. every
+	// remaining file is unreadable) cannot spin forever. Each pass that makes
+	// no progress exits early.
+	const maxPasses = 10
+	totalHashed := int64(0)
+	totalAttempted := 0
 
-	total := len(fileIDs)
-	jobLog.Info("files needing sha256 fingerprint", logger.Data{"count": total, "library_id": libraryID})
+	for pass := 0; pass < maxPasses; pass++ {
+		fileIDs, err := w.fingerprintService.ListFilesMissingAlgorithm(ctx, libraryID, models.FingerprintAlgorithmSHA256)
+		if err != nil {
+			return errors.Wrap(err, "list files missing sha256")
+		}
+		if len(fileIDs) == 0 {
+			break
+		}
 
-	if total == 0 {
-		jobLog.Info("no files need hashing, done", logger.Data{"library_id": libraryID})
-		return nil
-	}
+		batch := len(fileIDs)
+		totalAttempted += batch
+		jobLog.Info("files needing sha256 fingerprint", logger.Data{
+			"count":      batch,
+			"library_id": libraryID,
+			"pass":       pass,
+		})
 
-	// Worker pool size: at least 4 goroutines, at most NumCPU.
-	numWorkers := runtime.NumCPU()
-	if numWorkers < 4 {
-		numWorkers = 4
-	}
+		// Worker pool size: at least 4 goroutines, at most NumCPU.
+		numWorkers := runtime.NumCPU()
+		if numWorkers < 4 {
+			numWorkers = 4
+		}
 
-	type workItem struct {
-		fileID int
-	}
+		type workItem struct {
+			fileID int
+		}
 
-	workCh := make(chan workItem, numWorkers)
-	var processed int64
+		workCh := make(chan workItem, numWorkers)
+		var passHashed int64
 
-	var wg sync.WaitGroup
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for item := range workCh {
-				if err := w.hashOneFile(ctx, item.fileID, jobLog); err != nil {
-					// hashOneFile logs per-file errors internally; non-nil return means
-					// a hard error worth noting here too.
-					jobLog.Warn("hash generation failed for file", logger.Data{
-						"file_id": item.fileID,
-						"error":   err.Error(),
-					})
+		var wg sync.WaitGroup
+		for i := 0; i < numWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for item := range workCh {
+					inserted, err := w.hashOneFile(ctx, item.fileID, jobLog)
+					if err != nil {
+						jobLog.Warn("hash generation failed for file", logger.Data{
+							"file_id": item.fileID,
+							"error":   err.Error(),
+						})
+					}
+					if inserted {
+						atomic.AddInt64(&passHashed, 1)
+					}
 				}
-				n := atomic.AddInt64(&processed, 1)
-				if n%50 == 0 {
-					jobLog.Info("hash generation progress", logger.Data{
-						"processed":  n,
-						"total":      total,
-						"library_id": libraryID,
-					})
-				}
+			}()
+		}
+
+		for _, id := range fileIDs {
+			select {
+			case <-ctx.Done():
+				close(workCh)
+				wg.Wait()
+				return ctx.Err()
+			case workCh <- workItem{fileID: id}:
 			}
-		}()
-	}
+		}
+		close(workCh)
+		wg.Wait()
 
-	for _, id := range fileIDs {
-		select {
-		case <-ctx.Done():
-			close(workCh)
-			wg.Wait()
-			return ctx.Err()
-		case workCh <- workItem{fileID: id}:
+		passCount := atomic.LoadInt64(&passHashed)
+		totalHashed += passCount
+
+		// If this pass made no progress, don't loop forever. Either every
+		// remaining file is unreadable, or Insert is a no-op due to races —
+		// either way, additional passes won't help.
+		if passCount == 0 {
+			break
 		}
 	}
-	close(workCh)
-	wg.Wait()
 
 	jobLog.Info("hash generation complete", logger.Data{
-		"processed":  atomic.LoadInt64(&processed),
-		"total":      total,
+		"hashed":     totalHashed,
+		"attempted":  totalAttempted,
 		"library_id": libraryID,
 	})
 	return nil
@@ -102,17 +124,19 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 
 // hashOneFile retrieves a single file, computes its sha256, and persists the
 // result. Per-file errors (missing on disk, permission denied, read error) are
-// logged as warnings and the function returns nil so the job continues.
+// logged as warnings and the function returns (false, nil) so the job
+// continues. Returns (true, nil) only when a fingerprint was successfully
+// written to the DB — the caller uses this to detect no-progress passes.
 //
 //nolint:unparam // error return reserved for future hard-failure propagation
-func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.JobLogger) error {
+func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.JobLogger) (bool, error) {
 	file, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
 	if err != nil {
 		jobLog.Warn("could not retrieve file record", logger.Data{
 			"file_id": fileID,
 			"error":   err.Error(),
 		})
-		return nil
+		return false, nil
 	}
 
 	// Stat before reading to surface missing/permission errors with better context.
@@ -134,7 +158,7 @@ func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.Jo
 				"error":    err.Error(),
 			})
 		}
-		return nil
+		return false, nil
 	}
 
 	hash, err := fingerprint.ComputeSHA256(file.Filepath)
@@ -144,7 +168,7 @@ func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.Jo
 			"filepath": file.Filepath,
 			"error":    err.Error(),
 		})
-		return nil
+		return false, nil
 	}
 
 	if err := w.fingerprintService.Insert(ctx, fileID, models.FingerprintAlgorithmSHA256, hash); err != nil {
@@ -153,10 +177,10 @@ func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.Jo
 			"filepath": file.Filepath,
 			"error":    err.Error(),
 		})
-		return nil
+		return false, nil
 	}
 
-	return nil
+	return true, nil
 }
 
 // EnsureHashGenerationJob checks whether a pending or in-progress hash
