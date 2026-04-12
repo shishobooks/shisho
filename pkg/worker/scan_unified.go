@@ -2143,6 +2143,15 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		}
 	}
 
+	// Populate empty metadata fields from filepath (authors, narrators, series).
+	// For root-level files, bookPath isn't computed yet so we pass the file path —
+	// extractAuthorsFromFilepath uses the filename when isRootLevelFile=true.
+	fpBookPath := tempBookPath
+	if isRootLevelFile {
+		fpBookPath = path
+	}
+	applyFilepathFallbacks(metadata, path, fpBookPath, fileType, isRootLevelFile)
+
 	// Determine book path
 	var bookPath string
 	if isRootLevelFile {
@@ -2151,12 +2160,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		// This ensures "Wind and Truth.epub" and "Wind and Truth.m4b" become one book.
 		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		var authorNames []string
-		if metadata != nil && len(metadata.Authors) > 0 {
-			for _, author := range metadata.Authors {
-				authorNames = append(authorNames, author.Name)
-			}
-		} else {
-			authorNames = extractAuthorsFromFilepath(path, isRootLevelFile)
+		for _, author := range metadata.Authors {
+			authorNames = append(authorNames, author.Name)
 		}
 		organizedFolderName := fileutils.GenerateOrganizedFolderName(fileutils.OrganizedNameOptions{
 			AuthorNames: authorNames,
@@ -2211,58 +2216,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		if err := w.bookService.CreateBook(ctx, book); err != nil {
 			return nil, errors.Wrap(err, "failed to create book")
 		}
-
-		// Extract and create authors from filepath if metadata doesn't have authors
-		// Format: [Author Name] in directory or filename
-		filepathAuthors := extractAuthorsFromFilepath(bookPath, isRootLevelFile)
-		if len(filepathAuthors) > 0 && (metadata == nil || len(metadata.Authors) == 0) {
-			for i, authorName := range filepathAuthors {
-				var person *models.Person
-				var err error
-				if cache != nil {
-					person, err = cache.GetOrCreatePerson(ctx, authorName, opts.LibraryID, w.personService)
-				} else {
-					person, err = w.personService.FindOrCreatePerson(ctx, authorName, opts.LibraryID)
-				}
-				if err != nil {
-					logWarn("failed to create person for filepath author", logger.Data{"author": authorName, "error": err.Error()})
-					continue
-				}
-				author := &models.Author{
-					BookID:    book.ID,
-					PersonID:  person.ID,
-					SortOrder: i + 1,
-				}
-				if err := w.bookService.CreateAuthor(ctx, author); err != nil {
-					logWarn("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})
-				}
-			}
-		}
-		// Infer series from title if it contains a volume indicator and no series from metadata
-		if metadata == nil || metadata.Series == "" {
-			if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(book.Title, fileType); ok {
-				var seriesRecord *models.Series
-				var err error
-				if cache != nil {
-					seriesRecord, err = cache.GetOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath, w.seriesService)
-				} else {
-					seriesRecord, err = w.seriesService.FindOrCreateSeries(ctx, seriesName, opts.LibraryID, models.DataSourceFilepath)
-				}
-				if err != nil {
-					logWarn("failed to create series for inferred title", logger.Data{"series": seriesName, "error": err.Error()})
-				} else {
-					bookSeries := &models.BookSeries{
-						BookID:       book.ID,
-						SeriesID:     seriesRecord.ID,
-						SeriesNumber: volumeNumber,
-						SortOrder:    1,
-					}
-					if err := w.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
-						logWarn("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
+		// Authors, series, and narrators from filepath are already populated on metadata
+		// by applyFilepathFallbacks above. scanFileCore will create the DB records.
 	}
 
 	// Handle cover extraction. extractAndSaveCover also adopts a cover file
@@ -2328,38 +2283,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	if err := w.bookService.CreateFile(ctx, file); err != nil {
 		return nil, errors.Wrap(err, "failed to create file")
 	}
-
-	// Extract and create narrators from filepath if metadata doesn't have narrators
-	// Check both directory name and actual filename for {Narrator Name} pattern
-	filepathNarrators := extractNarratorsFromFilepath(path, bookPath, isRootLevelFile)
-	if len(filepathNarrators) > 0 && (metadata == nil || len(metadata.Narrators) == 0) {
-		narratorSource := models.DataSourceFilepath
-		for i, narratorName := range filepathNarrators {
-			var person *models.Person
-			var err error
-			if cache != nil {
-				person, err = cache.GetOrCreatePerson(ctx, narratorName, opts.LibraryID, w.personService)
-			} else {
-				person, err = w.personService.FindOrCreatePerson(ctx, narratorName, opts.LibraryID)
-			}
-			if err != nil {
-				logWarn("failed to create person for filepath narrator", logger.Data{"narrator": narratorName, "error": err.Error()})
-				continue
-			}
-			narrator := &models.Narrator{
-				FileID:    file.ID,
-				PersonID:  person.ID,
-				SortOrder: i + 1,
-			}
-			if err := w.bookService.CreateNarrator(ctx, narrator); err != nil {
-				logWarn("failed to create narrator", logger.Data{"file_id": file.ID, "person_id": person.ID, "error": err.Error()})
-			}
-		}
-		file.NarratorSource = &narratorSource
-		if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"narrator_source"}}); err != nil {
-			logWarn("failed to update narrator source", logger.Data{"error": err.Error()})
-		}
-	}
+	// Narrators from filepath are already populated on metadata by
+	// applyFilepathFallbacks above. scanFileCore will create the DB records.
 
 	// Reload file with relations for scanFileCore
 	file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
@@ -2586,6 +2511,7 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 
 	// Title fallback
 	if strings.TrimSpace(metadata.Title) == "" {
+		// Pass nil metadata so deriveInitialTitle uses filepath only (we already confirmed Title is empty)
 		metadata.Title = deriveInitialTitle(filePath, isRootLevelFile, nil)
 		setSource("title")
 	}
