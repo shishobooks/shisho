@@ -227,21 +227,26 @@ func computeFileSHA256(path string) (string, error) {
 }
 
 // syncBookFilepathAfterMove updates a book's Filepath to match a moved file's
-// new directory so that cover serving, supplement detection, and file
+// new location so that cover serving, supplement detection, and file
 // organization keep resolving correctly after a rename.
 //
 // Books come in two flavors:
 //   - Directory-based: Book.Filepath is the directory that contains the book's
-//     files. When the folder is renamed, we update Book.Filepath to the new
-//     directory as long as it currently matches the old file's directory.
-//   - Root-level: Book.Filepath is the file path itself (the book has a single
-//     file sitting directly in a library path). When the file is moved, we
-//     update Book.Filepath to the new file path.
+//     files. We update Book.Filepath when all of the book's (main) files share
+//     a single common directory after the move.
+//   - Root-level: Book.Filepath is the file path itself (a single-file book
+//     sitting directly in a library path). We detect this by the old
+//     Book.Filepath matching the pre-move file path and update accordingly.
 //
-// For multi-file books where only one file moved, the book's Filepath will not
-// match either the old file's directory or the old file path, so this is a
-// no-op. The other files' moves can reconcile the book independently as they
-// get processed.
+// The "all files share a common directory" rule is what lets this recover
+// from books whose Filepath was already out of sync (for instance, a previous
+// broken rename before this sync logic existed): if the single file moves to
+// a new directory and that directory is the common home for all the book's
+// files, the book follows — regardless of where its stale Filepath pointed.
+//
+// Multi-file books whose files are spread across multiple directories are
+// left alone; later moves of their other files can reconcile the book
+// independently.
 func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.File, oldFilePath, newFilePath string) error {
 	if file.BookID == 0 {
 		return nil
@@ -251,18 +256,55 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 		return errors.Wrap(err, "retrieve book for filepath sync")
 	}
 
-	oldDir := filepath.Dir(oldFilePath)
-	newDir := filepath.Dir(newFilePath)
-
-	switch {
-	case book.Filepath == oldDir && oldDir != newDir:
-		book.Filepath = newDir
-	case book.Filepath == oldFilePath:
+	// Root-level single-file book: Book.Filepath points at the file itself.
+	// Bring it along to the new file path.
+	if book.Filepath == oldFilePath {
 		book.Filepath = newFilePath
-	default:
+		if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{
+			Columns: []string{"filepath"},
+		}); err != nil {
+			return errors.Wrap(err, "update book filepath (root-level)")
+		}
 		return nil
 	}
 
+	// Directory-based book: look at where ALL the book's main files live
+	// (using the freshly-updated location of the moved file) and, if they
+	// share a single directory, set Book.Filepath to that directory.
+	mainFiles, err := w.bookService.ListFiles(ctx, books.ListFilesOptions{
+		BookID: &file.BookID,
+	})
+	if err != nil {
+		return errors.Wrap(err, "list files for filepath sync")
+	}
+	commonDir := ""
+	for _, f := range mainFiles {
+		if f.FileRole != models.FileRoleMain {
+			continue
+		}
+		// Use the in-memory new path for the file we just moved since
+		// the ListFiles result might reflect a slightly stale snapshot
+		// depending on transaction visibility.
+		fPath := f.Filepath
+		if f.ID == file.ID {
+			fPath = newFilePath
+		}
+		dir := filepath.Dir(fPath)
+		if commonDir == "" {
+			commonDir = dir
+			continue
+		}
+		if dir != commonDir {
+			// Files are spread across multiple directories — leave
+			// Book.Filepath alone and let other moves reconcile it.
+			return nil
+		}
+	}
+	if commonDir == "" || commonDir == book.Filepath {
+		return nil
+	}
+
+	book.Filepath = commonDir
 	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{
 		Columns: []string{"filepath"},
 	}); err != nil {
