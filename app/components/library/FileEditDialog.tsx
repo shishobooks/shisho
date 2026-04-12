@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { LanguageCombobox } from "@/components/library/LanguageCombobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,7 +38,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
-  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -52,14 +52,12 @@ import {
   SortableList,
   type DragHandleProps,
 } from "@/components/ui/SortableList";
-import { getLanguageName, LANGUAGES } from "@/constants/languages";
 import {
   useSetFileCoverPage,
   useUpdateFile,
   useUploadFileCover,
 } from "@/hooks/queries/books";
 import { useImprintsList } from "@/hooks/queries/imprints";
-import { useLibraryLanguages } from "@/hooks/queries/libraries";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
@@ -142,8 +140,6 @@ export function FileEditDialog({
   const [fileRole, setFileRole] = useState(file.file_role ?? FileRoleMain);
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
   const [language, setLanguage] = useState(file.language || "");
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const [languageSearch, setLanguageSearch] = useState("");
   // Abridged is intentionally a binary checkbox in the UI, not a three-state
   // control, even though the data model supports true/false/null. Rationale:
   // most books are unabridged, so showing an "Unknown" default on every book
@@ -202,11 +198,6 @@ export function FileEditDialog({
 
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
-
-  // Query for library languages (for language combobox)
-  const { data: libraryLanguages } = useLibraryLanguages(file.library_id, {
-    enabled: open,
-  });
 
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
@@ -292,7 +283,6 @@ export function FileEditDialog({
     setFileRole(initialFileRole);
     setShowDowngradeConfirm(false);
     setLanguage(initialLanguage);
-    setLanguageSearch("");
     setAbridged(initialAbridged);
     setPendingCoverPage(null);
     setPendingCoverFile(null);
@@ -468,60 +458,6 @@ export function FileEditDialog({
     !filteredImprints.find(
       (i) => i.name.toLowerCase() === imprintSearch.toLowerCase(),
     );
-
-  // Merged language list: curated LANGUAGES + any library-specific tags not already in the list
-  const mergedLanguages = useMemo(() => {
-    const curatedTags = new Set(LANGUAGES.map((l) => l.tag));
-    const extras: { tag: string; name: string }[] = [];
-    if (libraryLanguages) {
-      for (const tag of libraryLanguages) {
-        if (!curatedTags.has(tag)) {
-          extras.push({ tag, name: tag });
-        }
-      }
-    }
-    return [...LANGUAGES, ...extras];
-  }, [libraryLanguages]);
-
-  // Filter languages by search text (match both name and tag)
-  const filteredLanguages = useMemo(() => {
-    if (!languageSearch.trim()) return mergedLanguages;
-    const searchLower = languageSearch.trim().toLowerCase();
-    return mergedLanguages.filter(
-      (l) =>
-        l.name.toLowerCase().includes(searchLower) ||
-        l.tag.toLowerCase().includes(searchLower),
-    );
-  }, [mergedLanguages, languageSearch]);
-
-  // Show "use custom tag" option if search text doesn't exactly match a known tag or name
-  const showCustomLanguageOption = useMemo(() => {
-    if (!languageSearch.trim()) return false;
-    const searchLower = languageSearch.trim().toLowerCase();
-    return !mergedLanguages.some(
-      (l) =>
-        l.tag.toLowerCase() === searchLower ||
-        l.name.toLowerCase() === searchLower,
-    );
-  }, [languageSearch, mergedLanguages]);
-
-  const handleSelectLanguage = (tag: string) => {
-    setLanguage(tag);
-    setLanguageOpen(false);
-    setLanguageSearch("");
-  };
-
-  const handleCreateLanguage = () => {
-    if (languageSearch.trim()) {
-      setLanguage(languageSearch.trim());
-    }
-    setLanguageOpen(false);
-    setLanguageSearch("");
-  };
-
-  const handleClearLanguage = () => {
-    setLanguage("");
-  };
 
   const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -1071,97 +1007,11 @@ export function FileEditDialog({
               {/* Language */}
               <div className="space-y-2">
                 <Label>Language</Label>
-                <Popover
-                  modal
-                  onOpenChange={setLanguageOpen}
-                  open={languageOpen}
-                >
-                  {language ? (
-                    <PopoverAnchor asChild>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          className="flex items-center gap-1 max-w-full cursor-pointer"
-                          onClick={() => setLanguageOpen(true)}
-                          variant="secondary"
-                        >
-                          <span className="truncate" title={language}>
-                            {getLanguageName(language) || language}
-                          </span>
-                        </Badge>
-                        <button
-                          className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
-                          onClick={handleClearLanguage}
-                          type="button"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </PopoverAnchor>
-                  ) : (
-                    <PopoverTrigger asChild>
-                      <Button
-                        aria-expanded={languageOpen}
-                        className="w-full justify-between"
-                        role="combobox"
-                        variant="outline"
-                      >
-                        Select language...
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                  )}
-                  <PopoverContent align="start" className="w-full p-0">
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        onValueChange={setLanguageSearch}
-                        placeholder="Search languages..."
-                        value={languageSearch}
-                      />
-                      <CommandList>
-                        {filteredLanguages.length === 0 &&
-                          !showCustomLanguageOption && (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              No matching languages.
-                            </div>
-                          )}
-                        <CommandGroup>
-                          {filteredLanguages.map((l) => (
-                            <CommandItem
-                              key={l.tag}
-                              onSelect={() => handleSelectLanguage(l.tag)}
-                              value={l.tag}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 shrink-0 ${
-                                  language === l.tag
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                }`}
-                              />
-                              <span className="truncate" title={l.name}>
-                                {l.name}
-                              </span>
-                              <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                                {l.tag}
-                              </span>
-                            </CommandItem>
-                          ))}
-                          {showCustomLanguageOption && (
-                            <CommandItem
-                              onSelect={handleCreateLanguage}
-                              value={`create-${languageSearch}`}
-                            >
-                              <Plus className="mr-2 h-4 w-4 shrink-0" />
-                              <span className="truncate">
-                                Use custom tag: &quot;{languageSearch}&quot;
-                              </span>
-                            </CommandItem>
-                          )}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <LanguageCombobox
+                  libraryId={file.library_id}
+                  onChange={setLanguage}
+                  value={language}
+                />
               </div>
 
               {/* Abridged */}

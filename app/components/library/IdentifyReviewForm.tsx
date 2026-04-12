@@ -3,16 +3,14 @@ import {
   type FieldStatus,
   type IdentifierEntry,
 } from "./identify-utils";
+import { LanguageCombobox } from "./LanguageCombobox";
 import equal from "fast-deep-equal";
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
-  ChevronsUpDown,
   ChevronUp,
   ExternalLink,
   Loader2,
-  Plus,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,29 +19,15 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getLanguageName, LANGUAGES } from "@/constants/languages";
-import { useLibraryLanguages } from "@/hooks/queries/libraries";
+import { getLanguageName } from "@/constants/languages";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
@@ -531,62 +515,6 @@ export function IdentifyReviewForm({
   const [identifiers, setIdentifiers] = useState<IdentifierEntry[]>(
     defaults.identifiers.value,
   );
-
-  // Language combobox state (mirrors FileEditDialog)
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const [languageSearch, setLanguageSearch] = useState("");
-  const { data: libraryLanguages } = useLibraryLanguages(book.library_id);
-
-  const mergedLanguages = useMemo(() => {
-    const curatedTags = new Set(LANGUAGES.map((l) => l.tag));
-    const extras: { tag: string; name: string }[] = [];
-    if (libraryLanguages) {
-      for (const tag of libraryLanguages) {
-        if (!curatedTags.has(tag)) {
-          extras.push({ tag, name: tag });
-        }
-      }
-    }
-    return [...LANGUAGES, ...extras];
-  }, [libraryLanguages]);
-
-  const filteredLanguages = useMemo(() => {
-    if (!languageSearch.trim()) return mergedLanguages;
-    const searchLower = languageSearch.trim().toLowerCase();
-    return mergedLanguages.filter(
-      (l) =>
-        l.name.toLowerCase().includes(searchLower) ||
-        l.tag.toLowerCase().includes(searchLower),
-    );
-  }, [mergedLanguages, languageSearch]);
-
-  const showCustomLanguageOption = useMemo(() => {
-    if (!languageSearch.trim()) return false;
-    const searchLower = languageSearch.trim().toLowerCase();
-    return !mergedLanguages.some(
-      (l) =>
-        l.tag.toLowerCase() === searchLower ||
-        l.name.toLowerCase() === searchLower,
-    );
-  }, [languageSearch, mergedLanguages]);
-
-  const handleSelectLanguage = (tag: string) => {
-    setLanguage(tag);
-    setLanguageOpen(false);
-    setLanguageSearch("");
-  };
-
-  const handleCreateLanguage = () => {
-    if (languageSearch.trim()) {
-      setLanguage(languageSearch.trim());
-    }
-    setLanguageOpen(false);
-    setLanguageSearch("");
-  };
-
-  const handleClearLanguage = () => {
-    setLanguage("");
-  };
 
   // Cover state — page-based formats (CBZ, PDF) derive covers from page
   // content and shouldn't be overwritten by plugin images.
@@ -1117,109 +1045,12 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setLanguage(file?.language ?? "")}
         status={defaults.language.status}
       >
-        <Popover
-          modal
-          onOpenChange={isDisabled("language") ? undefined : setLanguageOpen}
-          open={languageOpen}
-        >
-          {language ? (
-            <PopoverAnchor asChild>
-              <div className="flex items-center gap-2">
-                <Badge
-                  className={cn(
-                    "flex items-center gap-1 max-w-full",
-                    !isDisabled("language") && "cursor-pointer",
-                  )}
-                  onClick={() => {
-                    if (!isDisabled("language")) setLanguageOpen(true);
-                  }}
-                  variant="secondary"
-                >
-                  <span
-                    className="truncate"
-                    title={getLanguageName(language) || language}
-                  >
-                    {getLanguageName(language)
-                      ? `${getLanguageName(language)} (${language})`
-                      : language}
-                  </span>
-                </Badge>
-                {!isDisabled("language") && (
-                  <button
-                    className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={handleClearLanguage}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </PopoverAnchor>
-          ) : (
-            <PopoverTrigger asChild>
-              <Button
-                aria-expanded={languageOpen}
-                className="w-full justify-between"
-                disabled={isDisabled("language")}
-                role="combobox"
-                variant="outline"
-              >
-                Select language...
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-          )}
-          <PopoverContent align="start" className="w-full p-0">
-            <Command shouldFilter={false}>
-              <CommandInput
-                onValueChange={setLanguageSearch}
-                placeholder="Search languages..."
-                value={languageSearch}
-              />
-              <CommandList>
-                {filteredLanguages.length === 0 &&
-                  !showCustomLanguageOption && (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      No matching languages.
-                    </div>
-                  )}
-                <CommandGroup>
-                  {filteredLanguages.map((l) => (
-                    <CommandItem
-                      key={l.tag}
-                      onSelect={() => handleSelectLanguage(l.tag)}
-                      value={l.tag}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4 shrink-0",
-                          language === l.tag ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                      <span className="truncate" title={l.name}>
-                        {l.name}
-                      </span>
-                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                        {l.tag}
-                      </span>
-                    </CommandItem>
-                  ))}
-                  {showCustomLanguageOption && (
-                    <CommandItem
-                      onSelect={handleCreateLanguage}
-                      value={`create-${languageSearch}`}
-                    >
-                      <Plus className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        Use custom tag: &quot;{languageSearch}&quot;
-                      </span>
-                    </CommandItem>
-                  )}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+        <LanguageCombobox
+          disabled={isDisabled("language")}
+          libraryId={book.library_id}
+          onChange={setLanguage}
+          value={language}
+        />
       </FieldWrapper>
 
       {/* Abridged */}
