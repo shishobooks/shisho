@@ -16,10 +16,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AlgorithmSHA256 is the algorithm identifier stored in file_fingerprints.value's
-// companion column for exact-content hashes.
-const AlgorithmSHA256 = "sha256"
-
 // ComputeSHA256 returns the lowercase hex-encoded sha256 of the file's contents.
 // It streams the file in fixed-size chunks so it can handle multi-GB files
 // without loading them into memory.

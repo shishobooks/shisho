@@ -28,6 +28,14 @@ type pendingEvent struct {
 	IsDirectory bool
 }
 
+// classifiedEvent pairs a pending event with its path so processPendingEvents
+// can sort events into "create" and "remove" buckets while preserving both
+// pieces of information for each bucket's processing loop.
+type classifiedEvent struct {
+	path  string
+	event pendingEvent
+}
+
 // Monitor watches library paths for filesystem changes and triggers targeted rescans
 // using a debounce pattern inspired by Jellyfin's FileRefresher.
 type Monitor struct {
@@ -503,38 +511,19 @@ func (m *Monitor) processPendingEvents() {
 	m.log.Info("processing filesystem events", logger.Data{"count": len(events)})
 
 	// Classify events into create and remove buckets for move detection.
-	// A "create" event is one that has Create or Write set (with or without
-	// Remove/Rename — mixed events are treated as creates).
-	// A "remove" event is one that has Remove or Rename with no Create/Write.
-	type eventClass int
-	const (
-		classCreate eventClass = iota
-		classRemove
-	)
-	classify := func(ev pendingEvent) eventClass {
-		hasCreate := ev.Op.Has(fsnotify.Create) || ev.Op.Has(fsnotify.Write)
-		hasRemove := ev.Op.Has(fsnotify.Remove) || ev.Op.Has(fsnotify.Rename)
-		if hasCreate || (!hasRemove) {
-			return classCreate
-		}
-		return classRemove
-	}
-
-	var createEvents, removeEvents []struct {
-		path  string
-		event pendingEvent
-	}
+	// Only pure Remove/Rename events go into the remove bucket; everything
+	// else (Create, Write, and mixed Create+Remove) is treated as a create
+	// so it flows through the tryDetectMove path when REMOVE events are
+	// also present in the same batch.
+	var createEvents, removeEvents []classifiedEvent
 	for path, event := range events {
-		if classify(event) == classCreate {
-			createEvents = append(createEvents, struct {
-				path  string
-				event pendingEvent
-			}{path, event})
+		hasCreate := event.Op.Has(fsnotify.Create) || event.Op.Has(fsnotify.Write)
+		hasRemove := event.Op.Has(fsnotify.Remove) || event.Op.Has(fsnotify.Rename)
+		ce := classifiedEvent{path: path, event: event}
+		if hasRemove && !hasCreate {
+			removeEvents = append(removeEvents, ce)
 		} else {
-			removeEvents = append(removeEvents, struct {
-				path  string
-				event pendingEvent
-			}{path, event})
+			createEvents = append(createEvents, ce)
 		}
 	}
 
@@ -704,14 +693,24 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		return nil, nil
 	}
 
-	// Walk matches, collecting every candidate whose stored path is no longer
-	// on disk. Multiple displaced candidates can happen if the library has
-	// byte-identical files (e.g. the user dropped two copies of the same
-	// book). Pick one as the move target (most recently modified) and
-	// schedule the rest for deletion so we don't leave orphaned rows
-	// pointing at dead paths.
+	// Filter matches by file type so a supplement whose content happens to
+	// collide with a main file (or vice versa) can never be wrongly
+	// repurposed as a move target. Move detection works within the main-main
+	// and supplement-supplement lanes, never cross-role.
+	newFileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+
+	// Walk matches, collecting every same-type candidate whose stored path
+	// is no longer on disk. Multiple displaced candidates can happen if the
+	// library has byte-identical files (e.g. the user dropped two copies of
+	// the same book). Pick one as the move target — specifically, the
+	// candidate with the latest FileModifiedAt (the file's on-disk mtime at
+	// its last scan, not monitor activity) — and schedule the rest for
+	// deletion so we don't leave orphaned rows pointing at dead paths.
 	var displaced []*models.File
 	for _, candidate := range matches {
+		if candidate.FileType != newFileType {
+			continue // cross-type collision — not a valid move target
+		}
 		if _, err := os.Stat(candidate.Filepath); err == nil {
 			continue // original path still present — treat as copy
 		}
@@ -765,7 +764,7 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 	// supplement detection, and file organization all resolve paths
 	// against it. If the move changed the directory, bring the book
 	// along to the new directory so those systems don't break.
-	if err := m.worker.syncBookFilepathAfterMove(ctx, best, oldPath, path); err != nil {
+	if err := m.worker.syncBookFilepathAfterMove(ctx, best, oldPath, path, nil); err != nil {
 		m.log.Err(err).Warn("monitor: failed to sync book filepath after move", logger.Data{
 			"file_id":  best.ID,
 			"old_path": oldPath,

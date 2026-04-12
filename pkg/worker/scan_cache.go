@@ -82,6 +82,13 @@ type ScanCache struct {
 	// after the scan (renaming folders back into the structured layout).
 	movedBookIDs map[int]struct{}
 
+	// libraryRootPaths caches the library's root paths (from
+	// library.LibraryPaths) so syncBookFilepathAfterMove can enforce its
+	// "don't set Book.Filepath to a library root" guard without a DB
+	// lookup per call. Populated by the scan before reconciliation runs.
+	// Nil means the caller should fall back to RetrieveLibrary.
+	libraryRootPaths []string
+
 	// Counters for cache hits/misses (atomic for thread safety)
 	personCount    atomic.Int64
 	genreCount     atomic.Int64
@@ -387,6 +394,19 @@ func (c *ScanCache) SetMovedBookIDs(ids map[int]struct{}) {
 // Returns nil if reconciliation did not run or found no matches.
 func (c *ScanCache) MovedBookIDs() map[int]struct{} {
 	return c.movedBookIDs
+}
+
+// SetLibraryRootPaths caches the library's root paths so downstream helpers
+// (currently syncBookFilepathAfterMove) can check "is this a library root?"
+// without a per-call DB lookup.
+func (c *ScanCache) SetLibraryRootPaths(paths []string) {
+	c.libraryRootPaths = paths
+}
+
+// LibraryRootPaths returns the cached library root paths. Returns nil if
+// SetLibraryRootPaths was not called for this scan.
+func (c *ScanCache) LibraryRootPaths() []string {
+	return c.libraryRootPaths
 }
 
 // AddKnownFile adds a file to the known-files cache at its new path. Used after

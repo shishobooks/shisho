@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -184,7 +185,7 @@ func (w *Worker) reconcileMoves(
 		// supplement detection, and organize all resolve against the
 		// new directory. No-op for multi-file books where this single
 		// file's move doesn't reflect the whole book's new location.
-		if err := w.syncBookFilepathAfterMove(ctx, orphanFile, oldPath, newPath); err != nil {
+		if err := w.syncBookFilepathAfterMove(ctx, orphanFile, oldPath, newPath, cache); err != nil {
 			jobLog.Warn("reconcile: failed to sync book filepath after move", logger.Data{
 				"file_id":  orphanFile.ID,
 				"old_path": oldPath,
@@ -213,7 +214,7 @@ func (w *Worker) reconcileMoves(
 
 		// Remove the matched entry from orphanIndex so it can't match again
 		// if another file on disk has the same size+hash (duplicate content).
-		orphanIndex[newSize] = append(candidates[:matchIdx], candidates[matchIdx+1:]...)
+		orphanIndex[newSize] = slices.Delete(candidates, matchIdx, matchIdx+1)
 	}
 
 	if len(movedOrphanIDs) > 0 {
@@ -229,14 +230,11 @@ func (w *Worker) reconcileMoves(
 }
 
 // computeFileSHA256 returns the lowercase hex-encoded sha256 of the file at path.
-// It delegates to the fingerprint package so the algorithm is consistent with
-// what the hash generation job stores.
+// Thin alias for fingerprint.ComputeSHA256 so callers in this package don't
+// need to import another package just to compute a content hash.
+// fingerprint.ComputeSHA256 already wraps its errors, so no extra wrapping here.
 func computeFileSHA256(path string) (string, error) {
-	hash, err := fingerprint.ComputeSHA256(path)
-	if err != nil {
-		return "", errors.WithStack(err)
-	}
-	return hash, nil
+	return fingerprint.ComputeSHA256(path)
 }
 
 // syncBookFilepathAfterMove updates a book's Filepath to match a moved file's
@@ -260,7 +258,7 @@ func computeFileSHA256(path string) (string, error) {
 // Multi-file books whose files are spread across multiple directories are
 // left alone; later moves of their other files can reconcile the book
 // independently.
-func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.File, oldFilePath, newFilePath string) error {
+func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.File, oldFilePath, newFilePath string, cache *ScanCache) error {
 	if file.BookID == 0 {
 		return nil
 	}
@@ -330,14 +328,12 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 	// multiple files directly in the library root, which would be a weird
 	// state anyway). Setting Book.Filepath to the library root would break
 	// cover/sidecar resolution, so we decline and leave things alone.
-	library, err := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
-		ID: &file.LibraryID,
-	})
+	rootPaths, err := w.resolveLibraryRootPaths(ctx, file.LibraryID, cache)
 	if err != nil {
-		return errors.Wrap(err, "retrieve library for filepath sync")
+		return errors.Wrap(err, "resolve library root paths for filepath sync")
 	}
-	for _, lp := range library.LibraryPaths {
-		if filepath.Clean(lp.Filepath) == commonDir {
+	for _, rp := range rootPaths {
+		if filepath.Clean(rp) == commonDir {
 			return nil
 		}
 	}
@@ -349,4 +345,30 @@ func (w *Worker) syncBookFilepathAfterMove(ctx context.Context, file *models.Fil
 		return errors.Wrap(err, "update book filepath")
 	}
 	return nil
+}
+
+// resolveLibraryRootPaths returns the list of root filepaths for a library,
+// preferring a pre-populated cache to avoid per-call DB lookups during scans
+// with many moved files. The monitor path passes nil cache and always hits
+// the DB, which is fine because monitor batches are small.
+func (w *Worker) resolveLibraryRootPaths(ctx context.Context, libraryID int, cache *ScanCache) ([]string, error) {
+	if cache != nil {
+		if cached := cache.LibraryRootPaths(); cached != nil {
+			return cached, nil
+		}
+	}
+	library, err := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &libraryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	roots := make([]string, 0, len(library.LibraryPaths))
+	for _, lp := range library.LibraryPaths {
+		roots = append(roots, lp.Filepath)
+	}
+	if cache != nil {
+		cache.SetLibraryRootPaths(roots)
+	}
+	return roots, nil
 }

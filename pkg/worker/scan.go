@@ -363,6 +363,17 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// size+sha256 comparison. Must run BEFORE the parallel worker pool so that
 		// the cache is up to date — moved orphans are registered at their new paths
 		// and won't be double-processed.
+		//
+		// Prime the library root paths on the cache so syncBookFilepathAfterMove
+		// (invoked per reconciled move) can enforce its "no library-root Book.Filepath"
+		// guard without a per-call DB lookup.
+		if len(library.LibraryPaths) > 0 {
+			roots := make([]string, 0, len(library.LibraryPaths))
+			for _, lp := range library.LibraryPaths {
+				roots = append(roots, lp.Filepath)
+			}
+			cache.SetLibraryRootPaths(roots)
+		}
 		if err := w.reconcileMoves(ctx, existingFiles, filesToScan, cache, jobLog); err != nil {
 			jobLog.Warn("move reconciliation encountered an error", logger.Data{"error": err.Error()})
 			// Non-fatal: proceed with the scan; moved files fall through to orphan cleanup.

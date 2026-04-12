@@ -334,3 +334,73 @@ func TestMonitor_DetectsFileMove_MultipleDisplacedCandidates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, newPath, winnerAfter.Filepath)
 }
+
+// TestMonitor_DetectsFileMove_CrossTypeCollisionIgnored verifies that
+// tryDetectMove does not repurpose a file row whose FileType differs from
+// the new file's extension, even if the sha256 happens to match. This
+// guards against the (unlikely) case where a supplement's content collides
+// with a main file — allowing it would corrupt book state and confuse
+// syncBookFilepathAfterMove.
+func TestMonitor_DetectsFileMove_CrossTypeCollisionIgnored(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// Create a real .epub at a new location — this is what the monitor will
+	// scan and attempt to match against the fingerprint index.
+	newDir := testgen.CreateSubDir(t, libDir, "Author - Destination")
+	newPath := testgen.GenerateEPUB(t, newDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Cross Type",
+		Authors: []string{"Author"},
+	})
+
+	hash, err := computeFileSHA256(newPath)
+	require.NoError(t, err)
+
+	libs, err := tc.libraryService.ListLibraries(tc.ctx, libraries.ListLibrariesOptions{})
+	require.NoError(t, err)
+	libID := libs[0].ID
+
+	// Seed a phantom .pdf file row whose content hash matches the .epub
+	// above (simulating an unlikely cross-type collision). Its path does
+	// not exist on disk.
+	ghostBook := &models.Book{
+		LibraryID:    libID,
+		Filepath:     filepath.Join(libDir, "phantom-pdf-dir"),
+		Title:        "Phantom PDF",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Phantom PDF",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, ghostBook))
+
+	stat, err := os.Stat(newPath)
+	require.NoError(t, err)
+	ghostFile := &models.File{
+		LibraryID:     libID,
+		BookID:        ghostBook.ID,
+		Filepath:      filepath.Join(libDir, "phantom-pdf-dir", "doc.pdf"),
+		FileType:      models.FileTypePDF, // different type from the incoming .epub
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: stat.Size(),
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, ghostFile))
+	require.NoError(t,
+		tc.fingerprintService.Insert(tc.ctx, ghostFile.ID, models.FingerprintAlgorithmSHA256, hash),
+	)
+
+	m, _ := newTestMonitorWithWorker(tc, libDir)
+
+	// tryDetectMove should refuse to match the .pdf ghost against the .epub
+	// newcomer, even though their sha256 matches.
+	moved, err := m.tryDetectMove(tc.ctx, newPath, libID)
+	require.NoError(t, err)
+	assert.Nil(t, moved, "cross-type collision must not be treated as a move")
+
+	// The ghost file row should be untouched.
+	ghostAfter, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &ghostFile.ID})
+	require.NoError(t, err)
+	assert.Equal(t, ghostFile.Filepath, ghostAfter.Filepath, "ghost PDF row must not be repurposed")
+}
