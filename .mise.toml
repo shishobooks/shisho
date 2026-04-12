@@ -21,6 +21,14 @@ CGO_ENABLED=0 go build -o ./build/api/api -installsuffix cgo \
 description = "Build development API binary (used by air)"
 run = "go build -o ./build/api/api-air ./cmd/api"
 
+[tasks."build:sdk"]
+description = "Build the @shisho/plugin-sdk testing module"
+run = "pnpm -C packages/plugin-sdk build"
+
+[tasks."build:docs"]
+description = "Build the Docusaurus documentation site"
+run = "pnpm -C website build"
+
 # === Dev Server ===
 
 [tasks.start]
@@ -59,7 +67,7 @@ run = "golangci-lint run"
 
 [tasks."lint:js"]
 description = "Run all JS/TS linting"
-depends = ["tygo", "lint:eslint", "lint:prettier", "lint:types"]
+depends = ["tygo", "lint:eslint", "lint:prettier", "lint:types", "build:sdk"]
 
 [tasks."lint:eslint"]
 description = "Run ESLint"

@@ -34,10 +34,10 @@ export interface MockShishoOptions {
   /**
    * Path-based filesystem mock.
    * - string values are returned by readTextFile/readFile
-   * - Buffer values are returned by readFile (as ArrayBuffer)
+   * - Uint8Array (or Buffer) values are returned by readFile (as ArrayBuffer)
    * - string[] values are returned by listDir
    */
-  fs?: Record<string, string | Buffer | string[]>;
+  fs?: Record<string, string | Uint8Array | string[]>;
   /**
    * Override the `sleep` implementation. Defaults to a no-op so tests asserting
    * exponential backoff with e.g. `shisho.sleep(1000 * Math.pow(2, attempt))`
@@ -492,7 +492,6 @@ export function createMockShisho(
         const encoder = new TextEncoder();
         return encoder.encode(entry).buffer as ArrayBuffer;
       }
-      // Buffer
       return entry.buffer.slice(
         entry.byteOffset,
         entry.byteOffset + entry.byteLength,
@@ -519,7 +518,6 @@ export function createMockShisho(
       if (typeof entry === "string") {
         return entry;
       }
-      // Buffer -> string
       const decoder = new TextDecoder();
       return decoder.decode(entry);
     },
