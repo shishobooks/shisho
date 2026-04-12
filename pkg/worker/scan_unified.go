@@ -2604,17 +2604,17 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 		return
 	}
 
-	setSource := func(field, source string) {
+	setSource := func(field string) {
 		if metadata.FieldDataSources == nil {
 			metadata.FieldDataSources = make(map[string]string)
 		}
-		metadata.FieldDataSources[field] = source
+		metadata.FieldDataSources[field] = models.DataSourceFilepath
 	}
 
 	// Title fallback
 	if strings.TrimSpace(metadata.Title) == "" {
 		metadata.Title = deriveInitialTitle(filePath, isRootLevelFile, nil)
-		setSource("title", models.DataSourceFilepath)
+		setSource("title")
 	}
 
 	// Authors fallback
@@ -2624,7 +2624,7 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 			metadata.Authors = append(metadata.Authors, mediafile.ParsedAuthor{Name: name})
 		}
 		if len(metadata.Authors) > 0 {
-			setSource("authors", models.DataSourceFilepath)
+			setSource("authors")
 		}
 	}
 
@@ -2633,7 +2633,7 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 		filepathNarrators := extractNarratorsFromFilepath(filePath, bookPath, isRootLevelFile)
 		metadata.Narrators = append(metadata.Narrators, filepathNarrators...)
 		if len(metadata.Narrators) > 0 {
-			setSource("narrators", models.DataSourceFilepath)
+			setSource("narrators")
 		}
 	}
 
@@ -2643,7 +2643,7 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 		if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
 			metadata.Series = seriesName
 			metadata.SeriesNumber = volumeNumber
-			setSource("series", models.DataSourceFilepath)
+			setSource("series")
 		}
 	}
 }

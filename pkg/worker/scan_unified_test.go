@@ -4828,7 +4828,7 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
 	require.NoError(t, err)
 	assert.Equal(t, "Reset Book", book.Title)
-	require.True(t, len(book.Authors) > 0, "should have authors after initial scan")
+	require.NotEmpty(t, book.Authors, "should have authors after initial scan")
 
 	file, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
 	require.NoError(t, err)
@@ -4870,7 +4870,7 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, book.Subtitle)
 	require.NotNil(t, book.Description)
-	require.True(t, len(book.BookGenres) > 0, "should have genres before reset")
+	require.NotEmpty(t, book.BookGenres, "should have genres before reset")
 
 	file, err = tc.bookService.RetrieveFileWithRelations(tc.ctx, fileID)
 	require.NoError(t, err)
@@ -4897,7 +4897,7 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 	assert.Equal(t, "Reset Book", book.Title, "title should be repopulated from EPUB")
 
 	// Authors should be repopulated from EPUB/filepath
-	assert.True(t, len(book.Authors) > 0, "authors should be repopulated after reset")
+	assert.NotEmpty(t, book.Authors, "authors should be repopulated after reset")
 
 	// Subtitle and description should be nil (they were manual, now wiped and EPUB has none)
 	assert.Nil(t, book.Subtitle, "subtitle should be nil after reset")
@@ -5016,7 +5016,7 @@ func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
 	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
 	require.NoError(t, err)
 	assert.Equal(t, "Multi File Book", book.Title)
-	require.True(t, len(book.Authors) > 0, "should have authors after initial scan")
+	require.NotEmpty(t, book.Authors, "should have authors after initial scan")
 
 	// Manually add extra metadata that should be cleared by reset
 	manualSource := models.DataSourceManual
@@ -5038,7 +5038,7 @@ func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
 	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
 	require.NoError(t, err)
 	require.NotNil(t, book.Subtitle, "subtitle should be set before reset")
-	require.True(t, len(book.BookGenres) > 0, "should have genres before reset")
+	require.NotEmpty(t, book.BookGenres, "should have genres before reset")
 
 	// Run reset scan at the book level
 	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
@@ -5064,5 +5064,5 @@ func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
 	assert.Equal(t, "Multi File Book", book.Title, "title should be repopulated from EPUB after reset")
 
 	// Authors should be repopulated from EPUB
-	assert.True(t, len(book.Authors) > 0, "authors should be repopulated after reset")
+	assert.NotEmpty(t, book.Authors, "authors should be repopulated after reset")
 }
