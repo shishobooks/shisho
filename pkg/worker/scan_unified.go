@@ -493,11 +493,26 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			return nil, errors.Wrap(err, "failed to reload file after reset")
 		}
 
-		// Re-extract cover since resetBookFileState deleted it.
-		// recoverMissingCover ran earlier (before the reset block), so we must
-		// call it again now that the cover columns have been wiped.
-		if err := w.recoverMissingCover(ctx, file, opts.JobLog); err != nil {
-			logWarn("failed to recover cover after reset", logger.Data{"file_id": file.ID, "error": err.Error()})
+		// Re-extract cover from the already-parsed metadata (resetBookFileState
+		// deleted the cover file from disk and cleared the DB columns).
+		// We use extractAndSaveCover instead of recoverMissingCover to avoid
+		// re-parsing the file — metadata.CoverData is already populated.
+		coverFilename, coverMime, _, coverErr := w.extractAndSaveCover(ctx, file.Filepath, book.Filepath, isRootLevelFile, metadata, opts.JobLog)
+		if coverErr != nil {
+			logWarn("failed to extract cover after reset", logger.Data{"error": coverErr.Error()})
+		} else if coverFilename != "" {
+			coverSource := metadata.SourceForField("cover")
+			file.CoverImageFilename = &coverFilename
+			file.CoverMimeType = &coverMime
+			file.CoverSource = &coverSource
+			if metadata.CoverPage != nil {
+				file.CoverPage = metadata.CoverPage
+			}
+			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+				Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source", "cover_page"},
+			}); err != nil {
+				logWarn("failed to update cover after reset", logger.Data{"error": err.Error()})
+			}
 		}
 	}
 
