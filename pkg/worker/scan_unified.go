@@ -249,9 +249,18 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// with main files, so the walk picks them up — but they have no
 			// metadata to rescan and must not be routed through the main-file
 			// creation path (which would try to insert a duplicate row and hit
-			// UNIQUE(filepath, library_id)). Nothing to do: the supplement is
-			// already tracked.
+			// UNIQUE(filepath, library_id)). The supplement is already tracked,
+			// so we just need to keep its fingerprint in sync with its content:
+			// if the supplement's bytes changed on disk, drop the stored
+			// fingerprint so the next hash generation job recomputes it.
 			if existingFile.FileRole == models.FileRoleSupplement {
+				if changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh); changedErr == nil && changed {
+					if w.fingerprintService != nil {
+						if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
+							return nil, errors.Wrap(err, "invalidate stale supplement fingerprints")
+						}
+					}
+				}
 				return &ScanResult{File: existingFile}, nil
 			}
 			// File exists in DB — check if it changed on disk. If size/mtime

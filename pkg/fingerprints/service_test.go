@@ -127,6 +127,31 @@ func TestInsert_Idempotent(t *testing.T) {
 	assert.Equal(t, 1, count, "duplicate insert should not create a second row")
 }
 
+// TestInsert_ConflictDoesNotOverwrite verifies that Insert's ON CONFLICT
+// clause is DO NOTHING, not DO UPDATE — a second insert with a different
+// value MUST NOT replace the stored value. Callers that need to replace a
+// stale fingerprint have to call DeleteForFile first.
+func TestInsert_ConflictDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	ctx := context.Background()
+	svc := fingerprints.NewService(db)
+
+	lib := insertTestLibrary(t, db, "Library")
+	book := insertTestBook(t, db, lib)
+	file := insertTestFile(t, db, book)
+
+	require.NoError(t, svc.Insert(ctx, file.ID, models.FingerprintAlgorithmSHA256, "original-value"))
+
+	// A second insert with a DIFFERENT value must not overwrite the stored value.
+	require.NoError(t, svc.Insert(ctx, file.ID, models.FingerprintAlgorithmSHA256, "replacement-value"))
+
+	stored, err := svc.ListForFile(ctx, file.ID, models.FingerprintAlgorithmSHA256)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	assert.Equal(t, "original-value", stored[0].Value, "ON CONFLICT DO NOTHING must preserve the original value")
+}
+
 // TestFindFilesByHash_FindsMatch verifies that a file can be looked up by hash.
 func TestFindFilesByHash_FindsMatch(t *testing.T) {
 	t.Parallel()

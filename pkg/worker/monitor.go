@@ -693,10 +693,21 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		return nil, nil
 	}
 
-	// Filter matches by file type so a supplement whose content happens to
-	// collide with a main file (or vice versa) can never be wrongly
-	// repurposed as a move target. Move detection works within the main-main
-	// and supplement-supplement lanes, never cross-role.
+	// Filter matches by file type (extension). This blocks the pathological
+	// case where a file of one format (say, a .pdf) has the same sha256 as
+	// a file of another format (say, a .epub) — repurposing the wrong-type
+	// row would leave the DB with a row whose FileType no longer matches
+	// its Filepath's extension.
+	//
+	// NOTE: this filter is FileType-only, not FileRole. At monitor-time we
+	// don't know whether the incoming file will be treated as a main or a
+	// supplement (that's decided by scanFileCreateNew based on directory
+	// contents), so we can't filter on role. A same-type same-content cross-
+	// role collision (e.g. an identical .pdf that exists as a main in one
+	// book and a supplement in another) falls through to the os.Stat check
+	// below: whichever row's stored path is gone from disk is treated as
+	// displaced, and the tiebreak picks among displaced candidates by
+	// FileModifiedAt.
 	newFileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
 	// Walk matches, collecting every same-type candidate whose stored path

@@ -95,6 +95,10 @@ func (svc *Service) CountForFile(ctx context.Context, fileID int) (int, error) {
 // ListFilesMissingAlgorithm returns IDs of files in the library that do not
 // yet have a fingerprint for the given algorithm. Used by the hash generation
 // job to determine what work needs doing.
+//
+// Includes supplement files by design: supplements are real files on disk and
+// benefit from content-hash move/rename detection just like main files.
+// Callers that only want main files should filter the result in Go.
 func (svc *Service) ListFilesMissingAlgorithm(ctx context.Context, libraryID int, algorithm string) ([]int, error) {
 	var ids []int
 	err := svc.db.

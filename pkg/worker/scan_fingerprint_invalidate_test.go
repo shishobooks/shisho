@@ -116,3 +116,71 @@ func TestScanFileByPath_UnchangedFile_PreservesFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, count, "fingerprint must survive a rescan of an unchanged file")
 }
+
+// TestScanFileByPath_SupplementContentChange_InvalidatesFingerprint verifies
+// that when a supplement's bytes change on disk (same path, different
+// content), its stored fingerprint is dropped so the next hash generation
+// job recomputes it. Without this, a supplement's fingerprint would go
+// stale and its next move detection could silently fail to match.
+//
+// Supplements in Shisho are user-demoted rather than auto-detected, so
+// this test wires the supplement row directly in the DB instead of going
+// through a scan-triggered promotion flow.
+func TestScanFileByPath_SupplementContentChange_InvalidatesFingerprint(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Set up a book directory with a main epub so the book row exists.
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Book With Supplement")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Book With Supplement",
+		Authors: []string{"Author"},
+	})
+	require.NoError(t, tc.runScan())
+
+	allFiles := tc.listFiles()
+	require.Len(t, allFiles, 1, "main epub should be the only file after initial scan")
+	mainFile := allFiles[0]
+
+	// Generate a real PDF on disk and insert a supplement row for it directly.
+	supplementPath := testgen.GeneratePDF(t, bookDir, "notes.pdf", testgen.PDFOptions{PageCount: 2})
+	supplementStat, err := os.Stat(supplementPath)
+	require.NoError(t, err)
+	supplementModTime := supplementStat.ModTime()
+
+	supplementFile := &models.File{
+		LibraryID:      mainFile.LibraryID,
+		BookID:         mainFile.BookID,
+		Filepath:       supplementPath,
+		FileType:       models.FileTypePDF,
+		FileRole:       models.FileRoleSupplement,
+		FilesizeBytes:  supplementStat.Size(),
+		FileModifiedAt: &supplementModTime,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplementFile))
+
+	// Seed a fingerprint as if the hash gen job had already processed it.
+	require.NoError(t,
+		tc.fingerprintService.Insert(tc.ctx, supplementFile.ID, models.FingerprintAlgorithmSHA256, "stale-supplement-hash"),
+	)
+	count, err := tc.fingerprintService.CountForFile(tc.ctx, supplementFile.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "expected the seeded fingerprint to be stored")
+
+	// Rewrite the supplement on disk with a different page count so the
+	// resulting bytes AND size differ from the originally-recorded values.
+	testgen.GeneratePDF(t, bookDir, "notes.pdf", testgen.PDFOptions{PageCount: 5})
+
+	// Run the scan again so scanFileByPath revisits the supplement and
+	// notices its size/mtime changed.
+	require.NoError(t, tc.runScan())
+
+	// The stale fingerprint must have been dropped.
+	count, err = tc.fingerprintService.CountForFile(tc.ctx, supplementFile.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count,
+		"supplement fingerprint must be invalidated when its bytes change on disk")
+}
