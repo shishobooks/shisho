@@ -82,6 +82,24 @@ func detectISBNType(value string) Type {
 	return TypeUnknown
 }
 
+// NormalizeValue returns a canonical form of an identifier value for storage,
+// based on its type. ISBN-10/13 values are stripped of hyphens/spaces/prefixes;
+// ASINs are uppercased; UUIDs are lowercased with any urn:uuid: prefix removed;
+// all other types are returned with surrounding whitespace trimmed.
+func NormalizeValue(identifierType, value string) string {
+	value = strings.TrimSpace(value)
+	switch Type(identifierType) {
+	case TypeISBN10, TypeISBN13:
+		return NormalizeISBN(value)
+	case TypeASIN:
+		return strings.ToUpper(value)
+	case TypeUUID:
+		lower := strings.ToLower(value)
+		return strings.TrimPrefix(lower, "urn:uuid:")
+	}
+	return value
+}
+
 // NormalizeISBN removes hyphens, spaces, and common prefixes from an ISBN.
 func NormalizeISBN(value string) string {
 	// Remove common prefixes

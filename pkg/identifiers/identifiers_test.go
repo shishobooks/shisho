@@ -96,6 +96,35 @@ func TestValidateISBN13(t *testing.T) {
 	}
 }
 
+func TestNormalizeValue(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		identType string
+		value     string
+		expected  string
+	}{
+		{"isbn13 hyphens", string(TypeISBN13), "978-0-316-76948-8", "9780316769488"},
+		{"isbn13 spaces", string(TypeISBN13), " 978 0 316 76948 8 ", "9780316769488"},
+		{"isbn13 with prefix", string(TypeISBN13), "ISBN: 978-0-316-76948-8", "9780316769488"},
+		{"isbn10 hyphens", string(TypeISBN10), "0-316-76948-7", "0316769487"},
+		{"isbn10 lowercase x", string(TypeISBN10), "0-8044-2957-x", "080442957X"},
+		{"asin lowercase", string(TypeASIN), "b08n5wrwnw", "B08N5WRWNW"},
+		{"asin whitespace", string(TypeASIN), "  B08N5WRWNW  ", "B08N5WRWNW"},
+		{"uuid urn prefix", string(TypeUUID), "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+		{"uuid mixed case", string(TypeUUID), "  A1b2C3d4-e5f6-7890-abcd-ef1234567890 ", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+		{"other trimmed", string(TypeOther), "  some-value  ", "some-value"},
+		{"goodreads trimmed", string(TypeGoodreads), " 12345 ", "12345"},
+		{"empty type trims", "", "  raw  ", "raw"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, NormalizeValue(tt.identType, tt.value))
+		})
+	}
+}
+
 func TestNormalizeISBN(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

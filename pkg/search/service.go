@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -242,13 +243,21 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 		return []BookSearchResult{}, nil
 	}
 
+	// Also match against an ISBN-normalized form so callers searching with
+	// hyphens/spaces find values stored in their canonical digits-only form
+	// (and vice versa, for legacy rows that predate normalization on write).
+	searchValues := []string{query}
+	if normalized := identifiers.NormalizeISBN(query); normalized != "" && normalized != query {
+		searchValues = append(searchValues, normalized)
+	}
+
 	q := svc.db.NewSelect().
 		TableExpr("file_identifiers fi").
 		ColumnExpr("DISTINCT b.id, b.library_id, b.title, b.subtitle").
 		ColumnExpr("(SELECT GROUP_CONCAT(DISTINCT p.name) FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
 		Join("JOIN files f ON f.id = fi.file_id").
 		Join("JOIN books b ON b.id = f.book_id").
-		Where("fi.value = ?", query).
+		Where("fi.value IN (?)", bun.In(searchValues)).
 		Where("b.library_id = ?", libraryID).
 		Limit(limit)
 
