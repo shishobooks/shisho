@@ -35,6 +35,7 @@ import {
 } from "@/hooks/queries/plugins";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
+import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
 
 // ---------------------------------------------------------------------------
@@ -377,6 +378,78 @@ function TagInput({
           onKeyDown={handleKeyDown}
           placeholder={
             tags.length === 0 ? (placeholder ?? "Type and press Enter") : ""
+          }
+          type="text"
+          value={input}
+        />
+      )}
+    </div>
+  );
+}
+
+function AuthorTagInput({
+  authors,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  authors: AuthorEntry[];
+  onChange: (authors: AuthorEntry[]) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const [input, setInput] = useState("");
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && input.trim()) {
+      e.preventDefault();
+      onChange([...authors, { name: input.trim(), role: undefined }]);
+      setInput("");
+    }
+    if (e.key === "Backspace" && !input && authors.length > 0) {
+      onChange(authors.slice(0, -1));
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-[36px]",
+        disabled && "opacity-50 cursor-not-allowed",
+      )}
+    >
+      {authors.map((author, i) => {
+        const label = getAuthorRoleLabel(author.role);
+        return (
+          <Badge className="max-w-full gap-1 pr-1" key={i} variant="secondary">
+            <span
+              className="truncate"
+              title={label ? `${author.name} (${label})` : author.name}
+            >
+              {author.name}
+              {label && (
+                <span className="text-muted-foreground ml-1">({label})</span>
+              )}
+            </span>
+            {!disabled && (
+              <button
+                className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
+                onClick={() => onChange(authors.filter((_, j) => j !== i))}
+                type="button"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </Badge>
+        );
+      })}
+      {!disabled && (
+        <input
+          className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            authors.length === 0 ? (placeholder ?? "Type and press Enter") : ""
           }
           type="text"
           value={input}
@@ -791,7 +864,12 @@ export function IdentifyReviewForm({
       <FieldWrapper
         currentValue={
           currentAuthors.length > 0
-            ? currentAuthors.map((a) => a.name).join(", ")
+            ? currentAuthors
+                .map((a) => {
+                  const label = getAuthorRoleLabel(a.role);
+                  return label ? `${a.name} (${label})` : a.name;
+                })
+                .join(", ")
             : undefined
         }
         disabled={isDisabled("authors")}
@@ -799,18 +877,11 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setAuthors(currentAuthors)}
         status={defaults.authors.status}
       >
-        <TagInput
+        <AuthorTagInput
+          authors={authors}
           disabled={isDisabled("authors")}
-          onChange={(names) =>
-            setAuthors(
-              names.map((name) => {
-                const existing = authors.find((a) => a.name === name);
-                return existing ?? { name, role: undefined };
-              }),
-            )
-          }
+          onChange={setAuthors}
           placeholder="Add author..."
-          tags={authors.map((a) => a.name)}
         />
       </FieldWrapper>
 

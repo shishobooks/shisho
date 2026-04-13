@@ -615,3 +615,71 @@ func TestWriteBookSidecar_NonExistentDirectory_FailsGracefully(t *testing.T) {
 	err := WriteBookSidecar(futureBookDir, s)
 	require.Error(t, err, "write should fail when directory doesn't exist")
 }
+
+// Empty-path guard regression tests.
+//
+// Previously, calling BookSidecarPath("") produced "..metadata.json" in the
+// current working directory because filepath.Clean("") returns ".",
+// os.Stat(".") succeeds as a real directory, filepath.Base(".") is ".", and
+// filepath.Join(".", "." + ".metadata.json") → "..metadata.json". Any code
+// that constructed a Book with an empty Filepath and then invoked
+// WriteBookSidecarFromModel would silently create a stray sidecar next to
+// whatever process was running (including Go test binaries, where CWD is
+// the package directory). The guards below make empty input impossible to
+// misuse.
+
+func TestBookSidecarPath_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, BookSidecarPath(""), "empty bookPath must not resolve to a sidecar path")
+}
+
+func TestFileSidecarPath_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, FileSidecarPath(""), "empty filePath must not resolve to a sidecar path")
+}
+
+func TestBookSidecarExists_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, BookSidecarExists(""), "empty bookPath must not report a sidecar as existing")
+}
+
+func TestFileSidecarExists_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, FileSidecarExists(""), "empty filePath must not report a sidecar as existing")
+}
+
+func TestReadBookSidecar_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	s, err := ReadBookSidecar("")
+	require.NoError(t, err)
+	assert.Nil(t, s)
+}
+
+func TestReadFileSidecar_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	s, err := ReadFileSidecar("")
+	require.NoError(t, err)
+	assert.Nil(t, s)
+}
+
+func TestWriteBookSidecar_EmptyInput_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	err := WriteBookSidecar("", &BookSidecar{Title: "Test"})
+	require.Error(t, err, "WriteBookSidecar must reject empty bookPath")
+	assert.ErrorIs(t, err, ErrEmptySidecarPath)
+}
+
+func TestWriteFileSidecar_EmptyInput_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	err := WriteFileSidecar("", &FileSidecar{})
+	require.Error(t, err, "WriteFileSidecar must reject empty filePath")
+	assert.ErrorIs(t, err, ErrEmptySidecarPath)
+}

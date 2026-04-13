@@ -94,10 +94,20 @@ func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 	return c
 }
 
+// newApplyTestBook builds a test book with a real on-disk Filepath so that
+// sidecar writes triggered by persistMetadata land under the test's scratch
+// directory rather than the package CWD. Without Filepath set, WriteBookSidecar
+// used to fall back to CWD-relative paths and silently drop stray
+// "..metadata.json" files into pkg/plugins/ on every test run.
+func newApplyTestBook(t *testing.T, title string) *models.Book {
+	t.Helper()
+	return &models.Book{ID: 1, LibraryID: 1, Title: title, Filepath: t.TempDir()}
+}
+
 func TestApplyMetadata_OrganizesFiles_WhenTitleChanges(t *testing.T) {
 	t.Parallel()
 
-	book := &models.Book{ID: 1, LibraryID: 1, Title: "Old Title"}
+	book := newApplyTestBook(t, "Old Title")
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
@@ -113,7 +123,7 @@ func TestApplyMetadata_OrganizesFiles_WhenTitleChanges(t *testing.T) {
 func TestApplyMetadata_OrganizesFiles_WhenAuthorsChange(t *testing.T) {
 	t.Parallel()
 
-	book := &models.Book{ID: 1, LibraryID: 1, Title: "Book"}
+	book := newApplyTestBook(t, "Book")
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
@@ -133,7 +143,7 @@ func TestApplyMetadata_OrganizesFiles_WhenAuthorsChange(t *testing.T) {
 func TestApplyMetadata_OrganizesFiles_WhenNarratorsChange(t *testing.T) {
 	t.Parallel()
 
-	book := &models.Book{ID: 1, LibraryID: 1, Title: "Book"}
+	book := newApplyTestBook(t, "Book")
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
@@ -151,7 +161,7 @@ func TestApplyMetadata_OrganizesFiles_WhenNarratorsChange(t *testing.T) {
 func TestApplyMetadata_OrganizesFiles_WhenSeriesChanges(t *testing.T) {
 	t.Parallel()
 
-	book := &models.Book{ID: 1, LibraryID: 1, Title: "Book"}
+	book := newApplyTestBook(t, "Book")
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
@@ -170,7 +180,7 @@ func TestApplyMetadata_OrganizesFiles_WhenSeriesChanges(t *testing.T) {
 func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	t.Parallel()
 
-	book := &models.Book{ID: 1, LibraryID: 1, Title: "Book"}
+	book := newApplyTestBook(t, "Book")
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}

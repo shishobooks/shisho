@@ -23,6 +23,7 @@ import {
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
 import { PluginHookMetadataEnricher, type Book } from "@/types";
+import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import {
   formatDate,
   formatDuration,
@@ -151,10 +152,14 @@ export function IdentifyBookDialog({
       ? `${result.plugin_scope}/${result.plugin_id}`
       : result.plugin_id;
 
-  const resolveAuthors = (result: PluginSearchResult): string[] | undefined => {
-    if (result.authors && result.authors.length > 0)
-      return result.authors.map((a) => a.name);
-    return undefined;
+  const resolveAuthors = (result: PluginSearchResult): string | undefined => {
+    if (!result.authors || result.authors.length === 0) return undefined;
+    return result.authors
+      .map((a) => {
+        const label = getAuthorRoleLabel(a.role);
+        return label ? `${a.name} (${label})` : a.name;
+      })
+      .join(", ");
   };
 
   const handleSelectResult = (result: PluginSearchResult) => {
@@ -446,7 +451,7 @@ export function IdentifyBookDialog({
                                 <div className="mt-2 space-y-0.5">
                                   {hasAuthors && (
                                     <p className="text-sm text-muted-foreground">
-                                      {authors.join(", ")}
+                                      {authors}
                                     </p>
                                   )}
                                   {hasNarrators && (
