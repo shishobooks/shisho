@@ -24,13 +24,13 @@ Display-only. Users still cannot assign or edit author roles from the identify d
 
 ### 1. Shared role label utility
 
-Create `app/lib/authorRoleLabel.ts` exporting:
+Create `app/utils/authorRoles.ts` exporting:
 
 ```ts
-export function getRoleLabel(role: string | undefined | null): string | null;
+export function getAuthorRoleLabel(role: string | undefined | null): string | null;
 ```
 
-Move the existing `getRoleLabel` implementation from `BookDetail.tsx` (currently lines 122–135) into this module verbatim. The function maps canonical role strings (`writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_artist`, `editor`, `translator`) to their capitalized display form, falls back to the raw role string for unknown values, and returns `null` for empty input.
+Move the existing `getRoleLabel` implementation from `BookDetail.tsx` (currently lines 122–135) into this module, renamed to `getAuthorRoleLabel` to avoid collision with the existing user-permission-role helpers in `app/utils/roles.ts`. The function maps canonical role strings (`writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_artist`, `editor`, `translator`) to their capitalized display form, falls back to the raw role string for unknown values, and returns `null` for empty input.
 
 Update `BookDetail.tsx` to import from the new module and delete the inline copy.
 
@@ -80,7 +80,7 @@ const resolveAuthors = (result: PluginSearchResult): string | undefined => {
   if (!result.authors || result.authors.length === 0) return undefined;
   return result.authors
     .map((a) => {
-      const label = getRoleLabel(a.role);
+      const label = getAuthorRoleLabel(a.role);
       return label ? `${a.name} (${label})` : a.name;
     })
     .join(", ");
@@ -91,7 +91,7 @@ The one call site (around line 449) already renders the value inside a `<p>` —
 
 ## Testing
 
-- **Unit test** for `getRoleLabel` in `app/lib/authorRoleLabel.test.ts` covering: known roles, unknown role (falls through), `undefined`, and `null`.
+- **Unit test** for `getAuthorRoleLabel` in `app/utils/authorRoles.test.ts` covering: known roles, unknown role (falls through), `undefined`, and `null`.
 - **No new component tests** for `IdentifyReviewForm` or `IdentifyBookDialog` — neither has component tests today, and the display logic is narrow enough that a unit test on the pure label helper plus manual verification covers the risk.
 - Manual verification: load a CBZ book with duplicate-named authors in different roles and confirm all three sites render the role suffix.
 
@@ -103,8 +103,8 @@ No documentation changes. This is purely visual polish of an existing feature; n
 
 | File | Change |
 |------|--------|
-| `app/lib/authorRoleLabel.ts` | New — `getRoleLabel` helper |
-| `app/lib/authorRoleLabel.test.ts` | New — unit test |
-| `app/components/pages/BookDetail.tsx` | Replace inline `getRoleLabel` with import |
+| `app/utils/authorRoles.ts` | New — `getAuthorRoleLabel` helper |
+| `app/utils/authorRoles.test.ts` | New — unit test |
+| `app/components/pages/BookDetail.tsx` | Replace inline `getRoleLabel` with `getAuthorRoleLabel` import |
 | `app/components/library/IdentifyReviewForm.tsx` | Add `AuthorTagInput`, update Authors field wiring, update `currentValue` summary |
 | `app/components/library/IdentifyBookDialog.tsx` | Update `resolveAuthors` return type + call site |
