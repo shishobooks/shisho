@@ -12,10 +12,22 @@ import (
 
 const SidecarSuffix = ".metadata.json"
 
+// ErrEmptySidecarPath is returned by Write* helpers when the caller supplies
+// an empty book or file path. An empty path would otherwise resolve to the
+// current working directory via filepath.Clean("") → ".", which historically
+// caused stray "..metadata.json" files to be written next to whatever process
+// was running (including Go test binaries).
+var ErrEmptySidecarPath = errors.New("sidecar: path is empty")
+
 // BookSidecarPath returns the sidecar file path for a book.
 // For directory-based books: {bookdir}/{dirname}.metadata.json.
 // For root-level books: {dir}/{filename_without_ext}.metadata.json.
+// Returns "" when bookPath is empty — an empty bookPath has no meaningful
+// sidecar location and must not be coerced into a CWD-relative path.
 func BookSidecarPath(bookPath string) string {
+	if bookPath == "" {
+		return ""
+	}
 	// Clean the path to normalize trailing slashes
 	cleanPath := filepath.Clean(bookPath)
 
@@ -48,27 +60,41 @@ func BookSidecarPath(bookPath string) string {
 }
 
 // FileSidecarPath returns the sidecar file path for a media file.
-// Returns {filepath}.metadata.json.
+// Returns {filepath}.metadata.json, or "" when filePath is empty.
 func FileSidecarPath(filePath string) string {
+	if filePath == "" {
+		return ""
+	}
 	return filePath + SidecarSuffix
 }
 
 // BookSidecarExists checks if a book sidecar file exists.
 func BookSidecarExists(bookPath string) bool {
-	_, err := os.Stat(BookSidecarPath(bookPath))
+	sidecarPath := BookSidecarPath(bookPath)
+	if sidecarPath == "" {
+		return false
+	}
+	_, err := os.Stat(sidecarPath)
 	return err == nil
 }
 
 // FileSidecarExists checks if a file sidecar exists.
 func FileSidecarExists(filePath string) bool {
-	_, err := os.Stat(FileSidecarPath(filePath))
+	sidecarPath := FileSidecarPath(filePath)
+	if sidecarPath == "" {
+		return false
+	}
+	_, err := os.Stat(sidecarPath)
 	return err == nil
 }
 
 // ReadBookSidecar reads and parses a book sidecar file.
-// Returns nil, nil if the sidecar doesn't exist.
+// Returns nil, nil if the sidecar doesn't exist or bookPath is empty.
 func ReadBookSidecar(bookPath string) (*BookSidecar, error) {
 	sidecarPath := BookSidecarPath(bookPath)
+	if sidecarPath == "" {
+		return nil, nil
+	}
 
 	data, err := os.ReadFile(sidecarPath)
 	if err != nil {
@@ -87,9 +113,12 @@ func ReadBookSidecar(bookPath string) (*BookSidecar, error) {
 }
 
 // ReadFileSidecar reads and parses a file sidecar.
-// Returns nil, nil if the sidecar doesn't exist.
+// Returns nil, nil if the sidecar doesn't exist or filePath is empty.
 func ReadFileSidecar(filePath string) (*FileSidecar, error) {
 	sidecarPath := FileSidecarPath(filePath)
+	if sidecarPath == "" {
+		return nil, nil
+	}
 
 	data, err := os.ReadFile(sidecarPath)
 	if err != nil {
@@ -111,8 +140,12 @@ func ReadFileSidecar(filePath string) (*FileSidecar, error) {
 // Note: The caller is responsible for ensuring the parent directory exists.
 // For root-level files with OrganizeFileStructure enabled, the directory
 // should be created before calling this function.
+// Returns ErrEmptySidecarPath if bookPath is empty.
 func WriteBookSidecar(bookPath string, s *BookSidecar) error {
 	sidecarPath := BookSidecarPath(bookPath)
+	if sidecarPath == "" {
+		return errors.WithStack(ErrEmptySidecarPath)
+	}
 
 	// Ensure version is set
 	if s.Version == 0 {
@@ -129,8 +162,12 @@ func WriteBookSidecar(bookPath string, s *BookSidecar) error {
 }
 
 // WriteFileSidecar writes a file sidecar.
+// Returns ErrEmptySidecarPath if filePath is empty.
 func WriteFileSidecar(filePath string, s *FileSidecar) error {
 	sidecarPath := FileSidecarPath(filePath)
+	if sidecarPath == "" {
+		return errors.WithStack(ErrEmptySidecarPath)
+	}
 
 	// Ensure version is set
 	if s.Version == 0 {
