@@ -6,6 +6,11 @@ sidebar_position: 4
 
 Shisho supports a variety of book formats across three media types.
 
+All supported formats are fingerprinted with a content sha256 hash for move
+and rename detection. Future versions will add format-specific fuzzy
+fingerprints (cover pHash, text SimHash, etc.) — see
+[File Fingerprints](./file-fingerprints.md).
+
 ## Ebooks
 
 - **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more

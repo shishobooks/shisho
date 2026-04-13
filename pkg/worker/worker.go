@@ -9,6 +9,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -43,20 +44,22 @@ type Worker struct {
 
 	processFuncs map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error
 
-	bookService      *books.Service
-	chapterService   *chapters.Service
-	genreService     *genres.Service
-	imprintService   *imprints.Service
-	jobService       *jobs.Service
-	jobLogService    *joblogs.Service
-	libraryService   *libraries.Service
-	personService    *people.Service
-	publisherService *publishers.Service
-	searchService    *search.Service
-	seriesService    *series.Service
-	tagService       *tags.Service
-	pluginService    *plugins.Service
-	pluginManager    *plugins.Manager
+	bookService        *books.Service
+	chapterService     *chapters.Service
+	genreService       *genres.Service
+	imprintService     *imprints.Service
+	jobService         *jobs.Service
+	jobLogService      *joblogs.Service
+	libraryService     *libraries.Service
+	personService      *people.Service
+	publisherService   *publishers.Service
+	searchService      *search.Service
+	seriesService      *series.Service
+	tagService         *tags.Service
+	fingerprintService *fingerprints.Service
+
+	pluginService *plugins.Service
+	pluginManager *plugins.Manager
 
 	broker        *events.Broker
 	downloadCache *downloadcache.Cache
@@ -86,28 +89,30 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	seriesService := series.NewService(db)
 	tagService := tags.NewService(db)
 	pluginService := plugins.NewService(db)
+	fingerprintService := fingerprints.NewService(db)
 
 	w := &Worker{
 		config: cfg,
 		log:    logger.New(),
 		db:     db,
 
-		bookService:      bookService,
-		chapterService:   chapterService,
-		genreService:     genreService,
-		imprintService:   imprintService,
-		jobService:       jobService,
-		jobLogService:    jobLogService,
-		libraryService:   libraryService,
-		personService:    personService,
-		publisherService: publisherService,
-		searchService:    searchService,
-		seriesService:    seriesService,
-		tagService:       tagService,
-		pluginService:    pluginService,
-		pluginManager:    pm,
-		broker:           broker,
-		downloadCache:    dlCache,
+		bookService:        bookService,
+		chapterService:     chapterService,
+		genreService:       genreService,
+		imprintService:     imprintService,
+		jobService:         jobService,
+		jobLogService:      jobLogService,
+		libraryService:     libraryService,
+		personService:      personService,
+		publisherService:   publisherService,
+		searchService:      searchService,
+		seriesService:      seriesService,
+		tagService:         tagService,
+		fingerprintService: fingerprintService,
+		pluginService:      pluginService,
+		pluginManager:      pm,
+		broker:             broker,
+		downloadCache:      dlCache,
 
 		queue:           make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:        make(chan struct{}),
@@ -119,8 +124,9 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	}
 
 	w.processFuncs = map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error{
-		models.JobTypeScan:         w.ProcessScanJob,
-		models.JobTypeBulkDownload: w.ProcessBulkDownloadJob,
+		models.JobTypeScan:           w.ProcessScanJob,
+		models.JobTypeBulkDownload:   w.ProcessBulkDownloadJob,
+		models.JobTypeHashGeneration: w.ProcessHashGenerationJob,
 	}
 
 	if dlCache != nil {

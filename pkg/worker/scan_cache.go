@@ -65,9 +65,29 @@ type ScanCache struct {
 	bookMu sync.Map // map[int]*sync.Mutex
 
 	// Pre-loaded file lookup for fast path during batch scans.
-	// Written once during LoadKnownFiles (single-threaded init), then read-only
-	// during the parallel scan, so a regular map is safe without synchronization.
+	// Written during LoadKnownFiles at init and again via AddKnownFile in the
+	// move reconciliation phase — both of which happen single-threaded before
+	// the parallel worker pool starts. During the parallel scan itself the
+	// map is read-only, so a regular map is safe without synchronization.
 	knownFiles map[string]*models.File
+
+	// movedOrphanIDs holds file IDs matched by the move reconciliation phase.
+	// Written once (single-threaded) before the parallel worker pool starts,
+	// then read-only during orphan cleanup. Nil means reconciliation did not run.
+	movedOrphanIDs map[int]struct{}
+
+	// movedBookIDs holds book IDs whose files were matched by the move
+	// reconciliation phase. The parent scan loop merges this into its
+	// booksToOrganize set so organize_file_structure runs on these books
+	// after the scan (renaming folders back into the structured layout).
+	movedBookIDs map[int]struct{}
+
+	// libraryRootPaths caches the library's root paths (from
+	// library.LibraryPaths) so syncBookFilepathAfterMove can enforce its
+	// "don't set Book.Filepath to a library root" guard without a DB
+	// lookup per call. Populated by the scan before reconciliation runs.
+	// Nil means the caller should fall back to RetrieveLibrary.
+	libraryRootPaths []string
 
 	// Counters for cache hits/misses (atomic for thread safety)
 	personCount    atomic.Int64
@@ -80,10 +100,13 @@ type ScanCache struct {
 
 // NewScanCache creates a new ScanCache.
 func NewScanCache() *ScanCache {
-	return &ScanCache{}
+	return &ScanCache{
+		knownFiles: make(map[string]*models.File),
+	}
 }
 
 // LoadKnownFiles populates the known files cache from a list of existing files.
+// Replaces any previously-set knownFiles map (e.g. from NewScanCache).
 func (c *ScanCache) LoadKnownFiles(files []*models.File) {
 	c.knownFiles = make(map[string]*models.File, len(files))
 	for _, f := range files {
@@ -342,4 +365,54 @@ func (c *ScanCache) LockBook(bookID int) func() {
 	mu := getMutex(&c.bookMu, bookID)
 	mu.Lock()
 	return mu.Unlock
+}
+
+// SetMovedOrphanIDs stores the set of file IDs identified as moved orphans.
+// Must be called before the parallel worker pool starts (not thread-safe for writes).
+func (c *ScanCache) SetMovedOrphanIDs(ids map[int]struct{}) {
+	c.movedOrphanIDs = ids
+}
+
+// IsMovedOrphan returns true if the given file ID was matched by the move
+// reconciliation phase and should be skipped by orphan cleanup.
+func (c *ScanCache) IsMovedOrphan(id int) bool {
+	if c.movedOrphanIDs == nil {
+		return false
+	}
+	_, ok := c.movedOrphanIDs[id]
+	return ok
+}
+
+// SetMovedBookIDs stores the set of book IDs whose files were matched by the
+// move reconciliation phase. The scan loop reads this after processing to
+// ensure organize_file_structure runs on the moved books.
+func (c *ScanCache) SetMovedBookIDs(ids map[int]struct{}) {
+	c.movedBookIDs = ids
+}
+
+// MovedBookIDs returns the set of book IDs whose files were matched as moves.
+// Returns nil if reconciliation did not run or found no matches.
+func (c *ScanCache) MovedBookIDs() map[int]struct{} {
+	return c.movedBookIDs
+}
+
+// SetLibraryRootPaths caches the library's root paths so downstream helpers
+// (currently syncBookFilepathAfterMove) can check "is this a library root?"
+// without a per-call DB lookup.
+func (c *ScanCache) SetLibraryRootPaths(paths []string) {
+	c.libraryRootPaths = paths
+}
+
+// LibraryRootPaths returns the cached library root paths. Returns nil if
+// SetLibraryRootPaths was not called for this scan.
+func (c *ScanCache) LibraryRootPaths() []string {
+	return c.libraryRootPaths
+}
+
+// AddKnownFile adds a file to the known-files cache at its new path. Used after
+// move reconciliation updates a file's filepath so the parallel processing loop
+// treats the new path as already known (skipping it instead of creating a duplicate).
+// NewScanCache guarantees the map is initialized, so no nil check is needed.
+func (c *ScanCache) AddKnownFile(f *models.File) {
+	c.knownFiles[f.Filepath] = f
 }

@@ -16,13 +16,24 @@ import (
 // during the scan. This replaces the previous sequential scanInternal loop with batch operations.
 //
 // The method is non-fatal: all errors are logged as warnings and execution continues.
+//
+// cache is optional (may be nil). When provided, files whose IDs appear in
+// cache.movedOrphanIDs are skipped — they were already reconciled by the move
+// reconciliation phase and must not be deleted.
 func (w *Worker) cleanupOrphanedFiles(
 	ctx context.Context,
 	existingFiles []*models.File,
 	scannedPaths map[string]struct{},
 	library *models.Library,
 	jobLog *joblogs.JobLogger,
+	cache ...*ScanCache,
 ) {
+	// Resolve optional cache argument.
+	var sc *ScanCache
+	if len(cache) > 0 {
+		sc = cache[0]
+	}
+
 	// Step 1: Collect orphans and group by book.
 	// existingFiles only contains main files (from ListFilesForLibrary).
 	totalFilesByBook := make(map[int]int)         // bookID → total main file count
@@ -31,6 +42,15 @@ func (w *Worker) cleanupOrphanedFiles(
 	for _, file := range existingFiles {
 		totalFilesByBook[file.BookID]++
 		if _, seen := scannedPaths[file.Filepath]; !seen {
+			// Skip files that were already reconciled as moves — they have a
+			// valid updated filepath and must not be deleted.
+			if sc != nil && sc.IsMovedOrphan(file.ID) {
+				jobLog.Info("orphan cleanup: skipping moved file", logger.Data{
+					"file_id":  file.ID,
+					"filepath": file.Filepath,
+				})
+				continue
+			}
 			orphansByBook[file.BookID] = append(orphansByBook[file.BookID], file)
 		}
 	}

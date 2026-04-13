@@ -356,6 +356,29 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			filesToScan = append(filesToScan, convertedFiles...)
 		}
 
+		// --- Move reconciliation ---
+		// Detect files that were moved/renamed while the server was offline by
+		// matching candidate-orphan DB rows (known path missing from disk) against
+		// unknown-new on-disk paths (disk path missing from the cache) using
+		// size+sha256 comparison. Must run BEFORE the parallel worker pool so that
+		// the cache is up to date — moved orphans are registered at their new paths
+		// and won't be double-processed.
+		//
+		// Prime the library root paths on the cache so syncBookFilepathAfterMove
+		// (invoked per reconciled move) can enforce its "no library-root Book.Filepath"
+		// guard without a per-call DB lookup.
+		if len(library.LibraryPaths) > 0 {
+			roots := make([]string, 0, len(library.LibraryPaths))
+			for _, lp := range library.LibraryPaths {
+				roots = append(roots, lp.Filepath)
+			}
+			cache.SetLibraryRootPaths(roots)
+		}
+		if err := w.reconcileMoves(ctx, existingFiles, filesToScan, cache, jobLog); err != nil {
+			jobLog.Warn("move reconciliation encountered an error", logger.Data{"error": err.Error()})
+			// Non-fatal: proceed with the scan; moved files fall through to orphan cleanup.
+		}
+
 		// Track books that need organization after scan completes.
 		// Organization is deferred to avoid breaking file paths during scan.
 		booksToOrganize := make(map[int]struct{})
@@ -426,14 +449,26 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"imprints_cached":   cache.ImprintCount(),
 		})
 
+		// Books whose files were reconciled as moves should also be organized
+		// so organize_file_structure can rename their folders back into the
+		// structured layout. Only merge these when the library actually has
+		// organize enabled — otherwise it's wasted work since the organize
+		// step below is gated on the same setting.
+		if library.OrganizeFileStructure {
+			for bookID := range cache.MovedBookIDs() {
+				booksToOrganize[bookID] = struct{}{}
+			}
+		}
+
 		// Cleanup orphaned files (in DB but not on disk) using batch operations.
 		// Uses the pre-loaded files from before the scan to avoid a second DB query.
+		// The cache is passed so that files already reconciled as moves are skipped.
 		if existingFiles != nil {
 			scannedPaths := make(map[string]struct{}, len(filesToScan))
 			for _, path := range filesToScan {
 				scannedPaths[path] = struct{}{}
 			}
-			w.cleanupOrphanedFiles(ctx, existingFiles, scannedPaths, library, jobLog)
+			w.cleanupOrphanedFiles(ctx, existingFiles, scannedPaths, library, jobLog, cache)
 		}
 
 		// Organize files after all scanning is complete
@@ -457,6 +492,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					})
 				}
 			}
+		}
+
+		// Queue async sha256 hash generation for files that still lack a fingerprint.
+		// Handles both initial backfill and newly-discovered files from this scan.
+		if err := EnsureHashGenerationJob(ctx, w.jobService, library.ID); err != nil {
+			jobLog.Warn("failed to ensure hash generation job", logger.Data{"error": err.Error()})
 		}
 	}
 
