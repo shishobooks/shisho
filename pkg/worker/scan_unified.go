@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -1896,13 +1897,17 @@ func (w *Worker) scanFileCore(
 		if file.IdentifierSource != nil {
 			existingIdentifierSource = *file.IdentifierSource
 		}
+		// Build diff keys via identifiers.Key so stored (normalized) and parsed
+		// (raw) values compare equal when they're semantically identical —
+		// otherwise every rescan of a book with hyphenated/prefixed identifiers
+		// would thrash delete+insert on every run.
 		existingIdentifierValues := make([]string, 0, len(file.Identifiers))
 		for _, id := range file.Identifiers {
-			existingIdentifierValues = append(existingIdentifierValues, id.Type+":"+id.Value)
+			existingIdentifierValues = append(existingIdentifierValues, identifiers.Key(id.Type, id.Value))
 		}
 		newIdentifierValues := make([]string, 0, len(metadata.Identifiers))
 		for _, id := range metadata.Identifiers {
-			newIdentifierValues = append(newIdentifierValues, id.Type+":"+id.Value)
+			newIdentifierValues = append(newIdentifierValues, identifiers.Key(id.Type, id.Value))
 		}
 
 		identifierSource := metadata.SourceForField("identifiers")
@@ -1915,16 +1920,16 @@ func (w *Worker) scanFileCore(
 			}
 
 			// Create new identifiers in bulk
-			identifiers := make([]*models.FileIdentifier, 0, len(metadata.Identifiers))
+			fileIdentifiers := make([]*models.FileIdentifier, 0, len(metadata.Identifiers))
 			for _, id := range metadata.Identifiers {
-				identifiers = append(identifiers, &models.FileIdentifier{
+				fileIdentifiers = append(fileIdentifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
 					Source: identifierSource,
 				})
 			}
-			if err := w.bookService.BulkCreateFileIdentifiers(ctx, identifiers); err != nil {
+			if err := w.bookService.BulkCreateFileIdentifiers(ctx, fileIdentifiers); err != nil {
 				logWarn("failed to create identifiers", logger.Data{"error": err.Error()})
 			}
 
@@ -1939,7 +1944,7 @@ func (w *Worker) scanFileCore(
 	if fileSidecarData != nil && len(fileSidecarData.Identifiers) > 0 {
 		sidecarIdentifierValues := make([]string, 0, len(fileSidecarData.Identifiers))
 		for _, id := range fileSidecarData.Identifiers {
-			sidecarIdentifierValues = append(sidecarIdentifierValues, id.Type+":"+id.Value)
+			sidecarIdentifierValues = append(sidecarIdentifierValues, identifiers.Key(id.Type, id.Value))
 		}
 		existingIdentifierSource := ""
 		if file.IdentifierSource != nil {
@@ -1947,7 +1952,7 @@ func (w *Worker) scanFileCore(
 		}
 		existingIdentifierValues := make([]string, 0, len(file.Identifiers))
 		for _, id := range file.Identifiers {
-			existingIdentifierValues = append(existingIdentifierValues, id.Type+":"+id.Value)
+			existingIdentifierValues = append(existingIdentifierValues, identifiers.Key(id.Type, id.Value))
 		}
 
 		if shouldApplySidecarRelationship(sidecarIdentifierValues, existingIdentifierValues, existingIdentifierSource, forceRefresh) {
@@ -1959,16 +1964,16 @@ func (w *Worker) scanFileCore(
 			}
 
 			// Create new identifiers from sidecar in bulk
-			identifiers := make([]*models.FileIdentifier, 0, len(fileSidecarData.Identifiers))
+			fileIdentifiers := make([]*models.FileIdentifier, 0, len(fileSidecarData.Identifiers))
 			for _, id := range fileSidecarData.Identifiers {
-				identifiers = append(identifiers, &models.FileIdentifier{
+				fileIdentifiers = append(fileIdentifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
 					Source: sidecarSource,
 				})
 			}
-			if err := w.bookService.BulkCreateFileIdentifiers(ctx, identifiers); err != nil {
+			if err := w.bookService.BulkCreateFileIdentifiers(ctx, fileIdentifiers); err != nil {
 				logWarn("failed to create identifiers", logger.Data{"error": err.Error()})
 			}
 

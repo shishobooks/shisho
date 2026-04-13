@@ -115,12 +115,78 @@ func TestNormalizeValue(t *testing.T) {
 		{"uuid mixed case", string(TypeUUID), "  A1b2C3d4-e5f6-7890-abcd-ef1234567890 ", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
 		{"other trimmed", string(TypeOther), "  some-value  ", "some-value"},
 		{"goodreads trimmed", string(TypeGoodreads), " 12345 ", "12345"},
+		{"google trimmed", string(TypeGoogle), "  abc123  ", "abc123"},
+		{"custom vendor trimmed", "custom_vendor", "  Mixed-Case-Val  ", "Mixed-Case-Val"},
 		{"empty type trims", "", "  raw  ", "raw"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, NormalizeValue(tt.identType, tt.value))
+		})
+	}
+}
+
+func TestKey_StableAcrossFormatting(t *testing.T) {
+	t.Parallel()
+	// Semantically identical identifier values with cosmetic differences must
+	// produce the same Key so diff-based scans don't report spurious changes.
+	tests := []struct {
+		name string
+		a    [2]string // type, value
+		b    [2]string
+	}{
+		{"isbn13 hyphens vs clean", [2]string{string(TypeISBN13), "978-0-316-76948-8"}, [2]string{string(TypeISBN13), "9780316769488"}},
+		{"isbn13 isbn-prefix vs clean", [2]string{string(TypeISBN13), "ISBN: 978-0-316-76948-8"}, [2]string{string(TypeISBN13), "9780316769488"}},
+		{"isbn10 lowercase x vs upper", [2]string{string(TypeISBN10), "0-8044-2957-x"}, [2]string{string(TypeISBN10), "080442957X"}},
+		{"asin lowercase vs upper", [2]string{string(TypeASIN), "b08n5wrwnw"}, [2]string{string(TypeASIN), "B08N5WRWNW"}},
+		{"uuid urn prefix vs bare", [2]string{string(TypeUUID), "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890"}, [2]string{string(TypeUUID), "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, Key(tt.a[0], tt.a[1]), Key(tt.b[0], tt.b[1]))
+		})
+	}
+}
+
+func TestKey_DistinctTypes(t *testing.T) {
+	t.Parallel()
+	// Same value string but different types must produce distinct keys.
+	assert.NotEqual(t, Key(string(TypeISBN13), "9780316769488"), Key(string(TypeOther), "9780316769488"))
+}
+
+func TestCandidateForms(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		input    string
+		contains []string
+	}{
+		{"isbn hyphenated", "978-0-316-76948-8", []string{"978-0-316-76948-8", "9780316769488"}},
+		{"isbn clean", "9780316769488", []string{"9780316769488"}},
+		{"asin lowercase", "b08n5wrwnw", []string{"b08n5wrwnw", "B08N5WRWNW"}},
+		{"uuid urn prefix mixed case", "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890", []string{
+			"URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+			"a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		}},
+		{"empty returns nil", "", nil},
+		{"whitespace only returns nil", "   ", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CandidateForms(tt.input)
+			for _, want := range tt.contains {
+				assert.Contains(t, got, want)
+			}
+			// No duplicates
+			seen := map[string]bool{}
+			for _, v := range got {
+				assert.False(t, seen[v], "duplicate value %q in candidates %v", v, got)
+				seen[v] = true
+			}
+			if tt.contains == nil {
+				assert.Empty(t, got)
+			}
 		})
 	}
 }

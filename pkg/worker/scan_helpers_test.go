@@ -3,6 +3,7 @@ package worker
 import (
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -643,4 +644,45 @@ func TestShouldApplySidecarRelationship(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestIdentifierDiff_StableAcrossRescans locks in the fix for a regression
+// where each rescan of a book with hyphenated/prefixed/mixed-case identifiers
+// would thrash delete+insert because the stored (normalized) value and the
+// parser-emitted (raw) value built different diff keys. The scanner now routes
+// both sides through identifiers.Key so semantically identical pairs compare
+// equal.
+func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
+	t.Parallel()
+
+	// Simulate what file.Identifiers holds after the first scan: values are
+	// already normalized because the books service canonicalizes on write.
+	stored := []*models.FileIdentifier{
+		{Type: models.IdentifierTypeISBN13, Value: "9780316769488"},
+		{Type: models.IdentifierTypeASIN, Value: "B08N5WRWNW"},
+		{Type: models.IdentifierTypeUUID, Value: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+	}
+	// Simulate what the parser returns on the next scan: raw cosmetic forms.
+	parsed := []mediafile.ParsedIdentifier{
+		{Type: models.IdentifierTypeISBN13, Value: "978-0-316-76948-8"},
+		{Type: models.IdentifierTypeASIN, Value: "b08n5wrwnw"},
+		{Type: models.IdentifierTypeUUID, Value: "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890"},
+	}
+
+	existingKeys := make([]string, 0, len(stored))
+	for _, id := range stored {
+		existingKeys = append(existingKeys, identifiers.Key(id.Type, id.Value))
+	}
+	newKeys := make([]string, 0, len(parsed))
+	for _, id := range parsed {
+		newKeys = append(newKeys, identifiers.Key(id.Type, id.Value))
+	}
+
+	// With a matching source (steady state), the diff must report no change.
+	got := shouldUpdateRelationship(newKeys, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	assert.False(t, got, "rescan must not report identifier change when only cosmetic formatting differs")
+
+	// Sidecar path uses the same key-building helper.
+	got = shouldApplySidecarRelationship(newKeys, existingKeys, models.DataSourceSidecar, false)
+	assert.False(t, got, "sidecar rescan must not report identifier change when only cosmetic formatting differs")
 }

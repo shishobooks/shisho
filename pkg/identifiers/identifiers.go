@@ -96,8 +96,46 @@ func NormalizeValue(identifierType, value string) string {
 	case TypeUUID:
 		lower := strings.ToLower(value)
 		return strings.TrimPrefix(lower, "urn:uuid:")
+	case TypeGoodreads, TypeGoogle, TypeOther, TypeUnknown:
+		// Fallthrough to trim-only return below.
 	}
 	return value
+}
+
+// Key returns a stable comparison key for an identifier, using the canonical
+// form of the value. Two identifiers with semantically identical values but
+// cosmetic differences (hyphens, prefixes, case) produce the same Key, so
+// diff-based code (e.g. scan reconciliation) can tell when a set has actually
+// changed without treating "978-0-316-76948-8" and "9780316769488" as distinct.
+func Key(identifierType, value string) string {
+	return identifierType + ":" + NormalizeValue(identifierType, value)
+}
+
+// CandidateForms returns all plausible canonical forms of a user-provided
+// identifier value for lookup purposes. Because the type is not known at query
+// time (a user may search by ISBN, ASIN, or UUID without specifying which),
+// this enumerates the normalized variants across the supported types so a
+// single query can match legacy rows stored in any format. The raw input is
+// always included as the first element. Duplicates are removed. Returns nil
+// for an empty or whitespace-only input.
+func CandidateForms(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	seen := map[string]bool{value: true}
+	out := []string{value}
+	addIfNew := func(s string) {
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	addIfNew(NormalizeISBN(value))
+	addIfNew(strings.ToUpper(value))
+	addIfNew(strings.TrimPrefix(strings.ToLower(value), "urn:uuid:"))
+	return out
 }
 
 // NormalizeISBN removes hyphens, spaces, and common prefixes from an ISBN.

@@ -237,18 +237,13 @@ func (svc *Service) countBooksInternal(ctx context.Context, ftsQuery string, lib
 
 // searchBooksByIdentifier searches for books with matching file identifier values (exact match).
 func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, libraryID int, fileTypes []string, limit int) ([]BookSearchResult, error) {
-	// Clean query for identifier search
-	query = strings.TrimSpace(query)
-	if query == "" {
+	// Match against all plausible normalized forms so callers searching with
+	// any cosmetic variation (hyphens/spaces for ISBN, lowercase for ASIN,
+	// urn:uuid: prefix for UUID) find values stored in canonical form, and
+	// legacy rows that predate write-side normalization remain findable.
+	searchValues := identifiers.CandidateForms(query)
+	if len(searchValues) == 0 {
 		return []BookSearchResult{}, nil
-	}
-
-	// Also match against an ISBN-normalized form so callers searching with
-	// hyphens/spaces find values stored in their canonical digits-only form
-	// (and vice versa, for legacy rows that predate normalization on write).
-	searchValues := []string{query}
-	if normalized := identifiers.NormalizeISBN(query); normalized != "" && normalized != query {
-		searchValues = append(searchValues, normalized)
 	}
 
 	q := svc.db.NewSelect().
@@ -257,7 +252,7 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 		ColumnExpr("(SELECT GROUP_CONCAT(DISTINCT p.name) FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = b.id ORDER BY a.sort_order) AS authors").
 		Join("JOIN files f ON f.id = fi.file_id").
 		Join("JOIN books b ON b.id = f.book_id").
-		Where("fi.value IN (?)", bun.In(searchValues)).
+		Where("fi.value IN (?)", bun.List(searchValues)).
 		Where("b.library_id = ?", libraryID).
 		Limit(limit)
 
