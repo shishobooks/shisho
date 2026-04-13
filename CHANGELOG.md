@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-04-13
+
+### Features
+- Show author roles in identify dialog (#92)
+- Add sha256 file hashing with move/rename detection (#91)
+- Polish identify workflow UI (#88)
+
+### Bug Fixes
+- Trigger file organization after identify/apply metadata (#90)
+- Make reset-to-file-metadata fully wipe non-file metadata (#89)
+- Stop release script from dropping oldest commit per release (#87)
+
+
 ## [0.0.28] - 2026-04-11
 
 ### CI/CD
