@@ -80,6 +80,7 @@ import {
   FileTypePDF,
   type File,
 } from "@/types";
+import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import {
   formatDate,
@@ -117,21 +118,6 @@ const getCoverFileType = (
       if (hasAudiobookFiles) return "audiobook";
   }
   return "book";
-};
-
-const getRoleLabel = (role: string | undefined): string | null => {
-  if (!role) return null;
-  const roleLabels: Record<string, string> = {
-    writer: "Writer",
-    penciller: "Penciller",
-    inker: "Inker",
-    colorist: "Colorist",
-    letterer: "Letterer",
-    cover_artist: "Cover Artist",
-    editor: "Editor",
-    translator: "Translator",
-  };
-  return roleLabels[role] || role;
 };
 
 interface DownloadError {
@@ -1215,7 +1201,7 @@ const BookDetail = () => {
                     <h3 className="font-semibold mb-2">Authors</h3>
                     <div className="flex flex-wrap gap-2">
                       {book.authors.map((author) => {
-                        const roleLabel = getRoleLabel(author.role);
+                        const roleLabel = getAuthorRoleLabel(author.role);
                         return (
                           <Link
                             key={author.id}
