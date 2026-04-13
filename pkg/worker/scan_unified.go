@@ -22,7 +22,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
-	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -1897,18 +1896,8 @@ func (w *Worker) scanFileCore(
 		if file.IdentifierSource != nil {
 			existingIdentifierSource = *file.IdentifierSource
 		}
-		// Build diff keys via identifiers.Key so stored (normalized) and parsed
-		// (raw) values compare equal when they're semantically identical —
-		// otherwise every rescan of a book with hyphenated/prefixed identifiers
-		// would thrash delete+insert on every run.
-		existingIdentifierValues := make([]string, 0, len(file.Identifiers))
-		for _, id := range file.Identifiers {
-			existingIdentifierValues = append(existingIdentifierValues, identifiers.Key(id.Type, id.Value))
-		}
-		newIdentifierValues := make([]string, 0, len(metadata.Identifiers))
-		for _, id := range metadata.Identifiers {
-			newIdentifierValues = append(newIdentifierValues, identifiers.Key(id.Type, id.Value))
-		}
+		existingIdentifierValues := fileIdentifierKeys(file.Identifiers)
+		newIdentifierValues := parsedIdentifierKeys(metadata.Identifiers)
 
 		identifierSource := metadata.SourceForField("identifiers")
 		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh) {
@@ -1942,18 +1931,12 @@ func (w *Worker) scanFileCore(
 	}
 	// Update identifiers (from sidecar)
 	if fileSidecarData != nil && len(fileSidecarData.Identifiers) > 0 {
-		sidecarIdentifierValues := make([]string, 0, len(fileSidecarData.Identifiers))
-		for _, id := range fileSidecarData.Identifiers {
-			sidecarIdentifierValues = append(sidecarIdentifierValues, identifiers.Key(id.Type, id.Value))
-		}
+		sidecarIdentifierValues := sidecarIdentifierKeys(fileSidecarData.Identifiers)
 		existingIdentifierSource := ""
 		if file.IdentifierSource != nil {
 			existingIdentifierSource = *file.IdentifierSource
 		}
-		existingIdentifierValues := make([]string, 0, len(file.Identifiers))
-		for _, id := range file.Identifiers {
-			existingIdentifierValues = append(existingIdentifierValues, identifiers.Key(id.Type, id.Value))
-		}
+		existingIdentifierValues := fileIdentifierKeys(file.Identifiers)
 
 		if shouldApplySidecarRelationship(sidecarIdentifierValues, existingIdentifierValues, existingIdentifierSource, forceRefresh) {
 			logInfo("updating identifiers from sidecar", logger.Data{"new_count": len(fileSidecarData.Identifiers), "old_count": len(file.Identifiers)})

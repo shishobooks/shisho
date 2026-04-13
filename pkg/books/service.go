@@ -1270,16 +1270,22 @@ func (svc *Service) BulkCreateBookSeries(ctx context.Context, bookSeries []*mode
 	return errors.WithStack(err)
 }
 
-// BulkCreateFileIdentifiers creates multiple file identifier records in a single query.
+// BulkCreateFileIdentifiers creates multiple file identifier records in a
+// single query. Identifier values are canonicalized via
+// identifiers.NormalizeValue before insert. The input slice and its elements
+// are not mutated — callers retain the exact structs they passed in.
 // Returns nil if the slice is empty.
 func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error {
 	if len(fileIdentifiers) == 0 {
 		return nil
 	}
-	for _, fi := range fileIdentifiers {
-		fi.Value = identifiers.NormalizeValue(fi.Type, fi.Value)
+	toInsert := make([]*models.FileIdentifier, len(fileIdentifiers))
+	for i, fi := range fileIdentifiers {
+		clone := *fi
+		clone.Value = identifiers.NormalizeValue(fi.Type, fi.Value)
+		toInsert[i] = &clone
 	}
-	_, err := svc.db.NewInsert().Model(&fileIdentifiers).Exec(ctx)
+	_, err := svc.db.NewInsert().Model(&toInsert).Exec(ctx)
 	return errors.WithStack(err)
 }
 

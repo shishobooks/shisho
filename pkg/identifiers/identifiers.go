@@ -97,7 +97,7 @@ func NormalizeValue(identifierType, value string) string {
 		lower := strings.ToLower(value)
 		return strings.TrimPrefix(lower, "urn:uuid:")
 	case TypeGoodreads, TypeGoogle, TypeOther, TypeUnknown:
-		// Fallthrough to trim-only return below.
+		// Handled by the trim-only return below.
 	}
 	return value
 }
@@ -118,6 +118,19 @@ func Key(identifierType, value string) string {
 // single query can match legacy rows stored in any format. The raw input is
 // always included as the first element. Duplicates are removed. Returns nil
 // for an empty or whitespace-only input.
+//
+// Each candidate form is only added if the input plausibly represents that
+// type. This prevents false positives like `"ref-9780316769488-v2"` — a vendor
+// id whose digits happen to contain a valid ISBN substring — from matching
+// real ISBN rows. Specifically:
+//
+//   - ISBN candidate is added only if the raw input consists exclusively of
+//     digits/hyphens/spaces (with optional leading "ISBN"/"ISBN:") AND the
+//     normalized form passes an ISBN-10 or ISBN-13 checksum.
+//   - Uppercased ASIN candidate is added only if the uppercased form matches
+//     the ASIN pattern.
+//   - Lowercased UUID candidate (with `urn:uuid:` prefix stripped) is added
+//     only if the stripped form matches the UUID pattern.
 func CandidateForms(value string) []string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -132,10 +145,40 @@ func CandidateForms(value string) []string {
 		seen[s] = true
 		out = append(out, s)
 	}
-	addIfNew(NormalizeISBN(value))
-	addIfNew(strings.ToUpper(value))
-	addIfNew(strings.TrimPrefix(strings.ToLower(value), "urn:uuid:"))
+
+	if looksLikeISBN(value) {
+		if normalized := NormalizeISBN(value); (len(normalized) == 13 && ValidateISBN13(normalized)) || (len(normalized) == 10 && ValidateISBN10(normalized)) {
+			addIfNew(normalized)
+		}
+	}
+	if upper := strings.ToUpper(value); asinRegex.MatchString(upper) {
+		addIfNew(upper)
+	}
+	if stripped := strings.TrimPrefix(strings.ToLower(value), "urn:uuid:"); uuidRegex.MatchString(stripped) {
+		addIfNew(stripped)
+	}
 	return out
+}
+
+// looksLikeISBN reports whether a value consists only of characters that can
+// appear in an ISBN representation — digits, hyphens, spaces, X/x — after
+// stripping a leading "ISBN"/"ISBN:" prefix. Values containing any other
+// letters (e.g. a vendor id like "ref-9780316769488-v2") are rejected so
+// extracting their digits does not yield a false-positive ISBN match.
+func looksLikeISBN(value string) bool {
+	trimmed := strings.ToUpper(strings.TrimSpace(value))
+	trimmed = strings.TrimPrefix(trimmed, "ISBN:")
+	trimmed = strings.TrimPrefix(trimmed, "ISBN")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
+		return false
+	}
+	for _, r := range trimmed {
+		if !unicode.IsDigit(r) && r != '-' && r != ' ' && r != 'X' {
+			return false
+		}
+	}
+	return true
 }
 
 // NormalizeISBN removes hyphens, spaces, and common prefixes from an ISBN.

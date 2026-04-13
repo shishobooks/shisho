@@ -3,7 +3,6 @@ package worker
 import (
 	"testing"
 
-	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -649,9 +648,11 @@ func TestShouldApplySidecarRelationship(t *testing.T) {
 // TestIdentifierDiff_StableAcrossRescans locks in the fix for a regression
 // where each rescan of a book with hyphenated/prefixed/mixed-case identifiers
 // would thrash delete+insert because the stored (normalized) value and the
-// parser-emitted (raw) value built different diff keys. The scanner now routes
-// both sides through identifiers.Key so semantically identical pairs compare
-// equal.
+// parser-emitted (raw) value built different diff keys. This test drives the
+// exact helpers that pkg/worker/scan_unified.go now calls (fileIdentifierKeys
+// and parsedIdentifierKeys) — so reverting the scanner to inline
+// "id.Type+':'+id.Value" key building would break it, locking in the
+// integration and not just the helper contract.
 func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 	t.Parallel()
 
@@ -669,20 +670,23 @@ func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 		{Type: models.IdentifierTypeUUID, Value: "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890"},
 	}
 
-	existingKeys := make([]string, 0, len(stored))
-	for _, id := range stored {
-		existingKeys = append(existingKeys, identifiers.Key(id.Type, id.Value))
-	}
-	newKeys := make([]string, 0, len(parsed))
-	for _, id := range parsed {
-		newKeys = append(newKeys, identifiers.Key(id.Type, id.Value))
-	}
+	existingKeys := fileIdentifierKeys(stored)
+	newKeys := parsedIdentifierKeys(parsed)
 
 	// With a matching source (steady state), the diff must report no change.
 	got := shouldUpdateRelationship(newKeys, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
 	assert.False(t, got, "rescan must not report identifier change when only cosmetic formatting differs")
 
-	// Sidecar path uses the same key-building helper.
+	// Sidecar path uses the same key-building helpers.
 	got = shouldApplySidecarRelationship(newKeys, existingKeys, models.DataSourceSidecar, false)
 	assert.False(t, got, "sidecar rescan must not report identifier change when only cosmetic formatting differs")
+
+	// A genuinely new identifier must still be detected as a change.
+	parsedWithAddition := append(parsed, mediafile.ParsedIdentifier{
+		Type:  models.IdentifierTypeGoodreads,
+		Value: "12345678",
+	})
+	newKeysWithAddition := parsedIdentifierKeys(parsedWithAddition)
+	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	assert.True(t, got, "rescan must still detect a real addition even when the existing entries have cosmetic variants")
 }

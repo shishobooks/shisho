@@ -1,6 +1,11 @@
 package worker
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"github.com/shishobooks/shisho/pkg/identifiers"
+	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
+)
 
 // shouldUpdateScalar determines if a scalar field should be updated based on priority rules.
 // Returns true if the new value should replace the existing value.
@@ -147,6 +152,43 @@ func shouldApplySidecarRelationship(newItems, existingItems []string, existingSo
 	existingPriority := models.GetDataSourcePriority(existingSource)
 
 	return sidecarPriority < existingPriority
+}
+
+// fileIdentifierKeys returns canonical comparison keys for a set of stored
+// file identifiers. Centralizing this in one helper (rather than inlining the
+// key construction at each diff site) ensures that both sides of a scan diff
+// — stored DB values and freshly-parsed values — use the same format, so a
+// rescan against cosmetically-different-but-semantically-identical parser
+// output (e.g. hyphenated ISBNs, mixed-case ASINs) does not thrash
+// delete+insert on every run. Paired with parsedIdentifierKeys below.
+func fileIdentifierKeys(ids []*models.FileIdentifier) []string {
+	keys := make([]string, 0, len(ids))
+	for _, id := range ids {
+		keys = append(keys, identifiers.Key(id.Type, id.Value))
+	}
+	return keys
+}
+
+// parsedIdentifierKeys returns canonical comparison keys for a set of freshly
+// parsed identifiers emitted by a file parser. Must use the same format as
+// fileIdentifierKeys so the two sides of a scan diff compare correctly.
+func parsedIdentifierKeys(ids []mediafile.ParsedIdentifier) []string {
+	keys := make([]string, 0, len(ids))
+	for _, id := range ids {
+		keys = append(keys, identifiers.Key(id.Type, id.Value))
+	}
+	return keys
+}
+
+// sidecarIdentifierKeys returns canonical comparison keys for a set of
+// sidecar-sourced identifiers. Same contract as parsedIdentifierKeys, but
+// for the distinct sidecar.IdentifierMetadata type.
+func sidecarIdentifierKeys(ids []sidecar.IdentifierMetadata) []string {
+	keys := make([]string, 0, len(ids))
+	for _, id := range ids {
+		keys = append(keys, identifiers.Key(id.Type, id.Value))
+	}
+	return keys
 }
 
 // appendIfMissing appends items to the slice only if they're not already present.

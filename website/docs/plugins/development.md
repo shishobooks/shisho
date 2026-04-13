@@ -289,7 +289,7 @@ The full set of fields you can return:
 | `chapters` | `[{ title, startPage?, startTimestampMs?, href?, children? }]` | Chapter list |
 
 :::warning[Identifier values are canonicalized on write]
-When Shisho stores an identifier emitted by a plugin, it canonicalizes the `value` based on `type`: ISBN-10/13 are stripped of hyphens/spaces/`ISBN:` prefixes, ASINs are uppercased, and UUIDs are lowercased with any `urn:uuid:` prefix removed. If a later hook reads back `context.file.identifiers`, do not rely on byte-equality against the exact string the plugin originally emitted — compare after normalizing on your side, or match against the canonical form.
+When Shisho stores an identifier emitted by a plugin, it canonicalizes the `value` based on `type`: ISBN-10/13 are stripped of hyphens/spaces/`ISBN:` prefixes, ASINs are uppercased, and UUIDs are lowercased with any `urn:uuid:` prefix removed. If a later hook reads back `context.file.identifiers`, do not rely on byte-equality against the exact string the plugin originally emitted — compare after normalizing on your side, or match against the canonical form. See [Identifiers in the metadata reference](../metadata#identifiers) for the full canonicalization rules.
 :::
 
 :::note[Field groupings for enrichers]

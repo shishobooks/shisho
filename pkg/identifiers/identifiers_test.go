@@ -158,37 +158,59 @@ func TestKey_DistinctTypes(t *testing.T) {
 func TestCandidateForms(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		input    string
-		contains []string
+		name  string
+		input string
+		want  []string // exact expected output (order matters: raw first)
 	}{
 		{"isbn hyphenated", "978-0-316-76948-8", []string{"978-0-316-76948-8", "9780316769488"}},
 		{"isbn clean", "9780316769488", []string{"9780316769488"}},
+		{"isbn with prefix", "ISBN: 978-0-316-76948-8", []string{"ISBN: 978-0-316-76948-8", "9780316769488"}},
 		{"asin lowercase", "b08n5wrwnw", []string{"b08n5wrwnw", "B08N5WRWNW"}},
+		{"asin already canonical", "B08N5WRWNW", []string{"B08N5WRWNW"}},
 		{"uuid urn prefix mixed case", "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890", []string{
 			"URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
 			"a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 		}},
 		{"empty returns nil", "", nil},
 		{"whitespace only returns nil", "   ", nil},
+
+		// False-positive guards: values containing ISBN-like digit substrings
+		// must NOT generate an ISBN candidate, or a vendor id search would
+		// incidentally match a real ISBN row.
+		{"vendor id with embedded isbn digits", "ref-9780316769488-v2", []string{"ref-9780316769488-v2"}},
+		{"goodreads numeric id", "12345678", []string{"12345678"}},
+		{"random text", "not an identifier", []string{"not an identifier"}},
+		{"asin-shaped but wrong length", "B08N5WRW", []string{"B08N5WRW"}},
+		{"looks like isbn but bad checksum", "9780316769489", []string{"9780316769489"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := CandidateForms(tt.input)
-			for _, want := range tt.contains {
-				assert.Contains(t, got, want)
-			}
-			// No duplicates
+			assert.Equal(t, tt.want, got)
+			// No duplicates (redundant given exact match, but guards against future loosening).
 			seen := map[string]bool{}
 			for _, v := range got {
 				assert.False(t, seen[v], "duplicate value %q in candidates %v", v, got)
 				seen[v] = true
 			}
-			if tt.contains == nil {
-				assert.Empty(t, got)
-			}
 		})
 	}
+}
+
+// TestKey_FormatContract locks in the exact string format of Key's output.
+// Callers (notably pkg/worker scan diff code) depend on this format being
+// "<type>:<normalized-value>" and on it being distinguishable from any other
+// stringification scheme. Changing the format is a deliberate breaking change
+// for those callers.
+func TestKey_FormatContract(t *testing.T) {
+	t.Parallel()
+	// The format is <type>:<NormalizeValue(type,value)>.
+	assert.Equal(t, "isbn_13:9780316769488", Key("isbn_13", "978-0-316-76948-8"))
+	assert.Equal(t, "asin:B08N5WRWNW", Key("asin", "b08n5wrwnw"))
+	assert.Equal(t, "uuid:a1b2c3d4-e5f6-7890-abcd-ef1234567890", Key("uuid", "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890"))
+	assert.Equal(t, "other:some-value", Key("other", "  some-value  "))
+	// Empty type is allowed and produces ":<value>".
+	assert.Equal(t, ":raw", Key("", " raw "))
 }
 
 func TestNormalizeISBN(t *testing.T) {
