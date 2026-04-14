@@ -804,6 +804,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			if err != nil {
 				return errors.WithStack(err)
 			}
+
+			// Write a fresh book sidecar at the renamed folder so the
+			// organized book is never left sidecar-less — the old-named
+			// sidecar was just deleted above.
+			if err := sidecar.WriteBookSidecarFromModel(book); err != nil {
+				log.Warn("failed to write book sidecar after folder rename", logger.Data{
+					"book_id": book.ID,
+					"path":    book.Filepath,
+					"error":   err.Error(),
+				})
+			}
 		}
 
 		// Rename files inside the folder (whether or not folder was renamed)
@@ -933,10 +944,9 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// folder is orphaned (contains only the stale sidecar) because
 			// OrganizeRootLevelFile computed the new folder from the current
 			// title and moved the media file + associated covers there.
-			//
-			// Mirrors the sidecar cleanup in the isDirectoryBased branch
-			// above. Write a fresh sidecar at the new folder so the organized
-			// book has a current sidecar with no gap.
+			// Then write a fresh sidecar at the new folder so the organized
+			// book is never left sidecar-less (same pattern as the
+			// isDirectoryBased branch above).
 			svc.cleanUpStaleRootLevelBookFolder(ctx, oldBookPath)
 			if err := sidecar.WriteBookSidecarFromModel(book); err != nil {
 				log.Warn("failed to write book sidecar after organize", logger.Data{
