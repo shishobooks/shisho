@@ -40,6 +40,15 @@ Publishers and imprints are attached at the **file level**, not the book level. 
 
 Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple identifiers of different types: `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and custom types registered by [plugins](./plugins/overview).
 
+Identifier values are **canonicalized on write** so comparisons and lookups are insensitive to cosmetic formatting:
+
+- **ISBN-10 / ISBN-13**: hyphens, spaces, and `ISBN:` prefixes are stripped. `978-0-316-76948-8` is stored as `9780316769488`.
+- **ASIN**: uppercased. `b08n5wrwnw` is stored as `B08N5WRWNW`.
+- **UUID**: lowercased, with any leading `urn:uuid:` prefix removed.
+- **Other types**: leading/trailing whitespace is trimmed.
+
+Searches by identifier accept any of the cosmetic variants above — you can paste a hyphenated ISBN into the search box and still find the stored canonical value.
+
 ## Relationships
 
 | Relationship | Type | Notes |

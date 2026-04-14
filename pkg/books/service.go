@@ -12,6 +12,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -484,6 +485,7 @@ func (svc *Service) CreateFileIdentifier(ctx context.Context, identifier *models
 	now := time.Now()
 	identifier.CreatedAt = now
 	identifier.UpdatedAt = now
+	identifier.Value = identifiers.NormalizeValue(identifier.Type, identifier.Value)
 	_, err := svc.db.NewInsert().Model(identifier).Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -1268,13 +1270,22 @@ func (svc *Service) BulkCreateBookSeries(ctx context.Context, bookSeries []*mode
 	return errors.WithStack(err)
 }
 
-// BulkCreateFileIdentifiers creates multiple file identifier records in a single query.
+// BulkCreateFileIdentifiers creates multiple file identifier records in a
+// single query. Identifier values are canonicalized via
+// identifiers.NormalizeValue before insert. The input slice and its elements
+// are not mutated — callers retain the exact structs they passed in.
 // Returns nil if the slice is empty.
-func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, identifiers []*models.FileIdentifier) error {
-	if len(identifiers) == 0 {
+func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error {
+	if len(fileIdentifiers) == 0 {
 		return nil
 	}
-	_, err := svc.db.NewInsert().Model(&identifiers).Exec(ctx)
+	toInsert := make([]*models.FileIdentifier, len(fileIdentifiers))
+	for i, fi := range fileIdentifiers {
+		clone := *fi
+		clone.Value = identifiers.NormalizeValue(fi.Type, fi.Value)
+		toInsert[i] = &clone
+	}
+	_, err := svc.db.NewInsert().Model(&toInsert).Exec(ctx)
 	return errors.WithStack(err)
 }
 

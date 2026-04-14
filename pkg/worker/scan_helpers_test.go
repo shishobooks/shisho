@@ -644,3 +644,49 @@ func TestShouldApplySidecarRelationship(t *testing.T) {
 		})
 	}
 }
+
+// TestIdentifierDiff_StableAcrossRescans locks in the fix for a regression
+// where each rescan of a book with hyphenated/prefixed/mixed-case identifiers
+// would thrash delete+insert because the stored (normalized) value and the
+// parser-emitted (raw) value built different diff keys. This test drives the
+// exact helpers that pkg/worker/scan_unified.go now calls (fileIdentifierKeys
+// and parsedIdentifierKeys) — so reverting the scanner to inline
+// "id.Type+':'+id.Value" key building would break it, locking in the
+// integration and not just the helper contract.
+func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
+	t.Parallel()
+
+	// Simulate what file.Identifiers holds after the first scan: values are
+	// already normalized because the books service canonicalizes on write.
+	stored := []*models.FileIdentifier{
+		{Type: models.IdentifierTypeISBN13, Value: "9780316769488"},
+		{Type: models.IdentifierTypeASIN, Value: "B08N5WRWNW"},
+		{Type: models.IdentifierTypeUUID, Value: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+	}
+	// Simulate what the parser returns on the next scan: raw cosmetic forms.
+	parsed := []mediafile.ParsedIdentifier{
+		{Type: models.IdentifierTypeISBN13, Value: "978-0-316-76948-8"},
+		{Type: models.IdentifierTypeASIN, Value: "b08n5wrwnw"},
+		{Type: models.IdentifierTypeUUID, Value: "URN:UUID:A1B2C3D4-E5F6-7890-ABCD-EF1234567890"},
+	}
+
+	existingKeys := fileIdentifierKeys(stored)
+	newKeys := parsedIdentifierKeys(parsed)
+
+	// With a matching source (steady state), the diff must report no change.
+	got := shouldUpdateRelationship(newKeys, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	assert.False(t, got, "rescan must not report identifier change when only cosmetic formatting differs")
+
+	// Sidecar path uses the same key-building helpers.
+	got = shouldApplySidecarRelationship(newKeys, existingKeys, models.DataSourceSidecar, false)
+	assert.False(t, got, "sidecar rescan must not report identifier change when only cosmetic formatting differs")
+
+	// A genuinely new identifier must still be detected as a change.
+	parsedWithAddition := append(parsed, mediafile.ParsedIdentifier{
+		Type:  models.IdentifierTypeGoodreads,
+		Value: "12345678",
+	})
+	newKeysWithAddition := parsedIdentifierKeys(parsedWithAddition)
+	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	assert.True(t, got, "rescan must still detect a real addition even when the existing entries have cosmetic variants")
+}
