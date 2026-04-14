@@ -570,12 +570,19 @@ export interface PluginSearchError {
   plugin_scope: string;
   plugin_id: string;
   plugin_name: string;
-  error: string;
+  message: string;
+}
+
+export interface PluginSearchSkipped {
+  plugin_scope: string;
+  plugin_id: string;
+  plugin_name: string;
 }
 
 export interface PluginSearchResponse {
   results: PluginSearchResult[];
   errors?: PluginSearchError[];
+  skipped_plugins?: PluginSearchSkipped[];
 }
 
 export const usePluginSearch = () => {

@@ -1344,7 +1344,17 @@ type PluginSearchError struct {
 	PluginScope string `json:"plugin_scope"`
 	PluginID    string `json:"plugin_id"`
 	PluginName  string `json:"plugin_name"`
-	Error       string `json:"error"`
+	Message     string `json:"message"`
+}
+
+// PluginSearchSkipped reports an enricher that was skipped because it does
+// not declare support for the target file type. The frontend uses this to
+// distinguish "no plugins handle this file type" from "plugins ran and
+// returned nothing".
+type PluginSearchSkipped struct {
+	PluginScope string `json:"plugin_scope"`
+	PluginID    string `json:"plugin_id"`
+	PluginName  string `json:"plugin_name"`
 }
 
 // searchMetadata runs search() across all enricher plugins available for manual invocation
@@ -1452,10 +1462,12 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	log := logger.FromContext(ctx)
 	var allResults []EnrichSearchResult
 	var pluginErrors []PluginSearchError
+	var skippedPlugins []PluginSearchSkipped
 	for _, rt := range runtimes {
+		manifest := rt.Manifest()
 		// Skip plugins that don't handle this file type
 		if fileType != "" {
-			enricherCap := rt.Manifest().Capabilities.MetadataEnricher
+			enricherCap := manifest.Capabilities.MetadataEnricher
 			if enricherCap == nil {
 				continue
 			}
@@ -1467,13 +1479,17 @@ func (h *handler) searchMetadata(c echo.Context) error {
 				}
 			}
 			if !handles {
+				skippedPlugins = append(skippedPlugins, PluginSearchSkipped{
+					PluginScope: rt.Scope(),
+					PluginID:    rt.PluginID(),
+					PluginName:  manifest.Name,
+				})
 				continue
 			}
 		}
 
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
-			manifest := rt.Manifest()
 			log.Warn("enricher search failed", logger.Data{
 				"scope":  rt.Scope(),
 				"plugin": rt.PluginID(),
@@ -1483,7 +1499,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 				PluginScope: rt.Scope(),
 				PluginID:    rt.PluginID(),
 				PluginName:  manifest.Name,
-				Error:       sErr.Error(),
+				Message:     sErr.Error(),
 			})
 			continue
 		}
@@ -1493,7 +1509,6 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 		// Compute disabled fields for this plugin
 		var disabledFields []string
-		manifest := rt.Manifest()
 		if manifest.Capabilities.MetadataEnricher != nil {
 			declaredFields := manifest.Capabilities.MetadataEnricher.Fields
 			effectiveSettings, fErr := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
@@ -1517,8 +1532,9 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"results": allResults,
-		"errors":  pluginErrors,
+		"results":         allResults,
+		"errors":          pluginErrors,
+		"skipped_plugins": skippedPlugins,
 	})
 }
 
