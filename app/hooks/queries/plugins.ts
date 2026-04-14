@@ -566,8 +566,16 @@ export interface PluginSearchResult {
   confidence?: number;
 }
 
+export interface PluginSearchError {
+  plugin_scope: string;
+  plugin_id: string;
+  plugin_name: string;
+  error: string;
+}
+
 export interface PluginSearchResponse {
   results: PluginSearchResult[];
+  errors?: PluginSearchError[];
 }
 
 export const usePluginSearch = () => {

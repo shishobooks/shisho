@@ -1338,6 +1338,15 @@ type EnrichSearchResult struct {
 	DisabledFields []string `json:"disabled_fields,omitempty"`
 }
 
+// PluginSearchError reports a plugin whose search() hook failed so the
+// frontend can surface it to the user instead of silently dropping it.
+type PluginSearchError struct {
+	PluginScope string `json:"plugin_scope"`
+	PluginID    string `json:"plugin_id"`
+	PluginName  string `json:"plugin_name"`
+	Error       string `json:"error"`
+}
+
 // searchMetadata runs search() across all enricher plugins available for manual invocation
 // and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
@@ -1440,7 +1449,9 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		searchCtx["file"] = fileCtx
 	}
 
+	log := logger.FromContext(ctx)
 	var allResults []EnrichSearchResult
+	var pluginErrors []PluginSearchError
 	for _, rt := range runtimes {
 		// Skip plugins that don't handle this file type
 		if fileType != "" {
@@ -1462,7 +1473,19 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
 		if sErr != nil {
-			continue // Skip failed plugins
+			manifest := rt.Manifest()
+			log.Warn("enricher search failed", logger.Data{
+				"scope":  rt.Scope(),
+				"plugin": rt.PluginID(),
+				"error":  sErr.Error(),
+			})
+			pluginErrors = append(pluginErrors, PluginSearchError{
+				PluginScope: rt.Scope(),
+				PluginID:    rt.PluginID(),
+				PluginName:  manifest.Name,
+				Error:       sErr.Error(),
+			})
+			continue
 		}
 		if resp == nil {
 			continue
@@ -1495,6 +1518,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"results": allResults,
+		"errors":  pluginErrors,
 	})
 }
 
