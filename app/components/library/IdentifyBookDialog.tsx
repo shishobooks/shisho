@@ -1,5 +1,5 @@
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
-import { ExternalLink, Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -130,6 +130,9 @@ export function IdentifyBookDialog({
   };
 
   const results = searchMutation.data?.results ?? [];
+  const pluginErrors = searchMutation.data?.errors ?? [];
+  const skippedPlugins = searchMutation.data?.skipped_plugins ?? [];
+  const selectedFileType = selectedFile?.file_type;
 
   // Detect plugin IDs that appear under multiple scopes
   const ambiguousIds = useMemo(() => {
@@ -347,16 +350,52 @@ export function IdentifyBookDialog({
                 </div>
               )}
 
-              {searchMutation.isSuccess && results.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground space-y-2">
-                  <p>No results found.</p>
-                  <p className="text-xs">
-                    {hasEnricherPlugins
-                      ? "Try a different search query."
-                      : "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."}
-                  </p>
+              {searchMutation.isSuccess && pluginErrors.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {pluginErrors.map((err) => (
+                    <div
+                      className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-xs"
+                      key={`${err.plugin_scope}-${err.plugin_id}`}
+                    >
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-destructive">
+                          {err.plugin_name || err.plugin_id} failed
+                        </p>
+                        <p
+                          className="text-muted-foreground break-words"
+                          title={err.message}
+                        >
+                          {err.message}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
+
+              {searchMutation.isSuccess &&
+                results.length === 0 &&
+                pluginErrors.length === 0 &&
+                (() => {
+                  const allSkippedForFileType =
+                    skippedPlugins.length > 0 && hasEnricherPlugins;
+                  const skippedNames = skippedPlugins
+                    .map((p) => p.plugin_name || p.plugin_id)
+                    .join(", ");
+                  return (
+                    <div className="text-center py-12 text-muted-foreground space-y-2">
+                      <p>No results found.</p>
+                      <p className="text-xs">
+                        {!hasEnricherPlugins
+                          ? "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."
+                          : allSkippedForFileType
+                            ? `No installed enricher${skippedPlugins.length === 1 ? "" : "s"} support${skippedPlugins.length === 1 ? "s" : ""} ${selectedFileType?.toUpperCase() ?? "this file type"} files (${skippedNames}).`
+                            : "Try a different search query."}
+                      </p>
+                    </div>
+                  );
+                })()}
 
               {searchMutation.isSuccess && results.length > 0 && (
                 <div className="space-y-2">
