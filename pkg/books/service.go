@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
 )
@@ -803,6 +804,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			if err != nil {
 				return errors.WithStack(err)
 			}
+
+			// Write a fresh book sidecar at the renamed folder so the
+			// organized book is never left sidecar-less — the old-named
+			// sidecar was just deleted above.
+			if err := sidecar.WriteBookSidecarFromModel(book); err != nil {
+				log.Warn("failed to write book sidecar after folder rename", logger.Data{
+					"book_id": book.ID,
+					"path":    book.Filepath,
+					"error":   err.Error(),
+				})
+			}
 		}
 
 		// Rename files inside the folder (whether or not folder was renamed)
@@ -913,6 +925,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 		// Update book filepath to the new folder
 		if newBookPath != "" && newBookPath != book.Filepath {
+			oldBookPath := book.Filepath
 			book.Filepath = newBookPath
 			book.UpdatedAt = now
 
@@ -923,6 +936,24 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
+			}
+
+			// Clean up the synthetic pre-organize folder that scan_unified.go
+			// created just to hold an early book sidecar. If an enricher
+			// changed book.Title between that sidecar write and now, the
+			// folder is orphaned (contains only the stale sidecar) because
+			// OrganizeRootLevelFile computed the new folder from the current
+			// title and moved the media file + associated covers there.
+			// Then write a fresh sidecar at the new folder so the organized
+			// book is never left sidecar-less (same pattern as the
+			// isDirectoryBased branch above).
+			svc.cleanUpStaleRootLevelBookFolder(ctx, oldBookPath)
+			if err := sidecar.WriteBookSidecarFromModel(book); err != nil {
+				log.Warn("failed to write book sidecar after organize", logger.Data{
+					"book_id": book.ID,
+					"path":    book.Filepath,
+					"error":   err.Error(),
+				})
 			}
 		}
 	} else {
@@ -1000,6 +1031,45 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	}
 
 	return nil
+}
+
+// cleanUpStaleRootLevelBookFolder removes the synthetic book folder that
+// scan_unified.go may have created to hold an early book sidecar. It's only
+// safe to call after root-level file organization has relocated the media
+// files (and any cover sidecars) to the new folder — at that point the old
+// folder should contain nothing but the stale book metadata.json.
+//
+// Missing directory or non-empty directory (e.g. user dropped extra files
+// in there) are both logged and tolerated: we only clean up what we know we
+// put there.
+func (svc *Service) cleanUpStaleRootLevelBookFolder(ctx context.Context, oldBookPath string) {
+	log := logger.FromContext(ctx)
+
+	if oldBookPath == "" {
+		return
+	}
+
+	info, err := os.Stat(oldBookPath)
+	if err != nil || !info.IsDir() {
+		return
+	}
+
+	staleSidecarPath := sidecar.BookSidecarPath(oldBookPath)
+	if staleSidecarPath != "" {
+		if err := os.Remove(staleSidecarPath); err != nil && !os.IsNotExist(err) {
+			log.Warn("failed to remove stale book sidecar", logger.Data{
+				"path":  staleSidecarPath,
+				"error": err.Error(),
+			})
+		}
+	}
+
+	if err := os.Remove(oldBookPath); err != nil && !os.IsNotExist(err) {
+		log.Warn("failed to remove stale book folder", logger.Data{
+			"path":  oldBookPath,
+			"error": err.Error(),
+		})
+	}
 }
 
 // CreateAuthor creates a book-author association.
