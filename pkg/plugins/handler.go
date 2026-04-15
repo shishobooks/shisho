@@ -1404,7 +1404,8 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 	if len(runtimes) == 0 {
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"results": []EnrichSearchResult{},
+			"results":       []EnrichSearchResult{},
+			"total_plugins": 0,
 		})
 	}
 
@@ -1535,6 +1536,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		"results":         allResults,
 		"errors":          pluginErrors,
 		"skipped_plugins": skippedPlugins,
+		"total_plugins":   len(runtimes),
 	})
 }
 

@@ -132,6 +132,7 @@ export function IdentifyBookDialog({
   const results = searchMutation.data?.results ?? [];
   const pluginErrors = searchMutation.data?.errors ?? [];
   const skippedPlugins = searchMutation.data?.skipped_plugins ?? [];
+  const totalPlugins = searchMutation.data?.total_plugins ?? 0;
   const selectedFileType = selectedFile?.file_type;
 
   // Detect plugin IDs that appear under multiple scopes
@@ -378,11 +379,17 @@ export function IdentifyBookDialog({
                 results.length === 0 &&
                 pluginErrors.length === 0 &&
                 (() => {
-                  const allSkippedForFileType =
-                    skippedPlugins.length > 0 && hasEnricherPlugins;
+                  const fileTypeLabel =
+                    selectedFileType?.toUpperCase() ?? "this file type";
                   const skippedNames = skippedPlugins
                     .map((p) => p.plugin_name || p.plugin_id)
                     .join(", ");
+                  const allSkippedForFileType =
+                    hasEnricherPlugins &&
+                    totalPlugins > 0 &&
+                    skippedPlugins.length >= totalPlugins;
+                  const partialSkip =
+                    skippedPlugins.length > 0 && !allSkippedForFileType;
                   return (
                     <div className="text-center py-12 text-muted-foreground space-y-2">
                       <p>No results found.</p>
@@ -390,9 +397,18 @@ export function IdentifyBookDialog({
                         {!hasEnricherPlugins
                           ? "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."
                           : allSkippedForFileType
-                            ? `No installed enricher${skippedPlugins.length === 1 ? "" : "s"} support${skippedPlugins.length === 1 ? "s" : ""} ${selectedFileType?.toUpperCase() ?? "this file type"} files (${skippedNames}).`
+                            ? `No installed enricher${skippedPlugins.length === 1 ? "" : "s"} support${skippedPlugins.length === 1 ? "s" : ""} ${fileTypeLabel} files (${skippedNames}).`
                             : "Try a different search query."}
                       </p>
+                      {partialSkip && (
+                        <p className="text-xs">
+                          {skippedNames}{" "}
+                          {skippedPlugins.length === 1 ? "was" : "were"} skipped
+                          because {skippedPlugins.length === 1 ? "it" : "they"}{" "}
+                          {skippedPlugins.length === 1 ? "doesn't" : "don't"}{" "}
+                          support {fileTypeLabel} files.
+                        </p>
+                      )}
                     </div>
                   );
                 })()}
