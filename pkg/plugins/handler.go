@@ -1473,7 +1473,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	log := logger.FromContext(ctx)
-	var allResults []EnrichSearchResult
+	allResults := make([]EnrichSearchResult, 0)
 	var pluginErrors []PluginSearchError
 	var skippedPlugins []PluginSearchSkipped
 	for _, rt := range runtimes {
