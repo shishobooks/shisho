@@ -1357,6 +1357,18 @@ type PluginSearchSkipped struct {
 	PluginName  string `json:"plugin_name"`
 }
 
+// PluginSearchResponse is the HTTP response body for POST /plugins/search.
+// TotalPlugins is the number of candidate enricher runtimes considered for
+// this search (after library + mode filtering but before file-type skipping),
+// which lets the frontend distinguish "every enricher was skipped" from
+// "some enrichers ran and returned nothing".
+type PluginSearchResponse struct {
+	Results        []EnrichSearchResult  `json:"results"`
+	Errors         []PluginSearchError   `json:"errors,omitempty"`
+	SkippedPlugins []PluginSearchSkipped `json:"skipped_plugins,omitempty"`
+	TotalPlugins   int                   `json:"total_plugins"`
+}
+
 // searchMetadata runs search() across all enricher plugins available for manual invocation
 // and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
@@ -1403,8 +1415,9 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	if len(runtimes) == 0 {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"results": []EnrichSearchResult{},
+		return c.JSON(http.StatusOK, PluginSearchResponse{
+			Results:      []EnrichSearchResult{},
+			TotalPlugins: 0,
 		})
 	}
 
@@ -1460,7 +1473,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	log := logger.FromContext(ctx)
-	var allResults []EnrichSearchResult
+	allResults := make([]EnrichSearchResult, 0)
 	var pluginErrors []PluginSearchError
 	var skippedPlugins []PluginSearchSkipped
 	for _, rt := range runtimes {
@@ -1531,10 +1544,11 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"results":         allResults,
-		"errors":          pluginErrors,
-		"skipped_plugins": skippedPlugins,
+	return c.JSON(http.StatusOK, PluginSearchResponse{
+		Results:        allResults,
+		Errors:         pluginErrors,
+		SkippedPlugins: skippedPlugins,
+		TotalPlugins:   len(runtimes),
 	})
 }
 

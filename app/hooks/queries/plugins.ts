@@ -583,6 +583,7 @@ export interface PluginSearchResponse {
   results: PluginSearchResult[];
   errors?: PluginSearchError[];
   skipped_plugins?: PluginSearchSkipped[];
+  total_plugins?: number;
 }
 
 export const usePluginSearch = () => {
