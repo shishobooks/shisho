@@ -5,6 +5,66 @@ export interface IdentifierEntry {
   value: string;
 }
 
+export interface SkippedPlugin {
+  plugin_id: string;
+  plugin_name?: string;
+}
+
+export interface IdentifyEmptyStateInput {
+  hasEnricherPlugins: boolean;
+  totalPlugins: number;
+  skippedPlugins: SkippedPlugin[];
+  fileType: string | undefined;
+}
+
+export interface IdentifyEmptyStateMessage {
+  primary: string;
+  secondary?: string;
+}
+
+export function computeIdentifyEmptyState(
+  input: IdentifyEmptyStateInput,
+): IdentifyEmptyStateMessage {
+  const fileTypeLabel = input.fileType?.toUpperCase() ?? "this file type";
+  const skippedNames = input.skippedPlugins
+    .map((p) => p.plugin_name || p.plugin_id)
+    .join(", ");
+
+  if (!input.hasEnricherPlugins) {
+    return {
+      primary:
+        "No metadata enricher plugins are installed. Install one from the plugin settings to search for books.",
+    };
+  }
+
+  if (input.totalPlugins === 0) {
+    return {
+      primary: "No metadata enricher plugins are enabled for this library.",
+    };
+  }
+
+  const allSkipped = input.skippedPlugins.length >= input.totalPlugins;
+
+  if (allSkipped) {
+    const plural = input.skippedPlugins.length !== 1;
+    return {
+      primary: `No installed enricher${plural ? "s" : ""} support${plural ? "" : "s"} ${fileTypeLabel} files (${skippedNames}).`,
+    };
+  }
+
+  if (input.skippedPlugins.length > 0) {
+    const plural = input.skippedPlugins.length !== 1;
+    return {
+      primary: "Try a different search query.",
+      secondary: plural
+        ? `${skippedNames} were skipped because they don't support ${fileTypeLabel} files.`
+        : `${skippedNames} was skipped because it doesn't support ${fileTypeLabel} files.`,
+    };
+  }
+
+  return { primary: "Try a different search query." };
+}
+
 export function resolveIdentifiers(
   current: IdentifierEntry[],
   incoming: IdentifierEntry[],

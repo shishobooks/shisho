@@ -1,3 +1,4 @@
+import { computeIdentifyEmptyState } from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
 import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -379,35 +380,18 @@ export function IdentifyBookDialog({
                 results.length === 0 &&
                 pluginErrors.length === 0 &&
                 (() => {
-                  const fileTypeLabel =
-                    selectedFileType?.toUpperCase() ?? "this file type";
-                  const skippedNames = skippedPlugins
-                    .map((p) => p.plugin_name || p.plugin_id)
-                    .join(", ");
-                  const allSkippedForFileType =
-                    hasEnricherPlugins &&
-                    totalPlugins > 0 &&
-                    skippedPlugins.length >= totalPlugins;
-                  const partialSkip =
-                    skippedPlugins.length > 0 && !allSkippedForFileType;
+                  const message = computeIdentifyEmptyState({
+                    hasEnricherPlugins,
+                    totalPlugins,
+                    skippedPlugins,
+                    fileType: selectedFileType,
+                  });
                   return (
                     <div className="text-center py-12 text-muted-foreground space-y-2">
                       <p>No results found.</p>
-                      <p className="text-xs">
-                        {!hasEnricherPlugins
-                          ? "No metadata enricher plugins are installed. Install one from the plugin settings to search for books."
-                          : allSkippedForFileType
-                            ? `No installed enricher${skippedPlugins.length === 1 ? "" : "s"} support${skippedPlugins.length === 1 ? "s" : ""} ${fileTypeLabel} files (${skippedNames}).`
-                            : "Try a different search query."}
-                      </p>
-                      {partialSkip && (
-                        <p className="text-xs">
-                          {skippedNames}{" "}
-                          {skippedPlugins.length === 1 ? "was" : "were"} skipped
-                          because {skippedPlugins.length === 1 ? "it" : "they"}{" "}
-                          {skippedPlugins.length === 1 ? "doesn't" : "don't"}{" "}
-                          support {fileTypeLabel} files.
-                        </p>
+                      <p className="text-xs">{message.primary}</p>
+                      {message.secondary && (
+                        <p className="text-xs">{message.secondary}</p>
                       )}
                     </div>
                   );
