@@ -167,7 +167,12 @@ const SeriesDetail = () => {
           {seriesBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
               {seriesBooksQuery.data.map((book) => (
-                <BookItem book={book} key={book.id} libraryId={libraryId!} />
+                <BookItem
+                  book={book}
+                  key={book.id}
+                  libraryId={libraryId!}
+                  seriesId={seriesId}
+                />
               ))}
             </div>
           )}

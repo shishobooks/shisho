@@ -310,7 +310,17 @@ const BookItem = ({
             />
           )}
         </div>
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2">
+        <div
+          className={cn(
+            "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
+            seriesNumber && "leading-[1.6]",
+          )}
+        >
+          {seriesNumber && (
+            <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
+              {seriesNumber}
+            </span>
+          )}
           {book.title}
         </div>
       </Link>
@@ -339,25 +349,18 @@ const BookItem = ({
           if (uniqueNames.length === 0) return null;
 
           return (
-            <div className="mt-1 text-sm line-clamp-2 text-neutral-500 dark:text-neutral-500">
+            <div className="mt-1 text-xs line-clamp-2 text-neutral-500 dark:text-neutral-500">
               {uniqueNames.join(", ")}
             </div>
           );
         })()}
       {book.files && (
-        <div className="mt-2 flex gap-2 text-sm">
+        <div className="mt-2 flex gap-2 text-xs">
           {uniqBy(book.files, "file_type").map((f) => (
             <Badge className="uppercase" key={f.id} variant="subtle">
               {f.file_type}
             </Badge>
           ))}
-        </div>
-      )}
-      {seriesNumber && (
-        <div className="mt-1">
-          <Badge className="text-xs" variant="outline">
-            #{seriesNumber}
-          </Badge>
         </div>
       )}
       {addedByUsername && (
