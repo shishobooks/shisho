@@ -15,11 +15,37 @@ type Event struct {
 type Broker struct {
 	mu          sync.RWMutex
 	subscribers map[chan Event]struct{}
+	// done is closed by Close() to broadcast "server is shutting down" to
+	// every SSE handler. Without this signal, streaming handlers would wait
+	// for the client to disconnect before returning, stalling srv.Shutdown
+	// until its timeout expires.
+	done chan struct{}
 }
 
 func NewBroker() *Broker {
 	return &Broker{
 		subscribers: make(map[chan Event]struct{}),
+		done:        make(chan struct{}),
+	}
+}
+
+// Done returns a channel that is closed when Close is called. SSE handlers
+// select on this channel alongside the request context so they exit promptly
+// during server shutdown instead of blocking until the client disconnects.
+func (b *Broker) Done() <-chan struct{} {
+	return b.done
+}
+
+// Close broadcasts shutdown to all current and future subscribers. Idempotent:
+// safe to call multiple times.
+func (b *Broker) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	select {
+	case <-b.done:
+		// already closed
+	default:
+		close(b.done)
 	}
 }
 

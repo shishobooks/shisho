@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -24,6 +25,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/shishobooks/shisho/pkg/worker"
 )
+
+// shutdownHardDeadline is the wall-clock budget for the full graceful shutdown
+// sequence (server + worker + db). If we exceed it, we os.Exit so the port is
+// released promptly. Air's kill_delay defaults to 1s before SIGKILL, so the
+// hard deadline is mainly insurance for `mise start:api` and other callers
+// without a watchdog — if graceful takes longer than this, something is wrong
+// and we'd rather drop the process than hold the port indefinitely.
+const shutdownHardDeadline = 5 * time.Second
+
+// serverShutdownTimeout bounds how long we wait for in-flight HTTP requests
+// (including long-lived SSE streams) to finish before forcing connections
+// closed. Shorter than shutdownHardDeadline so worker/db cleanup still runs.
+const serverShutdownTimeout = 3 * time.Second
 
 func main() {
 	ctx := context.Background()
@@ -115,9 +129,38 @@ func main() {
 	<-graceful
 	log.Info("starting graceful shutdown")
 
-	err = srv.Shutdown(ctx)
+	// Watchdog: if any step below blocks past the hard deadline, force-exit
+	// so the TCP listener is released. Without this, a stuck SSE stream, a
+	// slow DB close, or a runaway job handler could hold port 3689 long
+	// enough for the next air rebuild to race and hit "address already in
+	// use". log.Fatal is not used here because it flushes buffered logs
+	// which is itself a blocking operation.
+	go func() {
+		time.Sleep(shutdownHardDeadline)
+		log.Error("graceful shutdown exceeded hard deadline, forcing exit", logger.Data{"deadline": shutdownHardDeadline.String()})
+		os.Exit(1)
+	}()
+
+	// Tell SSE streams to exit their select loops now; otherwise each one
+	// would hold an in-flight request until srv.Shutdown's timeout expires
+	// or the client happened to disconnect. The broker's Done channel is
+	// idempotent so this is safe to call before Shutdown.
+	broker.Close()
+
+	// Bound server shutdown so a hung SSE client or slow handler can't stall
+	// the rest of the shutdown sequence. Shutdown returns ctx.DeadlineExceeded
+	// on timeout; we then call Close to tear down remaining connections
+	// forcefully.
+	srvCtx, cancel := context.WithTimeout(ctx, serverShutdownTimeout)
+	defer cancel()
+	err = srv.Shutdown(srvCtx)
 	if err != nil {
 		log.Err(err).Error("server shutdown error")
+		// Force-close any lingering connections (e.g. SSE streams that
+		// didn't observe their request context cancellation in time).
+		if closeErr := srv.Close(); closeErr != nil {
+			log.Err(closeErr).Error("server force-close error")
+		}
 	}
 	log.Info("server shutdown")
 

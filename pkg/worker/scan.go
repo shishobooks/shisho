@@ -260,6 +260,11 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})
 
 	for _, library := range allLibraries {
+		// Honor cancellation between libraries — if the worker is shutting
+		// down mid-scan, don't start a fresh per-library walk.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		jobLog.Info("processing library", logger.Data{"library_id": library.ID})
 		filesToScan := make([]string, 0)
 
@@ -289,6 +294,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		for _, libraryPath := range library.LibraryPaths {
 			jobLog.Info("processing library path", logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
 			err := filepath.WalkDir(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
+				// Stop walking the tree if the worker is shutting down. Returning
+				// the cancellation error aborts the outer WalkDir call so we bail
+				// out of the library rather than enumerating thousands more paths.
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return ctxErr
+				}
 				if err != nil {
 					return errors.WithStack(err)
 				}
@@ -393,13 +404,18 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		fileChan := make(chan string, len(filesToScan))
 		resultChan := make(chan scanResult, len(filesToScan))
 
-		// Start workers
+		// Start workers. Each worker checks ctx.Err() at the top of its
+		// loop so that once the worker is shutting down, queued paths
+		// still in fileChan are drained without running scanInternal.
 		var wg sync.WaitGroup
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for path := range fileChan {
+					if ctx.Err() != nil {
+						continue
+					}
 					result, err := w.scanInternal(ctx, ScanOptions{
 						FilePath:  path,
 						LibraryID: library.ID,
@@ -417,9 +433,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			}()
 		}
 
-		// Dispatch files
+		// Dispatch files; bail early on shutdown so queued workers can drain.
+	dispatchLoop:
 		for _, path := range filesToScan {
-			fileChan <- path
+			select {
+			case <-ctx.Done():
+				break dispatchLoop
+			case fileChan <- path:
+			}
 		}
 		close(fileChan)
 
@@ -448,6 +469,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"publishers_cached": cache.PublisherCount(),
 			"imprints_cached":   cache.ImprintCount(),
 		})
+
+		// If we were cancelled mid-scan, return now rather than running orphan
+		// cleanup/organize/hash-gen queuing on a partial result set.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 
 		// Books whose files were reconciled as moves should also be organized
 		// so organize_file_structure can rename their folders back into the

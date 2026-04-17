@@ -73,6 +73,17 @@ type Worker struct {
 	doneScheduling  chan struct{}
 	doneCleanup     chan struct{}
 	doneUpdateCheck chan struct{}
+
+	// ctx is the worker-wide context cancelled by Shutdown. It is the parent
+	// for every job handler's context (hash generation, scans, bulk downloads)
+	// AND for the DB calls inside fetchJobs/scheduleScanJobs/cleanupOldJobs/
+	// checkPluginUpdates. Without this, a hash-gen job iterating a large
+	// library would keep processJobs busy past air's 1s kill_delay (and the
+	// next `mise start` reload would race the outgoing process for port
+	// 3689), and a slow scheduler DB query would block the scheduler goroutine
+	// from observing shutdown until the query returned.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
@@ -91,10 +102,15 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	pluginService := plugins.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	w := &Worker{
 		config: cfg,
 		log:    logger.New(),
 		db:     db,
+
+		ctx:    ctx,
+		cancel: cancel,
 
 		bookService:        bookService,
 		chapterService:     chapterService,
@@ -131,9 +147,17 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 
 	if dlCache != nil {
 		dlCache.ShouldSkipCleanup = func() bool {
-			hasActive, err := w.jobService.HasActiveJob(context.Background(), models.JobTypeBulkDownload, nil)
+			// Use w.ctx so the query bails out during shutdown instead of
+			// holding up the cleanup goroutine on a DB that may be closing.
+			hasActive, err := w.jobService.HasActiveJob(w.ctx, models.JobTypeBulkDownload, nil)
 			if err != nil {
-				return false
+				// During shutdown the query returns context.Canceled — we
+				// can't confirm whether a bulk download is active, so err on
+				// the side of skipping cleanup rather than racing against
+				// Shutdown and potentially deleting an in-use cache file.
+				// Any other error (real DB failure) falls through to false
+				// so cleanup can still make progress under normal operation.
+				return errors.Is(err, context.Canceled)
 			}
 			return hasActive
 		}
@@ -178,13 +202,17 @@ func (w *Worker) fetchJobs() {
 			w.doneFetching <- struct{}{}
 			return
 		case <-timer.C:
-			j, err := w.jobService.ListJobs(context.Background(), jobs.ListJobsOptions{
+			j, err := w.jobService.ListJobs(w.ctx, jobs.ListJobsOptions{
 				Limit:              pointerutil.Int(1),
 				Statuses:           []string{models.JobStatusPending, models.JobStatusInProgress},
 				ProcessIDToExclude: &processID,
 			})
 			if err != nil {
-				w.log.Err(err).Error("list jobs error")
+				// Silently drop ctx.Canceled errors during shutdown; the
+				// enclosing select will observe w.shutdown on the next loop.
+				if !errors.Is(err, context.Canceled) {
+					w.log.Err(err).Error("list jobs error")
+				}
 				timer.Reset(duration)
 				continue
 			}
@@ -210,7 +238,11 @@ func (w *Worker) processJobs() {
 				continue
 			}
 			log := w.log.ID(id.String()).Root(logger.Data{"job_id": job.ID, "type": job.Type, "process_id": processID})
-			ctx := log.WithContext(context.Background())
+			// Derive from w.ctx (not context.Background) so Shutdown can
+			// cancel in-flight jobs. Hash generation, scan, and bulk download
+			// all check ctx.Done() at loop boundaries and return ctx.Err()
+			// when cancelled.
+			ctx := log.WithContext(w.ctx)
 
 			// Create job logger for DB persistence
 			jobLog := w.jobLogService.NewJobLogger(ctx, job.ID, log)
@@ -234,10 +266,7 @@ func (w *Worker) processJobs() {
 					if r := recover(); r != nil {
 						jobLog.Fatal("job panicked", errors.Wrapf(errJobPanicked, "%v", r), logger.Data{"panic": r})
 						job.Status = models.JobStatusFailed
-						_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
-							Columns: []string{"status"},
-						})
-						w.publishJobEvent("job.status_changed", job)
+						w.persistJobStatus(job, log)
 					}
 				}()
 
@@ -246,33 +275,38 @@ func (w *Worker) processJobs() {
 				if !ok {
 					jobLog.Error("can't find process function for type", errors.Wrapf(errUnknownJobType, "%s", job.Type), nil)
 					job.Status = models.JobStatusFailed
-					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
-						Columns: []string{"status"},
-					})
-					w.publishJobEvent("job.status_changed", job)
+					w.persistJobStatus(job, log)
 					return
 				}
 
 				err = fn(ctx, job, jobLog)
 				if err != nil {
-					jobLog.Error("job failed", err, nil)
+					// A context.Canceled from shutdown isn't a real failure —
+					// suppress the ERROR log (and its doomed DB persist, since
+					// the job ctx is already cancelled) to match how the
+					// schedulers above handle the same case. We still fall
+					// through to mark the row failed.
+					//
+					// Cancelled-at-shutdown jobs intentionally stay at
+					// failed rather than being reset to pending:
+					//   - scan is re-queued by scheduleScanJobs on the next
+					//     SyncIntervalMinutes tick
+					//   - hash_generation is re-queued by the tail-hook at
+					//     the end of every scan
+					//   - bulk_download is NOT re-queued automatically; a
+					//     partial zip is cheaper to abandon than to re-render
+					//     unprompted on restart, so the user re-initiates it
+					if !errors.Is(err, context.Canceled) {
+						jobLog.Error("job failed", err, nil)
+					}
 					job.Status = models.JobStatusFailed
-					_ = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
-						Columns: []string{"status"},
-					})
-					w.publishJobEvent("job.status_changed", job)
+					w.persistJobStatus(job, log)
 					return
 				}
 
 				// Update job to be completed so that it's not picked up anymore.
 				job.Status = models.JobStatusCompleted
-				err = w.jobService.UpdateJob(ctx, job, jobs.UpdateJobOptions{
-					Columns: []string{"status"},
-				})
-				if err != nil {
-					log.Err(err).Error("update job error")
-				}
-				w.publishJobEvent("job.status_changed", job)
+				w.persistJobStatus(job, log)
 			}()
 		}
 	}
@@ -289,15 +323,16 @@ func (w *Worker) scheduleScanJobs() {
 			w.doneScheduling <- struct{}{}
 			return
 		case <-timer.C:
-			ctx := context.Background()
 			log := w.log.Root(logger.Data{"scheduler": "scan"})
 
 			// Check if there are any non-deleted libraries
-			libs, err := w.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
+			libs, err := w.libraryService.ListLibraries(w.ctx, libraries.ListLibrariesOptions{
 				Limit: pointerutil.Int(1),
 			})
 			if err != nil {
-				log.Err(err).Error("failed to list libraries for scheduled scan")
+				if !errors.Is(err, context.Canceled) {
+					log.Err(err).Error("failed to list libraries for scheduled scan")
+				}
 				timer.Reset(duration)
 				continue
 			}
@@ -308,9 +343,11 @@ func (w *Worker) scheduleScanJobs() {
 			}
 
 			// Check if a scan job is already active
-			hasActive, err := w.jobService.HasActiveJob(ctx, models.JobTypeScan, nil)
+			hasActive, err := w.jobService.HasActiveJob(w.ctx, models.JobTypeScan, nil)
 			if err != nil {
-				log.Err(err).Error("failed to check for active scan job")
+				if !errors.Is(err, context.Canceled) {
+					log.Err(err).Error("failed to check for active scan job")
+				}
 				timer.Reset(duration)
 				continue
 			}
@@ -326,8 +363,10 @@ func (w *Worker) scheduleScanJobs() {
 				Status:     models.JobStatusPending,
 				DataParsed: &models.JobScanData{},
 			}
-			if err := w.jobService.CreateJob(ctx, scanJob); err != nil {
-				log.Err(err).Error("failed to create scheduled scan job")
+			if err := w.jobService.CreateJob(w.ctx, scanJob); err != nil {
+				if !errors.Is(err, context.Canceled) {
+					log.Err(err).Error("failed to create scheduled scan job")
+				}
 				timer.Reset(duration)
 				continue
 			}
@@ -351,12 +390,13 @@ func (w *Worker) cleanupOldJobs() {
 			w.doneCleanup <- struct{}{}
 			return
 		case <-timer.C:
-			ctx := context.Background()
 			log := w.log.Root(logger.Data{"cleanup": "jobs"})
 
-			count, err := w.jobService.CleanupOldJobs(ctx, w.config.JobRetentionDays)
+			count, err := w.jobService.CleanupOldJobs(w.ctx, w.config.JobRetentionDays)
 			if err != nil {
-				log.Err(err).Error("failed to cleanup old jobs")
+				if !errors.Is(err, context.Canceled) {
+					log.Err(err).Error("failed to cleanup old jobs")
+				}
 			} else if count > 0 {
 				log.Info("cleaned up old jobs", logger.Data{"count": count})
 			}
@@ -382,11 +422,12 @@ func (w *Worker) checkPluginUpdates() {
 			w.doneUpdateCheck <- struct{}{}
 			return
 		case <-timer.C:
-			ctx := context.Background()
 			log := w.log.Root(logger.Data{"scheduler": "plugin-update-check"})
 
-			if err := w.pluginManager.CheckForUpdates(ctx); err != nil {
-				log.Err(err).Error("failed to check for plugin updates")
+			if err := w.pluginManager.CheckForUpdates(w.ctx); err != nil {
+				if !errors.Is(err, context.Canceled) {
+					log.Err(err).Error("failed to check for plugin updates")
+				}
 			} else {
 				log.Debug("completed plugin update check")
 			}
@@ -436,6 +477,16 @@ func (w *Worker) Shutdown() {
 		w.monitor.stop()
 	}
 
+	// Cancel w.ctx BEFORE closing w.shutdown. This unblocks two things at
+	// once: in-flight job handlers currently running inside fn(ctx, ...),
+	// and DB queries in any of the scheduler goroutines that happened to
+	// be mid-call when shutdown arrived. Without this, processJobs would
+	// wait for the current job to finish naturally, and the schedulers
+	// wouldn't observe w.shutdown until their driver-level timeouts fired.
+	if w.cancel != nil {
+		w.cancel()
+	}
+
 	close(w.shutdown)
 
 	<-w.doneFetching
@@ -454,6 +505,30 @@ func (w *Worker) publishJobEvent(eventType string, job *models.Job) {
 		return
 	}
 	w.broker.Publish(events.NewJobEvent(eventType, job.ID, job.Status, job.Type, job.LibraryID))
+}
+
+// jobStatusWriteTimeout bounds the final status-update DB call when a job
+// finishes. It's short because the update is a single-row write — if it's
+// slower than this, something is wrong with the DB and blocking Shutdown on
+// it would only compound the problem.
+const jobStatusWriteTimeout = time.Second
+
+// persistJobStatus writes the job's current status (completed/failed) to the
+// DB and broadcasts the status_changed event, using a background-derived
+// context so it can still persist during shutdown. The in-progress job ctx
+// is cancelled the moment Shutdown starts, which would otherwise make this
+// final write fail silently and leave the row stuck at in_progress. The
+// 1s deadline keeps us from stalling Shutdown if the DB itself hangs.
+func (w *Worker) persistJobStatus(job *models.Job, log logger.Logger) {
+	statusCtx, cancel := context.WithTimeout(context.Background(), jobStatusWriteTimeout)
+	defer cancel()
+	if err := w.jobService.UpdateJob(statusCtx, job, jobs.UpdateJobOptions{
+		Columns: []string{"status"},
+	}); err != nil {
+		log.Err(err).Error("job status update error")
+		return
+	}
+	w.publishJobEvent("job.status_changed", job)
 }
 
 const letterBytes = "abcdef0123456789"
