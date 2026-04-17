@@ -107,19 +107,42 @@ const JobDetail = () => {
     return Array.from(names).sort();
   }, [logs]);
 
-  // Filter logs by search term (client-side)
-  const filteredLogs = logs.filter((log) => {
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      if (
-        !log.message.toLowerCase().includes(searchLower) &&
-        !log.data?.toLowerCase().includes(searchLower)
-      ) {
-        return false;
-      }
-    }
-    return true;
-  });
+  // Filter and map logs to LogViewerEntry format (memoized to avoid
+  // re-parsing JSON on every render).
+  const viewerEntries = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    return logs
+      .filter((log) => {
+        if (searchTerm) {
+          if (
+            !log.message.toLowerCase().includes(searchLower) &&
+            !log.data?.toLowerCase().includes(searchLower)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((log) => {
+        let parsedData: Record<string, unknown> | null = null;
+        if (log.data) {
+          try {
+            parsedData = JSON.parse(log.data);
+          } catch {
+            parsedData = null;
+          }
+        }
+        return {
+          id: log.id,
+          level: log.level,
+          timestamp: log.created_at,
+          message: log.message,
+          data: parsedData,
+          error: null,
+          stackTrace: log.stack_trace ?? null,
+        };
+      });
+  }, [logs, searchTerm]);
 
   const toggleLevelFilter = (level: string) => {
     setLevelFilter((prev) =>
@@ -235,25 +258,7 @@ const JobDetail = () => {
       {/* Log viewer */}
       <LogViewer
         emptyMessage="No logs found."
-        entries={filteredLogs.map((log) => {
-          let parsedData: Record<string, unknown> | null = null;
-          if (log.data) {
-            try {
-              parsedData = JSON.parse(log.data);
-            } catch {
-              parsedData = null;
-            }
-          }
-          return {
-            id: log.id,
-            level: log.level,
-            timestamp: log.created_at,
-            message: log.message,
-            data: parsedData,
-            error: null,
-            stackTrace: log.stack_trace ?? null,
-          };
-        })}
+        entries={viewerEntries}
         searchTerm={searchTerm}
       />
     </div>
