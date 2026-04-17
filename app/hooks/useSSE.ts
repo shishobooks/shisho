@@ -8,6 +8,7 @@ import {
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
 import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
+import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
 import { useAuth } from "@/hooks/useAuth";
 
 export function useSSE() {
@@ -99,9 +100,14 @@ export function useSSE() {
       }
     };
 
+    const handleLogEntry = () => {
+      queryClient.invalidateQueries({ queryKey: [LogsQueryKey.ListLogs] });
+    };
+
     es.addEventListener("job.created", handleJobCreated);
     es.addEventListener("job.status_changed", handleJobStatusChanged);
     es.addEventListener("bulk_download.progress", handleBulkDownloadProgress);
+    es.addEventListener("log.entry", handleLogEntry);
 
     return () => {
       es.removeEventListener("job.created", handleJobCreated);
@@ -110,6 +116,7 @@ export function useSSE() {
         "bulk_download.progress",
         handleBulkDownloadProgress,
       );
+      es.removeEventListener("log.entry", handleLogEntry);
       es.close();
     };
   }, [isAuthenticated, queryClient]);
