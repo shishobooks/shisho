@@ -1,12 +1,12 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import LogViewer from "@/components/library/LogViewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,7 +23,6 @@ import {
   JobLogLevelInfo,
   JobLogLevelWarn,
   JobStatusInProgress,
-  type JobLog,
 } from "@/types";
 
 const getLevelColor = (level: string) => {
@@ -73,102 +72,6 @@ const formatDuration = (start: string, end?: string | null): string => {
   return `${minutes}m ${remainingSeconds}s`;
 };
 
-interface LogEntryProps {
-  log: JobLog;
-  searchTerm: string;
-}
-
-const LogEntry = ({ log, searchTerm }: LogEntryProps) => {
-  const [expanded, setExpanded] = useState(false);
-  const hasExpandableContent = log.data || log.stack_trace;
-
-  const date = new Date(log.created_at);
-  const timestamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-
-  // Parse data if present
-  let parsedData: Record<string, unknown> | null = null;
-  if (log.data) {
-    try {
-      parsedData = JSON.parse(log.data);
-    } catch {
-      parsedData = null;
-    }
-  }
-
-  // Create data preview
-  const dataPreview = parsedData
-    ? Object.entries(parsedData)
-        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-        .join(" ")
-    : null;
-
-  // Highlight search term in message
-  const highlightText = (text: string) => {
-    if (!searchTerm) return text;
-    const regex = new RegExp(`(${searchTerm})`, "gi");
-    const parts = text.split(regex);
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark className="bg-yellow-300 dark:bg-yellow-700" key={i}>
-          {part}
-        </mark>
-      ) : (
-        part
-      ),
-    );
-  };
-
-  return (
-    <div className="py-2 border-b border-border last:border-b-0 font-mono text-sm">
-      <div
-        className={`flex items-center gap-2 overflow-hidden ${hasExpandableContent ? "cursor-pointer" : ""}`}
-        onClick={() => hasExpandableContent && setExpanded(!expanded)}
-      >
-        {hasExpandableContent ? (
-          expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          )
-        ) : (
-          <div className="w-4 flex-shrink-0" />
-        )}
-        <span className="text-muted-foreground flex-shrink-0 whitespace-nowrap">
-          {timestamp}
-        </span>
-        <Badge
-          className={`${getLevelColor(log.level)} flex-shrink-0`}
-          variant="secondary"
-        >
-          {log.level}
-        </Badge>
-        <span className="text-foreground flex-shrink-0 whitespace-nowrap">
-          {highlightText(log.message)}
-        </span>
-        {dataPreview && !expanded && (
-          <span className="text-muted-foreground truncate min-w-0">
-            {highlightText(dataPreview)}
-          </span>
-        )}
-      </div>
-      {expanded && (
-        <div className="ml-6 mt-2 space-y-2">
-          {parsedData && (
-            <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
-              {highlightText(JSON.stringify(parsedData, null, 2))}
-            </pre>
-          )}
-          {log.stack_trace && (
-            <pre className="bg-red-950/20 p-2 rounded text-xs overflow-x-auto text-red-400 whitespace-pre-wrap">
-              {highlightText(log.stack_trace)}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const JobDetail = () => {
   const { id } = useParams<{ id: string }>();
 
@@ -177,9 +80,6 @@ const JobDetail = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
   const [pluginFilter, setPluginFilter] = useState<string>("");
-  const [autoScroll, setAutoScroll] = useState(true);
-  const logContainerRef = useRef<HTMLDivElement>(null);
-  const lastLogIdRef = useRef<number | undefined>(undefined);
 
   const { data, isLoading, error } = useJobLogs(id, {
     level: levelFilter.length > 0 ? levelFilter : undefined,
@@ -220,29 +120,6 @@ const JobDetail = () => {
     }
     return true;
   });
-
-  // Auto-scroll to bottom when new logs arrive
-  useEffect(() => {
-    if (autoScroll && logContainerRef.current && filteredLogs.length > 0) {
-      const lastLog = filteredLogs[filteredLogs.length - 1];
-      if (lastLog.id !== lastLogIdRef.current) {
-        lastLogIdRef.current = lastLog.id;
-        logContainerRef.current.scrollTop =
-          logContainerRef.current.scrollHeight;
-      }
-    }
-  }, [filteredLogs, autoScroll]);
-
-  // Disable auto-scroll when user scrolls up
-  const handleScroll = useCallback(() => {
-    if (logContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-      if (!isAtBottom && autoScroll) {
-        setAutoScroll(false);
-      }
-    }
-  }, [autoScroll]);
 
   const toggleLevelFilter = (level: string) => {
     setLevelFilter((prev) =>
@@ -355,42 +232,30 @@ const JobDetail = () => {
         )}
       </div>
 
-      {/* Log container */}
-      <div
-        className="border border-border rounded-md bg-background overflow-y-auto max-h-[500px]"
-        onScroll={handleScroll}
-        ref={logContainerRef}
-      >
-        <div className="p-4">
-          {filteredLogs.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No logs found.
-            </p>
-          ) : (
-            filteredLogs.map((log) => (
-              <LogEntry key={log.id} log={log} searchTerm={searchTerm} />
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Auto-scroll checkbox */}
-      <div className="flex items-center gap-2 mt-4">
-        <Checkbox
-          checked={autoScroll}
-          id="autoscroll"
-          onCheckedChange={(checked) => {
-            setAutoScroll(checked as boolean);
-            if (checked && logContainerRef.current) {
-              logContainerRef.current.scrollTop =
-                logContainerRef.current.scrollHeight;
+      {/* Log viewer */}
+      <LogViewer
+        emptyMessage="No logs found."
+        entries={filteredLogs.map((log) => {
+          let parsedData: Record<string, unknown> | null = null;
+          if (log.data) {
+            try {
+              parsedData = JSON.parse(log.data);
+            } catch {
+              parsedData = null;
             }
-          }}
-        />
-        <label className="text-sm text-muted-foreground" htmlFor="autoscroll">
-          Auto-scroll to new logs
-        </label>
-      </div>
+          }
+          return {
+            id: log.id,
+            level: log.level,
+            timestamp: log.created_at,
+            message: log.message,
+            data: parsedData,
+            error: null,
+            stackTrace: log.stack_trace ?? null,
+          };
+        })}
+        searchTerm={searchTerm}
+      />
     </div>
   );
 };
