@@ -10,6 +10,7 @@ import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeletePerson,
   useMergePerson,
@@ -28,6 +29,7 @@ const PersonDetail = () => {
 
   const navigate = useNavigate();
 
+  const libraryQuery = useLibrary(libraryId);
   const personQuery = usePerson(personId);
 
   usePageTitle(personQuery.data?.name ?? "Person");
@@ -115,6 +117,34 @@ const PersonDetail = () => {
 
   return (
     <LibraryLayout>
+      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
+        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to={`/libraries/${libraryId}`}
+            >
+              {libraryQuery.data?.name || "Library"}
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to={`/libraries/${libraryId}/people`}
+            >
+              People
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="text-foreground truncate">{person.name}</li>
+        </ol>
+      </nav>
+
       {/* Person Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">

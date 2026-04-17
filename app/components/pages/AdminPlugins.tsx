@@ -394,7 +394,7 @@ const BrowseTab = () => {
                   )}
                   <Badge variant="secondary">{plugin.scope}</Badge>
                   {alreadyInstalled && (
-                    <Badge variant="subtle">Installed</Badge>
+                    <Badge variant="success">Installed</Badge>
                   )}
                   {!plugin.compatible && (
                     <Badge variant="destructive">Incompatible</Badge>

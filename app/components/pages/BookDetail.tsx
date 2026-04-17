@@ -1062,14 +1062,22 @@ const BookDetail = () => {
 
   return (
     <LibraryLayout>
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to={`/libraries/${libraryId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Books
-          </Link>
-        </Button>
-      </div>
+      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
+        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to={`/libraries/${libraryId}`}
+            >
+              {libraryQuery.data?.name || "Library"}
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="text-foreground truncate">{book.title}</li>
+        </ol>
+      </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Book Cover */}

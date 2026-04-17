@@ -188,16 +188,6 @@ const FileDetail = () => {
 
   return (
     <LibraryLayout>
-      {/* Header with breadcrumbs and back button */}
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to={`/libraries/${libraryId}/books/${bookId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Book
-          </Link>
-        </Button>
-      </div>
-
       {/* Breadcrumbs */}
       <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
         <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">

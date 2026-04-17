@@ -6,6 +6,11 @@ import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -88,11 +93,16 @@ const SeriesCard = ({
             />
           )}
         </div>
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2">
-          {seriesItem.name}
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="mt-2 group-hover:underline text-sm font-bold line-clamp-2">
+              {seriesItem.name}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{seriesItem.name}</TooltipContent>
+        </Tooltip>
       </Link>
-      <div className="mt-1 text-sm line-clamp-1 text-neutral-500 dark:text-neutral-500">
+      <div className="mt-1 text-xs line-clamp-1 text-neutral-500 dark:text-neutral-500">
         <Badge className="text-xs" variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>

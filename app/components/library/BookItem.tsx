@@ -25,6 +25,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { type RescanMode } from "@/hooks/queries/resync";
 import { cn } from "@/libraries/utils";
@@ -310,19 +315,24 @@ const BookItem = ({
             />
           )}
         </div>
-        <div
-          className={cn(
-            "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
-            seriesNumber && "leading-[1.6]",
-          )}
-        >
-          {seriesNumber && (
-            <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
-              {seriesNumber}
-            </span>
-          )}
-          {book.title}
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
+                seriesNumber && "leading-[1.6]",
+              )}
+            >
+              {seriesNumber && (
+                <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
+                  {seriesNumber}
+                </span>
+              )}
+              {book.title}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{book.title}</TooltipContent>
+        </Tooltip>
       </Link>
       {book.authors &&
         book.authors.length > 0 &&
@@ -357,7 +367,7 @@ const BookItem = ({
       {book.files && (
         <div className="mt-2 flex gap-2 text-xs">
           {uniqBy(book.files, "file_type").map((f) => (
-            <Badge className="uppercase" key={f.id} variant="subtle">
+            <Badge className="text-xs uppercase" key={f.id} variant="secondary">
               {f.file_type}
             </Badge>
           ))}

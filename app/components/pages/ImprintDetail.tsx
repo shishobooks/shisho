@@ -17,6 +17,7 @@ import {
   useMergeImprint,
   useUpdateImprint,
 } from "@/hooks/queries/imprints";
+import { useLibrary } from "@/hooks/queries/libraries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { File } from "@/types";
@@ -26,6 +27,7 @@ const ImprintDetail = () => {
   const navigate = useNavigate();
   const imprintId = id ? parseInt(id, 10) : undefined;
 
+  const libraryQuery = useLibrary(libraryId);
   const imprintQuery = useImprint(imprintId);
 
   usePageTitle(imprintQuery.data?.name ?? "Imprint");
@@ -114,6 +116,34 @@ const ImprintDetail = () => {
 
   return (
     <LibraryLayout>
+      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
+        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to={`/libraries/${libraryId}`}
+            >
+              {libraryQuery.data?.name || "Library"}
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to={`/libraries/${libraryId}/imprints`}
+            >
+              Imprints
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="text-foreground truncate">{imprint.name}</li>
+        </ol>
+      </nav>
+
       {/* Imprint Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
