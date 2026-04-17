@@ -175,3 +175,72 @@ func TestRingBuffer_EmptyBufferQuery(t *testing.T) {
 	entries := rb.Query("", "", 100, 0)
 	assert.Empty(t, entries)
 }
+
+func TestRingBuffer_RootLevelFields(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	// Zerolog puts Root() fields at the JSON root level, not under "data"
+	line := `{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"request handled","method":"GET","path":"/books","route":"/books","status_code":200,"duration":"1.234","hostname":"myhost"}` + "\n"
+	_, err := rb.Write([]byte(line))
+	require.NoError(t, err)
+
+	entries := rb.Query("", "", 100, 0)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "request handled", entries[0].Message)
+	// Root-level fields should appear in Data (except known fields like hostname)
+	assert.Equal(t, "GET", entries[0].Data["method"])
+	assert.Equal(t, "/books", entries[0].Data["path"])
+	assert.Equal(t, "/books", entries[0].Data["route"])
+	assert.Equal(t, float64(200), entries[0].Data["status_code"])
+	assert.Equal(t, "1.234", entries[0].Data["duration"])
+	// hostname is excluded
+	assert.Nil(t, entries[0].Data["hostname"])
+}
+
+func TestRingBuffer_RootAndNestedDataMerged(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	// Both nested "data" and root-level fields should appear in Data
+	line := `{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"starting","data":{"version":"0.0.31"},"id":"abc-123"}` + "\n"
+	_, err := rb.Write([]byte(line))
+	require.NoError(t, err)
+
+	entries := rb.Query("", "", 100, 0)
+	require.Len(t, entries, 1)
+	// Nested data
+	assert.Equal(t, "0.0.31", entries[0].Data["version"])
+	// Root-level field
+	assert.Equal(t, "abc-123", entries[0].Data["id"])
+}
+
+func TestRingBuffer_SkipLogsRoute(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	// Requests to /logs should be skipped to prevent feedback loops
+	line := `{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"request handled","route":"/logs","method":"GET","status_code":200}` + "\n"
+	_, err := rb.Write([]byte(line))
+	require.NoError(t, err)
+
+	entries := rb.Query("", "", 100, 0)
+	assert.Empty(t, entries)
+}
+
+func TestRingBuffer_SkipEventsRoute(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	// SSE endpoint should also be skipped
+	line := `{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"request handled","route":"/events","method":"GET"}` + "\n"
+	_, err := rb.Write([]byte(line))
+	require.NoError(t, err)
+
+	entries := rb.Query("", "", 100, 0)
+	assert.Empty(t, entries)
+}

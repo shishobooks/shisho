@@ -139,31 +139,69 @@ func (rb *RingBuffer) Query(level, search string, limit int, afterID uint64) []L
 	return matched
 }
 
-// rawLogEntry is the intermediate struct for parsing zerolog JSON.
-type rawLogEntry struct {
-	Level     string         `json:"level"`
-	Timestamp string         `json:"timestamp"`
-	Message   string         `json:"message"`
-	Data      map[string]any `json:"data,omitempty"`
-	Error     *string        `json:"error,omitempty"`
+// knownFields are top-level zerolog fields that are extracted into dedicated
+// LogEntry fields (or intentionally excluded like hostname). Everything else
+// is merged into Data so root-level fields from log.Root() are visible.
+var knownFields = map[string]bool{
+	"level": true, "timestamp": true, "message": true,
+	"data": true, "error": true, "hostname": true, "stack": true,
+}
+
+// skipRoutes are API routes whose "request handled" entries are excluded
+// from the ring buffer to prevent feedback loops (e.g. the logs page
+// fetching /logs generates a log entry that triggers an SSE event that
+// causes another fetch).
+var skipRoutes = map[string]bool{
+	"/logs":   true,
+	"/events": true,
 }
 
 func parseLogLine(line []byte) (LogEntry, bool) {
-	var raw rawLogEntry
+	var raw map[string]any
 	if err := json.Unmarshal(line, &raw); err != nil {
 		return LogEntry{}, false
 	}
-	if raw.Message == "" && raw.Level == "" {
+
+	level, _ := raw["level"].(string)
+	message, _ := raw["message"].(string)
+	if level == "" && message == "" {
 		return LogEntry{}, false
 	}
 
-	ts, _ := time.Parse(time.RFC3339, raw.Timestamp)
+	// Skip log viewer and SSE routes to prevent feedback loops.
+	if route, ok := raw["route"].(string); ok && skipRoutes[route] {
+		return LogEntry{}, false
+	}
+
+	timestampStr, _ := raw["timestamp"].(string)
+	ts, _ := time.Parse(time.RFC3339, timestampStr)
+
+	var errStr *string
+	if e, ok := raw["error"].(string); ok {
+		errStr = &e
+	}
+
+	// Build data from nested "data" object + root-level extras.
+	data := make(map[string]any)
+	if nested, ok := raw["data"].(map[string]any); ok {
+		for k, v := range nested {
+			data[k] = v
+		}
+	}
+	for k, v := range raw {
+		if !knownFields[k] {
+			data[k] = v
+		}
+	}
+	if len(data) == 0 {
+		data = nil
+	}
 
 	return LogEntry{
-		Level:     raw.Level,
+		Level:     level,
 		Timestamp: ts,
-		Message:   raw.Message,
-		Data:      raw.Data,
-		Error:     raw.Error,
+		Message:   message,
+		Data:      data,
+		Error:     errStr,
 	}, true
 }
