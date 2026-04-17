@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { type RescanMode } from "@/hooks/queries/resync";
+import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -142,6 +143,8 @@ const BookItem = ({
   onSelect,
   onShiftSelect,
 }: BookItemProps) => {
+  const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
+
   // Find the series number for the specific series context (if provided)
   const seriesNumber = seriesId
     ? book.book_series?.find((bs) => bs.series_id === seriesId)?.series_number
@@ -315,13 +318,17 @@ const BookItem = ({
             />
           )}
         </div>
-        <Tooltip>
+        <Tooltip
+          delayDuration={300}
+          open={isTitleTruncated ? undefined : false}
+        >
           <TooltipTrigger asChild>
             <div
               className={cn(
                 "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
                 seriesNumber && "leading-[1.6]",
               )}
+              ref={titleRef}
             >
               {seriesNumber && (
                 <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">

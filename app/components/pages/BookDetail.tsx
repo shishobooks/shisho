@@ -30,6 +30,7 @@ import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
@@ -1062,22 +1063,11 @@ const BookDetail = () => {
 
   return (
     <LibraryLayout>
-      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
-        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
-          <li className="shrink-0">
-            <Link
-              className="hover:text-foreground hover:underline"
-              to={`/libraries/${libraryId}`}
-            >
-              {libraryQuery.data?.name || "Library"}
-            </Link>
-          </li>
-          <li aria-hidden="true" className="shrink-0">
-            ›
-          </li>
-          <li className="text-foreground truncate">{book.title}</li>
-        </ol>
-      </nav>
+      <LibraryBreadcrumbs
+        items={[{ label: book.title }]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Book Cover */}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -110,33 +111,14 @@ const TagDetail = () => {
 
   return (
     <LibraryLayout>
-      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
-        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
-          <li className="shrink-0">
-            <Link
-              className="hover:text-foreground hover:underline"
-              to={`/libraries/${libraryId}`}
-            >
-              {libraryQuery.data?.name || "Library"}
-            </Link>
-          </li>
-          <li aria-hidden="true" className="shrink-0">
-            ›
-          </li>
-          <li className="shrink-0">
-            <Link
-              className="hover:text-foreground hover:underline"
-              to={`/libraries/${libraryId}/tags`}
-            >
-              Tags
-            </Link>
-          </li>
-          <li aria-hidden="true" className="shrink-0">
-            ›
-          </li>
-          <li className="text-foreground truncate">{tag.name}</li>
-        </ol>
-      </nav>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "Tags", to: `/libraries/${libraryId}/tags` },
+          { label: tag.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
 
       {/* Tag Header */}
       <div className="mb-8">
