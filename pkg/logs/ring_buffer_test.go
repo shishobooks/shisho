@@ -193,7 +193,7 @@ func TestRingBuffer_RootLevelFields(t *testing.T) {
 	assert.Equal(t, "GET", entries[0].Data["method"])
 	assert.Equal(t, "/books", entries[0].Data["path"])
 	assert.Equal(t, "/books", entries[0].Data["route"])
-	assert.Equal(t, float64(200), entries[0].Data["status_code"])
+	assert.EqualValues(t, 200, entries[0].Data["status_code"])
 	assert.Equal(t, "1.234", entries[0].Data["duration"])
 	// hostname is excluded
 	assert.Nil(t, entries[0].Data["hostname"])
