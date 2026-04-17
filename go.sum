@@ -137,8 +137,8 @@ github.com/puzpuzpuz/xsync/v3 v3.5.1 h1:GJYJZwO6IdxN/IKbneznS6yPkVC+c3zyY/j19c++
 github.com/puzpuzpuz/xsync/v3 v3.5.1/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
-github.com/robinjoseph08/golib v0.5.1 h1:ZUH8AkuH0gOaT/FQ4+jqdiLHaMa2yGRCU7hN18ExX7M=
-github.com/robinjoseph08/golib v0.5.1/go.mod h1:4igWuz+AzFHszJdlLeh0prE+dWrDSXIDYUzoY4usPcI=
+github.com/robinjoseph08/golib v0.5.2 h1:+6fHQ84Aa/hDrfjh9bE2zWwSRMMz6JVs5MfgH6A88Mg=
+github.com/robinjoseph08/golib v0.5.2/go.mod h1:4igWuz+AzFHszJdlLeh0prE+dWrDSXIDYUzoY4usPcI=
 github.com/rs/xid v1.6.0/go.mod h1:7XoLgs4eV+QndskICGsho+ADou8ySMSjJKDIan90Nz0=
 github.com/rs/zerolog v1.34.0 h1:k43nTLIwcTVQAncfCw4KZ2VY6ukYoZaBPNOE8txlOeY=
 github.com/rs/zerolog v1.34.0/go.mod h1:bJsvje4Z08ROH4Nhs5iH600c3IkWhwp44iRc54W6wYQ=
