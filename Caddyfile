@@ -4,7 +4,7 @@
 :5173 {
     # Logging
     log {
-        output stdout
+        output {$CADDY_ACCESS_LOG_OUTPUT:discard}
         format {$LOG_FORMAT}
     }
 

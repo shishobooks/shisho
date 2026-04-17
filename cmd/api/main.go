@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/logs"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/server"
@@ -25,6 +27,10 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	broker := events.NewBroker()
+	logBuffer := logs.NewRingBuffer(10_000, broker)
+	logger.SetOutput(io.MultiWriter(logger.Output(), logBuffer))
 	log := logger.New()
 
 	log.Info("starting shisho", logger.Data{"version": version.Version})
@@ -68,13 +74,11 @@ func main() {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}
 
-	broker := events.NewBroker()
-
 	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 
 	wrkr := worker.New(cfg, db, pluginManager, broker, dlCache)
 
-	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache)
+	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache, logBuffer)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/kobo"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
+	"github.com/shishobooks/shisho/pkg/logs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/opds"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -46,7 +47,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, logBuffer *logs.RingBuffer) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -102,6 +103,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// SSE event stream
 	events.RegisterRoutes(e, broker, authMiddleware)
+
+	// Log viewer endpoint (admin only)
+	logs.RegisterRoutes(e, logBuffer, authMiddleware)
 
 	echo.NotFoundHandler = notFoundHandler
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle

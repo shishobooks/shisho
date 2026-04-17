@@ -5,6 +5,7 @@ import {
   LogOut,
   Menu,
   Puzzle,
+  ScrollText,
   Users,
 } from "lucide-react";
 import {
@@ -176,6 +177,13 @@ const AdminLayoutContent = () => {
       isActive: location.pathname === "/settings/plugins",
       show: canViewConfig,
     },
+    {
+      to: "/settings/logs",
+      icon: <ScrollText className="h-4 w-4" />,
+      label: "Logs",
+      isActive: location.pathname === "/settings/logs",
+      show: canViewConfig,
+    },
   ].filter((item) => item.show);
 
   return (
@@ -244,6 +252,14 @@ const AdminLayoutContent = () => {
                   isActive={location.pathname === "/settings/plugins"}
                   label="Plugins"
                   to="/settings/plugins"
+                />
+              )}
+              {canViewConfig && (
+                <NavItem
+                  icon={<ScrollText className="h-4 w-4" />}
+                  isActive={location.pathname === "/settings/logs"}
+                  label="Logs"
+                  to="/settings/logs"
                 />
               )}
             </nav>

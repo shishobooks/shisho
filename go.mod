@@ -25,7 +25,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/pdfcpu/pdfcpu v0.11.1
 	github.com/pkg/errors v0.9.1
-	github.com/robinjoseph08/golib v0.5.1
+	github.com/robinjoseph08/golib v0.5.2
 	github.com/segmentio/encoding v0.5.4
 	github.com/stretchr/testify v1.11.1
 	github.com/uptrace/bun v1.2.18

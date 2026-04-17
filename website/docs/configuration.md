@@ -94,6 +94,18 @@ macOS (FSEvents) and Docker containers typically don't need this adjustment.
 |---------|-------------|---------|-------------|
 | `supplement_exclude_patterns` | `SUPPLEMENT_EXCLUDE_PATTERNS` | `[".*", ".DS_Store", "Thumbs.db", "desktop.ini"]` | Glob patterns to exclude from [supplement file](./supplement-files) discovery. Env var accepts comma-separated values |
 
+### Docker / Caddy
+
+These environment variables are only relevant when running Shisho in Docker, where Caddy serves as the reverse proxy.
+
+| Env Variable | Default | Description |
+|-------------|---------|-------------|
+| `CADDY_ACCESS_LOG_OUTPUT` | `discard` | Caddy access log output. Set to `stdout` to enable access logs. Logs are disabled by default to reduce noise |
+| `PUID` | `1000` | User ID for the Shisho process inside the container |
+| `PGID` | `1000` | Group ID for the Shisho process inside the container |
+| `STARTUP_TIMEOUT_SECONDS` | `120` | Seconds to wait for the backend to start before giving up. Increase for slow storage (e.g., NAS devices) |
+| `LOG_FORMAT` | `console` | Log output format. Set to `json` for structured JSON logs (useful for log aggregation) |
+
 ### Authentication
 
 | Setting | Env Variable | Default | Description |
