@@ -604,18 +604,18 @@ export function IdentifyReviewForm({
   const currentCoverDims = useImageDimensions(currentCoverUrl);
   const newCoverDims = useImageDimensions(newCoverUrl);
 
-  // When both cover dimensions are loaded and match exactly, default to keeping current
-  const coverDimsMatch =
+  // Prefer keeping the current cover when it's at least as high-resolution
+  // as the plugin cover (by pixel count) — avoids unnecessary writes/churn.
+  const preferCurrentCover =
     !!currentCoverDims &&
     !!newCoverDims &&
-    currentCoverDims.w === newCoverDims.w &&
-    currentCoverDims.h === newCoverDims.h;
+    currentCoverDims.w * currentCoverDims.h >= newCoverDims.w * newCoverDims.h;
   const [coverUserTouched, setCoverUserTouched] = useState(false);
   useEffect(() => {
-    if (coverDimsMatch && !coverUserTouched) {
+    if (preferCurrentCover && !coverUserTouched) {
       setCoverSelection("current");
     }
-  }, [coverDimsMatch, coverUserTouched]);
+  }, [preferCurrentCover, coverUserTouched]);
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -637,7 +637,7 @@ export function IdentifyReviewForm({
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
       coverSelection !==
-        (newCoverUrl && !disabledFields.has("cover") && !coverDimsMatch
+        (newCoverUrl && !disabledFields.has("cover") && !preferCurrentCover
           ? "new"
           : "current")
     );
@@ -662,7 +662,7 @@ export function IdentifyReviewForm({
     defaults,
     newCoverUrl,
     disabledFields,
-    coverDimsMatch,
+    preferCurrentCover,
   ]);
 
   useEffect(() => {
@@ -745,7 +745,7 @@ export function IdentifyReviewForm({
             <Label>{formatMetadataFieldLabel("cover")}</Label>
             <StatusBadge
               status={
-                isDisabled("cover") || coverDimsMatch
+                isDisabled("cover") || preferCurrentCover
                   ? "unchanged"
                   : currentCoverUrl
                     ? "changed"
