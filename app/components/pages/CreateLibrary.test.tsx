@@ -5,6 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Define global that's normally set by Vite
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -104,7 +107,7 @@ describe("CreateLibrary", () => {
     });
 
     it("should have unsaved changes when name is entered", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       renderPage();
 
       await waitFor(() => {
@@ -121,7 +124,7 @@ describe("CreateLibrary", () => {
     });
 
     it("should have unsaved changes when library path is entered", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       renderPage();
 
       await waitFor(() => {
@@ -137,7 +140,7 @@ describe("CreateLibrary", () => {
     });
 
     it("should have unsaved changes when organize file structure is unchecked", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       renderPage();
 
       await waitFor(() => {
@@ -158,7 +161,7 @@ describe("CreateLibrary", () => {
     });
 
     it("should NOT have unsaved changes when returning to initial defaults", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       renderPage();
 
       await waitFor(() => {

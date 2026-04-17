@@ -10,6 +10,13 @@
  */
 
 import { expect, getApiBaseURL, request, test } from "./fixtures";
+import type { Page } from "@playwright/test";
+
+async function gotoSetup(page: Page, path = "/setup") {
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL("/setup");
+  await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
+}
 
 test.describe("Setup Flow", () => {
   test.beforeAll(async ({ browser }) => {
@@ -21,16 +28,14 @@ test.describe("Setup Flow", () => {
   });
 
   test("redirects to setup when no users exist", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL("/setup");
-    await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
+    await gotoSetup(page, "/");
     await expect(
       page.getByText("Create your admin account to get started"),
     ).toBeVisible();
   });
 
   test("shows validation error for password mismatch", async ({ page }) => {
-    await page.goto("/setup");
+    await gotoSetup(page);
     await page.getByLabel("Username").fill("testadmin");
     await page.getByLabel("Password", { exact: true }).fill("password123");
     await page.getByLabel("Confirm Password").fill("different456");
@@ -40,7 +45,7 @@ test.describe("Setup Flow", () => {
   });
 
   test("shows validation error for username too short", async ({ page }) => {
-    await page.goto("/setup");
+    await gotoSetup(page);
     await page.getByLabel("Username").fill("ab");
     await page.getByLabel("Password", { exact: true }).fill("password123");
     await page.getByLabel("Confirm Password").fill("password123");
@@ -52,7 +57,7 @@ test.describe("Setup Flow", () => {
   });
 
   test("shows validation error for password too short", async ({ page }) => {
-    await page.goto("/setup");
+    await gotoSetup(page);
     await page.getByLabel("Username").fill("testadmin");
     await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByLabel("Confirm Password").fill("short");
@@ -64,7 +69,7 @@ test.describe("Setup Flow", () => {
   });
 
   test("shows validation error for empty username", async ({ page }) => {
-    await page.goto("/setup");
+    await gotoSetup(page);
     await page.getByLabel("Password", { exact: true }).fill("password123");
     await page.getByLabel("Confirm Password").fill("password123");
     await page.getByRole("button", { name: "Create Admin Account" }).click();
@@ -73,7 +78,7 @@ test.describe("Setup Flow", () => {
   });
 
   test("shows validation error for empty password", async ({ page }) => {
-    await page.goto("/setup");
+    await gotoSetup(page);
     await page.getByLabel("Username").fill("testadmin");
     await page.getByRole("button", { name: "Create Admin Account" }).click();
     await expect(page.getByText("Password is required")).toBeVisible();
@@ -81,8 +86,7 @@ test.describe("Setup Flow", () => {
   });
 
   test("creates admin account successfully", async ({ page }) => {
-    await page.goto("/setup");
-    await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
+    await gotoSetup(page);
     await page.getByLabel("Username").fill("testadmin");
     await page.getByLabel("Password", { exact: true }).fill("password123");
     await page.getByLabel("Confirm Password").fill("password123");

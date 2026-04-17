@@ -3,6 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 describe("UnsavedChangesDialog", () => {
   it("should render dialog content when open", () => {
     render(
@@ -30,7 +33,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should call onStay when Stay button is clicked", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 
@@ -50,7 +53,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should call onDiscard when Discard button is clicked", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 
@@ -70,7 +73,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should call onStay when dialog is closed via ESC key", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 
@@ -89,7 +92,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should call onStay when dialog is closed via overlay click", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 
@@ -141,7 +144,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should handle rapid button clicks without errors", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 
@@ -178,7 +181,7 @@ describe("UnsavedChangesDialog", () => {
   });
 
   it("should render close button that triggers onStay", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onStay = vi.fn();
     const onDiscard = vi.fn();
 

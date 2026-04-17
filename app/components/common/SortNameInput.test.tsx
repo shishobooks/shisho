@@ -3,6 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 describe("SortNameInput", () => {
   it("shows checkbox and input", () => {
     render(
@@ -89,7 +92,7 @@ describe("SortNameInput", () => {
   });
 
   it("calls onChange with empty string when checkbox is checked", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onChange = vi.fn();
 
     render(
@@ -108,7 +111,7 @@ describe("SortNameInput", () => {
   });
 
   it("enables input and pre-fills with generated value when unchecked", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onChange = vi.fn();
 
     render(
@@ -190,7 +193,7 @@ describe("SortNameInput", () => {
   });
 
   it("allows typing when checkbox is unchecked", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onChange = vi.fn();
 
     render(

@@ -4,6 +4,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock useFormDialogClose hook
 vi.mock("@/hooks/useFormDialogClose", () => ({
   useFormDialogClose: (
@@ -34,7 +37,7 @@ describe("MetadataEditDialog", () => {
       // The fix: Only initialize form when dialog opens (closed->open transition),
       // not every time props change.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onSave = vi.fn();
       const queryClient = createQueryClient();
@@ -125,7 +128,7 @@ describe("MetadataEditDialog", () => {
     });
 
     it("should reinitialize form when dialog closes and reopens", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onSave = vi.fn();
       const queryClient = createQueryClient();
@@ -203,7 +206,7 @@ describe("MetadataEditDialog", () => {
       //
       // The fix: Store initial values when dialog opens, compare against that.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onSave = vi.fn();
       const queryClient = createQueryClient();

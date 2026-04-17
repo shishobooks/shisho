@@ -8,6 +8,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFileChapters } from "@/hooks/queries/chapters";
 import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock the API hooks
 vi.mock("@/hooks/queries/chapters", () => ({
   useFileChapters: vi.fn(),
@@ -78,7 +81,7 @@ describe("FileChaptersTab - Play Promise handling", () => {
   });
 
   it("handles play() Promise rejection gracefully when interrupted by pause()", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
 
     // Track whether play was called so we only reject after it's called
     let playWasCalled = false;
@@ -238,7 +241,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     });
 
     it("plays audio when play button clicked", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
 
       renderWithProviders(
         <FileChaptersTab
@@ -255,7 +258,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     });
 
     it("stops previous playback when clicking play on different chapter", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
 
       renderWithProviders(
         <FileChaptersTab
@@ -278,7 +281,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     });
 
     it("stops playback when stop button clicked", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
 
       renderWithProviders(
         <FileChaptersTab
@@ -302,7 +305,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
   describe("edit mode - playback with reordering", () => {
     it("stops playback when entering edit mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onEditingChange = vi.fn();
 
       const { rerender } = renderWithProviders(
@@ -356,7 +359,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
   describe("index-based playback tracking", () => {
     it("only one chapter shows as playing at a time", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
 
       renderWithProviders(
         <FileChaptersTab
@@ -485,7 +488,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
   });
 
   it("plays audio after clicking minus button to decrement timestamp", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
 
     renderWithProviders(
       <FileChaptersTab
@@ -513,7 +516,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
   });
 
   it("plays audio after clicking plus button to increment timestamp", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
 
     renderWithProviders(
       <FileChaptersTab
@@ -541,7 +544,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
   });
 
   it("plays audio with updated timestamp after decrementing (state updates correctly)", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
 
     // Mock currentTime setter to verify correct timestamp is used
     let capturedCurrentTime: number | undefined;
@@ -580,7 +583,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
   });
 
   it("can play after clicking minus while already playing", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
 
     renderWithProviders(
       <FileChaptersTab
@@ -672,7 +675,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     // element at screen position 0 got reused for the (now-first) second
     // chapter, and the user's next click on that position silently
     // incremented the wrong chapter.
-    const user = userEvent.setup();
+    const user = createUser();
 
     renderWithProviders(
       <FileChaptersTab
@@ -712,7 +715,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     // The companion behavior: typing a page number into an input and tabbing
     // out is an explicit "commit" gesture, so the parent does reorder on
     // blur. Only button clicks intentionally skip the reorder.
-    const user = userEvent.setup();
+    const user = createUser();
 
     renderWithProviders(
       <FileChaptersTab

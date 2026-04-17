@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Role } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock the mutation hooks
 const mockCreateRole = vi.fn();
 const mockUpdateRole = vi.fn();
@@ -62,7 +65,7 @@ describe("RoleDialog", () => {
       // This can cause issues if the parent component hasn't unmounted the dialog yet
       // and is tracking some state based on the form values.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const queryClient = createQueryClient();
       const onOpenChange = vi.fn();
 
@@ -179,7 +182,7 @@ describe("RoleDialog", () => {
       // those edits just because the role prop changed (e.g., background refetch).
       // The form should only initialize once when the dialog opens.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const queryClient = createQueryClient();
       const onOpenChange = vi.fn();
 
@@ -336,7 +339,7 @@ describe("RoleDialog", () => {
     });
 
     it("should detect changes in create mode when name is entered", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const queryClient = createQueryClient();
       const onOpenChange = vi.fn();
 

@@ -14,6 +14,9 @@ import {
 
 import { FileRoleMain, FileTypeCBZ, type File } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Define global that's normally set by Vite
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -270,7 +273,7 @@ describe("FileEditDialog", () => {
       //    if file.cover_page hasn't updated from the async query refetch
       // 7. Dialog should close anyway because pendingCoverPage was reset
 
-      const user = userEvent.setup();
+      const user = createUser();
       const { onOpenChange } = renderDialog();
 
       // Wait for dialog to render
@@ -329,7 +332,7 @@ describe("FileEditDialog", () => {
         .spyOn(URL, "createObjectURL")
         .mockReturnValue("blob:test-url");
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const queryClient = createQueryClient();
 

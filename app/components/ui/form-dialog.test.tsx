@@ -10,6 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 describe("FormDialog", () => {
   // Store original addEventListener/removeEventListener
   let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
@@ -25,7 +28,7 @@ describe("FormDialog", () => {
     removeEventListenerSpy.mockRestore();
   });
   it("should close without confirmation when hasChanges is false", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -51,7 +54,7 @@ describe("FormDialog", () => {
   });
 
   it("should close directly when clicking X button even with unsaved changes", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -76,7 +79,7 @@ describe("FormDialog", () => {
   });
 
   it("should show UnsavedChangesDialog when pressing ESC with hasChanges", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -105,7 +108,7 @@ describe("FormDialog", () => {
   });
 
   it("handleStay should keep dialog open when clicking Stay button", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -143,7 +146,7 @@ describe("FormDialog", () => {
   });
 
   it("handleDiscard should close dialog when clicking Discard button", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -175,7 +178,7 @@ describe("FormDialog", () => {
   });
 
   it("should not show multiple confirmation dialogs on rapid ESC presses", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     render(
@@ -278,7 +281,7 @@ describe("FormDialog", () => {
   });
 
   it("should close when hasChanges changes from true to false", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     const { rerender } = render(
@@ -314,7 +317,7 @@ describe("FormDialog", () => {
   });
 
   it("should reset confirmation dialog when open becomes false externally", async () => {
-    const user = userEvent.setup();
+    const user = createUser();
     const onOpenChange = vi.fn();
 
     const { rerender } = render(

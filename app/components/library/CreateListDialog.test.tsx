@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { List } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock useFormDialogClose hook
 vi.mock("@/hooks/useFormDialogClose", () => ({
   useFormDialogClose: (
@@ -47,7 +50,7 @@ describe("CreateListDialog", () => {
       // The fix: Only initialize form when dialog opens (closed->open transition),
       // not every time list prop changes.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onUpdate = vi.fn();
       const queryClient = createQueryClient();
@@ -142,7 +145,7 @@ describe("CreateListDialog", () => {
     });
 
     it("should reinitialize form when dialog closes and reopens", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onUpdate = vi.fn();
       const queryClient = createQueryClient();
@@ -270,7 +273,7 @@ describe("CreateListDialog", () => {
 
   describe("initialization and state preservation (create mode)", () => {
     it("should NOT reset form when component re-renders in create mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onCreate = vi.fn();
       const queryClient = createQueryClient();
@@ -308,7 +311,7 @@ describe("CreateListDialog", () => {
     });
 
     it("should reset form when dialog closes and reopens in create mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onCreate = vi.fn();
       const queryClient = createQueryClient();
@@ -373,7 +376,7 @@ describe("CreateListDialog", () => {
       //
       // The fix: Store initial values when dialog opens, compare against that.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const onUpdate = vi.fn();
       const queryClient = createQueryClient();
