@@ -164,7 +164,7 @@ func TestRingBuffer_InvalidJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	entries := rb.Query("", "", 100, 0)
-	assert.Len(t, entries, 0)
+	assert.Empty(t, entries)
 }
 
 func TestRingBuffer_EmptyBufferQuery(t *testing.T) {
@@ -173,5 +173,5 @@ func TestRingBuffer_EmptyBufferQuery(t *testing.T) {
 	rb := NewRingBuffer(100, nil)
 
 	entries := rb.Query("", "", 100, 0)
-	assert.Len(t, entries, 0)
+	assert.Empty(t, entries)
 }
