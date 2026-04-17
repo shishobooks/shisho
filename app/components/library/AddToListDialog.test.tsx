@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { List } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock data
 const mockLists = [
   { id: 1, name: "Reading List", book_count: 5, permission: "owner" as const },
@@ -91,7 +94,7 @@ describe("AddToListDialog", () => {
       // The fix: Only initialize selections when dialog opens (closed->open transition),
       // not every time query data changes.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const queryClient = createQueryClient();
 
@@ -202,7 +205,7 @@ describe("AddToListDialog", () => {
     });
 
     it("should reinitialize selections when dialog closes and reopens", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const queryClient = createQueryClient();
 
@@ -264,7 +267,7 @@ describe("AddToListDialog", () => {
 
     it("should NOT reset selections when dialog stays open and component re-renders", async () => {
       // This tests that normal re-renders (without data changes) don't reset state
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const queryClient = createQueryClient();
 
@@ -320,7 +323,7 @@ describe("AddToListDialog", () => {
       //
       // The fix: Store initial list IDs when dialog opens, compare against that.
 
-      const user = userEvent.setup();
+      const user = createUser();
       const onOpenChange = vi.fn();
       const queryClient = createQueryClient();
 

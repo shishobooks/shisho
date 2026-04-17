@@ -157,6 +157,17 @@ await expect(page).toHaveURL("/settings/libraries");
 
 **Solution:** Understand app routing logic and test actual behavior.
 
+### 4. SPA Navigation Under Load
+
+**Problem:** `page.goto()` defaults to waiting for the full `"load"` event, which can be slower than the UI becoming usable when the dev server is busy during `mise check:quiet`.
+
+**Solution:** For SPA routes, prefer `waitUntil: "domcontentloaded"` and then assert on the stable UI the test actually needs:
+
+```typescript
+await page.goto("/setup", { waitUntil: "domcontentloaded" });
+await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
+```
+
 ## Test File Structure
 
 ```typescript

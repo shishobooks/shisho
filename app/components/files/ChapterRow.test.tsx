@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FileTypeCBZ, FileTypeM4B, type Chapter } from "@/types";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Wrapper to provide router context for Link components
 const renderWithRouter = (ui: React.ReactElement) => {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
@@ -100,7 +103,7 @@ describe("ChapterRow - M4B Playback", () => {
 
   describe("onPlay callback", () => {
     it("calls onPlay with chapterIndex and timestamp when play button clicked in view mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onPlay = vi.fn();
 
       renderWithRouter(
@@ -122,7 +125,7 @@ describe("ChapterRow - M4B Playback", () => {
     });
 
     it("calls onPlay with chapterIndex and current timestamp in edit mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onPlay = vi.fn();
 
       const editChapter: Chapter = {
@@ -159,7 +162,7 @@ describe("ChapterRow - M4B Playback", () => {
     });
 
     it("does not call onPlay when chapterIndex is undefined", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onPlay = vi.fn();
 
       renderWithRouter(
@@ -181,7 +184,7 @@ describe("ChapterRow - M4B Playback", () => {
     });
 
     it("calls onPlay with updated timestamp after clicking minus button in edit mode", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onPlay = vi.fn();
       const onStartTimestampChange = vi.fn();
 
@@ -232,7 +235,7 @@ describe("ChapterRow - M4B Playback", () => {
 
   describe("onStop callback", () => {
     it("calls onStop when stop button clicked while playing", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onStop = vi.fn();
 
       renderWithRouter(
@@ -277,7 +280,7 @@ describe("ChapterRow - M4B Playback", () => {
     // reserved for explicit commit actions (input blur, page picker).
 
     it("commits but does not reorder after clicking decrement timestamp button", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onBlur = vi.fn();
       const onStartTimestampChange = vi.fn();
 
@@ -313,7 +316,7 @@ describe("ChapterRow - M4B Playback", () => {
     });
 
     it("commits but does not reorder after clicking increment timestamp button", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onBlur = vi.fn();
       const onStartTimestampChange = vi.fn();
 
@@ -417,7 +420,7 @@ describe("ChapterRow - CBZ", () => {
     // reserved for explicit commit actions (input blur, page picker).
 
     it("commits but does not reorder after clicking decrement page button", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onBlur = vi.fn();
       const onStartPageChange = vi.fn();
 
@@ -449,7 +452,7 @@ describe("ChapterRow - CBZ", () => {
     });
 
     it("commits but does not reorder after clicking increment page button", async () => {
-      const user = userEvent.setup();
+      const user = createUser();
       const onBlur = vi.fn();
       const onStartPageChange = vi.fn();
 

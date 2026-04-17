@@ -491,6 +491,15 @@ describe("MyComponent", () => {
 });
 ```
 
+### Fake Timers and `userEvent`
+
+- `vitest.setup.ts` enables fake timers globally with `shouldAdvanceTime: true`
+- When a test uses `userEvent.setup()`, pass `advanceTimers: vi.advanceTimersByTime` so clicks and typing don't stall or hit the 5s test timeout under heavy load
+
+```typescript
+const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+```
+
 ### E2E Tests
 
 **See `e2e/CLAUDE.md` for detailed E2E patterns**, including:

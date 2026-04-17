@@ -5,6 +5,9 @@ import { useMemo, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 // Mock useNavigate
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -364,7 +367,7 @@ describe("useNavigateAfterSave", () => {
 
     it("should navigate after save when setChangesSaved and requestNavigate are called in same handler", async () => {
       // This test reproduces the EXACT bug scenario from CreateLibrary/CreateUser/Setup
-      const user = userEvent.setup();
+      const user = createUser();
 
       render(
         <MemoryRouter>
