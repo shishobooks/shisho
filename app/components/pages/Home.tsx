@@ -400,28 +400,28 @@ const HomeContent = () => {
             placeholder="Search books..."
           />
           <FilterSheet
-            selectedFileTypes={selectedFileTypes}
             fileTypeOptions={FILE_TYPE_OPTIONS}
-            onToggleFileType={toggleFileType}
-            selectedGenreIds={selectedGenreIds}
-            genres={genres}
-            genresLoading={genresQuery.isLoading}
-            genresError={genresQuery.isError}
             genreSearchInput={genreSearchInput}
-            onGenreSearchChange={setGenreSearchInput}
-            onToggleGenre={toggleGenreFilter}
-            selectedTagIds={selectedTagIds}
-            tags={tags}
-            tagsLoading={tagsQuery.isLoading}
-            tagsError={tagsQuery.isError}
-            tagSearchInput={tagSearchInput}
-            onTagSearchChange={setTagSearchInput}
-            onToggleTag={toggleTagFilter}
-            languageParam={languageParam}
-            languageOptions={languageOptions}
-            onLanguageChange={setLanguageFilter}
-            onClearAll={clearAllFilters}
+            genres={genres}
+            genresError={genresQuery.isError}
+            genresLoading={genresQuery.isLoading}
             hasActiveFilters={hasActiveFilters}
+            languageOptions={languageOptions}
+            languageParam={languageParam}
+            onClearAll={clearAllFilters}
+            onGenreSearchChange={setGenreSearchInput}
+            onLanguageChange={setLanguageFilter}
+            onTagSearchChange={setTagSearchInput}
+            onToggleFileType={toggleFileType}
+            onToggleGenre={toggleGenreFilter}
+            onToggleTag={toggleTagFilter}
+            selectedFileTypes={selectedFileTypes}
+            selectedGenreIds={selectedGenreIds}
+            selectedTagIds={selectedTagIds}
+            tagSearchInput={tagSearchInput}
+            tags={tags}
+            tagsError={tagsQuery.isError}
+            tagsLoading={tagsQuery.isLoading}
           />
           <div className="flex-1" />
           {isSelectionMode ? (
@@ -436,15 +436,15 @@ const HomeContent = () => {
           )}
         </div>
         <ActiveFilterChips
-          selectedFileTypes={selectedFileTypes}
-          selectedGenres={selectedGenres}
-          selectedTags={selectedTags}
           languageParam={languageParam}
+          onClearAll={clearAllFilters}
+          onClearLanguage={() => setLanguageFilter("all")}
           onToggleFileType={toggleFileType}
           onToggleGenre={toggleGenreFilter}
           onToggleTag={toggleTagFilter}
-          onClearLanguage={() => setLanguageFilter("all")}
-          onClearAll={clearAllFilters}
+          selectedFileTypes={selectedFileTypes}
+          selectedGenres={selectedGenres}
+          selectedTags={selectedTags}
         />
       </div>
 

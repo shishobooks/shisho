@@ -122,27 +122,27 @@ const FilterContent = ({
     {/* File Type */}
     <div>
       <SectionHeader
-        icon={<File className="h-3 w-3" />}
         colorClass="bg-chart-5/20 text-chart-5"
-        label="File type"
         detail={
           selectedFileTypes.length > 0
             ? `${selectedFileTypes.length} of ${fileTypeOptions.length}`
             : undefined
         }
+        icon={<File className="h-3 w-3" />}
+        label="File type"
       />
       <div className="flex flex-wrap gap-1.5">
         {fileTypeOptions.map((option) => {
           const isSelected = selectedFileTypes.includes(option.value);
           return (
             <button
-              key={option.value}
-              onClick={() => onToggleFileType(option.value)}
               className={`inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium cursor-pointer transition-colors ${
                 isSelected
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-card hover:bg-accent"
               }`}
+              key={option.value}
+              onClick={() => onToggleFileType(option.value)}
             >
               {option.label}
             </button>
@@ -154,14 +154,14 @@ const FilterContent = ({
     {/* Genres */}
     <div>
       <SectionHeader
-        icon={<Bookmark className="h-3 w-3" />}
         colorClass="bg-primary/20 text-primary"
-        label="Genres"
         detail={
           selectedGenreIds.length > 0
             ? `${selectedGenreIds.length} selected`
             : undefined
         }
+        icon={<Bookmark className="h-3 w-3" />}
+        label="Genres"
       />
       <Command shouldFilter={false}>
         <CommandInput
@@ -208,14 +208,14 @@ const FilterContent = ({
     {/* Tags */}
     <div>
       <SectionHeader
-        icon={<Tags className="h-3 w-3" />}
         colorClass="bg-chart-2/20 text-chart-2"
-        label="Tags"
         detail={
           selectedTagIds.length > 0
             ? `${selectedTagIds.length} selected`
             : undefined
         }
+        icon={<Tags className="h-3 w-3" />}
+        label="Tags"
       />
       <Command shouldFilter={false}>
         <CommandInput
@@ -263,8 +263,8 @@ const FilterContent = ({
     {languageOptions.length > 0 && (
       <div>
         <SectionHeader
-          icon={<Languages className="h-3 w-3" />}
           colorClass="bg-chart-5/20 text-chart-5"
+          icon={<Languages className="h-3 w-3" />}
           label="Language"
         />
         <Select onValueChange={onLanguageChange} value={languageParam || "all"}>
