@@ -938,6 +938,28 @@ When using raw `<button>` elements outside of the Button component, always add `
 - Missing cursor-pointer feels broken/unresponsive
 - Consistency across the UI is essential for professional UX
 
+### Dynamic Class Composition with `cn()`
+
+**Always use `cn()` from `@/libraries/utils` for dynamic className composition.** Never use template literals to concatenate class strings.
+
+```tsx
+// Good - cn()
+<span className={cn("inline-flex h-5 w-5 rounded-sm", colorClass)}>
+
+// Good - cn() with conditionals
+<button className={cn(
+  "h-8 rounded-md border px-3 text-xs cursor-pointer",
+  isSelected
+    ? "border-primary bg-primary text-primary-foreground"
+    : "border-border bg-card hover:bg-accent",
+)}>
+
+// Bad - template literal
+<span className={`inline-flex h-5 w-5 rounded-sm ${colorClass}`}>
+```
+
+`cn()` wraps `clsx` + `tailwind-merge`, so it handles conditional classes, deduplication, and Tailwind conflict resolution. Template literals bypass all of that.
+
 ## Known Radix UI Issues
 
 ### Dialog + DropdownMenu pointer-events Bug

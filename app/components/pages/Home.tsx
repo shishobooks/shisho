@@ -1,40 +1,16 @@
-import {
-  CheckSquare,
-  ChevronsUpDown,
-  Square,
-  SquareCheckBig,
-  X,
-} from "lucide-react";
+import { CheckSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
+import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
+import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
@@ -48,13 +24,6 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Book, Genre, Tag } from "@/types";
 
 const ITEMS_PER_PAGE = 24;
-
-const FILE_TYPE_OPTIONS = [
-  { value: "epub", label: "EPUB" },
-  { value: "m4b", label: "M4B" },
-  { value: "cbz", label: "CBZ" },
-  { value: "pdf", label: "PDF" },
-];
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -153,11 +122,6 @@ const HomeContent = () => {
 
     return options.sort((a, b) => a.label.localeCompare(b.label));
   }, [languagesQuery.data]);
-
-  // State for filter popovers
-  const [fileTypePopoverOpen, setFileTypePopoverOpen] = useState(false);
-  const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
-  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
 
   // State for genre/tag search inputs
   const [genreSearchInput, setGenreSearchInput] = useState("");
@@ -289,6 +253,24 @@ const HomeContent = () => {
     });
   };
 
+  const clearAllFilters = () => {
+    setSearchParams((prev) => {
+      const newParams = new URLSearchParams(prev);
+      newParams.delete("file_types");
+      newParams.delete("genre_ids");
+      newParams.delete("tag_ids");
+      newParams.delete("language");
+      newParams.set("page", "1");
+      return newParams;
+    });
+  };
+
+  const hasActiveFilters =
+    selectedFileTypes.length > 0 ||
+    selectedGenreIds.length > 0 ||
+    selectedTagIds.length > 0 ||
+    Boolean(languageParam);
+
   // Build query with search and file types
   const booksQueryParams: Parameters<typeof useBooks>[0] = {
     limit,
@@ -404,257 +386,62 @@ const HomeContent = () => {
       )}
 
       {/* Search and Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-4">
-        <SearchInput
-          initialValue={searchQuery}
-          onDebouncedChange={handleDebouncedSearchChange}
-          placeholder="Search books..."
-        />
-        {/* File Type Filter */}
-        <Popover
-          onOpenChange={setFileTypePopoverOpen}
-          open={fileTypePopoverOpen}
-        >
-          <PopoverTrigger asChild>
-            <Button
-              aria-expanded={fileTypePopoverOpen}
-              className="justify-between"
-              role="combobox"
-              variant="outline"
-            >
-              {selectedFileTypes.length > 0
-                ? `${selectedFileTypes.length} file type${selectedFileTypes.length > 1 ? "s" : ""}`
-                : "File types"}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            initialValue={searchQuery}
+            onDebouncedChange={handleDebouncedSearchChange}
+            placeholder="Search books..."
+          />
+          <FilterSheet
+            fileTypeOptions={FILE_TYPE_OPTIONS}
+            genreSearchInput={genreSearchInput}
+            genres={genres}
+            genresError={genresQuery.isError}
+            genresLoading={genresQuery.isLoading}
+            hasActiveFilters={hasActiveFilters}
+            languageOptions={languageOptions}
+            languageParam={languageParam}
+            onClearAll={clearAllFilters}
+            onGenreSearchChange={setGenreSearchInput}
+            onLanguageChange={setLanguageFilter}
+            onTagSearchChange={setTagSearchInput}
+            onToggleFileType={toggleFileType}
+            onToggleGenre={toggleGenreFilter}
+            onToggleTag={toggleTagFilter}
+            selectedFileTypes={selectedFileTypes}
+            selectedGenreIds={selectedGenreIds}
+            selectedTagIds={selectedTagIds}
+            tagSearchInput={tagSearchInput}
+            tags={tags}
+            tagsError={tagsQuery.isError}
+            tagsLoading={tagsQuery.isLoading}
+          />
+          <div className="flex-1" />
+          {isSelectionMode ? (
+            <Button onClick={exitSelectionMode} variant="outline">
+              Cancel
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0">
-            <Command>
-              <CommandList>
-                <CommandGroup>
-                  {FILE_TYPE_OPTIONS.map((option) => (
-                    <CommandItem
-                      key={option.value}
-                      onSelect={() => toggleFileType(option.value)}
-                      value={option.value}
-                    >
-                      {selectedFileTypes.includes(option.value) ? (
-                        <SquareCheckBig className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Square className="mr-2 h-4 w-4" />
-                      )}
-                      {option.label}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-
-        {/* Genre Filter */}
-        <Popover onOpenChange={setGenrePopoverOpen} open={genrePopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              aria-expanded={genrePopoverOpen}
-              className="justify-between"
-              role="combobox"
-              variant="outline"
-            >
-              {selectedGenres.length > 0
-                ? `${selectedGenres.length} genre${selectedGenres.length > 1 ? "s" : ""}`
-                : "Genres"}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          ) : (
+            <Button onClick={enterSelectionMode} variant="outline">
+              <CheckSquare className="h-4 w-4" />
+              Select
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0">
-            <Command shouldFilter={false}>
-              <CommandInput
-                onValueChange={setGenreSearchInput}
-                placeholder="Search genres..."
-                value={genreSearchInput}
-              />
-              <CommandList>
-                {genresQuery.isLoading ? (
-                  <div className="py-6 text-center text-sm text-muted-foreground">
-                    Loading...
-                  </div>
-                ) : genresQuery.isError ? (
-                  <div className="py-6 text-center text-sm text-destructive">
-                    Error loading genres
-                  </div>
-                ) : genres.length === 0 ? (
-                  <CommandEmpty>No genres found.</CommandEmpty>
-                ) : (
-                  <CommandGroup>
-                    {genres.map((genre: Genre) => (
-                      <CommandItem
-                        key={genre.id}
-                        onSelect={() => toggleGenreFilter(genre.id)}
-                        value={genre.name}
-                      >
-                        {selectedGenreIds.includes(genre.id) ? (
-                          <SquareCheckBig className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Square className="mr-2 h-4 w-4" />
-                        )}
-                        {genre.name}
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {genre.book_count}
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-
-        {/* Tag Filter */}
-        <Popover onOpenChange={setTagPopoverOpen} open={tagPopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              aria-expanded={tagPopoverOpen}
-              className="justify-between"
-              role="combobox"
-              variant="outline"
-            >
-              {selectedTags.length > 0
-                ? `${selectedTags.length} tag${selectedTags.length > 1 ? "s" : ""}`
-                : "Tags"}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0">
-            <Command shouldFilter={false}>
-              <CommandInput
-                onValueChange={setTagSearchInput}
-                placeholder="Search tags..."
-                value={tagSearchInput}
-              />
-              <CommandList>
-                {tagsQuery.isLoading ? (
-                  <div className="py-6 text-center text-sm text-muted-foreground">
-                    Loading...
-                  </div>
-                ) : tagsQuery.isError ? (
-                  <div className="py-6 text-center text-sm text-destructive">
-                    Error loading tags
-                  </div>
-                ) : tags.length === 0 ? (
-                  <CommandEmpty>No tags found.</CommandEmpty>
-                ) : (
-                  <CommandGroup>
-                    {tags.map((tag: Tag) => (
-                      <CommandItem
-                        key={tag.id}
-                        onSelect={() => toggleTagFilter(tag.id)}
-                        value={tag.name}
-                      >
-                        {selectedTagIds.includes(tag.id) ? (
-                          <SquareCheckBig className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Square className="mr-2 h-4 w-4" />
-                        )}
-                        {tag.name}
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {tag.book_count}
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        {/* Language Filter - only shown when 2+ distinct languages */}
-        {languageOptions.length > 0 && (
-          <Select
-            onValueChange={setLanguageFilter}
-            value={languageParam || "all"}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Languages</SelectItem>
-              {languageOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {isSelectionMode ? (
-          <Button onClick={exitSelectionMode} variant="outline">
-            Cancel
-          </Button>
-        ) : (
-          <Button onClick={enterSelectionMode} variant="outline">
-            <CheckSquare className="h-4 w-4" />
-            Select
-          </Button>
-        )}
-      </div>
-
-      {/* Active Filters */}
-      {(selectedFileTypes.length > 0 ||
-        selectedGenres.length > 0 ||
-        selectedTags.length > 0 ||
-        languageParam) && (
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Filtering by:</span>
-          {selectedFileTypes.map((fileType) => {
-            const option = FILE_TYPE_OPTIONS.find((o) => o.value === fileType);
-            return (
-              <Badge
-                className="cursor-pointer gap-1"
-                key={fileType}
-                onClick={() => toggleFileType(fileType)}
-                variant="secondary"
-              >
-                {option?.label ?? fileType}
-                <X className="h-3 w-3" />
-              </Badge>
-            );
-          })}
-          {selectedGenres.map((genre) => (
-            <Badge
-              className="cursor-pointer gap-1"
-              key={genre.id}
-              onClick={() => toggleGenreFilter(genre.id)}
-              variant="secondary"
-            >
-              Genre: {genre.name}
-              <X className="h-3 w-3" />
-            </Badge>
-          ))}
-          {selectedTags.map((tag) => (
-            <Badge
-              className="cursor-pointer gap-1"
-              key={tag.id}
-              onClick={() => toggleTagFilter(tag.id)}
-              variant="secondary"
-            >
-              Tag: {tag.name}
-              <X className="h-3 w-3" />
-            </Badge>
-          ))}
-          {languageParam && (
-            <Badge
-              className="cursor-pointer gap-1"
-              onClick={() => setLanguageFilter("all")}
-              variant="secondary"
-            >
-              Language: {getLanguageName(languageParam) ?? languageParam}
-              <X className="h-3 w-3" />
-            </Badge>
           )}
         </div>
-      )}
+        <ActiveFilterChips
+          hasActiveFilters={hasActiveFilters}
+          languageParam={languageParam}
+          onClearAll={clearAllFilters}
+          onClearLanguage={() => setLanguageFilter("all")}
+          onToggleFileType={toggleFileType}
+          onToggleGenre={toggleGenreFilter}
+          onToggleTag={toggleTagFilter}
+          selectedFileTypes={selectedFileTypes}
+          selectedGenres={selectedGenres}
+          selectedTags={selectedTags}
+        />
+      </div>
 
       <Gallery
         emptyMessage={
