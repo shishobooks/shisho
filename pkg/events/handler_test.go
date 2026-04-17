@@ -69,3 +69,39 @@ func TestSSEHandler_StreamsEvents(t *testing.T) {
 	assert.Contains(t, lines, "event: job.created")
 	assert.Contains(t, lines, `data: {"job_id":1}`)
 }
+
+// TestSSEHandler_ReturnsOnBrokerClose verifies that the SSE handler exits
+// promptly when the broker is closed (graceful server shutdown), without
+// waiting for the client to disconnect. Without this, srv.Shutdown blocks
+// for the full timeout waiting for the handler to return, which in turn
+// delays the worker/db cleanup and the process exit past air's kill_delay.
+func TestSSEHandler_ReturnsOnBrokerClose(t *testing.T) {
+	t.Parallel()
+
+	b := NewBroker()
+	h := &handler{broker: b}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	// Intentionally do NOT cancel the request context — we want to prove
+	// the handler observes broker shutdown independently of the client.
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- h.stream(c)
+	}()
+
+	// Let the handler subscribe before signalling shutdown.
+	time.Sleep(50 * time.Millisecond)
+
+	b.Close()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("SSE handler did not return after broker.Close()")
+	}
+}

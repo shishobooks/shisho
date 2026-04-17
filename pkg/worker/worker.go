@@ -73,6 +73,16 @@ type Worker struct {
 	doneScheduling  chan struct{}
 	doneCleanup     chan struct{}
 	doneUpdateCheck chan struct{}
+
+	// jobCtx is the parent context for every job the worker processes. It is
+	// cancelled by Shutdown so long-running jobs (hash generation, scans,
+	// bulk downloads) see ctx.Done() and return promptly instead of blocking
+	// shutdown until they finish naturally. Without this, a hash-gen job
+	// iterating a large library keeps processJobs busy past air's 1s
+	// kill_delay, and the next `mise start` reload races the outgoing
+	// process for port 3689.
+	jobCtx    context.Context
+	jobCancel context.CancelFunc
 }
 
 func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
@@ -91,10 +101,15 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	pluginService := plugins.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
 
+	jobCtx, jobCancel := context.WithCancel(context.Background())
+
 	w := &Worker{
 		config: cfg,
 		log:    logger.New(),
 		db:     db,
+
+		jobCtx:    jobCtx,
+		jobCancel: jobCancel,
 
 		bookService:        bookService,
 		chapterService:     chapterService,
@@ -210,7 +225,11 @@ func (w *Worker) processJobs() {
 				continue
 			}
 			log := w.log.ID(id.String()).Root(logger.Data{"job_id": job.ID, "type": job.Type, "process_id": processID})
-			ctx := log.WithContext(context.Background())
+			// Derive from jobCtx (not context.Background) so Shutdown can
+			// cancel in-flight jobs. Handlers like ProcessHashGenerationJob
+			// check ctx.Done() at loop boundaries and return ctx.Err() when
+			// cancelled; the scan job plumbs this ctx down to scanInternal.
+			ctx := log.WithContext(w.jobCtx)
 
 			// Create job logger for DB persistence
 			jobLog := w.jobLogService.NewJobLogger(ctx, job.ID, log)
@@ -434,6 +453,15 @@ func (w *Worker) RefreshMonitorWatches() {
 func (w *Worker) Shutdown() {
 	if w.monitor != nil {
 		w.monitor.stop()
+	}
+
+	// Cancel in-flight job contexts BEFORE closing w.shutdown. processJobs
+	// is currently inside fn(ctx, ...) for any running job, so signalling
+	// via w.shutdown alone would make it wait for the job to finish on its
+	// own. Cancelling the job context lets ctx.Done()-aware handlers unwind
+	// immediately.
+	if w.jobCancel != nil {
+		w.jobCancel()
 	}
 
 	close(w.shutdown)

@@ -40,6 +40,10 @@ func (h *handler) stream(c echo.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-h.broker.Done():
+			// Server is shutting down; exit the stream so srv.Shutdown can
+			// return without waiting the full timeout for this handler.
+			return nil
 		case <-heartbeat.C:
 			// SSE comment line keeps the connection alive through proxies.
 			fmt.Fprint(w, ": keepalive\n\n")

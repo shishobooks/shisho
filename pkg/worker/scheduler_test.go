@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -121,6 +122,7 @@ func TestScheduler_StartWithZeroInterval(t *testing.T) {
 	tc.worker.doneScheduling = make(chan struct{})
 	tc.worker.doneUpdateCheck = make(chan struct{})
 	tc.worker.queue = make(chan *models.Job, tc.worker.config.WorkerProcesses)
+	tc.worker.jobCtx, tc.worker.jobCancel = context.WithCancel(context.Background())
 
 	// Start the worker
 	tc.worker.Start()
