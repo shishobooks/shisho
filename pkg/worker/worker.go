@@ -226,9 +226,11 @@ func (w *Worker) processJobs() {
 			}
 			log := w.log.ID(id.String()).Root(logger.Data{"job_id": job.ID, "type": job.Type, "process_id": processID})
 			// Derive from jobCtx (not context.Background) so Shutdown can
-			// cancel in-flight jobs. Handlers like ProcessHashGenerationJob
-			// check ctx.Done() at loop boundaries and return ctx.Err() when
-			// cancelled; the scan job plumbs this ctx down to scanInternal.
+			// cancel in-flight jobs. Hash generation and bulk download check
+			// ctx.Done() at loop boundaries; the scan job does not yet honor
+			// cancellation, so its shutdown latency is still bounded only by
+			// the OS-level timeouts of whatever filesystem/DB call it happens
+			// to be in when ctx fires.
 			ctx := log.WithContext(w.jobCtx)
 
 			// Create job logger for DB persistence

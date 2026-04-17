@@ -37,8 +37,7 @@ func (b *Broker) Done() <-chan struct{} {
 }
 
 // Close broadcasts shutdown to all current and future subscribers. Idempotent:
-// safe to call multiple times (e.g., from both http.Server.RegisterOnShutdown
-// and explicit main-goroutine cleanup).
+// safe to call multiple times.
 func (b *Broker) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
