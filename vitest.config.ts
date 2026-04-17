@@ -1,6 +1,6 @@
 import path from "path";
 
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -20,7 +20,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text-summary", "lcov", "html"],
       reportsDirectory: "./coverage",
-      include: ["app/**/*.{ts,tsx}"],
       exclude: ["app/**/*.test.{ts,tsx}", "app/types/generated/**"],
     },
   },
