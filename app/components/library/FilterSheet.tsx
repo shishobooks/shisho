@@ -50,7 +50,7 @@ import type { Genre, Tag } from "@/types";
 
 interface FilterSheetProps {
   selectedFileTypes: string[];
-  fileTypeOptions: { value: string; label: string }[];
+  fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
   selectedGenreIds: number[];
   genres: Genre[];
@@ -304,10 +304,7 @@ const FilterButton = ({
   <Button aria-label="Filters" size="icon" variant="outline" {...props}>
     <ListFilter className={cn("h-4 w-4", hasActiveFilters && "text-primary")} />
     {hasActiveFilters && (
-      <span
-        className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"
-        style={{ boxShadow: "0 0 0 2px hsl(var(--background))" }}
-      />
+      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
     )}
   </Button>
 );

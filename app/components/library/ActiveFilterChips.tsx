@@ -11,7 +11,10 @@ interface FilterTypeConfig {
   colorClass: string;
 }
 
-const FILTER_TYPES: Record<string, FilterTypeConfig> = {
+const FILTER_TYPES: Record<
+  "fileType" | "genre" | "tag" | "language",
+  FilterTypeConfig
+> = {
   fileType: {
     icon: <File className="h-3 w-3 shrink-0" />,
     colorClass: "text-chart-5",
