@@ -244,3 +244,45 @@ func TestRingBuffer_SkipEventsRoute(t *testing.T) {
 	entries := rb.Query("", "", 100, 0)
 	assert.Empty(t, entries)
 }
+
+func TestRingBuffer_SkipHealthRoute(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	line := `{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"request handled","route":"/health","method":"GET","status_code":200}` + "\n"
+	_, err := rb.Write([]byte(line))
+	require.NoError(t, err)
+
+	entries := rb.Query("", "", 100, 0)
+	assert.Empty(t, entries)
+}
+
+func TestRingBuffer_SearchMatchesDataFields(t *testing.T) {
+	t.Parallel()
+
+	rb := NewRingBuffer(100, nil)
+
+	lines := []string{
+		`{"level":"info","timestamp":"2026-04-17T10:30:00Z","message":"request handled","method":"GET","path":"/books","duration":"1.234"}` + "\n",
+		`{"level":"info","timestamp":"2026-04-17T10:30:01Z","message":"request handled","method":"POST","path":"/jobs","duration":"5.678"}` + "\n",
+		`{"level":"info","timestamp":"2026-04-17T10:30:02Z","message":"starting shisho","data":{"version":"0.0.31"}}` + "\n",
+	}
+	for _, line := range lines {
+		_, err := rb.Write([]byte(line))
+		require.NoError(t, err)
+	}
+
+	// Search by data field value
+	entries := rb.Query("", "/books", 100, 0)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "/books", entries[0].Data["path"])
+
+	// Search by data field key
+	entries = rb.Query("", "duration", 100, 0)
+	require.Len(t, entries, 2)
+
+	// Search by nested data value
+	entries = rb.Query("", "0.0.31", 100, 0)
+	require.Len(t, entries, 1)
+}

@@ -3,6 +3,7 @@ package logs
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,7 +126,7 @@ func (rb *RingBuffer) Query(level, search string, limit int, afterID uint64) []L
 				continue
 			}
 		}
-		if searchLower != "" && !strings.Contains(strings.ToLower(entry.Message), searchLower) {
+		if searchLower != "" && !entryMatchesSearch(entry, searchLower) {
 			continue
 		}
 		matched = append(matched, entry)
@@ -137,6 +138,22 @@ func (rb *RingBuffer) Query(level, search string, limit int, afterID uint64) []L
 	}
 
 	return matched
+}
+
+// entryMatchesSearch checks if the search term appears in the message or any data value.
+func entryMatchesSearch(entry LogEntry, searchLower string) bool {
+	if strings.Contains(strings.ToLower(entry.Message), searchLower) {
+		return true
+	}
+	for k, v := range entry.Data {
+		if strings.Contains(strings.ToLower(k), searchLower) {
+			return true
+		}
+		if strings.Contains(strings.ToLower(fmt.Sprint(v)), searchLower) {
+			return true
+		}
+	}
+	return false
 }
 
 // knownFields are top-level zerolog fields that are extracted into dedicated
@@ -154,6 +171,7 @@ var knownFields = map[string]bool{
 var skipRoutes = map[string]bool{
 	"/logs":   true,
 	"/events": true,
+	"/health": true,
 }
 
 func parseLogLine(line []byte) (LogEntry, bool) {
