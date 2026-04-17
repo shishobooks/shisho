@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -153,4 +154,36 @@ func TestShutdown_PersistsFailedJobStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.JobStatusFailed, retrieved.Status,
 		"failed status should persist even when the job ctx was cancelled during shutdown")
+}
+
+// TestShouldSkipCleanup_SkipsAfterShutdown verifies that the download cache
+// cleanup callback observes worker shutdown. When w.ctx is cancelled, the
+// embedded HasActiveJob query bails out with context.Canceled, and the
+// closure returns true ("skip cleanup") rather than treating the cancelled
+// query as "no active job, proceed with cleanup" — that would race against
+// Shutdown and risk deleting cache files for an actively-running bulk
+// download whose job row we couldn't confirm.
+func TestShouldSkipCleanup_SkipsAfterShutdown(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	dlCache := downloadcache.NewCache(t.TempDir(), 100<<20)
+	cfg := &config.Config{WorkerProcesses: 1}
+	w := New(cfg, tc.db, nil, nil, dlCache)
+
+	// Before shutdown: no active bulk-download jobs exist, so the closure
+	// should allow cleanup (false == "don't skip").
+	assert.False(t, dlCache.ShouldSkipCleanup(),
+		"with no active bulk download job and a live ctx, cleanup should proceed")
+
+	// Simulate shutdown by cancelling the worker's context directly. We don't
+	// call Shutdown() here because that would block on goroutines we didn't
+	// Start(); cancelling the ctx exercises the codepath we care about.
+	w.cancel()
+
+	// After ctx cancellation, HasActiveJob returns context.Canceled. The
+	// closure must recognize that as a shutdown signal and return true so
+	// RunCleanup is skipped — we can't confirm it's safe.
+	assert.True(t, dlCache.ShouldSkipCleanup(),
+		"ShouldSkipCleanup should return true when the worker ctx is cancelled")
 }

@@ -147,9 +147,17 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 
 	if dlCache != nil {
 		dlCache.ShouldSkipCleanup = func() bool {
-			hasActive, err := w.jobService.HasActiveJob(context.Background(), models.JobTypeBulkDownload, nil)
+			// Use w.ctx so the query bails out during shutdown instead of
+			// holding up the cleanup goroutine on a DB that may be closing.
+			hasActive, err := w.jobService.HasActiveJob(w.ctx, models.JobTypeBulkDownload, nil)
 			if err != nil {
-				return false
+				// During shutdown the query returns context.Canceled — we
+				// can't confirm whether a bulk download is active, so err on
+				// the side of skipping cleanup rather than racing against
+				// Shutdown and potentially deleting an in-use cache file.
+				// Any other error (real DB failure) falls through to false
+				// so cleanup can still make progress under normal operation.
+				return errors.Is(err, context.Canceled)
 			}
 			return hasActive
 		}
@@ -273,7 +281,24 @@ func (w *Worker) processJobs() {
 
 				err = fn(ctx, job, jobLog)
 				if err != nil {
-					jobLog.Error("job failed", err, nil)
+					// A context.Canceled from shutdown isn't a real failure —
+					// suppress the ERROR log (and its doomed DB persist, since
+					// the job ctx is already cancelled) to match how the
+					// schedulers above handle the same case. We still fall
+					// through to mark the row failed.
+					//
+					// Cancelled-at-shutdown jobs intentionally stay at
+					// failed rather than being reset to pending:
+					//   - scan is re-queued by scheduleScanJobs on the next
+					//     SyncIntervalMinutes tick
+					//   - hash_generation is re-queued by the tail-hook at
+					//     the end of every scan
+					//   - bulk_download is NOT re-queued automatically; a
+					//     partial zip is cheaper to abandon than to re-render
+					//     unprompted on restart, so the user re-initiates it
+					if !errors.Is(err, context.Canceled) {
+						jobLog.Error("job failed", err, nil)
+					}
 					job.Status = models.JobStatusFailed
 					w.persistJobStatus(job, log)
 					return
