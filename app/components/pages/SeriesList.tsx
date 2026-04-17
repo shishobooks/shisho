@@ -6,8 +6,14 @@ import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
+import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type { Series } from "@/types";
@@ -43,6 +49,7 @@ const SeriesCard = ({
   aspectClass,
   isAudiobook,
 }: SeriesCardProps) => {
+  const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   const coverUrl = `/api/series/${seriesItem.id}/cover?t=${new Date(seriesItem.updated_at).getTime()}`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
@@ -88,11 +95,22 @@ const SeriesCard = ({
             />
           )}
         </div>
-        <div className="mt-2 group-hover:underline font-bold line-clamp-2">
-          {seriesItem.name}
-        </div>
+        <Tooltip
+          delayDuration={300}
+          open={isTitleTruncated ? undefined : false}
+        >
+          <TooltipTrigger asChild>
+            <div
+              className="mt-2 group-hover:underline text-sm font-bold line-clamp-2"
+              ref={titleRef}
+            >
+              {seriesItem.name}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{seriesItem.name}</TooltipContent>
+        </Tooltip>
       </Link>
-      <div className="mt-1 text-sm line-clamp-1 text-neutral-500 dark:text-neutral-500">
+      <div className="mt-1 text-xs line-clamp-1 text-neutral-500 dark:text-neutral-500">
         <Badge className="text-xs" variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>

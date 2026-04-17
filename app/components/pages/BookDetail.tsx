@@ -30,6 +30,7 @@ import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
@@ -1062,14 +1063,11 @@ const BookDetail = () => {
 
   return (
     <LibraryLayout>
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to={`/libraries/${libraryId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Books
-          </Link>
-        </Button>
-      </div>
+      <LibraryBreadcrumbs
+        items={[{ label: book.title }]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Book Cover */}

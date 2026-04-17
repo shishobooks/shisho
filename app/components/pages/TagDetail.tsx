@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -10,6 +11,7 @@ import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeleteTag,
   useMergeTag,
@@ -26,6 +28,7 @@ const TagDetail = () => {
   const navigate = useNavigate();
   const tagId = id ? parseInt(id, 10) : undefined;
 
+  const libraryQuery = useLibrary(libraryId);
   const tagQuery = useTag(tagId);
 
   usePageTitle(tagQuery.data?.name ?? "Tag");
@@ -108,6 +111,15 @@ const TagDetail = () => {
 
   return (
     <LibraryLayout>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "Tags", to: `/libraries/${libraryId}/tags` },
+          { label: tag.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
+
       {/* Tag Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">

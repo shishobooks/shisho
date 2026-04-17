@@ -2,6 +2,7 @@ import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -9,6 +10,7 @@ import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeletePublisher,
   useMergePublisher,
@@ -26,6 +28,7 @@ const PublisherDetail = () => {
   const navigate = useNavigate();
   const publisherId = id ? parseInt(id, 10) : undefined;
 
+  const libraryQuery = useLibrary(libraryId);
   const publisherQuery = usePublisher(publisherId);
 
   usePageTitle(publisherQuery.data?.name ?? "Publisher");
@@ -114,6 +117,15 @@ const PublisherDetail = () => {
 
   return (
     <LibraryLayout>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "Publishers", to: `/libraries/${libraryId}/publishers` },
+          { label: publisher.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
+
       {/* Publisher Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -10,6 +11,7 @@ import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeleteSeries,
   useMergeSeries,
@@ -26,6 +28,7 @@ const SeriesDetail = () => {
   const navigate = useNavigate();
   const seriesId = id ? parseInt(id, 10) : undefined;
 
+  const libraryQuery = useLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
@@ -111,6 +114,15 @@ const SeriesDetail = () => {
 
   return (
     <LibraryLayout>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "Series", to: `/libraries/${libraryId}/series` },
+          { label: series.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
+
       {/* Series Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
@@ -167,7 +179,12 @@ const SeriesDetail = () => {
           {seriesBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
               {seriesBooksQuery.data.map((book) => (
-                <BookItem book={book} key={book.id} libraryId={libraryId!} />
+                <BookItem
+                  book={book}
+                  key={book.id}
+                  libraryId={libraryId!}
+                  seriesId={seriesId}
+                />
               ))}
             </div>
           )}

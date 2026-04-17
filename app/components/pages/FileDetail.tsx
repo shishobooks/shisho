@@ -10,6 +10,7 @@ import FileChaptersTab, {
 import FileDetailsTab from "@/components/files/FileDetailsTab";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
@@ -188,44 +189,14 @@ const FileDetail = () => {
 
   return (
     <LibraryLayout>
-      {/* Header with breadcrumbs and back button */}
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to={`/libraries/${libraryId}/books/${bookId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Book
-          </Link>
-        </Button>
-      </div>
-
-      {/* Breadcrumbs */}
-      <nav className="mb-4 text-xs sm:text-sm text-muted-foreground overflow-hidden">
-        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
-          <li className="shrink-0">
-            <Link
-              className="hover:text-foreground hover:underline"
-              to={`/libraries/${libraryId}`}
-            >
-              {library?.name || "Library"}
-            </Link>
-          </li>
-          <li aria-hidden="true" className="shrink-0">
-            ›
-          </li>
-          <li className="truncate max-w-[120px] sm:max-w-none">
-            <Link
-              className="hover:text-foreground hover:underline"
-              to={`/libraries/${libraryId}/books/${bookId}`}
-            >
-              {book.title}
-            </Link>
-          </li>
-          <li aria-hidden="true" className="shrink-0">
-            ›
-          </li>
-          <li className="text-foreground truncate">{filename}</li>
-        </ol>
-      </nav>
+      <LibraryBreadcrumbs
+        items={[
+          { label: book.title, to: `/libraries/${libraryId}/books/${bookId}` },
+          { label: filename },
+        ]}
+        libraryId={libraryId!}
+        libraryName={library?.name}
+      />
 
       {/* File title with Edit/Save/Cancel buttons */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">

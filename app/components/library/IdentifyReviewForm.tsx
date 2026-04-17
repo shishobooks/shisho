@@ -188,7 +188,7 @@ function StatusBadge({ status }: { status: FieldStatus }) {
     );
   }
   return (
-    <Badge className="text-[0.65rem]" variant="subtle">
+    <Badge className="text-[0.65rem]" variant="outline">
       Unchanged
     </Badge>
   );

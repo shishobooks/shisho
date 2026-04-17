@@ -2,6 +2,7 @@ import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -17,6 +18,7 @@ import {
   useMergeImprint,
   useUpdateImprint,
 } from "@/hooks/queries/imprints";
+import { useLibrary } from "@/hooks/queries/libraries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { File } from "@/types";
@@ -26,6 +28,7 @@ const ImprintDetail = () => {
   const navigate = useNavigate();
   const imprintId = id ? parseInt(id, 10) : undefined;
 
+  const libraryQuery = useLibrary(libraryId);
   const imprintQuery = useImprint(imprintId);
 
   usePageTitle(imprintQuery.data?.name ?? "Imprint");
@@ -114,6 +117,15 @@ const ImprintDetail = () => {
 
   return (
     <LibraryLayout>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "Imprints", to: `/libraries/${libraryId}/imprints` },
+          { label: imprint.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
+
       {/* Imprint Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">

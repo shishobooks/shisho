@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
+import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
@@ -10,6 +11,7 @@ import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeletePerson,
   useMergePerson,
@@ -28,6 +30,7 @@ const PersonDetail = () => {
 
   const navigate = useNavigate();
 
+  const libraryQuery = useLibrary(libraryId);
   const personQuery = usePerson(personId);
 
   usePageTitle(personQuery.data?.name ?? "Person");
@@ -115,6 +118,15 @@ const PersonDetail = () => {
 
   return (
     <LibraryLayout>
+      <LibraryBreadcrumbs
+        items={[
+          { label: "People", to: `/libraries/${libraryId}/people` },
+          { label: person.name },
+        ]}
+        libraryId={libraryId!}
+        libraryName={libraryQuery.data?.name}
+      />
+
       {/* Person Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
