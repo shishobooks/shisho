@@ -110,7 +110,7 @@ func (rb *RingBuffer) Query(level, search string, limit int, afterID uint64) []L
 	}
 
 	// Collect matching entries in chronological order
-	var matched []LogEntry
+	matched := []LogEntry{}
 	start := (rb.head - rb.count + rb.capacity) % rb.capacity
 
 	for i := 0; i < rb.count; i++ {
