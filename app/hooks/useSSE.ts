@@ -100,8 +100,12 @@ export function useSSE() {
       }
     };
 
+    let logInvalidateTimeout: ReturnType<typeof setTimeout> | undefined;
     const handleLogEntry = () => {
-      queryClient.invalidateQueries({ queryKey: [LogsQueryKey.ListLogs] });
+      clearTimeout(logInvalidateTimeout);
+      logInvalidateTimeout = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: [LogsQueryKey.ListLogs] });
+      }, 500);
     };
 
     es.addEventListener("job.created", handleJobCreated);
@@ -110,6 +114,7 @@ export function useSSE() {
     es.addEventListener("log.entry", handleLogEntry);
 
     return () => {
+      clearTimeout(logInvalidateTimeout);
       es.removeEventListener("job.created", handleJobCreated);
       es.removeEventListener("job.status_changed", handleJobStatusChanged);
       es.removeEventListener(
