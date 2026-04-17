@@ -21,6 +21,7 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
+  DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
@@ -37,12 +38,14 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { cn } from "@/libraries/utils";
 import type { Genre, Tag } from "@/types";
 
 interface FilterSheetProps {
@@ -83,7 +86,10 @@ const SectionHeader = ({
 }) => (
   <div className="flex items-center gap-2 mb-3">
     <span
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-sm ${colorClass}`}
+      className={cn(
+        "inline-flex h-5 w-5 items-center justify-center rounded-sm",
+        colorClass,
+      )}
     >
       {icon}
     </span>
@@ -136,11 +142,12 @@ const FilterContent = ({
           const isSelected = selectedFileTypes.includes(option.value);
           return (
             <button
-              className={`inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium cursor-pointer transition-colors ${
+              className={cn(
+                "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium cursor-pointer transition-colors",
                 isSelected
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card hover:bg-accent"
-              }`}
+                  : "border-border bg-card hover:bg-accent",
+              )}
               key={option.value}
               onClick={() => onToggleFileType(option.value)}
             >
@@ -290,11 +297,12 @@ const FilterButton = ({
   ...props
 }: {
   hasActiveFilters: boolean;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+} & Omit<
+  React.ComponentPropsWithoutRef<typeof Button>,
+  "hasActiveFilters"
+>) => (
   <Button aria-label="Filters" size="icon" variant="outline" {...props}>
-    <ListFilter
-      className={`h-4 w-4 ${hasActiveFilters ? "text-primary" : ""}`}
-    />
+    <ListFilter className={cn("h-4 w-4", hasActiveFilters && "text-primary")} />
     {hasActiveFilters && (
       <span
         className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"
@@ -320,6 +328,9 @@ export const FilterSheet = (props: FilterSheetProps) => {
         <SheetContent className="flex flex-col overflow-hidden">
           <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <SheetTitle>Filters</SheetTitle>
+            <SheetDescription className="sr-only">
+              Filter books by file type, genre, tag, or language
+            </SheetDescription>
             {hasActiveFilters && (
               <button
                 className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
@@ -353,6 +364,9 @@ export const FilterSheet = (props: FilterSheetProps) => {
       <DrawerContent>
         <DrawerHeader className="flex flex-row items-center justify-between">
           <DrawerTitle>Filters</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Filter books by file type, genre, tag, or language
+          </DrawerDescription>
           {hasActiveFilters && (
             <button
               className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"

@@ -10,6 +10,7 @@ import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
 import { Button } from "@/components/ui/button";
+import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
@@ -23,13 +24,6 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Book, Genre, Tag } from "@/types";
 
 const ITEMS_PER_PAGE = 24;
-
-const FILE_TYPE_OPTIONS = [
-  { value: "epub", label: "EPUB" },
-  { value: "m4b", label: "M4B" },
-  { value: "cbz", label: "CBZ" },
-  { value: "pdf", label: "PDF" },
-];
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -436,6 +430,7 @@ const HomeContent = () => {
           )}
         </div>
         <ActiveFilterChips
+          hasActiveFilters={hasActiveFilters}
           languageParam={languageParam}
           onClearAll={clearAllFilters}
           onClearLanguage={() => setLanguageFilter("all")}

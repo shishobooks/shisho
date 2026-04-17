@@ -2,15 +2,9 @@ import { Bookmark, File, Languages, Tags, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import type { Genre, Tag } from "@/types";
-
-const FILE_TYPE_LABELS: Record<string, string> = {
-  epub: "EPUB",
-  m4b: "M4B",
-  cbz: "CBZ",
-  pdf: "PDF",
-};
 
 interface FilterTypeConfig {
   icon: ReactNode;
@@ -37,6 +31,7 @@ const FILTER_TYPES: Record<string, FilterTypeConfig> = {
 };
 
 interface ActiveFilterChipsProps {
+  hasActiveFilters: boolean;
   selectedFileTypes: string[];
   selectedGenres: Genre[];
   selectedTags: Tag[];
@@ -49,6 +44,7 @@ interface ActiveFilterChipsProps {
 }
 
 export const ActiveFilterChips = ({
+  hasActiveFilters,
   selectedFileTypes,
   selectedGenres,
   selectedTags,
@@ -59,13 +55,7 @@ export const ActiveFilterChips = ({
   onClearLanguage,
   onClearAll,
 }: ActiveFilterChipsProps) => {
-  const hasFilters =
-    selectedFileTypes.length > 0 ||
-    selectedGenres.length > 0 ||
-    selectedTags.length > 0 ||
-    Boolean(languageParam);
-
-  if (!hasFilters) return null;
+  if (!hasActiveFilters) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -80,7 +70,8 @@ export const ActiveFilterChips = ({
           <span className={FILTER_TYPES.fileType.colorClass}>
             {FILTER_TYPES.fileType.icon}
           </span>
-          {FILE_TYPE_LABELS[fileType] ?? fileType}
+          {FILE_TYPE_OPTIONS.find((o) => o.value === fileType)?.label ??
+            fileType}
           <X className="h-3 w-3 text-muted-foreground" />
         </Badge>
       ))}

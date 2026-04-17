@@ -9,7 +9,7 @@ import (
 
 func init() {
 	up := func(_ context.Context, db *bun.DB) error {
-		_, err := db.Exec(`CREATE INDEX ix_files_file_type_book_id ON files (file_type, book_id)`)
+		_, err := db.Exec(`CREATE INDEX IF NOT EXISTS ix_files_file_type_book_id ON files (file_type, book_id)`)
 		return errors.WithStack(err)
 	}
 
