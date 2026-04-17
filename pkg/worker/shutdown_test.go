@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/joblogs"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,4 +93,64 @@ func TestShutdown_CancelsInFlightJob(t *testing.T) {
 	default:
 		t.Error("job never reported its context")
 	}
+}
+
+// TestShutdown_PersistsFailedJobStatus verifies that when a handler returns an
+// error during shutdown, the job row is still updated to "failed" in the DB.
+// Without a separate un-cancelled context for the status write, UpdateJob uses
+// the cancelled job context and fails silently, leaving the row stuck in
+// "in_progress". That orphan row does self-heal on restart (processID
+// regenerates, fetchJobs re-picks it up), but a completed-but-unpersisted job
+// would otherwise re-run wastefully — bulk download in particular would
+// re-render its zip.
+func TestShutdown_PersistsFailedJobStatus(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	cfg := &config.Config{WorkerProcesses: 1}
+	w := New(cfg, tc.db, nil, nil, nil)
+
+	// Handler returns ctx.Err() once cancelled — same shape as a real job
+	// that observes shutdown and bails out.
+	jobStarted := make(chan struct{})
+	w.processFuncs[models.JobTypeScan] = func(ctx context.Context, _ *models.Job, _ *joblogs.JobLogger) error {
+		close(jobStarted)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	job := &models.Job{
+		Type:       models.JobTypeScan,
+		Status:     models.JobStatusPending,
+		DataParsed: &models.JobScanData{},
+	}
+	err := tc.jobService.CreateJob(tc.ctx, job)
+	require.NoError(t, err)
+
+	w.Start()
+	w.queue <- job
+
+	select {
+	case <-jobStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("job never started executing")
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		w.Shutdown()
+		close(shutdownDone)
+	}()
+	select {
+	case <-shutdownDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Shutdown did not complete in time")
+	}
+
+	// After shutdown, the job row should reflect that the handler completed
+	// with a failure — NOT be stuck in "in_progress" from the initial update.
+	retrieved, err := tc.jobService.RetrieveJob(tc.ctx, jobs.RetrieveJobOptions{ID: &job.ID})
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, retrieved.Status,
+		"failed status should persist even when the job ctx was cancelled during shutdown")
 }

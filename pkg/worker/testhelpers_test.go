@@ -141,6 +141,23 @@ func newTestContext(t *testing.T) *testContext {
 	return tc
 }
 
+// initWorkerRuntime initializes the channels and cancellable context that
+// Worker.Start/Shutdown need. Tests that build a Worker directly (via struct
+// literal in newTestContext, not via New()) must call this before Start()
+// otherwise processJobs and the schedulers will panic on nil channels or nil
+// ctx. Kept separate from newTestContext because most tests call service
+// methods directly and never exercise Start/Shutdown.
+func (tc *testContext) initWorkerRuntime() {
+	tc.t.Helper()
+	tc.worker.shutdown = make(chan struct{})
+	tc.worker.doneFetching = make(chan struct{})
+	tc.worker.doneProcessing = make(chan struct{}, tc.worker.config.WorkerProcesses)
+	tc.worker.doneScheduling = make(chan struct{})
+	tc.worker.doneUpdateCheck = make(chan struct{})
+	tc.worker.queue = make(chan *models.Job, tc.worker.config.WorkerProcesses)
+	tc.worker.ctx, tc.worker.cancel = context.WithCancel(context.Background())
+}
+
 // createLibrary creates a test library with the given paths.
 func (tc *testContext) createLibrary(paths []string) {
 	tc.t.Helper()

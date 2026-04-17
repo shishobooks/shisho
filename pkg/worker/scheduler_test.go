@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -115,14 +114,7 @@ func TestScheduler_StartWithZeroInterval(t *testing.T) {
 	// Set SyncIntervalMinutes to 0 (disabled)
 	tc.worker.config.SyncIntervalMinutes = 0
 
-	// Initialize channels
-	tc.worker.shutdown = make(chan struct{})
-	tc.worker.doneFetching = make(chan struct{})
-	tc.worker.doneProcessing = make(chan struct{}, tc.worker.config.WorkerProcesses)
-	tc.worker.doneScheduling = make(chan struct{})
-	tc.worker.doneUpdateCheck = make(chan struct{})
-	tc.worker.queue = make(chan *models.Job, tc.worker.config.WorkerProcesses)
-	tc.worker.jobCtx, tc.worker.jobCancel = context.WithCancel(context.Background())
+	tc.initWorkerRuntime()
 
 	// Start the worker
 	tc.worker.Start()
