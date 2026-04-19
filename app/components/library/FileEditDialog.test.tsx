@@ -262,6 +262,9 @@ describe("FileEditDialog", () => {
   });
 
   describe("cover page change race condition", () => {
+    // Bumped timeout: the test chains many waitFor + React Query + FormDialog
+    // settle steps, and the default 5s tips over under parallel E2E + coverage
+    // load in `mise check:quiet`. Runs in ~1s in isolation.
     it("should reset pendingCoverPage after successful save so hasChanges becomes false", async () => {
       // This test reproduces the bug:
       // 1. User opens dialog
@@ -321,7 +324,7 @@ describe("FileEditDialog", () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
-    });
+    }, 15_000);
   });
 
   describe("memory management", () => {
