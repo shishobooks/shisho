@@ -13,6 +13,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandler_GetManifest_PathTraversal(t *testing.T) {
+	pluginDir := t.TempDir()
+	installer := NewInstaller(pluginDir)
+	h := NewHandler(nil, nil, installer)
+
+	tests := []struct {
+		name  string
+		scope string
+		id    string
+	}{
+		{"dot-dot in scope", "..", "plugin"},
+		{"dot-dot in id", "scope", ".."},
+		{"dot-dot path in scope", "scope/../etc", "plugin"},
+		{"dot-dot path in id", "scope", "plugin/../../etc"},
+		{"forward slash in scope", "scope/sub", "plugin"},
+		{"forward slash in id", "scope", "plugin/sub"},
+		{"backslash in scope", "scope\\sub", "plugin"},
+		{"backslash in id", "scope", "plugin\\sub"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("scope", "id")
+			c.SetParamValues(tt.scope, tt.id)
+
+			err := h.GetManifest(c)
+			require.Error(t, err)
+
+			var ecErr *errcodes.Error
+			require.ErrorAs(t, err, &ecErr)
+			assert.Equal(t, http.StatusUnprocessableEntity, ecErr.HTTPCode)
+		})
+	}
+}
+
 func TestHandler_GetManifest_ReturnsFileContents(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)
