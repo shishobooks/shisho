@@ -105,7 +105,7 @@ The backend accepts exactly these field tokens. Any other token is rejected.
 |-------------------|--------------------------------------------------|-----------------------------------------|
 | `title`           | `books.sort_title`                               | —                                       |
 | `author`          | primary author's `persons.sort_name` (primary = `authors` row for this book with lowest `sort_order`, ties broken by `authors.id ASC`; books with zero authors sort last) | — |
-| `series`          | series `sort_name`, then `book_series.series_number ASC` | — (books with no series always sort last, regardless of direction; see NULLS-LAST note below) |
+| `series`          | primary series's `sort_name`, then `book_series.series_number ASC` (primary series = `book_series` row for this book with lowest `sort_order`, ties broken by `book_series.id ASC` — consistent with how `pkg/books/service.go` selects the primary series elsewhere; `book_series.series_number` is position *within* a single series and is not meaningful for picking which of multiple series is primary) | — (books with no series always sort last, regardless of direction; see NULLS-LAST note below) |
 | `date_added`      | `books.created_at`                               | —                                       |
 | `date_released`   | primary file's `release_date`                    | any other file on the book with a non-NULL `release_date` |
 | `page_count`      | primary file's `page_count`                      | any other file on the book with a non-NULL `page_count`  |

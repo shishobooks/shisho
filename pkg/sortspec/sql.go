@@ -48,16 +48,25 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 		case FieldSeries:
 			// Primary series sort name, then series number (always ASC
 			// within a series). Books with no series row sort last.
+			//
+			// "Primary" series is picked by bs.sort_order ASC (consistent
+			// with how pkg/books/service.go selects the primary series
+			// elsewhere). bs.series_number is the position *within* a
+			// specific series (e.g., "#3 in Stormlight") and is not
+			// meaningful for choosing which series is primary when a
+			// book belongs to multiple series. The outer-level sort still
+			// uses the primary series's series_number so that books in
+			// the same series sort by their position within it.
 			nameExpr := `(SELECT s.sort_name
                           FROM book_series bs
                           JOIN series s ON s.id = bs.series_id
                           WHERE bs.book_id = b.id
-                          ORDER BY bs.series_number ASC, bs.id ASC
+                          ORDER BY bs.sort_order ASC, bs.id ASC
                           LIMIT 1)`
 			numExpr := `(SELECT bs.series_number
                          FROM book_series bs
                          WHERE bs.book_id = b.id
-                         ORDER BY bs.series_number ASC, bs.id ASC
+                         ORDER BY bs.sort_order ASC, bs.id ASC
                          LIMIT 1)`
 			out = append(out,
 				nullsLast(nameExpr, l.Direction),

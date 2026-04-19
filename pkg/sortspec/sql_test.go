@@ -44,6 +44,16 @@ func TestOrderClauses_SeriesExpandsToTwo(t *testing.T) {
 	assert.Contains(t, got[0].Expression, "DESC")
 	assert.Contains(t, got[1].Expression, "series_number")
 	assert.Contains(t, got[1].Expression, "ASC")
+
+	// Both inner subqueries must pick the "primary" series via
+	// bs.sort_order (consistent with pkg/books/service.go), NOT
+	// bs.series_number — series_number is the position within a single
+	// series and is not meaningful for choosing which of multiple series
+	// is primary. Regression guard for the Task 5 review fix.
+	assert.Contains(t, got[0].Expression, "ORDER BY bs.sort_order ASC, bs.id ASC")
+	assert.Contains(t, got[1].Expression, "ORDER BY bs.sort_order ASC, bs.id ASC")
+	assert.NotContains(t, got[0].Expression, "ORDER BY bs.series_number ASC, bs.id ASC")
+	assert.NotContains(t, got[1].Expression, "ORDER BY bs.series_number ASC, bs.id ASC")
 }
 
 func TestOrderClauses_PrimaryFileFallback(t *testing.T) {
