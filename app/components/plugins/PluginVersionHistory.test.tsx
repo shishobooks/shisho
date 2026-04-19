@@ -32,6 +32,7 @@ const makeAvailable = (
   homepage,
   id: "p",
   imageUrl: "",
+  is_official: false,
   name: "Plugin",
   overview: "",
   scope: "shisho",

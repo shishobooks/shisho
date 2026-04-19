@@ -36,6 +36,7 @@ const makePlugin = (
   homepage: "",
   id: "my-plugin",
   imageUrl: "",
+  is_official: false,
   name: "My Plugin",
   overview: "",
   scope: "shisho",

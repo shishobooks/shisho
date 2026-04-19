@@ -62,6 +62,7 @@ export interface AvailablePlugin {
   author: string;
   homepage: string;
   imageUrl: string;
+  is_official: boolean;
   versions: PluginVersion[];
   compatible: boolean;
 }
