@@ -8,9 +8,9 @@ The library gallery can be sorted by one or more fields — author, series, date
 
 ## Using the Sort sheet
 
-Click **Sort** in the gallery toolbar to open the sort sheet. The sheet shows the current sort levels in priority order (leftmost = primary). From the sheet you can:
+Click **Sort** in the gallery toolbar to open the sort sheet. The sheet shows the current sort levels in priority order (top = primary). From the sheet you can:
 
-- **Add a level** — click any "Then by…" button at the bottom of the sheet.
+- **Add a level** — in the "Then by…" section at the bottom of the sheet, click the field you want to sort by next.
 - **Remove a level** — click the × on its row.
 - **Change direction** — click the ↑ / ↓ button on its row to flip ascending/descending.
 - **Reorder levels** — drag the grip handle on the left edge of each row.
