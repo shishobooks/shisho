@@ -80,7 +80,10 @@ export const PluginPermissions = ({
             className="flex items-start gap-3 rounded-md border p-3"
             key={label}
           >
-            <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+            <Icon
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 text-muted-foreground"
+            />
             <div className="flex-1">
               <div className="text-sm font-medium">{label}</div>
               {detail && (
