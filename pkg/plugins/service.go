@@ -30,7 +30,7 @@ func (s *Service) InstallPlugin(ctx context.Context, plugin *models.Plugin) erro
 
 // ListPlugins returns all installed plugins.
 func (s *Service) ListPlugins(ctx context.Context) ([]*models.Plugin, error) {
-	var plugins []*models.Plugin
+	plugins := make([]*models.Plugin, 0)
 	err := s.db.NewSelect().Model(&plugins).OrderExpr("scope ASC, id ASC").Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
