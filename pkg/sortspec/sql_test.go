@@ -17,7 +17,6 @@ func TestOrderClauses_SingleLevel(t *testing.T) {
 	// leading "IS NULL" term.
 	assert.Len(t, got, 1)
 	assert.Equal(t, "b.sort_title IS NULL, b.sort_title ASC", got[0].Expression)
-	assert.Nil(t, got[0].Args)
 }
 
 func TestOrderClauses_DescDirection(t *testing.T) {

@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
@@ -21,6 +24,7 @@ type Service struct {
 	bookService    *books.Service
 	libraryService *libraries.Service
 	seriesService  *series.Service
+	peopleService  *people.Service
 }
 
 // NewService creates a new OPDS service.
@@ -30,6 +34,7 @@ func NewService(db *bun.DB) *Service {
 		bookService:    books.NewService(db),
 		libraryService: libraries.NewService(db),
 		seriesService:  series.NewService(db),
+		peopleService:  people.NewService(db),
 	}
 }
 
@@ -450,68 +455,39 @@ func (svc *Service) BuildLibraryAuthorsListFeed(ctx context.Context, baseURL, fi
 }
 
 // ListBooksByAuthor lists books by a specific author in a library.
+//
+// Implementation note: the original version queried for unsorted book
+// IDs, paginated those IDs in Go, then fetched the entire library's
+// books with sort applied and filtered down to the paginated IDs. That
+// pattern broke pagination (page 1 wasn't "first N in sort order") and
+// scaled poorly. We now look up the person row (case-insensitive,
+// library-scoped, matching peopleService semantics) and delegate to
+// the books service's PersonID filter, which lets SQL apply the sort,
+// limit, and offset together.
 func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, authorName string, fileTypes []string, limit, offset int, sort []sortspec.SortLevel) ([]*models.Book, int, error) {
-	var bookIDs []int
-
-	// Get book IDs for this author using persons and authors tables
-	q := svc.db.NewSelect().
-		TableExpr("authors a").
-		ColumnExpr("DISTINCT a.book_id").
-		Join("INNER JOIN persons p ON p.id = a.person_id").
-		Join("INNER JOIN books b ON b.id = a.book_id").
-		Where("b.library_id = ? AND p.name = ?", libraryID, authorName)
-
-	if len(fileTypes) > 0 {
-		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
-	}
-
-	err := q.Scan(ctx, &bookIDs)
+	person, err := svc.peopleService.RetrievePerson(ctx, people.RetrievePersonOptions{
+		Name:      &authorName,
+		LibraryID: &libraryID,
+	})
 	if err != nil {
+		// "No such author in this library" yields an empty acquisition
+		// feed rather than a 404 — preserves the previous behavior of
+		// the unsorted-ID query, which returned empty when nothing
+		// joined.
+		if errors.Is(err, errcodes.NotFound("Person")) {
+			return []*models.Book{}, 0, nil
+		}
 		return nil, 0, err
 	}
 
-	if len(bookIDs) == 0 {
-		return []*models.Book{}, 0, nil
-	}
-
-	// Get books with pagination
-	total := len(bookIDs)
-
-	// Apply pagination to book IDs
-	start := offset
-	if start >= len(bookIDs) {
-		return []*models.Book{}, total, nil
-	}
-	end := start + limit
-	if end > len(bookIDs) {
-		end = len(bookIDs)
-	}
-	paginatedIDs := bookIDs[start:end]
-
-	// Fetch full book details
-	booksResult, err := svc.bookService.ListBooks(ctx, books.ListBooksOptions{
+	return svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		Limit:     &limit,
+		Offset:    &offset,
 		LibraryID: &libraryID,
+		PersonID:  &person.ID,
 		FileTypes: fileTypes,
 		Sort:      sort,
 	})
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Filter to only include books in paginatedIDs
-	idSet := make(map[int]bool)
-	for _, id := range paginatedIDs {
-		idSet[id] = true
-	}
-
-	var filtered []*models.Book
-	for _, book := range booksResult {
-		if idSet[book.ID] {
-			filtered = append(filtered, book)
-		}
-	}
-
-	return filtered, total, nil
 }
 
 // BuildLibraryAuthorBooksFeed builds an acquisition feed with books by an author.

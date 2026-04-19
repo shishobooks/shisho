@@ -89,6 +89,28 @@ func TestSerialize(t *testing.T) {
 	assert.Empty(t, Serialize(nil))
 }
 
+func TestBuiltinDefault(t *testing.T) {
+	t.Parallel()
+
+	got := BuiltinDefault()
+
+	// The exact default is intentionally pinned: OPDS, the eReader UI,
+	// and the React frontend all read this. Drift here without an
+	// equivalent change to app/libraries/sortSpec.ts BUILTIN_DEFAULT_SORT
+	// would cause inconsistent ordering across surfaces.
+	assert.Equal(t, []SortLevel{
+		{Field: FieldDateAdded, Direction: DirDesc},
+	}, got)
+
+	// Each call must return a fresh slice — callers (e.g. handlers
+	// composing sort options) may append or otherwise mutate without
+	// poisoning subsequent calls.
+	a := BuiltinDefault()
+	a[0].Direction = DirAsc
+	b := BuiltinDefault()
+	assert.Equal(t, DirDesc, b[0].Direction, "BuiltinDefault must return a fresh slice")
+}
+
 func TestParseSerialize_RoundTrip(t *testing.T) {
 	t.Parallel()
 

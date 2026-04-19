@@ -33,6 +33,7 @@ type ListBooksOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	SeriesID   *int
+	PersonID   *int     // Filter to books authored by this person (joins through authors)
 	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
 	GenreIDs   []int    // Filter by genre IDs
 	TagIDs     []int    // Filter by tag IDs
@@ -316,7 +317,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 
 	case len(opts.Sort) > 0:
 		for _, clause := range sortspec.OrderClauses(opts.Sort) {
-			q = q.OrderExpr(clause.Expression, clause.Args...)
+			q = q.OrderExpr(clause.Expression)
 		}
 		// Stable tiebreaker: ensures deterministic pagination when the
 		// user-specified sort levels have ties. Without this, SQLite's
@@ -348,6 +349,17 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by specific book IDs
 	if len(opts.IDs) > 0 {
 		q = q.Where("b.id IN (?)", bun.List(opts.IDs))
+	}
+
+	// Filter by author (person). Subquery rather than JOIN so it composes
+	// cleanly with the user-specified Sort — joining `authors` into the
+	// outer query would require disambiguating ORDER BY references and
+	// risks duplicate rows when a person appears multiple times on the
+	// same book (already deduped at the authors table by UNIQUE
+	// (book_id, person_id, role), but a future role-aware schema could
+	// reintroduce the issue).
+	if opts.PersonID != nil {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM authors WHERE person_id = ?)", *opts.PersonID)
 	}
 
 	// Filter by file types

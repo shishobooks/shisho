@@ -45,7 +45,15 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
 /** Hard cap matching pkg/sortspec.MaxLevels. */
 export const MAX_SORT_LEVELS = 10;
 
-/** Builtin default when the URL has no sort and the DB has no saved default. */
+/**
+ * Builtin default when the URL has no sort and the DB has no saved default.
+ *
+ * Mirrors `sortspec.BuiltinDefault()` in pkg/sortspec/spec.go (Go).
+ * Keep both sides in sync — the OPDS and eReader handlers fall back to
+ * the Go side when no preference is stored, so a drift here would mean
+ * the gallery, OPDS feeds, and eReader UI list the same library in
+ * different orders for users who have not saved a default.
+ */
 export const BUILTIN_DEFAULT_SORT: readonly SortLevel[] = [
   { field: "date_added", direction: "desc" },
 ];
@@ -94,7 +102,15 @@ export function parseSortSpec(s: string): SortLevel[] | null {
   return levels;
 }
 
-/** Serialize a spec back into the URL-param form. */
+/**
+ * Serialize a spec back into the URL-param form.
+ *
+ * Returns "" for an empty array — callers MUST treat empty output as
+ * "no sort" and either omit the URL param entirely or skip sending a
+ * `sort` query param to the API. Setting `?sort=` with an empty value
+ * would round-trip through parseSortSpec as null (no sort) but pollutes
+ * the URL with a meaningless empty key.
+ */
 export function serializeSortSpec(levels: readonly SortLevel[]): string {
   return levels.map((l) => `${l.field}:${l.direction}`).join(",");
 }

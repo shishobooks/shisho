@@ -33,15 +33,25 @@ type handler struct {
 }
 
 // resolveSort resolves the stored user-library sort preference for the
-// current request, or returns nil so the service's legacy default
-// ordering applies. OPDS is read-only; there's no explicit ?sort=
+// current request, falling back to sortspec.BuiltinDefault when no
+// preference exists. OPDS is read-only; there's no explicit ?sort=
 // input, so we pass explicit=nil to ResolveForLibrary.
+//
+// Falling back to BuiltinDefault (rather than returning nil and
+// inheriting the books service's hard-coded `sort_title ASC`) keeps
+// OPDS clients aligned with the gallery — the eReader on a Kobo and
+// the React frontend in a browser show the same library in the same
+// order when neither the user nor the URL has overridden it.
 func (h *handler) resolveSort(c echo.Context, libraryID int) []sortspec.SortLevel {
 	user, ok := c.Get("user").(*models.User)
 	if !ok {
-		return nil
+		return sortspec.BuiltinDefault()
 	}
-	return sortspec.ResolveForLibrary(c.Request().Context(), h.settingsService, user.ID, libraryID, nil)
+	resolved := sortspec.ResolveForLibrary(c.Request().Context(), h.settingsService, user.ID, libraryID, nil)
+	if resolved == nil {
+		return sortspec.BuiltinDefault()
+	}
+	return resolved
 }
 
 // getBaseURL returns the base URL for OPDS feeds.

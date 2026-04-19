@@ -6,11 +6,22 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// LibrarySettingsReader is the narrow read interface this package
-// needs from the settings service. Declared here (not in pkg/settings)
-// so ResolveForLibrary can be called without importing settings —
-// avoiding an import cycle because pkg/settings imports pkg/sortspec
-// to validate sort_spec at write time.
+// LibrarySettingsReader is the dependency-injection seam ResolveForLibrary
+// uses to read a user's stored sort preference for a library. In
+// production it is satisfied by *pkg/settings.Service; tests pass a
+// fake.
+//
+// It exists here (not in pkg/settings) to break what would otherwise
+// be a circular import: pkg/settings already imports pkg/sortspec to
+// validate sort_spec strings at write time, so pkg/sortspec cannot
+// turn around and import pkg/settings to read them back. Defining the
+// narrow read contract on this side of the boundary lets the resolver
+// stay in pkg/sortspec without dragging in the rest of the settings
+// service surface.
+//
+// Implementations MUST return (nil, nil) — not an error — when no row
+// exists for (userID, libraryID); ResolveForLibrary treats that as
+// "no stored preference" and falls back to the builtin default.
 type LibrarySettingsReader interface {
 	GetLibrarySettings(ctx context.Context, userID, libraryID int) (*models.UserLibrarySettings, error)
 }

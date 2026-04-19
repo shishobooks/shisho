@@ -3,9 +3,12 @@ package opds
 import (
 	"context"
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
@@ -181,4 +184,58 @@ func TestLibraryAllBooksFeed_NilSortUsesDefault(t *testing.T) {
 	// Default sort_title ASC → Apple, Cheese.
 	assert.Contains(t, feed.Entries[0].Title, "Apple")
 	assert.Contains(t, feed.Entries[1].Title, "Cheese")
+}
+
+// TestHandlerResolveSort_FallsBackToBuiltinDefault confirms the OPDS
+// handler's resolveSort layers sortspec.BuiltinDefault on top of
+// ResolveForLibrary. Without this, an OPDS client whose user has no
+// saved preference would get books in `b.sort_title ASC` order while
+// the React gallery shows them in `date_added:desc` — the M6 review
+// inconsistency.
+func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
+	t.Parallel()
+
+	db := setupOPDSDB(t)
+	user := &models.User{Username: "alice", PasswordHash: "x", RoleID: 1, IsActive: true}
+	_, err := db.NewInsert().Model(user).Exec(context.Background())
+	require.NoError(t, err)
+
+	settingsSvc := settings.NewService(db)
+	h := &handler{settingsService: settingsSvc}
+
+	// Build an echo.Context carrying the authenticated user, mirroring
+	// what the auth middleware sets in production.
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/opds/v1/library/1/all", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	got := h.resolveSort(c, 1)
+
+	assert.Equal(t, sortspec.BuiltinDefault(), got,
+		"no stored preference → handler falls back to BuiltinDefault")
+}
+
+// TestHandlerResolveSort_MissingUserFallsBackToBuiltinDefault is a
+// belt-and-suspenders check: in production the auth middleware ensures
+// "user" is set before the handler runs, but resolveSort is independently
+// safe — it never returns nil, so callers don't have to guard.
+func TestHandlerResolveSort_MissingUserFallsBackToBuiltinDefault(t *testing.T) {
+	t.Parallel()
+
+	db := setupOPDSDB(t)
+	settingsSvc := settings.NewService(db)
+	h := &handler{settingsService: settingsSvc}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/opds/v1/library/1/all", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	// Intentionally NOT calling c.Set("user", ...) — simulates a code
+	// path where middleware didn't run.
+
+	got := h.resolveSort(c, 1)
+
+	assert.Equal(t, sortspec.BuiltinDefault(), got)
 }

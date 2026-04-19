@@ -23,7 +23,7 @@ A dot on the Sort button means your current sort differs from your saved default
 |-------|----------|
 | Title | Book title |
 | Author | Primary author's name (books with no author sort to the end) |
-| Series | Primary series name, then series number within each series |
+| Series | Primary series name, then series number within each series (the within-series order is always ascending — "Stormlight #1 before #2" — even when you pick **Series, descending**, which only flips the series-name ordering) |
 | Date added | When the book was first scanned into the library |
 | Date released | Release date from the primary file's metadata |
 | Page count | Page count from the primary file |
