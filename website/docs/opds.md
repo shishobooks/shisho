@@ -72,3 +72,9 @@ Consult your app's documentation for how to add a new OPDS catalog.
 ## Library Access
 
 The feed respects your user's [library permissions](./users-and-permissions#library-access). You only see books from libraries you have access to.
+
+## Sort order
+
+Book-listing feeds (library, series, author, genre, tag, all-books, recently-added) apply the authenticated user's saved default sort for the relevant library. See [Gallery sort](./gallery-sort.md) for how to set a default.
+
+When a feed is not scoped to a single library (for example, the all-books root feed across a user's libraries), Shisho falls back to its builtin default order — `user_library_settings` is per-library by design.

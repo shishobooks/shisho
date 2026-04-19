@@ -60,3 +60,7 @@ The eReader browser works with any device that has a web browser, including:
 ## Authentication
 
 Each device gets its own API key. The key is embedded in the URL, so there's no login prompt. You can revoke access to a specific device at any time by removing it from the Security settings — the URL immediately stops working.
+
+## Sort order
+
+The eReader browser's book listings (library index, author, series, genre pages) apply the authenticated user's saved default sort for the relevant library. See [Gallery sort](./gallery-sort.md) for how to set a default.
