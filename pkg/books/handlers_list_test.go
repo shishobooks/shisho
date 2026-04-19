@@ -97,7 +97,10 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 }
 
 // TestListHandler_StoredPreferenceUsed verifies that when no URL sort is
-// provided, the stored preference drives ordering.
+// provided, the stored preference drives ordering. Books are chosen so the
+// default sort_title ASC (apple, banana) disagrees with date_added:desc
+// (banana, apple) — this asymmetry is what makes the test actually prove
+// the resolver fired.
 func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	t.Parallel()
 
@@ -106,8 +109,8 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	user := seedUserWithLibAccess(t, db, "bob", lib)
 
 	now := time.Now()
-	oldest := seedBook(t, db, lib, "Oldest", "Oldest", now.Add(-2*time.Hour))
-	newest := seedBook(t, db, lib, "Newest", "Newest", now)
+	apple := seedBook(t, db, lib, "Apple", "Apple", now.Add(-2*time.Hour)) // older
+	banana := seedBook(t, db, lib, "Banana", "Banana", now)                // newer
 
 	settingsSvc := settings.NewService(db)
 	stored := "date_added:desc"
@@ -129,8 +132,10 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Books, 2)
-	assert.Equal(t, newest.ID, resp.Books[0].ID)
-	assert.Equal(t, oldest.ID, resp.Books[1].ID)
+	// date_added:desc → banana (newer) before apple (older).
+	// If the resolver hadn't fired, default sort_title ASC would invert this.
+	assert.Equal(t, banana.ID, resp.Books[0].ID)
+	assert.Equal(t, apple.ID, resp.Books[1].ID)
 }
 
 // TestListHandler_InvalidSortReturns400 verifies sort validation.
