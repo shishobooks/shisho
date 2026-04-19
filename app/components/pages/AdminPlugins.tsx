@@ -1,8 +1,6 @@
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
-  ExternalLink,
   ListOrdered,
   Loader2,
   Package,
@@ -16,7 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
+import { DiscoverTab } from "@/components/plugins/DiscoverTab";
 import { InstalledTab } from "@/components/plugins/InstalledTab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,161 +32,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAddRepository,
   useAllPluginOrders,
-  useInstallPlugin,
   usePluginOrder,
   usePluginRepositories,
-  usePluginsAvailable,
   usePluginsInstalled,
   useRemoveRepository,
   useSetPluginOrder,
   useSyncRepository,
-  type AvailablePlugin,
   type PluginHookType,
   type PluginMode,
   type PluginOrder,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
-// --- Browse Tab ---
-
-const BrowseTab = () => {
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
-  const { data: available, isLoading, error } = usePluginsAvailable();
-  const { data: installed } = usePluginsInstalled();
-  const installPlugin = useInstallPlugin();
-
-  const [installTarget, setInstallTarget] = useState<AvailablePlugin | null>(
-    null,
-  );
-
-  if (isLoading) return <LoadingSpinner />;
-  if (error) {
-    return (
-      <p className="text-sm text-destructive">
-        Failed to load available plugins: {error.message}
-      </p>
-    );
-  }
-
-  if (!available || available.length === 0) {
-    return (
-      <div className="py-8 text-center">
-        <Package className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          No plugins available. Add a repository to browse plugins.
-        </p>
-      </div>
-    );
-  }
-
-  const isInstalled = (scope: string, id: string) =>
-    installed?.some((p) => p.scope === scope && p.id === id) ?? false;
-
-  const handleInstall = () => {
-    if (!installTarget) return;
-    const compatibleVersion = installTarget.versions.find((v) => v.compatible);
-    if (!compatibleVersion) return;
-    installPlugin.mutate(
-      {
-        scope: installTarget.scope,
-        id: installTarget.id,
-        name: installTarget.name,
-        version: compatibleVersion.version,
-      },
-      {
-        onSuccess: () => setInstallTarget(null),
-        onError: (err) => {
-          toast.error(`Failed to install plugin: ${err.message}`);
-        },
-      },
-    );
-  };
-
-  return (
-    <>
-      <div className="space-y-3">
-        {available.map((plugin) => {
-          const alreadyInstalled = isInstalled(plugin.scope, plugin.id);
-          const latestVersion =
-            plugin.versions.find((v) => v.compatible) ?? plugin.versions[0];
-
-          return (
-            <div
-              className="flex items-start justify-between gap-4 rounded-md border border-border p-4"
-              key={`${plugin.scope}/${plugin.id}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium">{plugin.name}</h3>
-                  {latestVersion && (
-                    <Badge variant="outline">{latestVersion.version}</Badge>
-                  )}
-                  <Badge variant="secondary">{plugin.scope}</Badge>
-                  {alreadyInstalled && (
-                    <Badge variant="success">Installed</Badge>
-                  )}
-                  {!plugin.compatible && (
-                    <Badge variant="destructive">Incompatible</Badge>
-                  )}
-                </div>
-                {plugin.description && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {plugin.description}
-                  </p>
-                )}
-                {plugin.author && (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    by {plugin.author}
-                  </p>
-                )}
-                {!plugin.compatible && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                    <AlertTriangle className="h-3 w-3" />
-                    Requires a newer version of Shisho
-                  </p>
-                )}
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                {canWrite && !alreadyInstalled && plugin.compatible && (
-                  <Button
-                    onClick={() => setInstallTarget(plugin)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Install
-                  </Button>
-                )}
-                {plugin.homepage && (
-                  <a
-                    className="text-muted-foreground hover:text-foreground"
-                    href={plugin.homepage}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <CapabilitiesWarning
-        isPending={installPlugin.isPending}
-        onConfirm={handleInstall}
-        onOpenChange={(open) => {
-          if (!open) setInstallTarget(null);
-        }}
-        open={!!installTarget}
-        plugin={installTarget}
-      />
-    </>
-  );
-};
 
 // --- Order Tab ---
 
@@ -583,18 +438,31 @@ const RepositoriesTab = () => {
 
 // --- Main Page ---
 
-const validTabs = ["installed", "browse", "order", "repositories"] as const;
+// "browse" is kept for backward-compat URL slugs; both resolve to "discover".
+const validTabs = [
+  "installed",
+  "discover",
+  "browse",
+  "order",
+  "repositories",
+] as const;
 type TabValue = (typeof validTabs)[number];
+
+const normalizeTab = (tab: string | undefined): TabValue => {
+  if (tab === "browse") return "discover";
+  return validTabs.includes(tab as TabValue) ? (tab as TabValue) : "installed";
+};
 
 const AdminPlugins = () => {
   usePageTitle("Plugins");
 
+  const { hasPermission } = useAuth();
+  const canWrite = hasPermission("config", "write");
+
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
 
-  const activeTab: TabValue = validTabs.includes(tab as TabValue)
-    ? (tab as TabValue)
-    : "installed";
+  const activeTab: TabValue = normalizeTab(tab);
 
   const handleTabChange = (value: string) => {
     if (value === "installed") {
@@ -611,7 +479,7 @@ const AdminPlugins = () => {
           Plugins
         </h1>
         <p className="text-sm md:text-base text-muted-foreground">
-          Manage installed plugins, browse available plugins, configure
+          Manage installed plugins, discover available plugins, configure
           execution order, and manage repositories.
         </p>
       </div>
@@ -621,8 +489,8 @@ const AdminPlugins = () => {
           <TabsTrigger className="text-xs sm:text-sm" value="installed">
             Installed
           </TabsTrigger>
-          <TabsTrigger className="text-xs sm:text-sm" value="browse">
-            Browse
+          <TabsTrigger className="text-xs sm:text-sm" value="discover">
+            Discover
           </TabsTrigger>
           <TabsTrigger className="text-xs sm:text-sm" value="order">
             Order
@@ -636,8 +504,8 @@ const AdminPlugins = () => {
           <InstalledTab />
         </TabsContent>
 
-        <TabsContent value="browse">
-          <BrowseTab />
+        <TabsContent value="discover">
+          <DiscoverTab canWrite={canWrite} />
         </TabsContent>
 
         <TabsContent value="order">
