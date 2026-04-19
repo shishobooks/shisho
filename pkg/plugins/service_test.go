@@ -108,6 +108,20 @@ func TestService_ListPlugins(t *testing.T) {
 	assert.Equal(t, "shisho", plugins[2].Scope)
 }
 
+func TestService_ListPlugins_Empty(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	got, err := svc.ListPlugins(ctx)
+	require.NoError(t, err)
+	// Must be non-nil so the JSON response is `[]` not `null`.
+	// Frontend consumers call .filter on the response and crash on null.
+	require.NotNil(t, got)
+	require.Empty(t, got)
+}
+
 func TestService_UpdatePlugin(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)
