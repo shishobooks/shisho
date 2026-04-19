@@ -41,7 +41,10 @@ func ExtractCoverPageToFile(
 		return "", "", errors.Wrap(err, "failed to extract cover page")
 	}
 
-	coverDir := fileutils.ResolveCoverDir(bookFilepath)
+	// Use the write-side resolver so root-level files (whose bookFilepath may
+	// be a synthetic organized-folder path that doesn't yet exist on disk)
+	// land the cover next to the file instead of failing on a stale path.
+	coverDir := fileutils.ResolveCoverDirForWrite(bookFilepath, file.Filepath)
 	coverBaseName := filepath.Base(file.Filepath) + ".cover"
 
 	ext := getExtensionFromMimeType(mimeType)

@@ -2085,3 +2085,86 @@ func TestScanWithEnricher_CoverPageForCBZ(t *testing.T) {
 	assert.Less(t, int(g>>8), 80, "green channel should be low (page 2 is blue)")
 	assert.Greater(t, int(b>>8), 150, "blue channel should be high (page 2 is blue)")
 }
+
+// TestScanWithEnricher_CoverPageOutOfBounds verifies that an enricher
+// returning an out-of-range coverPage is skipped with a warning during
+// auto-scan: file.CoverPage stays on the file parser's default (page 0),
+// and the on-disk cover is page 0 (red), not page 99.
+func TestScanWithEnricher_CoverPageOutOfBounds(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "oob-enricher",
+  "name": "Out-Of-Bounds Cover Page Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Returns an out-of-range page",
+      "fileTypes": ["cbz"],
+      "fields": ["cover"]
+    }
+  }
+}`
+	enricherMainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, coverPage: 99 }] };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "oob-enricher", enricherManifest, enricherMainJS)
+
+	pluginService := plugins.NewService(tc.db)
+	err := pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "oob-enricher")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Out Of Bounds Comic")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	cbzPath := filepath.Join(bookDir, "comic.cbz")
+	writeCBZWithColoredPages(t, cbzPath, []color.RGBA{
+		{R: 255, G: 0, B: 0, A: 255},   // page 0: red
+		{R: 0, G: 255, B: 0, A: 255},   // page 1: green
+		{R: 30, G: 40, B: 250, A: 255}, // page 2: blue
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	file := files[0]
+
+	// Enricher's out-of-range page is rejected; file parser's default (page 0) stands.
+	require.NotNil(t, file.CoverPage)
+	assert.Equal(t, 0, *file.CoverPage, "out-of-range coverPage should be skipped")
+
+	// Cover source must NOT be the enricher.
+	require.NotNil(t, file.CoverSource)
+	assert.NotEqual(t, "plugin:test/oob-enricher", *file.CoverSource)
+
+	// On-disk cover must be page 0 (red), not page 99.
+	require.NotNil(t, file.CoverImageFilename)
+	coverPath := filepath.Join(bookDir, *file.CoverImageFilename)
+	coverBytes, err := os.ReadFile(coverPath)
+	require.NoError(t, err)
+	img, _, err := image.Decode(bytes.NewReader(coverBytes))
+	require.NoError(t, err)
+	bounds := img.Bounds()
+	r, g, b, _ := img.At((bounds.Min.X+bounds.Max.X)/2, (bounds.Min.Y+bounds.Max.Y)/2).RGBA()
+	assert.Greater(t, int(r>>8), 200, "red channel should be high (page 0 is red)")
+	assert.Less(t, int(g>>8), 80, "green channel should be low (page 0 is red)")
+	assert.Less(t, int(b>>8), 80, "blue channel should be low (page 0 is red)")
+}
