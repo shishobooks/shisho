@@ -1,4 +1,4 @@
-import { CheckSquare } from "lucide-react";
+import { CheckSquare, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
@@ -9,6 +9,8 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
+import SortedByChips from "@/components/library/SortedByChips";
+import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
@@ -16,11 +18,22 @@ import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
 import { useLibrary, useLibraryLanguages } from "@/hooks/queries/libraries";
+import {
+  useLibrarySettings,
+  useUpdateLibrarySettings,
+} from "@/hooks/queries/librarySettings";
 import { useSeries } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  BUILTIN_DEFAULT_SORT,
+  parseSortSpec,
+  serializeSortSpec,
+  sortSpecsEqual,
+  type SortLevel,
+} from "@/libraries/sortSpec";
 import type { Book, Genre, Tag } from "@/types";
 
 const ITEMS_PER_PAGE = 24;
@@ -40,6 +53,10 @@ const HomeContent = () => {
   const genreIdsParam = searchParams.get("genre_ids") ?? "";
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
   const languageParam = searchParams.get("language") ?? "";
+  const sortParam = searchParams.get("sort") ?? "";
+  const urlSort: SortLevel[] | null = sortParam
+    ? parseSortSpec(sortParam)
+    : null;
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
@@ -88,6 +105,30 @@ const HomeContent = () => {
   // Fetch distinct languages for the library
   const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
   const languagesQuery = useLibraryLanguages(libraryIdNum);
+
+  // Fetch per-library sort preference. The query is auto-disabled when
+  // libraryIdNum is undefined (via Boolean(0) guard in useLibrarySettings).
+  const librarySettingsQuery = useLibrarySettings(libraryIdNum ?? 0);
+  const updateLibrarySettings = useUpdateLibrarySettings(libraryIdNum ?? 0);
+
+  // Resolve effective sort: URL wins if valid; else stored preference; else builtin.
+  const storedSort: SortLevel[] | null = librarySettingsQuery.data?.sort_spec
+    ? parseSortSpec(librarySettingsQuery.data.sort_spec)
+    : null;
+  const defaultSort: readonly SortLevel[] =
+    storedSort && storedSort.length > 0 ? storedSort : BUILTIN_DEFAULT_SORT;
+  const effectiveSort: readonly SortLevel[] =
+    urlSort && urlSort.length > 0 ? urlSort : defaultSort;
+
+  // "Dirty" = a sort was explicitly provided via URL and differs from default.
+  const isSortDirty = urlSort !== null && !sortSpecsEqual(urlSort, defaultSort);
+
+  // Gate gallery render on the settings query having resolved, so we
+  // don't flash the builtin default before the stored preference loads.
+  const settingsResolved =
+    libraryIdNum === undefined ||
+    librarySettingsQuery.isSuccess ||
+    librarySettingsQuery.isError;
 
   // Group languages by base subtag for the filter dropdown.
   // If a library has both "en" and "en-US", show only "English" (the bare "en" subsumes variants).
@@ -265,6 +306,37 @@ const HomeContent = () => {
     });
   };
 
+  const handleSaveSortAsDefault = () => {
+    if (libraryIdNum === undefined) return;
+    const serialized = serializeSortSpec(effectiveSort);
+    updateLibrarySettings.mutate(
+      { sort_spec: serialized || null },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("sort");
+            return params;
+          });
+        },
+      },
+    );
+  };
+
+  const applySortLevels = (next: readonly SortLevel[]) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      const serialized = serializeSortSpec(next);
+      if (serialized && !sortSpecsEqual(next, defaultSort)) {
+        params.set("sort", serialized);
+      } else {
+        params.delete("sort");
+      }
+      params.set("page", "1");
+      return params;
+    });
+  };
+
   const hasActiveFilters =
     selectedFileTypes.length > 0 ||
     selectedGenreIds.length > 0 ||
@@ -304,7 +376,16 @@ const HomeContent = () => {
     booksQueryParams.language = languageParam;
   }
 
-  const booksQuery = useBooks(booksQueryParams);
+  // Sort: serialize only the effective (possibly resolved-from-default) sort.
+  // Always sending a sort query param makes server-side sort explicit and deterministic.
+  const serializedSort = serializeSortSpec(effectiveSort);
+  if (serializedSort) {
+    booksQueryParams.sort = serializedSort;
+  }
+
+  const booksQuery = useBooks(booksQueryParams, {
+    enabled: settingsResolved,
+  });
 
   // Track the filter state that produced the currently displayed data
   // We use a stringified version of all filter params for comparison
@@ -314,6 +395,7 @@ const HomeContent = () => {
     genreIds: selectedGenreIds,
     tagIds: selectedTagIds,
     language: languageParam,
+    sort: sortParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
     null,
@@ -342,6 +424,7 @@ const HomeContent = () => {
     selectedGenreIds.length,
     selectedTagIds.length,
     languageParam,
+    sortParam,
   ]);
 
   // Data is stale if filters changed but query hasn't completed yet
@@ -417,6 +500,14 @@ const HomeContent = () => {
             tagsError={tagsQuery.isError}
             tagsLoading={tagsQuery.isLoading}
           />
+          <SortSheet
+            isDirty={isSortDirty}
+            isSaving={updateLibrarySettings.isPending}
+            levels={effectiveSort}
+            onChange={(next) => applySortLevels(next)}
+            onSaveAsDefault={handleSaveSortAsDefault}
+            trigger={<SortButton isDirty={isSortDirty} />}
+          />
           <div className="flex-1" />
           {isSelectionMode ? (
             <Button onClick={exitSelectionMode} variant="outline">
@@ -441,24 +532,46 @@ const HomeContent = () => {
           selectedGenres={selectedGenres}
           selectedTags={selectedTags}
         />
+        <SortedByChips
+          levels={isSortDirty ? effectiveSort : []}
+          onRemoveLevel={(index) => {
+            const next = effectiveSort.filter((_, i) => i !== index);
+            applySortLevels(next);
+          }}
+          onReset={() => {
+            setSearchParams((prev) => {
+              const params = new URLSearchParams(prev);
+              params.delete("sort");
+              return params;
+            });
+          }}
+        />
       </div>
 
-      <Gallery
-        emptyMessage={
-          confirmedHasFilters
-            ? "No books found matching your search or filters."
-            : "No books in this library yet."
-        }
-        isLoading={booksQuery.isLoading || booksQuery.isFetching || isStaleData}
-        isSuccess={
-          booksQuery.isSuccess && !booksQuery.isFetching && !isStaleData
-        }
-        itemLabel="books"
-        items={booksQuery.data?.books ?? []}
-        itemsPerPage={ITEMS_PER_PAGE}
-        renderItem={renderBookItem}
-        total={booksQuery.data?.total ?? 0}
-      />
+      {!settingsResolved ? (
+        <div className="flex min-h-[300px] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <Gallery
+          emptyMessage={
+            confirmedHasFilters
+              ? "No books found matching your search or filters."
+              : "No books in this library yet."
+          }
+          isLoading={
+            booksQuery.isLoading || booksQuery.isFetching || isStaleData
+          }
+          isSuccess={
+            booksQuery.isSuccess && !booksQuery.isFetching && !isStaleData
+          }
+          itemLabel="books"
+          items={booksQuery.data?.books ?? []}
+          itemsPerPage={ITEMS_PER_PAGE}
+          renderItem={renderBookItem}
+          total={booksQuery.data?.total ?? 0}
+        />
+      )}
       <SelectionToolbar library={libraryQuery.data} />
     </LibraryLayout>
   );

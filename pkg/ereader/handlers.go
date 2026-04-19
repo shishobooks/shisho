@@ -1,6 +1,7 @@
 package ereader
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,18 +22,21 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
 const defaultPageSize = 50
 
 type handler struct {
-	db             *bun.DB
-	libraryService *libraries.Service
-	bookService    *books.Service
-	seriesService  *series.Service
-	peopleService  *people.Service
-	downloadCache  *downloadcache.Cache
+	db              *bun.DB
+	libraryService  *libraries.Service
+	bookService     *books.Service
+	seriesService   *series.Service
+	peopleService   *people.Service
+	downloadCache   *downloadcache.Cache
+	settingsService *settings.Service
 }
 
 func newHandler(
@@ -42,14 +46,16 @@ func newHandler(
 	seriesService *series.Service,
 	peopleService *people.Service,
 	downloadCache *downloadcache.Cache,
+	settingsService *settings.Service,
 ) *handler {
 	return &handler{
-		db:             db,
-		libraryService: libraryService,
-		bookService:    bookService,
-		seriesService:  seriesService,
-		peopleService:  peopleService,
-		downloadCache:  downloadCache,
+		db:              db,
+		libraryService:  libraryService,
+		bookService:     bookService,
+		seriesService:   seriesService,
+		peopleService:   peopleService,
+		downloadCache:   downloadCache,
+		settingsService: settingsService,
 	}
 }
 
@@ -70,6 +76,17 @@ func (h *handler) getUserLibraryIDs(ctx echo.Context, userID int) ([]int, error)
 		return nil, errors.WithStack(err)
 	}
 	return user.GetAccessibleLibraryIDs(), nil
+}
+
+// resolveSort returns the stored user-library sort preference for the
+// API-key-authenticated caller, or nil when no preference is set. The
+// eReader browser has no explicit URL sort input — the stored default
+// is the only input.
+func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libraryID int) []sortspec.SortLevel {
+	if apiKey == nil {
+		return nil
+	}
+	return sortspec.ResolveForLibrary(ctx, h.settingsService, apiKey.UserID, libraryID, nil)
 }
 
 // Libraries lists all libraries the user has access to.
@@ -160,6 +177,8 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 		return errcodes.Forbidden("Access to this library is denied")
 	}
 
+	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+
 	// Fetch more books than needed to account for filtering
 	// When filtering by type, we fetch all and filter client-side
 	var booksResult []*models.Book
@@ -168,6 +187,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 		// Fetch all books and filter (pagination happens after filtering)
 		allBooks, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
 			LibraryID: &libraryIDInt,
+			Sort:      sort,
 		})
 		if err != nil {
 			return errors.WithStack(err)
@@ -189,6 +209,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 			Limit:     intPtr(defaultPageSize),
 			Offset:    intPtr(offset),
 			LibraryID: &libraryIDInt,
+			Sort:      sort,
 		})
 		if err != nil {
 			return errors.WithStack(err)
@@ -295,6 +316,8 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return errcodes.Forbidden("Access to this library is denied")
 	}
 
+	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+
 	// Get series info
 	s, err := h.seriesService.RetrieveSeriesByID(ctx, seriesIDInt)
 	if err != nil {
@@ -308,6 +331,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	booksResult, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		SeriesID:  &seriesIDInt,
+		Sort:      sort,
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -486,6 +510,8 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		return errcodes.Forbidden("Access to this library is denied")
 	}
 
+	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
 	content.WriteString("<h1>Search</h1>")
@@ -500,6 +526,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 			LibraryID: &libraryIDInt,
 			Search:    &query,
 			Limit:     intPtr(defaultPageSize),
+			Sort:      sort,
 		})
 		if err != nil {
 			return errors.WithStack(err)
