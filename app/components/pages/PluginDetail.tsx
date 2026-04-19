@@ -1,6 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
@@ -12,6 +13,8 @@ import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
   usePluginsAvailable,
   usePluginsInstalled,
+  useUpdatePlugin,
+  useUpdatePluginVersion,
 } from "@/hooks/queries/plugins";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -21,9 +24,11 @@ export const PluginDetail = () => {
   const navigate = useNavigate();
   const installedQuery = usePluginsInstalled();
   const availableQuery = usePluginsAvailable();
+  const updatePlugin = useUpdatePlugin();
+  const updateVersion = useUpdatePluginVersion();
 
   const [configDirty, setConfigDirty] = useState(false);
-  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+  const { cancelNavigation, proceedNavigation, showBlockerDialog } =
     useUnsavedChanges(configDirty);
 
   const installed = installedQuery.data?.find(
@@ -39,6 +44,38 @@ export const PluginDetail = () => {
   const isLoading = installedQuery.isLoading || availableQuery.isLoading;
   const hasError = installedQuery.isError || availableQuery.isError;
   const notFound = !isLoading && !hasError && !installed && !available;
+
+  const handleToggleEnabled = async (enabled: boolean) => {
+    if (!installed) return;
+    try {
+      await updatePlugin.mutateAsync({
+        id: installed.id,
+        payload: { enabled },
+        scope: installed.scope,
+      });
+      toast.success(
+        enabled ? `${installed.name} enabled` : `${installed.name} disabled`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!installed) return;
+    const targetLabel = installed.update_available_version;
+    try {
+      await updateVersion.mutateAsync({
+        id: installed.id,
+        scope: installed.scope,
+      });
+      toast.success(
+        targetLabel ? `Updated to v${targetLabel}` : "Plugin updated",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -86,6 +123,10 @@ export const PluginDetail = () => {
           available={available}
           id={id}
           installed={installed}
+          isTogglingEnabled={updatePlugin.isPending}
+          isUpdating={updateVersion.isPending}
+          onToggleEnabled={handleToggleEnabled}
+          onUpdate={handleUpdate}
           scope={scope}
         />
       )}

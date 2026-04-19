@@ -1,23 +1,35 @@
+import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
 import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
-import type { Plugin } from "@/types/generated/models";
+import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 export interface PluginDetailHeroProps {
-  scope: string;
+  available?: AvailablePlugin;
   id: string;
   installed?: Plugin;
-  available?: AvailablePlugin;
+  isTogglingEnabled?: boolean;
+  isUpdating?: boolean;
+  onToggleEnabled?: (enabled: boolean) => void;
+  onUpdate?: () => void;
+  scope: string;
 }
 
 export const PluginDetailHero = ({
-  scope,
+  available,
   id,
   installed,
-  available,
+  isTogglingEnabled,
+  isUpdating,
+  onToggleEnabled,
+  onUpdate,
+  scope,
 }: PluginDetailHeroProps) => {
   const name = installed?.name ?? available?.name ?? id;
   const description = installed?.description ?? available?.description ?? "";
@@ -38,7 +50,7 @@ export const PluginDetailHero = ({
         rel="noopener noreferrer"
         target="_blank"
       >
-        homepage <ExternalLink className="h-3 w-3" />
+        homepage <ExternalLink aria-hidden="true" className="h-3 w-3" />
       </a>,
     );
   }
@@ -75,6 +87,26 @@ export const PluginDetailHero = ({
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
+
+      {installed && (
+        <div className="flex flex-col items-end gap-3">
+          {updateAvailable && (
+            <Button disabled={isUpdating} onClick={onUpdate}>
+              {isUpdating ? "Updating…" : `Update to ${updateAvailable}`}
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
+            <Label htmlFor="plugin-enabled">Enabled</Label>
+            <Switch
+              checked={installed.status === PluginStatusActive}
+              disabled={isTogglingEnabled}
+              id="plugin-enabled"
+              onCheckedChange={onToggleEnabled}
+            />
+          </div>
+          <PluginHeroActions plugin={installed} />
+        </div>
+      )}
     </div>
   );
 };
