@@ -477,6 +477,31 @@ func (h *handler) getImage(c echo.Context) error {
 	return c.File(iconPath)
 }
 
+// getManifest returns the raw manifest.json for an installed plugin.
+func (h *handler) getManifest(c echo.Context) error {
+	ctx := c.Request().Context()
+	scope := c.Param("scope")
+	id := c.Param("id")
+
+	if _, err := h.service.RetrievePlugin(ctx, scope, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errcodes.NotFound("Plugin")
+		}
+		return errors.WithStack(err)
+	}
+
+	manifestPath := filepath.Join(h.installer.PluginDir(), scope, id, "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Manifest")
+		}
+		return errors.WithStack(err)
+	}
+
+	return c.Blob(http.StatusOK, "application/json", data)
+}
+
 func (h *handler) reload(c echo.Context) error {
 	ctx := c.Request().Context()
 	scope := c.Param("scope")
@@ -2179,6 +2204,7 @@ func NewHandler(service *Service, manager *Manager, installer *Installer) *handl
 
 // Exported handler methods for testing.
 func (h *handler) GetImage(c echo.Context) error              { return h.getImage(c) }
+func (h *handler) GetManifest(c echo.Context) error           { return h.getManifest(c) }
 func (h *handler) GetLibraryOrder(c echo.Context) error       { return h.getLibraryOrder(c) }
 func (h *handler) SetLibraryOrder(c echo.Context) error       { return h.setLibraryOrder(c) }
 func (h *handler) ResetLibraryOrder(c echo.Context) error     { return h.resetLibraryOrder(c) }

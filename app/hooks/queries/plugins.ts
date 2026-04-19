@@ -160,6 +160,26 @@ export const usePluginConfig = (scope?: string, id?: string) => {
   });
 };
 
+export const usePluginManifest = (
+  scope: string | undefined,
+  id: string | undefined,
+  options: { enabled?: boolean } = {},
+) => {
+  return useQuery<unknown, ShishoAPIError>({
+    queryKey: ["plugins", "manifest", scope, id],
+    enabled: !!scope && !!id && options.enabled !== false,
+    queryFn: ({ signal }) => {
+      return API.request<unknown>(
+        "GET",
+        `/plugins/installed/${scope}/${id}/manifest`,
+        null,
+        null,
+        signal,
+      );
+    },
+  });
+};
+
 export const usePluginRepositories = () => {
   return useQuery<PluginRepository[], ShishoAPIError>({
     queryKey: [QueryKey.PluginRepositories],
