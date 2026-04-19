@@ -14,6 +14,7 @@ import (
 )
 
 func TestHandler_GetManifest_PathTraversal(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
 	h := NewHandler(nil, nil, installer)
@@ -35,6 +36,7 @@ func TestHandler_GetManifest_PathTraversal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			rec := httptest.NewRecorder()
@@ -53,6 +55,7 @@ func TestHandler_GetManifest_PathTraversal(t *testing.T) {
 }
 
 func TestHandler_GetManifest_ReturnsFileContents(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
@@ -80,6 +83,7 @@ func TestHandler_GetManifest_ReturnsFileContents(t *testing.T) {
 }
 
 func TestHandler_GetManifest_Returns404WhenPluginNotInDB(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
@@ -102,6 +106,7 @@ func TestHandler_GetManifest_Returns404WhenPluginNotInDB(t *testing.T) {
 }
 
 func TestHandler_GetManifest_Returns404WhenFileMissing(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
