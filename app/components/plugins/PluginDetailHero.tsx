@@ -1,6 +1,6 @@
 import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
-import { ExternalLink } from "lucide-react";
+import { BadgeCheck, ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -38,12 +38,26 @@ export const PluginDetailHero = ({
   const author = installed?.author ?? available?.author;
   const homepage = installed?.homepage ?? available?.homepage;
   const imageUrl = available?.imageUrl ?? undefined;
+  const isOfficial = available?.is_official ?? false;
   const version = installed?.version;
   const updateAvailable = installed?.update_available_version ?? undefined;
 
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
-  if (author) metaParts.push(`by ${author}`);
+  if (author) {
+    metaParts.push(
+      <span className="inline-flex items-center gap-1">
+        by{" "}
+        {isOfficial && (
+          <BadgeCheck
+            aria-label="Official plugin"
+            className="h-4 w-4 text-primary"
+          />
+        )}
+        {author}
+      </span>,
+    );
+  }
   if (homepage) {
     metaParts.push(
       <a
