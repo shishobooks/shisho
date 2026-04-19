@@ -120,13 +120,15 @@ New route + component. Replaces `PluginConfigDialog` as the primary per-plugin s
 
 ### Load & polymorphism
 
-On mount, the page fires both `GET /plugins/installed/:scope/:id` and `GET /plugins/available/:scope/:id` in parallel. The result is one of three states:
+The detail page reuses the existing list queries — `usePluginsInstalled()` and `usePluginsAvailable()` — and filters client-side for the `(scope, id)` from the route. Both endpoints already return arrays (empty `[]` when no plugins are installed or no repositories are configured); neither 404s. No per-plugin detail endpoints are introduced for this page. On most navigations the list queries are already hot from the list-page visit, so the detail page renders from cache and the render-state decision happens without a network trip.
 
-- **Installed** — `installed` fetch succeeds. Render the full page (hero with Update/Enable/icon-actions, Version history, Configuration, Permissions, Danger zone).
-- **Available only** — `installed` returns 404, `available` succeeds. Render a reduced page: hero shows logo/name/meta/description + a primary `Install` button in place of the Update/Enable block. Version history renders (newest version is tagged `Latest` rather than `Available now`). Configuration, Permissions (derived from manifest declarations in the `AvailablePlugin`), and Danger zone are hidden — there's nothing installed to configure or uninstall.
-- **Neither** — both 404 or an unknown plugin id. Show a simple "Plugin not found" empty state with a back-link.
+The route derives one of three render states from the two query results:
 
-After a successful Install click, refetch both queries. The page transitions to the installed state in place without a navigation event.
+- **Installed** — the matching plugin appears in `usePluginsInstalled()`. Render the full page (hero with Update/Enable/icon-actions, Version history, Configuration, Permissions, Danger zone).
+- **Available only** — no match in the installed list, match in `usePluginsAvailable()`. Render a reduced page: hero shows logo/name/meta/description + a primary `Install` button in place of the Update/Enable block. Version history renders (newest version is tagged `Latest` rather than `Available now`). Configuration, Permissions (derived from manifest declarations in the `AvailablePlugin`), and Danger zone are hidden — there's nothing installed to configure or uninstall.
+- **Neither** — both queries resolved and neither contains the `(scope, id)`. Show a simple "Plugin not found" empty state with a back-link.
+
+While either query is still loading on a cold cache, show a lightweight skeleton of the hero + section headings rather than the empty state — we don't know yet whether the plugin exists. After a successful Install click, both list queries are invalidated. The page transitions to the installed state in place without a navigation event.
 
 ### Breadcrumb
 
@@ -141,21 +143,22 @@ After a successful Install click, refetch both queries. The page transitions to 
               Description paragraph.
                                                          [Update to X.Y.Z?]
                                                          Enabled  [toggle]
-                                                         [🔄] [📄] [📂]
+                                                         [🔄] [📄]
 ```
 
 Right rail, top to bottom:
 
 1. **Primary `Update to X.Y.Z` button** (only when update available). Same in-place flow as the row, but on the detail page it also rewrites the hero version meta and removes the update-available badge next to the name.
 2. **Enable/disable row** — `Enabled` label + toggle. Uses the existing `PATCH /plugins/installed/:scope/:id` endpoint with `enabled: boolean`.
-3. **Icon actions** — three `btn-icon` buttons, each with a `data-tooltip`:
+3. **Icon actions** — two `btn-icon` buttons, each with a `data-tooltip`:
    - **Reload from disk** (tooltip: "Reload plugin from disk") — only rendered when `plugin.scope === "local"`. Posts to `POST /plugins/installed/:scope/:id/reload` (existing endpoint). Non-local plugins simply don't show the button — no greyed-out state.
    - **View manifest** (tooltip: "View manifest") — opens a dialog or drawer showing the raw `manifest.json` with syntax highlighting. Read-only.
-   - **Open plugin folder** (tooltip: "Open plugin folder") — copies the plugin's absolute path *as reported by the server* to the clipboard and shows a toast ("Plugin folder path copied"). Shisho is a browser app; we can't open Finder, but the path in the clipboard is the next best affordance. For `local` plugins this is the user's own dev folder (if the UI and server run on the same host) or a path inside the container (Docker). For installed plugins it's the server's plugin dir. Users running Docker will get a container-internal path — documented in §11 as a known limitation.
+
+No "open plugin folder" affordance is exposed. Shisho runs primarily in Docker; the server-side plugin path is a container-internal path that doesn't resolve on the user's host filesystem. Copying it to the clipboard is more confusing than useful for the intended deployment, so the button is omitted entirely.
 
 ### Version history section
 
-Renders `AvailablePlugin.Versions` for the plugin (sourced via `GET /plugins/available/:scope/:id`).
+Renders `AvailablePlugin.Versions` for the plugin (sourced from the `usePluginsAvailable()` entry matched in §4, no separate endpoint).
 
 Each version rendered as a `version-card`:
 
@@ -269,10 +272,6 @@ No new endpoint. Query already runs.
 
 New endpoint `GET /plugins/installed/:scope/:id/manifest` reads `manifest.json` off disk and returns it as `application/json`. The full manifest is heavy and usually unread, so the list-item payload stays lean and the manifest is fetched on demand when the icon button is clicked. Reading directly off disk avoids stale-in-memory issues after a reload-from-disk.
 
-### Open plugin folder
-
-The icon button needs the plugin's absolute path on the server. Add a `folder_path` field to the plugin response (`GET /plugins/installed`). Backend already knows this: `filepath.Join(installer.PluginDir(), scope, id)`. Add to the `Plugin` struct's JSON serialization.
-
 ## 7. Frontend Implementation
 
 ### New components
@@ -307,25 +306,15 @@ Add a new route `/settings/plugins/:scope/:id` → `PluginDetailPage`. Keep the 
 
 ## 8. Docs
 
-### `website/docs/plugins/development.md`
+All three surfaces this spec touches on the docs side (`imageUrl`, `releaseDate`, and "changelog renders as markdown") are fields of the repository manifest. They belong as field-level notes inside the existing **Repository Manifest Format** section of `website/docs/plugins/repositories.md` — not in new dedicated sections, and not in `development.md`. The existing example JSON in that section already shows `releaseDate` and `changelog`; it just lacks field-level prose describing format, optionality, and rendering.
 
-Add a **Logo** section under the manifest reference with:
+### `website/docs/plugins/repositories.md`
 
-- `imageUrl` field description and where it goes in the repository manifest (NOT the installed-plugin manifest)
-- Recommendations: 128×128 minimum, 256×256 recommended; PNG or SVG (SVG preferred); 1:1 aspect; centered mark with ≥10% safe area (we apply 6px radius at 40px); any HTTPS URL (GitHub raw works)
-- Rendered treatment (Shisho applies square crop + radius + muted backdrop for transparent logos)
-- Fallback behavior (hashed-color initials)
-- Example manifest snippet showing `imageUrl` placement
+Extend the **Repository Manifest Format** section with field-level notes for each of the following (woven into the existing schema copy, not collected into a new "logo / release dates / changelog" section):
 
-Add a **Release dates** section covering the `releaseDate` field on `PluginVersion` entries in the repo manifest:
-
-- Optional field; when omitted, the UI hides the "Released" line on the version card
-- Accepted formats: RFC3339 (`2026-04-14T00:00:00Z`) or date-only (`2026-04-14`)
-- Example manifest snippet
-
-### `website/docs/plugins/` (new or existing index)
-
-Add a screenshot of the new detail page once the UI is built (this is a follow-up for the implementation plan, not the spec — noted so it's not forgotten).
+- **`imageUrl`** (plugin entry): Plugin logo URL. Recommended 256×256 PNG or SVG (SVG preferred), 1:1 aspect, centered mark with ≥10% safe area; any HTTPS URL works (GitHub raw is fine). Shisho renders it on a muted square backdrop with a rounded radius that scales with display size, so transparent artwork shows the backdrop through. When `imageUrl` is missing or fails to load, Shisho falls back to hashed-color initials derived from `scope/id`.
+- **`releaseDate`** (version entry): Optional. Accepts RFC3339 (`2026-04-14T00:00:00Z`) or date-only (`2026-04-14`). When omitted, the "Released" line is hidden on the version card.
+- **`changelog`** (version entry): Rendered as sanitized markdown on the plugin detail page. Supported subset: headings (`##`, `###`), paragraphs, lists, inline code, fenced code blocks, links (open in a new tab), bold, italic. Raw HTML, images, and iframes are stripped by `rehype-sanitize` — author content accordingly. The "View full diff on GitHub" link in the UI is inferred from `homepage` when it points to a GitHub repo; no additional manifest field is read for it.
 
 ## 9. Implementation Order (for the plan)
 
@@ -339,8 +328,8 @@ This is guidance for `writing-plans` — the actual plan will expand this:
 6. Row redesign (Installed + Discover share `PluginRow`)
 7. Tab pill with update count + tooltip
 8. Advanced dialog (Order + Repositories extract)
-9. Icon actions: reload (local only), view manifest, open folder
-10. Backend: `GET /plugins/installed/:scope/:id/manifest`, `folder_path` field
+9. Icon actions: reload (local only), view manifest
+10. Backend: `GET /plugins/installed/:scope/:id/manifest`
 11. `releaseDate` parsing for both date-only and RFC3339
 12. Docs updates
 13. Cleanup: remove old banner, unused modal code, dead CSS
@@ -350,7 +339,6 @@ This is guidance for `writing-plans` — the actual plan will expand this:
 - **Backend unit tests:**
   - `releaseDate` parser accepts both formats, rejects garbage
   - Manifest endpoint returns file contents; 404 when plugin gone
-  - `folder_path` field populated correctly for both local and installed plugins
 - **Frontend unit tests (Vitest + Testing Library):**
   - `PluginLogo` renders `<img>` when `imageUrl` present; swaps to initials on error; initials generator produces deterministic output per `(scope, id)`
   - `PluginRow` renders with all capability combinations (0, 1, 3+ caps); disabled state applies dim class; Update badge + button show only when `update_available_version` set
@@ -365,7 +353,6 @@ This is guidance for `writing-plans` — the actual plan will expand this:
 
 ## 11. Risks & Open Questions
 
-- **Markdown rendering surface area.** `react-markdown` + `rehype-sanitize` is safe by default, but plugin authors may put images or iframes in changelogs that get stripped. Document the allowlisted markdown subset in the logo/release-date docs section so authors don't waste effort on content that won't render.
-- **`Open plugin folder` is clipboard-only.** Users on Docker especially won't have host access to the server's plugin dir, and the copied path will be the container-internal path (e.g. `/data/plugins/local/my-plugin`), not a host path. This is unavoidable from a browser app — we return what the server knows. Document this explicitly in the docs page so Docker users aren't confused when they paste the path into Finder and nothing happens.
+- **Markdown rendering surface area.** `react-markdown` + `rehype-sanitize` is safe by default, but plugin authors may put images or iframes in changelogs that get stripped. The allowlisted markdown subset is documented as part of the `changelog` field notes in `repositories.md` (see §8) so authors don't waste effort on content that won't render.
 - **Update-count pill staleness.** The pill is derived from `usePluginsInstalled()`. If a repository sync runs in the background and turns up new updates, the pill updates when the query refetches — so make sure the repository sync mutation invalidates `plugins.installed`. This is easy to miss; verify in implementation.
-- **Detail-page fetch cost.** The detail page loads installed data + available-plugin data + config schema in parallel. Three round-trips on cold nav. Acceptable for a settings page but flag in the plan so it's not regressed later.
+- **Detail-page fetch cost.** The detail page reuses `usePluginsInstalled()` and `usePluginsAvailable()` (both already run for the list page) and additionally fetches the config schema. On a warm cache only the config schema is a new request; on cold nav directly to `/settings/plugins/:scope/:id` all three fetches are needed. Acceptable for a settings page but flag in the plan so it's not regressed later.
