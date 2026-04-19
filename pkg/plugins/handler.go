@@ -112,7 +112,7 @@ type searchIndexer interface {
 // it as that file's cover image. Returns the cover filename (not a full path)
 // and the MIME type of the extracted image.
 type pageExtractor interface {
-	ExtractCoverPage(file *models.File, bookFilepath string, page int) (filename, mimeType string, err error)
+	ExtractCoverPage(file *models.File, bookFilepath string, page int, log logger.Logger) (filename, mimeType string, err error)
 }
 
 type handler struct {

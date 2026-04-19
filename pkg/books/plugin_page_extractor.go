@@ -13,7 +13,6 @@ import (
 type PluginPageExtractor struct {
 	cbzCache *cbzpages.Cache
 	pdfCache *pdfpages.Cache
-	log      logger.Logger
 }
 
 // NewPluginPageExtractor constructs a page extractor backed by the given
@@ -22,12 +21,11 @@ func NewPluginPageExtractor(cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) 
 	return &PluginPageExtractor{
 		cbzCache: cbzCache,
 		pdfCache: pdfCache,
-		log:      logger.New(),
 	}
 }
 
 // ExtractCoverPage satisfies the plugins.pageExtractor interface by
 // delegating to ExtractCoverPageToFile.
-func (p *PluginPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int) (string, string, error) {
-	return ExtractCoverPageToFile(file, bookFilepath, page, p.cbzCache, p.pdfCache, p.log)
+func (p *PluginPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, log logger.Logger) (string, string, error) {
+	return ExtractCoverPageToFile(file, bookFilepath, page, p.cbzCache, p.pdfCache, log)
 }
