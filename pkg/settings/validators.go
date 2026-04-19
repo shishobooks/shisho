@@ -28,3 +28,17 @@ func IsValidFitMode(mode string) bool {
 	}
 	return false
 }
+
+// UpdateLibrarySettingsPayload is the request body for PUT /settings/libraries/:library_id.
+//
+// SortSpec is a pointer so the client can distinguish "unset" (omit field
+// from JSON) from "clear the saved default" (send null). A null body
+// clears the saved sort; omitting the field leaves it untouched.
+type UpdateLibrarySettingsPayload struct {
+	SortSpec *string `json:"sort_spec"`
+}
+
+// LibrarySettingsResponse is the response for GET/PUT /settings/libraries/:library_id.
+type LibrarySettingsResponse struct {
+	SortSpec *string `json:"sort_spec"`
+}
