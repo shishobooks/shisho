@@ -713,6 +713,8 @@ type availablePluginResponse struct {
 	Description string                   `json:"description"`
 	Author      string                   `json:"author"`
 	Homepage    string                   `json:"homepage"`
+	ImageURL    string                   `json:"imageUrl"`
+	IsOfficial  bool                     `json:"is_official"`
 	Versions    []AnnotatedPluginVersion `json:"versions"`
 	Compatible  bool                     `json:"compatible"`
 }
@@ -761,6 +763,8 @@ func (h *handler) listAvailable(c echo.Context) error {
 				Description: p.Description,
 				Author:      p.Author,
 				Homepage:    p.Homepage,
+				ImageURL:    p.ImageURL,
+				IsOfficial:  repo.IsOfficial,
 				Versions:    annotated,
 				Compatible:  hasCompatible,
 			})
