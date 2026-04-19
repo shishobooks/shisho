@@ -1,5 +1,6 @@
 import { PluginLogo } from "./PluginLogo";
 import { ExternalLink } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
@@ -26,6 +27,22 @@ export const PluginDetailHero = ({
   const version = installed?.version;
   const updateAvailable = installed?.update_available_version ?? undefined;
 
+  const metaParts: ReactNode[] = [];
+  if (version) metaParts.push(`v${version}`);
+  if (author) metaParts.push(`by ${author}`);
+  if (homepage) {
+    metaParts.push(
+      <a
+        className="inline-flex items-center gap-1 underline"
+        href={homepage}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        homepage <ExternalLink className="h-3 w-3" />
+      </a>,
+    );
+  }
+
   return (
     <div className="flex gap-4 rounded-md border border-border p-6">
       <PluginLogo id={id} imageUrl={imageUrl} scope={scope} size={64} />
@@ -43,24 +60,16 @@ export const PluginDetailHero = ({
           )}
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          {version && <span>v{version}</span>}
-          {version && author && <span> · by {author}</span>}
-          {!version && author && <span>by {author}</span>}
-          {homepage && (
-            <>
-              {" · "}
-              <a
-                className="inline-flex items-center gap-1 underline"
-                href={homepage}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                homepage <ExternalLink className="h-3 w-3" />
-              </a>
-            </>
-          )}
-        </p>
+        {metaParts.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {metaParts.map((part, i) => (
+              <span key={i}>
+                {i > 0 && " · "}
+                {part}
+              </span>
+            ))}
+          </p>
+        )}
 
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>

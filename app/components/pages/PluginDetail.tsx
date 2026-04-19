@@ -7,6 +7,7 @@ import {
   usePluginsAvailable,
   usePluginsInstalled,
 } from "@/hooks/queries/plugins";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
@@ -21,13 +22,12 @@ export const PluginDetail = () => {
     (p) => p.scope === scope && p.id === id,
   );
 
+  const displayName = installed?.name ?? available?.name ?? id;
+  usePageTitle(displayName);
+
   const isLoading = installedQuery.isLoading || availableQuery.isLoading;
-  const notFound =
-    !isLoading &&
-    installedQuery.isSuccess &&
-    availableQuery.isSuccess &&
-    !installed &&
-    !available;
+  const hasError = installedQuery.isError || availableQuery.isError;
+  const notFound = !isLoading && !hasError && !installed && !available;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -44,6 +44,19 @@ export const PluginDetail = () => {
 
       {isLoading && <PluginDetailSkeleton />}
 
+      {!isLoading && hasError && (
+        <div className="rounded-md border border-destructive/40 p-8 text-center text-destructive">
+          <p className="text-lg">Failed to load plugin</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {installedQuery.error instanceof Error
+              ? installedQuery.error.message
+              : availableQuery.error instanceof Error
+                ? availableQuery.error.message
+                : "An unexpected error occurred."}
+          </p>
+        </div>
+      )}
+
       {notFound && (
         <div className="rounded-md border border-border p-8 text-center text-muted-foreground">
           <p className="text-lg">Plugin not found</p>
@@ -57,7 +70,7 @@ export const PluginDetail = () => {
         </div>
       )}
 
-      {!isLoading && !notFound && scope && id && (
+      {!isLoading && !hasError && !notFound && scope && id && (
         <PluginDetailHero
           available={available}
           id={id}
