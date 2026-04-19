@@ -439,7 +439,7 @@ For advanced use cases (file parsers extracting embedded covers, or enrichers th
 During automatic scans, enricher-provided covers are subject to additional checks:
 
 - **Resolution gate:** An enricher cover is only applied if its total resolution (width × height) is strictly greater than the file's current cover. If the file already has a cover of equal or greater resolution, the enricher cover is skipped. This prevents low-resolution external images from replacing high-quality embedded covers.
-- **Page-based formats:** CBZ and PDF files derive covers from their page content. Plugin covers are never applied to these formats, even if the plugin declares the `cover` field.
+- **Page-based formats:** CBZ and PDF files derive covers from their page content. Plugin-supplied _image data_ (`coverData` and `coverUrl`) is never applied for these formats. To set the cover for a CBZ or PDF, a plugin returns `coverPage` — see [Cover page selection (CBZ and PDF only)](#cover-page-selection-cbz-and-pdf-only) below.
 - **Field settings:** The `cover` field must be enabled in the plugin's per-library field settings for cover enrichment to take effect. If disabled, all cover data from the plugin is silently stripped.
 
 #### Cover page selection (CBZ and PDF only)

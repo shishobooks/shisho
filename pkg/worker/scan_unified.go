@@ -3114,18 +3114,9 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		modified = true
 	}
 
-	// Merge file-parsed metadata as fallback for fields no enricher provided.
-	// This gives enrichers priority over file metadata (priority 2 > priority 3).
-	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
-
-	// Page-based formats (CBZ, PDF) derive covers from page content and must
-	// not have them replaced by enricher-downloaded images.
-	if models.IsPageBasedFileType(file.FileType) {
-		enrichedMeta.CoverData = metadata.CoverData
-		enrichedMeta.CoverMimeType = metadata.CoverMimeType
-		enrichedMeta.CoverPage = metadata.CoverPage
-		enrichedMeta.FieldDataSources["cover"] = metadata.SourceForField("cover")
-	}
+	// Merge file-parsed metadata as fallback and apply page-based cover
+	// protection. See mergeFileParserFallback for the full policy.
+	mergeFileParserFallback(&enrichedMeta, metadata, file.FileType)
 
 	// Copy technical fields that enrichers don't provide
 	enrichedMeta.Duration = metadata.Duration
@@ -3139,6 +3130,47 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	}
 
 	return &enrichedMeta
+}
+
+// mergeFileParserFallback merges file-parsed metadata into target as a
+// fallback for fields no enricher provided, then applies page-based-format
+// cover protection.
+//
+// For page-based formats (CBZ, PDF), plugin-provided image data
+// (coverData/coverUrl) must never replace page-derived covers, so CoverData
+// and CoverMimeType are reset to the file parser's values. Enricher-supplied
+// CoverPage IS honored — the merge already handles "enricher wins if set,
+// file parser fills in otherwise".
+//
+// Source-tracking nuance: FieldDataSources["cover"] is shared between
+// CoverData and CoverPage. The file-parser CoverData merge can overwrite the
+// "cover" source recorded by the enricher for CoverPage, so we capture the
+// pre-merge enricher state and restore it when appropriate.
+func mergeFileParserFallback(target, fileParsed *mediafile.ParsedMetadata, fileType string) {
+	// Capture enricher state before the file-parser merge possibly overwrites
+	// FieldDataSources["cover"] via its CoverData merge.
+	enricherSetCoverPage := target.CoverPage != nil
+	enricherCoverSource := ""
+	if target.FieldDataSources != nil {
+		enricherCoverSource = target.FieldDataSources["cover"]
+	}
+
+	// Merge file-parsed metadata as fallback for fields no enricher provided.
+	// This gives enrichers priority over file metadata (priority 2 > priority 3).
+	mergeEnrichedMetadata(target, fileParsed, fileParsed.DataSource)
+
+	// For page-based formats, reset image data to the file parser's values and
+	// restore the "cover" source to reflect whoever provided the CoverPage we
+	// kept.
+	if models.IsPageBasedFileType(fileType) {
+		target.CoverData = fileParsed.CoverData
+		target.CoverMimeType = fileParsed.CoverMimeType
+		if enricherSetCoverPage {
+			target.FieldDataSources["cover"] = enricherCoverSource
+		} else {
+			target.FieldDataSources["cover"] = fileParsed.SourceForField("cover")
+		}
+	}
 }
 
 // mergeEnrichedMetadata applies fields from enrichment result to the target
