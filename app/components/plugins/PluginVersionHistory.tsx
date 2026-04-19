@@ -16,12 +16,21 @@ export interface PluginVersionHistoryProps {
   installed?: Plugin;
 }
 
-const buildGitHubDiffUrl = (
+const buildGitHubReleaseUrl = (
   homepage: string | undefined | null,
   version: string,
 ): string | undefined => {
-  if (!homepage || !homepage.includes("github.com")) return undefined;
-  return `${homepage.replace(/\/$/, "")}/releases/tag/v${version}`;
+  if (!homepage) return undefined;
+  try {
+    const u = new URL(homepage);
+    if (u.hostname !== "github.com" && !u.hostname.endsWith(".github.com")) {
+      return undefined;
+    }
+    const pathname = u.pathname.replace(/\/$/, "");
+    return `https://${u.hostname}${pathname}/releases/tag/v${version}`;
+  } catch {
+    return undefined;
+  }
 };
 
 export const PluginVersionHistory = ({
@@ -48,7 +57,10 @@ export const PluginVersionHistory = ({
       (v) => v.version === installedVersion,
     );
     if (installedIdx === -1) {
-      return [[], versions];
+      // Installed version isn't in the current repository index (e.g. yanked or dev build).
+      // Treat available versions the same way as the available-only view.
+      const compatible = versions.filter((v) => v.compatible !== false);
+      return [compatible.slice(0, 1), compatible.slice(1)];
     }
     const newer = installedIdx > 0 ? versions.slice(0, installedIdx) : [];
     const rest = versions.slice(installedIdx);
@@ -57,7 +69,7 @@ export const PluginVersionHistory = ({
 
   const handleUpdate = () => {
     if (!installed) return;
-    const targetLabel = updateTarget ?? newerVersions[0]?.version ?? "latest";
+    const targetLabel = updateTarget ?? newerVersions[0]?.version;
     updateVersion.mutate(
       { id: installed.id, scope: installed.scope },
       {
@@ -65,7 +77,9 @@ export const PluginVersionHistory = ({
           toast.error(err instanceof Error ? err.message : "Update failed");
         },
         onSuccess: () => {
-          toast.success(`Updated to v${targetLabel}`);
+          toast.success(
+            targetLabel ? `Updated to v${targetLabel}` : "Plugin updated",
+          );
         },
       },
     );
@@ -89,7 +103,7 @@ export const PluginVersionHistory = ({
           (updateTarget ? v.version === updateTarget : idx === 0);
         return (
           <PluginVersionCard
-            gitHubDiffUrl={buildGitHubDiffUrl(homepage, v.version)}
+            gitHubReleaseUrl={buildGitHubReleaseUrl(homepage, v.version)}
             isUpdating={updateVersion.isPending}
             key={v.version}
             onUpdate={isUpdateTarget ? handleUpdate : undefined}
@@ -101,7 +115,7 @@ export const PluginVersionHistory = ({
 
       {visibleOlder.map((v) => (
         <PluginVersionCard
-          gitHubDiffUrl={buildGitHubDiffUrl(homepage, v.version)}
+          gitHubReleaseUrl={buildGitHubReleaseUrl(homepage, v.version)}
           key={v.version}
           state={v.version === installedVersion ? "installed" : "older"}
           version={v}

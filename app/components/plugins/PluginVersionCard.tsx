@@ -13,7 +13,7 @@ export type PluginVersionCardState =
   | "older";
 
 export interface PluginVersionCardProps {
-  gitHubDiffUrl?: string;
+  gitHubReleaseUrl?: string;
   isUpdating?: boolean;
   onUpdate?: () => void;
   state: PluginVersionCardState;
@@ -52,7 +52,7 @@ const formatReleaseDate = (
 };
 
 export const PluginVersionCard = ({
-  gitHubDiffUrl,
+  gitHubReleaseUrl,
   isUpdating,
   onUpdate,
   state,
@@ -87,21 +87,21 @@ export const PluginVersionCard = ({
         <ChangelogMarkdown>{version.changelog}</ChangelogMarkdown>
       )}
 
-      {(onUpdate || gitHubDiffUrl) && (
+      {(onUpdate || gitHubReleaseUrl) && (
         <div className="flex items-center gap-2">
           {onUpdate && (
             <Button disabled={isUpdating} onClick={onUpdate} size="sm">
               {isUpdating ? "Updating…" : "Update now"}
             </Button>
           )}
-          {gitHubDiffUrl && (
+          {gitHubReleaseUrl && (
             <a
               className="inline-flex items-center gap-1 text-xs underline underline-offset-2"
-              href={gitHubDiffUrl}
+              href={gitHubReleaseUrl}
               rel="noopener noreferrer"
               target="_blank"
             >
-              View full diff on GitHub <ExternalLink className="h-3 w-3" />
+              View release on GitHub <ExternalLink className="h-3 w-3" />
             </a>
           )}
         </div>
