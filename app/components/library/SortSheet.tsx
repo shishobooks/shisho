@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
+  MAX_SORT_LEVELS,
   SORT_FIELD_LABELS,
   SORT_FIELDS,
   type SortField,
@@ -66,7 +67,7 @@ interface SortSheetProps {
 
 interface SortLevelRowProps {
   level: SortLevel;
-  index: number;
+  levelIndex: number;
   usedFields: SortField[];
   onChangeField: (index: number, field: SortField) => void;
   onToggleDirection: (index: number) => void;
@@ -75,7 +76,7 @@ interface SortLevelRowProps {
 
 const SortLevelRow = ({
   level,
-  index,
+  levelIndex,
   usedFields,
   onChangeField,
   onToggleDirection,
@@ -111,7 +112,7 @@ const SortLevelRow = ({
       style={style}
     >
       <Button
-        aria-label={`Reorder sort level ${index + 1}`}
+        aria-label={`Drag to reorder ${fieldLabel}`}
         className="cursor-grab"
         size="icon"
         variant="ghost"
@@ -122,7 +123,7 @@ const SortLevelRow = ({
       </Button>
 
       <Select
-        onValueChange={(value) => onChangeField(index, value as SortField)}
+        onValueChange={(value) => onChangeField(levelIndex, value as SortField)}
         value={level.field}
       >
         <SelectTrigger className="flex-1">
@@ -143,7 +144,7 @@ const SortLevelRow = ({
             ? "Direction: ascending. Click to toggle."
             : "Direction: descending. Click to toggle."
         }
-        onClick={() => onToggleDirection(index)}
+        onClick={() => onToggleDirection(levelIndex)}
         size="icon"
         variant="outline"
       >
@@ -156,7 +157,7 @@ const SortLevelRow = ({
 
       <Button
         aria-label={`Remove ${fieldLabel} sort level`}
-        onClick={() => onRemove(index)}
+        onClick={() => onRemove(levelIndex)}
         size="icon"
         variant="ghost"
       >
@@ -229,9 +230,9 @@ const SortSheetContent = ({
             <div className="flex flex-col">
               {levels.map((level, index) => (
                 <SortLevelRow
-                  index={index}
                   key={level.field}
                   level={level}
+                  levelIndex={index}
                   onChangeField={changeField}
                   onRemove={removeLevel}
                   onToggleDirection={toggleDirection}
@@ -243,7 +244,7 @@ const SortSheetContent = ({
         </DndContext>
       )}
 
-      {unusedFields.length > 0 && (
+      {unusedFields.length > 0 && levels.length < MAX_SORT_LEVELS && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground mb-2">
             {levels.length === 0 ? "Sort by…" : "Then by…"}
