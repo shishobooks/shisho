@@ -5,7 +5,7 @@ package sortspec
 // When adding a new field here, you MUST also:
 //   - Update AllFields() below (order matters — it's pinned in tests).
 //   - Add an SQL case to OrderClauses in sql.go.
-//   - Update the TS whitelist in app/lib/sortSpec.ts (it mirrors this file).
+//   - Update the TS whitelist in app/libraries/sortSpec.ts (it mirrors this file).
 //   - Document semantics in docs/plans/2026-04-19-gallery-sort-design.md.
 const (
 	FieldTitle        = "title"
