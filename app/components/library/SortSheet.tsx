@@ -328,7 +328,10 @@ export const SortButton = ({
     <ArrowDownUp className="h-4 w-4" />
     Sort
     {isDirty && (
-      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
+      <span
+        aria-label="Sort differs from default"
+        className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background"
+      />
     )}
   </Button>
 );
