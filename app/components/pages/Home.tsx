@@ -1,5 +1,5 @@
 import { CheckSquare, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
@@ -306,9 +306,7 @@ const HomeContent = () => {
     });
   };
 
-  // effectiveSort may change when settings or URL changes; React Compiler allows this
-  /* eslint-disable react-hooks/preserve-manual-memoization */
-  const handleSaveSortAsDefault = useCallback(() => {
+  const handleSaveSortAsDefault = () => {
     if (libraryIdNum === undefined) return;
     const serialized = serializeSortSpec(effectiveSort);
     updateLibrarySettings.mutate(
@@ -323,28 +321,21 @@ const HomeContent = () => {
         },
       },
     );
-  }, [libraryIdNum, effectiveSort, updateLibrarySettings, setSearchParams]);
-  /* eslint-enable react-hooks/preserve-manual-memoization */
+  };
 
-  // defaultSort may change when library settings load; React Compiler allows this
-  /* eslint-disable react-hooks/preserve-manual-memoization */
-  const applySortLevels = useCallback(
-    (next: readonly SortLevel[]) => {
-      setSearchParams((prev) => {
-        const params = new URLSearchParams(prev);
-        const serialized = serializeSortSpec(next);
-        if (serialized && !sortSpecsEqual(next, defaultSort)) {
-          params.set("sort", serialized);
-        } else {
-          params.delete("sort");
-        }
-        params.set("page", "1");
-        return params;
-      });
-    },
-    [defaultSort, setSearchParams],
-  );
-  /* eslint-enable react-hooks/preserve-manual-memoization */
+  const applySortLevels = (next: readonly SortLevel[]) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      const serialized = serializeSortSpec(next);
+      if (serialized && !sortSpecsEqual(next, defaultSort)) {
+        params.set("sort", serialized);
+      } else {
+        params.delete("sort");
+      }
+      params.set("page", "1");
+      return params;
+    });
+  };
 
   const hasActiveFilters =
     selectedFileTypes.length > 0 ||
