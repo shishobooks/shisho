@@ -11,6 +11,7 @@ describe("TabUpdatePill", () => {
   it("renders the count when > 0", () => {
     render(<TabUpdatePill count={3} />);
     expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("3")).toHaveAttribute("role", "img");
   });
 
   it("sets the plural tooltip for count > 1", () => {

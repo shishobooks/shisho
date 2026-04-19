@@ -10,6 +10,7 @@ export const TabUpdatePill = ({ count }: { count: number }) => {
     <Badge
       aria-label={label}
       className="ml-2 h-5 min-w-5 bg-primary/20 text-primary border-primary/40"
+      role="img"
     >
       {count}
     </Badge>
