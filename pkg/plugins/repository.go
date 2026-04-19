@@ -78,14 +78,19 @@ type AvailablePlugin struct {
 
 // PluginVersion describes a specific version of an available plugin.
 type PluginVersion struct {
-	Version          string        `json:"version"`
-	MinShishoVersion string        `json:"minShishoVersion"`
-	ManifestVersion  int           `json:"manifestVersion"`
-	ReleaseDate      string        `json:"releaseDate"`
-	Changelog        string        `json:"changelog"`
-	DownloadURL      string        `json:"downloadUrl"`
-	SHA256           string        `json:"sha256"`
-	Capabilities     *Capabilities `json:"capabilities,omitempty"`
+	Version          string `json:"version"`
+	MinShishoVersion string `json:"minShishoVersion"`
+	ManifestVersion  int    `json:"manifestVersion"`
+	ReleaseDate      string `json:"releaseDate"`
+	Changelog        string `json:"changelog"`
+	DownloadURL      string `json:"downloadUrl"`
+	SHA256           string `json:"sha256"`
+	// ReleaseURL is an optional explicit URL for this version's release page
+	// (e.g. a GitHub release, a GitLab tag page). When present, the UI renders
+	// a "View release" link on the version card. When absent, no link is shown.
+	// Not validated — any string URL is accepted.
+	ReleaseURL   string        `json:"releaseUrl,omitempty"`
+	Capabilities *Capabilities `json:"capabilities,omitempty"`
 }
 
 // FetchRepository downloads and parses a repository manifest from the given URL.

@@ -44,12 +44,15 @@ export interface PluginCapabilities {
 export interface PluginVersion {
   version: string;
   minShishoVersion: string;
+  downloadUrl: string;
   compatible: boolean;
   changelog: string;
-  downloadUrl: string;
   sha256: string;
   manifestVersion: number;
   releaseDate: string;
+  // Optional full URL to this version's release page (e.g. a GitHub release
+  // URL). When unset, the version card does not show a release link.
+  releaseUrl?: string;
   capabilities?: PluginCapabilities;
 }
 
