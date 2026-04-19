@@ -1,5 +1,5 @@
 import { PluginLogo } from "./PluginLogo";
-import { ChevronRight } from "lucide-react";
+import { BadgeCheck, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -15,6 +15,7 @@ export interface PluginRowProps {
   href: string;
   id: string;
   imageUrl?: string | null;
+  isOfficial?: boolean;
   name: string;
   scope: string;
   updateAvailable?: string;
@@ -30,6 +31,7 @@ export const PluginRow = ({
   href,
   id,
   imageUrl,
+  isOfficial,
   name,
   scope,
   updateAvailable,
@@ -63,7 +65,18 @@ export const PluginRow = ({
               {cap}
             </Badge>
           ))}
-          {author && <span>· {author}</span>}
+          {author && (
+            <span className="inline-flex items-center gap-1">
+              ·{" "}
+              {isOfficial && (
+                <BadgeCheck
+                  aria-label="Official plugin"
+                  className="h-3.5 w-3.5 text-primary"
+                />
+              )}
+              {author}
+            </span>
+          )}
         </div>
         {description && (
           <p className="line-clamp-2 text-xs text-muted-foreground">

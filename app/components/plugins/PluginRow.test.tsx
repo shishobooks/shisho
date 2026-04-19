@@ -56,4 +56,15 @@ describe("PluginRow", () => {
       "/settings/plugins/shisho/test",
     );
   });
+
+  it("renders the official badge when isOfficial is true", () => {
+    render(wrap(<PluginRow {...base} isOfficial />));
+    // BadgeCheck from lucide renders with this aria-label when we label it.
+    expect(screen.getByLabelText(/official plugin/i)).toBeInTheDocument();
+  });
+
+  it("does not render the official badge by default", () => {
+    render(wrap(<PluginRow {...base} />));
+    expect(screen.queryByLabelText(/official plugin/i)).toBeNull();
+  });
 });
