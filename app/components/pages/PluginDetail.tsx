@@ -1,19 +1,27 @@
 import { ChevronLeft } from "lucide-react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
 import { Button } from "@/components/ui/button";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
   usePluginsAvailable,
   usePluginsInstalled,
 } from "@/hooks/queries/plugins";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
   const navigate = useNavigate();
   const installedQuery = usePluginsInstalled();
   const availableQuery = usePluginsAvailable();
+
+  const [configDirty, setConfigDirty] = useState(false);
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(configDirty);
 
   const installed = installedQuery.data?.find(
     (p) => p.scope === scope && p.id === id,
@@ -78,6 +86,22 @@ export const PluginDetail = () => {
           scope={scope}
         />
       )}
+
+      {installed && scope && id && (
+        <section className="space-y-3 rounded-md border border-border p-6">
+          <PluginConfigForm
+            id={id}
+            onDirtyChange={setConfigDirty}
+            scope={scope}
+          />
+        </section>
+      )}
+
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };
