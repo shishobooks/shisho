@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -127,4 +128,78 @@ func TestPersistMetadata_CoverWrite_RootLevelFile_SyntheticBookPath(t *testing.T
 	// CoverImageFilename should be set (to the filename only, not a full path).
 	require.NotNil(t, file.CoverImageFilename, "CoverImageFilename should be set on the file")
 	assert.Equal(t, "book.epub.cover.jpg", *file.CoverImageFilename)
+}
+
+// stubPageExtractor records calls and returns a fixed (filename, mimeType).
+// Set `wantErr` to simulate a failed extraction.
+type stubPageExtractor struct {
+	calls    []stubPageExtractorCall
+	filename string
+	mimeType string
+	wantErr  error
+}
+
+type stubPageExtractorCall struct {
+	FileID       int
+	BookFilepath string
+	Page         int
+}
+
+func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, error) {
+	s.calls = append(s.calls, stubPageExtractorCall{FileID: file.ID, BookFilepath: bookFilepath, Page: page})
+	if s.wantErr != nil {
+		return "", "", s.wantErr
+	}
+	return s.filename, s.mimeType, nil
+}
+
+func TestPersistMetadata_CoverPage_CBZ_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "comic.cbz")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+
+	pageCount := 10
+	file := &models.File{
+		ID:        1,
+		BookID:    1,
+		Filepath:  filePath,
+		FileType:  models.FileTypeCBZ,
+		PageCount: &pageCount,
+	}
+	book := &models.Book{
+		ID:        1,
+		LibraryID: 1,
+		Filepath:  libraryDir,
+		Files:     []*models.File{file},
+	}
+
+	extractor := &stubPageExtractor{filename: "comic.cbz.cover.jpg", mimeType: "image/jpeg"}
+
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			pageExtractor: extractor,
+		},
+	}
+
+	page := 3
+	md := &mediafile.ParsedMetadata{CoverPage: &page}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	require.Len(t, extractor.calls, 1)
+	assert.Equal(t, 1, extractor.calls[0].FileID)
+	assert.Equal(t, 3, extractor.calls[0].Page)
+
+	require.NotNil(t, file.CoverPage)
+	assert.Equal(t, 3, *file.CoverPage)
+	require.NotNil(t, file.CoverImageFilename)
+	assert.Equal(t, "comic.cbz.cover.jpg", *file.CoverImageFilename)
+	require.NotNil(t, file.CoverMimeType)
+	assert.Equal(t, "image/jpeg", *file.CoverMimeType)
+	require.NotNil(t, file.CoverSource)
+	assert.Equal(t, models.PluginDataSource("test", "plugin-id"), *file.CoverSource)
 }
