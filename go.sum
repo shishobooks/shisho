@@ -78,8 +78,8 @@ github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jolestar/go-commons-pool/v2 v2.1.2 h1:E+XGo58F23t7HtZiC/W6jzO2Ux2IccSH/yx4nD+J1CM=
 github.com/jolestar/go-commons-pool/v2 v2.1.2/go.mod h1:r4NYccrkS5UqP1YQI1COyTZ9UjPJAAGTUxzcsK1kqhY=
-github.com/klippa-app/go-pdfium v1.18.1 h1:NyCNTceAumo80NY3owLo05ygWTnjrDoUvMl31Sph65A=
-github.com/klippa-app/go-pdfium v1.18.1/go.mod h1:X+AMQDw/TXTsgiY2vEGA7oYlQTmjyqmlt6pm6aoIDa0=
+github.com/klippa-app/go-pdfium v1.19.2 h1:Gc/OT7wVO7xStNlDR5o/Qz0T/tsVtODsh7I1vOJXIKU=
+github.com/klippa-app/go-pdfium v1.19.2/go.mod h1:X+AMQDw/TXTsgiY2vEGA7oYlQTmjyqmlt6pm6aoIDa0=
 github.com/knadh/koanf/maps v0.1.2 h1:RBfmAW5CnZT+PJ1CVc1QSJKf4Xu9kxfQgYVQSu8hpbo=
 github.com/knadh/koanf/maps v0.1.2/go.mod h1:npD/QZY3V6ghQDdcQzl1W4ICNVTkohC8E73eI2xW4yI=
 github.com/knadh/koanf/parsers/yaml v1.1.0 h1:3ltfm9ljprAHt4jxgeYLlFPmUaunuCgu1yILuTXRdM4=
