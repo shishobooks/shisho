@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -38,6 +39,11 @@ type ListBooksOptions struct {
 	Language   *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
 	IDs        []int    // Filter by specific book IDs
 	Search     *string  // Search query for title/author
+
+	// Sort overrides the default ordering. When nil, the legacy default
+	// (sort_title ASC, or series_number ASC + sort_title ASC when
+	// filtering by series) is preserved.
+	Sort []sortspec.SortLevel
 
 	includeTotal  bool
 	orderByRecent bool // Order by updated_at DESC instead of created_at ASC
@@ -302,13 +308,22 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			Where("bs_filter.series_id = ?", *opts.SeriesID)
 	}
 
-	// Apply ordering
-	if opts.orderByRecent {
+	// Apply ordering.
+	// Precedence: orderByRecent (internal flag) > explicit Sort > legacy default.
+	switch {
+	case opts.orderByRecent:
 		q = q.Order("b.updated_at DESC")
-	} else if opts.SeriesID != nil {
+
+	case len(opts.Sort) > 0:
+		for _, clause := range sortspec.OrderClauses(opts.Sort) {
+			q = q.OrderExpr(clause.Expression, clause.Args...)
+		}
+
+	case opts.SeriesID != nil:
 		// When filtering by series, order by series_number then sort_title
 		q = q.Order("bs_filter.series_number ASC", "b.sort_title ASC")
-	} else {
+
+	default:
 		q = q.Order("b.sort_title ASC")
 	}
 
