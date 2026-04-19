@@ -2,15 +2,12 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  Download,
   ExternalLink,
-  FolderSearch,
   ListOrdered,
   Loader2,
   Package,
   Plus,
   RefreshCw,
-  Settings,
   Star,
   Trash2,
 } from "lucide-react";
@@ -20,7 +17,7 @@ import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
-import { PluginConfigDialog } from "@/components/plugins/PluginConfigDialog";
+import { InstalledTab } from "@/components/plugins/InstalledTab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -33,10 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  PluginStatusActive,
   useAddRepository,
   useAllPluginOrders,
   useInstallPlugin,
@@ -44,278 +39,16 @@ import {
   usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
-  useReloadPlugin,
   useRemoveRepository,
-  useScanPlugins,
   useSetPluginOrder,
   useSyncRepository,
-  useUninstallPlugin,
-  useUpdatePlugin,
-  useUpdatePluginVersion,
   type AvailablePlugin,
-  type Plugin,
   type PluginHookType,
   type PluginMode,
   type PluginOrder,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
-// --- Installed Tab ---
-
-const InstalledTab = () => {
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
-  const { data: plugins, isLoading, error } = usePluginsInstalled();
-  const updatePlugin = useUpdatePlugin();
-  const updatePluginVersion = useUpdatePluginVersion();
-  const reloadPlugin = useReloadPlugin();
-  const uninstallPlugin = useUninstallPlugin();
-  const scanPlugins = useScanPlugins();
-
-  const [configTarget, setConfigTarget] = useState<Plugin | null>(null);
-  const [uninstallTarget, setUninstallTarget] = useState<Plugin | null>(null);
-
-  const handleScan = () => {
-    scanPlugins.mutate(undefined, {
-      onSuccess: (discovered) => {
-        if (discovered.length === 0) {
-          toast.info("No new local plugins found.");
-        } else {
-          toast.success(
-            `Discovered ${discovered.length} new local plugin${discovered.length > 1 ? "s" : ""}.`,
-          );
-        }
-      },
-      onError: (err) => {
-        toast.error(`Scan failed: ${err.message}`);
-      },
-    });
-  };
-
-  if (isLoading) return <LoadingSpinner />;
-  if (error) {
-    return (
-      <p className="text-sm text-destructive">
-        Failed to load plugins: {error.message}
-      </p>
-    );
-  }
-
-  if (!plugins || plugins.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="py-8 text-center">
-          <Package className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No plugins installed yet. Browse available plugins to get started.
-          </p>
-        </div>
-        {canWrite && (
-          <div className="flex justify-end">
-            <Button
-              disabled={scanPlugins.isPending}
-              onClick={handleScan}
-              size="sm"
-              variant="outline"
-            >
-              {scanPlugins.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FolderSearch className="mr-2 h-4 w-4" />
-              )}
-              Scan for Local Plugins
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {canWrite && (
-        <div className="mb-4 flex justify-end">
-          <Button
-            disabled={scanPlugins.isPending}
-            onClick={handleScan}
-            size="sm"
-            variant="outline"
-          >
-            {scanPlugins.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <FolderSearch className="mr-2 h-4 w-4" />
-            )}
-            Scan for Local Plugins
-          </Button>
-        </div>
-      )}
-      <div className="space-y-3">
-        {plugins.map((plugin) => (
-          <div
-            className="flex items-start justify-between gap-4 rounded-md border border-border p-4"
-            key={`${plugin.scope}/${plugin.id}`}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium">{plugin.name}</h3>
-                <Badge variant="outline">{plugin.version}</Badge>
-                <Badge variant="secondary">{plugin.scope}</Badge>
-                {plugin.update_available_version && (
-                  <>
-                    <Badge variant="default">
-                      Update: {plugin.update_available_version}
-                    </Badge>
-                    {canWrite && (
-                      <Button
-                        disabled={updatePluginVersion.isPending}
-                        onClick={() =>
-                          updatePluginVersion.mutate({
-                            scope: plugin.scope,
-                            id: plugin.id,
-                          })
-                        }
-                        size="sm"
-                        variant="outline"
-                      >
-                        {updatePluginVersion.isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Download className="mr-1 h-3 w-3" />
-                        )}
-                        Update
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-              {plugin.description && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {plugin.description}
-                </p>
-              )}
-              {plugin.author && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  by {plugin.author}
-                </p>
-              )}
-              {plugin.load_error && (
-                <p className="mt-1 text-xs text-destructive">
-                  Error: {plugin.load_error}
-                </p>
-              )}
-            </div>
-
-            <div className="flex shrink-0 items-center gap-3">
-              {canWrite && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Label
-                      className="text-xs text-muted-foreground"
-                      htmlFor={`enable-${plugin.scope}-${plugin.id}`}
-                    >
-                      {plugin.status === PluginStatusActive
-                        ? "Enabled"
-                        : "Disabled"}
-                    </Label>
-                    <Switch
-                      checked={plugin.status === PluginStatusActive}
-                      id={`enable-${plugin.scope}-${plugin.id}`}
-                      onCheckedChange={(checked) => {
-                        updatePlugin.mutate({
-                          scope: plugin.scope,
-                          id: plugin.id,
-                          payload: { enabled: checked },
-                        });
-                      }}
-                    />
-                  </div>
-                  {plugin.status === PluginStatusActive && (
-                    <>
-                      <Button
-                        disabled={reloadPlugin.isPending}
-                        onClick={() =>
-                          reloadPlugin.mutate(
-                            { scope: plugin.scope, id: plugin.id },
-                            {
-                              onSuccess: () =>
-                                toast.success(`Reloaded ${plugin.name}`),
-                              onError: (err) =>
-                                toast.error(`Failed to reload: ${err.message}`),
-                            },
-                          )
-                        }
-                        size="sm"
-                        title="Reload plugin from disk"
-                        variant="ghost"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        onClick={() => setConfigTarget(plugin)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <Settings className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    onClick={() => setUninstallTarget(plugin)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </>
-              )}
-              {plugin.homepage && (
-                <a
-                  className="text-muted-foreground hover:text-foreground"
-                  href={plugin.homepage}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <ConfirmDialog
-        confirmLabel="Uninstall"
-        description={`Are you sure you want to uninstall "${uninstallTarget?.name}"? This action cannot be undone.`}
-        isPending={uninstallPlugin.isPending}
-        onConfirm={() => {
-          if (uninstallTarget) {
-            uninstallPlugin.mutate(
-              { scope: uninstallTarget.scope, id: uninstallTarget.id },
-              { onSuccess: () => setUninstallTarget(null) },
-            );
-          }
-        }}
-        onOpenChange={(open) => {
-          if (!open) setUninstallTarget(null);
-        }}
-        open={!!uninstallTarget}
-        title="Uninstall Plugin"
-      />
-
-      <PluginConfigDialog
-        onOpenChange={(open) => {
-          if (!open) setConfigTarget(null);
-        }}
-        open={!!configTarget}
-        pluginId={configTarget?.id ?? ""}
-        pluginName={configTarget?.name ?? ""}
-        scope={configTarget?.scope ?? ""}
-      />
-    </>
-  );
-};
 
 // --- Browse Tab ---
 
