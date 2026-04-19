@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
+import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
 import { PluginPermissions } from "@/components/plugins/PluginPermissions";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
@@ -106,6 +107,8 @@ export const PluginDetail = () => {
           />
         </section>
       )}
+
+      {installed && <PluginDangerZone plugin={installed} />}
 
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}
