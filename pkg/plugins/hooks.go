@@ -426,6 +426,13 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.Confidence = &c
 		}
 
+		// coverPage -> *int
+		coverPageVal := itemObj.Get("coverPage")
+		if coverPageVal != nil && !goja.IsUndefined(coverPageVal) && !goja.IsNull(coverPageVal) {
+			cp := int(coverPageVal.ToInteger())
+			md.CoverPage = &cp
+		}
+
 		// genres -> []string
 		genresVal := itemObj.Get("genres")
 		if genresVal != nil && !goja.IsUndefined(genresVal) && !goja.IsNull(genresVal) {

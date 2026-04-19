@@ -277,3 +277,29 @@ func TestParseSearchResponse_NilInput(t *testing.T) {
 	resp = parseSearchResponse(vm, val, "s", "p")
 	assert.Empty(t, resp.Results)
 }
+
+func TestParseSearchResponse_CoverPage(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	val, err := vm.RunString(`({ results: [{ title: "x", coverPage: 3 }] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "test", "plugin-id")
+
+	require.Len(t, resp.Results, 1)
+	require.NotNil(t, resp.Results[0].CoverPage)
+	assert.Equal(t, 3, *resp.Results[0].CoverPage)
+}
+
+func TestParseSearchResponse_CoverPage_MissingOrNull(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	val, err := vm.RunString(`({ results: [{ title: "a" }, { title: "b", coverPage: null }] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "test", "plugin-id")
+
+	require.Len(t, resp.Results, 2)
+	assert.Nil(t, resp.Results[0].CoverPage)
+	assert.Nil(t, resp.Results[1].CoverPage)
+}
