@@ -1,6 +1,6 @@
 import { Settings } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { AdvancedPluginsDialog } from "@/components/plugins/AdvancedPluginsDialog";
 import { DiscoverTab } from "@/components/plugins/DiscoverTab";
@@ -12,26 +12,21 @@ import { usePluginsInstalled } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-// "browse" is kept for backward-compat URL slugs; both resolve to "discover".
-const validTabs = ["installed", "discover", "browse"] as const;
-type TabValue = (typeof validTabs)[number];
-
-const normalizeTab = (tab: string | undefined): TabValue => {
-  if (tab === "browse") return "discover";
-  return validTabs.includes(tab as TabValue) ? (tab as TabValue) : "installed";
-};
-
 const AdminPlugins = () => {
   usePageTitle("Plugins");
 
   const { hasPermission } = useAuth();
   const canWrite = hasPermission("config", "write");
 
-  const { tab } = useParams<{ tab?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const activeTab: TabValue = normalizeTab(tab);
+  const activeTab: "installed" | "discover" = location.pathname.endsWith(
+    "/discover",
+  )
+    ? "discover"
+    : "installed";
 
   const { data: plugins = [] } = usePluginsInstalled();
   const updateCount = useMemo(
@@ -58,11 +53,9 @@ const AdminPlugins = () => {
   }, []); // intentionally empty — only on mount
 
   const handleTabChange = (value: string) => {
-    if (value === "installed") {
-      navigate("/settings/plugins");
-    } else {
-      navigate(`/settings/plugins/${value}`);
-    }
+    navigate(
+      value === "discover" ? "/settings/plugins/discover" : "/settings/plugins",
+    );
   };
 
   return (

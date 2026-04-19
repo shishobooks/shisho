@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminJobs from "@/components/pages/AdminJobs";
@@ -139,13 +139,47 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "plugins/:tab?",
+        path: "plugins",
         element: (
           <ProtectedRoute
             requiredPermission={{ resource: "config", operation: "read" }}
           >
             <AdminPlugins />
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: "plugins/installed",
+        element: (
+          <ProtectedRoute
+            requiredPermission={{ resource: "config", operation: "read" }}
+          >
+            <AdminPlugins />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "plugins/discover",
+        element: (
+          <ProtectedRoute
+            requiredPermission={{ resource: "config", operation: "read" }}
+          >
+            <AdminPlugins />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "plugins/browse",
+        element: <Navigate replace to="/settings/plugins/discover" />,
+      },
+      {
+        path: "plugins/order",
+        element: <Navigate replace to="/settings/plugins?advanced=order" />,
+      },
+      {
+        path: "plugins/repositories",
+        element: (
+          <Navigate replace to="/settings/plugins?advanced=repositories" />
         ),
       },
       {
