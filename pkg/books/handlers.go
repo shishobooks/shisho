@@ -30,8 +30,10 @@ import (
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/shishobooks/shisho/pkg/tags"
 )
 
@@ -70,6 +72,7 @@ type handler struct {
 	publisherService *publishers.Service
 	imprintService   *imprints.Service
 	listsService     *lists.Service
+	settingsService  *settings.Service
 	downloadCache    *downloadcache.Cache
 	pageCache        *cbzpages.Cache
 	pdfPageCache     *pdfpages.Cache
@@ -128,6 +131,17 @@ func (h *handler) list(c echo.Context) error {
 		}
 	}
 
+	// Parse the explicit sort param. Validation errors here surface as 422
+	// so a typo in a stored URL doesn't silently fall back to the default.
+	var explicitSort []sortspec.SortLevel
+	if params.Sort != "" {
+		parsed, err := sortspec.Parse(params.Sort)
+		if err != nil {
+			return errcodes.ValidationError(err.Error())
+		}
+		explicitSort = parsed
+	}
+
 	opts := ListBooksOptions{
 		Limit:     &params.Limit,
 		Offset:    &params.Offset,
@@ -141,12 +155,23 @@ func (h *handler) list(c echo.Context) error {
 		IDs:       params.IDs,
 	}
 
-	// Filter by user's library access if user is in context
-	if user, ok := c.Get("user").(*models.User); ok {
+	// Filter by user's library access if user is in context.
+	user, _ := c.Get("user").(*models.User)
+	if user != nil {
 		libraryIDs := user.GetAccessibleLibraryIDs()
 		if libraryIDs != nil {
 			opts.LibraryIDs = libraryIDs
 		}
+	}
+
+	// Resolve the sort: explicit param wins, then stored per-(user, library)
+	// preference, then nil (service applies its hard-coded default). The
+	// resolver is only consulted when scoped to a single library — there is
+	// no natural "stored sort" for a multi-library or all-libraries listing.
+	if user != nil && params.LibraryID != nil {
+		opts.Sort = sortspec.ResolveForLibrary(ctx, h.settingsService, user.ID, *params.LibraryID, explicitSort)
+	} else {
+		opts.Sort = explicitSort
 	}
 
 	books, total, err := h.bookService.ListBooksWithTotal(ctx, opts)

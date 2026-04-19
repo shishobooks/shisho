@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
 )
@@ -24,7 +25,8 @@ import (
 // These routes are mounted under /libraries/:id/... alongside library management routes.
 func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	bookService := NewService(db)
-	h := &handler{bookService: bookService}
+	settingsService := settings.NewService(db)
+	h := &handler{bookService: bookService, settingsService: settingsService}
 	g.GET("/:id/languages", h.listLibraryLanguages, authMiddleware.RequireLibraryAccess("id"))
 }
 
@@ -39,6 +41,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	listsService := lists.NewService(db)
+	settingsService := settings.NewService(db)
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
 	pdfPageCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
@@ -53,6 +56,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		publisherService: publisherService,
 		imprintService:   imprintService,
 		listsService:     listsService,
+		settingsService:  settingsService,
 		downloadCache:    dlCache,
 		pageCache:        pageCache,
 		pdfPageCache:     pdfPageCache,

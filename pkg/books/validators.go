@@ -13,6 +13,7 @@ type ListBooksQuery struct {
 	TagIDs    []int    `query:"tag_ids" json:"tag_ids,omitempty"`                                               // Filter by tag IDs
 	Language  *string  `query:"language" json:"language,omitempty" validate:"omitempty,max=35" tstype:"string"` // Filter by language tag
 	IDs       []int    `query:"ids" json:"ids,omitempty"`                                                       // Filter by specific book IDs
+	Sort      string   `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 }
 
 type UpdateBookPayload struct {

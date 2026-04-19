@@ -22,6 +22,11 @@ func setupBooksTestDB(t *testing.T) *bun.DB {
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
 
+	// :memory: SQLite is per-connection — multiple connections each have
+	// their own (empty) database. Pinning to a single connection ensures
+	// the migrated schema is visible to every operation in the test.
+	sqldb.SetMaxOpenConns(1)
+
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 	_, err = db.Exec("PRAGMA foreign_keys = ON")
 	require.NoError(t, err)
