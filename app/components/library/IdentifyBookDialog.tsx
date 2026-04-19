@@ -414,25 +414,45 @@ export function IdentifyBookDialog({
                     >
                       <div className="flex gap-3">
                         {/* Cover thumbnail */}
-                        {result.cover_url ? (
-                          <img
-                            alt=""
-                            className={cn(
-                              "w-16 object-cover rounded shrink-0 bg-muted",
-                              isAudiobook ? "h-16" : "h-24",
-                            )}
-                            src={result.cover_url}
-                          />
-                        ) : (
-                          <div
-                            className={cn(
-                              "w-16 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs",
-                              isAudiobook ? "h-16" : "h-24",
-                            )}
-                          >
-                            No cover
-                          </div>
-                        )}
+                        {(() => {
+                          const thumbClass = cn(
+                            "w-16 object-cover rounded shrink-0 bg-muted",
+                            isAudiobook ? "h-16" : "h-24",
+                          );
+                          if (result.cover_url) {
+                            return (
+                              <img
+                                alt=""
+                                className={thumbClass}
+                                src={result.cover_url}
+                              />
+                            );
+                          }
+                          if (
+                            result.cover_page != null &&
+                            selectedFileId &&
+                            (selectedFileType === "cbz" ||
+                              selectedFileType === "pdf")
+                          ) {
+                            return (
+                              <img
+                                alt=""
+                                className={thumbClass}
+                                src={`/api/books/files/${selectedFileId}/page/${result.cover_page}`}
+                              />
+                            );
+                          }
+                          return (
+                            <div
+                              className={cn(
+                                "w-16 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs",
+                                isAudiobook ? "h-16" : "h-24",
+                              )}
+                            >
+                              No cover
+                            </div>
+                          );
+                        })()}
 
                         {/* Details */}
                         <div className="flex-1 min-w-0">
