@@ -355,9 +355,11 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// cleanly with the user-specified Sort — joining `authors` into the
 	// outer query would require disambiguating ORDER BY references and
 	// risks duplicate rows when a person appears multiple times on the
-	// same book (already deduped at the authors table by UNIQUE
-	// (book_id, person_id, role), but a future role-aware schema could
-	// reintroduce the issue).
+	// same book. The `authors` UNIQUE index is on
+	// (book_id, person_id, role), so a single person CAN legitimately
+	// appear on one book under multiple roles (e.g., writer + inker on
+	// a comic). The `SELECT DISTINCT book_id` — not the UNIQUE index —
+	// is what guarantees each book appears at most once in the result.
 	if opts.PersonID != nil {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM authors WHERE person_id = ?)", *opts.PersonID)
 	}

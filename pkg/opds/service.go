@@ -460,10 +460,21 @@ func (svc *Service) BuildLibraryAuthorsListFeed(ctx context.Context, baseURL, fi
 // IDs, paginated those IDs in Go, then fetched the entire library's
 // books with sort applied and filtered down to the paginated IDs. That
 // pattern broke pagination (page 1 wasn't "first N in sort order") and
-// scaled poorly. We now look up the person row (case-insensitive,
-// library-scoped, matching peopleService semantics) and delegate to
-// the books service's PersonID filter, which lets SQL apply the sort,
-// limit, and offset together.
+// scaled poorly. We now look up the person row (library-scoped via
+// peopleService.RetrievePerson) and delegate to the books service's
+// PersonID filter, which lets SQL apply the sort, limit, and offset
+// together.
+//
+// Name-match semantics change: the old implementation used `p.name = ?`
+// (case-sensitive under SQLite's default BINARY collation), whereas
+// peopleService.RetrievePerson uses `LOWER(p.name) = LOWER(?)`. This
+// aligns with the creation-side invariant — `persons` has a UNIQUE
+// index on (name COLLATE NOCASE, library_id), so there's at most one
+// person per (library, name) regardless of case, and the canonical
+// casing is whatever was first inserted. Any author URL Shisho
+// generates itself is already canonical; the change only affects OPDS
+// clients that hand-craft URLs with non-canonical casing — those now
+// resolve instead of 404ing.
 func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, authorName string, fileTypes []string, limit, offset int, sort []sortspec.SortLevel) ([]*models.Book, int, error) {
 	person, err := svc.peopleService.RetrievePerson(ctx, people.RetrievePersonOptions{
 		Name:      &authorName,
