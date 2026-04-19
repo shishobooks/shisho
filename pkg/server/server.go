@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -33,6 +34,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/logs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/opds"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -197,6 +199,9 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	pluginService := plugins.NewService(db)
 	bookSvc := books.NewService(db)
 	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
+	cbzCache := cbzpages.NewCache(cfg.CacheDir)
+	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
+	pageExtractor := books.NewPluginPageExtractor(cbzCache, pdfCache)
 	enrichDeps := &plugins.EnrichDeps{
 		BookStore:       bookAdapter,
 		RelStore:        bookAdapter,
@@ -207,6 +212,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 		PublisherFinder: publishers.NewService(db),
 		ImprintFinder:   imprints.NewService(db),
 		SearchIndexer:   search.NewService(db),
+		PageExtractor:   pageExtractor,
 	}
 	pluginIdentifyGroup := e.Group("/plugins")
 	pluginIdentifyGroup.Use(authMiddleware.Authenticate)

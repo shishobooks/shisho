@@ -46,6 +46,7 @@ type enrichDeps struct {
 	publisherFinder publisherFinder
 	imprintFinder   imprintFinder
 	searchIndexer   searchIndexer
+	pageExtractor   pageExtractor
 }
 
 // bookStore provides core book and file CRUD operations.
@@ -105,6 +106,13 @@ type imprintFinder interface {
 // searchIndexer updates the search index after metadata changes.
 type searchIndexer interface {
 	IndexBook(ctx context.Context, book *models.Book) error
+}
+
+// pageExtractor renders a page from a page-based file (CBZ/PDF) and writes
+// it as that file's cover image. Returns the cover filename (not a full path)
+// and the MIME type of the extracted image.
+type pageExtractor interface {
+	ExtractCoverPage(file *models.File, bookFilepath string, page int) (filename, mimeType string, err error)
 }
 
 type handler struct {
