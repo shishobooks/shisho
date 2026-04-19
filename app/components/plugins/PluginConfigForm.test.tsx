@@ -89,4 +89,14 @@ describe("PluginConfigForm", () => {
       );
     });
   });
+
+  it("hides Save button and disables inputs when canWrite is false", () => {
+    render(
+      wrap(<PluginConfigForm canWrite={false} id="test" scope="shisho" />),
+    );
+    expect(
+      screen.queryByRole("button", { name: /save/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/api key/i)).toBeDisabled();
+  });
 });
