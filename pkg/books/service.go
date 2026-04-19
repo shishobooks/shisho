@@ -318,6 +318,11 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		for _, clause := range sortspec.OrderClauses(opts.Sort) {
 			q = q.OrderExpr(clause.Expression, clause.Args...)
 		}
+		// Stable tiebreaker: ensures deterministic pagination when the
+		// user-specified sort levels have ties. Without this, SQLite's
+		// order for tied rows is not guaranteed, which can cause books
+		// to shift between pages.
+		q = q.Order("b.id ASC")
 
 	case opts.SeriesID != nil:
 		// When filtering by series, order by series_number then sort_title

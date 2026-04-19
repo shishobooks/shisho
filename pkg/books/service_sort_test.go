@@ -118,6 +118,40 @@ func TestListBooks_SortByDateAddedDesc(t *testing.T) {
 	assert.Equal(t, oldest.ID, got[2].ID)
 }
 
+// TestListBooks_SortByTiesFallsBackToID confirms a stable tiebreaker
+// when the user-specified sort levels all have ties. Without a final
+// `b.id ASC`, SQLite's order for tied rows is unspecified and can
+// break pagination.
+func TestListBooks_SortByTiesFallsBackToID(t *testing.T) {
+	t.Parallel()
+
+	db := setupBooksTestDB(t)
+	svc := NewService(db)
+	lib := seedLibrary(t, db, "Books")
+
+	// Seed 3 books with identical created_at — every user-specified
+	// level (date_added) is tied across them.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	b1 := seedBook(t, db, lib, "B1", "B1", now)
+	b2 := seedBook(t, db, lib, "B2", "B2", now)
+	b3 := seedBook(t, db, lib, "B3", "B3", now)
+
+	got, _, err := svc.ListBooksWithTotal(context.Background(), ListBooksOptions{
+		LibraryID: &lib.ID,
+		Sort: []sortspec.SortLevel{
+			{Field: sortspec.FieldDateAdded, Direction: sortspec.DirDesc},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	// With the tiebreaker, insertion order (lowest id first) is the
+	// deterministic fallback.
+	assert.Equal(t, b1.ID, got[0].ID)
+	assert.Equal(t, b2.ID, got[1].ID)
+	assert.Equal(t, b3.ID, got[2].ID)
+}
+
 // TestListBooks_NilSortUsesDefault preserves backward compatibility.
 func TestListBooks_NilSortUsesDefault(t *testing.T) {
 	t.Parallel()
