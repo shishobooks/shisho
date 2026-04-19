@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
 )
 
@@ -18,9 +19,10 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	cache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
 
 	h := &handler{
-		opdsService:   opdsService,
-		bookService:   bookService,
-		downloadCache: cache,
+		opdsService:     opdsService,
+		bookService:     bookService,
+		downloadCache:   cache,
+		settingsService: settings.NewService(db),
 	}
 
 	// OPDS 1.2 routes with file type parameter

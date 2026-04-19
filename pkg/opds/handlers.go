@@ -16,6 +16,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
 const (
@@ -24,9 +26,22 @@ const (
 )
 
 type handler struct {
-	opdsService   *Service
-	bookService   *books.Service
-	downloadCache *downloadcache.Cache
+	opdsService     *Service
+	bookService     *books.Service
+	downloadCache   *downloadcache.Cache
+	settingsService *settings.Service
+}
+
+// resolveSort resolves the stored user-library sort preference for the
+// current request, or returns nil so the service's legacy default
+// ordering applies. OPDS is read-only; there's no explicit ?sort=
+// input, so we pass explicit=nil to ResolveForLibrary.
+func (h *handler) resolveSort(c echo.Context, libraryID int) []sortspec.SortLevel {
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return nil
+	}
+	return sortspec.ResolveForLibrary(c.Request().Context(), h.settingsService, user.ID, libraryID, nil)
 }
 
 // getBaseURL returns the base URL for OPDS feeds.
@@ -180,8 +195,9 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -243,8 +259,9 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset)
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -306,8 +323,9 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset)
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -340,8 +358,9 @@ func (h *handler) librarySearch(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, fileTypes, libraryID, query, limit, offset)
+	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -441,8 +460,9 @@ func (h *handler) libraryAllBooksKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAllBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	feed, err := h.opdsService.BuildLibraryAllBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -504,8 +524,9 @@ func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset)
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -567,8 +588,9 @@ func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset)
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -601,8 +623,9 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
+	sort := h.resolveSort(c, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySearchFeedKepub(ctx, baseURL, fileTypes, libraryID, query, limit, offset)
+	feed, err := h.opdsService.BuildLibrarySearchFeedKepub(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
