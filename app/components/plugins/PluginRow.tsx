@@ -38,7 +38,7 @@ export const PluginRow = ({
   return (
     <Link
       className={cn(
-        "group flex items-center gap-4 rounded-md border border-border p-4 transition-colors hover:bg-accent/30",
+        "group flex items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors hover:bg-accent/30",
         disabled && "opacity-50 saturate-50",
       )}
       to={href}
