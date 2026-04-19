@@ -7,7 +7,7 @@ import (
 )
 
 type UserLibrarySettings struct {
-	bun.BaseModel `bun:"table:user_library_settings,alias:uls"`
+	bun.BaseModel `bun:"table:user_library_settings,alias:uls" tstype:"-"`
 
 	ID        int       `bun:",pk,autoincrement"                            json:"id"`
 	CreatedAt time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
