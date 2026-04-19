@@ -180,11 +180,43 @@ tags don't match `v{version}`, per feedback #4).
 
 ### Layer 4 — Documentation and out-of-scope data changes
 
-**`website/docs/plugins/repositories.md`**
-- Document the `releaseUrl` field on plugin versions.
-- Remove the (already-uncommitted) `tag` documentation.
-- Clarify in the `homepage` description that it should be the plugin's
-  specific landing page, not necessarily the repo root.
+Every schema change in Layer 3 and every new response field in Layer 2 that
+shows up in the repository manifest format needs a corresponding update in
+`website/docs/plugins/repositories.md`. Specifics:
+
+**`website/docs/plugins/repositories.md` — example block (lines ~50–87)**
+- Remove the `"tag": "v1.0.0",` line from the example version entry.
+- Add `"releaseUrl": "https://github.com/my-org/my-plugin/releases/tag/v1.0.0"`
+  to the example version entry, placed near `downloadUrl` for visual grouping
+  of release-related fields.
+
+**`website/docs/plugins/repositories.md` — "Field notes" section (lines ~89–94)**
+- Delete the `tag` bullet entirely (added in commit 3be89b4, never shipped).
+- Add a `releaseUrl` bullet immediately after `releaseDate`:
+  > **`releaseUrl`** (on each version entry): Optional. Full URL to the
+  > release page for this version (e.g. a GitHub release, GitLab tag, or
+  > any other hosted release notes page). When present, Shisho renders a
+  > "View release" link on the version card. When omitted, no link is
+  > rendered. Any HTTPS URL is accepted — Shisho does not validate the
+  > host or path.
+- Add a `homepage` bullet (new — this field isn't currently documented in
+  the field notes, and its semantics are changing):
+  > **`homepage`** (on each plugin entry): Optional. The plugin's landing
+  > page — shown as the "homepage" link on the plugin detail page. This
+  > should point to documentation for this specific plugin (for multi-
+  > plugin repositories, typically a subdirectory URL like
+  > `…/tree/main/plugins/{plugin-id}`). Shisho uses this field purely for
+  > display; release links are built from `releaseUrl` on each version.
+- Update the `changelog` bullet: replace the existing sentence about
+  inferring "View full diff on GitHub" from `homepage` to reflect that
+  release links now come from `releaseUrl` per version, not from
+  `homepage`. New text should note that the "View release" link on each
+  version card is independent of the changelog content itself.
+
+**`website/docs/plugins/repositories.md` — "Plugin Versions Include" list
+(lines ~32–38)**
+- Add a bullet for the optional `releaseUrl` field so the summary list is
+  complete. Order it after the existing `changelog` bullet.
 
 **Out of scope — tracked on Notion**
 - Official repo (`shishobooks/plugins`): update each plugin's `homepage` to
