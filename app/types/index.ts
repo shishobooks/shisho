@@ -25,6 +25,7 @@ export interface ListBooksQuery {
   tag_ids?: number[];
   language?: string;
   ids?: number[];
+  sort?: string;
 }
 export * from "./generated/filesystem";
 export * from "./generated/jobs";
