@@ -50,6 +50,7 @@ export const InstalledTab = () => {
     const caps = resolveInstalledPluginCapabilities(plugin, availableEntry);
     const capabilityLabels = deriveCapabilityLabels(caps);
     const imageUrl = availableEntry?.imageUrl || undefined;
+    const isOfficial = availableEntry?.is_official ?? false;
     const isDisabled = plugin.status !== PluginStatusActive;
 
     return (
@@ -86,6 +87,7 @@ export const InstalledTab = () => {
         href={`/settings/plugins/${plugin.scope}/${plugin.id}`}
         id={plugin.id}
         imageUrl={imageUrl}
+        isOfficial={isOfficial}
         key={`${plugin.scope}/${plugin.id}`}
         name={plugin.name}
         scope={plugin.scope}

@@ -184,6 +184,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                   href={`/settings/plugins/${p.scope}/${p.id}`}
                   id={p.id}
                   imageUrl={p.imageUrl || null}
+                  isOfficial={p.is_official}
                   key={key}
                   name={p.name}
                   scope={p.scope}
