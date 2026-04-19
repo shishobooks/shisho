@@ -11,7 +11,7 @@ export const filterPlugins = (
     if (search) {
       const q = search.toLowerCase();
       const nameMatch = p.name.toLowerCase().includes(q);
-      const descMatch = p.description.toLowerCase().includes(q);
+      const descMatch = (p.description ?? "").toLowerCase().includes(q);
       if (!nameMatch && !descMatch) return false;
     }
     if (capability !== "all") {

@@ -134,6 +134,23 @@ describe("DiscoverTab", () => {
     expect(screen.queryByText("Plugin B")).toBeNull();
   });
 
+  it("filterPlugins: handles null/undefined description without crashing", () => {
+    const plugins = [
+      makePlugin({
+        description: undefined as unknown as string,
+        id: "a",
+        name: "Plugin A",
+      }),
+      makePlugin({
+        description: "matches search term",
+        id: "b",
+        name: "Plugin B",
+      }),
+    ];
+    const result = filterPlugins(plugins, "matches", "all", "all");
+    expect(result.map((p) => p.name)).toEqual(["Plugin B"]);
+  });
+
   it("filterPlugins: filters by source/scope", () => {
     const plugins = [
       makePlugin({ id: "a", name: "Plugin A", scope: "shisho" }),
