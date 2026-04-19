@@ -1959,6 +1959,12 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		md.SeriesNumber = &v
 	}
 
+	// Cover page (0-indexed page number for CBZ/PDF)
+	if v, ok := fields["cover_page"].(float64); ok {
+		cp := int(v)
+		md.CoverPage = &cp
+	}
+
 	// Release date
 	if v, ok := fields["release_date"].(string); ok && v != "" {
 		t, err := time.Parse("2006-01-02", v)

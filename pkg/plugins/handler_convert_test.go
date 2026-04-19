@@ -307,6 +307,24 @@ func TestConvertFieldsToMetadata_AbridgedFalse(t *testing.T) {
 	assert.False(t, *md.Abridged)
 }
 
+func TestConvertFieldsToMetadata_CoverPage(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"cover_page": float64(4), // JSON numbers decode to float64
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.CoverPage)
+	assert.Equal(t, 4, *md.CoverPage)
+}
+
+func TestConvertFieldsToMetadata_CoverPage_Missing(t *testing.T) {
+	t.Parallel()
+	md := convertFieldsToMetadata(map[string]any{})
+	assert.Nil(t, md.CoverPage)
+}
+
 func TestConvertFieldsToMetadata_AbridgedMissing(t *testing.T) {
 	t.Parallel()
 	// Absent key should result in nil
