@@ -26,6 +26,7 @@ import ListsIndex from "@/components/pages/ListsIndex";
 import Login from "@/components/pages/Login";
 import PersonDetail from "@/components/pages/PersonDetail";
 import PersonList from "@/components/pages/PersonList";
+import { PluginDetail } from "@/components/pages/PluginDetail";
 import PublisherDetail from "@/components/pages/PublisherDetail";
 import PublishersList from "@/components/pages/PublishersList";
 import Root from "@/components/pages/Root";
@@ -144,6 +145,16 @@ export const router = createBrowserRouter([
             requiredPermission={{ resource: "config", operation: "read" }}
           >
             <AdminPlugins />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "plugins/:scope/:id",
+        element: (
+          <ProtectedRoute
+            requiredPermission={{ resource: "config", operation: "read" }}
+          >
+            <PluginDetail />
           </ProtectedRoute>
         ),
       },
