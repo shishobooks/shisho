@@ -589,20 +589,29 @@ export function IdentifyReviewForm({
     defaults.identifiers.value,
   );
 
-  // Cover state — page-based formats (CBZ, PDF) derive covers from page
-  // content and shouldn't be overwritten by plugin images.
-  const coverEditable = !isPageBasedFileType(file?.file_type);
+  // Cover state — for page-based formats (CBZ, PDF) the cover is a page of
+  // the file itself, so plugin cover *image* data (cover_url/cover_data) is
+  // ignored, but a plugin-supplied `cover_page` can still change the cover.
+  const isFilePageBased = isPageBasedFileType(file?.file_type);
   const isAudiobook = file?.file_type === "m4b";
-  const newCoverUrl = result.cover_url;
+  const newCoverUrl = !isFilePageBased ? result.cover_url : undefined;
+  const newCoverPage = isFilePageBased ? result.cover_page : undefined;
+  // The preview URL shown for the "new" option. For page-based files with a
+  // plugin-supplied cover_page, render the page via the file's page endpoint.
+  const newCoverPreviewUrl =
+    newCoverUrl ??
+    (file && newCoverPage != null
+      ? `/api/books/files/${file.id}/page/${newCoverPage}`
+      : undefined);
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`
     : undefined;
-  const hasCoverChoice = !!newCoverUrl && coverEditable;
+  const hasCoverChoice = !!newCoverPreviewUrl;
   const [coverSelection, setCoverSelection] = useState<"current" | "new">(
-    newCoverUrl && !isDisabled("cover") ? "new" : "current",
+    hasCoverChoice && !isDisabled("cover") ? "new" : "current",
   );
   const currentCoverDims = useImageDimensions(currentCoverUrl);
-  const newCoverDims = useImageDimensions(newCoverUrl);
+  const newCoverDims = useImageDimensions(newCoverPreviewUrl);
 
   // Prefer keeping the current cover when it's at least as high-resolution
   // as the plugin cover (by pixel count) — avoids unnecessary writes/churn.
@@ -637,7 +646,7 @@ export function IdentifyReviewForm({
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
       coverSelection !==
-        (newCoverUrl && !disabledFields.has("cover") && !preferCurrentCover
+        (hasCoverChoice && !disabledFields.has("cover") && !preferCurrentCover
           ? "new"
           : "current")
     );
@@ -660,7 +669,7 @@ export function IdentifyReviewForm({
     identifiers,
     coverSelection,
     defaults,
-    newCoverUrl,
+    hasCoverChoice,
     disabledFields,
     preferCurrentCover,
   ]);
@@ -695,8 +704,12 @@ export function IdentifyReviewForm({
       })),
     };
 
-    if (coverSelection === "new" && newCoverUrl) {
-      fields.cover_url = newCoverUrl;
+    if (coverSelection === "new") {
+      if (newCoverUrl) {
+        fields.cover_url = newCoverUrl;
+      } else if (newCoverPage != null) {
+        fields.cover_page = newCoverPage;
+      }
     }
 
     try {
@@ -806,7 +819,7 @@ export function IdentifyReviewForm({
                   "w-24 object-cover bg-muted",
                   isAudiobook ? "h-24" : "h-36",
                 )}
-                src={newCoverUrl}
+                src={newCoverPreviewUrl}
               />
               <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[0.6rem] text-center py-0.5">
                 Use new
