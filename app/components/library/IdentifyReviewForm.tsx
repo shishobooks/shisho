@@ -595,7 +595,16 @@ export function IdentifyReviewForm({
   const isFilePageBased = isPageBasedFileType(file?.file_type);
   const isAudiobook = file?.file_type === "m4b";
   const newCoverUrl = !isFilePageBased ? result.cover_url : undefined;
-  const newCoverPage = isFilePageBased ? result.cover_page : undefined;
+  // Only treat coverPage as usable when it's a non-negative integer within
+  // the file's page range. A plugin returning out-of-range values would
+  // otherwise render a broken preview and get silently dropped at apply time.
+  const newCoverPage =
+    isFilePageBased &&
+    result.cover_page != null &&
+    result.cover_page >= 0 &&
+    (file?.page_count == null || result.cover_page < file.page_count)
+      ? result.cover_page
+      : undefined;
   // The preview URL shown for the "new" option. For page-based files with a
   // plugin-supplied cover_page, render the page via the file's page endpoint.
   const newCoverPreviewUrl =

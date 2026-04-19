@@ -2035,46 +2035,22 @@ func (w *Worker) scanFileCore(
 		isDifferent := file.CoverPage == nil || *file.CoverPage != *fileSidecarData.CoverPage
 
 		if shouldApply && isDifferent {
-			// book.Filepath may be a synthetic organized-folder path that
-			// does not yet exist for root-level new files, so use the
-			// write-side helper that falls back to the file's parent dir.
-			coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
-
-			// Generate cover filename
-			filename := filepath.Base(file.Filepath)
-			coverBaseName := filename + ".cover"
-
-			// Extract the cover page from the source file.
-			var coverFilename, coverMimeType string
-			switch file.FileType {
-			case models.FileTypePDF:
-				coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
-			case models.FileTypeCBZ:
-				coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
-			default:
-				err = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
-			}
-			if err != nil {
+			fromPage := file.CoverPage
+			page := *fileSidecarData.CoverPage
+			extractErr, updateErr := w.applyPageCover(ctx, file, book, page, sidecarSource)
+			switch {
+			case extractErr != nil:
 				logWarn("failed to extract cover page from sidecar", logger.Data{
-					"error":      err.Error(),
-					"cover_page": *fileSidecarData.CoverPage,
+					"error":      extractErr.Error(),
+					"cover_page": page,
 				})
-			} else {
+			case updateErr != nil:
+				return nil, errors.Wrap(updateErr, "failed to update cover page from sidecar")
+			default:
 				logInfo("updating cover page from sidecar", logger.Data{
-					"from_page": file.CoverPage,
-					"to_page":   *fileSidecarData.CoverPage,
+					"from_page": fromPage,
+					"to_page":   page,
 				})
-
-				file.CoverPage = fileSidecarData.CoverPage
-				file.CoverImageFilename = &coverFilename
-				file.CoverMimeType = &coverMimeType
-				file.CoverSource = &sidecarSource
-
-				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-					Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
-				}); err != nil {
-					return nil, errors.Wrap(err, "failed to update cover page from sidecar")
-				}
 			}
 		}
 	}
@@ -2129,39 +2105,23 @@ func (w *Worker) scanFileCore(
 					"source":     metadataCoverSource,
 				})
 			default:
-				coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
-				coverBaseName := filepath.Base(file.Filepath) + ".cover"
-
-				var coverFilename, coverMimeType string
-				switch file.FileType {
-				case models.FileTypePDF:
-					coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
-				case models.FileTypeCBZ:
-					coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
-				}
-				if err != nil {
+				fromPage := file.CoverPage
+				extractErr, updateErr := w.applyPageCover(ctx, file, book, page, metadataCoverSource)
+				switch {
+				case extractErr != nil:
 					logWarn("failed to extract cover page from metadata", logger.Data{
-						"error":      err.Error(),
+						"error":      extractErr.Error(),
 						"cover_page": page,
 						"source":     metadataCoverSource,
 					})
-				} else {
+				case updateErr != nil:
+					return nil, errors.Wrap(updateErr, "failed to update cover page from metadata")
+				default:
 					logInfo("updating cover page from metadata", logger.Data{
-						"from_page": file.CoverPage,
+						"from_page": fromPage,
 						"to_page":   page,
 						"source":    metadataCoverSource,
 					})
-
-					file.CoverPage = &page
-					file.CoverImageFilename = &coverFilename
-					file.CoverMimeType = &coverMimeType
-					file.CoverSource = &metadataCoverSource
-
-					if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-						Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
-					}); err != nil {
-						return nil, errors.Wrap(err, "failed to update cover page from metadata")
-					}
 				}
 			}
 		}
@@ -3690,6 +3650,39 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 	}
 
 	return nil
+}
+
+// applyPageCover renders `page` from the page-based file, writes it as the
+// cover image next to the book, and persists the cover_page /
+// cover_image_filename / cover_mime_type / cover_source update to the DB.
+// Returns (extractErr, updateErr). Callers typically treat extract errors as
+// non-fatal warnings and surface update errors.
+func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *models.Book, page int, source string) (extractErr, updateErr error) {
+	coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
+	coverBaseName := filepath.Base(file.Filepath) + ".cover"
+
+	var coverFilename, coverMimeType string
+	switch file.FileType {
+	case models.FileTypePDF:
+		coverFilename, coverMimeType, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
+	case models.FileTypeCBZ:
+		coverFilename, coverMimeType, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
+	default:
+		extractErr = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
+	}
+	if extractErr != nil {
+		return extractErr, nil
+	}
+
+	file.CoverPage = &page
+	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &coverMimeType
+	file.CoverSource = &source
+
+	updateErr = w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
+	})
+	return nil, updateErr
 }
 
 // extractCBZPageCover extracts a specific page from a CBZ file and saves it as the cover.

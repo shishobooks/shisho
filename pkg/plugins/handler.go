@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -1994,10 +1995,14 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		md.SeriesNumber = &v
 	}
 
-	// Cover page (0-indexed page number for CBZ/PDF)
+	// Cover page (0-indexed page number for CBZ/PDF). Only accept finite
+	// non-negative integers; reject negative, NaN, and Infinity so they
+	// don't propagate to the apply path.
 	if v, ok := fields["cover_page"].(float64); ok {
-		cp := int(v)
-		md.CoverPage = &cp
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 {
+			cp := int(v)
+			md.CoverPage = &cp
+		}
 	}
 
 	// Release date

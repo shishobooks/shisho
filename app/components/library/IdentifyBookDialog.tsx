@@ -430,8 +430,14 @@ export function IdentifyBookDialog({
                           }
                           const previewFileId =
                             selectedFileId ?? selectedFile?.id;
-                          if (
+                          const previewPageCount = selectedFile?.page_count;
+                          const coverPageInRange =
                             result.cover_page != null &&
+                            result.cover_page >= 0 &&
+                            (previewPageCount == null ||
+                              result.cover_page < previewPageCount);
+                          if (
+                            coverPageInRange &&
                             previewFileId &&
                             (selectedFileType === "cbz" ||
                               selectedFileType === "pdf")

@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -426,11 +427,15 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.Confidence = &c
 		}
 
-		// coverPage -> *int
+		// coverPage -> *int (only accept finite non-negative integers; reject
+		// negative, NaN, and Infinity to avoid broken previews downstream)
 		coverPageVal := itemObj.Get("coverPage")
 		if coverPageVal != nil && !goja.IsUndefined(coverPageVal) && !goja.IsNull(coverPageVal) {
-			cp := int(coverPageVal.ToInteger())
-			md.CoverPage = &cp
+			f := coverPageVal.ToFloat()
+			if !math.IsNaN(f) && !math.IsInf(f, 0) && f >= 0 {
+				cp := int(f)
+				md.CoverPage = &cp
+			}
 		}
 
 		// genres -> []string
@@ -556,11 +561,15 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 		md.CoverData = parseByteData(coverDataVal)
 	}
 
-	// coverPage -> *int
+	// coverPage -> *int (only accept finite non-negative integers; reject
+	// negative, NaN, and Infinity to avoid broken previews downstream)
 	coverPageVal := obj.Get("coverPage")
 	if coverPageVal != nil && !goja.IsUndefined(coverPageVal) && !goja.IsNull(coverPageVal) {
-		cp := int(coverPageVal.ToInteger())
-		md.CoverPage = &cp
+		f := coverPageVal.ToFloat()
+		if !math.IsNaN(f) && !math.IsInf(f, 0) && f >= 0 {
+			cp := int(f)
+			md.CoverPage = &cp
+		}
 	}
 
 	// duration -> time.Duration (from seconds float)
