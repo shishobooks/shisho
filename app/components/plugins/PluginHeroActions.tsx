@@ -13,10 +13,14 @@ import { useReloadPlugin } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
 
 export interface PluginHeroActionsProps {
+  canWrite: boolean;
   plugin: Plugin;
 }
 
-export const PluginHeroActions = ({ plugin }: PluginHeroActionsProps) => {
+export const PluginHeroActions = ({
+  canWrite,
+  plugin,
+}: PluginHeroActionsProps) => {
   const [manifestOpen, setManifestOpen] = useState(false);
   const reload = useReloadPlugin();
 
@@ -32,7 +36,7 @@ export const PluginHeroActions = ({ plugin }: PluginHeroActionsProps) => {
   return (
     <>
       <div className="flex items-center gap-1">
-        {plugin.scope === "local" && (
+        {canWrite && plugin.scope === "local" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

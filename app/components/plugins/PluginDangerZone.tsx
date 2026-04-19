@@ -8,13 +8,19 @@ import { useUninstallPlugin } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
 
 export interface PluginDangerZoneProps {
+  canWrite: boolean;
   plugin: Plugin;
 }
 
-export const PluginDangerZone = ({ plugin }: PluginDangerZoneProps) => {
+export const PluginDangerZone = ({
+  canWrite,
+  plugin,
+}: PluginDangerZoneProps) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const navigate = useNavigate();
   const uninstall = useUninstallPlugin();
+
+  if (!canWrite) return null;
 
   const handleUninstall = () => {
     uninstall.mutate(

@@ -12,6 +12,7 @@ import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 export interface PluginDetailHeroProps {
   available?: AvailablePlugin;
+  canWrite: boolean;
   id: string;
   installed?: Plugin;
   isTogglingEnabled?: boolean;
@@ -23,6 +24,7 @@ export interface PluginDetailHeroProps {
 
 export const PluginDetailHero = ({
   available,
+  canWrite,
   id,
   installed,
   isTogglingEnabled,
@@ -90,21 +92,23 @@ export const PluginDetailHero = ({
 
       {installed && (
         <div className="flex flex-col items-end gap-3">
-          {updateAvailable && (
+          {canWrite && updateAvailable && (
             <Button disabled={isUpdating} onClick={onUpdate}>
               {isUpdating ? "Updating…" : `Update to ${updateAvailable}`}
             </Button>
           )}
-          <div className="flex items-center gap-2">
-            <Label htmlFor="plugin-enabled">Enabled</Label>
-            <Switch
-              checked={installed.status === PluginStatusActive}
-              disabled={isTogglingEnabled}
-              id="plugin-enabled"
-              onCheckedChange={onToggleEnabled}
-            />
-          </div>
-          <PluginHeroActions plugin={installed} />
+          {canWrite && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="plugin-enabled">Enabled</Label>
+              <Switch
+                checked={installed.status === PluginStatusActive}
+                disabled={isTogglingEnabled}
+                id="plugin-enabled"
+                onCheckedChange={onToggleEnabled}
+              />
+            </div>
+          )}
+          <PluginHeroActions canWrite={canWrite} plugin={installed} />
         </div>
       )}
     </div>

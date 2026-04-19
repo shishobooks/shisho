@@ -19,6 +19,7 @@ import { formatMetadataFieldLabel } from "@/utils/format";
 const SECRET_MASK = "***";
 
 export interface PluginConfigFormProps {
+  canWrite: boolean;
   id: string;
   onDirtyChange?: (isDirty: boolean) => void;
   onSaved?: () => void;
@@ -26,6 +27,7 @@ export interface PluginConfigFormProps {
 }
 
 export const PluginConfigForm = ({
+  canWrite,
   id,
   onDirtyChange,
   onSaved,
@@ -200,6 +202,7 @@ export const PluginConfigForm = ({
           <div className="flex items-center gap-2">
             <Switch
               checked={value === "true"}
+              disabled={!canWrite}
               id={fieldId}
               onCheckedChange={(checked) =>
                 handleChange(checked ? "true" : "false")
@@ -211,7 +214,8 @@ export const PluginConfigForm = ({
           </div>
         ) : field.type === "select" ? (
           <select
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canWrite}
             id={fieldId}
             onChange={(e) => handleChange(e.target.value)}
             value={value}
@@ -225,6 +229,7 @@ export const PluginConfigForm = ({
           </select>
         ) : field.type === "textarea" ? (
           <Textarea
+            disabled={!canWrite}
             id={fieldId}
             onChange={(e) => handleChange(e.target.value)}
             rows={4}
@@ -232,6 +237,7 @@ export const PluginConfigForm = ({
           />
         ) : field.type === "number" ? (
           <Input
+            disabled={!canWrite}
             id={fieldId}
             max={field.max ?? undefined}
             min={field.min ?? undefined}
@@ -241,6 +247,7 @@ export const PluginConfigForm = ({
           />
         ) : (
           <Input
+            disabled={!canWrite}
             id={fieldId}
             onChange={(e) => handleChange(e.target.value)}
             type={field.secret ? "password" : "text"}
@@ -295,6 +302,7 @@ export const PluginConfigForm = ({
                 </span>
                 <Switch
                   checked={fieldSettings[field] ?? true}
+                  disabled={!canWrite}
                   onCheckedChange={(checked) =>
                     handleFieldToggle(field, checked)
                   }
@@ -313,6 +321,7 @@ export const PluginConfigForm = ({
             <div className="flex items-center gap-2">
               <Input
                 className="w-24"
+                disabled={!canWrite}
                 max={100}
                 min={0}
                 onChange={(e) => {
@@ -329,27 +338,29 @@ export const PluginConfigForm = ({
         </>
       )}
 
-      <div className="flex justify-end pt-2">
-        <Button
-          disabled={
-            isLoading ||
-            saveConfig.isPending ||
-            saveFieldSettings.isPending ||
-            !data ||
-            (!hasSchema && !hasDeclaredFields)
-          }
-          onClick={handleSave}
-        >
-          {saveConfig.isPending || saveFieldSettings.isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            "Save"
-          )}
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end pt-2">
+          <Button
+            disabled={
+              isLoading ||
+              saveConfig.isPending ||
+              saveFieldSettings.isPending ||
+              !data ||
+              (!hasSchema && !hasDeclaredFields)
+            }
+            onClick={handleSave}
+          >
+            {saveConfig.isPending || saveFieldSettings.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

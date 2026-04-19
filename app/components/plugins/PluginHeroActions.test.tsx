@@ -49,8 +49,15 @@ const wrap = (ui: React.ReactNode) => (
 );
 
 describe("PluginHeroActions", () => {
-  it("shows reload button only for local-scope plugins", () => {
-    render(wrap(<PluginHeroActions plugin={makePlugin({ scope: "local" })} />));
+  it("shows reload button only for local-scope plugins when canWrite", () => {
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
+    );
     expect(
       screen.getByRole("button", { name: /reload plugin from disk/i }),
     ).toBeInTheDocument();
@@ -58,7 +65,26 @@ describe("PluginHeroActions", () => {
 
   it("does not show reload button for non-local plugins", () => {
     render(
-      wrap(<PluginHeroActions plugin={makePlugin({ scope: "shisho" })} />),
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "shisho" })}
+        />,
+      ),
+    );
+    expect(
+      screen.queryByRole("button", { name: /reload plugin from disk/i }),
+    ).toBeNull();
+  });
+
+  it("does not show reload button when canWrite is false", () => {
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={false}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
     );
     expect(
       screen.queryByRole("button", { name: /reload plugin from disk/i }),
@@ -66,7 +92,28 @@ describe("PluginHeroActions", () => {
   });
 
   it("always shows view manifest button", () => {
-    render(wrap(<PluginHeroActions plugin={makePlugin({ scope: "local" })} />));
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: /view manifest/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows view manifest button even when canWrite is false", () => {
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={false}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
+    );
     expect(
       screen.getByRole("button", { name: /view manifest/i }),
     ).toBeInTheDocument();
@@ -74,7 +121,12 @@ describe("PluginHeroActions", () => {
 
   it("also shows view manifest for non-local plugins", () => {
     render(
-      wrap(<PluginHeroActions plugin={makePlugin({ scope: "shisho" })} />),
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "shisho" })}
+        />,
+      ),
     );
     expect(
       screen.getByRole("button", { name: /view manifest/i }),
@@ -85,7 +137,14 @@ describe("PluginHeroActions", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockReloadMutateAsync.mockResolvedValue({});
 
-    render(wrap(<PluginHeroActions plugin={makePlugin({ scope: "local" })} />));
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
+    );
 
     await user.click(
       screen.getByRole("button", { name: /reload plugin from disk/i }),
@@ -107,7 +166,14 @@ describe("PluginHeroActions", () => {
   it("opens the manifest dialog when view manifest is clicked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    render(wrap(<PluginHeroActions plugin={makePlugin({ scope: "local" })} />));
+    render(
+      wrap(
+        <PluginHeroActions
+          canWrite={true}
+          plugin={makePlugin({ scope: "local" })}
+        />,
+      ),
+    );
 
     await user.click(screen.getByRole("button", { name: /view manifest/i }));
 

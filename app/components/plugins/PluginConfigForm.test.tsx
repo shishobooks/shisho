@@ -68,13 +68,13 @@ const wrap = (ui: React.ReactNode) => (
 
 describe("PluginConfigForm", () => {
   it("renders the declared schema fields", () => {
-    render(wrap(<PluginConfigForm id="test" scope="shisho" />));
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
     expect(screen.getByLabelText(/api key/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/max results/i)).toBeInTheDocument();
   });
 
   it("calls save with updated values when the user clicks Save", async () => {
-    render(wrap(<PluginConfigForm id="test" scope="shisho" />));
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
     fireEvent.change(screen.getByLabelText(/api key/i), {
       target: { value: "sk-123" },
     });

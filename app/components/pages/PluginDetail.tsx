@@ -16,12 +16,15 @@ import {
   useUpdatePlugin,
   useUpdatePluginVersion,
 } from "@/hooks/queries/plugins";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canWrite = hasPermission("config", "write");
   const installedQuery = usePluginsInstalled();
   const availableQuery = usePluginsAvailable();
   const updatePlugin = useUpdatePlugin();
@@ -123,6 +126,7 @@ export const PluginDetail = () => {
       {!isLoading && !hasError && !notFound && scope && id && (
         <PluginDetailHero
           available={available}
+          canWrite={canWrite}
           id={id}
           installed={installed}
           isTogglingEnabled={updatePlugin.isPending}
@@ -144,6 +148,7 @@ export const PluginDetail = () => {
       {installed && scope && id && (
         <section className="space-y-3 rounded-md border border-border p-6">
           <PluginConfigForm
+            canWrite={canWrite}
             id={id}
             onDirtyChange={setConfigDirty}
             scope={scope}
@@ -151,7 +156,7 @@ export const PluginDetail = () => {
         </section>
       )}
 
-      {installed && <PluginDangerZone plugin={installed} />}
+      {installed && <PluginDangerZone canWrite={canWrite} plugin={installed} />}
 
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}
