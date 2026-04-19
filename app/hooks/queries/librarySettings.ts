@@ -28,6 +28,7 @@ export const useLibrarySettings = (
   > = {},
 ) => {
   return useQuery<LibrarySettings, ShishoAPIError>({
+    enabled: Boolean(libraryId),
     ...options,
     queryKey: [QueryKey.LibrarySettings, libraryId],
     queryFn: ({ signal }) => {
@@ -60,7 +61,9 @@ export const useUpdateLibrarySettings = (libraryId: number) => {
     },
     onSuccess: (data) => {
       queryClient.setQueryData([QueryKey.LibrarySettings, libraryId], data);
-      // The gallery ordering may change; invalidate the books cache.
+      // Gallery ordering may change, so invalidate the list cache.
+      // RetrieveBook is intentionally not invalidated — sort preferences
+      // don't change individual book data.
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
     },
   });
