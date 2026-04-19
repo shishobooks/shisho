@@ -57,7 +57,9 @@ export const PluginDetail = () => {
         enabled ? `${installed.name} enabled` : `${installed.name} disabled`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update plugin status",
+      );
     }
   };
 

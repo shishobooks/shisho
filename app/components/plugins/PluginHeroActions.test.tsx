@@ -3,12 +3,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 const mockReloadMutateAsync = vi.fn();
-const mockReloadIsPending = vi.fn(() => false);
 
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginManifest: () => ({
@@ -17,7 +17,7 @@ vi.mock("@/hooks/queries/plugins", () => ({
     isLoading: false,
   }),
   useReloadPlugin: () => ({
-    isPending: mockReloadIsPending(),
+    isPending: false,
     mutateAsync: mockReloadMutateAsync,
   }),
 }));
@@ -96,6 +96,11 @@ describe("PluginHeroActions", () => {
         id: "my-plugin",
         scope: "local",
       });
+    });
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "My Plugin reloaded from disk",
+      );
     });
   });
 
