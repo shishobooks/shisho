@@ -39,10 +39,12 @@ export const PluginLogo = ({
 
   return (
     <div
+      aria-label={!showImage ? `${id} logo` : undefined}
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden",
         className,
       )}
+      role={!showImage ? "img" : undefined}
       style={{
         width: size,
         height: size,
@@ -67,6 +69,7 @@ export const PluginLogo = ({
         />
       ) : (
         <span
+          aria-hidden="true"
           className="font-semibold text-white"
           style={{ fontSize: size * 0.4 }}
         >

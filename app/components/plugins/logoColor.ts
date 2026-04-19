@@ -26,12 +26,13 @@ export const derivePluginInitials = (id: string): string => {
 };
 
 const hashString = (s: string): number => {
-  // djb2-style hash, deterministic, no dependencies
+  // djb2-style hash; `>>> 0` coerces to an unsigned 32-bit int so the result is
+  // always non-negative (avoids the `Math.abs(INT32_MIN) === INT32_MIN` pitfall).
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
     h = (h * 33) ^ s.charCodeAt(i);
   }
-  return Math.abs(h);
+  return h >>> 0;
 };
 
 export const getPluginFallbackColor = (scope: string, id: string): string => {

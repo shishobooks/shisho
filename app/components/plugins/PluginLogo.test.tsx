@@ -18,13 +18,15 @@ describe("PluginLogo", () => {
   });
 
   it("falls back to initials when imageUrl is missing", () => {
-    render(<PluginLogo id="google-books" scope="shisho" size={40} />);
+    const { container } = render(
+      <PluginLogo id="google-books" scope="shisho" size={40} />,
+    );
     expect(screen.getByText("GB")).toBeInTheDocument();
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("swaps to initials when the <img> onError fires", () => {
-    render(
+    const { container } = render(
       <PluginLogo
         id="google-books"
         imageUrl="https://broken"
@@ -33,9 +35,17 @@ describe("PluginLogo", () => {
       />,
     );
     const img = screen.getByRole("img");
+    expect(container.querySelector("img")).not.toBeNull();
     fireEvent.error(img);
     expect(screen.getByText("GB")).toBeInTheDocument();
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("gives the initials variant an accessible role+label", () => {
+    render(<PluginLogo id="google-books" scope="shisho" size={40} />);
+    expect(
+      screen.getByRole("img", { name: /google-books logo/i }),
+    ).toBeInTheDocument();
   });
 
   it("sizes the container to the size prop", () => {

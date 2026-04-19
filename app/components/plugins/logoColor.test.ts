@@ -41,4 +41,13 @@ describe("getPluginFallbackColor", () => {
     const color = getPluginFallbackColor("shisho", "google-books");
     expect(color).toMatch(/^#([0-9a-f]{6})$/i);
   });
+
+  it("never returns undefined (INT32_MIN regression guard)", () => {
+    // Stress test: random-ish ids shouldn't produce an invalid palette lookup.
+    for (let i = 0; i < 1000; i++) {
+      const color = getPluginFallbackColor("shisho", `stress-${i}-${i * 7}`);
+      expect(color).toBeDefined();
+      expect(color).toMatch(/^#([0-9a-f]{6})$/i);
+    }
+  });
 });
