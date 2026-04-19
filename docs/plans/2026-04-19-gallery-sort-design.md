@@ -101,15 +101,17 @@ Rationale for this shape over parallel arrays (`?sort_by=author,series&sort_dir=
 
 The backend accepts exactly these field tokens. Any other token is rejected.
 
-| Field             | Source (primary)                                 | Fallback for missing primary            | Contextual direction labels |
-|-------------------|--------------------------------------------------|-----------------------------------------|-----------------------------|
-| `title`           | `books.sort_title`                               | —                                       | A → Z / Z → A               |
-| `author`          | primary author's `persons.sort_name` (primary = `authors` row for this book with lowest `sort_order`, ties broken by `authors.id ASC`; books with zero authors sort last) | — | A → Z / Z → A |
-| `series`          | series `sort_name`, then `book_series.series_number ASC` | — (books with no series always sort last, regardless of direction; see NULLS-LAST note below) | A → Z / Z → A |
-| `date_added`      | `books.created_at`                               | —                                       | Newest / Oldest             |
-| `date_released`   | primary file's `release_date`                    | any other file on the book with a non-NULL `release_date` | Newest / Oldest |
-| `page_count`      | primary file's `page_count`                      | any other file on the book with a non-NULL `page_count`  | Shortest / Longest |
-| `duration`        | primary file's `audiobook_duration_seconds`      | any other file on the book with a non-NULL `audiobook_duration_seconds` | Shortest / Longest |
+| Field             | Source (primary)                                 | Fallback for missing primary            |
+|-------------------|--------------------------------------------------|-----------------------------------------|
+| `title`           | `books.sort_title`                               | —                                       |
+| `author`          | primary author's `persons.sort_name` (primary = `authors` row for this book with lowest `sort_order`, ties broken by `authors.id ASC`; books with zero authors sort last) | — |
+| `series`          | series `sort_name`, then `book_series.series_number ASC` | — (books with no series always sort last, regardless of direction; see NULLS-LAST note below) |
+| `date_added`      | `books.created_at`                               | —                                       |
+| `date_released`   | primary file's `release_date`                    | any other file on the book with a non-NULL `release_date` |
+| `page_count`      | primary file's `page_count`                      | any other file on the book with a non-NULL `page_count`  |
+| `duration`        | primary file's `audiobook_duration_seconds`      | any other file on the book with a non-NULL `audiobook_duration_seconds` |
+
+Direction is shown as a simple arrow (↑ / ↓) in both the sheet and the chips — no per-field contextual labels. Rationale: consistent sizing across all fields and both surfaces, and users understand arrow semantics well enough that picking the wrong one is a one-click correction.
 
 ### "Primary file with fallback" semantics
 
@@ -471,7 +473,7 @@ All Go tests use `t.Parallel()` per project convention except any that mutate gl
 
 - `app/lib/sortSpec.test.ts` — round-trips parse ↔ serialize; rejects same inputs the Go parser does; whitelist constant matches the Go side (maintained manually — failing test if they drift).
 - `app/components/library/SortSheet.test.tsx` — adding/removing levels, drag-reorder updates the URL, direction toggle updates the URL, "Save as default" fires the mutation and clears the URL.
-- `app/components/library/SortedByChips.test.tsx` — clicking a chip removes that level from the URL; removing the last level clears `?sort=` and hides the chip bar; chip labels render with contextual direction text (A → Z, Newest / Oldest, etc.).
+- `app/components/library/SortedByChips.test.tsx` — clicking a chip removes that level from the URL; removing the last level clears `?sort=` and hides the chip bar; chip labels render with the field name plus an arrow glyph (↑ for asc, ↓ for desc).
 - `e2e/gallery-sort.spec.ts` — Playwright E2E covering: default load → change sort → URL updates → dot appears → save as default → URL clears, dot disappears → reload → saved sort renders → reset → builtin renders. Runs in both Chromium and Firefox per project convention.
 
 ### Docs
@@ -504,11 +506,9 @@ Captured here for posterity so implementation doesn't accidentally re-litigate t
 
 - **Filters button:** icon-only (unchanged from today). No "Filters" text label.
 - **Clicking a "Sorted by" chip:** removes that level from the URL. Parallels the "click a filter chip to remove the filter" interaction in `ActiveFilterChips`. UX consistency with filter chips outweighs the discoverability of opening the sheet.
-- **Direction labels:** contextual (A → Z / Z → A, Newest / Oldest, Shortest / Longest). Generic `↑ / ↓` rejected as less readable.
+- **Direction labels:** simple arrows (`↑` / `↓`) everywhere — sheet and chips. Contextual labels ("A → Z", "Newest / Oldest", "Shortest / Longest") considered but rejected: arrows keep sizing consistent across fields and surfaces, and picking the wrong direction is a one-click correction.
 - **Save-as-default scope:** per-library only for v1 (this design). A global "always sort this way" preference could be added later as a column on `user_settings`; no schema changes needed in `user_library_settings` to support that.
 
-## Open UX Questions (non-blocking)
+## Open UX Questions
 
-These are polish details that can be adjusted during implementation without any schema or API changes.
-
-1. **Direction-label sizing in the sort sheet.** The contextual labels ("A → Z", "Shortest / Longest") are wider than a simple "↑ / ↓" glyph, and they sit next to the field dropdown. There's a concern the two controls will feel cramped on narrow sheet widths (especially mobile drawer). Plan: build it with contextual labels, visual-check during implementation, and fall back to truncated labels or an icon-only variant *inside the sheet only* if it's noticeably tight. Chip labels stay contextual regardless.
+None outstanding. All UI decisions needed to begin implementation are captured in "Resolved UX Decisions" above; any further polish (exact chip padding, arrow glyph weight, etc.) can be adjusted during implementation without schema or API changes.
