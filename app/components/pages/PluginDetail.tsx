@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
+import { PluginPermissions } from "@/components/plugins/PluginPermissions";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
 import { Button } from "@/components/ui/button";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
@@ -90,6 +91,10 @@ export const PluginDetail = () => {
 
       {!isLoading && !hasError && !notFound && (
         <PluginVersionHistory available={available} installed={installed} />
+      )}
+
+      {!isLoading && !hasError && !notFound && (
+        <PluginPermissions available={available} installed={installed} />
       )}
 
       {installed && scope && id && (
