@@ -76,7 +76,13 @@ export function parseSortSpec(s: string): SortLevel[] | null {
 
   for (const part of parts) {
     if (!part) return null;
-    const [field, direction] = part.split(":", 2);
+    // Use unbounded split + length check so trailing-colon junk like
+    // "title:asc:extra" rejects instead of being silently truncated by
+    // JS's split(_, 2). This mirrors Go's strings.SplitN(_, _, 2) +
+    // direction-validation behavior in pkg/sortspec.
+    const pieces = part.split(":");
+    if (pieces.length !== 2) return null;
+    const [field, direction] = pieces;
     if (!field || !direction) return null;
     if (!isSortField(field)) return null;
     if (!isSortDirection(direction)) return null;

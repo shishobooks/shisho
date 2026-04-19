@@ -39,10 +39,19 @@ describe("parseSortSpec", () => {
     expect(parseSortSpec("")).toBeNull();
   });
 
-  it("ignores trailing colon segments (title:asc:extra parses as valid)", () => {
-    expect(parseSortSpec("title:asc:extra")).toEqual([
-      { field: "title", direction: "asc" },
-    ]);
+  it("returns null for trailing colon segments (title:asc:extra)", () => {
+    // Mirrors Go's pkg/sortspec which rejects "asc:extra" as an invalid
+    // direction. JS's split(_, 2) would silently truncate; we use an
+    // unbounded split + length check to match Go.
+    expect(parseSortSpec("title:asc:extra")).toBeNull();
+  });
+
+  it("returns null for empty middle segment (title::asc)", () => {
+    expect(parseSortSpec("title::asc")).toBeNull();
+  });
+
+  it("returns null for trailing colon (title:asc:)", () => {
+    expect(parseSortSpec("title:asc:")).toBeNull();
   });
 
   it("returns null for input containing whitespace", () => {
