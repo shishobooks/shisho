@@ -30,7 +30,7 @@ func (h *libraryHandler) getLibrarySettings(c echo.Context) error {
 	}
 
 	if !user.HasLibraryAccess(libraryID) {
-		return errcodes.Forbidden("Access to this library")
+		return errcodes.Forbidden("You don't have access to this library")
 	}
 
 	row, err := h.settingsService.GetLibrarySettings(ctx, user.ID, libraryID)
@@ -59,7 +59,7 @@ func (h *libraryHandler) updateLibrarySettings(c echo.Context) error {
 	}
 
 	if !user.HasLibraryAccess(libraryID) {
-		return errcodes.Forbidden("Access to this library")
+		return errcodes.Forbidden("You don't have access to this library")
 	}
 
 	var payload UpdateLibrarySettingsPayload
