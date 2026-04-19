@@ -24,7 +24,13 @@ const formatReleaseDate = (
   raw: string,
 ): { absolute: string; relative: string } | null => {
   if (!raw) return null;
-  const d = new Date(raw);
+  // Date-only strings like "2026-04-14" are parsed as midnight UTC by
+  // `new Date()`, which renders as the previous day west of UTC. Detect the
+  // format and construct a local-midnight Date instead.
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const d = dateOnly
+    ? new Date(+dateOnly[1], +dateOnly[2] - 1, +dateOnly[3])
+    : new Date(raw);
   if (Number.isNaN(d.getTime())) return null;
   const absolute = d.toLocaleDateString(undefined, {
     day: "numeric",
