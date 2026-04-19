@@ -26,7 +26,7 @@ export const PluginDangerZone = ({ plugin }: PluginDangerZoneProps) => {
         onSuccess: () => {
           toast.success(`${plugin.name} uninstalled`);
           setConfirmOpen(false);
-          navigate("/plugins");
+          navigate("/settings/plugins");
         },
       },
     );
