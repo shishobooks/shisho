@@ -9,13 +9,14 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { DiscoverTab } from "@/components/plugins/DiscoverTab";
 import { InstalledTab } from "@/components/plugins/InstalledTab";
+import { TabUpdatePill } from "@/components/plugins/TabUpdatePill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -464,6 +465,12 @@ const AdminPlugins = () => {
 
   const activeTab: TabValue = normalizeTab(tab);
 
+  const { data: plugins = [] } = usePluginsInstalled();
+  const updateCount = useMemo(
+    () => plugins.filter((p) => !!p.update_available_version).length,
+    [plugins],
+  );
+
   const handleTabChange = (value: string) => {
     if (value === "installed") {
       navigate("/settings/plugins");
@@ -487,7 +494,7 @@ const AdminPlugins = () => {
       <Tabs onValueChange={handleTabChange} value={activeTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger className="text-xs sm:text-sm" value="installed">
-            Installed
+            Installed <TabUpdatePill count={updateCount} />
           </TabsTrigger>
           <TabsTrigger className="text-xs sm:text-sm" value="discover">
             Discover
