@@ -1,5 +1,5 @@
 import { CheckSquare, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
@@ -306,19 +306,45 @@ const HomeContent = () => {
     });
   };
 
-  const applySortLevels = (next: readonly SortLevel[]) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      const serialized = serializeSortSpec(next);
-      if (serialized && !sortSpecsEqual(next, defaultSort)) {
-        params.set("sort", serialized);
-      } else {
-        params.delete("sort");
-      }
-      params.set("page", "1");
-      return params;
-    });
-  };
+  // effectiveSort may change when settings or URL changes; React Compiler allows this
+  /* eslint-disable react-hooks/preserve-manual-memoization */
+  const handleSaveSortAsDefault = useCallback(() => {
+    if (libraryIdNum === undefined) return;
+    const serialized = serializeSortSpec(effectiveSort);
+    updateLibrarySettings.mutate(
+      { sort_spec: serialized || null },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("sort");
+            return params;
+          });
+        },
+      },
+    );
+  }, [libraryIdNum, effectiveSort, updateLibrarySettings, setSearchParams]);
+  /* eslint-enable react-hooks/preserve-manual-memoization */
+
+  // defaultSort may change when library settings load; React Compiler allows this
+  /* eslint-disable react-hooks/preserve-manual-memoization */
+  const applySortLevels = useCallback(
+    (next: readonly SortLevel[]) => {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        const serialized = serializeSortSpec(next);
+        if (serialized && !sortSpecsEqual(next, defaultSort)) {
+          params.set("sort", serialized);
+        } else {
+          params.delete("sort");
+        }
+        params.set("page", "1");
+        return params;
+      });
+    },
+    [defaultSort, setSearchParams],
+  );
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const hasActiveFilters =
     selectedFileTypes.length > 0 ||
@@ -378,6 +404,7 @@ const HomeContent = () => {
     genreIds: selectedGenreIds,
     tagIds: selectedTagIds,
     language: languageParam,
+    sort: sortParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
     null,
@@ -406,6 +433,7 @@ const HomeContent = () => {
     selectedGenreIds.length,
     selectedTagIds.length,
     languageParam,
+    sortParam,
   ]);
 
   // Data is stale if filters changed but query hasn't completed yet
@@ -486,22 +514,7 @@ const HomeContent = () => {
             isSaving={updateLibrarySettings.isPending}
             levels={effectiveSort}
             onChange={(next) => applySortLevels(next)}
-            onSaveAsDefault={() => {
-              if (libraryIdNum === undefined) return;
-              const serialized = serializeSortSpec(effectiveSort);
-              updateLibrarySettings.mutate(
-                { sort_spec: serialized || null },
-                {
-                  onSuccess: () => {
-                    setSearchParams((prev) => {
-                      const params = new URLSearchParams(prev);
-                      params.delete("sort");
-                      return params;
-                    });
-                  },
-                },
-              );
-            }}
+            onSaveAsDefault={handleSaveSortAsDefault}
             trigger={<SortButton isDirty={isSortDirty} />}
           />
           <div className="flex-1" />
