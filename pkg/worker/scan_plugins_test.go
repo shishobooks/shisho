@@ -1,7 +1,10 @@
 package worker
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1998,4 +2001,87 @@ func TestScanWithPluginMetadataEnricher_PerLibraryFieldOverride(t *testing.T) {
 
 	// Description should NOT be present due to per-library override
 	assert.Nil(t, book.Description, "description should be filtered due to per-library override")
+}
+
+// TestScanWithEnricher_CoverPageForCBZ verifies that when a metadata enricher
+// returns coverPage for a CBZ file during an automated scan, Shisho writes the
+// selected page back to file.CoverPage, re-extracts that page as the on-disk
+// cover image, and records the enricher as the cover source.
+func TestScanWithEnricher_CoverPageForCBZ(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "cover-page-enricher",
+  "name": "Cover Page Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Picks page 2 as the cover",
+      "fileTypes": ["cbz"],
+      "fields": ["cover"]
+    }
+  }
+}`
+	enricherMainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{ title: ctx.query, coverPage: 2 }] };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "cover-page-enricher", enricherManifest, enricherMainJS)
+
+	pluginService := plugins.NewService(tc.db)
+	err := pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "cover-page-enricher")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Page Picker Comic")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	cbzPath := filepath.Join(bookDir, "comic.cbz")
+	writeCBZWithColoredPages(t, cbzPath, []color.RGBA{
+		{R: 255, G: 0, B: 0, A: 255},   // page 0: red (file parser default)
+		{R: 0, G: 255, B: 0, A: 255},   // page 1: green
+		{R: 30, G: 40, B: 250, A: 255}, // page 2: blue (enricher's choice)
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	file := files[0]
+
+	// The enricher's coverPage must land in the DB.
+	require.NotNil(t, file.CoverPage, "file.CoverPage should be set from enricher")
+	assert.Equal(t, 2, *file.CoverPage)
+
+	// The cover source must reflect the enricher.
+	require.NotNil(t, file.CoverSource)
+	assert.Equal(t, "plugin:test/cover-page-enricher", *file.CoverSource)
+
+	// The on-disk cover image must be page 2 (blue), not page 0 (red).
+	require.NotNil(t, file.CoverImageFilename)
+	coverPath := filepath.Join(bookDir, *file.CoverImageFilename)
+	coverBytes, err := os.ReadFile(coverPath)
+	require.NoError(t, err)
+	img, _, err := image.Decode(bytes.NewReader(coverBytes))
+	require.NoError(t, err)
+	bounds := img.Bounds()
+	r, g, b, _ := img.At((bounds.Min.X+bounds.Max.X)/2, (bounds.Min.Y+bounds.Max.Y)/2).RGBA()
+	assert.Less(t, int(r>>8), 80, "red channel should be low (page 2 is blue)")
+	assert.Less(t, int(g>>8), 80, "green channel should be low (page 2 is blue)")
+	assert.Greater(t, int(b>>8), 150, "blue channel should be high (page 2 is blue)")
 }

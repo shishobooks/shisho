@@ -428,9 +428,11 @@ export function IdentifyBookDialog({
                               />
                             );
                           }
+                          const previewFileId =
+                            selectedFileId ?? selectedFile?.id;
                           if (
                             result.cover_page != null &&
-                            selectedFileId &&
+                            previewFileId &&
                             (selectedFileType === "cbz" ||
                               selectedFileType === "pdf")
                           ) {
@@ -438,7 +440,7 @@ export function IdentifyBookDialog({
                               <img
                                 alt=""
                                 className={thumbClass}
-                                src={`/api/books/files/${selectedFileId}/page/${result.cover_page}`}
+                                src={`/api/books/files/${previewFileId}/page/${result.cover_page}`}
                               />
                             );
                           }

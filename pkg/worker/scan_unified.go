@@ -2079,6 +2079,66 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Update cover page (from enricher-supplied metadata) for page-based formats.
+	// Plugin enrichers can identify a cover page that isn't the file parser's
+	// default (typically page 0); apply their value when the source priority
+	// allows. The file parser's own metadata.CoverPage is also handled here —
+	// scanFileCreateNew already wrote it during the initial insert, so the
+	// isDifferent guard makes this a no-op for that path.
+	if metadata.CoverPage != nil && models.IsPageBasedFileType(file.FileType) {
+		metadataCoverSource := metadata.SourceForField("cover")
+		existingCoverSource := ""
+		if file.CoverSource != nil {
+			existingCoverSource = *file.CoverSource
+		}
+
+		metadataPriority := models.GetDataSourcePriority(metadataCoverSource)
+		existingPriority := models.GetDataSourcePriority(existingCoverSource)
+		if existingCoverSource == "" {
+			existingPriority = models.GetDataSourcePriority(models.DataSourceFilepath)
+		}
+
+		shouldApply := forceRefresh || metadataPriority <= existingPriority
+		isDifferent := file.CoverPage == nil || *file.CoverPage != *metadata.CoverPage
+
+		if shouldApply && isDifferent {
+			coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
+			coverBaseName := filepath.Base(file.Filepath) + ".cover"
+
+			var coverFilename, coverMimeType string
+			switch file.FileType {
+			case models.FileTypePDF:
+				coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, *metadata.CoverPage)
+			case models.FileTypeCBZ:
+				coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *metadata.CoverPage)
+			}
+			if err != nil {
+				logWarn("failed to extract cover page from metadata", logger.Data{
+					"error":      err.Error(),
+					"cover_page": *metadata.CoverPage,
+					"source":     metadataCoverSource,
+				})
+			} else {
+				logInfo("updating cover page from metadata", logger.Data{
+					"from_page": file.CoverPage,
+					"to_page":   *metadata.CoverPage,
+					"source":    metadataCoverSource,
+				})
+
+				file.CoverPage = metadata.CoverPage
+				file.CoverImageFilename = &coverFilename
+				file.CoverMimeType = &coverMimeType
+				file.CoverSource = &metadataCoverSource
+
+				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+					Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
+				}); err != nil {
+					return nil, errors.Wrap(err, "failed to update cover page from metadata")
+				}
+			}
+		}
+	}
+
 	// ==========================================================================
 	// Write sidecar files
 	// ==========================================================================
