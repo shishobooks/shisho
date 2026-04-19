@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -126,5 +128,253 @@ func TestPersistMetadata_CoverWrite_RootLevelFile_SyntheticBookPath(t *testing.T
 
 	// CoverImageFilename should be set (to the filename only, not a full path).
 	require.NotNil(t, file.CoverImageFilename, "CoverImageFilename should be set on the file")
+	assert.Equal(t, "book.epub.cover.jpg", *file.CoverImageFilename)
+}
+
+// stubPageExtractor records calls and returns a fixed (filename, mimeType).
+// Set `wantErr` to simulate a failed extraction.
+type stubPageExtractor struct {
+	calls    []stubPageExtractorCall
+	filename string
+	mimeType string
+	wantErr  error
+}
+
+type stubPageExtractorCall struct {
+	FileID       int
+	BookFilepath string
+	Page         int
+}
+
+func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, error) {
+	s.calls = append(s.calls, stubPageExtractorCall{FileID: file.ID, BookFilepath: bookFilepath, Page: page})
+	if s.wantErr != nil {
+		return "", "", s.wantErr
+	}
+	return s.filename, s.mimeType, nil
+}
+
+func TestPersistMetadata_CoverPage_CBZ_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "comic.cbz")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+
+	pageCount := 10
+	file := &models.File{
+		ID:        1,
+		BookID:    1,
+		Filepath:  filePath,
+		FileType:  models.FileTypeCBZ,
+		PageCount: &pageCount,
+	}
+	book := &models.Book{
+		ID:        1,
+		LibraryID: 1,
+		Filepath:  libraryDir,
+		Files:     []*models.File{file},
+	}
+
+	extractor := &stubPageExtractor{filename: "comic.cbz.cover.jpg", mimeType: "image/jpeg"}
+
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			pageExtractor: extractor,
+		},
+	}
+
+	page := 3
+	md := &mediafile.ParsedMetadata{CoverPage: &page}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	require.Len(t, extractor.calls, 1)
+	assert.Equal(t, 1, extractor.calls[0].FileID)
+	assert.Equal(t, 3, extractor.calls[0].Page)
+
+	require.NotNil(t, file.CoverPage)
+	assert.Equal(t, 3, *file.CoverPage)
+	require.NotNil(t, file.CoverImageFilename)
+	assert.Equal(t, "comic.cbz.cover.jpg", *file.CoverImageFilename)
+	require.NotNil(t, file.CoverMimeType)
+	assert.Equal(t, "image/jpeg", *file.CoverMimeType)
+	require.NotNil(t, file.CoverSource)
+	assert.Equal(t, models.PluginDataSource("test", "plugin-id"), *file.CoverSource)
+}
+
+func TestPersistMetadata_CoverPage_PDF_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "book.pdf")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake pdf"), 0600))
+
+	pageCount := 100
+	file := &models.File{
+		ID: 2, BookID: 2, Filepath: filePath, FileType: models.FileTypePDF, PageCount: &pageCount,
+	}
+	book := &models.Book{ID: 2, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+
+	extractor := &stubPageExtractor{filename: "book.pdf.cover.jpg", mimeType: "image/jpeg"}
+	h := &handler{enrich: &enrichDeps{bookStore: &stubBookStoreForPersist{book: book}, pageExtractor: extractor}}
+
+	page := 7
+	md := &mediafile.ParsedMetadata{CoverPage: &page}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	require.Len(t, extractor.calls, 1)
+	assert.Equal(t, 7, extractor.calls[0].Page)
+	require.NotNil(t, file.CoverPage)
+	assert.Equal(t, 7, *file.CoverPage)
+}
+
+func TestPersistMetadata_CoverPage_OutOfBounds(t *testing.T) {
+	t.Parallel()
+
+	intPointer := func(v int) *int { return &v }
+
+	cases := []struct {
+		name      string
+		pageCount *int
+		page      int
+	}{
+		{"negative", intPointer(10), -1},
+		{"page equals count", intPointer(5), 5},
+		{"page above count", intPointer(5), 99},
+		{"page count unknown", nil, 3},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			libraryDir := t.TempDir()
+			filePath := filepath.Join(libraryDir, "comic.cbz")
+			require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+
+			file := &models.File{
+				ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeCBZ, PageCount: tc.pageCount,
+			}
+			book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+			extractor := &stubPageExtractor{filename: "x", mimeType: "image/jpeg"}
+			h := &handler{enrich: &enrichDeps{bookStore: &stubBookStoreForPersist{book: book}, pageExtractor: extractor}}
+
+			md := &mediafile.ParsedMetadata{CoverPage: &tc.page}
+
+			err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+			require.NoError(t, err)
+
+			assert.Empty(t, extractor.calls, "extractor should not be called for invalid page")
+			assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")
+			assert.Nil(t, file.CoverImageFilename, "file.CoverImageFilename should remain unchanged")
+		})
+	}
+}
+
+func TestPersistMetadata_CoverPage_ExtractorError(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "comic.cbz")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+
+	pageCount := 10
+	file := &models.File{
+		ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeCBZ, PageCount: &pageCount,
+	}
+	book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+
+	extractor := &stubPageExtractor{wantErr: errors.New("extraction failed")}
+	h := &handler{enrich: &enrichDeps{bookStore: &stubBookStoreForPersist{book: book}, pageExtractor: extractor}}
+
+	page := 3
+	md := &mediafile.ParsedMetadata{CoverPage: &page}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err, "extractor errors should be logged, not returned")
+
+	require.Len(t, extractor.calls, 1, "extractor should still be called once")
+	assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")
+	assert.Nil(t, file.CoverImageFilename, "file.CoverImageFilename should remain unchanged")
+	assert.Nil(t, file.CoverSource, "file.CoverSource should remain unchanged")
+}
+
+// Plugin returns both coverPage and coverData for a CBZ file — coverPage wins,
+// coverData is silently ignored (no .cover file written via the data path).
+func TestPersistMetadata_CoverPage_CBZ_BeatsCoverData(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "comic.cbz")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+
+	pageCount := 10
+	file := &models.File{
+		ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeCBZ, PageCount: &pageCount,
+	}
+	book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+	extractor := &stubPageExtractor{filename: "comic.cbz.cover.jpg", mimeType: "image/jpeg"}
+	h := &handler{enrich: &enrichDeps{bookStore: &stubBookStoreForPersist{book: book}, pageExtractor: extractor}}
+
+	page := 2
+	md := &mediafile.ParsedMetadata{
+		CoverPage:     &page,
+		CoverData:     makePersistTestJPEG(400, 600),
+		CoverMimeType: "image/jpeg",
+	}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	// coverPage path taken
+	require.Len(t, extractor.calls, 1)
+	require.NotNil(t, file.CoverPage)
+	assert.Equal(t, 2, *file.CoverPage)
+
+	// coverData file must NOT have been written alongside the file
+	_, err = os.Stat(filepath.Join(libraryDir, "comic.cbz.cover.png"))
+	assert.True(t, os.IsNotExist(err), "coverData should not have been written for a page-based file")
+	_, err = os.Stat(filepath.Join(libraryDir, "comic.cbz.cover.jpg"))
+	assert.True(t, os.IsNotExist(err), "coverData should not have been written for a page-based file (jpg path)")
+}
+
+// Plugin returns coverPage for a non-page-based format (EPUB) — coverPage is
+// silently ignored, coverData (if provided) is applied.
+func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0600))
+
+	file := &models.File{
+		ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeEPUB,
+	}
+	book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+	extractor := &stubPageExtractor{filename: "x", mimeType: "image/jpeg"}
+	h := &handler{enrich: &enrichDeps{bookStore: &stubBookStoreForPersist{book: book}, pageExtractor: extractor}}
+
+	page := 3
+	md := &mediafile.ParsedMetadata{
+		CoverPage:     &page,
+		CoverData:     makePersistTestJPEG(400, 600),
+		CoverMimeType: "image/jpeg",
+	}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	// Extractor must not be called for non-page-based files
+	assert.Empty(t, extractor.calls)
+	// file.CoverPage must remain unchanged
+	assert.Nil(t, file.CoverPage)
+	// coverData write path ran — CoverImageFilename is set
+	require.NotNil(t, file.CoverImageFilename)
 	assert.Equal(t, "book.epub.cover.jpg", *file.CoverImageFilename)
 }

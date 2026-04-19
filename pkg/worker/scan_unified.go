@@ -2035,45 +2035,93 @@ func (w *Worker) scanFileCore(
 		isDifferent := file.CoverPage == nil || *file.CoverPage != *fileSidecarData.CoverPage
 
 		if shouldApply && isDifferent {
-			// book.Filepath may be a synthetic organized-folder path that
-			// does not yet exist for root-level new files, so use the
-			// write-side helper that falls back to the file's parent dir.
-			coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
-
-			// Generate cover filename
-			filename := filepath.Base(file.Filepath)
-			coverBaseName := filename + ".cover"
-
-			// Extract the cover page from the source file.
-			var coverFilename, coverMimeType string
-			switch file.FileType {
-			case models.FileTypePDF:
-				coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
-			case models.FileTypeCBZ:
-				coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, *fileSidecarData.CoverPage)
-			default:
-				err = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
-			}
-			if err != nil {
+			fromPage := file.CoverPage
+			page := *fileSidecarData.CoverPage
+			extractErr, updateErr := w.applyPageCover(ctx, file, book, page, sidecarSource)
+			switch {
+			case extractErr != nil:
 				logWarn("failed to extract cover page from sidecar", logger.Data{
-					"error":      err.Error(),
-					"cover_page": *fileSidecarData.CoverPage,
+					"error":      extractErr.Error(),
+					"cover_page": page,
 				})
-			} else {
+			case updateErr != nil:
+				return nil, errors.Wrap(updateErr, "failed to update cover page from sidecar")
+			default:
 				logInfo("updating cover page from sidecar", logger.Data{
-					"from_page": file.CoverPage,
-					"to_page":   *fileSidecarData.CoverPage,
+					"from_page": fromPage,
+					"to_page":   page,
 				})
+			}
+		}
+	}
 
-				file.CoverPage = fileSidecarData.CoverPage
-				file.CoverImageFilename = &coverFilename
-				file.CoverMimeType = &coverMimeType
-				file.CoverSource = &sidecarSource
+	// Update cover page (from plugin-supplied metadata) for page-based formats.
+	// Plugin enrichers (and plugin fileParsers) can identify a cover page that
+	// isn't the file parser's default (typically page 0); apply their value
+	// when the source priority allows.
+	//
+	// This branch only fires for plugin-sourced CoverPage. The file parser's
+	// own default (cbz_metadata / pdf_metadata) is already written by
+	// scanFileCreateNew, and re-applying it here would silently revert a
+	// user's page-picker selection on any forced rescan — see
+	// TestRecoverMissingCover_RespectsCoverPage. Sidecar-sourced CoverPage is
+	// handled by the dedicated sidecar branch above.
+	metadataCoverSource := metadata.SourceForField("cover")
+	isPluginCoverSource := strings.HasPrefix(metadataCoverSource, models.DataSourcePluginPrefix)
+	if metadata.CoverPage != nil && models.IsPageBasedFileType(file.FileType) && isPluginCoverSource {
+		existingCoverSource := ""
+		if file.CoverSource != nil {
+			existingCoverSource = *file.CoverSource
+		}
 
-				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
-					Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
-				}); err != nil {
-					return nil, errors.Wrap(err, "failed to update cover page from sidecar")
+		metadataPriority := models.GetDataSourcePriority(metadataCoverSource)
+		existingPriority := models.GetDataSourcePriority(existingCoverSource)
+		if existingCoverSource == "" {
+			existingPriority = models.GetDataSourcePriority(models.DataSourceFilepath)
+		}
+
+		shouldApply := metadataPriority <= existingPriority
+		isDifferent := file.CoverPage == nil || *file.CoverPage != *metadata.CoverPage
+
+		if shouldApply && isDifferent {
+			page := *metadata.CoverPage
+			// Bounds guard — mirrors persistMetadata's handling so scan-path
+			// warnings are just as actionable as the identify-apply path.
+			switch {
+			case page < 0:
+				logWarn("plugin-provided cover page is negative, skipping", logger.Data{
+					"cover_page": page,
+					"source":     metadataCoverSource,
+				})
+			case file.PageCount == nil:
+				logWarn("cover page skipped: page count unknown", logger.Data{
+					"cover_page": page,
+					"source":     metadataCoverSource,
+				})
+			case page >= *file.PageCount:
+				logWarn("plugin-provided cover page is out of range, skipping", logger.Data{
+					"cover_page": page,
+					"page_count": *file.PageCount,
+					"source":     metadataCoverSource,
+				})
+			default:
+				fromPage := file.CoverPage
+				extractErr, updateErr := w.applyPageCover(ctx, file, book, page, metadataCoverSource)
+				switch {
+				case extractErr != nil:
+					logWarn("failed to extract cover page from metadata", logger.Data{
+						"error":      extractErr.Error(),
+						"cover_page": page,
+						"source":     metadataCoverSource,
+					})
+				case updateErr != nil:
+					return nil, errors.Wrap(updateErr, "failed to update cover page from metadata")
+				default:
+					logInfo("updating cover page from metadata", logger.Data{
+						"from_page": fromPage,
+						"to_page":   page,
+						"source":    metadataCoverSource,
+					})
 				}
 			}
 		}
@@ -3114,18 +3162,9 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		modified = true
 	}
 
-	// Merge file-parsed metadata as fallback for fields no enricher provided.
-	// This gives enrichers priority over file metadata (priority 2 > priority 3).
-	mergeEnrichedMetadata(&enrichedMeta, metadata, metadata.DataSource)
-
-	// Page-based formats (CBZ, PDF) derive covers from page content and must
-	// not have them replaced by enricher-downloaded images.
-	if models.IsPageBasedFileType(file.FileType) {
-		enrichedMeta.CoverData = metadata.CoverData
-		enrichedMeta.CoverMimeType = metadata.CoverMimeType
-		enrichedMeta.CoverPage = metadata.CoverPage
-		enrichedMeta.FieldDataSources["cover"] = metadata.SourceForField("cover")
-	}
+	// Merge file-parsed metadata as fallback and apply page-based cover
+	// protection. See mergeFileParserFallback for the full policy.
+	mergeFileParserFallback(&enrichedMeta, metadata, file.FileType)
 
 	// Copy technical fields that enrichers don't provide
 	enrichedMeta.Duration = metadata.Duration
@@ -3139,6 +3178,47 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	}
 
 	return &enrichedMeta
+}
+
+// mergeFileParserFallback merges file-parsed metadata into target as a
+// fallback for fields no enricher provided, then applies page-based-format
+// cover protection.
+//
+// For page-based formats (CBZ, PDF), plugin-provided image data
+// (coverData/coverUrl) must never replace page-derived covers, so CoverData
+// and CoverMimeType are reset to the file parser's values. Enricher-supplied
+// CoverPage IS honored — the merge already handles "enricher wins if set,
+// file parser fills in otherwise".
+//
+// Source-tracking nuance: FieldDataSources["cover"] is shared between
+// CoverData and CoverPage. The file-parser CoverData merge can overwrite the
+// "cover" source recorded by the enricher for CoverPage, so we capture the
+// pre-merge enricher state and restore it when appropriate.
+func mergeFileParserFallback(target, fileParsed *mediafile.ParsedMetadata, fileType string) {
+	// Capture enricher state before the file-parser merge possibly overwrites
+	// FieldDataSources["cover"] via its CoverData merge.
+	enricherSetCoverPage := target.CoverPage != nil
+	enricherCoverSource := ""
+	if target.FieldDataSources != nil {
+		enricherCoverSource = target.FieldDataSources["cover"]
+	}
+
+	// Merge file-parsed metadata as fallback for fields no enricher provided.
+	// This gives enrichers priority over file metadata (priority 2 > priority 3).
+	mergeEnrichedMetadata(target, fileParsed, fileParsed.DataSource)
+
+	// For page-based formats, reset image data to the file parser's values and
+	// restore the "cover" source to reflect whoever provided the CoverPage we
+	// kept.
+	if models.IsPageBasedFileType(fileType) {
+		target.CoverData = fileParsed.CoverData
+		target.CoverMimeType = fileParsed.CoverMimeType
+		if enricherSetCoverPage {
+			target.FieldDataSources["cover"] = enricherCoverSource
+		} else {
+			target.FieldDataSources["cover"] = fileParsed.SourceForField("cover")
+		}
+	}
 }
 
 // mergeEnrichedMetadata applies fields from enrichment result to the target
@@ -3570,6 +3650,39 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 	}
 
 	return nil
+}
+
+// applyPageCover renders `page` from the page-based file, writes it as the
+// cover image next to the book, and persists the cover_page /
+// cover_image_filename / cover_mime_type / cover_source update to the DB.
+// Returns (extractErr, updateErr). Callers typically treat extract errors as
+// non-fatal warnings and surface update errors.
+func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *models.Book, page int, source string) (extractErr, updateErr error) {
+	coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, file.Filepath)
+	coverBaseName := filepath.Base(file.Filepath) + ".cover"
+
+	var coverFilename, coverMimeType string
+	switch file.FileType {
+	case models.FileTypePDF:
+		coverFilename, coverMimeType, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
+	case models.FileTypeCBZ:
+		coverFilename, coverMimeType, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
+	default:
+		extractErr = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
+	}
+	if extractErr != nil {
+		return extractErr, nil
+	}
+
+	file.CoverPage = &page
+	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &coverMimeType
+	file.CoverSource = &source
+
+	updateErr = w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
+		Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
+	})
+	return nil, updateErr
 }
 
 // extractCBZPageCover extracts a specific page from a CBZ file and saves it as the cover.

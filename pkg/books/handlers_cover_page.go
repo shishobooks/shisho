@@ -4,14 +4,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
@@ -62,59 +60,27 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return errcodes.ValidationError("Page number is out of bounds")
 	}
 
-	// Extract the page image using the appropriate page cache
-	var cachedPath, mimeType string
-	switch file.FileType {
-	case models.FileTypeCBZ:
-		cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, payload.Page)
-	case models.FileTypePDF:
-		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, payload.Page)
-	default:
-		return errcodes.ValidationError("This file does not support page-based covers")
-	}
+	coverFilename, mimeType, err := ExtractCoverPageToFile(
+		file,
+		file.Book.Filepath,
+		payload.Page,
+		h.pageCache,
+		h.pdfPageCache,
+		log,
+	)
 	if err != nil {
 		log.Error("failed to extract cover page", logger.Data{"error": err.Error(), "page": payload.Page, "file_type": file.FileType})
 		return errcodes.ValidationError("Failed to extract page from file")
 	}
 
-	coverDir := fileutils.ResolveCoverDir(file.Book.Filepath)
-
-	// Generate the cover filename: {filename}.cover.{ext}
-	filename := filepath.Base(file.Filepath)
-	coverBaseName := filename + ".cover"
-
-	// Get extension from mime type
-	ext := getExtensionFromMimeType(mimeType)
-	if ext == "" {
-		ext = filepath.Ext(cachedPath)
-	}
-
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
-
-	// Copy the extracted page to the cover location
-	coverFilePath := filepath.Join(coverDir, coverBaseName+ext)
-	if err := copyFile(cachedPath, coverFilePath); err != nil {
-		log.Error("failed to copy cover image", logger.Data{"error": err.Error()})
-		return errcodes.ValidationError("Failed to save cover image")
-	}
-
 	log.Info("set cover page", logger.Data{
-		"file_id":    file.ID,
-		"page":       payload.Page,
-		"cover_path": coverFilePath,
-		"mime_type":  mimeType,
+		"file_id":   file.ID,
+		"page":      payload.Page,
+		"cover":     coverFilename,
+		"mime_type": mimeType,
 	})
 
 	// Update file's cover metadata
-	coverFilename := coverBaseName + ext
 	file.CoverPage = &payload.Page
 	file.CoverMimeType = &mimeType
 	file.CoverSource = strPtr(models.DataSourceManual)

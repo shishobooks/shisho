@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -305,6 +306,45 @@ func TestConvertFieldsToMetadata_AbridgedFalse(t *testing.T) {
 
 	require.NotNil(t, md.Abridged)
 	assert.False(t, *md.Abridged)
+}
+
+func TestConvertFieldsToMetadata_CoverPage(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"cover_page": float64(4), // JSON numbers decode to float64
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.CoverPage)
+	assert.Equal(t, 4, *md.CoverPage)
+}
+
+func TestConvertFieldsToMetadata_CoverPage_Missing(t *testing.T) {
+	t.Parallel()
+	md := convertFieldsToMetadata(map[string]any{})
+	assert.Nil(t, md.CoverPage)
+}
+
+func TestConvertFieldsToMetadata_CoverPage_Invalid(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		value float64
+	}{
+		{"negative", -1},
+		{"NaN", math.NaN()},
+		{"positive infinity", math.Inf(1)},
+		{"negative infinity", math.Inf(-1)},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			md := convertFieldsToMetadata(map[string]any{"cover_page": tc.value})
+			assert.Nil(t, md.CoverPage, "invalid coverPage %v should be rejected", tc.value)
+		})
+	}
 }
 
 func TestConvertFieldsToMetadata_AbridgedMissing(t *testing.T) {

@@ -14,8 +14,16 @@ import {
 
 import { FileRoleMain, FileTypeCBZ, type File } from "@/types";
 
+// delay:null skips userEvent's default 10ms-per-event pause so chained
+// clicks don't rely on fake-timer advancement under CPU contention — this
+// is the root-cause fix for the parallel E2E + coverage flakiness that the
+// "cover page save race" test hit (the test chains 5 waitFor + React Query
+// + FormDialog settle steps, each of which accumulates delay otherwise).
 const createUser = () =>
-  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  userEvent.setup({
+    advanceTimers: vi.advanceTimersByTime,
+    delay: null,
+  });
 
 // Define global that's normally set by Vite
 beforeAll(() => {

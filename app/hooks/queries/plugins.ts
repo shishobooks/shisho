@@ -560,6 +560,7 @@ export interface PluginSearchResult {
   language?: string;
   abridged?: boolean;
   cover_url?: string;
+  cover_page?: number;
   plugin_scope: string;
   plugin_id: string;
   disabled_fields?: string[];

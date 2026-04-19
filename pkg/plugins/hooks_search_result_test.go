@@ -277,3 +277,52 @@ func TestParseSearchResponse_NilInput(t *testing.T) {
 	resp = parseSearchResponse(vm, val, "s", "p")
 	assert.Empty(t, resp.Results)
 }
+
+func TestParseSearchResponse_CoverPage(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	val, err := vm.RunString(`({ results: [{ title: "x", coverPage: 3 }] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "test", "plugin-id")
+
+	require.Len(t, resp.Results, 1)
+	require.NotNil(t, resp.Results[0].CoverPage)
+	assert.Equal(t, 3, *resp.Results[0].CoverPage)
+}
+
+func TestParseSearchResponse_CoverPage_MissingOrNull(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	val, err := vm.RunString(`({ results: [{ title: "a" }, { title: "b", coverPage: null }] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "test", "plugin-id")
+
+	require.Len(t, resp.Results, 2)
+	assert.Nil(t, resp.Results[0].CoverPage)
+	assert.Nil(t, resp.Results[1].CoverPage)
+}
+
+func TestParseSearchResponse_CoverPage_Invalid(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	// Negative, NaN, and Infinity values must be rejected at parse time so
+	// they don't propagate to the apply path and cause broken previews.
+	val, err := vm.RunString(`({ results: [
+		{ title: "neg", coverPage: -1 },
+		{ title: "nan", coverPage: NaN },
+		{ title: "inf", coverPage: Infinity },
+		{ title: "zero", coverPage: 0 },
+	] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "test", "plugin-id")
+
+	require.Len(t, resp.Results, 4)
+	assert.Nil(t, resp.Results[0].CoverPage, "negative coverPage should be rejected")
+	assert.Nil(t, resp.Results[1].CoverPage, "NaN coverPage should be rejected")
+	assert.Nil(t, resp.Results[2].CoverPage, "Infinity coverPage should be rejected")
+	require.NotNil(t, resp.Results[3].CoverPage, "0 is a valid coverPage")
+	assert.Equal(t, 0, *resp.Results[3].CoverPage)
+}

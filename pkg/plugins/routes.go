@@ -19,6 +19,7 @@ type EnrichDeps struct {
 	PublisherFinder publisherFinder
 	ImprintFinder   imprintFinder
 	SearchIndexer   searchIndexer
+	PageExtractor   pageExtractor
 }
 
 // RegisterRoutesWithGroup registers plugin management API routes.
@@ -35,6 +36,7 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 			publisherFinder: ed.PublisherFinder,
 			imprintFinder:   ed.ImprintFinder,
 			searchIndexer:   ed.SearchIndexer,
+			pageExtractor:   ed.PageExtractor,
 		}
 	}
 
@@ -77,6 +79,7 @@ func RegisterIdentifyRoutes(g *echo.Group, service *Service, manager *Manager, e
 			publisherFinder: ed.PublisherFinder,
 			imprintFinder:   ed.ImprintFinder,
 			searchIndexer:   ed.SearchIndexer,
+			pageExtractor:   ed.PageExtractor,
 		}
 	}
 

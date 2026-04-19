@@ -480,21 +480,166 @@ func TestCoverPageProtection_EnricherCannotOverridePageCover(t *testing.T) {
 	require.NotNil(t, enrichedMeta.CoverPage)
 	assert.Equal(t, 0, *enrichedMeta.CoverPage)
 
-	// 3. Apply page-based file type protection (as runMetadataEnrichers does)
+	// 3. Apply page-based file type protection (as runMetadataEnrichers does).
+	// The reset only touches image data; CoverPage is intentionally left alone
+	// since the merge already handled "enricher wins if set, file parser fills
+	// in otherwise". Since the enricher did NOT set CoverPage here, the
+	// "cover" source is restored to the file parser.
 	fileType := models.FileTypeCBZ
 	if models.IsPageBasedFileType(fileType) {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
-		enrichedMeta.CoverPage = fileMetadata.CoverPage
 		enrichedMeta.FieldDataSources["cover"] = fileMetadata.SourceForField("cover")
 	}
 
-	// File parser's cover should be restored
+	// File parser's image data should be restored; CoverPage came from file
+	// parser via merge (enricher didn't set one) and stays there.
 	assert.Equal(t, []byte("page-derived cover"), enrichedMeta.CoverData)
 	assert.Equal(t, "image/jpeg", enrichedMeta.CoverMimeType)
 	require.NotNil(t, enrichedMeta.CoverPage)
 	assert.Equal(t, 0, *enrichedMeta.CoverPage)
 	assert.Equal(t, fileSource, enrichedMeta.FieldDataSources["cover"])
+}
+
+// TestMergeFileParserFallback_EnricherCoverPagePreserved is a regression test
+// for a bug where the page-based file protection block unconditionally reset
+// CoverPage to the file parser's value, silently discarding an enricher-
+// provided coverPage. The feature spec requires enrichers on CBZ/PDF to be
+// able to set coverPage — this test exercises mergeFileParserFallback
+// directly so the production code path is under test.
+func TestMergeFileParserFallback_EnricherCoverPagePreserved(t *testing.T) {
+	t.Parallel()
+
+	fileCoverPage := 0
+	fileSource := "cbz_metadata"
+
+	// File parser provides cover page 0 (default)
+	fileMetadata := &mediafile.ParsedMetadata{
+		Title:         "My CBZ Book",
+		CoverData:     []byte("page-derived cover"),
+		CoverMimeType: "image/jpeg",
+		CoverPage:     &fileCoverPage,
+		DataSource:    fileSource,
+		FieldDataSources: map[string]string{
+			"cover": fileSource,
+		},
+	}
+
+	// Enricher tells Shisho to use page 3 for the cover.
+	enricherCoverPage := 3
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverPage: &enricherCoverPage,
+	}
+
+	// 1. Enricher merges into empty target (simulates runMetadataEnrichers).
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+
+	// 2. File parser fallback + page-based protection (production code path).
+	mergeFileParserFallback(&enrichedMeta, fileMetadata, models.FileTypeCBZ)
+
+	// Enricher's CoverPage must be preserved — this is the whole point of the
+	// coverPage feature for page-based formats.
+	require.NotNil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, 3, *enrichedMeta.CoverPage, "enricher coverPage must not be overwritten by file parser")
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"], "source should reflect enricher, not file parser")
+
+	// File parser's image data should still be restored (enricher image data,
+	// if any, is rejected for page-based formats).
+	assert.Equal(t, []byte("page-derived cover"), enrichedMeta.CoverData)
+	assert.Equal(t, "image/jpeg", enrichedMeta.CoverMimeType)
+}
+
+// TestMergeFileParserFallback_PDFEnricherCoverPagePreserved covers the PDF
+// variant of the regression fix — same behavior as CBZ.
+func TestMergeFileParserFallback_PDFEnricherCoverPagePreserved(t *testing.T) {
+	t.Parallel()
+
+	fileCoverPage := 0
+	fileSource := "pdf_metadata"
+	fileMetadata := &mediafile.ParsedMetadata{
+		Title:      "My PDF",
+		CoverPage:  &fileCoverPage,
+		DataSource: fileSource,
+	}
+
+	enricherCoverPage := 5
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverPage: &enricherCoverPage,
+	}
+
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+	mergeFileParserFallback(&enrichedMeta, fileMetadata, models.FileTypePDF)
+
+	require.NotNil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, 5, *enrichedMeta.CoverPage)
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"])
+}
+
+// TestMergeFileParserFallback_NoEnricherCoverPage_FileParserUsed verifies
+// that when no enricher provides a CoverPage, the file parser's value is
+// used and the source tracks the file parser.
+func TestMergeFileParserFallback_NoEnricherCoverPage_FileParserUsed(t *testing.T) {
+	t.Parallel()
+
+	fileCoverPage := 0
+	fileSource := "cbz_metadata"
+	fileMetadata := &mediafile.ParsedMetadata{
+		CoverData:     []byte("page-derived cover"),
+		CoverMimeType: "image/jpeg",
+		CoverPage:     &fileCoverPage,
+		DataSource:    fileSource,
+	}
+
+	// Enricher provides only downloaded image data (no CoverPage).
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverData:     []byte("enricher-downloaded cover"),
+		CoverMimeType: "image/png",
+	}
+
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+	mergeFileParserFallback(&enrichedMeta, fileMetadata, models.FileTypeCBZ)
+
+	// Enricher image data is rejected; file parser's cover applied.
+	assert.Equal(t, []byte("page-derived cover"), enrichedMeta.CoverData)
+	assert.Equal(t, "image/jpeg", enrichedMeta.CoverMimeType)
+	require.NotNil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, 0, *enrichedMeta.CoverPage)
+	assert.Equal(t, fileSource, enrichedMeta.FieldDataSources["cover"])
+}
+
+// TestMergeFileParserFallback_NonPageBased_EnricherCoverPreserved verifies
+// that EPUB/M4B (non-page-based) files keep the enricher's cover data.
+func TestMergeFileParserFallback_NonPageBased_EnricherCoverPreserved(t *testing.T) {
+	t.Parallel()
+
+	fileSource := "epub_metadata"
+	fileMetadata := &mediafile.ParsedMetadata{
+		CoverData:     []byte("epub-embedded cover"),
+		CoverMimeType: "image/jpeg",
+		DataSource:    fileSource,
+	}
+
+	enricherSource := "plugin:test/enricher"
+	enricherResult := &mediafile.ParsedMetadata{
+		CoverData:     []byte("enricher high-res cover"),
+		CoverMimeType: "image/png",
+	}
+
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, enricherResult, enricherSource)
+	mergeFileParserFallback(&enrichedMeta, fileMetadata, models.FileTypeEPUB)
+
+	// Enricher cover preserved (EPUB is not page-based).
+	assert.Equal(t, []byte("enricher high-res cover"), enrichedMeta.CoverData)
+	assert.Equal(t, "image/png", enrichedMeta.CoverMimeType)
+	assert.Nil(t, enrichedMeta.CoverPage)
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"])
 }
 
 // TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved verifies that when
@@ -530,8 +675,6 @@ func TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved(t *testing.T) {
 	if models.IsPageBasedFileType(fileType) {
 		enrichedMeta.CoverData = fileMetadata.CoverData
 		enrichedMeta.CoverMimeType = fileMetadata.CoverMimeType
-		enrichedMeta.CoverPage = fileMetadata.CoverPage
-		enrichedMeta.FieldDataSources["cover"] = fileMetadata.SourceForField("cover")
 	}
 
 	// Enricher's cover should be preserved
