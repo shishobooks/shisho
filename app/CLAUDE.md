@@ -100,6 +100,15 @@ const MyPage = () => {
 };
 ```
 
+**When tabs are distinct routes:** Some pages give each tab its own explicit route (e.g., `AdminPlugins` has `/settings/plugins`, `/settings/plugins/installed`, `/settings/plugins/discover` in `app/router.tsx`). Explicit routes enable cleaner bookmarks and allow `<Navigate>` redirects for legacy paths (e.g., `/settings/plugins/browse` → `/settings/plugins/discover`). In that case, derive `activeTab` from `useLocation()` instead of `useParams()`:
+
+```tsx
+const location = useLocation();
+const activeTab = location.pathname.endsWith("/discover") ? "discover" : "installed";
+```
+
+Use the `useParams` pattern by default; reach for `useLocation` only when tabs are distinct top-level routes.
+
 ### Page Titles
 
 **All pages MUST set a browser title** using the `usePageTitle` hook. This improves UX by showing meaningful titles in browser tabs and history.
