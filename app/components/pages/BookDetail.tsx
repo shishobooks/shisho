@@ -869,7 +869,7 @@ const BookDetail = () => {
       }
 
       // HEAD succeeded - file is ready, trigger streaming download
-      window.location.href = endpoint;
+      window.location.assign(endpoint);
       toast.success("Download started");
     } catch (error) {
       // Don't show error dialog for user-initiated cancellation
@@ -911,7 +911,7 @@ const BookDetail = () => {
 
   const handleDownloadOriginal = (fileId: number) => {
     // Direct download of original file - this won't show any error since it's a simple file serve
-    window.location.href = `/api/books/files/${fileId}/download/original`;
+    window.location.assign(`/api/books/files/${fileId}/download/original`);
     setDownloadError(null);
   };
 
