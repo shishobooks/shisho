@@ -59,6 +59,7 @@ Create a `repository.json` file with this structure:
       "description": "A brief description of what the plugin does.",
       "author": "Your Name",
       "homepage": "https://github.com/my-org/my-plugin",
+      "imageUrl": "https://raw.githubusercontent.com/my-org/my-plugin/main/logo.png",
       "versions": [
         {
           "version": "1.0.0",
@@ -83,6 +84,12 @@ Create a `repository.json` file with this structure:
   ]
 }
 ```
+
+### Field notes
+
+- **`imageUrl`** (on each plugin entry): Plugin logo URL. Recommended 256×256 PNG or SVG (SVG preferred), 1:1 aspect ratio, centered mark with ≥10% safe area; any HTTPS URL works (GitHub raw is fine). Shisho renders it on a muted square backdrop with a rounded radius that scales with display size, so transparent artwork shows the backdrop through. When `imageUrl` is missing or fails to load, Shisho falls back to hashed-color initials derived from `scope/id`.
+- **`releaseDate`** (on each version entry): Optional. Accepts RFC3339 (`2026-04-14T00:00:00Z`) or date-only (`2026-04-14`). When omitted, the "Released" line is hidden on the version card. Repository manifests are validated at fetch time; versions with an invalid `releaseDate` are skipped (and a warning is logged server-side).
+- **`changelog`** (on each version entry): Rendered as sanitized markdown on the plugin detail page. Supported subset: headings (`##`, `###`), paragraphs, lists, inline code, fenced code blocks, links (open in a new tab), bold, italic. Raw HTML, images, and iframes are stripped — author content accordingly. The "View full diff on GitHub" link in the UI is inferred from the plugin's `homepage` when it points to a GitHub repo; no additional manifest field is read for it.
 
 ### Key Rules
 
