@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -36,14 +35,22 @@ func setupEReaderDB(t *testing.T) *bun.DB {
 	return db
 }
 
-// TestEReaderResolveSort_AppliesStoredPreference confirms the eReader
+// These tests verify the sortspec resolver + books service integration at
+// the seam the eReader handler uses internally, not the HTTP handler
+// round-trip. The handlers render HTML templates; end-to-end testing would
+// couple assertions to template structure and API-key middleware wiring,
+// both of which add no sort-behavior signal. A future follow-up could add
+// a thin handler-shape smoke test that asserts `Sort: sort` is threaded
+// into `ListBooksWithTotal` (e.g. via a bookService seam / stub).
+
+// TestStoredSortFlowsThroughBooksService confirms the eReader
 // sort-resolution helper picks up a stored `(user, library)` preference.
 //
 // We exercise the resolution path at the service boundary (ListBooksWithTotal
 // with the resolved Sort), which is what the handler does internally. This
 // keeps the test independent of the HTML template layer and of whichever API
 // key middleware wrapper is in use.
-func TestEReaderResolveSort_AppliesStoredPreference(t *testing.T) {
+func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 	t.Parallel()
 
 	db := setupEReaderDB(t)
@@ -93,14 +100,11 @@ func TestEReaderResolveSort_AppliesStoredPreference(t *testing.T) {
 	_, err = settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
-	// The API key struct the eReader middleware would install.
-	apiKey := &apikeys.APIKey{UserID: user.ID}
-
 	// Resolve via the same helper the handler uses.
 	resolved := sortspec.ResolveForLibrary(
 		context.Background(),
 		settingsSvc,
-		apiKey.UserID,
+		user.ID,
 		lib.ID,
 		nil, // eReader never carries an explicit URL sort
 	)
@@ -121,10 +125,10 @@ func TestEReaderResolveSort_AppliesStoredPreference(t *testing.T) {
 	assert.Equal(t, apple.ID, got[1].ID)
 }
 
-// TestEReaderResolveSort_NoPreferenceReturnsNil confirms that without a
+// TestNoStoredSortResolvesToNil confirms that without a
 // stored preference, ResolveForLibrary returns nil and the handler falls
 // through to its existing default ordering.
-func TestEReaderResolveSort_NoPreferenceReturnsNil(t *testing.T) {
+func TestNoStoredSortResolvesToNil(t *testing.T) {
 	t.Parallel()
 
 	db := setupEReaderDB(t)
