@@ -104,6 +104,8 @@ shisho/goodreads-metadata/
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls both `series` (name) and `seriesNumber`
 
+**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
+
 ## main.js Pattern
 
 All plugins use IIFE to define the `plugin` global:
@@ -167,7 +169,7 @@ fileParser: {
       releaseDate: "2023-06-15T00:00:00Z",  // ISO 8601
       coverMimeType: "image/jpeg",
       coverData: arrayBuffer,                 // ArrayBuffer
-      coverPage: 0,
+      coverPage: 0,                           // CBZ/PDF only; silently ignored for other formats, skipped with warning when out of range
       duration: 3661.5,                       // seconds (float)
       bitrateBps: 128000,
       pageCount: 42,

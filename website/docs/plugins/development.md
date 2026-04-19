@@ -442,6 +442,32 @@ During automatic scans, enricher-provided covers are subject to additional check
 - **Page-based formats:** CBZ and PDF files derive covers from their page content. Plugin covers are never applied to these formats, even if the plugin declares the `cover` field.
 - **Field settings:** The `cover` field must be enabled in the plugin's per-library field settings for cover enrichment to take effect. If disabled, all cover data from the plugin is silently stripped.
 
+#### Cover page selection (CBZ and PDF only)
+
+For page-based file formats — CBZ and PDF — the cover is derived from a page of the file itself, not from an arbitrary image. Plugins can tell Shisho which page to use by returning `coverPage` (a 0-indexed page number).
+
+**Precedence (strict, file-type-gated):**
+
+- **CBZ/PDF:** Only `coverPage` is applied. `coverData` and `coverUrl` are silently ignored for these formats. A plugin that returns only `coverData` for a CBZ/PDF will not change the cover.
+- **EPUB/M4B and other formats:** Only `coverData` / `coverUrl` are applied. `coverPage` is silently ignored.
+
+**Bounds:** If `coverPage` is negative, greater than or equal to the file's page count, or the page count is unknown, the value is skipped with a warning in the server logs — Shisho will not fall through to `coverData`.
+
+**Cover source:** When `coverPage` is applied, the rendered page is saved as the file's cover image on disk, and `cover_source` is set to `plugin:<scope>/<id>`. This mirrors the behavior of the manual page-picker UI (which uses `manual` as the source).
+
+Example search result from a metadata enricher:
+
+```javascript
+return {
+  results: [{
+    title: "Saga #1",
+    authors: [{ name: "Brian K. Vaughan", role: "writer" }],
+    coverPage: 3, // The cover image is on page 3 of this CBZ, not page 0.
+    confidence: 0.95
+  }]
+};
+```
+
 #### File Hints
 
 The `context.file` object provides read-only metadata about the file being enriched. Use it to narrow your search — for example, filtering audiobook results by duration or distinguishing a comic from a novel by page count:
