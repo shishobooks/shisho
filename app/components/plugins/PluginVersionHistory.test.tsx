@@ -22,14 +22,11 @@ const makeVersion = (
   ...overrides,
 });
 
-const makeAvailable = (
-  versions: PluginVersion[],
-  homepage = "",
-): AvailablePlugin => ({
+const makeAvailable = (versions: PluginVersion[]): AvailablePlugin => ({
   author: "",
   compatible: true,
   description: "",
-  homepage,
+  homepage: "",
   id: "p",
   imageUrl: "",
   is_official: false,
@@ -49,29 +46,37 @@ const renderWithClient = (ui: React.ReactElement) => {
 };
 
 describe("PluginVersionHistory", () => {
-  it("ignores non-github homepages for diff URL", () => {
-    const available = makeAvailable(
-      [makeVersion("1.0.0")],
-      "https://github.com.evil.com/foo",
-    );
+  it("renders a View release link pointing at the version's releaseUrl", () => {
+    const available = makeAvailable([
+      makeVersion("1.0.0", {
+        releaseUrl: "https://github.com/me/repo/releases/tag/v1.0.0",
+      }),
+    ]);
     renderWithClient(<PluginVersionHistory available={available} />);
-    expect(
-      screen.queryByRole("link", { name: /view release on github/i }),
-    ).toBeNull();
-  });
-
-  it("builds a valid release URL for a real github homepage", () => {
-    const available = makeAvailable(
-      [makeVersion("1.0.0")],
-      "https://github.com/me/repo",
-    );
-    renderWithClient(<PluginVersionHistory available={available} />);
-    const link = screen.getByRole("link", {
-      name: /view release on github/i,
-    });
+    const link = screen.getByRole("link", { name: /view release/i });
     expect(link).toHaveAttribute(
       "href",
       "https://github.com/me/repo/releases/tag/v1.0.0",
     );
+  });
+
+  it("renders releaseUrl verbatim regardless of host", () => {
+    const available = makeAvailable([
+      makeVersion("1.0.0", {
+        releaseUrl: "https://gitlab.example.com/me/repo/-/tags/v1.0.0",
+      }),
+    ]);
+    renderWithClient(<PluginVersionHistory available={available} />);
+    const link = screen.getByRole("link", { name: /view release/i });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://gitlab.example.com/me/repo/-/tags/v1.0.0",
+    );
+  });
+
+  it("omits the release link when releaseUrl is absent", () => {
+    const available = makeAvailable([makeVersion("1.0.0")]);
+    renderWithClient(<PluginVersionHistory available={available} />);
+    expect(screen.queryByRole("link", { name: /view release/i })).toBeNull();
   });
 });

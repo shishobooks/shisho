@@ -16,23 +16,6 @@ export interface PluginVersionHistoryProps {
   installed?: Plugin;
 }
 
-const buildGitHubReleaseUrl = (
-  homepage: string | undefined | null,
-  version: string,
-): string | undefined => {
-  if (!homepage) return undefined;
-  try {
-    const u = new URL(homepage);
-    if (u.hostname !== "github.com" && !u.hostname.endsWith(".github.com")) {
-      return undefined;
-    }
-    const pathname = u.pathname.replace(/\/$/, "");
-    return `https://${u.hostname}${pathname}/releases/tag/v${version}`;
-  } catch {
-    return undefined;
-  }
-};
-
 export const PluginVersionHistory = ({
   available,
   installed,
@@ -57,8 +40,6 @@ export const PluginVersionHistory = ({
       (v) => v.version === installedVersion,
     );
     if (installedIdx === -1) {
-      // Installed version isn't in the current repository index (e.g. yanked or dev build).
-      // Treat available versions the same way as the available-only view.
       const compatible = versions.filter((v) => v.compatible !== false);
       return [compatible.slice(0, 1), compatible.slice(1)];
     }
@@ -91,7 +72,6 @@ export const PluginVersionHistory = ({
     ? olderVersions
     : olderVersions.slice(0, INITIAL_VISIBLE_OLDER);
   const hiddenCount = olderVersions.length - visibleOlder.length;
-  const homepage = installed?.homepage ?? available?.homepage;
 
   return (
     <section className="space-y-4">
@@ -103,10 +83,10 @@ export const PluginVersionHistory = ({
           (updateTarget ? v.version === updateTarget : idx === 0);
         return (
           <PluginVersionCard
-            gitHubReleaseUrl={buildGitHubReleaseUrl(homepage, v.version)}
             isUpdating={updateVersion.isPending}
             key={v.version}
             onUpdate={isUpdateTarget ? handleUpdate : undefined}
+            releaseUrl={v.releaseUrl}
             state={installedVersion ? "available" : "latest"}
             version={v}
           />
@@ -115,8 +95,8 @@ export const PluginVersionHistory = ({
 
       {visibleOlder.map((v) => (
         <PluginVersionCard
-          gitHubReleaseUrl={buildGitHubReleaseUrl(homepage, v.version)}
           key={v.version}
+          releaseUrl={v.releaseUrl}
           state={v.version === installedVersion ? "installed" : "older"}
           version={v}
         />
