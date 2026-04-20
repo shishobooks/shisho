@@ -170,10 +170,8 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                         <Button
                           disabled={installPlugin.isPending}
                           onClick={() => setInstallTarget(p)}
-                          size="sm"
-                          variant="outline"
                         >
-                          Install
+                          {installPlugin.isPending ? "Installing…" : "Install"}
                         </Button>
                       )
                     ) : null
