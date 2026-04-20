@@ -181,6 +181,10 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
               const isInstalled = installedKeys.has(key);
               const incompatible = p.compatible === false;
               const caps = deriveCapabilityLabels(p.versions[0]?.capabilities);
+              const isThisInstalling =
+                installPlugin.isPending &&
+                installTarget?.scope === p.scope &&
+                installTarget?.id === p.id;
 
               return (
                 <PluginRow
@@ -200,7 +204,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                           disabled={installPlugin.isPending}
                           onClick={() => setInstallTarget(p)}
                         >
-                          {installPlugin.isPending ? "Installing…" : "Install"}
+                          {isThisInstalling ? "Installing…" : "Install"}
                         </Button>
                       )
                     ) : null
