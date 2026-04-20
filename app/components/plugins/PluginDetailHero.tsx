@@ -1,7 +1,7 @@
 import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
 import { BadgeCheck, ExternalLink } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -93,14 +93,18 @@ export const PluginDetailHero = ({
         </div>
 
         {metaParts.length > 0 && (
-          <p className="text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {metaParts.map((part, i) => (
-              <span key={i}>
-                {i > 0 && " · "}
+              <Fragment key={i}>
+                {i > 0 && (
+                  <span aria-hidden="true" className="text-muted-foreground/50">
+                    ·
+                  </span>
+                )}
                 {part}
-              </span>
+              </Fragment>
             ))}
-          </p>
+          </div>
         )}
 
         {description && (
