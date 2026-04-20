@@ -37,11 +37,12 @@ type handler struct {
 // preference exists. OPDS is read-only; there's no explicit ?sort=
 // input, so we pass explicit=nil to ResolveForLibrary.
 //
-// Falling back to BuiltinDefault (rather than returning nil and
-// inheriting the books service's hard-coded `sort_title ASC`) keeps
-// OPDS clients aligned with the gallery — the eReader on a Kobo and
-// the React frontend in a browser show the same library in the same
-// order when neither the user nor the URL has overridden it.
+// The books service also falls back to BuiltinDefault when Sort is nil,
+// so returning BuiltinDefault here is belt-and-suspenders: it keeps the
+// OPDS surface explicit about what sort it applies (useful when
+// tracing requests) and insulates OPDS from a future change to the
+// service's default. Returning the resolved slice directly also lets
+// callers log or cache it without re-resolving.
 func (h *handler) resolveSort(c echo.Context, libraryID int) []sortspec.SortLevel {
 	user, ok := c.Get("user").(*models.User)
 	if !ok {

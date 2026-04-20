@@ -109,10 +109,11 @@ func seedAuthorTestData(t *testing.T, db *bun.DB) authorTestSeeds {
 
 // TestListBooksByAuthor_HonorsSort confirms M14: the per-author ID
 // query now applies the user's sort. Apple has the older created_at
-// but the alphabetically-earlier title, so default `sort_title ASC`
-// would return Apple, Cheese. The explicit date_added:desc inverts
-// that — proving the sort is threaded into the filtered query rather
-// than being applied to a different (broader) result set as before.
+// but the alphabetically-earlier title. The builtin default is
+// date_added:desc (Cheese first, Apple second). The explicit title:asc
+// inverts that to Apple, Cheese — proving the sort is threaded into the
+// filtered query rather than silently falling back to the builtin
+// default.
 func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 	t.Parallel()
 
@@ -127,13 +128,13 @@ func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 		nil, // no file-type filter
 		10,
 		0,
-		[]sortspec.SortLevel{{Field: sortspec.FieldDateAdded, Direction: sortspec.DirDesc}},
+		[]sortspec.SortLevel{{Field: sortspec.FieldTitle, Direction: sortspec.DirAsc}},
 	)
 	require.NoError(t, err)
 	require.Equal(t, 2, total, "alice has two books, bob's book filtered out")
 	require.Len(t, got, 2)
-	assert.Equal(t, seeds.cheese.ID, got[0].ID, "date_added DESC: cheese first")
-	assert.Equal(t, seeds.apple.ID, got[1].ID, "date_added DESC: apple second")
+	assert.Equal(t, seeds.apple.ID, got[0].ID, "title:asc: apple first")
+	assert.Equal(t, seeds.cheese.ID, got[1].ID, "title:asc: cheese second")
 }
 
 // TestListBooksByAuthor_RespectsLimitOffset confirms pagination is

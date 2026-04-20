@@ -41,9 +41,11 @@ type ListBooksOptions struct {
 	IDs        []int    // Filter by specific book IDs
 	Search     *string  // Search query for title/author
 
-	// Sort overrides the default ordering. When nil, the legacy default
-	// (sort_title ASC, or series_number ASC + sort_title ASC when
-	// filtering by series) is preserved.
+	// Sort overrides the default ordering. When nil and SeriesID is set,
+	// books are ordered by series_number ASC + sort_title ASC. When nil
+	// and SeriesID is not set, the service falls back to
+	// sortspec.BuiltinDefault (date_added DESC) so all surfaces (REST,
+	// OPDS, eReader, gallery) share the same "newest first" default.
 	Sort []sortspec.SortLevel
 
 	includeTotal  bool
@@ -310,7 +312,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	// Apply ordering.
-	// Precedence: orderByRecent (internal flag) > explicit Sort > legacy default.
+	// Precedence: orderByRecent (internal flag) > explicit Sort >
+	// series-number (when SeriesID is set) > sortspec.BuiltinDefault.
 	switch {
 	case opts.orderByRecent:
 		q = q.Order("b.updated_at DESC")
@@ -326,11 +329,24 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Order("b.id ASC")
 
 	case opts.SeriesID != nil:
-		// When filtering by series, order by series_number then sort_title
+		// When filtering by series, order by series_number then sort_title.
+		// Series listings are a distinct use case from the general "newest
+		// first" fallback — readers of a series expect #1, #2, #3 order,
+		// not most-recently-added.
 		q = q.Order("bs_filter.series_number ASC", "b.sort_title ASC")
 
 	default:
-		q = q.Order("b.sort_title ASC")
+		// No explicit caller Sort, not a series listing, not the internal
+		// recent-flag path — fall back to the builtin default ("date_added
+		// DESC"). Applying it here means the /books REST handler, OPDS
+		// feeds, and the eReader browser all show the same "newest first"
+		// ordering when neither the URL nor a stored preference overrides
+		// it. Keep a stable id tiebreaker for the same pagination reason
+		// as the explicit-sort branch.
+		for _, clause := range sortspec.OrderClauses(sortspec.BuiltinDefault()) {
+			q = q.OrderExpr(clause.Expression)
+		}
+		q = q.Order("b.id ASC")
 	}
 
 	if opts.Limit != nil {

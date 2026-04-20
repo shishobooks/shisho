@@ -127,11 +127,12 @@ func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 }
 
 // TestHandlerResolveSort_FallsBackToBuiltinDefault confirms the handler's
-// resolveSort layers sortspec.BuiltinDefault on top of ResolveForLibrary.
-// Without this layering an eReader user with no saved preference would
-// see books in `b.sort_title ASC` order (the books service's hard-coded
-// fallback) while the React gallery shows the same library in
-// `date_added:desc` order — the inconsistency the M6 review caught.
+// resolveSort returns sortspec.BuiltinDefault when ResolveForLibrary
+// finds no stored preference. The books service also applies
+// BuiltinDefault when Sort is nil, so this is belt-and-suspenders — it
+// keeps the eReader surface explicit about the sort it applies and
+// ensures the function never returns nil for callers that depend on a
+// non-nil slice.
 func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 	t.Parallel()
 

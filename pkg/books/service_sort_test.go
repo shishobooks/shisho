@@ -68,7 +68,7 @@ func seedBook(t *testing.T, db *bun.DB, lib *models.Library, title, sortTitle st
 }
 
 // TestListBooks_SortByTitleAsc confirms an explicit Sort overrides the
-// default sort_title ASC ordering.
+// service's builtin default (date_added:desc) and orders by title.
 func TestListBooks_SortByTitleAsc(t *testing.T) {
 	t.Parallel()
 
@@ -152,14 +152,25 @@ func TestListBooks_SortByTiesFallsBackToID(t *testing.T) {
 	assert.Equal(t, b3.ID, got[2].ID)
 }
 
-// TestListBooks_NilSortUsesDefault preserves backward compatibility.
-func TestListBooks_NilSortUsesDefault(t *testing.T) {
+// TestListBooks_NilSortUsesBuiltinDefault confirms callers that pass no
+// explicit sort (e.g., the /books REST handler when no ?sort= is set)
+// inherit sortspec.BuiltinDefault — currently "date_added DESC".
+//
+// Pushing the builtin default into the service keeps all surfaces (the
+// React gallery, OPDS, eReader browser, and third-party REST consumers)
+// aligned on the same "newest first" fallback unless the caller or the
+// user has asked for something else.
+func TestListBooks_NilSortUsesBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
 	db := setupBooksTestDB(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 
+	// "Cheese" is newer than "Apple" — sort_title ASC would surface
+	// Apple first, date_added DESC surfaces Cheese first. Picking
+	// non-alphabetic-vs-chronological titles makes the assertion
+	// unambiguous.
 	now := time.Now()
 	cheese := seedBook(t, db, lib, "Cheese", "Cheese", now)
 	apple := seedBook(t, db, lib, "Apple", "Apple", now.Add(-time.Hour))
@@ -170,7 +181,7 @@ func TestListBooks_NilSortUsesDefault(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	// Default is sort_title ASC → Apple before Cheese.
-	assert.Equal(t, apple.ID, got[0].ID)
-	assert.Equal(t, cheese.ID, got[1].ID)
+	// Builtin default is date_added DESC → newer (Cheese) before older (Apple).
+	assert.Equal(t, cheese.ID, got[0].ID)
+	assert.Equal(t, apple.ID, got[1].ID)
 }

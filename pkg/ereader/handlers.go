@@ -84,10 +84,12 @@ func (h *handler) getUserLibraryIDs(ctx echo.Context, userID int) ([]int, error)
 // sort input — the stored preference (or builtin default) is the only
 // input.
 //
-// Falling back to BuiltinDefault (rather than nil + the books service's
-// hard-coded `sort_title ASC`) keeps the eReader UI consistent with the
-// React gallery and OPDS feeds: the same library lists the same way
-// across all surfaces unless the user has saved a different default.
+// The books service also falls back to BuiltinDefault when Sort is nil,
+// so returning BuiltinDefault here is belt-and-suspenders: it keeps the
+// eReader surface explicit about what sort it applies and insulates the
+// eReader UI from a future change to the service's default. It also
+// guarantees this function never returns nil, so callers can rely on
+// the result without guarding.
 func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libraryID int) []sortspec.SortLevel {
 	if apiKey == nil {
 		return sortspec.BuiltinDefault()
