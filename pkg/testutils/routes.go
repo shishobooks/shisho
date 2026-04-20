@@ -23,4 +23,9 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB) {
 	test.POST("/series", h.createSeries)
 	test.POST("/api-keys", h.createAPIKey)
 	test.DELETE("/ereader", h.deleteAllEReaderData)
+
+	// Plugin fixture endpoints — serve the fixture plugin as a zip so the
+	// real install flow can download it from localhost during E2E tests.
+	test.GET("/plugins/fixture.zip", h.fixtureZip)
+	test.GET("/plugins/fixture-info", h.fixtureInfo)
 }
