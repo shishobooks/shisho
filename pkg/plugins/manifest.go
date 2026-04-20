@@ -16,7 +16,6 @@ type Manifest struct {
 	Version          string       `json:"version"`
 	Overview         string       `json:"overview"`
 	Description      string       `json:"description"`
-	Author           string       `json:"author"`
 	Homepage         string       `json:"homepage"`
 	License          string       `json:"license"`
 	MinShishoVersion string       `json:"minShishoVersion"`

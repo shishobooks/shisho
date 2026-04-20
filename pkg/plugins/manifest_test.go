@@ -15,7 +15,6 @@ func TestParseManifest_Valid(t *testing.T) {
 		"name":             "Goodreads Enricher",
 		"version":          "1.0.0",
 		"description":      "Enriches book metadata from Goodreads",
-		"author":           "Shisho",
 		"homepage":         "https://github.com/shishobooks/plugin-goodreads",
 		"license":          "MIT",
 		"minShishoVersion": "0.5.0",
@@ -51,7 +50,6 @@ func TestParseManifest_Valid(t *testing.T) {
 	assert.Equal(t, "Goodreads Enricher", m.Name)
 	assert.Equal(t, "1.0.0", m.Version)
 	assert.Equal(t, "Enriches book metadata from Goodreads", m.Description)
-	assert.Equal(t, "Shisho", m.Author)
 	assert.Equal(t, "https://github.com/shishobooks/plugin-goodreads", m.Homepage)
 	assert.Equal(t, "MIT", m.License)
 	assert.Equal(t, "0.5.0", m.MinShishoVersion)

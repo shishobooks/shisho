@@ -56,7 +56,6 @@ type Plugin struct {
 	Name                   string       `bun:",notnull" json:"name"`
 	Version                string       `bun:",notnull" json:"version"`
 	Description            *string      `json:"description"`
-	Author                 *string      `json:"author"`
 	Homepage               *string      `json:"homepage"`
 	Status                 PluginStatus `bun:",notnull,default:0" json:"status"`
 	AutoUpdate             bool         `bun:",notnull,default:true" json:"auto_update"`

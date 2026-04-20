@@ -26,7 +26,7 @@ Plugins are installed from **[plugin repositories](./repositories)** — curated
 To install a plugin:
 
 1. Go to **Admin > Plugins**
-2. Browse the **Available** tab to see plugins from enabled repositories
+2. Browse the **Discover** tab to see plugins from enabled repositories
 3. Click **Install** on the plugin you want
 
 Plugins can also be installed by placing them directly in the plugin directory for [development or testing](./development#local-development) purposes.
@@ -36,13 +36,13 @@ Plugins can also be installed by placing them directly in the plugin directory f
 Many plugins have configuration options, such as API keys for external services. After installing a plugin:
 
 1. Go to **Admin > Plugins**
-2. Click the gear icon on the installed plugin
-3. Fill in the required configuration fields
+2. Click a plugin in the **Installed** tab to open its detail page
+3. Fill in the required configuration fields in the **Configuration** section
 4. Save
 
 ### Execution Order and Plugin Modes
 
-When multiple plugins of the same type are installed (e.g., two metadata enrichers), you can control the order they run in and set their mode. Go to **Admin > Plugins** and use the **Order** tab to drag plugins to reorder them within each hook type.
+When multiple plugins of the same type are installed (e.g., two metadata enrichers), you can control the order they run in and set their mode. Go to **Admin > Plugins**, click the gear icon in the top-right to open the **Advanced plugin settings** dialog, and use the **Order** section to drag plugins to reorder them within each hook type.
 
 Each plugin can be set to one of three modes:
 

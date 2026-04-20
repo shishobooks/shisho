@@ -50,6 +50,7 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.GET("/installed/:scope/:id/fields", h.getFieldSettings)
 	g.PUT("/installed/:scope/:id/fields", h.setFieldSettings)
 	g.GET("/installed/:scope/:id/image", h.getImage)
+	g.GET("/installed/:scope/:id/manifest", h.getManifest)
 	g.POST("/installed/:scope/:id/reload", h.reload)
 	g.POST("/installed/:scope/:id/update", h.updateVersion)
 	g.GET("/order/:hookType", h.getOrder)

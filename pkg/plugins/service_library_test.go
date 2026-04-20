@@ -113,6 +113,22 @@ func TestService_ResetLibraryOrder(t *testing.T) {
 	assert.Empty(t, order)
 }
 
+func TestService_GetLibraryOrder_Empty(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	library := insertTestLibrary(t, db, "Test Library")
+
+	// No library-order entries configured yet. Must return non-nil so the JSON
+	// response is `[]` not `null` (frontend .filter crash).
+	got, err := svc.GetLibraryOrder(ctx, library.ID, "metadataEnricher")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got)
+}
+
 func TestService_ResetAllLibraryOrders(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)

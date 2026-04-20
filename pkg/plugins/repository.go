@@ -9,12 +9,52 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/version"
 )
 
 // AllowedFetchHosts lists the allowed host prefixes for repository manifest URLs.
 // Tests can override this to allow test servers.
 var AllowedFetchHosts = []string{"https://raw.githubusercontent.com/"}
+
+// validateReleaseDate returns nil for an empty string, RFC3339, or date-only
+// (YYYY-MM-DD) values. Any other non-empty value returns an error.
+func validateReleaseDate(s string) error {
+	if s == "" {
+		return nil
+	}
+	if _, err := time.Parse(time.RFC3339, s); err == nil {
+		return nil
+	}
+	if _, err := time.Parse("2006-01-02", s); err == nil {
+		return nil
+	}
+	return errors.Errorf("invalid releaseDate %q: expected RFC3339 or YYYY-MM-DD", s)
+}
+
+// filterInvalidReleaseDates drops versions whose ReleaseDate fails validation,
+// logging a warning for each dropped entry. It mutates manifest in place.
+func filterInvalidReleaseDates(manifest *RepositoryManifest) {
+	log := logger.New()
+	for i := range manifest.Plugins {
+		p := &manifest.Plugins[i]
+		filtered := p.Versions[:0]
+		for _, v := range p.Versions {
+			if err := validateReleaseDate(v.ReleaseDate); err != nil {
+				log.Warn("skipping plugin version with invalid releaseDate", logger.Data{
+					"scope":        manifest.Scope,
+					"plugin":       p.ID,
+					"version":      v.Version,
+					"release_date": v.ReleaseDate,
+					"error":        err.Error(),
+				})
+				continue
+			}
+			filtered = append(filtered, v)
+		}
+		p.Versions = filtered
+	}
+}
 
 // RepositoryManifest is the parsed JSON from a repository URL.
 type RepositoryManifest struct {
@@ -30,7 +70,6 @@ type AvailablePlugin struct {
 	Name        string          `json:"name"`
 	Overview    string          `json:"overview"`
 	Description string          `json:"description"`
-	Author      string          `json:"author"`
 	Homepage    string          `json:"homepage"`
 	ImageURL    string          `json:"imageUrl"`
 	Versions    []PluginVersion `json:"versions"`
@@ -38,14 +77,19 @@ type AvailablePlugin struct {
 
 // PluginVersion describes a specific version of an available plugin.
 type PluginVersion struct {
-	Version          string        `json:"version"`
-	MinShishoVersion string        `json:"minShishoVersion"`
-	ManifestVersion  int           `json:"manifestVersion"`
-	ReleaseDate      string        `json:"releaseDate"`
-	Changelog        string        `json:"changelog"`
-	DownloadURL      string        `json:"downloadUrl"`
-	SHA256           string        `json:"sha256"`
-	Capabilities     *Capabilities `json:"capabilities,omitempty"`
+	Version          string `json:"version"`
+	MinShishoVersion string `json:"minShishoVersion"`
+	ManifestVersion  int    `json:"manifestVersion"`
+	ReleaseDate      string `json:"releaseDate"`
+	Changelog        string `json:"changelog"`
+	DownloadURL      string `json:"downloadUrl"`
+	SHA256           string `json:"sha256"`
+	// ReleaseURL is an optional explicit URL for this version's release page
+	// (e.g. a GitHub release, a GitLab tag page). When present, the UI renders
+	// a "View release" link on the version card. When absent, no link is shown.
+	// Not validated — any string URL is accepted.
+	ReleaseURL   string        `json:"releaseUrl,omitempty"`
+	Capabilities *Capabilities `json:"capabilities,omitempty"`
 }
 
 // FetchRepository downloads and parses a repository manifest from the given URL.
@@ -85,6 +129,8 @@ func FetchRepository(rawURL string) (*RepositoryManifest, error) {
 	if manifest.RepositoryVersion != 1 {
 		return nil, errors.Errorf("unsupported repositoryVersion %d (only version 1 is supported)", manifest.RepositoryVersion)
 	}
+
+	filterInvalidReleaseDates(&manifest)
 
 	return &manifest, nil
 }

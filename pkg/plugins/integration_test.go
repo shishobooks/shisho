@@ -33,7 +33,6 @@ func TestPluginLifecycle(t *testing.T) {
   "name": "Lifecycle Test Plugin",
   "version": "1.0.0",
   "description": "Integration test plugin exercising all hooks",
-  "author": "Test",
   "capabilities": {
     "inputConverter": {
       "description": "Converts test files",

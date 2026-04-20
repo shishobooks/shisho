@@ -222,9 +222,6 @@ func (h *handler) install(c echo.Context) error {
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
 		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
-		}
 		if manifest.Homepage != "" {
 			plugin.Homepage = &manifest.Homepage
 		}
@@ -258,9 +255,6 @@ func (h *handler) install(c echo.Context) error {
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
-		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
 		}
 		if manifest.Homepage != "" {
 			plugin.Homepage = &manifest.Homepage
@@ -477,6 +471,36 @@ func (h *handler) getImage(c echo.Context) error {
 	return c.File(iconPath)
 }
 
+// getManifest returns the raw manifest.json for an installed plugin.
+func (h *handler) getManifest(c echo.Context) error {
+	ctx := c.Request().Context()
+	scope := c.Param("scope")
+	id := c.Param("id")
+
+	if strings.Contains(scope, "..") || strings.Contains(id, "..") ||
+		strings.ContainsAny(scope, "/\\") || strings.ContainsAny(id, "/\\") {
+		return errcodes.ValidationError("Invalid scope or plugin ID")
+	}
+
+	if _, err := h.service.RetrievePlugin(ctx, scope, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errcodes.NotFound("Plugin")
+		}
+		return errors.WithStack(err)
+	}
+
+	manifestPath := filepath.Join(h.installer.PluginDir(), scope, id, "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Manifest")
+		}
+		return errors.WithStack(err)
+	}
+
+	return c.Blob(http.StatusOK, "application/json", data)
+}
+
 func (h *handler) reload(c echo.Context) error {
 	ctx := c.Request().Context()
 	scope := c.Param("scope")
@@ -681,8 +705,9 @@ type availablePluginResponse struct {
 	Name        string                   `json:"name"`
 	Overview    string                   `json:"overview"`
 	Description string                   `json:"description"`
-	Author      string                   `json:"author"`
 	Homepage    string                   `json:"homepage"`
+	ImageURL    string                   `json:"imageUrl"`
+	IsOfficial  bool                     `json:"is_official"`
 	Versions    []AnnotatedPluginVersion `json:"versions"`
 	Compatible  bool                     `json:"compatible"`
 }
@@ -729,8 +754,9 @@ func (h *handler) listAvailable(c echo.Context) error {
 				Name:        p.Name,
 				Overview:    p.Overview,
 				Description: p.Description,
-				Author:      p.Author,
 				Homepage:    p.Homepage,
+				ImageURL:    p.ImageURL,
+				IsOfficial:  repo.IsOfficial,
 				Versions:    annotated,
 				Compatible:  hasCompatible,
 			})
@@ -857,8 +883,9 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 				Name:        p.Name,
 				Overview:    p.Overview,
 				Description: p.Description,
-				Author:      p.Author,
 				Homepage:    p.Homepage,
+				ImageURL:    p.ImageURL,
+				IsOfficial:  repo.IsOfficial,
 				Versions:    annotated,
 				Compatible:  hasCompatible,
 			}))
@@ -983,9 +1010,6 @@ func (h *handler) scan(c echo.Context) error {
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
-		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
 		}
 
 		if err := h.service.InstallPlugin(ctx, plugin); err != nil {
@@ -2179,6 +2203,7 @@ func NewHandler(service *Service, manager *Manager, installer *Installer) *handl
 
 // Exported handler methods for testing.
 func (h *handler) GetImage(c echo.Context) error              { return h.getImage(c) }
+func (h *handler) GetManifest(c echo.Context) error           { return h.getManifest(c) }
 func (h *handler) GetLibraryOrder(c echo.Context) error       { return h.getLibraryOrder(c) }
 func (h *handler) SetLibraryOrder(c echo.Context) error       { return h.setLibraryOrder(c) }
 func (h *handler) ResetLibraryOrder(c echo.Context) error     { return h.resetLibraryOrder(c) }

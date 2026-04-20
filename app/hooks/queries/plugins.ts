@@ -44,12 +44,15 @@ export interface PluginCapabilities {
 export interface PluginVersion {
   version: string;
   minShishoVersion: string;
+  downloadUrl: string;
   compatible: boolean;
   changelog: string;
-  downloadUrl: string;
   sha256: string;
   manifestVersion: number;
   releaseDate: string;
+  // Optional full URL to this version's release page (e.g. a GitHub release
+  // URL). When unset, the version card does not show a release link.
+  releaseUrl?: string;
   capabilities?: PluginCapabilities;
 }
 
@@ -59,9 +62,9 @@ export interface AvailablePlugin {
   name: string;
   overview: string;
   description: string;
-  author: string;
   homepage: string;
   imageUrl: string;
+  is_official: boolean;
   versions: PluginVersion[];
   compatible: boolean;
 }
@@ -160,6 +163,26 @@ export const usePluginConfig = (scope?: string, id?: string) => {
   });
 };
 
+export const usePluginManifest = (
+  scope: string | undefined,
+  id: string | undefined,
+  options: { enabled?: boolean } = {},
+) => {
+  return useQuery<unknown, ShishoAPIError>({
+    queryKey: ["plugins", "manifest", scope, id],
+    enabled: !!scope && !!id && options.enabled !== false,
+    queryFn: ({ signal }) => {
+      return API.request<unknown>(
+        "GET",
+        `/plugins/installed/${scope}/${id}/manifest`,
+        null,
+        null,
+        signal,
+      );
+    },
+  });
+};
+
 export const usePluginRepositories = () => {
   return useQuery<PluginRepository[], ShishoAPIError>({
     queryKey: [QueryKey.PluginRepositories],
@@ -232,6 +255,28 @@ export const useUninstallPlugin = () => {
       });
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginIdentifierTypes],
+      });
+      // The backend removes the plugin from every hook's global order, so the
+      // AdvancedOrderSection list must refetch — otherwise it keeps showing
+      // the now-uninstalled plugin until the user navigates away.
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginOrder],
+      });
+      // Library-scoped orders (LibraryPluginsTab) are keyed under
+      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
+      // only those — the shared "libraries" prefix is used by other hooks
+      // too (books, settings) and blanket-invalidating it would trigger
+      // unrelated refetches on every uninstall.
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === "libraries" &&
+            key[2] === "plugins" &&
+            key[3] === "order"
+          );
+        },
       });
     },
   });
