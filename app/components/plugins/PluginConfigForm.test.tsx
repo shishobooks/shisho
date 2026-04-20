@@ -1,8 +1,9 @@
-import { PluginConfigForm } from "./PluginConfigForm";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { PluginConfigForm } from "./PluginConfigForm";
 
 const mockSaveConfig = vi.fn();
 const mockSaveFields = vi.fn();

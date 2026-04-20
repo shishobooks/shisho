@@ -1,8 +1,9 @@
-import { PluginVersionCard } from "./PluginVersionCard";
 import { render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { PluginVersion } from "@/hooks/queries/plugins";
+
+import { PluginVersionCard } from "./PluginVersionCard";
 
 const makeVersion = (
   overrides: Partial<PluginVersion> = {},

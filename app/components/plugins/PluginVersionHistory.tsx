@@ -1,4 +1,3 @@
-import { PluginVersionCard } from "./PluginVersionCard";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -8,6 +7,8 @@ import {
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
+
+import { PluginVersionCard } from "./PluginVersionCard";
 
 const INITIAL_VISIBLE_OLDER = 3;
 

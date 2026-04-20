@@ -1,8 +1,9 @@
-import { PluginDetailHero } from "./PluginDetailHero";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
+
+import { PluginDetailHero } from "./PluginDetailHero";
 
 const baseAvailable: AvailablePlugin = {
   compatible: true,

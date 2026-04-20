@@ -1,4 +1,3 @@
-import { useSSE } from "./useSSE";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
@@ -10,6 +9,8 @@ import {
 } from "@/components/contexts/Auth/context";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
+
+import { useSSE } from "./useSSE";
 
 // Mock EventSource
 class MockEventSource {

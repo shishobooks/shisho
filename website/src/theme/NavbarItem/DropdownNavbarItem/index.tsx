@@ -1,6 +1,7 @@
-import DropdownNavbarItemDesktop from "./Desktop";
 import DropdownNavbarItemMobile from "@theme-original/NavbarItem/DropdownNavbarItem/Mobile";
 import type { ReactNode } from "react";
+
+import DropdownNavbarItemDesktop from "./Desktop";
 
 interface DropdownNavbarItemProps {
   mobile?: boolean;

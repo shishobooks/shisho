@@ -1,7 +1,8 @@
-import { derivePluginInitials, getPluginFallbackColor } from "./logoColor";
 import { useState } from "react";
 
 import { cn } from "@/libraries/utils";
+
+import { derivePluginInitials, getPluginFallbackColor } from "./logoColor";
 
 export interface PluginLogoProps {
   scope: string;

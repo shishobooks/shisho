@@ -1,7 +1,8 @@
-import { UnsavedChangesDialog } from "./unsaved-changes-dialog";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import { UnsavedChangesDialog } from "./unsaved-changes-dialog";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

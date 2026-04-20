@@ -1,4 +1,3 @@
-import { PluginManifestDialog } from "./PluginManifestDialog";
 import { Braces, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +10,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useReloadPlugin } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
+
+import { PluginManifestDialog } from "./PluginManifestDialog";
 
 export interface PluginHeroActionsProps {
   canWrite: boolean;

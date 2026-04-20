@@ -1,5 +1,3 @@
-import { CapabilityRow } from "./CapabilityRow";
-import { CAPABILITY_DEFS, filterDefsByCapabilities } from "./capabilityRows";
 import { useMemo } from "react";
 
 import type {
@@ -7,6 +5,9 @@ import type {
   PluginCapabilities,
 } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
+
+import { CapabilityRow } from "./CapabilityRow";
+import { CAPABILITY_DEFS, filterDefsByCapabilities } from "./capabilityRows";
 
 interface PluginCapabilitiesSectionProps {
   available?: AvailablePlugin;

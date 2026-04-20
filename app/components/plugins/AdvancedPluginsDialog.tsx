@@ -1,6 +1,3 @@
-import { AdvancedOrderSection } from "./AdvancedOrderSection";
-import { AdvancedRepositoriesSection } from "./AdvancedRepositoriesSection";
-
 import {
   Dialog,
   DialogContent,
@@ -8,6 +5,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+import { AdvancedOrderSection } from "./AdvancedOrderSection";
+import { AdvancedRepositoriesSection } from "./AdvancedRepositoriesSection";
 
 export interface AdvancedPluginsDialogProps {
   defaultSection?: "order" | "repositories";

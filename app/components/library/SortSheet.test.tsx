@@ -1,10 +1,11 @@
-import SortSheet from "./SortSheet";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/components/ui/button";
 import type { SortLevel } from "@/libraries/sortSpec";
+
+import SortSheet from "./SortSheet";
 
 // jsdom does not implement window.matchMedia. Mock it to return matches=true
 // so useMediaQuery("(min-width: 768px)") returns true and the Sheet (Radix

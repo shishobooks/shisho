@@ -1,7 +1,3 @@
-import {
-  deriveCapabilityLabels,
-  resolveInstalledPluginCapabilities,
-} from "./pluginCapabilities";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -10,6 +6,11 @@ import type {
   PluginVersion,
 } from "@/hooks/queries/plugins";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
+
+import {
+  deriveCapabilityLabels,
+  resolveInstalledPluginCapabilities,
+} from "./pluginCapabilities";
 
 describe("deriveCapabilityLabels", () => {
   it("returns [] for null caps", () => {

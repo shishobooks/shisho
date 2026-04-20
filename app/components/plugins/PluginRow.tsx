@@ -1,10 +1,11 @@
-import { PluginLogo } from "./PluginLogo";
 import { BadgeCheck, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libraries/utils";
+
+import { PluginLogo } from "./PluginLogo";
 
 export interface PluginRowProps {
   actions?: ReactNode;

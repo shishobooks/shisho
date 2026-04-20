@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import {
   validateASIN,
   validateIdentifier,
@@ -5,7 +7,6 @@ import {
   validateISBN13,
   validateUUID,
 } from "./identifiers";
-import { describe, expect, it } from "vitest";
 
 describe("validateISBN10", () => {
   it("validates correct ISBN-10", () => {

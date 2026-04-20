@@ -1,6 +1,7 @@
-import { useFormDialogClose } from "./useFormDialogClose";
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { useFormDialogClose } from "./useFormDialogClose";
 
 describe("useFormDialogClose", () => {
   it("should not close dialog when hasChanges is true", () => {

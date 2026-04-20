@@ -1,4 +1,3 @@
-import { FormDialog } from "./form-dialog";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+import { FormDialog } from "./form-dialog";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

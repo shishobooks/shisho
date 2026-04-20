@@ -1,4 +1,3 @@
-import type { EntityType } from "./MetadataEditDialog";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+import type { EntityType } from "./MetadataEditDialog";
 
 interface MetadataDeleteDialogProps {
   open: boolean;

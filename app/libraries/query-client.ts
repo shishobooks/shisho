@@ -1,5 +1,6 @@
-import { ShishoAPIError } from "./api";
 import { keepPreviousData, QueryClient } from "@tanstack/react-query";
+
+import { ShishoAPIError } from "./api";
 
 export const queryClient = new QueryClient({
   defaultOptions: {

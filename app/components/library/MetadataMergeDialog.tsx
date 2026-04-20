@@ -1,4 +1,3 @@
-import type { EntityType } from "./MetadataEditDialog";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -23,6 +22,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+
+import type { EntityType } from "./MetadataEditDialog";
 
 interface EntityOption {
   id: number;

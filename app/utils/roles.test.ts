@@ -1,7 +1,8 @@
-import { sortRoles } from "./roles";
 import { describe, expect, it } from "vitest";
 
 import type { Role } from "@/types";
+
+import { sortRoles } from "./roles";
 
 const makeRole = (id: number, name: string, is_system = false): Role => ({
   id,

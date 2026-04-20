@@ -1,8 +1,9 @@
-import { PluginDetail } from "./PluginDetail";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+
+import { PluginDetail } from "./PluginDetail";
 
 // Mock the auth hook used by PluginDetail.
 vi.mock("@/hooks/useAuth", () => ({

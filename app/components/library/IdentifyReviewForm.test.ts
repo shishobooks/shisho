@@ -1,5 +1,6 @@
-import { resolveIdentifiers } from "./identify-utils";
 import { describe, expect, it } from "vitest";
+
+import { resolveIdentifiers } from "./identify-utils";
 
 describe("resolveIdentifiers", () => {
   it("returns unchanged when identifiers are identical", () => {

@@ -1,7 +1,7 @@
-import BookItem from "./BookItem";
-
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import type { Book } from "@/types";
+
+import BookItem from "./BookItem";
 
 interface SelectableBookItemProps {
   book: Book;

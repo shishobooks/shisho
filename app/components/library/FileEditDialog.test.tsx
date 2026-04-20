@@ -1,4 +1,3 @@
-import { FileEditDialog } from "./FileEditDialog";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,6 +12,8 @@ import {
 } from "vitest";
 
 import { FileRoleMain, FileTypeCBZ, type File } from "@/types";
+
+import { FileEditDialog } from "./FileEditDialog";
 
 // delay:null skips userEvent's default 10ms-per-event pause so chained
 // clicks don't rely on fake-timer advancement under CPU contention — this

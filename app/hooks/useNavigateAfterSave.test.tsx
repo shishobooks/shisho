@@ -1,9 +1,10 @@
-import { useNavigateAfterSave } from "./useNavigateAfterSave";
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useNavigateAfterSave } from "./useNavigateAfterSave";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

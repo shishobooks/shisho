@@ -1,8 +1,9 @@
-import { QueryKey, useUninstallPlugin } from "./plugins";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
+
+import { QueryKey, useUninstallPlugin } from "./plugins";
 
 // Mock the API layer so the mutation completes without a real HTTP call.
 vi.mock("@/libraries/api", async () => {

@@ -1,4 +1,3 @@
-import FileChaptersTab from "./FileChaptersTab";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFileChapters } from "@/hooks/queries/chapters";
 import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
+
+import FileChaptersTab from "./FileChaptersTab";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

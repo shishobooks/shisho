@@ -1,8 +1,9 @@
+import { describe, expect, it } from "vitest";
+
 import {
   computeIdentifyEmptyState,
   resolveIdentifiers,
 } from "./identify-utils";
-import { describe, expect, it } from "vitest";
 
 describe("computeIdentifyEmptyState", () => {
   const baseInput = {

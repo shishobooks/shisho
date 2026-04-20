@@ -1,4 +1,3 @@
-import { QueryKey as BooksQueryKey } from "./books";
 import {
   useMutation,
   useQuery,
@@ -9,6 +8,8 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { Book, File, Person } from "@/types";
 import type { UpdatePersonPayload } from "@/types/generated/people";
+
+import { QueryKey as BooksQueryKey } from "./books";
 
 export enum QueryKey {
   ListPeople = "ListPeople",

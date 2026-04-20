@@ -1,4 +1,3 @@
-import { QueryKey as BooksQueryKey } from "./books";
 import {
   useMutation,
   useQuery,
@@ -12,6 +11,8 @@ import type {
   ListPublishersQuery,
   UpdatePublisherPayload,
 } from "@/types/generated/publishers";
+
+import { QueryKey as BooksQueryKey } from "./books";
 
 export enum QueryKey {
   ListPublishers = "ListPublishers",

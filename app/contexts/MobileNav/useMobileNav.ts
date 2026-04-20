@@ -1,5 +1,6 @@
-import { MobileNavContext } from "./MobileNavContext";
 import { useContext } from "react";
+
+import { MobileNavContext } from "./MobileNavContext";
 
 export const useMobileNav = () => {
   const context = useContext(MobileNavContext);

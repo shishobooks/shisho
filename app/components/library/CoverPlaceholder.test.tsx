@@ -1,6 +1,7 @@
-import CoverPlaceholder from "./CoverPlaceholder";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import CoverPlaceholder from "./CoverPlaceholder";
 
 describe("CoverPlaceholder", () => {
   it("renders book variant with correct viewBox", () => {

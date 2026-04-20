@@ -1,5 +1,6 @@
-import { getLanguageName, LANGUAGES } from "./languages";
 import { describe, expect, it } from "vitest";
+
+import { getLanguageName, LANGUAGES } from "./languages";
 
 describe("getLanguageName", () => {
   it("returns exact match for a curated tag", () => {

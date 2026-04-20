@@ -1,9 +1,10 @@
-import SortedByChips from "./SortedByChips";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SortLevel } from "@/libraries/sortSpec";
+
+import SortedByChips from "./SortedByChips";
 
 describe("SortedByChips", () => {
   it("renders a chip per level", () => {

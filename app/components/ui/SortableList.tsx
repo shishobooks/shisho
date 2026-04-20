@@ -1,4 +1,3 @@
-import { SortableItem, type DragHandleProps } from "./SortableItem";
 import {
   closestCenter,
   DndContext,
@@ -15,6 +14,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { ReactNode, useCallback } from "react";
+
+import { SortableItem, type DragHandleProps } from "./SortableItem";
 
 export type { DragHandleProps };
 

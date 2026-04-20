@@ -1,9 +1,10 @@
-import { ChangelogMarkdown } from "./ChangelogMarkdown";
 import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PluginVersion } from "@/hooks/queries/plugins";
+
+import { ChangelogMarkdown } from "./ChangelogMarkdown";
 
 export type PluginVersionCardState =
   | "installed"

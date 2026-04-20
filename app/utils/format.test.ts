@@ -1,5 +1,6 @@
-import { formatDate, formatDateTime } from "./format";
 import { describe, expect, it } from "vitest";
+
+import { formatDate, formatDateTime } from "./format";
 
 describe("formatDate", () => {
   it("preserves the UTC date regardless of local timezone", () => {

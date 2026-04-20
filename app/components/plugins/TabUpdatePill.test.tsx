@@ -1,6 +1,7 @@
-import { TabUpdatePill } from "./TabUpdatePill";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { TabUpdatePill } from "./TabUpdatePill";
 
 describe("TabUpdatePill", () => {
   it("renders nothing when count is 0", () => {
