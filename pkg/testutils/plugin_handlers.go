@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -55,9 +54,7 @@ func (h *handler) fixtureZip(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	c.Response().Header().Set("Content-Type", "application/zip")
-	_, err = io.Copy(c.Response().Writer, bytes.NewReader(data))
-	return errors.WithStack(err)
+	return errors.WithStack(c.Blob(http.StatusOK, "application/zip", data))
 }
 
 type fixtureInfoResponse struct {
