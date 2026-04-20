@@ -85,6 +85,8 @@ The `docusaurus.config.ts` reads `versions.json` to determine the latest version
 
 Pages are ordered by `sidebar_position` in frontmatter. Core/essential pages go first, niche or advanced topics go last. When adding a new page, check the existing positions and place it appropriately — don't insert early in the list unless the page is something most users need to see. New pages for optional or secondary features should go at the end.
 
+Top-level positions are numbered in increments of 10 (`10, 20, 30, …`) so new entries can slot between existing ones without renumbering. Category positions (in `_category_.json`) share the same number line as leaf docs — never reuse a number across the two, or Docusaurus will fall back to alphabetical order and the sidebar order becomes fragile.
+
 **Advanced is always last.** The `advanced/` category must have the highest `position` of any top-level sidebar item. When adding a new top-level page or category whose position would land after Advanced, bump Advanced's position in `docs/advanced/_category_.json` so it stays at the bottom.
 
 ### Doc Title Casing
