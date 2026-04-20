@@ -264,7 +264,7 @@ export const PluginConfigForm = ({
     data?.declaredFields && data.declaredFields.length > 0;
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-4 rounded-md border border-border p-4 md:p-6">
       <h2 className="text-lg font-semibold">Configuration</h2>
 
       {isLoading ? (
@@ -358,6 +358,6 @@ export const PluginConfigForm = ({
           </Button>
         </div>
       )}
-    </div>
+    </section>
   );
 };

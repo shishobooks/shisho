@@ -39,9 +39,9 @@ export const PluginDangerZone = ({
   };
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3 rounded-md border border-destructive/40 p-4 md:p-6">
       <h2 className="text-lg font-semibold text-destructive">Danger zone</h2>
-      <div className="flex items-center justify-between gap-4 rounded-md border border-destructive/40 p-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <div className="text-sm font-medium">Uninstall plugin</div>
           <div className="text-xs text-muted-foreground">

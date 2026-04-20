@@ -203,7 +203,7 @@ export const AdvancedOrderSection = () => {
                     <SelectContent>
                       <SelectItem value="enabled">
                         <div>
-                          <div>On every scan</div>
+                          <div>For every new file</div>
                           <div className="text-xs text-muted-foreground">
                             Also available for manual identification
                           </div>
@@ -214,7 +214,7 @@ export const AdvancedOrderSection = () => {
                           <div>
                             <div>Only when manually identifying</div>
                             <div className="text-xs text-muted-foreground">
-                              Skipped during automated scans
+                              Skipped when new files are added
                             </div>
                           </div>
                         </SelectItem>

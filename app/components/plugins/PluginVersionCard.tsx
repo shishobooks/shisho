@@ -4,7 +4,6 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PluginVersion } from "@/hooks/queries/plugins";
-import { cn } from "@/libraries/utils";
 
 export type PluginVersionCardState =
   | "installed"
@@ -66,21 +65,13 @@ export const PluginVersionCard = ({
 }: PluginVersionCardProps) => {
   const date = formatReleaseDate(version.releaseDate);
   return (
-    <div
-      className={cn(
-        "space-y-3 rounded-md border p-4",
-        (state === "available" || state === "latest") &&
-          "border-primary/50 bg-primary/5",
-      )}
-    >
+    <div className="space-y-3 py-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="font-medium">v{version.version}</span>
           {state === "available" && <Badge>Available now</Badge>}
           {state === "latest" && <Badge>Latest</Badge>}
-          {state === "installed" && (
-            <Badge variant="secondary">Installed</Badge>
-          )}
+          {state === "installed" && <Badge variant="success">Installed</Badge>}
         </div>
         {date && (
           <span className="text-xs text-muted-foreground">

@@ -31,13 +31,14 @@ export const PluginCapabilitiesSection = ({
   if (rows.length === 0) return null;
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3 rounded-md border border-border p-4 md:p-6">
       <h2 className="text-lg font-semibold">Capabilities</h2>
-      <div className="space-y-2">
+      <div className="divide-y divide-border">
         {rows.map((def) => (
           <CapabilityRow
             description={def.description}
             detail={caps ? def.detail(caps) : undefined}
+            flat
             icon={def.icon}
             key={def.key}
             label={def.label}

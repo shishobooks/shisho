@@ -76,7 +76,7 @@ export const PluginDetailHero = ({
   }
 
   return (
-    <div className="flex gap-4 rounded-md border border-border p-6">
+    <div className="flex gap-4 rounded-md border border-border p-4 md:p-6">
       <PluginLogo id={id} imageUrl={imageUrl} scope={scope} size={64} />
 
       <div className="flex-1 space-y-2">

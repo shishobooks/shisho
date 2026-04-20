@@ -45,7 +45,7 @@ const HOOK_TYPES: {
 const modeLabel = (mode: PluginMode | undefined): string => {
   switch (mode) {
     case "enabled":
-      return "Runs on every scan";
+      return "Runs for every new file";
     case "manual_only":
       return "Runs only when manually identifying";
     case "disabled":
@@ -74,9 +74,9 @@ export const PluginHookOrderSection = ({
   if (activeHooks.length === 0) return null;
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3 rounded-md border border-border p-4 md:p-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Execution order</h2>
+        <h2 className="text-lg font-semibold">Hook execution order</h2>
         <Link
           className="inline-flex items-center gap-1 text-xs text-muted-foreground underline hover:text-foreground"
           to="/settings/plugins?advanced=order"
@@ -86,7 +86,7 @@ export const PluginHookOrderSection = ({
         </Link>
       </div>
 
-      <div className="space-y-2">
+      <div className="divide-y divide-border">
         {activeHooks.map((ht, i) => {
           const order = orderQueries[i]?.data ?? [];
           const idx = order.findIndex(
@@ -97,7 +97,7 @@ export const PluginHookOrderSection = ({
 
           return (
             <div
-              className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+              className="flex items-center justify-between gap-3 py-3"
               key={ht.value}
             >
               <div className="text-sm font-medium">{ht.label}</div>

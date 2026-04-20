@@ -74,36 +74,43 @@ export const PluginVersionHistory = ({
   const hiddenCount = olderVersions.length - visibleOlder.length;
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-semibold">Version history</h2>
+    <section className="rounded-md border border-border p-4 md:p-6">
+      <h2 className="mb-3 text-lg font-semibold md:mb-4">Version history</h2>
 
-      {newerVersions.map((v, idx) => {
-        const isUpdateTarget =
-          installedVersion !== undefined &&
-          (updateTarget ? v.version === updateTarget : idx === 0);
-        return (
+      <div className="divide-y divide-border">
+        {newerVersions.map((v, idx) => {
+          const isUpdateTarget =
+            installedVersion !== undefined &&
+            (updateTarget ? v.version === updateTarget : idx === 0);
+          return (
+            <PluginVersionCard
+              isUpdating={updateVersion.isPending}
+              key={v.version}
+              onUpdate={isUpdateTarget ? handleUpdate : undefined}
+              releaseUrl={v.releaseUrl}
+              state={installedVersion ? "available" : "latest"}
+              version={v}
+            />
+          );
+        })}
+
+        {visibleOlder.map((v) => (
           <PluginVersionCard
-            isUpdating={updateVersion.isPending}
             key={v.version}
-            onUpdate={isUpdateTarget ? handleUpdate : undefined}
             releaseUrl={v.releaseUrl}
-            state={installedVersion ? "available" : "latest"}
+            state={v.version === installedVersion ? "installed" : "older"}
             version={v}
           />
-        );
-      })}
-
-      {visibleOlder.map((v) => (
-        <PluginVersionCard
-          key={v.version}
-          releaseUrl={v.releaseUrl}
-          state={v.version === installedVersion ? "installed" : "older"}
-          version={v}
-        />
-      ))}
+        ))}
+      </div>
 
       {hiddenCount > 0 && (
-        <Button onClick={() => setExpanded(true)} size="sm" variant="ghost">
+        <Button
+          className="mt-2"
+          onClick={() => setExpanded(true)}
+          size="sm"
+          variant="ghost"
+        >
           Show {hiddenCount} older version{hiddenCount === 1 ? "" : "s"}
         </Button>
       )}

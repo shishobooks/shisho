@@ -196,7 +196,12 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                   actions={
                     canWrite ? (
                       isInstalled ? (
-                        <Button disabled size="sm" variant="outline">
+                        <Button
+                          className="border-transparent bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/40"
+                          disabled
+                          size="sm"
+                          variant="outline"
+                        >
                           <Check aria-hidden="true" className="mr-1 h-3 w-3" />
                           Installed
                         </Button>
