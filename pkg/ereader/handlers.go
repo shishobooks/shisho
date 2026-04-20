@@ -457,9 +457,6 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if author == nil {
-		return errcodes.NotFound("Author")
-	}
 
 	// Resolve sort once (so the type-filter branch and the SQL query use
 	// the same ordering) and fetch books for this author + library via
