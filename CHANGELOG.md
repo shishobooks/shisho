@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-04-20
+
+### Features
+- Plugin admin UI polish pass (#110)
+- Add gallery sort with persisted library preferences (#108)
+- Let plugins set cover_page for CBZ/PDF files (#107)
+- Add server log viewer with in-memory ring buffer (#102)
+- Switch Vite to plugin-react (#101)
+- Collapse library filters into a single sheet/drawer button (#99)
+- Display series number prominently and polish detail page navigation (#97)
+
+### Bug Fixes
+- Align sort default across surfaces and fix per-author pagination (#109)
+- Release port 3689 promptly on server shutdown (#103)
+- Stabilize flaky JS test runs (#100)
+- Prefer existing cover in identify dialog when plugin cover is lower resolution (#98)
+- Avoid misleading skipped enricher message in identify dialog (#96)
+
+### Other
+- Bump the minor-and-patch group with 8 updates (#106)
+- Bump github.com/klippa-app/go-pdfium from 1.18.1 to 1.19.2 in the minor-and-patch group (#104)
+- Bump actions/upload-pages-artifact from 4 to 5 (#105)
+
+
 ## [0.0.31] - 2026-04-14
 
 ### Features
