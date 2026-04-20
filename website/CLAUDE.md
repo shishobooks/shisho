@@ -27,9 +27,11 @@ website/
 │   ├── directory-structure.md
 │   ├── configuration.md
 │   ├── supported-formats.md
-│   ├── plugins.md
+│   ├── plugins/             # Category directory
+│   │   ├── _category_.json  # Label, position, collapsed state
+│   │   └── overview.md
 │   └── advanced/
-│       ├── _category_.json  # Label, position, collapsed state
+│       ├── _category_.json
 │       └── primary-file.md
 ├── versioned_docs/          # Snapshots per release (auto-generated)
 ├── versioned_sidebars/      # Sidebar snapshots per release
@@ -85,7 +87,7 @@ The `docusaurus.config.ts` reads `versions.json` to determine the latest version
 
 Pages are ordered by `sidebar_position` in frontmatter. Core/essential pages go first, niche or advanced topics go last. When adding a new page, check the existing positions and place it appropriately — don't insert early in the list unless the page is something most users need to see. New pages for optional or secondary features should go at the end.
 
-Top-level positions are numbered in increments of 10 (`10, 20, 30, …`) so new entries can slot between existing ones without renumbering. Category positions (in `_category_.json`) share the same number line as leaf docs — never reuse a number across the two, or Docusaurus will fall back to alphabetical order and the sidebar order becomes fragile.
+Top-level positions are numbered in increments of 10 (`10, 20, 30, …`) so new entries can slot between existing ones without renumbering. Category positions (in `_category_.json`) share the same number line as leaf docs — never reuse a number across the two, or Docusaurus will fall back to alphabetical order and the sidebar order becomes fragile. Docs *inside* a category use their own local number line (e.g. `plugins/overview.md` at 1, `plugins/repositories.md` at 2) and do not need to follow the increments-of-10 convention.
 
 **Advanced is always last.** The `advanced/` category must have the highest `position` of any top-level sidebar item. When adding a new top-level page or category whose position would land after Advanced, bump Advanced's position in `docs/advanced/_category_.json` so it stays at the bottom.
 
