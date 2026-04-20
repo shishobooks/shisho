@@ -30,7 +30,7 @@ export const AdvancedPluginsDialog = ({
           className="flex flex-col overflow-hidden"
           defaultValue={defaultSection}
         >
-          <TabsList>
+          <TabsList className="w-full justify-start">
             <TabsTrigger value="order">Order</TabsTrigger>
             <TabsTrigger value="repositories">Repositories</TabsTrigger>
           </TabsList>
