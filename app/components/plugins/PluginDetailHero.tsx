@@ -1,5 +1,3 @@
-import { PluginHeroActions } from "./PluginHeroActions";
-import { PluginLogo } from "./PluginLogo";
 import { BadgeCheck, ExternalLink } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
@@ -9,6 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
+
+import { PluginHeroActions } from "./PluginHeroActions";
+import { PluginLogo } from "./PluginLogo";
 
 export interface PluginDetailHeroProps {
   available?: AvailablePlugin;

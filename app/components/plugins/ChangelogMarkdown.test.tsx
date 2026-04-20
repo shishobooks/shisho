@@ -1,6 +1,7 @@
-import { ChangelogMarkdown } from "./ChangelogMarkdown";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { ChangelogMarkdown } from "./ChangelogMarkdown";
 
 describe("ChangelogMarkdown", () => {
   it("renders h2/h3 headings and paragraphs", () => {

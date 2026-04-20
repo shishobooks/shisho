@@ -1,10 +1,11 @@
-import { CreateListDialog } from "./CreateListDialog";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { List } from "@/types";
+
+import { CreateListDialog } from "./CreateListDialog";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

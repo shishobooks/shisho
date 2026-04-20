@@ -1,3 +1,6 @@
+import { XMLParser } from "fast-xml-parser";
+import { parseHTML } from "linkedom";
+
 import type {
   FetchResponse,
   HtmlElement,
@@ -12,8 +15,6 @@ import type {
   ShishoXML,
   XMLElement,
 } from "../index";
-import { XMLParser } from "fast-xml-parser";
-import { parseHTML } from "linkedom";
 
 /** Configuration for a mock fetch response. */
 export interface MockFetchResponse {

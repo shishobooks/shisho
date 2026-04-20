@@ -1,5 +1,6 @@
-import { derivePluginInitials, getPluginFallbackColor } from "./logoColor";
 import { describe, expect, it } from "vitest";
+
+import { derivePluginInitials, getPluginFallbackColor } from "./logoColor";
 
 describe("derivePluginInitials", () => {
   it("uses first letter + letter after first hyphen when id has a hyphen", () => {

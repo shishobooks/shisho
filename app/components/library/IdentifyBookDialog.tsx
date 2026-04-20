@@ -1,5 +1,3 @@
-import { computeIdentifyEmptyState } from "./identify-utils";
-import { IdentifyReviewForm } from "./IdentifyReviewForm";
 import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,6 +31,9 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
+
+import { computeIdentifyEmptyState } from "./identify-utils";
+import { IdentifyReviewForm } from "./IdentifyReviewForm";
 
 interface IdentifyBookDialogProps {
   open: boolean;

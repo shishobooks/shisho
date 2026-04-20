@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -6,7 +8,6 @@ import {
   sortSpecsEqual,
   type SortLevel,
 } from "./sortSpec";
-import { describe, expect, it } from "vitest";
 
 describe("parseSortSpec", () => {
   it("parses single level", () => {

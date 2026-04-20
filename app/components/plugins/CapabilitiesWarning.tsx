@@ -1,6 +1,3 @@
-import { CapabilityRow } from "./CapabilityRow";
-import { CAPABILITY_DEFS, filterDefsByCapabilities } from "./capabilityRows";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +8,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
+
+import { CapabilityRow } from "./CapabilityRow";
+import { CAPABILITY_DEFS, filterDefsByCapabilities } from "./capabilityRows";
 
 interface CapabilitiesWarningProps {
   isPending: boolean;

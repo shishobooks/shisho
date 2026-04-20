@@ -1,5 +1,6 @@
-import { forPerson, forTitle } from "./sortname";
 import { describe, expect, it } from "vitest";
+
+import { forPerson, forTitle } from "./sortname";
 
 describe("forTitle", () => {
   it("moves 'The' to end", () => {

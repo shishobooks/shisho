@@ -1,8 +1,9 @@
-import CoverGalleryTabs from "./CoverGalleryTabs";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { File } from "@/types";
+
+import CoverGalleryTabs from "./CoverGalleryTabs";
 
 function makeFile(overrides: Partial<File> = {}): File {
   return {

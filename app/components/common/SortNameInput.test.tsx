@@ -1,7 +1,8 @@
-import { SortNameInput } from "./SortNameInput";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import { SortNameInput } from "./SortNameInput";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

@@ -1,4 +1,3 @@
-import { BookSelectionList } from "./BookSelectionList";
 import { AlertTriangle, GitMerge, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +14,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { useMergeBooks } from "@/hooks/queries/books";
 import type { Book, Library } from "@/types";
+
+import { BookSelectionList } from "./BookSelectionList";
 
 interface MergeIntoDialogProps {
   open: boolean;

@@ -1,4 +1,3 @@
-import { Github } from "../components/GithubIcon";
 import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
@@ -14,6 +13,8 @@ import {
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { Github } from "../components/GithubIcon";
 
 const workflowSteps = [
   {

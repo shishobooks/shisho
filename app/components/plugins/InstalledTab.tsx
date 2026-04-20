@@ -1,8 +1,3 @@
-import {
-  deriveCapabilityLabels,
-  resolveInstalledPluginCapabilities,
-} from "./pluginCapabilities";
-import { PluginRow } from "./PluginRow";
 import { Download, FolderSearch, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +13,12 @@ import {
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
 import type { Plugin } from "@/types/generated/models";
+
+import {
+  deriveCapabilityLabels,
+  resolveInstalledPluginCapabilities,
+} from "./pluginCapabilities";
+import { PluginRow } from "./PluginRow";
 
 export const InstalledTab = () => {
   const { hasPermission } = useAuth();

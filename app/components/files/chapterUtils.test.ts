@@ -1,9 +1,3 @@
-import {
-  formatTimestampMs,
-  getNextChapterTitle,
-  normalizeChapterOrder,
-  parseTimestampMs,
-} from "./chapterUtils";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,6 +7,13 @@ import {
   FileTypePDF,
   type ChapterInput,
 } from "@/types";
+
+import {
+  formatTimestampMs,
+  getNextChapterTitle,
+  normalizeChapterOrder,
+  parseTimestampMs,
+} from "./chapterUtils";
 
 describe("getNextChapterTitle", () => {
   it('detects "Chapter N" pattern', () => {

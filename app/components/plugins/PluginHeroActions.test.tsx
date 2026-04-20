@@ -1,4 +1,3 @@
-import { PluginHeroActions } from "./PluginHeroActions";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,6 +6,8 @@ import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
+
+import { PluginHeroActions } from "./PluginHeroActions";
 
 const mockReloadMutateAsync = vi.fn();
 

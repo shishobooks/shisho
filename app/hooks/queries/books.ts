@@ -1,5 +1,3 @@
-import { QueryKey as LibrariesQueryKey } from "./libraries";
-import { QueryKey as SearchQueryKey } from "./search";
 import {
   useMutation,
   useQuery,
@@ -23,6 +21,9 @@ import type {
   UpdateBookPayload,
   UpdateFilePayload,
 } from "@/types";
+
+import { QueryKey as LibrariesQueryKey } from "./libraries";
+import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
   RetrieveBook = "RetrieveBook",

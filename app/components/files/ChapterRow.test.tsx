@@ -1,10 +1,11 @@
-import ChapterRow from "./ChapterRow";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { FileTypeCBZ, FileTypeM4B, type Chapter } from "@/types";
+
+import ChapterRow from "./ChapterRow";
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

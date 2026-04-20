@@ -9,8 +9,9 @@
  *   pnpm test:e2e e2e/setup.spec.ts  # Run only setup tests
  */
 
-import { expect, getApiBaseURL, request, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+
+import { expect, getApiBaseURL, request, test } from "./fixtures";
 
 async function gotoSetup(page: Page, path = "/setup") {
   await page.goto(path, { waitUntil: "domcontentloaded" });

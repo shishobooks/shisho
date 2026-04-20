@@ -18,8 +18,9 @@
  *   pnpm test:e2e e2e/plugins.spec.ts    # Run only plugins tests
  */
 
-import { expect, getApiBaseURL, request, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+
+import { expect, getApiBaseURL, request, test } from "./fixtures";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");

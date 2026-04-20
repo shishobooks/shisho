@@ -1,11 +1,4 @@
 import {
-  countDescendants,
-  formatTimestampMs,
-  parseTimestampMs,
-} from "./chapterUtils";
-import PagePicker from "./PagePicker";
-import PagePreview from "./PagePreview";
-import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -42,6 +35,14 @@ import {
   type Chapter,
   type FileType,
 } from "@/types";
+
+import {
+  countDescendants,
+  formatTimestampMs,
+  parseTimestampMs,
+} from "./chapterUtils";
+import PagePicker from "./PagePicker";
+import PagePreview from "./PagePreview";
 
 /** Pixels of indentation per depth level for EPUB hierarchy */
 const INDENT_PX_PER_LEVEL = 24;

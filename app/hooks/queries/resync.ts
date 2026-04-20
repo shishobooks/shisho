@@ -1,8 +1,9 @@
-import { QueryKey } from "./books";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { API } from "@/libraries/api";
 import { Book, File } from "@/types";
+
+import { QueryKey } from "./books";
 
 export type RescanMode = "scan" | "refresh" | "reset";
 

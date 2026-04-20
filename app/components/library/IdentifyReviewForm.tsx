@@ -1,9 +1,3 @@
-import {
-  resolveIdentifiers,
-  type FieldStatus,
-  type IdentifierEntry,
-} from "./identify-utils";
-import { LanguageCombobox } from "./LanguageCombobox";
 import equal from "fast-deep-equal";
 import {
   ArrowLeft,
@@ -37,6 +31,13 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+
+import {
+  resolveIdentifiers,
+  type FieldStatus,
+  type IdentifierEntry,
+} from "./identify-utils";
+import { LanguageCombobox } from "./LanguageCombobox";
 
 // ---------------------------------------------------------------------------
 // Types

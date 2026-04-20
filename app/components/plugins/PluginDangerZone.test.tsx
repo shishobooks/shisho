@@ -1,10 +1,11 @@
-import { PluginDangerZone } from "./PluginDangerZone";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
+
+import { PluginDangerZone } from "./PluginDangerZone";
 
 const mockUninstallMutate = vi.fn();
 const mockNavigate = vi.fn();

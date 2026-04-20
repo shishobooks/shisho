@@ -1,7 +1,8 @@
-import { AdvancedPluginsDialog } from "./AdvancedPluginsDialog";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import { AdvancedPluginsDialog } from "./AdvancedPluginsDialog";
 
 // Mock child sections to keep tests focused on dialog behaviour
 vi.mock("./AdvancedOrderSection", () => ({

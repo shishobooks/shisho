@@ -1,4 +1,3 @@
-import { BookSelectionList } from "./BookSelectionList";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +14,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { useMoveFiles } from "@/hooks/queries/books";
 import type { Book, File, Library } from "@/types";
+
+import { BookSelectionList } from "./BookSelectionList";
 
 interface MoveFilesDialogProps {
   open: boolean;

@@ -1,5 +1,6 @@
-import { getAuthorRoleLabel } from "./authorRoles";
 import { describe, expect, it } from "vitest";
+
+import { getAuthorRoleLabel } from "./authorRoles";
 
 describe("getAuthorRoleLabel", () => {
   it("maps known canonical roles to capitalized labels", () => {

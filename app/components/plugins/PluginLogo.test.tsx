@@ -1,6 +1,7 @@
-import { PluginLogo } from "./PluginLogo";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { PluginLogo } from "./PluginLogo";
 
 describe("PluginLogo", () => {
   it("renders an <img> when imageUrl is provided", () => {

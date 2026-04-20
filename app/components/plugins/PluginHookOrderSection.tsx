@@ -1,4 +1,3 @@
-import { resolveInstalledPluginCapabilities } from "./pluginCapabilities";
 import { ExternalLink } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -10,6 +9,8 @@ import {
   type PluginMode,
 } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
+
+import { resolveInstalledPluginCapabilities } from "./pluginCapabilities";
 
 interface PluginHookOrderSectionProps {
   installed: Plugin;
