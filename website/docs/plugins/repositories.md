@@ -35,6 +35,7 @@ Each plugin version in a repository includes:
 - A **SHA256 hash** for verifying the download integrity
 - A **minimum Shisho version** for compatibility filtering
 - A **changelog** describing what changed
+- An optional **release URL** linking to the version's release page (shown as "View release" on the version card)
 - An optional **capabilities** object declaring what the plugin can do (shown during install)
 
 Plugin versions that require a newer version of Shisho are marked as **Incompatible** in the Browse tab and cannot be installed. Compatible versions remain installable as normal.
@@ -68,6 +69,7 @@ Create a `repository.json` file with this structure:
           "releaseDate": "2025-06-15",
           "changelog": "Initial release.",
           "downloadUrl": "https://github.com/my-org/my-plugin/releases/download/v1.0.0/my-plugin.zip",
+          "releaseUrl": "https://github.com/my-org/my-plugin/releases/tag/v1.0.0",
           "sha256": "abc123...",
           "capabilities": {
             "metadataEnricher": {
@@ -87,9 +89,11 @@ Create a `repository.json` file with this structure:
 
 ### Field notes
 
+- **`homepage`** (on each plugin entry): Optional. The plugin's landing page — shown as the "homepage" link on the plugin detail page. For multi-plugin repositories, point this at the plugin's own page (e.g. `https://github.com/my-org/my-plugins/tree/main/plugins/my-plugin`) rather than the repository root. Shisho uses this field purely for display — release links come from `releaseUrl` on each version, not from `homepage`.
 - **`imageUrl`** (on each plugin entry): Plugin logo URL. Recommended 256×256 PNG or SVG (SVG preferred), 1:1 aspect ratio, centered mark with ≥10% safe area; any HTTPS URL works (GitHub raw is fine). Shisho renders it on a muted square backdrop with a rounded radius that scales with display size, so transparent artwork shows the backdrop through. When `imageUrl` is missing or fails to load, Shisho falls back to hashed-color initials derived from `scope/id`.
 - **`releaseDate`** (on each version entry): Optional. Accepts RFC3339 (`2026-04-14T00:00:00Z`) or date-only (`2026-04-14`). When omitted, the "Released" line is hidden on the version card. Repository manifests are validated at fetch time; versions with an invalid `releaseDate` are skipped (and a warning is logged server-side).
-- **`changelog`** (on each version entry): Rendered as sanitized markdown on the plugin detail page. Supported subset: headings (`##`, `###`), paragraphs, lists, inline code, fenced code blocks, links (open in a new tab), bold, italic. Raw HTML, images, and iframes are stripped — author content accordingly. The "View full diff on GitHub" link in the UI is inferred from the plugin's `homepage` when it points to a GitHub repo; no additional manifest field is read for it.
+- **`releaseUrl`** (on each version entry): Optional. Full URL to the release page for this version — any HTTPS URL works (GitHub release, GitLab tag, Codeberg release, etc.). When present, Shisho renders a "View release" link on the version card. When omitted, no link is shown. Shisho does not validate the host or path — it renders the URL verbatim.
+- **`changelog`** (on each version entry): Rendered as sanitized markdown on the plugin detail page. Supported subset: headings (`##`, `###`), paragraphs, lists, inline code, fenced code blocks, links (open in a new tab), bold, italic. Raw HTML, images, and iframes are stripped — author content accordingly. The "View release" link shown alongside the changelog is controlled by `releaseUrl` on the version, not inferred from `homepage`.
 
 ### Key Rules
 
