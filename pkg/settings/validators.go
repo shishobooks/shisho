@@ -34,8 +34,14 @@ func IsValidFitMode(mode string) bool {
 // SortSpec is a pointer so the client can distinguish "unset" (omit field
 // from JSON) from "clear the saved default" (send null). A null body
 // clears the saved sort; omitting the field leaves it untouched.
+//
+// max=200 caps the input length defensively at bind time. The longest
+// possible legitimate spec — every field at the longest direction —
+// fits comfortably under 200 chars (sortspec.MaxLevels=10), so 200 is
+// a generous upper bound that still rejects pathological input before
+// it reaches sortspec.Parse.
 type UpdateLibrarySettingsPayload struct {
-	SortSpec *string `json:"sort_spec"`
+	SortSpec *string `json:"sort_spec" validate:"omitempty,max=200"`
 }
 
 // LibrarySettingsResponse is the response for GET/PUT /settings/libraries/:library_id.

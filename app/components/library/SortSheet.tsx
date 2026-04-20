@@ -57,6 +57,22 @@ import {
   type SortLevel,
 } from "@/libraries/sortSpec";
 
+/*
+ * SortSheet is intentionally controlled — it holds NO local state for
+ * the levels list. Every edit (add/remove/reorder/toggle) is bubbled
+ * up via `onChange` to the parent (typically Home.tsx), which writes
+ * the serialized spec into the URL `?sort=` param. The next render
+ * flows the new levels back in through `levels`.
+ *
+ * This keeps a single source of truth (the URL), makes sorts shareable
+ * via link, and avoids divergence between sheet state and the gallery.
+ *
+ * Field-uniqueness invariant: the dnd-kit `SortableContext` and
+ * `useSortable` calls below key rows by `level.field`. Parent-level
+ * logic in Home.tsx + the available-fields filter inside SortLevelRow
+ * must keep `levels` free of duplicate fields, otherwise dnd-kit will
+ * reuse the same node id for two rows and reorder/animations break.
+ */
 interface SortSheetProps {
   levels: readonly SortLevel[];
   onChange: (levels: SortLevel[]) => void;

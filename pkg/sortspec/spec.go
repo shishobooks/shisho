@@ -26,6 +26,29 @@ type SortLevel struct {
 	Direction Direction
 }
 
+// BuiltinDefault is the fallback sort applied when neither an explicit
+// URL sort nor a stored per-(user, library) preference exists. It is
+// the same default the React frontend's app/libraries/sortSpec.ts
+// exposes as `BUILTIN_DEFAULT_SORT` — keep both in sync.
+//
+// Returns a fresh slice each call so callers can mutate the result
+// without surprising other consumers.
+//
+// The books service (pkg/books/service.go ListBooksWithTotal) applies
+// this default when Sort is nil and no series filter is active, so all
+// surfaces that hit the books service — the /books REST endpoint, OPDS
+// feeds, the eReader browser, and the React gallery — share the same
+// "newest first" fallback. OPDS and the eReader browser still resolve
+// to this default explicitly in their handlers so a stored preference
+// takes priority over the builtin; the books service default is the
+// safety net for callers that pass Sort=nil with no stored preference
+// (e.g. third-party API consumers).
+func BuiltinDefault() []SortLevel {
+	return []SortLevel{
+		{Field: FieldDateAdded, Direction: DirDesc},
+	}
+}
+
 // Parse reads a serialized spec string (e.g. "author:asc,series:desc") into
 // a slice of SortLevel. It rejects unknown fields, bad directions, duplicates,
 // empty pairs, stray whitespace, and specs longer than MaxLevels.

@@ -79,14 +79,26 @@ func (h *handler) getUserLibraryIDs(ctx echo.Context, userID int) ([]int, error)
 }
 
 // resolveSort returns the stored user-library sort preference for the
-// API-key-authenticated caller, or nil when no preference is set. The
-// eReader browser has no explicit URL sort input — the stored default
-// is the only input.
+// API-key-authenticated caller, falling back to sortspec.BuiltinDefault
+// when no preference is set. The eReader browser has no explicit URL
+// sort input — the stored preference (or builtin default) is the only
+// input.
+//
+// The books service also falls back to BuiltinDefault when Sort is nil,
+// so returning BuiltinDefault here is belt-and-suspenders: it keeps the
+// eReader surface explicit about what sort it applies and insulates the
+// eReader UI from a future change to the service's default. It also
+// guarantees this function never returns nil, so callers can rely on
+// the result without guarding.
 func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libraryID int) []sortspec.SortLevel {
 	if apiKey == nil {
-		return nil
+		return sortspec.BuiltinDefault()
 	}
-	return sortspec.ResolveForLibrary(ctx, h.settingsService, apiKey.UserID, libraryID, nil)
+	resolved := sortspec.ResolveForLibrary(ctx, h.settingsService, apiKey.UserID, libraryID, nil)
+	if resolved == nil {
+		return sortspec.BuiltinDefault()
+	}
+	return resolved
 }
 
 // Libraries lists all libraries the user has access to.
@@ -447,21 +459,26 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return errcodes.NotFound("Author")
 	}
 
-	// Get books by author
-	authorBooks, err := h.peopleService.GetAuthoredBooks(ctx, authorIDInt)
+	// Resolve sort once (so the type-filter branch and the SQL query use
+	// the same ordering) and fetch books for this author + library via
+	// the books service. Going through the books service applies the
+	// user's stored sort preference and lets SQL do the library/author
+	// filtering — the previous code fetched all books for the author
+	// across every library and filtered in Go, which both ignored sort
+	// and scanned more rows than necessary.
+	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+	booksInLibrary, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		LibraryID: &libraryIDInt,
+		PersonID:  &authorIDInt,
+		Sort:      sort,
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Filter books to only those in the current library
-	var booksInLibrary []*models.Book
-	for _, book := range authorBooks {
-		if book.LibraryID == libraryIDInt {
-			booksInLibrary = append(booksInLibrary, book)
-		}
-	}
-
-	// Apply type filter
+	// Apply type filter (in-memory, matches LibraryAllBooks behavior —
+	// books service's FileTypes filter is "any file matches", but the
+	// eReader UI shows the dominant per-book type via getBookFileType).
 	booksInLibrary = filterBooksByType(booksInLibrary, typesFilter)
 
 	var content strings.Builder

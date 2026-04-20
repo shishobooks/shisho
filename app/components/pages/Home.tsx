@@ -106,8 +106,12 @@ const HomeContent = () => {
   const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
   const languagesQuery = useLibraryLanguages(libraryIdNum);
 
-  // Fetch per-library sort preference. The query is auto-disabled when
-  // libraryIdNum is undefined (via Boolean(0) guard in useLibrarySettings).
+  // Fetch per-library sort preference. Hooks can't be called conditionally,
+  // so we pass a 0 placeholder when libraryIdNum is undefined. Both hooks
+  // are safe under that placeholder:
+  //   - useLibrarySettings auto-disables the query via a Boolean(libraryId) gate.
+  //   - useUpdateLibrarySettings rejects mutate() calls when libraryId is 0,
+  //     and handleSaveSortAsDefault below also early-returns before calling it.
   const librarySettingsQuery = useLibrarySettings(libraryIdNum ?? 0);
   const updateLibrarySettings = useUpdateLibrarySettings(libraryIdNum ?? 0);
 

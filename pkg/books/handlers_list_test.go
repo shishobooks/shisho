@@ -97,10 +97,11 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 }
 
 // TestListHandler_StoredPreferenceUsed verifies that when no URL sort is
-// provided, the stored preference drives ordering. Books are chosen so the
-// default sort_title ASC (apple, banana) disagrees with date_added:desc
-// (banana, apple) — this asymmetry is what makes the test actually prove
-// the resolver fired.
+// provided, the stored preference drives ordering. Books are chosen so
+// the builtin default (date_added:desc → banana, apple) disagrees with
+// the stored title:asc (apple, banana) — this asymmetry is what makes
+// the test actually prove the resolver fired rather than silently
+// inheriting the builtin default.
 func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	t.Parallel()
 
@@ -113,7 +114,7 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	banana := seedBook(t, db, lib, "Banana", "Banana", now)                // newer
 
 	settingsSvc := settings.NewService(db)
-	stored := "date_added:desc"
+	stored := "title:asc"
 	_, err := settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
@@ -132,10 +133,11 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Books, 2)
-	// date_added:desc → banana (newer) before apple (older).
-	// If the resolver hadn't fired, default sort_title ASC would invert this.
-	assert.Equal(t, banana.ID, resp.Books[0].ID)
-	assert.Equal(t, apple.ID, resp.Books[1].ID)
+	// title:asc → apple (alphabetical) before banana. If the resolver
+	// hadn't fired, the builtin default (date_added:desc) would return
+	// banana (newer) first and the assertion would fail.
+	assert.Equal(t, apple.ID, resp.Books[0].ID)
+	assert.Equal(t, banana.ID, resp.Books[1].ID)
 }
 
 // TestListHandler_InvalidSortReturns400 verifies sort validation.
@@ -176,11 +178,14 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	cheese := seedBook(t, db, lib, "Cheese", "Cheese", now)
 	apple := seedBook(t, db, lib, "Apple", "Apple", now.Add(-time.Hour))
 
-	// Stored preference would produce date_added:desc → cheese first,
-	// but without library_id the resolver is skipped and the default
-	// sort_title ASC → apple first applies.
+	// Stored preference title:asc would produce Apple first; the builtin
+	// default (date_added:desc, applied by the books service when Sort is
+	// nil) produces Cheese first. Picking stored-vs-default pairs that
+	// order differently is what makes this test actually prove the
+	// resolver was skipped — if both produced the same order we couldn't
+	// tell whether the resolver ran.
 	settingsSvc := settings.NewService(db)
-	stored := "date_added:desc"
+	stored := "title:asc"
 	_, err := settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
@@ -199,6 +204,9 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Books, 2)
-	assert.Equal(t, apple.ID, resp.Books[0].ID) // alphabetical default
-	assert.Equal(t, cheese.ID, resp.Books[1].ID)
+	// Without library_id the resolver is skipped, so the stored title:asc
+	// preference is ignored and the builtin default (date_added:desc) wins
+	// → Cheese (newer) before Apple (older).
+	assert.Equal(t, cheese.ID, resp.Books[0].ID)
+	assert.Equal(t, apple.ID, resp.Books[1].ID)
 }

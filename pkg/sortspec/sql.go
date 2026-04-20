@@ -6,14 +6,17 @@ import (
 )
 
 // OrderClause is one unit of ordering for a Bun query, ready to pass
-// to q.OrderExpr(clause.Expression, clause.Args...).
+// to q.OrderExpr(clause.Expression).
 //
 // Each user-visible sort level produces ONE OrderClause, except the
 // series level which expands to two (series sort name, then series
 // number ASC).
+//
+// Expressions are built from the whitelisted field branches in
+// OrderClauses and never embed user input, so no parameter args are
+// needed — callers pass Expression directly to OrderExpr.
 type OrderClause struct {
 	Expression string
-	Args       []any
 }
 
 // OrderClauses maps a parsed sort spec to the SQL ORDER BY clauses
