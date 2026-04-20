@@ -30,4 +30,5 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, manager *plugins.Manager, installe
 	test.GET("/plugins/fixture.zip", h.fixtureZip)
 	test.GET("/plugins/fixture-info", h.fixtureInfo)
 	test.POST("/plugins", h.seedPlugin)
+	test.DELETE("/plugins", h.deleteAllPlugins)
 }

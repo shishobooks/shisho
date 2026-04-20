@@ -168,3 +168,71 @@ func (h *handler) seedPlugin(c echo.Context) error {
 
 	return c.JSON(http.StatusCreated, plugin)
 }
+
+// deleteAllPluginsResponse is the response body for deleting all plugin state.
+type deleteAllPluginsResponse struct {
+	Plugins      int `json:"plugins"`
+	Repositories int `json:"repositories"`
+}
+
+// deleteAllPlugins wipes all plugin state: unloads runtimes, removes the
+// plugin directory contents, and truncates all plugin-related tables.
+// DELETE /test/plugins.
+func (h *handler) deleteAllPlugins(c echo.Context) error {
+	ctx := c.Request().Context()
+	var resp deleteAllPluginsResponse
+
+	// Unload runtimes for every currently-installed plugin.
+	if h.manager != nil {
+		existing := make([]*models.Plugin, 0)
+		if err := h.db.NewSelect().Model(&existing).Scan(ctx); err == nil {
+			for _, p := range existing {
+				h.manager.UnloadPlugin(p.Scope, p.ID)
+			}
+		}
+	}
+
+	// Truncate in FK-safe order: child tables first.
+	_, _ = h.db.NewDelete().Model((*models.LibraryPluginFieldSetting)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.PluginFieldSetting)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.LibraryPluginHookConfig)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.LibraryPluginCustomization)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.PluginHookConfig)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.PluginIdentifierType)(nil)).Where("1=1").Exec(ctx)
+	_, _ = h.db.NewDelete().Model((*models.PluginConfig)(nil)).Where("1=1").Exec(ctx)
+
+	result, _ := h.db.NewDelete().Model((*models.Plugin)(nil)).Where("1=1").Exec(ctx)
+	if n, _ := result.RowsAffected(); n > 0 {
+		resp.Plugins = int(n)
+	}
+
+	// Repositories: only delete non-official ones by default to match
+	// RemoveRepository semantics. Tests that need a clean slate (including
+	// official) can call the endpoint with ?include_official=true.
+	includeOfficial := c.QueryParam("include_official") == "true"
+	delQ := h.db.NewDelete().Model((*models.PluginRepository)(nil))
+	if !includeOfficial {
+		delQ = delQ.Where("is_official = ?", false)
+	} else {
+		delQ = delQ.Where("1=1")
+	}
+	result, _ = delQ.Exec(ctx)
+	if n, _ := result.RowsAffected(); n > 0 {
+		resp.Repositories = int(n)
+	}
+
+	// Wipe the plugin directory (everything under pluginDir). If the
+	// directory doesn't exist yet (e.g. tests pass a tmp dir with no
+	// children), ReadDir returns an error which we simply skip.
+	if h.installer != nil {
+		dir := h.installer.PluginDir()
+		entries, err := os.ReadDir(dir)
+		if err == nil {
+			for _, entry := range entries {
+				_ = os.RemoveAll(filepath.Join(dir, entry.Name()))
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}

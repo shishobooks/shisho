@@ -9,9 +9,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -131,4 +133,40 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 	// Files exist on disk.
 	assert.FileExists(t, filepath.Join(tmp, "test", "fixture", "manifest.json"))
 	assert.FileExists(t, filepath.Join(tmp, "test", "fixture", "main.js"))
+}
+
+func TestDeleteAllPluginsWipesStateAndDisk(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	tmp := t.TempDir()
+	// Seed a fake plugin dir.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "test", "fixture"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "test", "fixture", "x.txt"), []byte("x"), 0644))
+
+	// Seed a DB row.
+	_, err := db.NewInsert().Model(&models.Plugin{
+		Scope: "test", ID: "fixture", Name: "F", Version: "1.0.0",
+		Status: models.PluginStatusActive, InstalledAt: time.Now(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	installer := plugins.NewInstaller(tmp)
+	e := echo.New()
+	h := &handler{db: db, manager: nil, installer: installer}
+	e.DELETE("/test/plugins", h.deleteAllPlugins)
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/test/plugins", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Row gone.
+	count, err := db.NewSelect().Model((*models.Plugin)(nil)).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Directory gone.
+	_, err = os.Stat(filepath.Join(tmp, "test"))
+	assert.True(t, os.IsNotExist(err), "plugin dir should be removed")
 }
