@@ -448,9 +448,11 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return errcodes.Forbidden("Access to this library is denied")
 	}
 
-	// Get author info
+	// Get author info, scoped to the library param so a person ID from a
+	// sibling library cannot leak its name through the page heading.
 	author, err := h.peopleService.RetrievePerson(ctx, people.RetrievePersonOptions{
-		ID: &authorIDInt,
+		ID:        &authorIDInt,
+		LibraryID: &libraryIDInt,
 	})
 	if err != nil {
 		return errors.WithStack(err)
