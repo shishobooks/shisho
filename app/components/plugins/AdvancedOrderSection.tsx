@@ -193,15 +193,40 @@ export const AdvancedOrderSection = () => {
                     }
                     value={item.mode}
                   >
-                    <SelectTrigger className="h-8 w-[140px] text-xs">
+                    <SelectTrigger
+                      aria-label="When this plugin runs"
+                      className="h-8 w-auto gap-2 text-xs"
+                    >
+                      <span className="text-muted-foreground">Runs:</span>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="enabled">Enabled</SelectItem>
+                      <SelectItem value="enabled">
+                        <div>
+                          <div>On every scan</div>
+                          <div className="text-xs text-muted-foreground">
+                            Also available for manual identification
+                          </div>
+                        </div>
+                      </SelectItem>
                       {selectedHookType === "metadataEnricher" && (
-                        <SelectItem value="manual_only">Manual Only</SelectItem>
+                        <SelectItem value="manual_only">
+                          <div>
+                            <div>Only when manually identifying</div>
+                            <div className="text-xs text-muted-foreground">
+                              Skipped during automated scans
+                            </div>
+                          </div>
+                        </SelectItem>
                       )}
-                      <SelectItem value="disabled">Disabled</SelectItem>
+                      <SelectItem value="disabled">
+                        <div>
+                          <div>Never</div>
+                          <div className="text-xs text-muted-foreground">
+                            Plugin is inactive for this hook
+                          </div>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
