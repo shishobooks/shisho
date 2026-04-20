@@ -68,6 +68,7 @@ export const PluginHeroActions = ({
       </div>
       <PluginManifestDialog
         id={plugin.id}
+        name={plugin.name}
         onOpenChange={setManifestOpen}
         open={manifestOpen}
         scope={plugin.scope}
