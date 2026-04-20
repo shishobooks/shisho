@@ -3,6 +3,7 @@ package ereader
 import (
 	"fmt"
 	"html"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -39,22 +40,32 @@ func navBar(homeURL string) string {
 	return fmt.Sprintf(`<div class="nav"><a href="%s" class="nav-btn">Home</a></div>`, html.EscapeString(homeURL))
 }
 
-// paginationWithParams generates pagination links with button styling, preserving filter params.
-func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, coversParam string) string {
+// paginationWithParams generates pagination links with button styling,
+// preserving filter params. extraParams contains additional query
+// parameters to thread through each page link (e.g., a search query).
+// Values are URL-encoded; keys must already be safe identifiers.
+func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, coversParam string, extraParams ...[2]string) string {
 	if totalPages <= 1 {
 		return ""
 	}
 
 	// Build query string with filter params
 	buildURL := func(page int) string {
-		url := baseURL + "?page=" + strconv.Itoa(page)
+		q := make(url.Values)
+		q.Set("page", strconv.Itoa(page))
 		if typesFilter != "" && typesFilter != "all" {
-			url += "&types=" + typesFilter
+			q.Set("types", typesFilter)
 		}
 		if coversParam == "on" {
-			url += "&covers=on"
+			q.Set("covers", "on")
 		}
-		return url
+		for _, kv := range extraParams {
+			if kv[1] == "" {
+				continue
+			}
+			q.Set(kv[0], kv[1])
+		}
+		return baseURL + "?" + q.Encode()
 	}
 
 	var parts []string

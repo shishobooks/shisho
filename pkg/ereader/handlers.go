@@ -165,12 +165,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	}
 
 	// Parse query params
-	page := 1
-	if pageStr := c.QueryParam("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
+	page := parsePageParam(c.QueryParam("page"))
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
@@ -191,41 +186,12 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
 
-	// Fetch more books than needed to account for filtering
-	// When filtering by type, we fetch all and filter client-side
-	var booksResult []*models.Book
-	var total int
-	if typesFilter != "" && typesFilter != "all" {
-		// Fetch all books and filter (pagination happens after filtering)
-		allBooks, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-			LibraryID: &libraryIDInt,
-			Sort:      sort,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		filtered := filterBooksByType(allBooks, typesFilter)
-		total = len(filtered)
-		// Apply pagination to filtered results
-		offset := (page - 1) * defaultPageSize
-		end := offset + defaultPageSize
-		if end > total {
-			end = total
-		}
-		if offset < total {
-			booksResult = filtered[offset:end]
-		}
-	} else {
-		offset := (page - 1) * defaultPageSize
-		booksResult, total, err = h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-			Limit:     intPtr(defaultPageSize),
-			Offset:    intPtr(offset),
-			LibraryID: &libraryIDInt,
-			Sort:      sort,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
+	booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
+		LibraryID: &libraryIDInt,
+		Sort:      sort,
+	}, page, typesFilter)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	var content strings.Builder
@@ -304,7 +270,8 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return errcodes.Unauthorized("API key not found")
 	}
 
-	// Parse filter params
+	// Parse query and filter params
+	page := parsePageParam(c.QueryParam("page"))
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
@@ -339,18 +306,15 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return errcodes.NotFound("Series")
 	}
 
-	// Get books in series
-	booksResult, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+	// Get books in series (paginated)
+	booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		SeriesID:  &seriesIDInt,
 		Sort:      sort,
-	})
+	}, page, typesFilter)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Apply type filter
-	booksResult = filterBooksByType(booksResult, typesFilter)
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -365,6 +329,10 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
 	}
+
+	// Pagination (preserve filter params)
+	totalPages := (total + defaultPageSize - 1) / defaultPageSize
+	content.WriteString(paginationWithParams(page, totalPages, currentURL, typesFilter, coversParam))
 
 	return c.HTML(http.StatusOK, RenderPage(content.String()))
 }
@@ -424,7 +392,8 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return errcodes.Unauthorized("API key not found")
 	}
 
-	// Parse filter params
+	// Parse query and filter params
+	page := parsePageParam(c.QueryParam("page"))
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
@@ -466,19 +435,14 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	// across every library and filtered in Go, which both ignored sort
 	// and scanned more rows than necessary.
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
-	booksInLibrary, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+	booksInLibrary, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		PersonID:  &authorIDInt,
 		Sort:      sort,
-	})
+	}, page, typesFilter)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Apply type filter (in-memory, matches LibraryAllBooks behavior —
-	// books service's FileTypes filter is "any file matches", but the
-	// eReader UI shows the dominant per-book type via getBookFileType).
-	booksInLibrary = filterBooksByType(booksInLibrary, typesFilter)
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -494,6 +458,10 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
 	}
 
+	// Pagination (preserve filter params)
+	totalPages := (total + defaultPageSize - 1) / defaultPageSize
+	content.WriteString(paginationWithParams(page, totalPages, currentURL, typesFilter, coversParam))
+
 	return c.HTML(http.StatusOK, RenderPage(content.String()))
 }
 
@@ -508,6 +476,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	}
 
 	query := c.QueryParam("q")
+	page := parsePageParam(c.QueryParam("page"))
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
@@ -537,21 +506,17 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	content.WriteString(filterBar(searchURL, typesFilter, coversParam))
 
 	if query != "" {
-		// Search for books
-		booksResult, _, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
+		// Search for books (paginated)
+		booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
 			LibraryID: &libraryIDInt,
 			Search:    &query,
-			Limit:     intPtr(defaultPageSize),
 			Sort:      sort,
-		})
+		}, page, typesFilter)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		// Apply type filter
-		booksResult = filterBooksByType(booksResult, typesFilter)
-
-		content.WriteString(fmt.Sprintf("<p>Found %d results</p>", len(booksResult)))
+		content.WriteString(fmt.Sprintf("<p>Found %d results</p>", total))
 
 		for _, book := range booksResult {
 			meta := formatBookMeta(book)
@@ -559,6 +524,10 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 			coverURL := getBookCoverURL(baseURL, book)
 			content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
 		}
+
+		// Pagination (preserve q + filter params)
+		totalPages := (total + defaultPageSize - 1) / defaultPageSize
+		content.WriteString(paginationWithParams(page, totalPages, searchURL, typesFilter, coversParam, [2]string{"q", query}))
 	}
 
 	return c.HTML(http.StatusOK, RenderPage(content.String()))
@@ -1097,6 +1066,57 @@ func containsInt(slice []int, val int) bool {
 
 func intPtr(i int) *int {
 	return &i
+}
+
+// parsePageParam parses a ?page= query value, defaulting to 1 for
+// missing or invalid input (including non-positive numbers).
+func parsePageParam(raw string) int {
+	if raw == "" {
+		return 1
+	}
+	if p, err := strconv.Atoi(raw); err == nil && p > 0 {
+		return p
+	}
+	return 1
+}
+
+// listBooksPaginated fetches a single page of books, applying the
+// eReader's in-memory type filter (when active) before paginating.
+// Returns the books for the requested page and the total count used to
+// drive the pagination UI.
+//
+// When typesFilter is active, we fetch all books and filter in Go
+// because the books service's FileTypes filter is "any file matches"
+// while the eReader UI shows the dominant per-book type via
+// getBookFileType — the two definitions disagree on books with mixed
+// file types, so we filter to match what the UI displays.
+func (h *handler) listBooksPaginated(ctx context.Context, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
+	if typesFilter != "" && typesFilter != "all" {
+		allBooks, _, err := h.bookService.ListBooksWithTotal(ctx, opts)
+		if err != nil {
+			return nil, 0, errors.WithStack(err)
+		}
+		filtered := filterBooksByType(allBooks, typesFilter)
+		total := len(filtered)
+		offset := (page - 1) * defaultPageSize
+		if offset >= total {
+			return nil, total, nil
+		}
+		end := offset + defaultPageSize
+		if end > total {
+			end = total
+		}
+		return filtered[offset:end], total, nil
+	}
+
+	offset := (page - 1) * defaultPageSize
+	opts.Limit = intPtr(defaultPageSize)
+	opts.Offset = intPtr(offset)
+	result, total, err := h.bookService.ListBooksWithTotal(ctx, opts)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+	return result, total, nil
 }
 
 // ResolveShortURL redirects a short code to the full eReader URL.
