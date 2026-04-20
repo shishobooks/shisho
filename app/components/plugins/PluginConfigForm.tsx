@@ -22,7 +22,6 @@ export interface PluginConfigFormProps {
   canWrite: boolean;
   id: string;
   onDirtyChange?: (isDirty: boolean) => void;
-  onSaved?: () => void;
   scope: string;
 }
 
@@ -30,7 +29,6 @@ export const PluginConfigForm = ({
   canWrite,
   id,
   onDirtyChange,
-  onSaved,
   scope,
 }: PluginConfigFormProps) => {
   const { data, isLoading, dataUpdatedAt } = usePluginConfig(scope, id);
@@ -174,7 +172,6 @@ export const PluginConfigForm = ({
             fieldSettings: { ...fieldSettings },
             confidenceThreshold,
           });
-          onSaved?.();
         },
         onError: (err) => {
           toast.error(`Failed to save configuration: ${err.message}`);
