@@ -29,4 +29,5 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, manager *plugins.Manager, installe
 	// real install flow can download it from localhost during E2E tests.
 	test.GET("/plugins/fixture.zip", h.fixtureZip)
 	test.GET("/plugins/fixture-info", h.fixtureInfo)
+	test.POST("/plugins", h.seedPlugin)
 }

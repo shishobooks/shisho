@@ -1,18 +1,52 @@
 package testutils
 
 import (
+	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
+
+// newTestDB creates an in-memory SQLite DB with all migrations applied,
+// matching the pattern used by pkg/apikeys/service_test.go.
+func newTestDB(t *testing.T) *bun.DB {
+	t.Helper()
+
+	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	require.NoError(t, err)
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	// Enable foreign keys to match production behavior.
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	_, err = migrations.BringUpToDate(context.Background(), db)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return db
+}
 
 func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	t.Parallel()
@@ -59,4 +93,42 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	assert.Equal(t, "fixture", info.ID)
 	assert.Equal(t, "1.0.0", info.Version)
 	assert.Equal(t, hex.EncodeToString(h1[:]), info.SHA256)
+}
+
+func TestSeedPluginWritesDBRow(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	tmp := t.TempDir()
+	installer := plugins.NewInstaller(tmp)
+	e := echo.New()
+	h := &handler{db: db, manager: nil, installer: installer}
+	e.POST("/test/plugins", h.seedPlugin)
+
+	body := `{
+		"scope": "test",
+		"id": "fixture",
+		"name": "Fixture Plugin",
+		"version": "1.0.0",
+		"status": 0,
+		"update_available_version": "2.0.0"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/test/plugins", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	// DB row exists.
+	count, err := db.NewSelect().Model((*models.Plugin)(nil)).
+		Where("scope = ? AND id = ?", "test", "fixture").
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Files exist on disk.
+	assert.FileExists(t, filepath.Join(tmp, "test", "fixture", "manifest.json"))
+	assert.FileExists(t, filepath.Join(tmp, "test", "fixture", "main.js"))
 }
