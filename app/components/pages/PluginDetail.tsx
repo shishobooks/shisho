@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
@@ -9,6 +10,7 @@ import { PluginPermissions } from "@/components/plugins/PluginPermissions";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
+  useInstallPlugin,
   usePluginsAvailable,
   usePluginsInstalled,
   useUpdatePlugin,
@@ -26,8 +28,10 @@ export const PluginDetail = () => {
   const availableQuery = usePluginsAvailable();
   const updatePlugin = useUpdatePlugin();
   const updateVersion = useUpdatePluginVersion();
+  const installPlugin = useInstallPlugin();
 
   const [configDirty, setConfigDirty] = useState(false);
+  const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const { cancelNavigation, proceedNavigation, showBlockerDialog } =
     useUnsavedChanges(configDirty);
 
@@ -61,6 +65,29 @@ export const PluginDetail = () => {
         err instanceof Error ? err.message : "Failed to update plugin status",
       );
     }
+  };
+
+  const handleInstallConfirm = () => {
+    if (!available) return;
+    const compatibleVersion = available.versions.find((v) => v.compatible);
+    if (!compatibleVersion) return;
+    installPlugin.mutate(
+      {
+        id: available.id,
+        name: available.name,
+        scope: available.scope,
+        version: compatibleVersion.version,
+      },
+      {
+        onError: (err) => {
+          toast.error(`Failed to install plugin: ${err.message}`);
+        },
+        onSuccess: () => {
+          setInstallDialogOpen(false);
+          toast.success(`${available.name} installed`);
+        },
+      },
+    );
   };
 
   const handleUpdate = async () => {
@@ -132,8 +159,10 @@ export const PluginDetail = () => {
           canWrite={canWrite}
           id={id}
           installed={installed}
+          isInstalling={installPlugin.isPending}
           isTogglingEnabled={updatePlugin.isPending}
           isUpdating={updateVersion.isPending}
+          onInstall={() => setInstallDialogOpen(true)}
           onToggleEnabled={handleToggleEnabled}
           onUpdate={handleUpdate}
           scope={scope}
@@ -165,6 +194,14 @@ export const PluginDetail = () => {
         onDiscard={proceedNavigation}
         onStay={cancelNavigation}
         open={showBlockerDialog}
+      />
+
+      <CapabilitiesWarning
+        isPending={installPlugin.isPending}
+        onConfirm={handleInstallConfirm}
+        onOpenChange={setInstallDialogOpen}
+        open={installDialogOpen}
+        plugin={available ?? null}
       />
     </div>
   );

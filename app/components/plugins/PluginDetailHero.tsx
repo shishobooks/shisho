@@ -15,8 +15,10 @@ export interface PluginDetailHeroProps {
   canWrite: boolean;
   id: string;
   installed?: Plugin;
+  isInstalling?: boolean;
   isTogglingEnabled?: boolean;
   isUpdating?: boolean;
+  onInstall?: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
   onUpdate?: () => void;
   scope: string;
@@ -27,8 +29,10 @@ export const PluginDetailHero = ({
   canWrite,
   id,
   installed,
+  isInstalling,
   isTogglingEnabled,
   isUpdating,
+  onInstall,
   onToggleEnabled,
   onUpdate,
   scope,
@@ -66,7 +70,7 @@ export const PluginDetailHero = ({
         rel="noopener noreferrer"
         target="_blank"
       >
-        homepage <ExternalLink aria-hidden="true" className="h-3 w-3" />
+        home page <ExternalLink aria-hidden="true" className="h-3 w-3" />
       </a>,
     );
   }
@@ -123,6 +127,20 @@ export const PluginDetailHero = ({
             </div>
           )}
           <PluginHeroActions canWrite={canWrite} plugin={installed} />
+        </div>
+      )}
+
+      {!installed && available && canWrite && (
+        <div className="flex flex-col items-end gap-3">
+          {available.versions.some((v) => v.compatible) ? (
+            <Button disabled={isInstalling} onClick={onInstall}>
+              {isInstalling ? "Installing…" : "Install"}
+            </Button>
+          ) : (
+            <Button disabled variant="outline">
+              Incompatible
+            </Button>
+          )}
         </div>
       )}
     </div>
