@@ -257,6 +257,18 @@ export const useUninstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginIdentifierTypes],
       });
+      // The backend removes the plugin from every hook's global order, so the
+      // AdvancedOrderSection list must refetch — otherwise it keeps showing
+      // the now-uninstalled plugin until the user navigates away.
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginOrder],
+      });
+      // Library-scoped orders (LibraryPluginsTab) are keyed under
+      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate the
+      // shared prefix so every cached library order refetches.
+      queryClient.invalidateQueries({
+        queryKey: ["libraries"],
+      });
     },
   });
 };
