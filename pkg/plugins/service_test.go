@@ -788,3 +788,51 @@ func TestService_SetOrder_WithMode(t *testing.T) {
 	assert.Equal(t, models.PluginModeEnabled, orders[0].Mode)
 	assert.Equal(t, models.PluginModeManualOnly, orders[1].Mode)
 }
+
+// The following _Empty tests guard against nil-slice JSON serialization (`null`
+// instead of `[]`), which crashes frontend consumers that call `.filter` / `.map`
+// on the response. Mirror TestService_ListPlugins_Empty above.
+
+func TestService_GetOrder_Empty(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	got, err := svc.GetOrder(ctx, models.PluginHookMetadataEnricher)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got)
+}
+
+func TestService_ListRepositories_Empty(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	// The migration seeds the official shisho repo, so delete it directly to
+	// exercise the truly-empty case. In production, ListRepositories is
+	// practically never empty, but the function should still be correct.
+	_, err := db.NewDelete().Model((*models.PluginRepository)(nil)).
+		Where("1 = 1"). // Bun requires a WHERE clause for bulk deletes.
+		Exec(ctx)
+	require.NoError(t, err)
+
+	got, err := svc.ListRepositories(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got)
+}
+
+func TestService_ListIdentifierTypes_Empty(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	got, err := svc.ListIdentifierTypes(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got)
+}

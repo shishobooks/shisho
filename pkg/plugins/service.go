@@ -162,7 +162,9 @@ func (s *Service) GetConfigRaw(ctx context.Context, scope, pluginID, key string)
 
 // GetOrder returns the plugin hook config entries for a hook type, sorted by position.
 func (s *Service) GetOrder(ctx context.Context, hookType string) ([]*models.PluginHookConfig, error) {
-	var orders []*models.PluginHookConfig
+	// Initialize with make to avoid nil-slice JSON serialization (`null` instead
+	// of `[]`), which crashes frontend consumers that call .filter/.map.
+	orders := make([]*models.PluginHookConfig, 0)
 	err := s.db.NewSelect().Model(&orders).
 		Where("hook_type = ?", hookType).
 		OrderExpr("position ASC").
@@ -228,7 +230,9 @@ func (s *Service) AppendToOrder(ctx context.Context, hookType, scope, pluginID s
 
 // ListRepositories returns all plugin repositories, ordered by official first then by scope.
 func (s *Service) ListRepositories(ctx context.Context) ([]*models.PluginRepository, error) {
-	var repos []*models.PluginRepository
+	// Initialize with make to avoid nil-slice JSON serialization (`null` instead
+	// of `[]`), which crashes frontend consumers that call .filter/.map.
+	repos := make([]*models.PluginRepository, 0)
 	err := s.db.NewSelect().Model(&repos).
 		OrderExpr("is_official DESC, scope ASC").
 		Scan(ctx)
@@ -383,7 +387,9 @@ func (s *Service) IsLibraryCustomized(ctx context.Context, libraryID int, hookTy
 
 // GetLibraryOrder returns the per-library plugin hook config for a hook type, sorted by position.
 func (s *Service) GetLibraryOrder(ctx context.Context, libraryID int, hookType string) ([]*models.LibraryPluginHookConfig, error) {
-	var entries []*models.LibraryPluginHookConfig
+	// Initialize with make to avoid nil-slice JSON serialization (`null` instead
+	// of `[]`), which crashes frontend consumers that call .filter/.map.
+	entries := make([]*models.LibraryPluginHookConfig, 0)
 	err := s.db.NewSelect().Model(&entries).
 		Where("library_id = ? AND hook_type = ?", libraryID, hookType).
 		OrderExpr("position ASC").
