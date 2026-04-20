@@ -1,5 +1,5 @@
 ---
-sidebar_position: 9
+sidebar_position: 100
 ---
 
 # eReader Browser
@@ -63,4 +63,4 @@ Each device gets its own API key. The key is embedded in the URL, so there's no 
 
 ## Sort order
 
-The eReader browser's book listings (library index, author, series, genre pages) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the browser falls back to the builtin default: **Date added, newest first**. See [Gallery sort](./gallery-sort.md) for how to save a different default for a library.
+The eReader browser's book listings (library index, author, series, genre pages) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the browser falls back to the builtin default: **Date added, newest first**. See [Gallery Sort](./gallery-sort.md) for how to save a different default for a library.

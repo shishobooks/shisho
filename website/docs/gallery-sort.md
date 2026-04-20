@@ -1,8 +1,8 @@
 ---
-sidebar_position: 20
+sidebar_position: 150
 ---
 
-# Gallery sort
+# Gallery Sort
 
 The library gallery can be sorted by one or more fields — author, series, date added, and more — with each level ascending or descending. You can share a sorted view as a URL, save it as your default for that library, or reset back to the builtin default.
 
