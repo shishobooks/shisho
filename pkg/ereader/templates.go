@@ -3,9 +3,34 @@ package ereader
 import (
 	"fmt"
 	"html"
+	"net/url"
 	"strconv"
 	"strings"
 )
+
+// buildFilterQuery seeds a url.Values with the eReader's standard
+// filter params (types, covers) plus any extra key/value pairs threaded
+// through by the caller (e.g., "q" for search). Skips empty values so
+// an unset filter doesn't show up as "?types=" in the link. Using
+// url.Values ensures consistent encoding — values like a search query
+// containing "&" or "#" are percent-encoded correctly and key order is
+// stable across calls.
+func buildFilterQuery(typesFilter, coversParam string, extraParams ...[2]string) url.Values {
+	q := make(url.Values)
+	if typesFilter != "" && typesFilter != "all" {
+		q.Set("types", typesFilter)
+	}
+	if coversParam == "on" {
+		q.Set("covers", "on")
+	}
+	for _, kv := range extraParams {
+		if kv[1] == "" {
+			continue
+		}
+		q.Set(kv[0], kv[1])
+	}
+	return q
+}
 
 const baseTemplate = `<!DOCTYPE html>
 <html>
@@ -39,22 +64,30 @@ func navBar(homeURL string) string {
 	return fmt.Sprintf(`<div class="nav"><a href="%s" class="nav-btn">Home</a></div>`, html.EscapeString(homeURL))
 }
 
-// paginationWithParams generates pagination links with button styling, preserving filter params.
-func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, coversParam string) string {
+// paginationWithParams generates pagination links with button styling,
+// preserving filter params. extraParams contains additional query
+// parameters to thread through each page link (e.g., a search query).
+// Values are URL-encoded; keys must already be safe identifiers.
+//
+// currentPage is clamped into [1, totalPages] so a URL-edited ?page=
+// overshoot renders a sensible "Page M of M" rather than "Page 9999 of 3"
+// with misleading Prev/Next targets.
+func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, coversParam string, extraParams ...[2]string) string {
 	if totalPages <= 1 {
 		return ""
+	}
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	if currentPage > totalPages {
+		currentPage = totalPages
 	}
 
 	// Build query string with filter params
 	buildURL := func(page int) string {
-		url := baseURL + "?page=" + strconv.Itoa(page)
-		if typesFilter != "" && typesFilter != "all" {
-			url += "&types=" + typesFilter
-		}
-		if coversParam == "on" {
-			url += "&covers=on"
-		}
-		return url
+		q := buildFilterQuery(typesFilter, coversParam, extraParams...)
+		q.Set("page", strconv.Itoa(page))
+		return baseURL + "?" + q.Encode()
 	}
 
 	var parts []string
@@ -98,21 +131,24 @@ func searchForm(actionURL, query string) string {
 </form>`, html.EscapeString(actionURL), html.EscapeString(query))
 }
 
-// filterBar generates the file type and cover filter UI with button-style links.
-func filterBar(baseURL, currentTypes, currentCovers string) string {
+// filterBar generates the file type and cover filter UI with
+// button-style links. extraParams preserves additional query params
+// (e.g., "q" on the search page) so changing a filter doesn't drop the
+// user's in-progress state.
+func filterBar(baseURL, currentTypes, currentCovers string, extraParams ...[2]string) string {
 	// Build type filter links
 	typeLinks := []string{
-		filterLink(baseURL, "types", "all", currentTypes, currentCovers, "All"),
-		filterLink(baseURL, "types", "epub", currentTypes, currentCovers, "EPUB"),
-		filterLink(baseURL, "types", "cbz", currentTypes, currentCovers, "CBZ"),
-		filterLink(baseURL, "types", "m4b", currentTypes, currentCovers, "M4B"),
-		filterLink(baseURL, "types", "pdf", currentTypes, currentCovers, "PDF"),
+		filterLink(baseURL, "types", "all", currentTypes, currentCovers, "All", extraParams...),
+		filterLink(baseURL, "types", "epub", currentTypes, currentCovers, "EPUB", extraParams...),
+		filterLink(baseURL, "types", "cbz", currentTypes, currentCovers, "CBZ", extraParams...),
+		filterLink(baseURL, "types", "m4b", currentTypes, currentCovers, "M4B", extraParams...),
+		filterLink(baseURL, "types", "pdf", currentTypes, currentCovers, "PDF", extraParams...),
 	}
 
 	// Build cover toggle links
 	coverLinks := []string{
-		filterLink(baseURL, "covers", "off", currentTypes, currentCovers, "Off"),
-		filterLink(baseURL, "covers", "on", currentTypes, currentCovers, "On"),
+		filterLink(baseURL, "covers", "off", currentTypes, currentCovers, "Off", extraParams...),
+		filterLink(baseURL, "covers", "on", currentTypes, currentCovers, "On", extraParams...),
 	}
 
 	return fmt.Sprintf(`<div class="filter">
@@ -123,7 +159,7 @@ func filterBar(baseURL, currentTypes, currentCovers string) string {
 
 // filterLink generates a single filter link with button styling for easier tapping.
 // The current selection is shown in bold without a link.
-func filterLink(baseURL, param, value, currentTypes, currentCovers, label string) string {
+func filterLink(baseURL, param, value, currentTypes, currentCovers, label string, extraParams ...[2]string) string {
 	// Determine query params
 	types := currentTypes
 	covers := currentCovers
@@ -134,15 +170,10 @@ func filterLink(baseURL, param, value, currentTypes, currentCovers, label string
 		covers = value
 	}
 
-	// Build URL with query params
-	url := baseURL
-	sep := "?"
-	if types != "" && types != "all" {
-		url += sep + "types=" + types
-		sep = "&"
-	}
-	if covers == "on" {
-		url += sep + "covers=on"
+	q := buildFilterQuery(types, covers, extraParams...)
+	linkURL := baseURL
+	if encoded := q.Encode(); encoded != "" {
+		linkURL += "?" + encoded
 	}
 
 	// Check if this is the current selection
@@ -157,7 +188,7 @@ func filterLink(baseURL, param, value, currentTypes, currentCovers, label string
 	if isCurrent {
 		return fmt.Sprintf(`<span class="filter-btn" style="font-weight: bold; border-color: #000;">%s</span>`, label)
 	}
-	return fmt.Sprintf(`<a href="%s" class="filter-btn">%s</a>`, html.EscapeString(url), label)
+	return fmt.Sprintf(`<a href="%s" class="filter-btn">%s</a>`, html.EscapeString(linkURL), label)
 }
 
 // itemHTMLWithCover generates an HTML item with optional cover image.

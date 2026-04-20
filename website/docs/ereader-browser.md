@@ -32,9 +32,11 @@ The eReader browser provides the same navigation as the main web UI:
 
 - **Libraries** — Browse your libraries
 - **All books** — Paginated list of every book in a library
-- **Series** — Browse by series
-- **Authors** — Browse by author
-- **Search** — Full-text search within a library
+- **Series** — Paginated list of books in a series
+- **Authors** — Paginated list of books by an author
+- **Search** — Paginated full-text search within a library
+
+All book listings are paged in fixed-size batches (50 books per page) with **← Prev** / **Next →** links at the bottom. This keeps each page small enough for the limited memory of e-ink browsers — even libraries with prolific authors (e.g., 500+ book runs) render quickly.
 
 ### File type filtering
 
