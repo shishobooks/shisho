@@ -25,11 +25,11 @@ export const PluginManifestDialog = ({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-2xl overflow-x-hidden">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>Plugin manifest</DialogTitle>
         </DialogHeader>
-        <div className="overflow-x-auto rounded-md border bg-muted/30 p-4">
+        <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4">
           {isLoading && (
             <div className="text-sm text-muted-foreground">Loading…</div>
           )}
