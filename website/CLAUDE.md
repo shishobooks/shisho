@@ -85,17 +85,17 @@ The `docusaurus.config.ts` reads `versions.json` to determine the latest version
 
 Pages are ordered by `sidebar_position` in frontmatter. Core/essential pages go first, niche or advanced topics go last. When adding a new page, check the existing positions and place it appropriately — don't insert early in the list unless the page is something most users need to see. New pages for optional or secondary features should go at the end.
 
-**Advanced is always last.** The `advanced/` category must have the highest `position` of any top-level sidebar item. When adding a new top-level page whose position would land after Advanced, bump Advanced's position in `docs/advanced/_category_.json` so it stays at the bottom.
+**Advanced is always last.** The `advanced/` category must have the highest `position` of any top-level sidebar item. When adding a new top-level page or category whose position would land after Advanced, bump Advanced's position in `docs/advanced/_category_.json` so it stays at the bottom.
 
 ### Doc Title Casing
 
-Page titles (the `# Heading` at the top of each doc) use **Title Case** and must match the casing used in any cross-references and in `_category_.json` labels. Capitalize the principal words; lowercase articles (`a`, `an`, `the`), coordinating conjunctions (`and`, `or`, `but`), and short prepositions ≤4 letters (`of`, `to`, `in`, `with`). Preserve branded casing (e.g. `eReader`, `iPhone`, `macOS`) even at the start of a title.
+Page titles (the `# Heading` at the top of each doc) use **Title Case** and must match the casing used in any cross-references and in `_category_.json` labels. Capitalize the principal words; lowercase articles (`a`, `an`, `the`), coordinating conjunctions (`and`, `or`, `but`), and short prepositions ≤4 letters (`at`, `by`, `for`, `in`, `of`, `on`, `to`, `with`). Preserve branded casing (e.g. `eReader`, `iPhone`, `macOS`) even at the start of a title.
 
 Examples:
 - ✅ `# Gallery Sort`, `# Kobo Sync`, `# Supported Formats`, `# Users and Permissions`, `# eReader Browser`
 - ❌ `# Gallery sort`, `# kobo sync`, `# Supported formats`, `# Users And Permissions`, `# EReader Browser`
 
-When renaming a title, grep the docs for the old casing and update any links (`[Old Title](...)`) — but do **not** edit `versioned_docs/`, those are frozen snapshots.
+When renaming a title, grep the docs for the old casing and update the display text in any cross-references — i.e. the bracketed part of `[Old Title](./page.md)` becomes `[New Title](./page.md)`; the URL does not change. Do **not** edit `versioned_docs/`, those are frozen snapshots.
 
 ## Monorepo Integration Points
 
