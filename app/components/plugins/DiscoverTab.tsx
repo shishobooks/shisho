@@ -1,4 +1,4 @@
-import { Check, Package } from "lucide-react";
+import { BadgeCheck, Check, Package } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import {
   useInstallPlugin,
+  usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
   type AvailablePlugin,
@@ -30,6 +31,7 @@ interface DiscoverTabProps {
 export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const { data: available = [], error, isLoading } = usePluginsAvailable();
   const { data: installed = [] } = usePluginsInstalled();
+  const { data: repos = [] } = usePluginRepositories();
   const installPlugin = useInstallPlugin();
 
   const [capability, setCapability] = useState<string>("all");
@@ -45,9 +47,27 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   );
 
   const sources = useMemo(() => {
-    const set = new Set(available.map((p) => p.scope));
-    return ["all", ...Array.from(set).sort()];
-  }, [available]);
+    const scopesWithPlugins = new Set(available.map((p) => p.scope));
+    const scopeMeta = new Map(
+      repos.map((r) => [
+        r.scope,
+        { isOfficial: r.is_official, name: r.name || r.scope },
+      ]),
+    );
+    const present = Array.from(scopesWithPlugins).map((scope) => {
+      const meta = scopeMeta.get(scope);
+      return {
+        isOfficial: meta?.isOfficial ?? false,
+        name: meta?.name ?? scope,
+        scope,
+      };
+    });
+    present.sort((a, b) => {
+      if (a.isOfficial !== b.isOfficial) return a.isOfficial ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return present;
+  }, [available, repos]);
 
   const filtered = useMemo(
     () => filterPlugins(available, search, capability, source),
@@ -122,13 +142,22 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
             </SelectContent>
           </Select>
           <Select onValueChange={setSource} value={source}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
               {sources.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s === "all" ? "All sources" : s}
+                <SelectItem key={s.scope} value={s.scope}>
+                  <span className="inline-flex items-center gap-1.5">
+                    {s.isOfficial && (
+                      <BadgeCheck
+                        aria-label="Official repository"
+                        className="h-3.5 w-3.5 text-primary"
+                      />
+                    )}
+                    {s.name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

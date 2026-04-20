@@ -15,6 +15,7 @@ const mockInstallMutate = vi.fn();
 
 vi.mock("@/hooks/queries/plugins", () => ({
   useInstallPlugin: () => ({ isPending: false, mutate: mockInstallMutate }),
+  usePluginRepositories: () => ({ data: mockRepos }),
   usePluginsAvailable: () => ({
     data: mockAvailable,
     isLoading: false,
@@ -58,6 +59,7 @@ const makePlugin = (
 
 let mockAvailable: AvailablePlugin[] = [];
 let mockInstalled: AvailablePlugin[] = [];
+const mockRepos: unknown[] = [];
 
 const wrap = (ui: React.ReactNode) => (
   <QueryClientProvider

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
 
 const baseAvailable: AvailablePlugin = {
-  author: "Shisho Team",
+  author: "Official Shisho Plugins",
   compatible: true,
   description: "",
   homepage: "",

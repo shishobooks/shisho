@@ -1,4 +1,4 @@
-import { Package, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
+import { BadgeCheck, Package, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -62,9 +62,9 @@ export const AdvancedRepositoriesSection = () => {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {repo.is_official && (
-                    <Star
-                      aria-hidden="true"
-                      className="h-4 w-4 shrink-0 text-yellow-500"
+                    <BadgeCheck
+                      aria-label="Official repository"
+                      className="h-4 w-4 shrink-0 text-primary"
                     />
                   )}
                   <h3 className="text-sm font-medium">
