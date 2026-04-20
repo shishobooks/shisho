@@ -503,7 +503,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 
 	searchURL := fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID)
 	content.WriteString(searchForm(searchURL, query))
-	content.WriteString(filterBar(searchURL, typesFilter, coversParam))
+	content.WriteString(filterBar(searchURL, typesFilter, coversParam, [2]string{"q", query}))
 
 	if query != "" {
 		// Search for books (paginated)
