@@ -455,9 +455,6 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		LibraryID: &libraryIDInt,
 	})
 	if err != nil {
-		// Re-emit the resource noun so users see "Author not found" on
-		// this author-scoped route rather than the generic "Person"
-		// noun produced inside peopleService.
 		if errors.Is(err, errcodes.NotFound("Person")) {
 			return errcodes.NotFound("Author")
 		}
