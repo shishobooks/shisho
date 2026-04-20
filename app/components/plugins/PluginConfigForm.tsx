@@ -285,7 +285,7 @@ export const PluginConfigForm = ({
 
       {hasDeclaredFields && (
         <>
-          <div className="border-t pt-4">
+          <div>
             <Label className="text-base">Metadata Fields</Label>
             <p className="mt-1 text-xs text-muted-foreground">
               Choose which fields this plugin can set during enrichment.
@@ -309,7 +309,7 @@ export const PluginConfigForm = ({
           </div>
 
           {/* Confidence threshold - only for enricher plugins */}
-          <div className="space-y-2 border-t pt-4">
+          <div className="space-y-2">
             <Label>Auto-identify confidence threshold</Label>
             <p className="text-xs text-muted-foreground">
               During automatic scans, results with confidence below this
