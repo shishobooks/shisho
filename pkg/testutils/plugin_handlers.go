@@ -48,7 +48,7 @@ func buildFixtureZip() ([]byte, string, error) {
 }
 
 // fixtureZip serves the fixture plugin as a zip.
-// GET /test/plugins/fixture.zip
+// GET /test/plugins/fixture.zip.
 func (h *handler) fixtureZip(c echo.Context) error {
 	data, _, err := buildFixtureZip()
 	if err != nil {
@@ -66,7 +66,7 @@ type fixtureInfoResponse struct {
 }
 
 // fixtureInfo returns metadata about the fixture plugin.
-// GET /test/plugins/fixture-info
+// GET /test/plugins/fixture-info.
 func (h *handler) fixtureInfo(c echo.Context) error {
 	_, sum, err := buildFixtureZip()
 	if err != nil {

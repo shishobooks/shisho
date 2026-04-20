@@ -67,7 +67,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	// Register test-only routes when in test mode
 	// These endpoints allow E2E tests to set up and tear down test data
 	if cfg.IsTestMode() {
-		testutils.RegisterRoutes(e, db)
+		testutils.RegisterRoutes(e, db, pm, plugins.NewInstaller(cfg.PluginDir))
 	}
 
 	// Register auth routes and get the auth service

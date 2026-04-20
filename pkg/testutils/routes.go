@@ -4,13 +4,14 @@ package testutils
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers test-only routes.
 // These endpoints should ONLY be registered in test environments.
-func RegisterRoutes(e *echo.Echo, db *bun.DB) {
-	h := &handler{db: db}
+func RegisterRoutes(e *echo.Echo, db *bun.DB, manager *plugins.Manager, installer *plugins.Installer) {
+	h := &handler{db: db, manager: manager, installer: installer}
 
 	test := e.Group("/test")
 	test.POST("/users", h.createUser)
