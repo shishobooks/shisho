@@ -190,14 +190,12 @@ export const PluginDetail = () => {
       {installed && <PluginHookOrderSection installed={installed} />}
 
       {installed && scope && id && (
-        <section className="space-y-3 rounded-md border border-border p-6">
-          <PluginConfigForm
-            canWrite={canWrite}
-            id={id}
-            onDirtyChange={setConfigDirty}
-            scope={scope}
-          />
-        </section>
+        <PluginConfigForm
+          canWrite={canWrite}
+          id={id}
+          onDirtyChange={setConfigDirty}
+          scope={scope}
+        />
       )}
 
       {installed && <PluginDangerZone canWrite={canWrite} plugin={installed} />}
