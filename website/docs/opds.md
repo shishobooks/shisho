@@ -75,6 +75,6 @@ The feed respects your user's [library permissions](./users-and-permissions#libr
 
 ## Sort order
 
-Book-listing feeds (library, series, author, genre, tag, all-books, recently-added) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the feed falls back to the builtin default: **Date added, newest first**. See [Gallery sort](./gallery-sort.md) for how to save a different default for a library.
+Book-listing feeds (library, series, author, genre, tag, all-books, recently-added) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the feed falls back to the builtin default: **Date added, newest first**. See [Gallery Sort](./gallery-sort.md) for how to save a different default for a library.
 
 When a feed is not scoped to a single library (for example, the all-books root feed across a user's libraries), Shisho uses the same builtin default — **Date added, newest first** — because `user_library_settings` is per-library by design.
