@@ -1,6 +1,5 @@
-import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
@@ -8,7 +7,6 @@ import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
 import { PluginPermissions } from "@/components/plugins/PluginPermissions";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
-import { Button } from "@/components/ui/button";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
   usePluginsAvailable,
@@ -22,7 +20,6 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
-  const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const canWrite = hasPermission("config", "write");
   const installedQuery = usePluginsInstalled();
@@ -84,16 +81,22 @@ export const PluginDetail = () => {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div>
-        <Button
-          onClick={() => navigate("/settings/plugins")}
-          size="sm"
-          variant="ghost"
-        >
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          Plugins
-        </Button>
-      </div>
+      <nav className="text-xs sm:text-sm text-muted-foreground overflow-hidden">
+        <ol className="flex items-center gap-1 sm:gap-2 flex-wrap">
+          <li className="shrink-0">
+            <Link
+              className="hover:text-foreground hover:underline"
+              to="/settings/plugins"
+            >
+              Plugins
+            </Link>
+          </li>
+          <li aria-hidden="true" className="shrink-0">
+            ›
+          </li>
+          <li className="text-foreground truncate">{displayName}</li>
+        </ol>
+      </nav>
 
       {isLoading && <PluginDetailSkeleton />}
 
