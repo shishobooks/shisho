@@ -7,6 +7,7 @@ import { PluginCapabilitiesSection } from "@/components/plugins/PluginCapabiliti
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
+import { PluginHookOrderSection } from "@/components/plugins/PluginHookOrderSection";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
@@ -185,6 +186,8 @@ export const PluginDetail = () => {
           installed={installed}
         />
       )}
+
+      {installed && <PluginHookOrderSection installed={installed} />}
 
       {installed && scope && id && (
         <section className="space-y-3 rounded-md border border-border p-6">

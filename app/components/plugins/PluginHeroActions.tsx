@@ -1,5 +1,5 @@
 import { PluginManifestDialog } from "./PluginManifestDialog";
-import { FileText, RotateCw } from "lucide-react";
+import { Braces, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -59,7 +59,7 @@ export const PluginHeroActions = ({
               size="icon"
               variant="ghost"
             >
-              <FileText aria-hidden="true" className="h-4 w-4" />
+              <Braces aria-hidden="true" className="h-4 w-4" />
               <span className="sr-only">View manifest</span>
             </Button>
           </TooltipTrigger>
