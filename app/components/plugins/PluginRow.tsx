@@ -67,18 +67,29 @@ export const PluginRow = ({
               {cap}
             </Badge>
           ))}
-          {author && <span>· by {author}</span>}
+          {author && (
+            <>
+              <span aria-hidden="true" className="text-muted-foreground/50">
+                ·
+              </span>
+              <span>{author}</span>
+            </>
+          )}
           {repoName && (
-            <span className="inline-flex items-center gap-1">
-              {"· from "}
-              {isOfficial && (
-                <BadgeCheck
-                  aria-label="Official plugin"
-                  className="h-3.5 w-3.5 text-primary"
-                />
-              )}
-              {repoName}
-            </span>
+            <>
+              <span aria-hidden="true" className="text-muted-foreground/50">
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1">
+                {isOfficial && (
+                  <BadgeCheck
+                    aria-label="Official plugin"
+                    className="h-3.5 w-3.5 text-primary"
+                  />
+                )}
+                {repoName}
+              </span>
+            </>
           )}
         </div>
         {description && (

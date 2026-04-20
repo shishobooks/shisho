@@ -23,14 +23,12 @@ describe("PluginRow", () => {
     render(wrap(<PluginRow {...base} />));
     expect(screen.getByText("Test")).toBeInTheDocument();
     expect(screen.getByText(/v1\.0\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/by Me/)).toBeInTheDocument();
+    expect(screen.getByText("Me")).toBeInTheDocument();
   });
 
-  it("renders the repo name with a 'from' prefix when provided", () => {
+  it("renders the repo name on the meta line when provided", () => {
     render(wrap(<PluginRow {...base} repoName="Official Shisho Plugins" />));
-    expect(
-      screen.getByText(/from Official Shisho Plugins/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Official Shisho Plugins")).toBeInTheDocument();
   });
 
   it("renders the Disabled badge when disabled=true", () => {

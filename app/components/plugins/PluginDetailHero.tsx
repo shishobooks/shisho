@@ -51,12 +51,11 @@ export const PluginDetailHero = ({
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
   if (author) {
-    metaParts.push(<span>by {author}</span>);
+    metaParts.push(<span>{author}</span>);
   }
   if (repoName) {
     metaParts.push(
       <span className="inline-flex items-center gap-1">
-        {"from "}
         {isOfficial && (
           <BadgeCheck
             aria-label="Official plugin"
