@@ -21,6 +21,7 @@ export interface PluginDetailHeroProps {
   onInstall?: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
   onUpdate?: () => void;
+  repoName?: string;
   scope: string;
 }
 
@@ -35,6 +36,7 @@ export const PluginDetailHero = ({
   onInstall,
   onToggleEnabled,
   onUpdate,
+  repoName,
   scope,
 }: PluginDetailHeroProps) => {
   const name = installed?.name ?? available?.name ?? id;
@@ -49,16 +51,19 @@ export const PluginDetailHero = ({
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
   if (author) {
+    metaParts.push(<span>by {author}</span>);
+  }
+  if (repoName) {
     metaParts.push(
       <span className="inline-flex items-center gap-1">
-        by{" "}
+        {"from "}
         {isOfficial && (
           <BadgeCheck
             aria-label="Official plugin"
             className="h-4 w-4 text-primary"
           />
         )}
-        {author}
+        {repoName}
       </span>,
     );
   }

@@ -17,6 +17,7 @@ export interface PluginRowProps {
   imageUrl?: string | null;
   isOfficial?: boolean;
   name: string;
+  repoName?: string;
   scope: string;
   updateAvailable?: string;
   version?: string;
@@ -33,6 +34,7 @@ export const PluginRow = ({
   imageUrl,
   isOfficial,
   name,
+  repoName,
   scope,
   updateAvailable,
   version,
@@ -65,16 +67,17 @@ export const PluginRow = ({
               {cap}
             </Badge>
           ))}
-          {author && (
+          {author && <span>· by {author}</span>}
+          {repoName && (
             <span className="inline-flex items-center gap-1">
-              ·{" "}
+              {"· from "}
               {isOfficial && (
                 <BadgeCheck
                   aria-label="Official plugin"
                   className="h-3.5 w-3.5 text-primary"
                 />
               )}
-              {author}
+              {repoName}
             </span>
           )}
         </div>

@@ -11,6 +11,7 @@ import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory"
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
   useInstallPlugin,
+  usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
   useUpdatePlugin,
@@ -26,6 +27,7 @@ export const PluginDetail = () => {
   const canWrite = hasPermission("config", "write");
   const installedQuery = usePluginsInstalled();
   const availableQuery = usePluginsAvailable();
+  const { data: repos = [] } = usePluginRepositories();
   const updatePlugin = useUpdatePlugin();
   const updateVersion = useUpdatePluginVersion();
   const installPlugin = useInstallPlugin();
@@ -43,6 +45,9 @@ export const PluginDetail = () => {
   );
 
   const displayName = installed?.name ?? available?.name ?? id;
+  const repoScope = installed?.scope ?? available?.scope ?? scope;
+  const repoMatch = repos.find((r) => r.scope === repoScope);
+  const repoName = repoMatch?.name || undefined;
   usePageTitle(displayName);
 
   const isLoading = installedQuery.isLoading || availableQuery.isLoading;
@@ -165,6 +170,7 @@ export const PluginDetail = () => {
           onInstall={() => setInstallDialogOpen(true)}
           onToggleEnabled={handleToggleEnabled}
           onUpdate={handleUpdate}
+          repoName={repoName}
           scope={scope}
         />
       )}

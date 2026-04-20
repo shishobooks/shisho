@@ -46,6 +46,11 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
     [installed],
   );
 
+  const repoNameByScope = useMemo(
+    () => new Map(repos.map((r) => [r.scope, r.name || r.scope])),
+    [repos],
+  );
+
   const sources = useMemo(() => {
     const scopesWithPlugins = new Set(available.map((p) => p.scope));
     const scopeMeta = new Map(
@@ -218,6 +223,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                   isOfficial={p.is_official}
                   key={key}
                   name={p.name}
+                  repoName={repoNameByScope.get(p.scope)}
                   scope={p.scope}
                   version={p.versions[0]?.version}
                 />

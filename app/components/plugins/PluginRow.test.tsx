@@ -23,7 +23,14 @@ describe("PluginRow", () => {
     render(wrap(<PluginRow {...base} />));
     expect(screen.getByText("Test")).toBeInTheDocument();
     expect(screen.getByText(/v1\.0\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/Me/)).toBeInTheDocument();
+    expect(screen.getByText(/by Me/)).toBeInTheDocument();
+  });
+
+  it("renders the repo name with a 'from' prefix when provided", () => {
+    render(wrap(<PluginRow {...base} repoName="Official Shisho Plugins" />));
+    expect(
+      screen.getByText(/from Official Shisho Plugins/),
+    ).toBeInTheDocument();
   });
 
   it("renders the Disabled badge when disabled=true", () => {
@@ -57,8 +64,12 @@ describe("PluginRow", () => {
     );
   });
 
-  it("renders the official badge when isOfficial is true", () => {
-    render(wrap(<PluginRow {...base} isOfficial />));
+  it("renders the official badge next to the repo name when isOfficial is true", () => {
+    render(
+      wrap(
+        <PluginRow {...base} isOfficial repoName="Official Shisho Plugins" />,
+      ),
+    );
     // BadgeCheck from lucide renders with this aria-label when we label it.
     expect(screen.getByLabelText(/official plugin/i)).toBeInTheDocument();
   });

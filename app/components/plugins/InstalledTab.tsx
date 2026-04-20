@@ -10,6 +10,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import {
   PluginStatusActive,
+  usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
   useScanPlugins,
@@ -23,8 +24,13 @@ export const InstalledTab = () => {
   const canWrite = hasPermission("config", "write");
   const { data: plugins, error, isLoading } = usePluginsInstalled();
   const { data: available = [] } = usePluginsAvailable();
+  const { data: repos = [] } = usePluginRepositories();
   const updatePluginVersion = useUpdatePluginVersion();
   const scanPlugins = useScanPlugins();
+
+  const repoNameByScope = new Map(
+    repos.map((r) => [r.scope, r.name || r.scope]),
+  );
 
   const handleScan = () => {
     scanPlugins.mutate(undefined, {
@@ -90,6 +96,7 @@ export const InstalledTab = () => {
         isOfficial={isOfficial}
         key={`${plugin.scope}/${plugin.id}`}
         name={plugin.name}
+        repoName={repoNameByScope.get(plugin.scope)}
         scope={plugin.scope}
         updateAvailable={plugin.update_available_version ?? undefined}
         version={plugin.version}

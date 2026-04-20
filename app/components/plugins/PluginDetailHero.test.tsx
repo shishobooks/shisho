@@ -19,12 +19,13 @@ const baseAvailable: AvailablePlugin = {
 };
 
 describe("PluginDetailHero", () => {
-  it("renders the official badge when the available plugin is official", () => {
+  it("renders the official badge next to the repo name", () => {
     render(
       <PluginDetailHero
         available={{ ...baseAvailable, is_official: true }}
         canWrite={false}
         id="p"
+        repoName="Official Shisho Plugins"
         scope="shisho"
       />,
     );
@@ -37,6 +38,7 @@ describe("PluginDetailHero", () => {
         available={baseAvailable}
         canWrite={false}
         id="p"
+        repoName="Community Plugins"
         scope="shisho"
       />,
     );

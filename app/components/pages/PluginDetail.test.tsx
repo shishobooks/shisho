@@ -47,6 +47,7 @@ vi.mock("@/hooks/queries/plugins", () => ({
     mutate: vi.fn(),
   }),
   useInstallPlugin: () => ({ mutate: vi.fn(), isPending: false }),
+  usePluginRepositories: () => ({ data: [] }),
   PluginStatusActive: "active",
 }));
 
