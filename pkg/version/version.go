@@ -40,6 +40,25 @@ func isVersionCompatible(currentVersion, minVersion string) bool {
 	return true // Equal
 }
 
+// Compare returns -1 if a < b, 0 if a == b, 1 if a > b using semver
+// comparison (major.minor.patch). Unparseable versions compare equal.
+func Compare(a, b string) int {
+	aParts := parseSemver(a)
+	bParts := parseSemver(b)
+	if aParts == nil || bParts == nil {
+		return 0
+	}
+	for i := 0; i < 3; i++ {
+		if aParts[i] < bParts[i] {
+			return -1
+		}
+		if aParts[i] > bParts[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
 // parseSemver extracts [major, minor, patch] from a semver string.
 // Returns nil if the string cannot be parsed.
 func parseSemver(s string) []int {
