@@ -263,10 +263,20 @@ export const useUninstallPlugin = () => {
         queryKey: [QueryKey.PluginOrder],
       });
       // Library-scoped orders (LibraryPluginsTab) are keyed under
-      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate the
-      // shared prefix so every cached library order refetches.
+      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
+      // only those — the shared "libraries" prefix is used by other hooks
+      // too (books, settings) and blanket-invalidating it would trigger
+      // unrelated refetches on every uninstall.
       queryClient.invalidateQueries({
-        queryKey: ["libraries"],
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === "libraries" &&
+            key[2] === "plugins" &&
+            key[3] === "order"
+          );
+        },
       });
     },
   });

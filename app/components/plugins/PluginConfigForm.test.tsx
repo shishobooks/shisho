@@ -37,22 +37,16 @@ vi.mock("@/hooks/queries/plugins", () => ({
     dataUpdatedAt: 1,
   }),
   useSavePluginConfig: () => ({
-    mutate: (
-      args: unknown,
-      opts?: { onSuccess?: () => void; onError?: (err: Error) => void },
-    ) => {
+    mutateAsync: (args: unknown) => {
       mockSaveConfig(args);
-      opts?.onSuccess?.();
+      return Promise.resolve();
     },
     isPending: false,
   }),
   useSavePluginFieldSettings: () => ({
-    mutate: (
-      args: unknown,
-      opts?: { onSuccess?: () => void; onError?: (err: Error) => void },
-    ) => {
+    mutateAsync: (args: unknown) => {
       mockSaveFields(args);
-      opts?.onSuccess?.();
+      return Promise.resolve();
     },
     isPending: false,
   }),

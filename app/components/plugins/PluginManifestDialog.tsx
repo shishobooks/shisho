@@ -27,6 +27,10 @@ export const PluginManifestDialog = ({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
+      {/* `overflow-hidden` on DialogContent (rather than the usual
+          `overflow-x-hidden`) is deliberate here: the header must stay
+          sticky while the JSON body scrolls in both axes. The inner
+          container owns the scroll via its own max-h + overflow-auto. */}
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>

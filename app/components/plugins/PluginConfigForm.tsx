@@ -117,7 +117,7 @@ export const PluginConfigForm = ({
     setFieldSettings((prev) => ({ ...prev, [field]: enabled }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!data) return;
 
     // Build config payload, excluding secret fields that still show the mask
@@ -131,9 +131,9 @@ export const PluginConfigForm = ({
       config[key] = value;
     }
 
-    // Save field settings if there are declared fields
+    // Compute which declared fields actually changed.
+    const changedFields: Record<string, boolean> = {};
     if (data.declaredFields && data.declaredFields.length > 0) {
-      const changedFields: Record<string, boolean> = {};
       for (const field of data.declaredFields) {
         const original = data.fieldSettings?.[field] ?? true;
         const current = fieldSettings[field] ?? true;
@@ -141,43 +141,40 @@ export const PluginConfigForm = ({
           changedFields[field] = current;
         }
       }
-      if (Object.keys(changedFields).length > 0) {
-        saveFieldSettings.mutate(
-          { scope, id, fields: changedFields },
-          {
-            onError: (err) => {
-              toast.error(`Failed to save field settings: ${err.message}`);
-            },
-          },
-        );
-      }
     }
 
-    saveConfig.mutate(
-      {
-        scope,
-        id,
-        config,
-        confidence_threshold:
-          confidenceThreshold != null ? confidenceThreshold / 100 : undefined,
-        clear_confidence_threshold:
-          confidenceThreshold == null ? true : undefined,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Plugin configuration saved.");
-          // Reset initial values so hasChanges becomes false
-          setInitialValues({
-            formValues: { ...formValues },
-            fieldSettings: { ...fieldSettings },
-            confidenceThreshold,
-          });
-        },
-        onError: (err) => {
-          toast.error(`Failed to save configuration: ${err.message}`);
-        },
-      },
-    );
+    // Await both mutations so initialValues is only reset when both succeed.
+    // Otherwise a failed field-settings save would silently clear the dirty
+    // state and the user could navigate away thinking everything persisted.
+    try {
+      const tasks: Promise<unknown>[] = [
+        saveConfig.mutateAsync({
+          scope,
+          id,
+          config,
+          confidence_threshold:
+            confidenceThreshold != null ? confidenceThreshold / 100 : undefined,
+          clear_confidence_threshold:
+            confidenceThreshold == null ? true : undefined,
+        }),
+      ];
+      if (Object.keys(changedFields).length > 0) {
+        tasks.push(
+          saveFieldSettings.mutateAsync({ scope, id, fields: changedFields }),
+        );
+      }
+      await Promise.all(tasks);
+
+      toast.success("Plugin configuration saved.");
+      setInitialValues({
+        formValues: { ...formValues },
+        fieldSettings: { ...fieldSettings },
+        confidenceThreshold,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      toast.error(`Failed to save configuration: ${msg}`);
+    }
   };
 
   const renderField = (key: string, field: ConfigField) => {

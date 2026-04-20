@@ -63,4 +63,30 @@ describe("useUninstallPlugin", () => {
     ]);
     expect(libraryOrder?.isInvalidated).toBe(true);
   });
+
+  it("does not invalidate unrelated 'libraries'-prefixed queries", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    // Unrelated library-scoped query — e.g. a library's books. Blanket
+    // invalidation on the "libraries" prefix would sweep this up too.
+    client.setQueryData(["libraries", "lib-1", "books"], []);
+    client.setQueryData(["libraries", "lib-1", "settings"], {});
+
+    const { result } = renderHook(() => useUninstallPlugin(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ scope: "shisho", id: "test" });
+    });
+
+    expect(
+      client.getQueryState(["libraries", "lib-1", "books"])?.isInvalidated,
+    ).toBe(false);
+    expect(
+      client.getQueryState(["libraries", "lib-1", "settings"])?.isInvalidated,
+    ).toBe(false);
+  });
 });

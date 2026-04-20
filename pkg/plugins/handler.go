@@ -884,6 +884,8 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 				Overview:    p.Overview,
 				Description: p.Description,
 				Homepage:    p.Homepage,
+				ImageURL:    p.ImageURL,
+				IsOfficial:  repo.IsOfficial,
 				Versions:    annotated,
 				Compatible:  hasCompatible,
 			}))
