@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -93,4 +95,58 @@ func TestGetAuthoredBooks_DeduplicatesMultipleRoles(t *testing.T) {
 	// Should return only 1 book, not 2 (duplicated for each role)
 	assert.Len(t, books, 1, "Should return 1 book, not duplicated for each role")
 	assert.Equal(t, book.ID, books[0].ID)
+}
+
+// TestRetrievePerson_LibraryScoping verifies that RetrievePerson applies
+// the LibraryID filter as an independent predicate so a person ID from a
+// sibling library cannot leak through. See
+// pkg/ereader/handlers.go AuthorBooks for the motivating call site.
+func TestRetrievePerson_LibraryScoping(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libA := &models.Library{
+		Name:                     "Library A",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(libA).Exec(ctx)
+	require.NoError(t, err)
+
+	libB := &models.Library{
+		Name:                     "Library B",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err = db.NewInsert().Model(libB).Exec(ctx)
+	require.NoError(t, err)
+
+	personInB := &models.Person{
+		LibraryID:      libB.ID,
+		Name:           "Secret Author",
+		SortName:       "Author, Secret",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(personInB).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+
+	// Lookup scoped to lib B succeeds.
+	got, err := svc.RetrievePerson(ctx, RetrievePersonOptions{
+		ID:        &personInB.ID,
+		LibraryID: &libB.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, personInB.ID, got.ID)
+
+	// Lookup scoped to lib A must NOT leak the person from lib B.
+	_, err = svc.RetrievePerson(ctx, RetrievePersonOptions{
+		ID:        &personInB.ID,
+		LibraryID: &libA.ID,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errcodes.NotFound("Person")),
+		"expected NotFound when person ID belongs to a different library, got: %v", err)
 }

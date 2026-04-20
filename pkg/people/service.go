@@ -76,9 +76,12 @@ func (svc *Service) RetrievePerson(ctx context.Context, opts RetrievePersonOptio
 	if opts.ID != nil {
 		q = q.Where("p.id = ?", *opts.ID)
 	}
-	if opts.Name != nil && opts.LibraryID != nil {
+	if opts.Name != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(p.name) = LOWER(?) AND p.library_id = ?", *opts.Name, *opts.LibraryID)
+		q = q.Where("LOWER(p.name) = LOWER(?)", *opts.Name)
+	}
+	if opts.LibraryID != nil {
+		q = q.Where("p.library_id = ?", *opts.LibraryID)
 	}
 
 	err := q.Scan(ctx)
