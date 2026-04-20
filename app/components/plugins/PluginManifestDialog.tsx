@@ -25,11 +25,11 @@ export const PluginManifestDialog = ({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Plugin manifest</DialogTitle>
         </DialogHeader>
-        <div className="overflow-auto rounded-md border bg-muted/30 p-4">
+        <div className="rounded-md border bg-muted/30 p-4">
           {isLoading && (
             <div className="text-sm text-muted-foreground">Loading…</div>
           )}
@@ -37,7 +37,7 @@ export const PluginManifestDialog = ({
             <div className="text-sm text-destructive">{error.message}</div>
           )}
           {data !== undefined && data !== null && (
-            <pre className="text-xs">
+            <pre className="overflow-x-auto text-xs">
               <code>{JSON.stringify(data, null, 2)}</code>
             </pre>
           )}
