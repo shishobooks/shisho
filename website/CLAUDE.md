@@ -89,11 +89,11 @@ Pages are ordered by `sidebar_position` in frontmatter. Core/essential pages go 
 
 ### Doc Title Casing
 
-Page titles (the `# Heading` at the top of each doc) use **Title Case** and must match the casing used in any cross-references and in `_category_.json` labels. Capitalize the principal words; lowercase only articles, short prepositions, and conjunctions.
+Page titles (the `# Heading` at the top of each doc) use **Title Case** and must match the casing used in any cross-references and in `_category_.json` labels. Capitalize the principal words; lowercase only articles, conjunctions, and short prepositions (≤4 letters, e.g. `and`, `of`, `to`, `with`). Preserve branded casing (e.g. `eReader`, `iPhone`, `macOS`) even at the start of a title.
 
 Examples:
-- ✅ `# Gallery Sort`, `# Kobo Sync`, `# Supported Formats`, `# Users and Permissions`
-- ❌ `# Gallery sort`, `# kobo sync`, `# Supported formats`
+- ✅ `# Gallery Sort`, `# Kobo Sync`, `# Supported Formats`, `# Users and Permissions`, `# eReader Browser`
+- ❌ `# Gallery sort`, `# kobo sync`, `# Supported formats`, `# EReader Browser`
 
 When renaming a title, grep the docs for the old casing and update any links (`[Old Title](...)`) — but do **not** edit `versioned_docs/`, those are frozen snapshots.
 
