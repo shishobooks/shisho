@@ -424,6 +424,9 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		LibraryID: &libraryIDInt,
 	})
 	if err != nil {
+		if errors.Is(err, errcodes.NotFound("Person")) {
+			return errcodes.NotFound("Author")
+		}
 		return errors.WithStack(err)
 	}
 
