@@ -101,21 +101,6 @@ export const CAPABILITY_DEFS: CapabilityDef[] = [
   },
 ];
 
-// Permission-style capabilities: the ones that grant the plugin access to
-// external systems (network, filesystem, ffmpeg, shell). The first four
-// entries in CAPABILITY_DEFS describe what the plugin does for Shisho, not
-// what it can reach outside of the sandbox.
-const PERMISSION_KEYS: (keyof PluginCapabilities)[] = [
-  "httpAccess",
-  "fileAccess",
-  "ffmpegAccess",
-  "shellAccess",
-];
-
-export const PERMISSION_DEFS: CapabilityDef[] = CAPABILITY_DEFS.filter((def) =>
-  PERMISSION_KEYS.includes(def.key),
-);
-
 export function filterDefsByCapabilities(
   defs: CapabilityDef[],
   capabilities: PluginCapabilities | undefined,

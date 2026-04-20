@@ -1,5 +1,5 @@
 import { CapabilityRow } from "./CapabilityRow";
-import { filterDefsByCapabilities, PERMISSION_DEFS } from "./capabilityRows";
+import { CAPABILITY_DEFS, filterDefsByCapabilities } from "./capabilityRows";
 import { useMemo } from "react";
 
 import type {
@@ -8,15 +8,15 @@ import type {
 } from "@/hooks/queries/plugins";
 import type { Plugin } from "@/types/generated/models";
 
-interface PluginPermissionsProps {
+interface PluginCapabilitiesSectionProps {
   available?: AvailablePlugin;
   installed?: Plugin;
 }
 
-export const PluginPermissions = ({
+export const PluginCapabilitiesSection = ({
   available,
   installed,
-}: PluginPermissionsProps) => {
+}: PluginCapabilitiesSectionProps) => {
   const caps = useMemo<PluginCapabilities | null>(() => {
     if (installed && available) {
       const match = available.versions.find(
@@ -27,12 +27,12 @@ export const PluginPermissions = ({
     return available?.versions?.[0]?.capabilities ?? null;
   }, [installed, available]);
 
-  const rows = filterDefsByCapabilities(PERMISSION_DEFS, caps ?? undefined);
+  const rows = filterDefsByCapabilities(CAPABILITY_DEFS, caps ?? undefined);
   if (rows.length === 0) return null;
 
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Permissions</h2>
+      <h2 className="text-lg font-semibold">Capabilities</h2>
       <div className="space-y-2">
         {rows.map((def) => (
           <CapabilityRow

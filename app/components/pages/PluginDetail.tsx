@@ -3,10 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
+import { PluginCapabilitiesSection } from "@/components/plugins/PluginCapabilitiesSection";
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
 import { PluginDetailHero } from "@/components/plugins/PluginDetailHero";
-import { PluginPermissions } from "@/components/plugins/PluginPermissions";
 import { PluginVersionHistory } from "@/components/plugins/PluginVersionHistory";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
@@ -174,7 +174,10 @@ export const PluginDetail = () => {
       )}
 
       {!isLoading && !hasError && !notFound && (
-        <PluginPermissions available={available} installed={installed} />
+        <PluginCapabilitiesSection
+          available={available}
+          installed={installed}
+        />
       )}
 
       {installed && scope && id && (
