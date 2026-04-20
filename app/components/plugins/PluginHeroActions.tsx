@@ -43,7 +43,7 @@ export const PluginHeroActions = ({
                 disabled={reload.isPending}
                 onClick={handleReload}
                 size="icon"
-                variant="ghost"
+                variant="outline"
               >
                 <RotateCw aria-hidden="true" className="h-4 w-4" />
                 <span className="sr-only">Reload plugin from disk</span>
@@ -57,7 +57,7 @@ export const PluginHeroActions = ({
             <Button
               onClick={() => setManifestOpen(true)}
               size="icon"
-              variant="ghost"
+              variant="outline"
             >
               <Braces aria-hidden="true" className="h-4 w-4" />
               <span className="sr-only">View manifest</span>
