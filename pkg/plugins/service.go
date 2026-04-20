@@ -290,7 +290,9 @@ func (s *Service) UpdateRepository(ctx context.Context, repo *models.PluginRepos
 // Multiple plugins can register the same type (e.g., local and published versions);
 // only the first by scope/plugin ordering is returned.
 func (s *Service) ListIdentifierTypes(ctx context.Context) ([]*models.PluginIdentifierType, error) {
-	var types []*models.PluginIdentifierType
+	// Initialize with make to avoid nil-slice JSON serialization (`null` instead
+	// of `[]`), which crashes frontend consumers that call .filter/.map.
+	types := make([]*models.PluginIdentifierType, 0)
 	err := s.db.NewSelect().Model(&types).OrderExpr("scope ASC, plugin_id ASC, id ASC").Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
