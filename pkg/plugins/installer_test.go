@@ -56,7 +56,6 @@ func TestInstaller_InstallPlugin_Success(t *testing.T) {
 		Name:            "Test Plugin",
 		Version:         "1.0.0",
 		Description:     "A test plugin",
-		Author:          "Test Author",
 	}
 
 	zipData := createPluginZip(t, manifest)
@@ -170,7 +169,6 @@ func TestInstaller_UpdatePlugin(t *testing.T) {
 		Name:            "Test Plugin Updated",
 		Version:         "2.0.0",
 		Description:     "Updated plugin",
-		Author:          "Test Author",
 	}
 
 	zipData := createPluginZip(t, manifest)

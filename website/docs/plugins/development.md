@@ -71,7 +71,6 @@ The manifest declares what your plugin does, what permissions it needs, and what
 | Field | Description |
 |-------|-------------|
 | `description` | Brief description of the plugin |
-| `author` | Plugin author name |
 | `homepage` | URL to plugin homepage or repository |
 | `license` | License identifier (e.g., `MIT`) |
 | `minShishoVersion` | Minimum compatible Shisho version |

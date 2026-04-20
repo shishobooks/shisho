@@ -58,7 +58,6 @@ Create a `repository.json` file with this structure:
       "id": "my-plugin",
       "name": "My Plugin",
       "description": "A brief description of what the plugin does.",
-      "author": "Your Name",
       "homepage": "https://github.com/my-org/my-plugin",
       "imageUrl": "https://raw.githubusercontent.com/my-org/my-plugin/main/logo.png",
       "versions": [

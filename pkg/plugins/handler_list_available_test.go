@@ -19,7 +19,6 @@ func TestAvailablePluginResponse_JSONFields(t *testing.T) {
 		Name:        "Example",
 		Overview:    "ov",
 		Description: "desc",
-		Author:      "Author",
 		Homepage:    "https://example.com",
 		ImageURL:    "https://example.com/logo.png",
 		IsOfficial:  true,

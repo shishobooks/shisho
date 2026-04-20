@@ -8,7 +8,6 @@ import { cn } from "@/libraries/utils";
 
 export interface PluginRowProps {
   actions?: ReactNode;
-  author?: string;
   capabilities: string[];
   description?: string;
   disabled?: boolean;
@@ -25,7 +24,6 @@ export interface PluginRowProps {
 
 export const PluginRow = ({
   actions,
-  author,
   capabilities,
   description,
   disabled,
@@ -67,14 +65,6 @@ export const PluginRow = ({
               {cap}
             </Badge>
           ))}
-          {author && (
-            <>
-              <span aria-hidden="true" className="text-muted-foreground/50">
-                ·
-              </span>
-              <span>{author}</span>
-            </>
-          )}
           {repoName && (
             <>
               <span aria-hidden="true" className="text-muted-foreground/50">

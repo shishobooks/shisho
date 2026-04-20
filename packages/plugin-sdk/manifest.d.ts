@@ -158,7 +158,6 @@ export interface PluginManifest {
   /** Short one-liner overview (separate from longer description). */
   overview?: string;
   description?: string;
-  author?: string;
   homepage?: string;
   license?: string;
   /** Minimum Shisho version required. */

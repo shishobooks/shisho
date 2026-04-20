@@ -31,7 +31,6 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 const makePlugin = (
   overrides: Partial<AvailablePlugin> = {},
 ): AvailablePlugin => ({
-  author: "Test Author",
   compatible: true,
   description: "A helpful plugin",
   homepage: "",

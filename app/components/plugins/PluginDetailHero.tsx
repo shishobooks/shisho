@@ -41,7 +41,6 @@ export const PluginDetailHero = ({
 }: PluginDetailHeroProps) => {
   const name = installed?.name ?? available?.name ?? id;
   const description = installed?.description ?? available?.description ?? "";
-  const author = installed?.author ?? available?.author;
   const homepage = installed?.homepage ?? available?.homepage;
   const imageUrl = available?.imageUrl ?? undefined;
   const isOfficial = available?.is_official ?? false;
@@ -50,9 +49,6 @@ export const PluginDetailHero = ({
 
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
-  if (author) {
-    metaParts.push(<span>{author}</span>);
-  }
   if (repoName) {
     metaParts.push(
       <span className="inline-flex items-center gap-1">

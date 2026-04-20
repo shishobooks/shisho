@@ -9,7 +9,6 @@ const base = {
   id: "test",
   name: "Test",
   version: "1.0.0",
-  author: "Me",
   description: "A test plugin.",
   imageUrl: undefined,
   capabilities: [],
@@ -19,11 +18,10 @@ const base = {
 const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 
 describe("PluginRow", () => {
-  it("renders name, version, and author on meta line", () => {
+  it("renders name and version on meta line", () => {
     render(wrap(<PluginRow {...base} />));
     expect(screen.getByText("Test")).toBeInTheDocument();
     expect(screen.getByText(/v1\.0\.0/)).toBeInTheDocument();
-    expect(screen.getByText("Me")).toBeInTheDocument();
   });
 
   it("renders the repo name on the meta line when provided", () => {

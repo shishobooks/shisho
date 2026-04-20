@@ -86,7 +86,6 @@ export const InstalledTab = () => {
             </Button>
           ) : undefined
         }
-        author={plugin.author}
         capabilities={capabilityLabels}
         description={plugin.description}
         disabled={isDisabled}

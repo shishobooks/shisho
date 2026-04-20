@@ -63,7 +63,6 @@ shisho/goodreads-metadata/
   "name": "Display Name",
   "version": "1.0.0",
   "description": "...",
-  "author": "...",
   "homepage": "...",
   "license": "...",
   "minShishoVersion": "...",

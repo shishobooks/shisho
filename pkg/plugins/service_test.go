@@ -58,14 +58,12 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 	ctx := context.Background()
 
 	desc := "A test plugin"
-	author := "Test Author"
 	plugin := &models.Plugin{
 		Scope:       "community",
 		ID:          "test-plugin",
 		Name:        "Test Plugin",
 		Version:     "1.0.0",
 		Description: &desc,
-		Author:      &author,
 		Status:      models.PluginStatusActive,
 		InstalledAt: time.Now().UTC().Truncate(time.Second),
 	}
@@ -78,7 +76,6 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 	assert.Equal(t, "Test Plugin", retrieved.Name)
 	assert.Equal(t, "1.0.0", retrieved.Version)
 	assert.Equal(t, &desc, retrieved.Description)
-	assert.Equal(t, &author, retrieved.Author)
 	assert.Equal(t, models.PluginStatusActive, retrieved.Status)
 
 	// Test not found

@@ -222,9 +222,6 @@ func (h *handler) install(c echo.Context) error {
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
 		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
-		}
 		if manifest.Homepage != "" {
 			plugin.Homepage = &manifest.Homepage
 		}
@@ -258,9 +255,6 @@ func (h *handler) install(c echo.Context) error {
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
-		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
 		}
 		if manifest.Homepage != "" {
 			plugin.Homepage = &manifest.Homepage
@@ -711,7 +705,6 @@ type availablePluginResponse struct {
 	Name        string                   `json:"name"`
 	Overview    string                   `json:"overview"`
 	Description string                   `json:"description"`
-	Author      string                   `json:"author"`
 	Homepage    string                   `json:"homepage"`
 	ImageURL    string                   `json:"imageUrl"`
 	IsOfficial  bool                     `json:"is_official"`
@@ -761,7 +754,6 @@ func (h *handler) listAvailable(c echo.Context) error {
 				Name:        p.Name,
 				Overview:    p.Overview,
 				Description: p.Description,
-				Author:      p.Author,
 				Homepage:    p.Homepage,
 				ImageURL:    p.ImageURL,
 				IsOfficial:  repo.IsOfficial,
@@ -891,7 +883,6 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 				Name:        p.Name,
 				Overview:    p.Overview,
 				Description: p.Description,
-				Author:      p.Author,
 				Homepage:    p.Homepage,
 				Versions:    annotated,
 				Compatible:  hasCompatible,
@@ -1017,9 +1008,6 @@ func (h *handler) scan(c echo.Context) error {
 		}
 		if manifest.Description != "" {
 			plugin.Description = &manifest.Description
-		}
-		if manifest.Author != "" {
-			plugin.Author = &manifest.Author
 		}
 
 		if err := h.service.InstallPlugin(ctx, plugin); err != nil {

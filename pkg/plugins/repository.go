@@ -70,7 +70,6 @@ type AvailablePlugin struct {
 	Name        string          `json:"name"`
 	Overview    string          `json:"overview"`
 	Description string          `json:"description"`
-	Author      string          `json:"author"`
 	Homepage    string          `json:"homepage"`
 	ImageURL    string          `json:"imageUrl"`
 	Versions    []PluginVersion `json:"versions"`

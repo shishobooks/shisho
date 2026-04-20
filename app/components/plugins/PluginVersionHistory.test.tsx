@@ -23,7 +23,6 @@ const makeVersion = (
 });
 
 const makeAvailable = (versions: PluginVersion[]): AvailablePlugin => ({
-  author: "",
   compatible: true,
   description: "",
   homepage: "",

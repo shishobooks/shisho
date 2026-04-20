@@ -91,7 +91,6 @@ describe("resolveInstalledPluginCapabilities", () => {
     name: "My Plugin",
     overview: "",
     description: "",
-    author: "",
     homepage: "",
     imageUrl: "",
     is_official: false,

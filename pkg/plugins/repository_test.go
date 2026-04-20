@@ -21,7 +21,6 @@ func TestFetchRepository_Success(t *testing.T) {
 				ID:          "goodreads-metadata",
 				Name:        "Goodreads Metadata",
 				Description: "Fetches book metadata from Goodreads",
-				Author:      "Official Shisho Plugins",
 				Homepage:    "https://example.com",
 				Versions: []PluginVersion{
 					{

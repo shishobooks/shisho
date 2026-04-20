@@ -214,7 +214,6 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                       )
                     ) : null
                   }
-                  author={p.author || undefined}
                   capabilities={caps}
                   description={p.description || undefined}
                   href={`/settings/plugins/${p.scope}/${p.id}`}

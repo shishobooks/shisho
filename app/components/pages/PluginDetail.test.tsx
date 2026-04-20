@@ -24,7 +24,6 @@ vi.mock("@/hooks/queries/plugins", () => ({
   usePluginsAvailable: () => ({
     data: [
       {
-        author: "",
         compatible: true,
         description: "",
         homepage: "",
