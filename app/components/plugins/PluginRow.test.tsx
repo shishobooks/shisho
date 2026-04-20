@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
 
 import { PluginRow } from "./PluginRow";
 
@@ -74,5 +75,46 @@ describe("PluginRow", () => {
   it("does not render the official badge by default", () => {
     render(wrap(<PluginRow {...base} />));
     expect(screen.queryByLabelText(/official plugin/i)).toBeNull();
+  });
+
+  it("stops action clicks from triggering Link navigation", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const mockAction = vi.fn();
+
+    const LocationDisplay = () => {
+      const location = useLocation();
+      return <div data-testid="location">{location.pathname}</div>;
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/start"]}>
+        <Routes>
+          <Route
+            element={
+              <>
+                <PluginRow
+                  {...base}
+                  actions={
+                    <button onClick={mockAction} type="button">
+                      Do
+                    </button>
+                  }
+                />
+                <LocationDisplay />
+              </>
+            }
+            path="/start"
+          />
+          <Route element={<LocationDisplay />} path="*" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/start");
+
+    await user.click(screen.getByRole("button", { name: "Do" }));
+
+    expect(mockAction).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("location")).toHaveTextContent("/start");
   });
 });
