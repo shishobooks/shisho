@@ -88,7 +88,10 @@ export const PluginRow = ({
       {actions && (
         <div
           className="flex items-center gap-2"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {actions}
