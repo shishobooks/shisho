@@ -1,21 +1,17 @@
 /**
  * E2E tests for the redesigned Plugins admin UI (/settings/plugins).
  *
- * Covers UI-structural behavior that does not require plugin seeding:
- *   - Unauthenticated access redirects to /login
- *   - Installed/Discover tabs reflect the URL and update it on click
- *   - Legacy routes (/browse, /order, /repositories) redirect to the new homes
- *   - Gear button opens the Advanced dialog
- *   - Empty-state copy renders with no plugins installed
+ * This file covers UI-structural behavior that does not require plugin
+ * seeding: routing, tab selection, legacy redirects, empty-state copy.
  *
- * Flows that require plugin seeding (install, update, uninstall, enable-toggle,
- * local-scope reload icon) are intentionally out of scope: the test-only API
- * has no /test/plugins endpoint, and real plugin installs require network
- * fetches from GitHub. See the Notion follow-up task for the deferred suite.
+ * Flows that require plugin seeding live in:
+ *   - e2e/plugin-install.spec.ts   (install)
+ *   - e2e/plugin-lifecycle.spec.ts (uninstall, enable/disable, update)
+ *   - e2e/plugin-config.spec.ts    (config save)
  *
  * Running:
  *   pnpm test:e2e                        # Run all E2E tests
- *   pnpm test:e2e e2e/plugins.spec.ts    # Run only plugins tests
+ *   pnpm test:e2e e2e/plugins.spec.ts    # Run only this file
  */
 
 import type { Page } from "@playwright/test";
