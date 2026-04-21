@@ -1,7 +1,7 @@
 import equal from "fast-deep-equal";
-import { ArrowLeft, FolderOpen, Trash2 } from "lucide-react";
+import { FolderOpen, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
@@ -231,16 +231,10 @@ const LibrarySettings = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Library Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The library you're looking for doesn't exist or may have been
             removed.
           </p>
-          <Button asChild>
-            <Link to="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Link>
-          </Button>
         </div>
       </LibraryLayout>
     );
@@ -248,15 +242,6 @@ const LibrarySettings = () => {
 
   return (
     <LibraryLayout>
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to={`/libraries/${libraryId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Library
-          </Link>
-        </Button>
-      </div>
-
       <div className="mb-8">
         <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
         <p className="text-muted-foreground">

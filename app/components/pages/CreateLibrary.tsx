@@ -1,6 +1,5 @@
-import { ArrowLeft, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
@@ -166,15 +165,6 @@ const CreateLibrary = () => {
     <div>
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-6">
-          <Button asChild variant="ghost">
-            <Link to="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-        </div>
-
         <div className="mb-8">
           <h1 className="text-2xl font-semibold mb-2">Create Library</h1>
           <p className="text-muted-foreground">

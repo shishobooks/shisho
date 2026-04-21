@@ -1,6 +1,6 @@
-import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import Logo from "@/components/library/Logo";
@@ -163,15 +163,6 @@ const SecuritySettings = () => {
     <div>
       <TopNav />
       <div className="mx-auto w-full max-w-7xl px-6 py-8">
-        <div className="mb-6">
-          <Button asChild variant="ghost">
-            <Link to="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-        </div>
-
         <div className="mb-8">
           <h1 className="mb-2 text-2xl font-semibold">Security Settings</h1>
           <p className="text-muted-foreground">

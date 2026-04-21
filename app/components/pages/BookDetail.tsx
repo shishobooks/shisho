@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   ArrowRightLeft,
   BookOpen,
   Check,
@@ -1024,15 +1023,9 @@ const BookDetail = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Book Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The book you're looking for doesn't exist or may have been removed.
           </p>
-          <Button asChild>
-            <Link to={`/libraries/${libraryId}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Link>
-          </Button>
         </div>
       </LibraryLayout>
     );

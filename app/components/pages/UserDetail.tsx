@@ -1,7 +1,7 @@
 import equal from "fast-deep-equal";
-import { ArrowLeft, Loader2, Save, Shield, Trash2 } from "lucide-react";
+import { Loader2, Save, Shield, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -266,15 +266,6 @@ const UserDetail = () => {
 
   return (
     <div>
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to="/settings/users">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Users
-          </Link>
-        </Button>
-      </div>
-
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">{user.username}</h1>
