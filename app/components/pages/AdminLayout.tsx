@@ -30,7 +30,7 @@ const AdminHeader = () => {
               <Menu className="h-5 w-5" />
             </Button>
             <Logo asLink />
-            <div className="hidden items-center gap-2 text-sm font-medium text-muted-foreground sm:flex">
+            <div className="hidden h-9 items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground sm:flex">
               <Settings className="h-4 w-4" />
               <span>Settings</span>
             </div>
