@@ -2,6 +2,11 @@ import { Menu, Search, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import {
+  TOP_NAV_INNER,
+  TOP_NAV_ROW,
+  TOP_NAV_WRAPPER,
+} from "@/components/layout/topNavClasses";
 import UserMenu from "@/components/layout/UserMenu";
 import GlobalSearch from "@/components/library/GlobalSearch";
 import LibraryListPicker from "@/components/library/LibraryListPicker";
@@ -34,9 +39,9 @@ const TopNav = () => {
   const canResync = hasPermission("jobs", "write");
 
   return (
-    <div className="border-b border-border bg-background dark:bg-neutral-900 sticky top-0 z-30">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <div className="flex items-center justify-between h-14 md:h-16">
+    <div className={TOP_NAV_WRAPPER}>
+      <div className={TOP_NAV_INNER}>
+        <div className={TOP_NAV_ROW}>
           {/* Left section */}
           <div className="flex items-center gap-2 md:gap-8">
             {/* Mobile hamburger menu */}
