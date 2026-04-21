@@ -249,9 +249,10 @@ func TestConvertRawMetadata_SeriesFromGrouping(t *testing.T) {
 }
 
 // TestConvertRawMetadata_AlbumIsNotSeriesSource verifies that series is NOT
-// extracted from the album atom. Existing files that stored series in album
-// (from older Shisho versions) will lose their series on re-scan; series data
-// still lives in the Shisho database.
+// extracted from the album atom, regardless of origin. Files that stored
+// series in album (older Shisho versions or third-party taggers) will lose
+// their parsed series on re-scan; for Shisho-managed books the series still
+// lives in the database, and regenerating the file writes the new atoms.
 func TestConvertRawMetadata_AlbumIsNotSeriesSource(t *testing.T) {
 	t.Parallel()
 	raw := &rawMetadata{album: "Some Series #2"}

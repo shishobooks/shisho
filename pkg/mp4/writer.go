@@ -308,6 +308,11 @@ func buildIlst(metadata *Metadata) []byte {
 	// Series info: write to ©grp (legacy/compatibility) and to the Audible-
 	// style freeform atoms com.apple.iTunes:SERIES + SERIES-PART (preferred
 	// modern source, used by Audible, Tone, Audiobookshelf).
+	//
+	// When metadata.Series is empty, we emit none of these atoms. Any ©grp
+	// from the source file is dropped on regeneration because ©grp is not
+	// round-tripped through Metadata (no Grouping field) — series data is
+	// expected to live in the DB, not in file tags.
 	if metadata.Series != "" {
 		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber)
 		content.Write(buildItunesTextAtom(AtomGrouping, grouping))

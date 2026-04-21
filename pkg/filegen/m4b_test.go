@@ -1096,6 +1096,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves existing freeform atoms from source file", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
