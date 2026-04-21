@@ -1,5 +1,6 @@
-// 10-entry palette of saturated but not-harsh hues. Hex values chosen to render
-// legibly on the muted 5%-white backdrop used by <PluginLogo />.
+// 10-entry palette of saturated but not-harsh hues used as the background of
+// the plugin-logo initials tile; chosen for legible contrast with the white
+// initials text rendered on top.
 export const PLUGIN_LOGO_PALETTE = [
   "#7a5cff", // violet
   "#2ea4ff", // blue

@@ -56,4 +56,28 @@ describe("PluginLogo", () => {
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper).toHaveStyle({ width: "64px", height: "64px" });
   });
+
+  it("renders the image flush to the rounded tile, with no wrapper backdrop", () => {
+    const { container } = render(
+      <PluginLogo
+        id="google-books"
+        imageUrl="https://example/g.png"
+        scope="shisho"
+        size={40}
+      />,
+    );
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.style.backgroundColor).toBe("");
+    const img = screen.getByRole("img") as HTMLImageElement;
+    expect(img).toHaveStyle({ width: "100%", height: "100%" });
+    expect(img.style.padding).toBe("");
+  });
+
+  it("keeps a colored background on the initials fallback", () => {
+    const { container } = render(
+      <PluginLogo id="google-books" scope="shisho" size={40} />,
+    );
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.style.backgroundColor).not.toBe("");
+  });
 });
