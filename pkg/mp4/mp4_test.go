@@ -101,6 +101,39 @@ func TestParse_SeriesExtraction(t *testing.T) {
 	assert.InDelta(t, 7.0, *metadata.SeriesNumber, 0.001)
 }
 
+// TestParse_GroupingExtraction verifies the ©grp atom is extracted.
+// We exercise it by round-tripping through the writer: write a Metadata
+// struct with Series + SeriesNumber, then re-parse and expect the series
+// to come through via grouping.
+func TestParse_GroupingExtraction(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-grouping-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Book Title",
+		Duration: 1.0,
+	})
+
+	// Write a file with series set; the new writer emits ©grp.
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	num := 7.0
+	meta.Series = "Dungeon Crawler Carl"
+	meta.SeriesNumber = &num
+
+	err = mp4.Write(path, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	reparsed, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Dungeon Crawler Carl", reparsed.Series)
+	require.NotNil(t, reparsed.SeriesNumber)
+	assert.InDelta(t, 7.0, *reparsed.SeriesNumber, 0.001)
+	// Album must be the title, not the series-formatted string.
+	assert.Equal(t, "Book Title", reparsed.Album)
+}
+
 // TestParseFull_Duration tests that duration is extracted correctly.
 func TestParseFull_Duration(t *testing.T) {
 	t.Parallel()
