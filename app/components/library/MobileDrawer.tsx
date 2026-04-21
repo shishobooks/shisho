@@ -1,13 +1,17 @@
 import {
   Book,
   Bookmark,
+  Briefcase,
   Check,
   ChevronRight,
+  Cog,
   KeyRound,
   Layers,
   Library,
   List,
   LogOut,
+  Puzzle,
+  ScrollText,
   Settings,
   Tags,
   UserCog,
@@ -180,6 +184,56 @@ const MobileDrawer = () => {
       ]
     : [];
 
+  const isAdminContext = location.pathname.startsWith("/settings");
+  const adminNavItems = isAdminContext
+    ? [
+        {
+          to: "/settings/server",
+          icon: <Cog className="h-5 w-5" />,
+          label: "Server",
+          isActive:
+            location.pathname === "/settings/server" ||
+            location.pathname === "/settings",
+          show: hasPermission("config", "read"),
+        },
+        {
+          to: "/settings/libraries",
+          icon: <Library className="h-5 w-5" />,
+          label: "Libraries",
+          isActive: location.pathname.startsWith("/settings/libraries"),
+          show: hasPermission("libraries", "read"),
+        },
+        {
+          to: "/settings/users",
+          icon: <Users className="h-5 w-5" />,
+          label: "Users",
+          isActive: location.pathname.startsWith("/settings/users"),
+          show: hasPermission("users", "read"),
+        },
+        {
+          to: "/settings/jobs",
+          icon: <Briefcase className="h-5 w-5" />,
+          label: "Jobs",
+          isActive: location.pathname === "/settings/jobs",
+          show: hasPermission("jobs", "read"),
+        },
+        {
+          to: "/settings/plugins",
+          icon: <Puzzle className="h-5 w-5" />,
+          label: "Plugins",
+          isActive: location.pathname === "/settings/plugins",
+          show: hasPermission("config", "read"),
+        },
+        {
+          to: "/settings/logs",
+          icon: <ScrollText className="h-5 w-5" />,
+          label: "Logs",
+          isActive: location.pathname === "/settings/logs",
+          show: hasPermission("config", "read"),
+        },
+      ]
+    : [];
+
   // Check if user has any admin permissions
   const canAccessAdmin =
     hasPermission("config", "read") ||
@@ -344,6 +398,24 @@ const MobileDrawer = () => {
           {isLibraryContext && libraryNavItems.length > 0 && (
             <nav className="py-2 border-b border-border">
               {libraryNavItems
+                .filter((item) => item.show)
+                .map((item) => (
+                  <NavItem
+                    icon={item.icon}
+                    isActive={item.isActive}
+                    key={item.to}
+                    label={item.label}
+                    onClick={close}
+                    to={item.to}
+                  />
+                ))}
+            </nav>
+          )}
+
+          {/* Admin Navigation (when on /settings routes) */}
+          {isAdminContext && adminNavItems.length > 0 && (
+            <nav className="py-2 border-b border-border">
+              {adminNavItems
                 .filter((item) => item.show)
                 .map((item) => (
                   <NavItem
