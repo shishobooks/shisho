@@ -124,10 +124,12 @@ const MobileDrawer = () => {
 
   // Library navigation items (when in library context)
   const libraryNavDefs = useLibraryNavItems();
-  const libraryNavItems = libraryNavDefs ?? [];
+  const visibleLibraryItems = (libraryNavDefs ?? []).filter(
+    (item) => item.show,
+  );
 
   const isAdminContext = location.pathname.startsWith("/settings");
-  const adminNavItems = useAdminNavItems();
+  const visibleAdminItems = useAdminNavItems().filter((item) => item.show);
 
   // Check if user has any admin permissions
   const canAccessAdmin =
@@ -290,41 +292,36 @@ const MobileDrawer = () => {
           )}
 
           {/* Library Navigation (when in library context) */}
-          {isLibraryContext && libraryNavItems.length > 0 && (
+          {isLibraryContext && visibleLibraryItems.length > 0 && (
             <nav className="py-2 border-b border-border">
-              {libraryNavItems
-                .filter((item) => item.show)
-                .map((item) => (
-                  <NavItem
-                    icon={<item.Icon className="h-5 w-5" />}
-                    isActive={item.isActive}
-                    key={item.to}
-                    label={item.drawerLabel ?? item.label}
-                    onClick={close}
-                    to={item.to}
-                  />
-                ))}
+              {visibleLibraryItems.map((item) => (
+                <NavItem
+                  icon={<item.Icon className="h-5 w-5" />}
+                  isActive={item.isActive}
+                  key={item.to}
+                  label={item.drawerLabel ?? item.label}
+                  onClick={close}
+                  to={item.to}
+                />
+              ))}
             </nav>
           )}
 
           {/* Admin Navigation (when on /settings routes) */}
-          {isAdminContext &&
-            adminNavItems.filter((item) => item.show).length > 0 && (
-              <nav className="py-2 border-b border-border">
-                {adminNavItems
-                  .filter((item) => item.show)
-                  .map((item) => (
-                    <NavItem
-                      icon={<item.Icon className="h-5 w-5" />}
-                      isActive={item.isActive}
-                      key={item.to}
-                      label={item.label}
-                      onClick={close}
-                      to={item.to}
-                    />
-                  ))}
-              </nav>
-            )}
+          {isAdminContext && visibleAdminItems.length > 0 && (
+            <nav className="py-2 border-b border-border">
+              {visibleAdminItems.map((item) => (
+                <NavItem
+                  icon={<item.Icon className="h-5 w-5" />}
+                  isActive={item.isActive}
+                  key={item.to}
+                  label={item.label}
+                  onClick={close}
+                  to={item.to}
+                />
+              ))}
+            </nav>
+          )}
 
           {/* General Navigation */}
           <nav className="py-2 border-b border-border">

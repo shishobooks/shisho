@@ -70,7 +70,7 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       to: "/settings/logs",
       Icon: ScrollText,
       label: "Logs",
-      isActive: location.pathname === "/settings/logs",
+      isActive: location.pathname.startsWith("/settings/logs"),
       show: canViewConfig,
     },
   ];
