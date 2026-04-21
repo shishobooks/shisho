@@ -60,6 +60,12 @@ func mapServiceError(err error) error {
 		status = http.StatusGatewayTimeout
 	case ErrCodeUpstreamError:
 		status = http.StatusBadGateway
+	case ErrCodeRateLimited:
+		status = http.StatusTooManyRequests
+	default:
+		// A new ErrorCode was added to errors.go without wiring it here.
+		// Fall back to 502 and log so the gap surfaces in production.
+		slog.Warn("audnexus: unmapped service error code", "code", string(e.Code))
 	}
 	return &errcodes.Error{
 		HTTPCode: status,

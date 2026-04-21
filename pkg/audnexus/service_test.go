@@ -115,6 +115,32 @@ func TestService_GetChapters_UpstreamError_5xx(t *testing.T) {
 	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
 }
 
+func TestService_GetChapters_RateLimited(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		status int
+	}{
+		{"429_too_many_requests", http.StatusTooManyRequests},
+		{"503_service_unavailable", http.StatusServiceUnavailable},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			defer upstream.Close()
+
+			svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+			_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+			require.Error(t, err)
+			assert.Equal(t, ErrCodeRateLimited, AsAudnexusError(err).Code)
+		})
+	}
+}
+
 func TestService_GetChapters_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

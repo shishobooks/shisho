@@ -22,8 +22,11 @@ This package fetches chapter data for audiobooks from [Audnexus](https://audnex.
 |--------------|-------------|
 | `invalid_asin` | 400 |
 | `not_found` | 404 |
+| `rate_limited` | 429 |
 | `timeout` | 504 |
 | `upstream_error` | 502 |
+
+Audnexus rate-limits by IP and can return 429 or 503 under load (see [their error handling docs](https://github.com/laxamentumtech/audnexus#%EF%B8%8F-error-handling-)); both upstream statuses map to `rate_limited`.
 
 ASINs are validated before upstream calls: 10 alphanumeric characters, normalized to uppercase.
 

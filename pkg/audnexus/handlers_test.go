@@ -106,6 +106,7 @@ func TestMapServiceError_PreservesAudnexusCode(t *testing.T) {
 		{"not_found", newErr(ErrCodeNotFound, "x"), "not_found", http.StatusNotFound},
 		{"timeout", newErr(ErrCodeTimeout, "x"), "timeout", http.StatusGatewayTimeout},
 		{"upstream_error", newErr(ErrCodeUpstreamError, "x"), "upstream_error", http.StatusBadGateway},
+		{"rate_limited", newErr(ErrCodeRateLimited, "x"), "rate_limited", http.StatusTooManyRequests},
 	}
 	for _, tc := range cases {
 		tc := tc

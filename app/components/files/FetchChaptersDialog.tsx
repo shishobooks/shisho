@@ -67,6 +67,8 @@ function errorMessage(code: string | undefined): string {
       return "Request timed out. Try again.";
     case "invalid_asin":
       return "Check the ASIN format. It should be 10 alphanumeric characters.";
+    case "rate_limited":
+      return "Audible is rate-limiting lookups right now. Wait a few minutes and try again.";
     default:
       return "Couldn't reach Audible. Try again in a moment.";
   }

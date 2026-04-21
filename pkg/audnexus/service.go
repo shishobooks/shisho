@@ -117,6 +117,12 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, newErr(ErrCodeNotFound, "ASIN not found on Audible")
 	}
+	// Audnexus rate-limits by IP; surface 429/503 so the UI can tell the user
+	// to back off. See
+	// https://github.com/laxamentumtech/audnexus#%EF%B8%8F-error-handling-.
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, newErr(ErrCodeRateLimited, "upstream rate limit: "+resp.Status)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, newErr(ErrCodeUpstreamError, "upstream returned "+resp.Status)
 	}

@@ -11,6 +11,7 @@ const (
 	ErrCodeNotFound      ErrorCode = "not_found"
 	ErrCodeTimeout       ErrorCode = "timeout"
 	ErrCodeUpstreamError ErrorCode = "upstream_error"
+	ErrCodeRateLimited   ErrorCode = "rate_limited"
 )
 
 // Error is a typed error carrying an ErrorCode. Callers can use errors.As to
