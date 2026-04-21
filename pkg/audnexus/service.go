@@ -88,6 +88,10 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 		return nil, newErr(ErrCodeInvalidASIN, "ASIN must be 10 alphanumeric characters")
 	}
 
+	if cached := s.cacheGet(normalized); cached != nil {
+		return cached, nil
+	}
+
 	url := s.baseURL + "/books/" + normalized + "/chapters"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -132,6 +136,7 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 		})
 	}
 
+	s.cachePut(normalized, out)
 	return out, nil
 }
 
@@ -143,4 +148,23 @@ func isTimeout(err error) bool {
 		return t.Timeout()
 	}
 	return false
+}
+
+func (s *Service) cacheGet(asin string) *Response {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.cache[asin]
+	if !ok || time.Now().After(entry.expireAt) {
+		return nil
+	}
+	return entry.value
+}
+
+func (s *Service) cachePut(asin string, value *Response) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cache[asin] = &cacheEntry{
+		value:    value,
+		expireAt: time.Now().Add(s.cacheTTL),
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -143,4 +144,65 @@ func TestService_GetChapters_Timeout(t *testing.T) {
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
 	require.Error(t, err)
 	assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
+}
+
+func TestService_GetChapters_CacheHit(t *testing.T) {
+	t.Parallel()
+	var hits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: time.Hour})
+
+	// First call hits upstream.
+	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.NoError(t, err)
+	// Second call with same ASIN hits cache.
+	_, err = svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.NoError(t, err)
+	// Lowercase should normalize to same cache key.
+	_, err = svc.GetChapters(context.Background(), "b0036uc2lo")
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits), "expected exactly one upstream call")
+}
+
+func TestService_GetChapters_CacheExpires(t *testing.T) {
+	t.Parallel()
+	var hits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: 10 * time.Millisecond})
+
+	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
+	time.Sleep(20 * time.Millisecond)
+	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
+
+	assert.Equal(t, int32(2), atomic.LoadInt32(&hits), "expected cache to expire and re-fetch")
+}
+
+func TestService_GetChapters_ErrorsNotCached(t *testing.T) {
+	t.Parallel()
+	var hits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: time.Hour})
+
+	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
+	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
+
+	assert.Equal(t, int32(2), atomic.LoadInt32(&hits), "errors must not be cached")
 }
