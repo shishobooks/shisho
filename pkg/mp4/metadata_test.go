@@ -162,3 +162,101 @@ func TestConvertRawMetadata_NoFreeform(t *testing.T) {
 	assert.Nil(t, meta.Language)
 	assert.Nil(t, meta.Abridged)
 }
+
+// TestConvertRawMetadata_SeriesFromFreeform tests that series is parsed from
+// the Audible-style freeform SERIES / SERIES-PART atoms.
+func TestConvertRawMetadata_SeriesFromFreeform(t *testing.T) {
+	t.Parallel()
+
+	t.Run("freeform SERIES and SERIES-PART", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{
+			freeform: map[string]string{
+				"com.apple.iTunes:SERIES":      "Expanse",
+				"com.apple.iTunes:SERIES-PART": "3",
+			},
+		}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Expanse", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 3.0, *meta.SeriesNumber, 0.001)
+	})
+
+	t.Run("freeform SERIES with decimal SERIES-PART", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{
+			freeform: map[string]string{
+				"com.apple.iTunes:SERIES":      "Expanse",
+				"com.apple.iTunes:SERIES-PART": "3.5",
+			},
+		}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Expanse", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 3.5, *meta.SeriesNumber, 0.001)
+	})
+
+	t.Run("freeform SERIES without SERIES-PART", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{
+			freeform: map[string]string{
+				"com.apple.iTunes:SERIES": "Expanse",
+			},
+		}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Expanse", meta.Series)
+		assert.Nil(t, meta.SeriesNumber)
+	})
+
+	t.Run("freeform beats grouping", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{
+			grouping: "Fallback Series #9",
+			freeform: map[string]string{
+				"com.apple.iTunes:SERIES":      "Preferred Series",
+				"com.apple.iTunes:SERIES-PART": "1",
+			},
+		}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Preferred Series", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 1.0, *meta.SeriesNumber, 0.001)
+	})
+}
+
+// TestConvertRawMetadata_SeriesFromGrouping tests that series falls back to
+// parsing from the ©grp grouping atom when no freeform SERIES exists.
+func TestConvertRawMetadata_SeriesFromGrouping(t *testing.T) {
+	t.Parallel()
+
+	t.Run("grouping with hash format", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{grouping: "Dungeon Crawler Carl #7"}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Dungeon Crawler Carl", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 7.0, *meta.SeriesNumber, 0.001)
+	})
+
+	t.Run("grouping with book format", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{grouping: "Mistborn, Book 3"}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Mistborn", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 3.0, *meta.SeriesNumber, 0.001)
+	})
+}
+
+// TestConvertRawMetadata_AlbumIsNotSeriesSource verifies that series is NOT
+// extracted from the album atom. Existing files that stored series in album
+// (from older Shisho versions) will lose their series on re-scan; series data
+// still lives in the Shisho database.
+func TestConvertRawMetadata_AlbumIsNotSeriesSource(t *testing.T) {
+	t.Parallel()
+	raw := &rawMetadata{album: "Some Series #2"}
+	meta := convertRawMetadata(raw)
+	assert.Equal(t, "Some Series #2", meta.Album) // album still readable
+	assert.Empty(t, meta.Series)
+	assert.Nil(t, meta.SeriesNumber)
+}

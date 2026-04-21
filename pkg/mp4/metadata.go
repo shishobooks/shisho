@@ -17,8 +17,8 @@ type Metadata struct {
 	Authors       []mediafile.ParsedAuthor     // from ©ART (artist)
 	Narrators     []string                     // from ©nrt (narrator) or ©cmp (composer)
 	Album         string                       // from ©alb
-	Series        string                       // parsed from album or ©grp
-	SeriesNumber  *float64                     // parsed from album
+	Series        string                       // parsed from com.apple.iTunes:SERIES freeform or ©grp
+	SeriesNumber  *float64                     // parsed from com.apple.iTunes:SERIES-PART freeform or ©grp
 	Genre         string                       // from ©gen or gnre (original, may be comma-separated)
 	Genres        []string                     // parsed from ©gen (comma-separated)
 	Tags          []string                     // from ----:com.shisho:tags freeform atom
@@ -98,9 +98,21 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		meta.Narrators = splitMultiValue(raw.writer)
 	}
 
-	// Parse series information from album field
-	if raw.album != "" {
-		if parsed := parseSeriesFromGrouping(raw.album); parsed.series != "" {
+	// Parse series information.
+	// Priority:
+	//   1. Audible-style freeform atoms: com.apple.iTunes:SERIES + SERIES-PART
+	//   2. ©grp Grouping atom (format: "Series Name #N", "Series Name, Book N", etc.)
+	// ©alb Album is intentionally NOT a series source — the writer now uses
+	// album for the book title, so parsing series from it would be wrong.
+	if name, ok := raw.freeform["com.apple.iTunes:SERIES"]; ok && name != "" {
+		meta.Series = strings.TrimSpace(name)
+		if part, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]; ok && part != "" {
+			if num, err := strconv.ParseFloat(strings.TrimSpace(part), 64); err == nil {
+				meta.SeriesNumber = &num
+			}
+		}
+	} else if raw.grouping != "" {
+		if parsed := parseSeriesFromGrouping(raw.grouping); parsed.series != "" {
 			meta.Series = parsed.series
 			meta.SeriesNumber = parsed.number
 		}
