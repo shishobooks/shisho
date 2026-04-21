@@ -56,14 +56,14 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       to: "/settings/jobs",
       Icon: Briefcase,
       label: "Jobs",
-      isActive: location.pathname === "/settings/jobs",
+      isActive: location.pathname.startsWith("/settings/jobs"),
       show: canViewJobs,
     },
     {
       to: "/settings/plugins",
       Icon: Puzzle,
       label: "Plugins",
-      isActive: location.pathname === "/settings/plugins",
+      isActive: location.pathname.startsWith("/settings/plugins"),
       show: canViewConfig,
     },
     {
