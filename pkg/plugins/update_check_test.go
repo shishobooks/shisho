@@ -503,9 +503,12 @@ func TestManager_CheckForUpdates_SemverNotLexicographic(t *testing.T) {
 				{
 					ID:   "my-plugin",
 					Name: "My Plugin",
+					// Ordered so the old "last element is latest" code would
+					// have picked 0.2.0, making this a true regression guard
+					// for the lexicographic-comparison bug.
 					Versions: []PluginVersion{
-						{Version: "0.2.0", ManifestVersion: 1},
 						{Version: "0.10.0", ManifestVersion: 1},
+						{Version: "0.2.0", ManifestVersion: 1},
 					},
 				},
 			},

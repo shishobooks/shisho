@@ -63,7 +63,7 @@ func TestCompare(t *testing.T) {
 		{"v prefix on one side", "v1.2.3", "1.2.3", 0},
 		{"v prefix on both", "v2.0.0", "v1.0.0", 1},
 		{"prerelease stripped — compares equal to release", "1.0.0-rc1", "1.0.0", 0},
-		{"partial version treated as zero", "1.2", "1.2.0", 0},
+		{"two-part version equals three-part with zero patch", "1.2", "1.2.0", 0},
 		{"unparseable a returns 0", "abc", "1.0.0", 0},
 		{"unparseable b returns 0", "1.0.0", "abc", 0},
 		{"both unparseable returns 0", "abc", "def", 0},
