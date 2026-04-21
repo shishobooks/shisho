@@ -13,6 +13,7 @@ import { DiscoverTab } from "./DiscoverTab";
 // --- Mocks ---
 
 const mockInstallMutate = vi.fn();
+const mockUpdateMutate = vi.fn();
 
 vi.mock("@/hooks/queries/plugins", () => ({
   useInstallPlugin: () => ({ isPending: false, mutate: mockInstallMutate }),
@@ -23,6 +24,10 @@ vi.mock("@/hooks/queries/plugins", () => ({
     error: null,
   }),
   usePluginsInstalled: () => ({ data: mockInstalled }),
+  useUpdatePluginVersion: () => ({
+    isPending: false,
+    mutate: mockUpdateMutate,
+  }),
 }));
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
@@ -86,6 +91,46 @@ describe("DiscoverTab", () => {
     render(wrap(<DiscoverTab canWrite />));
     const btn = screen.getByRole("button", { name: /installed/i });
     expect(btn).toBeDisabled();
+  });
+
+  it("renders Update button and installed version when an update is available", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const p = makePlugin({
+      versions: [
+        {
+          capabilities: { metadataEnricher: { fileTypes: ["epub"] } },
+          changelog: "",
+          compatible: true,
+          downloadUrl: "",
+          manifestVersion: 1,
+          minShishoVersion: "0.1.0",
+          releaseDate: "2024-01-01",
+          sha256: "",
+          version: "2.0.0",
+        },
+      ],
+    });
+    mockAvailable = [p];
+    mockInstalled = [
+      {
+        ...p,
+        update_available_version: "2.0.0",
+        version: "1.0.0",
+      } as unknown as AvailablePlugin,
+    ];
+    render(wrap(<DiscoverTab canWrite />));
+
+    // Row should show the installed version, not the repo's latest
+    expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+    expect(screen.getByText(/Update 2\.0\.0/i)).toBeInTheDocument();
+
+    // Update button should trigger the update mutation
+    const btn = screen.getByRole("button", { name: /^update$/i });
+    await user.click(btn);
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      { id: p.id, scope: p.scope },
+      expect.any(Object),
+    );
   });
 
   it("renders disabled Incompatible button for incompatible plugin", () => {

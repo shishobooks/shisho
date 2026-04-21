@@ -695,6 +695,18 @@ func (h *handler) syncRepository(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Re-evaluate update_available_version for installed plugins so a manual
+	// sync surfaces newly published versions (and clears stale ones) without
+	// waiting for the 24h background check.
+	if h.manager != nil {
+		if err := h.manager.CheckForUpdates(ctx); err != nil {
+			logger.New().Warn("failed to refresh plugin updates after repo sync", logger.Data{
+				"scope": scope,
+				"error": err.Error(),
+			})
+		}
+	}
+
 	return errors.WithStack(c.JSON(http.StatusOK, repo))
 }
 
