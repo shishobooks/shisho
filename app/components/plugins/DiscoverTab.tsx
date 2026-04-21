@@ -1,4 +1,4 @@
-import { BadgeCheck, Check, Package } from "lucide-react";
+import { BadgeCheck, Check, Download, Loader2, Package } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ import {
   usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
+  useUpdatePluginVersion,
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
 
@@ -33,6 +34,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const { data: installed = [] } = usePluginsInstalled();
   const { data: repos = [] } = usePluginRepositories();
   const installPlugin = useInstallPlugin();
+  const updatePluginVersion = useUpdatePluginVersion();
 
   const [capability, setCapability] = useState<string>("all");
   const [installTarget, setInstallTarget] = useState<AvailablePlugin | null>(
@@ -41,8 +43,8 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<string>("all");
 
-  const installedKeys = useMemo(
-    () => new Set(installed.map((p) => `${p.scope}/${p.id}`)),
+  const installedByKey = useMemo(
+    () => new Map(installed.map((p) => [`${p.scope}/${p.id}`, p])),
     [installed],
   );
 
@@ -183,19 +185,60 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
           <div className="space-y-2">
             {filtered.map((p) => {
               const key = `${p.scope}/${p.id}`;
-              const isInstalled = installedKeys.has(key);
+              const installedPlugin = installedByKey.get(key);
+              const isInstalled = !!installedPlugin;
+              const updateAvailable =
+                installedPlugin?.update_available_version ?? undefined;
               const incompatible = p.compatible === false;
               const caps = deriveCapabilityLabels(p.versions[0]?.capabilities);
               const isThisInstalling =
                 installPlugin.isPending &&
                 installTarget?.scope === p.scope &&
                 installTarget?.id === p.id;
+              const isThisUpdating =
+                updatePluginVersion.isPending &&
+                updatePluginVersion.variables?.scope === p.scope &&
+                updatePluginVersion.variables?.id === p.id;
 
               return (
                 <PluginRow
                   actions={
                     canWrite ? (
-                      isInstalled ? (
+                      updateAvailable ? (
+                        <Button
+                          disabled={updatePluginVersion.isPending}
+                          onClick={() =>
+                            updatePluginVersion.mutate(
+                              { id: p.id, scope: p.scope },
+                              {
+                                onError: (err) =>
+                                  toast.error(
+                                    `Failed to update plugin: ${err.message}`,
+                                  ),
+                                onSuccess: (updated) =>
+                                  toast.success(
+                                    `Updated ${updated.name} to v${updated.version}`,
+                                  ),
+                              },
+                            )
+                          }
+                          size="sm"
+                          variant="outline"
+                        >
+                          {isThisUpdating ? (
+                            <Loader2
+                              aria-hidden="true"
+                              className="h-3 w-3 animate-spin"
+                            />
+                          ) : (
+                            <Download
+                              aria-hidden="true"
+                              className="mr-1 h-3 w-3"
+                            />
+                          )}
+                          Update
+                        </Button>
+                      ) : isInstalled ? (
                         <Button
                           className="border-transparent bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/40"
                           disabled
@@ -229,7 +272,8 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                   name={p.name}
                   repoName={repoNameByScope.get(p.scope)}
                   scope={p.scope}
-                  version={p.versions[0]?.version}
+                  updateAvailable={updateAvailable}
+                  version={installedPlugin?.version ?? p.versions[0]?.version}
                 />
               );
             })}

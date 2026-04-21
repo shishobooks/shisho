@@ -411,9 +411,10 @@ func (w *Worker) checkPluginUpdates() {
 		return
 	}
 
-	// Run update check every 24 hours
+	// Fire immediately on startup so a server restart refreshes stale
+	// update_available_version values, then run every 24 hours.
 	duration := 24 * time.Hour
-	timer := time.NewTimer(duration)
+	timer := time.NewTimer(0)
 
 	for {
 		select {

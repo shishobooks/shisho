@@ -12,6 +12,74 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestManager_CheckForUpdatesForRepo_UsesPassedManifest(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+	mgr := NewManager(service, t.TempDir(), "")
+	ctx := t.Context()
+
+	// Plugin in scope "official" at 1.0.0 — should pick up 2.0.0 from the manifest.
+	require.NoError(t, service.InstallPlugin(ctx, &models.Plugin{
+		Scope:       "official",
+		ID:          "my-plugin",
+		Name:        "My Plugin",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+		AutoUpdate:  true,
+	}))
+
+	// Plugin in another scope with an existing update hint — must not be touched
+	// when syncing the "official" repo.
+	otherUpdate := "9.9.9"
+	require.NoError(t, service.InstallPlugin(ctx, &models.Plugin{
+		Scope:                  "community",
+		ID:                     "other-plugin",
+		Name:                   "Other",
+		Version:                "1.0.0",
+		Status:                 models.PluginStatusActive,
+		InstalledAt:            time.Now(),
+		AutoUpdate:             true,
+		UpdateAvailableVersion: &otherUpdate,
+	}))
+
+	// Track fetchRepo calls — CheckForUpdatesForRepo must not re-fetch.
+	fetchCalls := 0
+	mgr.fetchRepo = func(_ string) (*RepositoryManifest, error) {
+		fetchCalls++
+		return nil, errors.New("fetch should not be called")
+	}
+
+	manifest := &RepositoryManifest{
+		RepositoryVersion: 1,
+		Scope:             "official",
+		Name:              "Official",
+		Plugins: []AvailablePlugin{{
+			ID:   "my-plugin",
+			Name: "My Plugin",
+			Versions: []PluginVersion{
+				{Version: "2.0.0", ManifestVersion: 1},
+				{Version: "1.0.0", ManifestVersion: 1},
+			},
+		}},
+	}
+
+	require.NoError(t, mgr.CheckForUpdatesForRepo(ctx, "official", manifest))
+	assert.Equal(t, 0, fetchCalls, "CheckForUpdatesForRepo must not re-fetch manifests")
+
+	// Plugin in the synced scope picks up the newer version.
+	official, err := service.RetrievePlugin(ctx, "official", "my-plugin")
+	require.NoError(t, err)
+	require.NotNil(t, official.UpdateAvailableVersion)
+	assert.Equal(t, "2.0.0", *official.UpdateAvailableVersion)
+
+	// Plugin in a different scope is untouched — its existing value survives.
+	community, err := service.RetrievePlugin(ctx, "community", "other-plugin")
+	require.NoError(t, err)
+	require.NotNil(t, community.UpdateAvailableVersion)
+	assert.Equal(t, "9.9.9", *community.UpdateAvailableVersion)
+}
+
 func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)

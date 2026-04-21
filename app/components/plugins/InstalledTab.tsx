@@ -59,6 +59,10 @@ export const InstalledTab = () => {
     const imageUrl = availableEntry?.imageUrl || undefined;
     const isOfficial = availableEntry?.is_official ?? false;
     const isDisabled = plugin.status !== PluginStatusActive;
+    const isThisUpdating =
+      updatePluginVersion.isPending &&
+      updatePluginVersion.variables?.scope === plugin.scope &&
+      updatePluginVersion.variables?.id === plugin.id;
 
     return (
       <PluginRow
@@ -72,13 +76,17 @@ export const InstalledTab = () => {
                   {
                     onError: (err) =>
                       toast.error(`Failed to update plugin: ${err.message}`),
+                    onSuccess: (updated) =>
+                      toast.success(
+                        `Updated ${updated.name} to v${updated.version}`,
+                      ),
                   },
                 )
               }
               size="sm"
               variant="outline"
             >
-              {updatePluginVersion.isPending ? (
+              {isThisUpdating ? (
                 <Loader2 aria-hidden="true" className="h-3 w-3 animate-spin" />
               ) : (
                 <Download aria-hidden="true" className="mr-1 h-3 w-3" />

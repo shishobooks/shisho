@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
+import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 import { filterPlugins } from "./discoverFilters";
 import { DiscoverTab } from "./DiscoverTab";
@@ -13,6 +14,7 @@ import { DiscoverTab } from "./DiscoverTab";
 // --- Mocks ---
 
 const mockInstallMutate = vi.fn();
+const mockUpdateMutate = vi.fn();
 
 vi.mock("@/hooks/queries/plugins", () => ({
   useInstallPlugin: () => ({ isPending: false, mutate: mockInstallMutate }),
@@ -23,9 +25,15 @@ vi.mock("@/hooks/queries/plugins", () => ({
     error: null,
   }),
   usePluginsInstalled: () => ({ data: mockInstalled }),
+  useUpdatePluginVersion: () => ({
+    isPending: false,
+    mutate: mockUpdateMutate,
+  }),
 }));
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 // --- Test data ---
 
@@ -57,8 +65,22 @@ const makePlugin = (
   ...overrides,
 });
 
+const toInstalled = (
+  p: AvailablePlugin,
+  overrides: Partial<Plugin> = {},
+): Plugin => ({
+  auto_update: true,
+  id: p.id,
+  installed_at: "2024-01-01T00:00:00Z",
+  name: p.name,
+  scope: p.scope,
+  status: PluginStatusActive,
+  version: p.versions[0]?.version ?? "1.0.0",
+  ...overrides,
+});
+
 let mockAvailable: AvailablePlugin[] = [];
-let mockInstalled: AvailablePlugin[] = [];
+let mockInstalled: Plugin[] = [];
 const mockRepos: unknown[] = [];
 
 const wrap = (ui: React.ReactNode) => (
@@ -82,10 +104,46 @@ describe("DiscoverTab", () => {
   it("renders disabled Installed button for already-installed plugin", () => {
     const p = makePlugin();
     mockAvailable = [p];
-    mockInstalled = [p];
+    mockInstalled = [toInstalled(p)];
     render(wrap(<DiscoverTab canWrite />));
     const btn = screen.getByRole("button", { name: /installed/i });
     expect(btn).toBeDisabled();
+  });
+
+  it("renders Update button and installed version when an update is available", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const p = makePlugin({
+      versions: [
+        {
+          capabilities: { metadataEnricher: { fileTypes: ["epub"] } },
+          changelog: "",
+          compatible: true,
+          downloadUrl: "",
+          manifestVersion: 1,
+          minShishoVersion: "0.1.0",
+          releaseDate: "2024-01-01",
+          sha256: "",
+          version: "2.0.0",
+        },
+      ],
+    });
+    mockAvailable = [p];
+    mockInstalled = [
+      toInstalled(p, { update_available_version: "2.0.0", version: "1.0.0" }),
+    ];
+    render(wrap(<DiscoverTab canWrite />));
+
+    // Row should show the installed version, not the repo's latest
+    expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+    expect(screen.getByText(/Update 2\.0\.0/i)).toBeInTheDocument();
+
+    // Update button should trigger the update mutation
+    const btn = screen.getByRole("button", { name: /^update$/i });
+    await user.click(btn);
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      { id: p.id, scope: p.scope },
+      expect.any(Object),
+    );
   });
 
   it("renders disabled Incompatible button for incompatible plugin", () => {

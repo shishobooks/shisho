@@ -473,6 +473,14 @@ func (m *Manager) RegisteredConverterExtensions() map[string]struct{} {
 	return result
 }
 
+// scopedManifest pairs a repository manifest with the scope it was fetched
+// for, so refreshPluginUpdateVersion can skip manifests whose scope doesn't
+// match the plugin being evaluated.
+type scopedManifest struct {
+	scope    string
+	manifest *RepositoryManifest
+}
+
 // CheckForUpdates checks all installed plugins against enabled repositories
 // for available updates. It sets or clears UpdateAvailableVersion on each plugin.
 func (m *Manager) CheckForUpdates(ctx context.Context) error {
@@ -492,13 +500,7 @@ func (m *Manager) CheckForUpdates(ctx context.Context) error {
 		return errors.Wrap(err, "failed to list repositories for update check")
 	}
 
-	// Fetch manifests from all enabled repositories
-	type scopedManifest struct {
-		scope    string
-		manifest *RepositoryManifest
-	}
 	var manifests []scopedManifest
-
 	for _, repo := range repos {
 		if !repo.Enabled {
 			continue
@@ -515,64 +517,98 @@ func (m *Manager) CheckForUpdates(ctx context.Context) error {
 		manifests = append(manifests, scopedManifest{scope: repo.Scope, manifest: manifest})
 	}
 
-	// For each installed plugin, find latest compatible version from matching repos
 	for _, plugin := range installedPlugins {
-		// Skip plugins with auto-update disabled
 		if !plugin.AutoUpdate {
 			continue
 		}
-
-		var latestVersion string
-
-		for _, sm := range manifests {
-			if sm.manifest.Scope != plugin.Scope {
-				continue
-			}
-			for _, available := range sm.manifest.Plugins {
-				if available.ID != plugin.ID {
-					continue
-				}
-				compatible := FilterVersionCompatibleVersions(FilterCompatibleVersions(available.Versions))
-				if len(compatible) == 0 {
-					continue
-				}
-				for _, v := range compatible {
-					if v.Version == plugin.Version {
-						continue
-					}
-					if pkgversion.Compare(v.Version, plugin.Version) <= 0 {
-						continue
-					}
-					if latestVersion == "" || pkgversion.Compare(v.Version, latestVersion) > 0 {
-						latestVersion = v.Version
-					}
-				}
-			}
-		}
-
-		// Determine if we need to update the record
-		var changed bool
-		if latestVersion != "" {
-			if plugin.UpdateAvailableVersion == nil || *plugin.UpdateAvailableVersion != latestVersion {
-				plugin.UpdateAvailableVersion = &latestVersion
-				changed = true
-			}
-		} else {
-			if plugin.UpdateAvailableVersion != nil {
-				plugin.UpdateAvailableVersion = nil
-				changed = true
-			}
-		}
-
-		if changed {
-			if err := m.service.UpdatePlugin(ctx, plugin); err != nil {
-				log.Warn("failed to update plugin update_available_version", logger.Data{
-					"plugin": pluginKey(plugin.Scope, plugin.ID),
-					"error":  err.Error(),
-				})
-			}
+		if err := m.refreshPluginUpdateVersion(ctx, plugin, manifests); err != nil {
+			log.Warn("failed to update plugin update_available_version", logger.Data{
+				"plugin": pluginKey(plugin.Scope, plugin.ID),
+				"error":  err.Error(),
+			})
 		}
 	}
 
 	return nil
+}
+
+// CheckForUpdatesForRepo re-evaluates UpdateAvailableVersion for installed
+// plugins belonging to the given scope using an already-fetched manifest. Used
+// by the sync-repo handler to avoid re-fetching every enabled repository when
+// a single repo is synced. Plugins in other scopes are left untouched — they
+// can't have changed since we only synced one repo.
+func (m *Manager) CheckForUpdatesForRepo(ctx context.Context, scope string, manifest *RepositoryManifest) error {
+	log := logger.New()
+
+	installedPlugins, err := m.service.ListPlugins(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list plugins for update check")
+	}
+
+	manifests := []scopedManifest{{scope: scope, manifest: manifest}}
+	for _, plugin := range installedPlugins {
+		if plugin.Scope != scope {
+			continue
+		}
+		if !plugin.AutoUpdate {
+			continue
+		}
+		if err := m.refreshPluginUpdateVersion(ctx, plugin, manifests); err != nil {
+			log.Warn("failed to update plugin update_available_version", logger.Data{
+				"plugin": pluginKey(plugin.Scope, plugin.ID),
+				"error":  err.Error(),
+			})
+		}
+	}
+
+	return nil
+}
+
+// refreshPluginUpdateVersion finds the newest compatible version of the plugin
+// across the provided manifests and persists UpdateAvailableVersion if the
+// computed value differs from the current one. If no newer version is found,
+// the field is cleared.
+func (m *Manager) refreshPluginUpdateVersion(ctx context.Context, plugin *models.Plugin, manifests []scopedManifest) error {
+	var latestVersion string
+	for _, sm := range manifests {
+		if sm.manifest.Scope != plugin.Scope {
+			continue
+		}
+		for _, available := range sm.manifest.Plugins {
+			if available.ID != plugin.ID {
+				continue
+			}
+			compatible := FilterVersionCompatibleVersions(FilterCompatibleVersions(available.Versions))
+			if len(compatible) == 0 {
+				continue
+			}
+			for _, v := range compatible {
+				if v.Version == plugin.Version {
+					continue
+				}
+				if pkgversion.Compare(v.Version, plugin.Version) <= 0 {
+					continue
+				}
+				if latestVersion == "" || pkgversion.Compare(v.Version, latestVersion) > 0 {
+					latestVersion = v.Version
+				}
+			}
+		}
+	}
+
+	var changed bool
+	if latestVersion != "" {
+		if plugin.UpdateAvailableVersion == nil || *plugin.UpdateAvailableVersion != latestVersion {
+			plugin.UpdateAvailableVersion = &latestVersion
+			changed = true
+		}
+	} else if plugin.UpdateAvailableVersion != nil {
+		plugin.UpdateAvailableVersion = nil
+		changed = true
+	}
+
+	if !changed {
+		return nil
+	}
+	return m.service.UpdatePlugin(ctx, plugin)
 }
