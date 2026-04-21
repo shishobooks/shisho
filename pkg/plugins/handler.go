@@ -700,7 +700,7 @@ func (h *handler) syncRepository(c echo.Context) error {
 	// waiting for the 24h background check.
 	if h.manager != nil {
 		if err := h.manager.CheckForUpdates(ctx); err != nil {
-			logger.New().Warn("failed to refresh plugin updates after repo sync", logger.Data{
+			logger.FromContext(ctx).Warn("failed to refresh plugin updates after repo sync", logger.Data{
 				"scope": scope,
 				"error": err.Error(),
 			})

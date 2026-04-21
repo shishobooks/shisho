@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
+import type { Plugin } from "@/types/generated/models";
 
 import { filterPlugins } from "./discoverFilters";
 import { DiscoverTab } from "./DiscoverTab";
@@ -30,7 +31,9 @@ vi.mock("@/hooks/queries/plugins", () => ({
   }),
 }));
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
+}));
 
 // --- Test data ---
 
@@ -62,8 +65,22 @@ const makePlugin = (
   ...overrides,
 });
 
+const toInstalled = (
+  p: AvailablePlugin,
+  overrides: Partial<Plugin> = {},
+): Plugin => ({
+  auto_update: true,
+  id: p.id,
+  installed_at: "2024-01-01T00:00:00Z",
+  name: p.name,
+  scope: p.scope,
+  status: 0,
+  version: p.versions[0]?.version ?? "1.0.0",
+  ...overrides,
+});
+
 let mockAvailable: AvailablePlugin[] = [];
-let mockInstalled: AvailablePlugin[] = [];
+let mockInstalled: Plugin[] = [];
 const mockRepos: unknown[] = [];
 
 const wrap = (ui: React.ReactNode) => (
@@ -87,7 +104,7 @@ describe("DiscoverTab", () => {
   it("renders disabled Installed button for already-installed plugin", () => {
     const p = makePlugin();
     mockAvailable = [p];
-    mockInstalled = [p];
+    mockInstalled = [toInstalled(p)];
     render(wrap(<DiscoverTab canWrite />));
     const btn = screen.getByRole("button", { name: /installed/i });
     expect(btn).toBeDisabled();
@@ -112,11 +129,7 @@ describe("DiscoverTab", () => {
     });
     mockAvailable = [p];
     mockInstalled = [
-      {
-        ...p,
-        update_available_version: "2.0.0",
-        version: "1.0.0",
-      } as unknown as AvailablePlugin,
+      toInstalled(p, { update_available_version: "2.0.0", version: "1.0.0" }),
     ];
     render(wrap(<DiscoverTab canWrite />));
 

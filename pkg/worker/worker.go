@@ -411,9 +411,8 @@ func (w *Worker) checkPluginUpdates() {
 		return
 	}
 
-	// Run update check every 24 hours. Fire immediately on startup so a
-	// server restart refreshes stale update_available_version values without
-	// waiting 24h for the first tick.
+	// Fire immediately on startup so a server restart refreshes stale
+	// update_available_version values, then run every 24 hours.
 	duration := 24 * time.Hour
 	timer := time.NewTimer(0)
 

@@ -24,7 +24,6 @@ import {
   useUpdatePluginVersion,
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
-import type { Plugin } from "@/types/generated/models";
 
 interface DiscoverTabProps {
   canWrite: boolean;
@@ -45,7 +44,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const [source, setSource] = useState<string>("all");
 
   const installedByKey = useMemo(
-    () => new Map(installed.map((p) => [`${p.scope}/${p.id}`, p as Plugin])),
+    () => new Map(installed.map((p) => [`${p.scope}/${p.id}`, p])),
     [installed],
   );
 
