@@ -1,75 +1,13 @@
-import {
-  Book,
-  Bookmark,
-  ChevronsLeft,
-  ChevronsRight,
-  Layers,
-  Settings,
-  Tags,
-  Users,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Book, Bookmark, Layers, Settings, Tags, Users } from "lucide-react";
+import { useLocation, useParams } from "react-router-dom";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import Sidebar, { type SidebarItem } from "@/components/layout/Sidebar";
 import { useAuth } from "@/hooks/useAuth";
-import { cn } from "@/libraries/utils";
-
-const SIDEBAR_COLLAPSED_KEY = "shisho-sidebar-collapsed";
-
-interface NavItemProps {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-  isActive: boolean;
-  collapsed: boolean;
-}
-
-const NavItem = ({ to, icon, label, isActive, collapsed }: NavItemProps) => {
-  const linkContent = (
-    <Link
-      className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-        collapsed && "justify-center px-2",
-        isActive
-          ? "bg-primary/10 text-primary dark:bg-violet-500/20 dark:text-violet-300"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-      )}
-      to={to}
-    >
-      {icon}
-      {!collapsed && label}
-    </Link>
-  );
-
-  if (collapsed) {
-    return (
-      <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return linkContent;
-};
 
 const LibrarySidebar = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const { hasPermission } = useAuth();
-  const [collapsed, setCollapsed] = useState(() => {
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    return stored === "true";
-  });
-
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
-  }, [collapsed]);
 
   if (!libraryId) return null;
 
@@ -84,128 +22,47 @@ const LibrarySidebar = () => {
       !location.pathname.startsWith(`${basePath}/tags`) &&
       !location.pathname.startsWith(`${basePath}/settings`));
 
-  const isSeriesActive = location.pathname.startsWith(`${basePath}/series`);
-  const isPeopleActive = location.pathname.startsWith(`${basePath}/people`);
-  const isGenresActive = location.pathname.startsWith(`${basePath}/genres`);
-  const isTagsActive = location.pathname.startsWith(`${basePath}/tags`);
-  const isSettingsActive = location.pathname.startsWith(`${basePath}/settings`);
-
-  const navItems = [
+  const items: SidebarItem[] = [
     {
       to: basePath,
       icon: <Book className="h-4 w-4" />,
       label: "Books",
       isActive: isBooksActive,
-      show: true,
     },
     {
       to: `${basePath}/series`,
       icon: <Layers className="h-4 w-4" />,
       label: "Series",
-      isActive: isSeriesActive,
-      show: true,
+      isActive: location.pathname.startsWith(`${basePath}/series`),
     },
     {
       to: `${basePath}/people`,
       icon: <Users className="h-4 w-4" />,
       label: "People",
-      isActive: isPeopleActive,
-      show: true,
+      isActive: location.pathname.startsWith(`${basePath}/people`),
     },
     {
       to: `${basePath}/genres`,
       icon: <Bookmark className="h-4 w-4" />,
       label: "Genres",
-      isActive: isGenresActive,
-      show: true,
+      isActive: location.pathname.startsWith(`${basePath}/genres`),
     },
     {
       to: `${basePath}/tags`,
       icon: <Tags className="h-4 w-4" />,
       label: "Tags",
-      isActive: isTagsActive,
-      show: true,
+      isActive: location.pathname.startsWith(`${basePath}/tags`),
     },
     {
       to: `${basePath}/settings`,
       icon: <Settings className="h-4 w-4" />,
       label: "Settings",
-      isActive: isSettingsActive,
+      isActive: location.pathname.startsWith(`${basePath}/settings`),
       show: hasPermission("libraries", "write"),
     },
   ];
 
-  return (
-    <aside
-      className={cn(
-        "shrink-0 border-r border-border bg-muted/30 dark:bg-neutral-900/50 transition-all duration-200 h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] sticky top-14 md:top-16 flex flex-col",
-        collapsed ? "w-14" : "w-48",
-      )}
-    >
-      <div className="flex-1">
-        <nav className={cn("p-4 space-y-1", collapsed && "px-2")}>
-          {navItems
-            .filter((item) => item.show)
-            .map((item) => (
-              <NavItem
-                collapsed={collapsed}
-                icon={item.icon}
-                isActive={item.isActive}
-                key={item.to}
-                label={item.label}
-                to={item.to}
-              />
-            ))}
-        </nav>
-        <div className={cn("px-4 pt-2", collapsed && "px-2")}>
-          <div className="border-t border-border/50 pt-3">
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <button
-                  aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  className={cn(
-                    "flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
-                    "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50",
-                    collapsed && "justify-center px-2",
-                  )}
-                  onClick={() => setCollapsed(!collapsed)}
-                >
-                  {collapsed ? (
-                    <ChevronsRight className="h-4 w-4" />
-                  ) : (
-                    <>
-                      <ChevronsLeft className="h-4 w-4" />
-                      <span className="text-xs">Collapse</span>
-                    </>
-                  )}
-                </button>
-              </TooltipTrigger>
-              {collapsed && (
-                <TooltipContent side="right">Expand sidebar</TooltipContent>
-              )}
-            </Tooltip>
-          </div>
-        </div>
-      </div>
-      {!collapsed && (
-        <div className="p-4 pt-0">
-          <a
-            className="group flex items-center justify-center gap-1.5 py-1.5 rounded border border-transparent hover:border-border/40 hover:bg-muted/30 transition-all duration-200"
-            href="https://github.com/shishobooks/shisho/releases"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors">
-              shisho
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-              {__APP_VERSION__}
-            </span>
-          </a>
-        </div>
-      )}
-    </aside>
-  );
+  return <Sidebar items={items} />;
 };
 
 export default LibrarySidebar;
