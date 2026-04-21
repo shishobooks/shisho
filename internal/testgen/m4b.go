@@ -89,6 +89,9 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 	if opts.Album != "" {
 		args = append(args, "-metadata", "album="+opts.Album)
 	}
+	if opts.Grouping != "" {
+		args = append(args, "-metadata", "grouping="+opts.Grouping)
+	}
 	if opts.Composer != "" {
 		args = append(args, "-metadata", "composer="+opts.Composer)
 	}

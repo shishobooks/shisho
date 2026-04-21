@@ -787,7 +787,7 @@ func TestProcessScanJob_M4BWithCover(t *testing.T) {
 	testgen.GenerateM4B(t, bookDir, "audiobook.m4b", testgen.M4BOptions{
 		Title:    "Audiobook With Cover",
 		Artist:   "Narrator",
-		Album:    "Series Name #3",
+		Grouping: "Series Name #3",
 		HasCover: true,
 	})
 
@@ -800,7 +800,7 @@ func TestProcessScanJob_M4BWithCover(t *testing.T) {
 	book := allBooks[0]
 	assert.Equal(t, "Audiobook With Cover", book.Title)
 
-	// Check series parsing from album
+	// Check series parsing from grouping atom
 	require.Len(t, book.BookSeries, 1, "book should have a series")
 	require.NotNil(t, book.BookSeries[0].SeriesNumber)
 	assert.InDelta(t, 3.0, *book.BookSeries[0].SeriesNumber, 0.001)
