@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
-import type { Plugin } from "@/types/generated/models";
+import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 import { filterPlugins } from "./discoverFilters";
 import { DiscoverTab } from "./DiscoverTab";
@@ -32,7 +32,7 @@ vi.mock("@/hooks/queries/plugins", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 // --- Test data ---
@@ -74,7 +74,7 @@ const toInstalled = (
   installed_at: "2024-01-01T00:00:00Z",
   name: p.name,
   scope: p.scope,
-  status: 0,
+  status: PluginStatusActive,
   version: p.versions[0]?.version ?? "1.0.0",
   ...overrides,
 });

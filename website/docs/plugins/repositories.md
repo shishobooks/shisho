@@ -19,7 +19,7 @@ Shisho ships with the official plugin repository enabled by default. You can man
 
 ### Syncing a Repository
 
-Repositories cache their plugin list locally. To check for newly added plugins or updated versions, click **Sync** on the repository. This fetches the latest manifest from GitHub and refreshes the update indicator for any installed plugins from that repository.
+Repositories cache their plugin list locally. To check for newly added plugins or updated versions, click **Sync** on the repository. This fetches the latest manifest from GitHub and refreshes update indicators for installed plugins.
 
 ### Disabling a Repository
 

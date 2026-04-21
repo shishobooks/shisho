@@ -16,6 +16,8 @@ import (
 // TestSyncRepository_RefreshesUpdateAvailableVersion verifies that after a
 // manual repo sync, CheckForUpdates runs so stale update_available_version
 // values don't linger until the 24h background check.
+//
+// Mutates global AllowedFetchHosts — not safe for t.Parallel().
 func TestSyncRepository_RefreshesUpdateAvailableVersion(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
