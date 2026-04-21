@@ -306,6 +306,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("replaces cover image", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -354,6 +355,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves description and genre", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -387,6 +389,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes subtitle as freeform atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -418,6 +421,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for missing cover", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -456,6 +460,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -482,6 +487,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent source file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 
 		srcPath := filepath.Join(dir, "nonexistent.m4b")
@@ -500,6 +506,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for empty file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 
 		srcPath := filepath.Join(dir, "empty.m4b")
@@ -521,6 +528,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("no temp file remains after generation", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -548,6 +556,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes genres to genre atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -581,6 +590,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes tags to custom atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -616,6 +626,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves source genre when book has none", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -647,6 +658,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes ASIN identifier", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -683,6 +695,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses file.Name for title when available", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -716,6 +729,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses book.Title when file.Name is empty", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -749,6 +763,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses chapters from file model instead of source", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -795,6 +810,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves source chapters when file has no chapters", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -839,6 +855,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapter order follows StartTimestampMs when SortOrder disagrees", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -881,6 +898,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapters with missing StartTimestampMs use zero", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -925,6 +943,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("nested chapters use only top-level for M4B", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -987,6 +1006,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapters with empty title are included", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -1040,6 +1060,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes language and abridged via freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -1070,6 +1091,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes abridged=false via freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
