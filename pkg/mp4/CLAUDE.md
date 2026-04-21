@@ -27,7 +27,7 @@ moov                      # Movie box (metadata container)
         ©nrt              # Narrator (dedicated audiobook atom)
         ©cmp              # Composer (fallback narrator)
         ©wrt              # Writer (fallback narrator)
-        ©alb              # Album (series)
+        ©alb              # Album (book title)
         ©gen              # Genre (text form)
         ©pub              # Publisher
         ©grp              # Grouping (series info)
@@ -52,14 +52,14 @@ mdat                      # Media data box (audio)
 | `©nrt` | Narrator | Narrators (preferred source) |
 | `©cmp` | Composer | Narrators (fallback 1) |
 | `©wrt` | Writer | Narrators (fallback 2) |
-| `©alb` | Album | "Series Name #N" format |
+| `©alb` | Album | Book title (always) |
 | `©gen` | Genre | Genres (comma-separated text) |
 | `gnre` | Genre ID | Genre by ID3v1 index (1-based) |
 | `©day` | Year | Publication year |
-| `©cmt` | Comment | Description (alternative) |
+| `©cmt` | Comment | Description (written alongside desc) |
 | `desc` | Description | Description (preferred) |
 | `©pub` | Publisher | Publisher name |
-| `©grp` | Grouping | Series info (parsed for name/number) |
+| `©grp` | Grouping | Series info: "Series Name #N" |
 | `©cpy` | Copyright | Copyright notice |
 | `©too` | Encoder | Encoding tool info |
 | `covr` | Cover art | Cover image data (JPEG/PNG/BMP) |
@@ -73,8 +73,8 @@ Custom metadata uses freeform atoms with namespace:
 ```
 ----:com.apple.iTunes:SUBTITLE     # Subtitle (preferred)
 ----:com.pilabor.tone:SUBTITLE     # Subtitle (fallback, Tone audiobook player)
-----:com.apple.iTunes:SERIES       # Series name (Audible style)
-----:com.apple.iTunes:SERIES-PART  # Series number (Audible style)
+----:com.apple.iTunes:SERIES       # Series name (preferred)
+----:com.apple.iTunes:SERIES-PART  # Series number (preferred)
 ----:com.shisho:tags               # Tags (comma-separated)
 ----:com.shisho:imprint            # Imprint name
 ----:com.shisho:url                # URL
@@ -111,8 +111,8 @@ Freeform atom structure:
 | Subtitle | `com.apple.iTunes:SUBTITLE` → `com.pilabor.tone:SUBTITLE` | Fallback chain |
 | Authors | `©ART` | Split by comma/semicolon |
 | Narrators | `©nrt` → `©cmp` → `©wrt` | Fallback chain |
-| Series Name | Album or `©grp` | Parsed from album format |
-| Series Number | Album or `©grp` | Extracted by regex patterns |
+| Series Name | `com.apple.iTunes:SERIES` freeform → `©grp` | Freeform preferred, grouping fallback |
+| Series Number | `com.apple.iTunes:SERIES-PART` freeform → `©grp` | Freeform parses as float; grouping uses regex |
 | Genres | `©gen` | Comma-separated text |
 | Tags | `com.shisho:tags` | Freeform atom, comma-separated |
 | Description | `desc` or `©cmt` | desc preferred |
@@ -128,8 +128,8 @@ Freeform atom structure:
 | Language | `com.pilabor.tone:LANGUAGE` → `com.apple.iTunes:LANGUAGE` | Validated BCP 47 tag via NormalizeLanguage |
 | Abridged | `com.pilabor.tone:ABRIDGED` | "true"/"false" (case-insensitive) → *bool |
 
-**Series Parsing from Album:**
-Regex patterns extract series from album field:
+**Series Parsing from Grouping:**
+Regex patterns extract series from the grouping (`©grp`) field when the `com.apple.iTunes:SERIES` freeform atom is absent:
 ```
 "Series Name #N"           → Series: "Series Name", Number: N
 "Series Name, Book N"      → Series: "Series Name", Number: N
@@ -167,18 +167,23 @@ Uses `mp4.WriteToFile()` for atomic writes.
 | Title | `©nam` | book.Title |
 | Authors | `©ART` | Joined author names |
 | Narrators | `©nrt` AND `©cmp` | Written to both for compatibility |
-| Album | `©alb` | "Series Name #N" format |
+| Album | `©alb` | book.Title (always, for audiobook player compatibility) |
+| Grouping | `©grp` | "Series Name #N" when series exists |
 | Subtitle | `com.apple.iTunes:SUBTITLE` | book.Subtitle |
+| Series | `----:com.apple.iTunes:SERIES` | Series name when set |
+| Series Part | `----:com.apple.iTunes:SERIES-PART` | Series number when set |
 | Genres | `©gen` | Comma-separated |
 | Tags | `com.shisho:tags` | Comma-separated |
 | Description | `desc` | book.Description |
+| Comment | `©cmt` | book.Description (mirrored from desc) |
 | Publisher | `©pub` | file.Publisher.Name |
 | Imprint | `com.shisho:imprint` | file.Imprint.Name |
 | URL | `com.shisho:url` | file.URL |
 | Cover | `covr` | Image with type flag (13=JPEG, 14=PNG) |
+| Media Type | `stik` | Always `2` (audiobook) |
 
 **Preserved from Source:**
-- Description, comments, year, copyright, encoder
+- Year, copyright, encoder
 - Duration, bitrate
 - Chapters
 - Unknown atoms (e.g., `aART`, `cprt`)

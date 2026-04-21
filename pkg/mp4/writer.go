@@ -296,13 +296,30 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildItunesTextAtom(AtomArtist, joinAuthorNames(metadata.Authors)))
 	}
 
-	// Album: format from series info if available, otherwise use existing album
-	album := metadata.Album
-	if metadata.Series != "" {
-		album = formatAlbumFromSeries(metadata.Series, metadata.SeriesNumber)
+	// Album: always the book title. Audiobook players (Bound, Overcast, etc.)
+	// commonly use Album as the canonical book-title atom; leaving it empty or
+	// putting series info here makes those players show "Unknown". Series info
+	// goes into ©grp and the Audible-style SERIES / SERIES-PART freeforms
+	// below instead.
+	if metadata.Album != "" {
+		content.Write(buildItunesTextAtom(AtomAlbum, metadata.Album))
 	}
-	if album != "" {
-		content.Write(buildItunesTextAtom(AtomAlbum, album))
+
+	// Series info: write to ©grp (legacy/compatibility) and to the Audible-
+	// style freeform atoms com.apple.iTunes:SERIES + SERIES-PART (preferred
+	// modern source, used by Audible, Tone, Audiobookshelf).
+	//
+	// When metadata.Series is empty, we emit none of these atoms. Any ©grp
+	// from the source file is dropped on regeneration because ©grp is not
+	// round-tripped through Metadata (no Grouping field) — series data is
+	// expected to live in the DB, not in file tags.
+	if metadata.Series != "" {
+		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber)
+		content.Write(buildItunesTextAtom(AtomGrouping, grouping))
+		content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES", metadata.Series))
+		if metadata.SeriesNumber != nil {
+			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", formatSeriesNumber(*metadata.SeriesNumber)))
+		}
 	}
 
 	// Narrators: write to both ©nrt (dedicated narrator) and ©cmp (composer) for compatibility
@@ -342,17 +359,25 @@ func buildIlst(metadata *Metadata) []byte {
 
 	// Write any remaining freeform atoms from the Freeform map. This preserves
 	// atoms that aren't explicitly handled above (e.g., com.pilabor.tone:LANGUAGE,
-	// com.pilabor.tone:ABRIDGED, com.apple.iTunes:SERIES) plus anything carried
-	// over from the source file via src.Freeform.
+	// com.pilabor.tone:ABRIDGED) plus anything carried over from the source file
+	// via src.Freeform. com.apple.iTunes:SERIES/SERIES-PART also flow through here
+	// when metadata.Series is empty (i.e., no series in the DB).
 	//
 	// Keys that are already written by an explicit branch above are skipped to
-	// avoid duplicate atoms.
+	// avoid duplicate atoms. SERIES/SERIES-PART are only excluded when
+	// metadata.Series is set (the Series branch already wrote them); when
+	// metadata.Series is empty, we allow passthrough so existing freeform values
+	// from the source file survive the round-trip.
 	explicitFreeformKeys := map[string]bool{
 		"com.apple.iTunes:SUBTITLE":     true,
 		"com.pilabor.tone:SUBTITLE":     true,
 		"com.shisho:tags":               true,
 		"com.apple.iTunes:ASIN":         true,
 		"com.pilabor.tone:AUDIBLE_ASIN": true,
+	}
+	if metadata.Series != "" {
+		explicitFreeformKeys["com.apple.iTunes:SERIES"] = true
+		explicitFreeformKeys["com.apple.iTunes:SERIES-PART"] = true
 	}
 	for key, value := range metadata.Freeform {
 		if value == "" || explicitFreeformKeys[key] {
@@ -497,19 +522,23 @@ func splitFreeformKey(key string) (namespace, name string, ok bool) {
 	return key[:idx], key[idx+1:], true
 }
 
-// formatAlbumFromSeries formats series info as album: "Series Name #N".
-func formatAlbumFromSeries(series string, number *float64) string {
+// formatSeriesGrouping formats series info as a grouping string: "Series Name #N".
+func formatSeriesGrouping(series string, number *float64) string {
 	if series == "" {
 		return ""
 	}
 	if number == nil {
 		return series
 	}
-	// Format: "Series Name #N" (integer if whole, decimal otherwise)
-	if *number == float64(int(*number)) {
-		return series + " #" + strconv.Itoa(int(*number))
+	return series + " #" + formatSeriesNumber(*number)
+}
+
+// formatSeriesNumber formats a series number as integer when whole, decimal otherwise.
+func formatSeriesNumber(num float64) string {
+	if num == float64(int(num)) {
+		return strconv.Itoa(int(num))
 	}
-	return series + " #" + strconv.FormatFloat(*number, 'f', -1, 64)
+	return strconv.FormatFloat(num, 'f', -1, 64)
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.

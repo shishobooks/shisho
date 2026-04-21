@@ -24,6 +24,7 @@ func TestM4BGenerator_SupportedType(t *testing.T) {
 func TestM4BGenerator_Generate(t *testing.T) {
 	t.Parallel()
 	t.Run("modifies title and authors", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -60,6 +61,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("modifies multiple authors in sort order", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -94,6 +96,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("modifies narrators", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -130,7 +133,8 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Second Narrator", meta.Narrators[1])
 	})
 
-	t.Run("formats series as album", func(t *testing.T) {
+	t.Run("writes series to grouping and freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -161,11 +165,16 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Test Series", meta.Series)
 		require.NotNil(t, meta.SeriesNumber)
 		assert.InDelta(t, 3.0, *meta.SeriesNumber, 0.001)
-		// Album should be formatted as "Series Name #N"
-		assert.Equal(t, "Test Series #3", meta.Album)
+		// Album is the title, not the series.
+		assert.Equal(t, "Test Book", meta.Album)
+		// Audible-style freeform atoms are set.
+		require.NotNil(t, meta.Freeform)
+		assert.Equal(t, "Test Series", meta.Freeform["com.apple.iTunes:SERIES"])
+		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
 	})
 
 	t.Run("handles decimal series number", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -193,11 +202,111 @@ func TestM4BGenerator_Generate(t *testing.T) {
 
 		meta, err := mp4.ParseFull(destPath)
 		require.NoError(t, err)
-		// Album should be formatted with decimal
-		assert.Equal(t, "Series #1.5", meta.Album)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 1.5, *meta.SeriesNumber, 0.001)
+		assert.Equal(t, "1.5", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+		// Album is still the title.
+		assert.Equal(t, "Test Book", meta.Album)
+	})
+
+	t.Run("always tags as audiobook (stik=2)", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// ffmpeg doesn't emit a stik atom by default, so the source file
+		// has MediaType == 0.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Stik Test",
+			Duration: 1.0,
+		})
+		srcMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		require.Equal(t, 0, srcMeta.MediaType, "precondition: source file has no stik")
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Stik Test",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err = gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, 2, meta.MediaType)
+	})
+
+	t.Run("writes description to both desc and ©cmt", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Desc Test",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		desc := "A twisty novel about a woman out of time."
+		book := &models.Book{
+			Title:       "Desc Test",
+			Description: &desc,
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, desc, meta.Description)
+		assert.Equal(t, desc, meta.Comment)
+	})
+
+	t.Run("album equals title when no series", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Yesteryear",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Yesteryear",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Caro Claire Burke"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Yesteryear", meta.Album)
+		assert.Empty(t, meta.Series)
 	})
 
 	t.Run("replaces cover image", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -246,6 +355,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves description and genre", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -279,6 +389,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes subtitle as freeform atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -310,6 +421,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for missing cover", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -348,6 +460,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -374,6 +487,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent source file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 
 		srcPath := filepath.Join(dir, "nonexistent.m4b")
@@ -392,6 +506,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("returns error for empty file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 
 		srcPath := filepath.Join(dir, "empty.m4b")
@@ -413,6 +528,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("no temp file remains after generation", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -440,6 +556,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes genres to genre atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -473,6 +590,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes tags to custom atom", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -508,6 +626,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves source genre when book has none", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -539,6 +658,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes ASIN identifier", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -575,6 +695,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses file.Name for title when available", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -608,6 +729,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses book.Title when file.Name is empty", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -641,6 +763,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("uses chapters from file model instead of source", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -687,6 +810,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves source chapters when file has no chapters", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -731,6 +855,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapter order follows StartTimestampMs when SortOrder disagrees", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -773,6 +898,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapters with missing StartTimestampMs use zero", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -817,6 +943,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("nested chapters use only top-level for M4B", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -879,6 +1006,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("chapters with empty title are included", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -932,6 +1060,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes language and abridged via freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -962,6 +1091,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("writes abridged=false via freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -988,6 +1118,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("preserves existing freeform atoms from source file", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -1019,5 +1150,59 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "My Series", meta.Freeform["com.apple.iTunes:SERIES"])
 		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+	})
+
+	t.Run("overrides stale SERIES freeforms from source", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Step 1: generate a base M4B.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 1.0,
+		})
+
+		// Step 2: seed the source with stale SERIES/SERIES-PART freeform atoms
+		// (as if an older version of Shisho or another tagger wrote them).
+		srcMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		if srcMeta.Freeform == nil {
+			srcMeta.Freeform = map[string]string{}
+		}
+		srcMeta.Freeform["com.apple.iTunes:SERIES"] = "Old Series"
+		srcMeta.Freeform["com.apple.iTunes:SERIES-PART"] = "99"
+		require.NoError(t, mp4.Write(srcPath, srcMeta, mp4.WriteOptions{}))
+
+		// Sanity check: source now has the stale values.
+		staleMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		require.Equal(t, "Old Series", staleMeta.Freeform["com.apple.iTunes:SERIES"])
+
+		// Step 3: regenerate with a DB book whose series is different.
+		destPath := filepath.Join(dir, "dest.m4b")
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookSeries: []*models.BookSeries{
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "New Series"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err = gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// DB wins: output reflects the new series, not the stale source values.
+		assert.Equal(t, "New Series", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 2.0, *meta.SeriesNumber, 0.001)
+		assert.Equal(t, "New Series", meta.Freeform["com.apple.iTunes:SERIES"])
+		assert.Equal(t, "2", meta.Freeform["com.apple.iTunes:SERIES-PART"])
 	})
 }
