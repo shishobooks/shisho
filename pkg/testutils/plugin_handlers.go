@@ -133,7 +133,7 @@ func (h *handler) seedPlugin(c echo.Context) error {
 		return errors.Wrap(err, "create plugin dir")
 	}
 	for fname, data := range fixtureFiles() {
-		if err := os.WriteFile(filepath.Join(destDir, fname), data, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(destDir, fname), data, 0600); err != nil {
 			return errors.Wrapf(err, "write %s", fname)
 		}
 	}
