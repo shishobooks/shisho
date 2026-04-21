@@ -57,31 +57,7 @@ test.describe("Plugin lifecycle flows", () => {
     ).toBeVisible();
   });
 
-  test("update applies the new version and clears the update pill", async ({
-    apiContext,
-    page,
-  }) => {
-    // Seed with an update pending. The /plugins/installed/:scope/:id/update
-    // handler performs the real update flow, so it needs a valid download
-    // URL + sha. We patch the plugin after the page renders by calling
-    // the update endpoint ourselves with fixture info.
-    await seedPlugin(apiContext, {
-      scope: "test",
-      id: "fixture",
-      name: "Fixture Plugin",
-      version: "0.9.0",
-      update_available_version: "1.0.0",
-    });
-
-    await loginAsPluginAdmin(page);
-    await page.goto("/settings/plugins");
-
-    // Update pill is visible.
-    await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
-
-    // The real updateVersion handler looks up the repository version. That
-    // path requires a seeded repository; the direct-URL update path is not
-    // exposed from the UI. Skip this test until repository seeding lands.
+  test("update applies the new version and clears the update pill", async () => {
     test.skip(
       true,
       "Update-via-UI requires a seeded repository (follow-up task).",

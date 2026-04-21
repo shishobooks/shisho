@@ -117,6 +117,9 @@ func (h *handler) seedPlugin(c echo.Context) error {
 	if req.Scope == "" || req.ID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "scope and id are required")
 	}
+	if h.installer == nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "plugin installer not configured")
+	}
 
 	name := req.Name
 	if name == "" {

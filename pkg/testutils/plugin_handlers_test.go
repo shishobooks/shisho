@@ -95,6 +95,7 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	assert.Equal(t, "fixture", info.ID)
 	assert.Equal(t, "1.0.0", info.Version)
 	assert.Equal(t, hex.EncodeToString(h1[:]), info.SHA256)
+	assert.Contains(t, info.DownloadURL, "/test/plugins/fixture.zip")
 }
 
 func TestSeedPluginWritesDBRow(t *testing.T) {

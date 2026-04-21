@@ -58,27 +58,10 @@ test.describe("Plugin install flow", () => {
     ).toBeVisible();
   });
 
-  test("clicking Install from Discover adds the plugin to Installed", async ({
-    apiContext,
-    page,
-  }) => {
-    const info = await getFixtureInfo(apiContext);
-
-    // Seed a repository whose single version points at our fixture zip.
-    // This requires a helper endpoint that serves the repository manifest
-    // OR we insert a pre-synced repository directly. For simplicity, we
-    // mock the Discover list by seeding an installed-and-uninstalled
-    // round-trip path: install -> immediately uninstall -> verify Discover
-    // now shows the plugin as installable.
-    //
-    // Repository-backed Discover is deferred to a follow-up; the primary
-    // value here is that the UI Install button wires to the install
-    // mutation, which is covered by the direct-URL test above.
+  test("clicking Install from Discover adds the plugin to Installed", async () => {
     test.skip(
       true,
       "Discover-backed install requires a /test/plugins/repository endpoint (follow-up task).",
     );
-    expect(info.version).toBeTruthy(); // keep the unused var referenced
-    await loginAsPluginAdmin(page);
   });
 });
