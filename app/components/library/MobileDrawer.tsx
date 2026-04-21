@@ -308,22 +308,23 @@ const MobileDrawer = () => {
           )}
 
           {/* Admin Navigation (when on /settings routes) */}
-          {isAdminContext && (
-            <nav className="py-2 border-b border-border">
-              {adminNavItems
-                .filter((item) => item.show)
-                .map((item) => (
-                  <NavItem
-                    icon={<item.Icon className="h-5 w-5" />}
-                    isActive={item.isActive}
-                    key={item.to}
-                    label={item.label}
-                    onClick={close}
-                    to={item.to}
-                  />
-                ))}
-            </nav>
-          )}
+          {isAdminContext &&
+            adminNavItems.filter((item) => item.show).length > 0 && (
+              <nav className="py-2 border-b border-border">
+                {adminNavItems
+                  .filter((item) => item.show)
+                  .map((item) => (
+                    <NavItem
+                      icon={<item.Icon className="h-5 w-5" />}
+                      isActive={item.isActive}
+                      key={item.to}
+                      label={item.label}
+                      onClick={close}
+                      to={item.to}
+                    />
+                  ))}
+              </nav>
+            )}
 
           {/* General Navigation */}
           <nav className="py-2 border-b border-border">

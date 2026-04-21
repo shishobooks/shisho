@@ -2,6 +2,7 @@ import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -86,14 +87,14 @@ const Sidebar = ({ items }: SidebarProps) => {
           <div className="border-t border-border/50 pt-3">
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <button
+                <Button
                   aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                   className={cn(
-                    "flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    "text-muted-foreground/60 hover:bg-muted/50 hover:text-muted-foreground",
+                    "h-auto w-full justify-start gap-3 px-3 py-2 text-sm font-medium text-muted-foreground/60 hover:bg-muted/50 hover:text-muted-foreground",
                     collapsed && "justify-center px-2",
                   )}
                   onClick={() => setCollapsed(!collapsed)}
+                  variant="ghost"
                 >
                   {collapsed ? (
                     <ChevronsRight className="h-4 w-4" />
@@ -103,7 +104,7 @@ const Sidebar = ({ items }: SidebarProps) => {
                       <span className="text-xs">Collapse</span>
                     </>
                   )}
-                </button>
+                </Button>
               </TooltipTrigger>
               {collapsed && (
                 <TooltipContent side="right">Expand sidebar</TooltipContent>
