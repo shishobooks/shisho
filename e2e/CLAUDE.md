@@ -98,6 +98,11 @@ Test endpoints are only registered when `ENVIRONMENT=test`.
 |----------|--------|---------|
 | `/test/users` | POST | Create a test user with admin role |
 | `/test/users` | DELETE | Delete all users |
+| `/test/ereader` | DELETE | Wipe all eReader test data |
+| `/test/plugins` | POST | Seed a plugin (disk + DB) |
+| `/test/plugins` | DELETE | Wipe all plugin state (add `?include_official=true` to also wipe official repos) |
+| `/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
+| `/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
 
 ### Backend Pattern
 
