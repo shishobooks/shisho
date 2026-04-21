@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -101,7 +102,12 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		if ctx.Err() != nil || isTimeout(err) {
+		// Propagate user-initiated cancellation as-is so callers (and
+		// observability) can distinguish it from a timeout.
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
 			return nil, newErr(ErrCodeTimeout, err.Error())
 		}
 		return nil, newErr(ErrCodeUpstreamError, err.Error())
@@ -115,8 +121,11 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 		return nil, newErr(ErrCodeUpstreamError, "upstream returned "+resp.Status)
 	}
 
+	// Cap the upstream body to guard against a misbehaving or malicious
+	// response. Real chapter payloads are well under 1 MB.
+	const maxUpstreamBytes = 1 << 20
 	var upstream audnexusUpstream
-	if err := json.NewDecoder(resp.Body).Decode(&upstream); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxUpstreamBytes)).Decode(&upstream); err != nil {
 		return nil, newErr(ErrCodeUpstreamError, "invalid JSON from upstream")
 	}
 

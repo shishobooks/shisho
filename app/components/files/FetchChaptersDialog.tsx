@@ -119,7 +119,7 @@ const EntryStage = ({ asinInput, onAsinChange, onFetch }: EntryStageProps) => {
 const LoadingStage = () => (
   <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
     <Loader2 className="h-6 w-6 animate-spin" />
-    <span className="text-sm">Looking up chapters on Audnexus...</span>
+    <span className="text-sm">Looking up chapters on Audible...</span>
   </div>
 );
 
@@ -202,7 +202,7 @@ const ResultStage = ({
       {/* Duration comparison */}
       <div className="text-sm text-muted-foreground">
         <span>
-          Audnexus runtime:{" "}
+          Audible runtime:{" "}
           <span className="font-mono">
             {formatDurationMs(data.runtime_length_ms)}
           </span>
@@ -248,29 +248,39 @@ const ResultStage = ({
         </div>
       )}
 
-      {/* Intro offset checkbox */}
-      <div className="flex items-center gap-2">
-        <Checkbox
-          checked={applyOffset}
-          id="apply-offset"
-          onCheckedChange={(checked) => setApplyOffset(Boolean(checked))}
-        />
-        <Label className="cursor-pointer" htmlFor="apply-offset">
-          Shift timestamps: subtract intro (
-          {formatDurationMs(data.brand_intro_duration_ms)}) from each chapter
-        </Label>
-      </div>
+      {/* Intro offset checkbox — only meaningful when Audible reports a non-zero intro */}
+      {data.brand_intro_duration_ms > 0 && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={applyOffset}
+            id="apply-offset"
+            onCheckedChange={(checked) => setApplyOffset(Boolean(checked))}
+          />
+          <Label className="cursor-pointer" htmlFor="apply-offset">
+            Shift timestamps: subtract intro (
+            {formatDurationMs(data.brand_intro_duration_ms)}) from each chapter
+          </Label>
+        </div>
+      )}
 
       {/* Chapter count info */}
       <p className="text-sm text-muted-foreground">
         {data.chapters.length} chapter{data.chapters.length !== 1 ? "s" : ""}{" "}
-        from Audnexus
+        from Audible
         {!countsMatch && (
           <span className="ml-1 text-destructive">
             (file has {editedChapters.length})
           </span>
         )}
       </p>
+
+      {/* is_accurate flag from Audnexus — warn when timestamps are approximate */}
+      {!data.is_accurate && (
+        <p className="text-sm text-muted-foreground">
+          Note: Audible flagged this entry as approximate. Spot-check timestamps
+          before saving.
+        </p>
+      )}
 
       {/* Overwrite warning */}
       {hasChanges && (
@@ -398,7 +408,9 @@ const FetchChaptersDialog = ({
   };
 
   const handleRetry = () => {
-    setSubmittedAsin(null);
+    // Force a fresh network call rather than replaying a cached error from
+    // tanstack-query.
+    void query.refetch();
   };
 
   const handleClose = () => {
@@ -409,7 +421,7 @@ const FetchChaptersDialog = ({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-lg overflow-x-hidden">
         <DialogHeader className="pr-8">
-          <DialogTitle>Fetch chapters from Audnexus</DialogTitle>
+          <DialogTitle>Fetch chapters from Audible</DialogTitle>
           <DialogDescription>
             Look up chapter titles and timestamps using an Audible ASIN.
           </DialogDescription>

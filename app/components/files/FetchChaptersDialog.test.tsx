@@ -150,7 +150,7 @@ describe("FetchChaptersDialog", () => {
       // lands in the result stage before our next assertion.
       await waitFor(() => {
         expect(
-          screen.getByText(/2 chapters from audnexus/i),
+          screen.getByText(/2 chapters from audible/i),
         ).toBeInTheDocument();
       });
 
@@ -339,12 +339,12 @@ describe("FetchChaptersDialog", () => {
       });
     });
 
-    it("goes back to entry stage when Retry is clicked", async () => {
+    it("refetches when Retry is clicked", async () => {
       const user = createUser();
 
-      vi.spyOn(API, "request").mockRejectedValue(
-        new ShishoAPIError("not found", "not_found", 404),
-      );
+      const apiMock = vi
+        .spyOn(API, "request")
+        .mockRejectedValue(new ShishoAPIError("not found", "not_found", 404));
 
       renderWithClient(<FetchChaptersDialog {...defaultProps} />);
 
@@ -358,12 +358,14 @@ describe("FetchChaptersDialog", () => {
         ).toBeInTheDocument();
       });
 
+      const callsBefore = apiMock.mock.calls.length;
       await user.click(screen.getByRole("button", { name: /retry/i }));
 
-      // Should be back at entry stage
-      expect(
-        screen.getByRole("button", { name: /fetch chapters/i }),
-      ).toBeInTheDocument();
+      // Retry should fire a fresh upstream call rather than replaying the
+      // cached error.
+      await waitFor(() => {
+        expect(apiMock.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
     });
   });
 });
