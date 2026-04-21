@@ -46,6 +46,16 @@ export async function clearPlugins(api: APIRequestContext): Promise<void> {
   expect(resp.ok()).toBeTruthy();
 }
 
+export async function loginApi(api: APIRequestContext): Promise<void> {
+  const resp = await api.post("/auth/login", {
+    data: {
+      username: PLUGIN_TEST_USERNAME,
+      password: PLUGIN_TEST_PASSWORD,
+    },
+  });
+  expect(resp.ok()).toBeTruthy();
+}
+
 export async function loginAsPluginAdmin(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username").fill(PLUGIN_TEST_USERNAME);

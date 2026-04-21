@@ -34,6 +34,9 @@ test.describe("Plugins UI (redesigned)", () => {
   test.beforeAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
+    // Wipe plugin state left behind by any preceding plugin-lifecycle / -config
+    // specs so the "no plugins installed" empty-state test is independent.
+    await apiContext.delete("/test/plugins?include_official=true");
     await apiContext.delete("/test/ereader");
     await apiContext.delete("/test/users");
     await apiContext.post("/test/users", {
