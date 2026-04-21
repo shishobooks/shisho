@@ -91,16 +91,10 @@ const PublisherDetail = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Publisher Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The publisher you're looking for doesn't exist or may have been
             removed.
           </p>
-          <Link
-            className="text-primary hover:underline"
-            to={`/libraries/${libraryId}/publishers`}
-          >
-            Back to Publishers
-          </Link>
         </div>
       </LibraryLayout>
     );

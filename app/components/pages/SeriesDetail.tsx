@@ -1,6 +1,6 @@
 import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
@@ -94,16 +94,10 @@ const SeriesDetail = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Series Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The series you're looking for doesn't exist or may have been
             removed.
           </p>
-          <Link
-            className="text-primary hover:underline"
-            to={`/libraries/${libraryId}/series`}
-          >
-            Back to Series
-          </Link>
         </div>
       </LibraryLayout>
     );
