@@ -660,6 +660,15 @@ func (h *handler) removeRepository(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// syncRepositoryResponse is the JSON body returned from the sync endpoint.
+// Embeds the repository so its fields stay at the top level for
+// backwards-compat with clients reading them, and adds an optional
+// update_refresh_error populated when the post-sync update refresh failed.
+type syncRepositoryResponse struct {
+	*models.PluginRepository
+	UpdateRefreshError *string `json:"update_refresh_error,omitempty"`
+}
+
 func (h *handler) syncRepository(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -684,7 +693,7 @@ func (h *handler) syncRepository(c echo.Context) error {
 		if err := h.service.UpdateRepository(ctx, repo); err != nil {
 			return errors.WithStack(err)
 		}
-		return errors.WithStack(c.JSON(http.StatusOK, repo))
+		return errors.WithStack(c.JSON(http.StatusOK, syncRepositoryResponse{PluginRepository: repo}))
 	}
 
 	// Update repository metadata from manifest
@@ -695,19 +704,26 @@ func (h *handler) syncRepository(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Re-evaluate update_available_version for installed plugins so a manual
-	// sync surfaces newly published versions (and clears stale ones) without
-	// waiting for the 24h background check.
+	// Re-evaluate update_available_version for installed plugins from this
+	// repo using the manifest we already fetched above — avoids a second
+	// round of network fetches against every other enabled repository and
+	// keeps the refresh scoped to what actually changed.
+	var updateRefreshError *string
 	if h.manager != nil {
-		if err := h.manager.CheckForUpdates(ctx); err != nil {
+		if err := h.manager.CheckForUpdatesForRepo(ctx, scope, manifest); err != nil {
 			logger.FromContext(ctx).Warn("failed to refresh plugin updates after repo sync", logger.Data{
 				"scope": scope,
 				"error": err.Error(),
 			})
+			msg := err.Error()
+			updateRefreshError = &msg
 		}
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, repo))
+	return errors.WithStack(c.JSON(http.StatusOK, syncRepositoryResponse{
+		PluginRepository:   repo,
+		UpdateRefreshError: updateRefreshError,
+	}))
 }
 
 // availablePluginResponse is the response format for available plugins.

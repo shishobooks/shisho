@@ -1,5 +1,6 @@
 import { BadgeCheck, Package, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +95,18 @@ export const AdvancedRepositoriesSection = () => {
                     <Button
                       disabled={syncRepository.isPending}
                       onClick={() =>
-                        syncRepository.mutate({ scope: repo.scope })
+                        syncRepository.mutate(
+                          { scope: repo.scope },
+                          {
+                            onSuccess: (res) => {
+                              if (res.update_refresh_error) {
+                                toast.warning(
+                                  `Synced ${res.name ?? res.scope}, but update indicators may be stale: ${res.update_refresh_error}`,
+                                );
+                              }
+                            },
+                          },
+                        )
                       }
                       size="sm"
                       variant="outline"

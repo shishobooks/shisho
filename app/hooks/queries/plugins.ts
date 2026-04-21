@@ -466,22 +466,34 @@ export const useScanPlugins = () => {
   });
 };
 
+export interface SyncRepositoryResponse extends PluginRepository {
+  update_refresh_error?: string;
+}
+
 export const useSyncRepository = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, ShishoAPIError, { scope: string }>({
-    mutationFn: ({ scope }) => {
-      return API.request("POST", `/plugins/repositories/${scope}/sync`);
+  return useMutation<SyncRepositoryResponse, ShishoAPIError, { scope: string }>(
+    {
+      mutationFn: ({ scope }) => {
+        return API.request<SyncRepositoryResponse>(
+          "POST",
+          `/plugins/repositories/${scope}/sync`,
+        );
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.PluginRepositories],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.PluginsAvailable],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.PluginsInstalled],
+        });
+      },
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PluginRepositories],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PluginsAvailable],
-      });
-    },
-  });
+  );
 };
 
 // --- Plugin Mode ---
