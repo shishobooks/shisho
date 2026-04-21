@@ -1,32 +1,26 @@
 import {
-  Book,
-  Bookmark,
-  Briefcase,
   Check,
   ChevronRight,
-  Cog,
   KeyRound,
-  Layers,
   Library,
   List,
   LogOut,
-  Puzzle,
-  ScrollText,
   Settings,
-  Tags,
   UserCog,
-  Users,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/libraries/utils";
+
+import { useLibraryNavItems } from "./useLibraryNavItems";
 
 interface NavItemProps {
   to: string;
@@ -129,110 +123,11 @@ const MobileDrawer = () => {
   );
 
   // Library navigation items (when in library context)
-  const basePath = libraryId ? `/libraries/${libraryId}` : "";
-  const libraryNavItems = libraryId
-    ? [
-        {
-          to: basePath,
-          icon: <Book className="h-5 w-5" />,
-          label: "Books",
-          isActive:
-            location.pathname === basePath ||
-            (location.pathname.startsWith(`${basePath}/books`) &&
-              !location.pathname.includes("/series") &&
-              !location.pathname.includes("/people") &&
-              !location.pathname.includes("/genres") &&
-              !location.pathname.includes("/tags") &&
-              !location.pathname.includes("/settings")),
-          show: true,
-        },
-        {
-          to: `${basePath}/series`,
-          icon: <Layers className="h-5 w-5" />,
-          label: "Series",
-          isActive: location.pathname.startsWith(`${basePath}/series`),
-          show: true,
-        },
-        {
-          to: `${basePath}/people`,
-          icon: <Users className="h-5 w-5" />,
-          label: "People",
-          isActive: location.pathname.startsWith(`${basePath}/people`),
-          show: true,
-        },
-        {
-          to: `${basePath}/genres`,
-          icon: <Bookmark className="h-5 w-5" />,
-          label: "Genres",
-          isActive: location.pathname.startsWith(`${basePath}/genres`),
-          show: true,
-        },
-        {
-          to: `${basePath}/tags`,
-          icon: <Tags className="h-5 w-5" />,
-          label: "Tags",
-          isActive: location.pathname.startsWith(`${basePath}/tags`),
-          show: true,
-        },
-        {
-          to: `${basePath}/settings`,
-          icon: <Settings className="h-5 w-5" />,
-          label: "Library Settings",
-          isActive: location.pathname.startsWith(`${basePath}/settings`),
-          show: hasPermission("libraries", "write"),
-        },
-      ]
-    : [];
+  const libraryNavDefs = useLibraryNavItems();
+  const libraryNavItems = libraryNavDefs ?? [];
 
   const isAdminContext = location.pathname.startsWith("/settings");
-  const adminNavItems = isAdminContext
-    ? [
-        {
-          to: "/settings/server",
-          icon: <Cog className="h-5 w-5" />,
-          label: "Server",
-          isActive:
-            location.pathname === "/settings/server" ||
-            location.pathname === "/settings",
-          show: hasPermission("config", "read"),
-        },
-        {
-          to: "/settings/libraries",
-          icon: <Library className="h-5 w-5" />,
-          label: "Libraries",
-          isActive: location.pathname.startsWith("/settings/libraries"),
-          show: hasPermission("libraries", "read"),
-        },
-        {
-          to: "/settings/users",
-          icon: <Users className="h-5 w-5" />,
-          label: "Users",
-          isActive: location.pathname.startsWith("/settings/users"),
-          show: hasPermission("users", "read"),
-        },
-        {
-          to: "/settings/jobs",
-          icon: <Briefcase className="h-5 w-5" />,
-          label: "Jobs",
-          isActive: location.pathname === "/settings/jobs",
-          show: hasPermission("jobs", "read"),
-        },
-        {
-          to: "/settings/plugins",
-          icon: <Puzzle className="h-5 w-5" />,
-          label: "Plugins",
-          isActive: location.pathname === "/settings/plugins",
-          show: hasPermission("config", "read"),
-        },
-        {
-          to: "/settings/logs",
-          icon: <ScrollText className="h-5 w-5" />,
-          label: "Logs",
-          isActive: location.pathname === "/settings/logs",
-          show: hasPermission("config", "read"),
-        },
-      ]
-    : [];
+  const adminNavItems = useAdminNavItems();
 
   // Check if user has any admin permissions
   const canAccessAdmin =
@@ -401,10 +296,10 @@ const MobileDrawer = () => {
                 .filter((item) => item.show)
                 .map((item) => (
                   <NavItem
-                    icon={item.icon}
+                    icon={<item.Icon className="h-5 w-5" />}
                     isActive={item.isActive}
                     key={item.to}
-                    label={item.label}
+                    label={item.drawerLabel ?? item.label}
                     onClick={close}
                     to={item.to}
                   />
@@ -419,7 +314,7 @@ const MobileDrawer = () => {
                 .filter((item) => item.show)
                 .map((item) => (
                   <NavItem
-                    icon={item.icon}
+                    icon={<item.Icon className="h-5 w-5" />}
                     isActive={item.isActive}
                     key={item.to}
                     label={item.label}
