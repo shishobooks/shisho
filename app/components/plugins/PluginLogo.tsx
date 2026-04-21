@@ -19,13 +19,6 @@ const RADIUS_BY_SIZE: Record<PluginLogoProps["size"], number> = {
   64: 12,
 };
 
-const PADDING_BY_SIZE: Record<PluginLogoProps["size"], number> = {
-  24: 3,
-  40: 6,
-  56: 8,
-  64: 10,
-};
-
 export const PluginLogo = ({
   scope,
   id,
@@ -36,7 +29,6 @@ export const PluginLogo = ({
   const [hasError, setHasError] = useState(false);
   const showImage = !!imageUrl && !hasError;
   const radius = RADIUS_BY_SIZE[size];
-  const padding = PADDING_BY_SIZE[size];
 
   return (
     <div
@@ -52,7 +44,7 @@ export const PluginLogo = ({
         aspectRatio: "1 / 1",
         borderRadius: radius,
         backgroundColor: showImage
-          ? "oklch(1 0 0 / 5%)"
+          ? undefined
           : getPluginFallbackColor(scope, id),
       }}
     >
@@ -64,7 +56,6 @@ export const PluginLogo = ({
           style={{
             width: "100%",
             height: "100%",
-            padding,
             objectFit: "contain",
           }}
         />
