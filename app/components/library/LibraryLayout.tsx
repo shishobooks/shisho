@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import LibrarySidebar from "@/components/library/LibrarySidebar";
 import TopNav from "@/components/library/TopNav";
+import { cn } from "@/libraries/utils";
 
 interface LibraryLayoutProps {
   children: ReactNode;
@@ -22,7 +23,10 @@ const LibraryLayout = ({
           <LibrarySidebar />
         </div>
         <main
-          className={`flex-1 w-full mx-auto px-4 py-4 md:px-6 md:py-8 ${maxWidth}`}
+          className={cn(
+            "flex-1 w-full mx-auto px-4 py-4 md:px-6 md:py-8",
+            maxWidth,
+          )}
         >
           {children}
         </main>
