@@ -10,11 +10,14 @@ import (
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/uptrace/bun"
 )
 
 type handler struct {
-	db *bun.DB
+	db        *bun.DB
+	manager   *plugins.Manager
+	installer *plugins.Installer
 }
 
 // createUserRequest is the request body for creating a test user.
