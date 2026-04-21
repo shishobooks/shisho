@@ -114,7 +114,7 @@ func (c *Config) IsTestMode() bool {
 
 // pkg/server/server.go
 if cfg.IsTestMode() {
-    testutils.RegisterRoutes(e, db)
+    testutils.RegisterRoutes(e, db, pm, plugins.NewInstaller(cfg.PluginDir))
 }
 ```
 

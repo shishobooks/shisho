@@ -47,13 +47,27 @@ test.describe("Plugin config save", () => {
     // The fixture has a single secret config field "apiKey".
     const input = page.getByLabel("API Key");
     await input.fill("test-secret-value");
-    await page.getByRole("button", { name: "Save" }).click();
+
+    // Wait for the save PATCH to complete before querying — otherwise the
+    // GET below can race the in-flight write and read a stale (empty)
+    // plugin_configs row.
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes("/plugins/installed/test/fixture") &&
+          response.request().method() === "PATCH" &&
+          response.ok(),
+      ),
+      page.getByRole("button", { name: "Save" }).click(),
+    ]);
 
     // Assert the save succeeded: the value round-trips via the API.
     const resp = await apiContext.get("/plugins/installed/test/fixture/config");
     expect(resp.ok()).toBeTruthy();
     const body: { values: Record<string, unknown> } = await resp.json();
-    // Secret values are masked on read - we only assert the key exists.
-    expect(body.values).toHaveProperty("apiKey");
+    // Secret values are masked on read as "***" — asserting the masked
+    // value proves both that the write landed AND that secret masking is
+    // applied on read.
+    expect(body.values.apiKey).toBe("***");
   });
 });
