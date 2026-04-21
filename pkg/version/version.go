@@ -41,7 +41,9 @@ func isVersionCompatible(currentVersion, minVersion string) bool {
 }
 
 // Compare returns -1 if a < b, 0 if a == b, 1 if a > b using semver
-// comparison (major.minor.patch). Unparseable versions compare equal.
+// comparison on major.minor.patch only. Prerelease suffixes (anything after
+// "-") are stripped before comparing, so "1.0.0-rc1" and "1.0.0" compare
+// equal. Returns 0 if either input is unparseable.
 func Compare(a, b string) int {
 	aParts := parseSemver(a)
 	bParts := parseSemver(b)
