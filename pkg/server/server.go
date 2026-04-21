@@ -13,6 +13,7 @@ import (
 	"github.com/robinjoseph08/golib/echo/v4/middleware/logger"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/audnexus"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
@@ -45,6 +46,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/users"
+	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/uptrace/bun"
 )
@@ -115,6 +117,12 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Log viewer endpoint (admin only)
 	logs.RegisterRoutes(e, logBuffer, authMiddleware)
+
+	// Audnexus chapter lookup (books:write required)
+	audnexusService := audnexus.NewService(audnexus.ServiceConfig{
+		UserAgent: "Shisho/" + version.Version,
+	})
+	audnexus.RegisterRoutes(e, audnexusService, authMiddleware)
 
 	echo.NotFoundHandler = notFoundHandler
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle

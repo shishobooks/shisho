@@ -16,6 +16,7 @@ import {
   getNextChapterTitle,
   normalizeChapterOrder,
 } from "@/components/files/chapterUtils";
+import FetchChaptersDialog from "@/components/files/FetchChaptersDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import {
   FileTypeEPUB,
   FileTypeM4B,
   FileTypePDF,
+  IdentifierTypeASIN,
   type Chapter,
   type ChapterInput,
   type File,
@@ -139,10 +141,21 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     >(null);
     const playbackTimeoutRef = useRef<number | null>(null);
 
+    // Whether the Fetch from Audible dialog is open
+    const [isFetchDialogOpen, setIsFetchDialogOpen] = useState(false);
+
     const chapters = useMemo(
       () => chaptersQuery.data ?? [],
       [chaptersQuery.data],
     );
+
+    // ASIN from the file's identifiers, used to prefill the Fetch dialog
+    const audibleAsin = useMemo(() => {
+      const asinIdentifier = file.identifiers?.find(
+        (id) => id.type === IdentifierTypeASIN,
+      );
+      return asinIdentifier?.value;
+    }, [file.identifiers]);
 
     // Initialize editedChapters when entering edit mode
     useEffect(() => {
@@ -341,6 +354,26 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       editInitializedRef.current = true;
       onEditingChange(true);
     };
+
+    /**
+     * Applies chapters from the Fetch from Audible dialog.
+     * Replaces editedChapters with the incoming chapters, and enters edit mode
+     * if not already editing. Sets initialChapters so Cancel reverts correctly.
+     */
+    const handleApplyAudnexus = useCallback(
+      (chapters: ChapterInput[]) => {
+        const newEdited = toEditedChapters(chapters);
+        setEditedChapters(newEdited);
+        if (!isEditing) {
+          setInitialChapters(
+            toEditedChapters(chaptersToInputArray(chaptersQuery.data ?? [])),
+          );
+          editInitializedRef.current = true;
+          onEditingChange(true);
+        }
+      },
+      [isEditing, chaptersQuery.data, onEditingChange],
+    );
 
     /**
      * Handles clicking the uncovered pages warning for page-based files.
@@ -725,16 +758,39 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             </Button>
           )}
 
-          {/* Add Chapter button for M4B */}
+          {/* Add Chapter + Fetch from Audible buttons for M4B */}
           {isM4b && (
-            <Button
-              className="mt-2"
-              onClick={handleAddChapterM4B}
-              type="button"
-              variant="outline"
-            >
-              Add Chapter
-            </Button>
+            <>
+              <Button
+                className="mt-2"
+                onClick={handleAddChapterM4B}
+                type="button"
+                variant="outline"
+              >
+                Add Chapter
+              </Button>
+              <Button
+                className="mt-2 ml-2"
+                onClick={() => setIsFetchDialogOpen(true)}
+                type="button"
+                variant="outline"
+              >
+                Fetch from Audible
+              </Button>
+            </>
+          )}
+
+          {/* Fetch from Audible dialog (M4B only) */}
+          {isM4b && (
+            <FetchChaptersDialog
+              editedChapters={stripEditKeys(editedChapters)}
+              fileDurationMs={(file.audiobook_duration_seconds ?? 0) * 1000}
+              hasChanges={hasChanges}
+              initialAsin={audibleAsin}
+              onApply={handleApplyAudnexus}
+              onOpenChange={setIsFetchDialogOpen}
+              open={isFetchDialogOpen}
+            />
           )}
         </div>
       );
@@ -771,18 +827,38 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       }
 
       return (
-        <div className="py-8 text-center">
-          <p className="text-muted-foreground">No chapters</p>
-          {canAddChapters && (
-            <button
-              className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
-              onClick={handleAddChapterFromEmpty}
-              type="button"
-            >
-              Add Chapter
-            </button>
+        <>
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">No chapters</p>
+            {canAddChapters && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Button onClick={handleAddChapterFromEmpty} type="button">
+                  Add Chapter
+                </Button>
+                {file.file_type === FileTypeM4B && (
+                  <Button
+                    onClick={() => setIsFetchDialogOpen(true)}
+                    type="button"
+                    variant="outline"
+                  >
+                    Fetch from Audible
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {file.file_type === FileTypeM4B && (
+            <FetchChaptersDialog
+              editedChapters={chaptersToInputArray(chaptersQuery.data ?? [])}
+              fileDurationMs={(file.audiobook_duration_seconds ?? 0) * 1000}
+              hasChanges={hasChanges}
+              initialAsin={audibleAsin}
+              onApply={handleApplyAudnexus}
+              onOpenChange={setIsFetchDialogOpen}
+              open={isFetchDialogOpen}
+            />
           )}
-        </div>
+        </>
       );
     }
 

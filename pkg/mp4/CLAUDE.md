@@ -481,3 +481,7 @@ const handleAudioPlay = (timestampMs: number) => {
 See `app/components/files/FileChaptersTab.tsx`:
 - `handleAudioPlay` - Playback with timeout handling
 - `handleAudioStop` - Cleanup and state reset
+
+## External chapter source
+
+For user-initiated chapter enrichment on M4B files, see `pkg/audnexus/` — a single-endpoint integration that fetches chapter titles and timestamps from Audible via the Audnexus public API. The M4B chapter edit UI exposes a "Fetch from Audible" button that stages the fetched data into the edit form without persisting until the user clicks Save.

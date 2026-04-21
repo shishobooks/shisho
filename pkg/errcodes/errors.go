@@ -121,6 +121,24 @@ func Unauthorized(msg string) error {
 	}
 }
 
+// BadGateway returns a 502 error with the given message.
+func BadGateway(msg string) error {
+	return &Error{
+		http.StatusBadGateway,
+		msg,
+		"bad_gateway",
+	}
+}
+
+// GatewayTimeout returns a 504 error with the given message.
+func GatewayTimeout(msg string) error {
+	return &Error{
+		http.StatusGatewayTimeout,
+		msg,
+		"gateway_timeout",
+	}
+}
+
 // Conflict returns a 409 error with the given message.
 func Conflict(msg string) error {
 	return &Error{
