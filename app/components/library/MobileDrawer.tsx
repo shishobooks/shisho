@@ -413,7 +413,7 @@ const MobileDrawer = () => {
           )}
 
           {/* Admin Navigation (when on /settings routes) */}
-          {isAdminContext && adminNavItems.length > 0 && (
+          {isAdminContext && (
             <nav className="py-2 border-b border-border">
               {adminNavItems
                 .filter((item) => item.show)
