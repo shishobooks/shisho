@@ -76,7 +76,7 @@ const AdminSettings = () => {
         </p>
       </div>
 
-      <div className="grid gap-6 max-w-2xl">
+      <div className="grid gap-6">
         {/* Database Settings */}
         <div className="border border-border rounded-md p-4 md:p-6">
           <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">

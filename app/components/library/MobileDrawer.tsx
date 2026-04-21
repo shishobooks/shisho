@@ -1,28 +1,26 @@
 import {
-  Book,
-  Bookmark,
   Check,
   ChevronRight,
   KeyRound,
-  Layers,
   Library,
   List,
   LogOut,
   Settings,
-  Tags,
   UserCog,
-  Users,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/libraries/utils";
+
+import { useLibraryNavItems } from "./useLibraryNavItems";
 
 interface NavItemProps {
   to: string;
@@ -125,60 +123,13 @@ const MobileDrawer = () => {
   );
 
   // Library navigation items (when in library context)
-  const basePath = libraryId ? `/libraries/${libraryId}` : "";
-  const libraryNavItems = libraryId
-    ? [
-        {
-          to: basePath,
-          icon: <Book className="h-5 w-5" />,
-          label: "Books",
-          isActive:
-            location.pathname === basePath ||
-            (location.pathname.startsWith(`${basePath}/books`) &&
-              !location.pathname.includes("/series") &&
-              !location.pathname.includes("/people") &&
-              !location.pathname.includes("/genres") &&
-              !location.pathname.includes("/tags") &&
-              !location.pathname.includes("/settings")),
-          show: true,
-        },
-        {
-          to: `${basePath}/series`,
-          icon: <Layers className="h-5 w-5" />,
-          label: "Series",
-          isActive: location.pathname.startsWith(`${basePath}/series`),
-          show: true,
-        },
-        {
-          to: `${basePath}/people`,
-          icon: <Users className="h-5 w-5" />,
-          label: "People",
-          isActive: location.pathname.startsWith(`${basePath}/people`),
-          show: true,
-        },
-        {
-          to: `${basePath}/genres`,
-          icon: <Bookmark className="h-5 w-5" />,
-          label: "Genres",
-          isActive: location.pathname.startsWith(`${basePath}/genres`),
-          show: true,
-        },
-        {
-          to: `${basePath}/tags`,
-          icon: <Tags className="h-5 w-5" />,
-          label: "Tags",
-          isActive: location.pathname.startsWith(`${basePath}/tags`),
-          show: true,
-        },
-        {
-          to: `${basePath}/settings`,
-          icon: <Settings className="h-5 w-5" />,
-          label: "Library Settings",
-          isActive: location.pathname.startsWith(`${basePath}/settings`),
-          show: hasPermission("libraries", "write"),
-        },
-      ]
-    : [];
+  const libraryNavDefs = useLibraryNavItems();
+  const visibleLibraryItems = (libraryNavDefs ?? []).filter(
+    (item) => item.show,
+  );
+
+  const isAdminContext = location.pathname.startsWith("/settings");
+  const visibleAdminItems = useAdminNavItems().filter((item) => item.show);
 
   // Check if user has any admin permissions
   const canAccessAdmin =
@@ -341,20 +292,34 @@ const MobileDrawer = () => {
           )}
 
           {/* Library Navigation (when in library context) */}
-          {isLibraryContext && libraryNavItems.length > 0 && (
+          {isLibraryContext && visibleLibraryItems.length > 0 && (
             <nav className="py-2 border-b border-border">
-              {libraryNavItems
-                .filter((item) => item.show)
-                .map((item) => (
-                  <NavItem
-                    icon={item.icon}
-                    isActive={item.isActive}
-                    key={item.to}
-                    label={item.label}
-                    onClick={close}
-                    to={item.to}
-                  />
-                ))}
+              {visibleLibraryItems.map((item) => (
+                <NavItem
+                  icon={<item.Icon className="h-5 w-5" />}
+                  isActive={item.isActive}
+                  key={item.to}
+                  label={item.drawerLabel ?? item.label}
+                  onClick={close}
+                  to={item.to}
+                />
+              ))}
+            </nav>
+          )}
+
+          {/* Admin Navigation (when on /settings routes) */}
+          {isAdminContext && visibleAdminItems.length > 0 && (
+            <nav className="py-2 border-b border-border">
+              {visibleAdminItems.map((item) => (
+                <NavItem
+                  icon={<item.Icon className="h-5 w-5" />}
+                  isActive={item.isActive}
+                  key={item.to}
+                  label={item.label}
+                  onClick={close}
+                  to={item.to}
+                />
+              ))}
             </nav>
           )}
 

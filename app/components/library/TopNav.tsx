@@ -1,31 +1,18 @@
-import {
-  KeyRound,
-  List,
-  LogOut,
-  Menu,
-  Search,
-  Settings,
-  User,
-  UserCog,
-  X,
-} from "lucide-react";
-import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { Menu, Search, Settings, X } from "lucide-react";
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
 
+import {
+  TOP_NAV_INNER,
+  TOP_NAV_ROW,
+  TOP_NAV_WRAPPER,
+} from "@/components/layout/topNavClasses";
+import UserMenu from "@/components/layout/UserMenu";
 import GlobalSearch from "@/components/library/GlobalSearch";
 import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -38,8 +25,7 @@ import { cn } from "@/libraries/utils";
 
 const TopNav = () => {
   const { libraryId } = useParams();
-  const navigate = useNavigate();
-  const { user, logout, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const { toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -52,20 +38,10 @@ const TopNav = () => {
 
   const canResync = hasPermission("jobs", "write");
 
-  const handleLogout = useCallback(async () => {
-    try {
-      await logout();
-      toast.success("Signed out successfully");
-      navigate("/login");
-    } catch {
-      toast.error("Failed to sign out");
-    }
-  }, [logout, navigate]);
-
   return (
-    <div className="border-b border-border bg-background dark:bg-neutral-900 sticky top-0 z-30">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <div className="flex items-center justify-between h-14 md:h-16">
+    <div className={TOP_NAV_WRAPPER}>
+      <div className={TOP_NAV_INNER}>
+        <div className={TOP_NAV_ROW}>
           {/* Left section */}
           <div className="flex items-center gap-2 md:gap-8">
             {/* Mobile hamburger menu */}
@@ -141,46 +117,7 @@ const TopNav = () => {
                 </Tooltip>
               </TooltipProvider>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="h-9 w-9" size="icon" variant="ghost">
-                  <User className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col">
-                    <span>{user?.username}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {user?.role_name}
-                    </span>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/lists">
-                    <List className="h-4 w-4" />
-                    Lists
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/user/security">
-                    <KeyRound className="h-4 w-4" />
-                    Security
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/user/settings">
-                    <UserCog className="h-4 w-4" />
-                    User Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <UserMenu />
           </div>
         </div>
 

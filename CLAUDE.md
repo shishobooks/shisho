@@ -29,6 +29,7 @@ Project-specific conventions are documented in `CLAUDE.md` files within each sub
 |----------|--------|
 | `pkg/CLAUDE.md` | Go backend: Echo handlers, Bun ORM, workers |
 | `app/CLAUDE.md` | React frontend: Tanstack Query, components, UI patterns |
+| `app/components/layout/CLAUDE.md` | Shared layout primitives: Sidebar, UserMenu, top-nav class constants |
 | `pkg/plugins/CLAUDE.md` | Plugin system: Goja runtime, hooks, host APIs, manifests |
 | `pkg/epub/CLAUDE.md` | EPUB format: OPF, Dublin Core, parsing/generation |
 | `pkg/cbz/CLAUDE.md` | CBZ format: ComicInfo.xml, creator roles, chapter detection |

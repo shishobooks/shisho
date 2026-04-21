@@ -1,11 +1,9 @@
 import Sidebar, { type SidebarItem } from "@/components/layout/Sidebar";
 
-import { useLibraryNavItems } from "./useLibraryNavItems";
+import { useAdminNavItems } from "./useAdminNavItems";
 
-const LibrarySidebar = () => {
-  const navItems = useLibraryNavItems();
-
-  if (!navItems) return null;
+const AdminSidebar = () => {
+  const navItems = useAdminNavItems();
 
   const items: SidebarItem[] = navItems.map((item) => ({
     to: item.to,
@@ -18,4 +16,4 @@ const LibrarySidebar = () => {
   return <Sidebar items={items} />;
 };
 
-export default LibrarySidebar;
+export default AdminSidebar;

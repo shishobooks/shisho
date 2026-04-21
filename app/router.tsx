@@ -49,166 +49,169 @@ export const router = createBrowserRouter([
     path: "/setup",
     Component: Setup,
   },
-  // Settings routes with dedicated layout (formerly admin)
-  {
-    path: "/settings",
-    element: (
-      <ProtectedRoute>
-        <AdminLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminSettings />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "server",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminSettings />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "libraries",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "libraries", operation: "read" }}
-          >
-            <AdminLibraries />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "users",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "users", operation: "read" }}
-          >
-            <AdminUsers />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "users/create",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "users", operation: "write" }}
-          >
-            <CreateUser />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "users/:id",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "users", operation: "read" }}
-          >
-            <UserDetail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "jobs",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "jobs", operation: "read" }}
-          >
-            <AdminJobs />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "jobs/:id",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "jobs", operation: "read" }}
-          >
-            <JobDetail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "plugins",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminPlugins />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "plugins/installed",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminPlugins />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "plugins/discover",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminPlugins />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "plugins/browse",
-        element: <Navigate replace to="/settings/plugins/discover" />,
-      },
-      {
-        path: "plugins/order",
-        element: <Navigate replace to="/settings/plugins?advanced=order" />,
-      },
-      {
-        path: "plugins/repositories",
-        element: (
-          <Navigate replace to="/settings/plugins?advanced=repositories" />
-        ),
-      },
-      {
-        path: "plugins/:scope/:id",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <PluginDetail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "logs",
-        element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "config", operation: "read" }}
-          >
-            <AdminLogs />
-          </ProtectedRoute>
-        ),
-      },
-    ],
-  },
   // Protected routes (require authentication)
   {
     path: "/",
     Component: Root,
     children: [
+      // Settings routes with dedicated layout (formerly admin)
+      {
+        path: "settings",
+        element: (
+          <ProtectedRoute>
+            <AdminLayout />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminSettings />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "server",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminSettings />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "libraries",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{
+                  resource: "libraries",
+                  operation: "read",
+                }}
+              >
+                <AdminLibraries />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "users",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "users", operation: "read" }}
+              >
+                <AdminUsers />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "users/create",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "users", operation: "write" }}
+              >
+                <CreateUser />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "users/:id",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "users", operation: "read" }}
+              >
+                <UserDetail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "jobs",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "jobs", operation: "read" }}
+              >
+                <AdminJobs />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "jobs/:id",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "jobs", operation: "read" }}
+              >
+                <JobDetail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "plugins",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminPlugins />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "plugins/installed",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminPlugins />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "plugins/discover",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminPlugins />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "plugins/browse",
+            element: <Navigate replace to="/settings/plugins/discover" />,
+          },
+          {
+            path: "plugins/order",
+            element: <Navigate replace to="/settings/plugins?advanced=order" />,
+          },
+          {
+            path: "plugins/repositories",
+            element: (
+              <Navigate replace to="/settings/plugins?advanced=repositories" />
+            ),
+          },
+          {
+            path: "plugins/:scope/:id",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <PluginDetail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "logs",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminLogs />
+              </ProtectedRoute>
+            ),
+          },
+        ],
+      },
       {
         path: "",
         element: (
