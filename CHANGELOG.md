@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-04-21
+
+### Features
+- Fetch M4B chapters from Audible via Audnexus (#123)
+- Remove in-app back buttons (#122)
+- Unify admin and library sidebars and top nav (#121)
+- Let plugin logos fill their rounded tile (#120)
+- Paginate eReader AuthorBooks, SeriesBooks, and LibrarySearch (#116)
+- Initialize ListIdentifierTypes slice with make for JSON safety (#113)
+- Sort relative imports last via prettier (#111)
+
+### Bug Fixes
+- Select newest plugin update via semver comparison (#118)
+- Show "Author not found" in eReader AuthorBooks 404 (#117)
+- Library-scope RetrievePerson in eReader AuthorBooks (#114)
+
+### Documentation
+- Title-case Gallery Sort and reorder before Advanced (#112)
+
+### Testing
+- Backend test infra + E2E specs for plugin install/update/uninstall flows (#119)
+- Cover PluginRow stopPropagation on action click (#115)
+
+
 ## [0.0.32] - 2026-04-20
 
 ### Features
