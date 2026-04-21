@@ -80,7 +80,7 @@ func TestParse_WithCover(t *testing.T) {
 	assert.NotEmpty(t, metadata.CoverMimeType, "Cover mime type should be set")
 }
 
-// TestParse_SeriesExtraction tests series name and number parsing from album field.
+// TestParse_SeriesExtraction tests series name and number parsing via the writer's new atom layout.
 func TestParse_SeriesExtraction(t *testing.T) {
 	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
@@ -89,9 +89,18 @@ func TestParse_SeriesExtraction(t *testing.T) {
 	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
 		Title:    "Book Title",
 		Artist:   "Author",
-		Album:    "Dungeon Crawler Carl #7",
 		Duration: 1.0,
 	})
+
+	// Round-trip through the writer so we exercise the real atom layout.
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	num := 7.0
+	meta.Series = "Dungeon Crawler Carl"
+	meta.SeriesNumber = &num
+	// Mirror what the generator does: ©alb = book title.
+	meta.Album = meta.Title
+	require.NoError(t, mp4.Write(path, meta, mp4.WriteOptions{}))
 
 	metadata, err := mp4.Parse(path)
 	require.NoError(t, err)
@@ -118,6 +127,8 @@ func TestParse_GroupingExtraction(t *testing.T) {
 	// Write a file with series set; the new writer emits ©grp.
 	meta, err := mp4.ParseFull(path)
 	require.NoError(t, err)
+	// Simulate what the generator does: set album = title before writing.
+	meta.Album = meta.Title
 	num := 7.0
 	meta.Series = "Dungeon Crawler Carl"
 	meta.SeriesNumber = &num
@@ -243,47 +254,128 @@ func TestWrite_NarratorAtoms(t *testing.T) {
 	assert.Equal(t, "Jane Doe", modified.Narrators[1])
 }
 
-// TestWrite_SeriesFormatting tests album formatting from series info.
-func TestWrite_SeriesFormatting(t *testing.T) {
+// TestWrite_SeriesAtoms tests that series is written to ©grp and to the
+// Audible-style SERIES / SERIES-PART freeform atoms, and that ©alb is the
+// book title (not the series).
+func TestWrite_SeriesAtoms(t *testing.T) {
 	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 
 	tests := []struct {
-		name          string
-		series        string
-		seriesNumber  *float64
-		expectedAlbum string
+		name         string
+		series       string
+		seriesNumber *float64
+		expectedPart string
 	}{
-		{"integer number", "Test Series", pointerutil.Float64(1), "Test Series #1"},
-		{"decimal number", "Test Series", pointerutil.Float64(1.5), "Test Series #1.5"},
-		{"no number", "Test Series", nil, "Test Series"},
+		{"integer number", "Test Series", pointerutil.Float64(1), "1"},
+		{"decimal number", "Test Series", pointerutil.Float64(1.5), "1.5"},
+		{"no number", "Test Series", nil, ""},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := testgen.TempDir(t, "mp4-series-format-*")
+			t.Parallel()
+			dir := testgen.TempDir(t, "mp4-series-atoms-*")
 
-			// Generate M4B
 			path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
-				Title:    "Series Test",
+				Title:    "Book Title",
 				Duration: 1.0,
 			})
 
-			// Parse, set series, and write
 			meta, err := mp4.ParseFull(path)
 			require.NoError(t, err)
+			// Simulate what the generator does: set album = title before writing.
+			meta.Album = meta.Title
 			meta.Series = tc.series
 			meta.SeriesNumber = tc.seriesNumber
 
 			err = mp4.Write(path, meta, mp4.WriteOptions{})
 			require.NoError(t, err)
 
-			// Re-read and verify album was formatted correctly
 			modified, err := mp4.ParseFull(path)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expectedAlbum, modified.Album)
+
+			// Album must be the book title, never the series.
+			assert.Equal(t, "Book Title", modified.Album)
+
+			// Series round-trips via freeform SERIES + SERIES-PART.
+			assert.Equal(t, tc.series, modified.Series)
+			if tc.seriesNumber != nil {
+				require.NotNil(t, modified.SeriesNumber)
+				assert.InDelta(t, *tc.seriesNumber, *modified.SeriesNumber, 0.001)
+			} else {
+				assert.Nil(t, modified.SeriesNumber)
+			}
+
+			// Raw freeform map should contain the Audible-style atoms.
+			require.NotNil(t, modified.Freeform)
+			assert.Equal(t, tc.series, modified.Freeform["com.apple.iTunes:SERIES"])
+			if tc.expectedPart == "" {
+				_, hasPart := modified.Freeform["com.apple.iTunes:SERIES-PART"]
+				assert.False(t, hasPart, "SERIES-PART should be absent when no number")
+			} else {
+				assert.Equal(t, tc.expectedPart, modified.Freeform["com.apple.iTunes:SERIES-PART"])
+			}
 		})
 	}
+}
+
+// TestWrite_AlbumIsTitleWhenNoSeries verifies that ©alb equals the title
+// even when the book has no series.
+func TestWrite_AlbumIsTitleWhenNoSeries(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-album-title-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Yesteryear",
+		Duration: 1.0,
+	})
+
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	// No series set.
+	meta.Series = ""
+	meta.SeriesNumber = nil
+	// Simulate what the generator does: force album to title.
+	meta.Album = meta.Title
+
+	err = mp4.Write(path, meta, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	modified, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Yesteryear", modified.Album)
+	assert.Empty(t, modified.Series)
+	_, hasSeries := modified.Freeform["com.apple.iTunes:SERIES"]
+	assert.False(t, hasSeries)
+}
+
+// TestWrite_ForcesAudiobookStik verifies that stik is emitted when set to 2,
+// even if the source had no stik atom. This is the writer-level guarantee;
+// the generator layer (pkg/filegen/m4b.go) is what forces MediaType=2.
+func TestWrite_ForcesAudiobookStik(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-stik-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Stik Test",
+		Duration: 1.0,
+	})
+
+	// Baseline: ffmpeg-generated file has no stik (MediaType == 0).
+	baseline, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	require.Equal(t, 0, baseline.MediaType)
+
+	baseline.MediaType = 2
+	err = mp4.Write(path, baseline, mp4.WriteOptions{})
+	require.NoError(t, err)
+
+	modified, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, modified.MediaType)
 }
 
 // TestWriteToFile_AtomicWrite tests that WriteToFile creates a new file atomically.

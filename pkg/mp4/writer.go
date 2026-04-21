@@ -296,13 +296,25 @@ func buildIlst(metadata *Metadata) []byte {
 		content.Write(buildItunesTextAtom(AtomArtist, joinAuthorNames(metadata.Authors)))
 	}
 
-	// Album: format from series info if available, otherwise use existing album
-	album := metadata.Album
-	if metadata.Series != "" {
-		album = formatAlbumFromSeries(metadata.Series, metadata.SeriesNumber)
+	// Album: always the book title. Audiobook players (Bound, Overcast, etc.)
+	// commonly use Album as the canonical book-title atom; leaving it empty or
+	// putting series info here makes those players show "Unknown". Series info
+	// goes into ©grp and the Audible-style SERIES / SERIES-PART freeforms
+	// below instead.
+	if metadata.Album != "" {
+		content.Write(buildItunesTextAtom(AtomAlbum, metadata.Album))
 	}
-	if album != "" {
-		content.Write(buildItunesTextAtom(AtomAlbum, album))
+
+	// Series info: write to ©grp (legacy/compatibility) and to the Audible-
+	// style freeform atoms com.apple.iTunes:SERIES + SERIES-PART (preferred
+	// modern source, used by Audible, Tone, Audiobookshelf).
+	if metadata.Series != "" {
+		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber)
+		content.Write(buildItunesTextAtom(AtomGrouping, grouping))
+		content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES", metadata.Series))
+		if metadata.SeriesNumber != nil {
+			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", formatSeriesNumber(*metadata.SeriesNumber)))
+		}
 	}
 
 	// Narrators: write to both ©nrt (dedicated narrator) and ©cmp (composer) for compatibility
@@ -353,6 +365,8 @@ func buildIlst(metadata *Metadata) []byte {
 		"com.shisho:tags":               true,
 		"com.apple.iTunes:ASIN":         true,
 		"com.pilabor.tone:AUDIBLE_ASIN": true,
+		"com.apple.iTunes:SERIES":       true,
+		"com.apple.iTunes:SERIES-PART":  true,
 	}
 	for key, value := range metadata.Freeform {
 		if value == "" || explicitFreeformKeys[key] {
@@ -497,19 +511,23 @@ func splitFreeformKey(key string) (namespace, name string, ok bool) {
 	return key[:idx], key[idx+1:], true
 }
 
-// formatAlbumFromSeries formats series info as album: "Series Name #N".
-func formatAlbumFromSeries(series string, number *float64) string {
+// formatSeriesGrouping formats series info as a grouping string: "Series Name #N".
+func formatSeriesGrouping(series string, number *float64) string {
 	if series == "" {
 		return ""
 	}
 	if number == nil {
 		return series
 	}
-	// Format: "Series Name #N" (integer if whole, decimal otherwise)
-	if *number == float64(int(*number)) {
-		return series + " #" + strconv.Itoa(int(*number))
+	return series + " #" + formatSeriesNumber(*number)
+}
+
+// formatSeriesNumber formats a series number as integer when whole, decimal otherwise.
+func formatSeriesNumber(num float64) string {
+	if num == float64(int(num)) {
+		return strconv.Itoa(int(num))
 	}
-	return series + " #" + strconv.FormatFloat(*number, 'f', -1, 64)
+	return strconv.FormatFloat(num, 'f', -1, 64)
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.
