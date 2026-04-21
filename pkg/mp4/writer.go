@@ -358,15 +358,20 @@ func buildIlst(metadata *Metadata) []byte {
 	// over from the source file via src.Freeform.
 	//
 	// Keys that are already written by an explicit branch above are skipped to
-	// avoid duplicate atoms.
+	// avoid duplicate atoms. SERIES/SERIES-PART are only excluded when
+	// metadata.Series is set (the Series branch already wrote them); when
+	// metadata.Series is empty, we allow passthrough so existing freeform values
+	// from the source file survive the round-trip.
 	explicitFreeformKeys := map[string]bool{
 		"com.apple.iTunes:SUBTITLE":     true,
 		"com.pilabor.tone:SUBTITLE":     true,
 		"com.shisho:tags":               true,
 		"com.apple.iTunes:ASIN":         true,
 		"com.pilabor.tone:AUDIBLE_ASIN": true,
-		"com.apple.iTunes:SERIES":       true,
-		"com.apple.iTunes:SERIES-PART":  true,
+	}
+	if metadata.Series != "" {
+		explicitFreeformKeys["com.apple.iTunes:SERIES"] = true
+		explicitFreeformKeys["com.apple.iTunes:SERIES-PART"] = true
 	}
 	for key, value := range metadata.Freeform {
 		if value == "" || explicitFreeformKeys[key] {

@@ -68,6 +68,10 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		// From book/file model
 		Title:    title,
 		Subtitle: "",
+		// Album tracks the book title. Audiobook players commonly use ©alb as
+		// the canonical "book title" atom, so we always emit it. Series info
+		// is written to ©grp + SERIES/SERIES-PART freeforms by the writer.
+		Album: title,
 
 		// Preserve from source (will be overwritten if we have new values)
 		Description: src.Description,
@@ -78,12 +82,15 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		Duration:    src.Duration,
 		Bitrate:     src.Bitrate,
 		Chapters:    src.Chapters,
-		MediaType:   src.MediaType,
 		Freeform:    src.Freeform,
 		Publisher:   src.Publisher,
 		Imprint:     src.Imprint,
 		URL:         src.URL,
 		ReleaseDate: src.ReleaseDate,
+
+		// Always tag as audiobook. Some source files have no stik atom,
+		// which causes audiobook players to treat them as generic music.
+		MediaType: 2,
 
 		// Preserve cover from source initially (may be replaced below)
 		CoverData:     src.CoverData,
@@ -98,9 +105,11 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		meta.Chapters = convertModelChaptersToMP4(file.Chapters, src.Duration)
 	}
 
-	// Set description from book if available
+	// Set description from book if available. Mirror into ©cmt (Comment) too
+	// so audiobook taggers/players that prefer the comment field see it.
 	if book.Description != nil && *book.Description != "" {
 		meta.Description = *book.Description
+		meta.Comment = *book.Description
 	}
 
 	// Set publisher from file if available

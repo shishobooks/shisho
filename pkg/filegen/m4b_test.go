@@ -130,7 +130,8 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Second Narrator", meta.Narrators[1])
 	})
 
-	t.Run("formats series as album", func(t *testing.T) {
+	t.Run("writes series to grouping and freeform atoms", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -161,11 +162,16 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Test Series", meta.Series)
 		require.NotNil(t, meta.SeriesNumber)
 		assert.InDelta(t, 3.0, *meta.SeriesNumber, 0.001)
-		// Album should be formatted as "Series Name #N"
-		assert.Equal(t, "Test Series #3", meta.Album)
+		// Album is the title, not the series.
+		assert.Equal(t, "Test Book", meta.Album)
+		// Audible-style freeform atoms are set.
+		require.NotNil(t, meta.Freeform)
+		assert.Equal(t, "Test Series", meta.Freeform["com.apple.iTunes:SERIES"])
+		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
 	})
 
 	t.Run("handles decimal series number", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -193,8 +199,107 @@ func TestM4BGenerator_Generate(t *testing.T) {
 
 		meta, err := mp4.ParseFull(destPath)
 		require.NoError(t, err)
-		// Album should be formatted with decimal
-		assert.Equal(t, "Series #1.5", meta.Album)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 1.5, *meta.SeriesNumber, 0.001)
+		assert.Equal(t, "1.5", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+		// Album is still the title.
+		assert.Equal(t, "Test Book", meta.Album)
+	})
+
+	t.Run("always tags as audiobook (stik=2)", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// ffmpeg doesn't emit a stik atom by default, so the source file
+		// has MediaType == 0.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Stik Test",
+			Duration: 1.0,
+		})
+		srcMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		require.Equal(t, 0, srcMeta.MediaType, "precondition: source file has no stik")
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Stik Test",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err = gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, 2, meta.MediaType)
+	})
+
+	t.Run("writes description to both desc and ©cmt", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Desc Test",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		desc := "A twisty novel about a woman out of time."
+		book := &models.Book{
+			Title:       "Desc Test",
+			Description: &desc,
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, desc, meta.Description)
+		assert.Equal(t, desc, meta.Comment)
+	})
+
+	t.Run("album equals title when no series", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Yesteryear",
+			Duration: 1.0,
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		book := &models.Book{
+			Title: "Yesteryear",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Caro Claire Burke"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, "Yesteryear", meta.Album)
+		assert.Empty(t, meta.Series)
 	})
 
 	t.Run("replaces cover image", func(t *testing.T) {
