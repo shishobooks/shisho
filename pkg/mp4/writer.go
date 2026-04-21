@@ -359,8 +359,9 @@ func buildIlst(metadata *Metadata) []byte {
 
 	// Write any remaining freeform atoms from the Freeform map. This preserves
 	// atoms that aren't explicitly handled above (e.g., com.pilabor.tone:LANGUAGE,
-	// com.pilabor.tone:ABRIDGED, com.apple.iTunes:SERIES) plus anything carried
-	// over from the source file via src.Freeform.
+	// com.pilabor.tone:ABRIDGED) plus anything carried over from the source file
+	// via src.Freeform. com.apple.iTunes:SERIES/SERIES-PART also flow through here
+	// when metadata.Series is empty (i.e., no series in the DB).
 	//
 	// Keys that are already written by an explicit branch above are skipped to
 	// avoid duplicate atoms. SERIES/SERIES-PART are only excluded when
