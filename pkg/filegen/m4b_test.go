@@ -24,6 +24,7 @@ func TestM4BGenerator_SupportedType(t *testing.T) {
 func TestM4BGenerator_Generate(t *testing.T) {
 	t.Parallel()
 	t.Run("modifies title and authors", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -60,6 +61,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("modifies multiple authors in sort order", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -94,6 +96,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 	})
 
 	t.Run("modifies narrators", func(t *testing.T) {
+		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
@@ -1124,5 +1127,59 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "My Series", meta.Freeform["com.apple.iTunes:SERIES"])
 		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+	})
+
+	t.Run("overrides stale SERIES freeforms from source", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// Step 1: generate a base M4B.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Test Book",
+			Duration: 1.0,
+		})
+
+		// Step 2: seed the source with stale SERIES/SERIES-PART freeform atoms
+		// (as if an older version of Shisho or another tagger wrote them).
+		srcMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		if srcMeta.Freeform == nil {
+			srcMeta.Freeform = map[string]string{}
+		}
+		srcMeta.Freeform["com.apple.iTunes:SERIES"] = "Old Series"
+		srcMeta.Freeform["com.apple.iTunes:SERIES-PART"] = "99"
+		require.NoError(t, mp4.Write(srcPath, srcMeta, mp4.WriteOptions{}))
+
+		// Sanity check: source now has the stale values.
+		staleMeta, err := mp4.ParseFull(srcPath)
+		require.NoError(t, err)
+		require.Equal(t, "Old Series", staleMeta.Freeform["com.apple.iTunes:SERIES"])
+
+		// Step 3: regenerate with a DB book whose series is different.
+		destPath := filepath.Join(dir, "dest.m4b")
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+			BookSeries: []*models.BookSeries{
+				{SortOrder: 0, SeriesNumber: pointerutil.Float64(2), Series: &models.Series{Name: "New Series"}},
+			},
+		}
+		file := &models.File{FileType: models.FileTypeM4B}
+
+		gen := &M4BGenerator{}
+		err = gen.Generate(context.Background(), srcPath, destPath, book, file)
+		require.NoError(t, err)
+
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		// DB wins: output reflects the new series, not the stale source values.
+		assert.Equal(t, "New Series", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		assert.InDelta(t, 2.0, *meta.SeriesNumber, 0.001)
+		assert.Equal(t, "New Series", meta.Freeform["com.apple.iTunes:SERIES"])
+		assert.Equal(t, "2", meta.Freeform["com.apple.iTunes:SERIES-PART"])
 	})
 }
