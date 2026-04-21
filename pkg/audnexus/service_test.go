@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,4 +86,61 @@ func TestService_GetChapters_HappyPath(t *testing.T) {
 	assert.Equal(t, "Prelude", resp.Chapters[0].Title)
 	assert.Equal(t, int64(0), resp.Chapters[0].StartOffsetMs)
 	assert.Equal(t, int64(272000), resp.Chapters[0].LengthMs)
+}
+
+func TestService_GetChapters_NotFound(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.Error(t, err)
+	assert.Equal(t, ErrCodeNotFound, AsAudnexusError(err).Code)
+}
+
+func TestService_GetChapters_UpstreamError_5xx(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.Error(t, err)
+	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
+}
+
+func TestService_GetChapters_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not json`))
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.Error(t, err)
+	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
+}
+
+func TestService_GetChapters_Timeout(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{
+		BaseURL:    upstream.URL,
+		HTTPClient: &http.Client{Timeout: 50 * time.Millisecond},
+	})
+	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.Error(t, err)
+	assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
 }
