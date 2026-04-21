@@ -90,3 +90,31 @@ func asErrcodesError(t *testing.T, err error) *errcodes.Error {
 	}
 	return ec
 }
+
+// The frontend switches on errcodes.Error.Code. Confirm each service error
+// preserves its audnexus-specific slug end-to-end, not a generic HTTP family
+// code.
+func TestMapServiceError_PreservesAudnexusCode(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		err      error
+		wantCode string
+		wantHTTP int
+	}{
+		{"invalid_asin", newErr(ErrCodeInvalidASIN, "x"), "invalid_asin", http.StatusBadRequest},
+		{"not_found", newErr(ErrCodeNotFound, "x"), "not_found", http.StatusNotFound},
+		{"timeout", newErr(ErrCodeTimeout, "x"), "timeout", http.StatusGatewayTimeout},
+		{"upstream_error", newErr(ErrCodeUpstreamError, "x"), "upstream_error", http.StatusBadGateway},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mapped := mapServiceError(tc.err)
+			ec := asErrcodesError(t, mapped)
+			assert.Equal(t, tc.wantCode, ec.Code, "Code")
+			assert.Equal(t, tc.wantHTTP, ec.HTTPCode, "HTTPCode")
+		})
+	}
+}

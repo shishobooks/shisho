@@ -29,26 +29,41 @@ func (h *handler) getChapters(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
-// mapServiceError converts an audnexus *Error into an errcodes response with
-// the right HTTP status. Non-typed errors bubble up as 502 (upstream_error);
-// they aren't expected in practice, so log when one shows up so future
-// regressions surface.
+// mapServiceError converts an audnexus *Error into an errcodes response that
+// carries the audnexus-specific code as `Code` (so the frontend can map it to
+// a user-facing message) alongside the appropriate HTTP status.
+//
+// The generic errcodes helpers (BadRequest, NotFound, etc.) would set Code to
+// the HTTP family (e.g. "bad_request") and stuff the audnexus slug in
+// Message, which broke the frontend's code-based switch. Building the
+// errcodes.Error directly keeps the audnexus slug in Code end-to-end.
+//
+// Non-typed errors bubble up as 502 (upstream_error); they aren't expected in
+// practice, so log when one shows up so future regressions surface.
 func mapServiceError(err error) error {
 	e := AsAudnexusError(err)
 	if e == nil {
 		slog.Warn("audnexus: unexpected non-typed service error", "err", err.Error())
-		return errcodes.BadGateway(string(ErrCodeUpstreamError))
+		return &errcodes.Error{
+			HTTPCode: http.StatusBadGateway,
+			Message:  string(ErrCodeUpstreamError),
+			Code:     string(ErrCodeUpstreamError),
+		}
 	}
+	status := http.StatusBadGateway
 	switch e.Code {
 	case ErrCodeInvalidASIN:
-		return errcodes.BadRequest(string(e.Code))
+		status = http.StatusBadRequest
 	case ErrCodeNotFound:
-		return errcodes.NotFound(string(e.Code))
+		status = http.StatusNotFound
 	case ErrCodeTimeout:
-		return errcodes.GatewayTimeout(string(e.Code))
+		status = http.StatusGatewayTimeout
 	case ErrCodeUpstreamError:
-		return errcodes.BadGateway(string(e.Code))
-	default:
-		return errcodes.BadGateway(string(e.Code))
+		status = http.StatusBadGateway
+	}
+	return &errcodes.Error{
+		HTTPCode: status,
+		Message:  string(e.Code),
+		Code:     string(e.Code),
 	}
 }
