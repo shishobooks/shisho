@@ -2,6 +2,8 @@ package audnexus
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,4 +44,45 @@ func TestService_GetChapters_NormalizesASINToUppercase(t *testing.T) {
 	if e := AsAudnexusError(err); e != nil {
 		assert.NotEqual(t, ErrCodeInvalidASIN, e.Code, "lowercase ASIN should normalize to valid")
 	}
+}
+
+func TestService_GetChapters_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/books/B0036UC2LO/chapters", r.URL.Path)
+		assert.Equal(t, "Shisho/test", r.Header.Get("User-Agent"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"asin": "B0036UC2LO",
+			"isAccurate": true,
+			"runtimeLengthMs": 163938000,
+			"brandIntroDurationMs": 38000,
+			"brandOutroDurationMs": 62000,
+			"chapters": [
+				{"title": "Prelude", "startOffsetMs": 0, "lengthMs": 272000},
+				{"title": "Prologue", "startOffsetMs": 272000, "lengthMs": 1063000}
+			]
+		}`))
+	}))
+	defer upstream.Close()
+
+	svc := NewService(ServiceConfig{
+		BaseURL:   upstream.URL,
+		UserAgent: "Shisho/test",
+	})
+
+	resp, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "B0036UC2LO", resp.ASIN)
+	assert.True(t, resp.IsAccurate)
+	assert.Equal(t, int64(163938000), resp.RuntimeLengthMs)
+	assert.Equal(t, int64(38000), resp.BrandIntroDurationMs)
+	assert.Equal(t, int64(62000), resp.BrandOutroDurationMs)
+	require.Len(t, resp.Chapters, 2)
+	assert.Equal(t, "Prelude", resp.Chapters[0].Title)
+	assert.Equal(t, int64(0), resp.Chapters[0].StartOffsetMs)
+	assert.Equal(t, int64(272000), resp.Chapters[0].LengthMs)
 }

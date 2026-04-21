@@ -2,6 +2,8 @@ package audnexus
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -85,6 +87,60 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 	if normalized == "" {
 		return nil, newErr(ErrCodeInvalidASIN, "ASIN must be 10 alphanumeric characters")
 	}
-	// Upstream call will be implemented in the next task.
-	return nil, newErr(ErrCodeUpstreamError, "not implemented")
+
+	url := s.baseURL + "/books/" + normalized + "/chapters"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, newErr(ErrCodeUpstreamError, err.Error())
+	}
+	req.Header.Set("User-Agent", s.userAgent)
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		if ctx.Err() != nil || isTimeout(err) {
+			return nil, newErr(ErrCodeTimeout, err.Error())
+		}
+		return nil, newErr(ErrCodeUpstreamError, err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, newErr(ErrCodeNotFound, "ASIN not found on Audible")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, newErr(ErrCodeUpstreamError, "upstream returned "+resp.Status)
+	}
+
+	var upstream audnexusUpstream
+	if err := json.NewDecoder(resp.Body).Decode(&upstream); err != nil {
+		return nil, newErr(ErrCodeUpstreamError, "invalid JSON from upstream")
+	}
+
+	out := &Response{
+		ASIN:                 upstream.ASIN,
+		IsAccurate:           upstream.IsAccurate,
+		RuntimeLengthMs:      upstream.RuntimeLengthMs,
+		BrandIntroDurationMs: upstream.BrandIntroDurationMs,
+		BrandOutroDurationMs: upstream.BrandOutroDurationMs,
+		Chapters:             make([]Chapter, 0, len(upstream.Chapters)),
+	}
+	for _, c := range upstream.Chapters {
+		out.Chapters = append(out.Chapters, Chapter{
+			Title:         c.Title,
+			StartOffsetMs: c.StartOffsetMs,
+			LengthMs:      c.LengthMs,
+		})
+	}
+
+	return out, nil
+}
+
+// isTimeout reports whether err represents a net/http timeout.
+func isTimeout(err error) bool {
+	type timeout interface{ Timeout() bool }
+	var t timeout
+	if errors.As(err, &t) {
+		return t.Timeout()
+	}
+	return false
 }
