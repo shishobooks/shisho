@@ -208,6 +208,17 @@ func TestInstaller_UpdatePlugin(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestIsAllowedDownloadURL_AcceptsLocalhostWhenConfigured(t *testing.T) {
+	// Not parallel: mutates package-level AllowedDownloadHosts, which is also
+	// mutated by other tests in this file. Running in parallel would race.
+	orig := AllowedDownloadHosts
+	defer func() { AllowedDownloadHosts = orig }()
+	AllowedDownloadHosts = append(orig, "http://127.0.0.1:")
+
+	assert.True(t, isAllowedDownloadURL("http://127.0.0.1:9876/test/plugins/fixture.zip"))
+	assert.False(t, isAllowedDownloadURL("http://evil.example.com/x.zip"))
+}
+
 func TestInstaller_UpdatePlugin_BadChecksum(t *testing.T) {
 	manifest := &Manifest{
 		ManifestVersion: 1,

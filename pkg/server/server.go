@@ -67,6 +67,13 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	// Register test-only routes when in test mode
 	// These endpoints allow E2E tests to set up and tear down test data
 	if cfg.IsTestMode() {
+		// Allow localhost download URLs so E2E tests can install the fixture
+		// plugin from /test/plugins/fixture.zip. Safe because these hosts are
+		// only added in test mode (ENVIRONMENT=test).
+		plugins.AllowedDownloadHosts = append(plugins.AllowedDownloadHosts,
+			"http://127.0.0.1:",
+			"http://localhost:",
+		)
 		testutils.RegisterRoutes(e, db, pm, plugins.NewInstaller(cfg.PluginDir))
 	}
 
