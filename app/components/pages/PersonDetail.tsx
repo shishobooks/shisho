@@ -97,16 +97,10 @@ const PersonDetail = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Person Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The person you're looking for doesn't exist or may have been
             removed.
           </p>
-          <Link
-            className="text-primary hover:underline"
-            to={`/libraries/${libraryId}/people`}
-          >
-            Back to People
-          </Link>
         </div>
       </LibraryLayout>
     );

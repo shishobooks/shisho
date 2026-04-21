@@ -91,16 +91,10 @@ const ImprintDetail = () => {
       <LibraryLayout>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-4">Imprint Not Found</h1>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground">
             The imprint you're looking for doesn't exist or may have been
             removed.
           </p>
-          <Link
-            className="text-primary hover:underline"
-            to={`/libraries/${libraryId}/imprints`}
-          >
-            Back to Imprints
-          </Link>
         </div>
       </LibraryLayout>
     );

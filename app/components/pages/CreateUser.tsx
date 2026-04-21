@@ -1,6 +1,5 @@
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -150,15 +149,6 @@ const CreateUser = () => {
 
   return (
     <div>
-      <div className="mb-6">
-        <Button asChild variant="ghost">
-          <Link to="/settings/users">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Users
-          </Link>
-        </Button>
-      </div>
-
       <div className="mb-8">
         <h1 className="text-2xl font-semibold mb-2">Create User</h1>
         <p className="text-muted-foreground">Add a new user to the system</p>

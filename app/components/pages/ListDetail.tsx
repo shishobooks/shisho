@@ -1,12 +1,7 @@
 import { format, formatDistanceToNow } from "date-fns";
 import { Edit, Save, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import BookItem from "@/components/library/BookItem";
@@ -142,13 +137,10 @@ const ListDetail = () => {
             <h1 className="text-xl md:text-2xl font-semibold mb-4">
               List Not Found
             </h1>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-muted-foreground">
               The list you're looking for doesn't exist or may have been
               removed.
             </p>
-            <Link className="text-primary hover:underline" to="/lists">
-              Back to Lists
-            </Link>
           </div>
         </div>
       </div>

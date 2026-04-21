@@ -1,7 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import LogViewer from "@/components/library/LogViewer";
@@ -175,13 +174,6 @@ const JobDetail = () => {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
-          to="/settings/jobs"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Jobs
-        </Link>
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Job #{job.id}</h1>
           <Badge className={getStatusColor(job.status)} variant="secondary">

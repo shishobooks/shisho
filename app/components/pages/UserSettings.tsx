@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, KeyRound, Moon, Sun } from "lucide-react";
+import { Check, KeyRound, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
@@ -45,15 +45,6 @@ const UserSettings = () => {
     <div>
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-6">
-          <Button asChild variant="ghost">
-            <Link to="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-        </div>
-
         <div className="mb-8">
           <h1 className="text-2xl font-semibold mb-2">User Settings</h1>
           <p className="text-muted-foreground">
