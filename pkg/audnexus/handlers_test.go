@@ -16,7 +16,7 @@ import (
 
 func newTestHandler(t *testing.T, upstreamStatus int, upstreamBody string) *handler {
 	t.Helper()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(upstreamStatus)
 		_, _ = io.WriteString(w, upstreamBody)
 	}))
@@ -26,7 +26,7 @@ func newTestHandler(t *testing.T, upstreamStatus int, upstreamBody string) *hand
 	return &handler{service: svc}
 }
 
-func invokeHandler(t *testing.T, h *handler, asin string) (statusCode int, errOut error, body string) {
+func invokeHandler(t *testing.T, h *handler, asin string) (statusCode int, body string, errOut error) {
 	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/audnexus/books/"+asin+"/chapters", nil)
@@ -36,13 +36,13 @@ func invokeHandler(t *testing.T, h *handler, asin string) (statusCode int, errOu
 	c.SetParamValues(asin)
 
 	err := h.getChapters(c)
-	return rec.Code, err, rec.Body.String()
+	return rec.Code, rec.Body.String(), err
 }
 
 func TestHandler_GetChapters_Success(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t, http.StatusOK, `{"asin":"B0036UC2LO","chapters":[{"title":"C1","startOffsetMs":0,"lengthMs":1000}]}`)
-	status, err, body := invokeHandler(t, h, "B0036UC2LO")
+	status, body, err := invokeHandler(t, h, "B0036UC2LO")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, status)
 
@@ -56,7 +56,7 @@ func TestHandler_GetChapters_Success(t *testing.T) {
 func TestHandler_GetChapters_InvalidASIN(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t, http.StatusOK, `{}`)
-	_, err, _ := invokeHandler(t, h, "short")
+	_, _, err := invokeHandler(t, h, "short")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
 	assert.Equal(t, http.StatusBadRequest, ec.HTTPCode)
@@ -65,7 +65,7 @@ func TestHandler_GetChapters_InvalidASIN(t *testing.T) {
 func TestHandler_GetChapters_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t, http.StatusNotFound, ``)
-	_, err, _ := invokeHandler(t, h, "B0036UC2LO")
+	_, _, err := invokeHandler(t, h, "B0036UC2LO")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
 	assert.Equal(t, http.StatusNotFound, ec.HTTPCode)
@@ -74,7 +74,7 @@ func TestHandler_GetChapters_NotFound(t *testing.T) {
 func TestHandler_GetChapters_UpstreamError(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t, http.StatusInternalServerError, ``)
-	_, err, _ := invokeHandler(t, h, "B0036UC2LO")
+	_, _, err := invokeHandler(t, h, "B0036UC2LO")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
 	assert.Equal(t, http.StatusBadGateway, ec.HTTPCode)

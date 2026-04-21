@@ -91,7 +91,7 @@ func TestService_GetChapters_HappyPath(t *testing.T) {
 
 func TestService_GetChapters_NotFound(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer upstream.Close()
@@ -104,7 +104,7 @@ func TestService_GetChapters_NotFound(t *testing.T) {
 
 func TestService_GetChapters_UpstreamError_5xx(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer upstream.Close()
@@ -117,7 +117,7 @@ func TestService_GetChapters_UpstreamError_5xx(t *testing.T) {
 
 func TestService_GetChapters_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`not json`))
 	}))
@@ -131,7 +131,7 @@ func TestService_GetChapters_InvalidJSON(t *testing.T) {
 
 func TestService_GetChapters_Timeout(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -149,7 +149,7 @@ func TestService_GetChapters_Timeout(t *testing.T) {
 func TestService_GetChapters_CacheHit(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
@@ -174,7 +174,7 @@ func TestService_GetChapters_CacheHit(t *testing.T) {
 func TestService_GetChapters_CacheExpires(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
@@ -193,7 +193,7 @@ func TestService_GetChapters_CacheExpires(t *testing.T) {
 func TestService_GetChapters_ErrorsNotCached(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

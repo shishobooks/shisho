@@ -129,11 +129,7 @@ func (s *Service) GetChapters(ctx context.Context, asin string) (*Response, erro
 		Chapters:             make([]Chapter, 0, len(upstream.Chapters)),
 	}
 	for _, c := range upstream.Chapters {
-		out.Chapters = append(out.Chapters, Chapter{
-			Title:         c.Title,
-			StartOffsetMs: c.StartOffsetMs,
-			LengthMs:      c.LengthMs,
-		})
+		out.Chapters = append(out.Chapters, Chapter(c))
 	}
 
 	s.cachePut(normalized, out)

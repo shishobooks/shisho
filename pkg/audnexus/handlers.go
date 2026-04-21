@@ -35,6 +35,8 @@ func mapServiceError(err error) error {
 		return errcodes.NotFound(string(e.Code))
 	case ErrCodeTimeout:
 		return errcodes.GatewayTimeout(string(e.Code))
+	case ErrCodeUpstreamError:
+		return errcodes.BadGateway(string(e.Code))
 	default:
 		return errcodes.BadGateway(string(e.Code))
 	}
