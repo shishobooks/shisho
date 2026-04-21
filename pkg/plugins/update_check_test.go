@@ -408,6 +408,122 @@ func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
 	assert.Nil(t, updated.UpdateAvailableVersion)
 }
 
+func TestManager_CheckForUpdates_NewestFirstOrdering(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+	mgr := NewManager(service, t.TempDir(), "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "official",
+		ID:          "my-plugin",
+		Name:        "My Plugin",
+		Version:     "0.3.3",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	repo := &models.PluginRepository{
+		URL:        "https://raw.githubusercontent.com/test/repo/main/manifest.json",
+		Scope:      "official",
+		Name:       strPtr("Official Repo"),
+		IsOfficial: true,
+		Enabled:    true,
+	}
+	err = service.AddRepository(ctx, repo)
+	require.NoError(t, err)
+
+	// Repository lists versions newest-first, matching production repo manifests
+	// and the ordering the frontend and install handler expect.
+	mgr.fetchRepo = func(_ string) (*RepositoryManifest, error) {
+		return &RepositoryManifest{
+			RepositoryVersion: 1,
+			Scope:             "official",
+			Name:              "Official Repo",
+			Plugins: []AvailablePlugin{
+				{
+					ID:   "my-plugin",
+					Name: "My Plugin",
+					Versions: []PluginVersion{
+						{Version: "0.4.0", ManifestVersion: 1},
+						{Version: "0.3.3", ManifestVersion: 1},
+						{Version: "0.2.0", ManifestVersion: 1},
+						{Version: "0.1.0", ManifestVersion: 1},
+					},
+				},
+			},
+		}, nil
+	}
+
+	err = mgr.CheckForUpdates(ctx)
+	require.NoError(t, err)
+
+	updated, err := service.RetrievePlugin(ctx, "official", "my-plugin")
+	require.NoError(t, err)
+	require.NotNil(t, updated.UpdateAvailableVersion)
+	assert.Equal(t, "0.4.0", *updated.UpdateAvailableVersion)
+}
+
+func TestManager_CheckForUpdates_SemverNotLexicographic(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+	mgr := NewManager(service, t.TempDir(), "")
+	ctx := context.Background()
+
+	plugin := &models.Plugin{
+		Scope:       "official",
+		ID:          "my-plugin",
+		Name:        "My Plugin",
+		Version:     "0.1.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	err := service.InstallPlugin(ctx, plugin)
+	require.NoError(t, err)
+
+	repo := &models.PluginRepository{
+		URL:        "https://raw.githubusercontent.com/test/repo/main/manifest.json",
+		Scope:      "official",
+		Name:       strPtr("Official Repo"),
+		IsOfficial: true,
+		Enabled:    true,
+	}
+	err = service.AddRepository(ctx, repo)
+	require.NoError(t, err)
+
+	// 0.10.0 > 0.2.0 semantically, but "0.10.0" < "0.2.0" lexicographically.
+	mgr.fetchRepo = func(_ string) (*RepositoryManifest, error) {
+		return &RepositoryManifest{
+			RepositoryVersion: 1,
+			Scope:             "official",
+			Name:              "Official Repo",
+			Plugins: []AvailablePlugin{
+				{
+					ID:   "my-plugin",
+					Name: "My Plugin",
+					// Ordered so the old "last element is latest" code would
+					// have picked 0.2.0, making this a true regression guard
+					// for the lexicographic-comparison bug.
+					Versions: []PluginVersion{
+						{Version: "0.10.0", ManifestVersion: 1},
+						{Version: "0.2.0", ManifestVersion: 1},
+					},
+				},
+			},
+		}, nil
+	}
+
+	err = mgr.CheckForUpdates(ctx)
+	require.NoError(t, err)
+
+	updated, err := service.RetrievePlugin(ctx, "official", "my-plugin")
+	require.NoError(t, err)
+	require.NotNil(t, updated.UpdateAvailableVersion)
+	assert.Equal(t, "0.10.0", *updated.UpdateAvailableVersion)
+}
+
 func TestManager_CheckForUpdates_MinShishoVersionFiltered(t *testing.T) {
 	origVersion := version.Version
 	version.Version = "1.0.0"

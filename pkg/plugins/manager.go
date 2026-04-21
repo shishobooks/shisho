@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
+	pkgversion "github.com/shishobooks/shisho/pkg/version"
 )
 
 // reservedExtensions are built-in file types that plugins cannot claim.
@@ -535,10 +536,16 @@ func (m *Manager) CheckForUpdates(ctx context.Context) error {
 				if len(compatible) == 0 {
 					continue
 				}
-				// The last compatible version is the latest
-				candidate := compatible[len(compatible)-1].Version
-				if candidate != plugin.Version && (latestVersion == "" || candidate > latestVersion) {
-					latestVersion = candidate
+				for _, v := range compatible {
+					if v.Version == plugin.Version {
+						continue
+					}
+					if pkgversion.Compare(v.Version, plugin.Version) <= 0 {
+						continue
+					}
+					if latestVersion == "" || pkgversion.Compare(v.Version, latestVersion) > 0 {
+						latestVersion = v.Version
+					}
 				}
 			}
 		}
