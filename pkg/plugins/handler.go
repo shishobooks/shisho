@@ -1685,6 +1685,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 
+	// Accumulate file-level column updates so Title/Narrator/Publisher/etc.
+	// can all contribute, then flush once at the end.
+	var fileColumns []string
+
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" {
@@ -1693,11 +1697,21 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		book.SortTitle = sortname.ForTitle(title)
 		book.SortTitleSource = pluginSource
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
+
+		// Mirror the identified title onto the target main file's Name so
+		// file organization and downloads reflect it. Supplements keep their
+		// own filename-based label.
+		if targetFile != nil && targetFile.FileRole == models.FileRoleMain {
+			titleCopy := title
+			targetFile.Name = &titleCopy
+			targetFile.NameSource = &pluginSource
+			fileColumns = append(fileColumns, "name", "name_source")
+		}
 	}
 
 	// Subtitle
-	if md.Subtitle != "" {
-		subtitle := strings.TrimSpace(md.Subtitle)
+	subtitle := strings.TrimSpace(md.Subtitle)
+	if subtitle != "" {
 		book.Subtitle = &subtitle
 		book.SubtitleSource = &pluginSource
 		columns = append(columns, "subtitle", "subtitle_source")
@@ -1827,9 +1841,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// File-level metadata: accumulate column updates and flush once at the end
-	var fileColumns []string
-
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
@@ -1857,10 +1868,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Publisher (file-level, applied to target file)
-	if md.Publisher != "" && targetFile != nil && h.enrich.publisherFinder != nil {
-		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, md.Publisher, book.LibraryID)
+	publisherName := strings.TrimSpace(md.Publisher)
+	if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {
+		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 		if pErr != nil {
-			log.Warn("failed to find/create publisher", logger.Data{"name": md.Publisher, "error": pErr.Error()})
+			log.Warn("failed to find/create publisher", logger.Data{"name": publisherName, "error": pErr.Error()})
 		} else {
 			targetFile.PublisherID = &publisher.ID
 			targetFile.PublisherSource = &pluginSource
@@ -1869,10 +1881,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Imprint (file-level, applied to target file)
-	if md.Imprint != "" && targetFile != nil && h.enrich.imprintFinder != nil {
-		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, md.Imprint, book.LibraryID)
+	imprintName := strings.TrimSpace(md.Imprint)
+	if imprintName != "" && targetFile != nil && h.enrich.imprintFinder != nil {
+		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
 		if iErr != nil {
-			log.Warn("failed to find/create imprint", logger.Data{"name": md.Imprint, "error": iErr.Error()})
+			log.Warn("failed to find/create imprint", logger.Data{"name": imprintName, "error": iErr.Error()})
 		} else {
 			targetFile.ImprintID = &imprint.ID
 			targetFile.ImprintSource = &pluginSource
@@ -1881,8 +1894,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// URL (file-level, applied to target file)
-	if md.URL != "" && targetFile != nil {
-		targetFile.URL = &md.URL
+	url := strings.TrimSpace(md.URL)
+	if url != "" && targetFile != nil {
+		targetFile.URL = &url
 		targetFile.URLSource = &pluginSource
 		fileColumns = append(fileColumns, "url", "url_source")
 	}
@@ -2203,8 +2217,10 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Organize files if title, authors, narrators, or series changed (these affect directory/file names).
+	// Trim title/series first so whitespace-only values don't trigger a no-op organize pass —
+	// persistMetadata already trims before persisting, so untrimmed values would never change the book.
 	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
-	if md.Title != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || md.Series != "" {
+	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})

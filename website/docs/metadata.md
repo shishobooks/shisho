@@ -164,6 +164,10 @@ This means your manual edits are never overwritten by a normal scan. If you need
 - **Refresh all metadata** — Bypasses the priority system and overwrites all fields, including manual edits. Re-runs plugins.
 - **Reset to file metadata** — Clears all existing metadata (including manual edits) and re-scans the file from scratch, without running plugins. Fields not present in the source file are removed. The title and authors will fall back to the filepath if the file has no embedded values. Use this when plugin enrichment has misidentified a book and you want a clean slate.
 
+### Title Normalization for CBZ Volumes
+
+For CBZ files, titles with volume notation (e.g., `Series Name #7`, `Series Name Vol. 7`) are normalized to the canonical `Series Name v007` form so books sort correctly by volume. This normalization applies only to titles that came from **File metadata** or **Filepath** sources. Titles from **Manual**, **Sidecar**, or **Plugin** sources are stored verbatim — if a plugin search result shows `Naruto v1` and you apply it, the stored title stays `Naruto v1` instead of being rewritten.
+
 ## Content fingerprints
 
 Shisho stores a sha256 hash of every file's contents to preserve file identity

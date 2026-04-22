@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,6 +69,35 @@ func newApplyTestHandler(store *stubBookStoreForApply) *handler {
 	}
 }
 
+// stubPublisherFinder records the name FindOrCreatePublisher was called with.
+type stubPublisherFinder struct {
+	lastName string
+}
+
+func (s *stubPublisherFinder) FindOrCreatePublisher(_ context.Context, name string, _ int) (*models.Publisher, error) {
+	s.lastName = name
+	return &models.Publisher{ID: 1, Name: name}, nil
+}
+
+// stubImprintFinder records the name FindOrCreateImprint was called with.
+type stubImprintFinder struct {
+	lastName string
+}
+
+func (s *stubImprintFinder) FindOrCreateImprint(_ context.Context, name string, _ int) (*models.Imprint, error) {
+	s.lastName = name
+	return &models.Imprint{ID: 1, Name: name}, nil
+}
+
+// newApplyTestHandlerWithFinders wires publisher/imprint finders so tests can
+// assert on the exact names persistMetadata passed to FindOrCreate*.
+func newApplyTestHandlerWithFinders(store *stubBookStoreForApply, pub *stubPublisherFinder, imp *stubImprintFinder) *handler {
+	h := newApplyTestHandler(store)
+	h.enrich.publisherFinder = pub
+	h.enrich.imprintFinder = imp
+	return h
+}
+
 // newApplyEchoContext creates an Echo context with the given fields payload and an all-access user.
 func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 	t.Helper()
@@ -102,6 +132,24 @@ func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 func newApplyTestBook(t *testing.T, title string) *models.Book {
 	t.Helper()
 	return &models.Book{ID: 1, LibraryID: 1, Title: title, Filepath: t.TempDir()}
+}
+
+// newApplyTestBookWithFile builds a book with a single attached main file.
+// The returned file pointer is the same one persistMetadata will mutate, so
+// tests can assert on its fields directly after applyMetadata returns.
+func newApplyTestBookWithFile(t *testing.T, title string, fileType string) (*models.Book, *models.File) {
+	t.Helper()
+	book := newApplyTestBook(t, title)
+	file := &models.File{
+		ID:        1,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "main."+fileType),
+		FileType:  fileType,
+		FileRole:  models.FileRoleMain,
+	}
+	book.Files = []*models.File{file}
+	return book, file
 }
 
 func TestApplyMetadata_OrganizesFiles_WhenTitleChanges(t *testing.T) {
@@ -193,4 +241,124 @@ func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when only description changes")
+}
+
+func TestApplyMetadata_SkipsOrganize_WhenOnlyWhitespaceTitleAndSeries(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"title":  "   ",
+		"series": "\t\n",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when title and series are whitespace-only")
+}
+
+func TestApplyMetadata_SkipsSubtitle_WhenWhitespaceOnly(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"subtitle": "   ",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Nil(t, book.Subtitle, "book.Subtitle should not be set to a pointer-to-empty-string for whitespace-only input")
+}
+
+func TestApplyMetadata_UpdatesMainFileName_WhenTitleChanges(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name, "main file Name should be set")
+	assert.Equal(t, "New Title", *file.Name)
+	require.NotNil(t, file.NameSource, "main file NameSource should be set")
+	assert.Equal(t, "plugin:test/enricher", *file.NameSource)
+}
+
+func TestApplyMetadata_DoesNotUpdateSupplementFileName(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypePDF)
+	file.FileRole = models.FileRoleSupplement
+	originalName := "Supplement.pdf"
+	file.Name = &originalName
+
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "Supplement.pdf", *file.Name, "supplement Name must not be overwritten with book title")
+}
+
+func TestApplyMetadata_PreservesVolumeNotation_CBZ(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeCBZ)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "Naruto v1"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Naruto v1", book.Title, "book.Title must not be volume-normalized on identify")
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "Naruto v1", *file.Name, "file.Name must mirror the verbatim title")
+}
+
+func TestApplyMetadata_TrimsPublisherImprintURL(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	pub := &stubPublisherFinder{}
+	imp := &stubImprintFinder{}
+	h := newApplyTestHandlerWithFinders(store, pub, imp)
+	c := newApplyEchoContext(t, map[string]any{
+		"publisher": "  Some Publisher  ",
+		"imprint":   "  Penguin Classics  ",
+		"url":       "  https://example.com  ",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Some Publisher", pub.lastName, "publisher name must be trimmed before FindOrCreate")
+	assert.Equal(t, "Penguin Classics", imp.lastName, "imprint name must be trimmed before FindOrCreate")
+	require.NotNil(t, file.URL)
+	assert.Equal(t, "https://example.com", *file.URL, "file URL must be trimmed")
 }

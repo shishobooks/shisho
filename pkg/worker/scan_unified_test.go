@@ -5074,3 +5074,123 @@ func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
 	// Authors should be repopulated from EPUB
 	assert.NotEmpty(t, book.Authors, "authors should be repopulated after reset")
 }
+
+func TestScanFileCore_Title_PluginSource_NotVolumeNormalized(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Placeholder",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Placeholder",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "naruto.cbz"),
+		FileType:      models.FileTypeCBZ,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Naruto v1",
+		DataSource: models.PluginDataSource("test", "enricher"),
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	assert.Equal(t, "Naruto v1", reloaded.Title, "plugin-sourced title must not be volume-normalized")
+}
+
+func TestScanFileCore_Title_FileMetadataSource_StillVolumeNormalized(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Placeholder",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Placeholder",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "comic.cbz"),
+		FileType:      models.FileTypeCBZ,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	// File-embedded metadata with raw volume notation.
+	metadata := &mediafile.ParsedMetadata{
+		Title:      "Some Title #7",
+		DataSource: models.DataSourceCBZMetadata,
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	assert.Equal(t, "Some Title v007", reloaded.Title, "file_metadata-sourced volume notation must still be normalized")
+}
+
+func TestScanFileCore_Description_StripsHTMLFromMetadata(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "book.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	metadata := &mediafile.ParsedMetadata{
+		Title:       "Book",
+		Description: "<p>Hello <b>world</b></p>",
+		DataSource:  models.PluginDataSource("test", "enricher"),
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Description)
+	assert.Equal(t, "Hello world", *reloaded.Description, "description HTML must be stripped from scan metadata")
+}

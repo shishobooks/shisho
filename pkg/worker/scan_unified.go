@@ -807,11 +807,16 @@ func (w *Worker) scanFileCore(
 	if isMainFile {
 		// Title (from metadata)
 		title := strings.TrimSpace(metadata.Title)
-		// Normalize volume indicators (e.g., "#007" -> "v7") for CBZ files
-		if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, file.FileType); hasVolume {
-			title = normalizedTitle
-		}
 		titleSource := metadata.SourceForField("title")
+		// Normalize volume indicators (e.g., "#007" -> "v7") for CBZ files only when
+		// the title came from the file itself or its path. Plugin/sidecar/manual
+		// titles are user-curated and must not be rewritten
+		// (e.g., "Naruto v1" must not become "Naruto v001").
+		if models.GetDataSourcePriority(titleSource) >= models.DataSourceFileMetadataPriority {
+			if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, file.FileType); hasVolume {
+				title = normalizedTitle
+			}
+		}
 		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
 			logInfo("updating book title", logger.Data{"from": book.Title, "to": title})
 			book.Title = title
@@ -883,8 +888,10 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		// Description (from metadata)
-		description := strings.TrimSpace(metadata.Description)
+		// Description (from metadata) — strip HTML so enricher-provided markup
+		// doesn't leak into the stored description. Matches the sidecar branch
+		// below and the identify apply path.
+		description := htmlutil.StripTags(strings.TrimSpace(metadata.Description))
 		if description != "" {
 			existingDescription := ""
 			existingDescriptionSource := ""
@@ -904,7 +911,7 @@ func (w *Worker) scanFileCore(
 		}
 		// Description (from sidecar, strip HTML for clean display)
 		if bookSidecarData != nil && bookSidecarData.Description != nil && *bookSidecarData.Description != "" {
-			sanitizedDesc := htmlutil.StripTags(*bookSidecarData.Description)
+			sanitizedDesc := htmlutil.StripTags(strings.TrimSpace(*bookSidecarData.Description))
 			existingDescription := ""
 			existingDescriptionSource := ""
 			if book.Description != nil {
