@@ -82,6 +82,15 @@ export default function EPUBReader({
   const theme = settings?.viewer_epub_theme ?? "light";
   const flow = settings?.viewer_epub_flow ?? "paginated";
 
+  // Local draft state lets the slider thumb and label update live while the
+  // user drags, without firing a PUT on every tick. We only commit to the API
+  // on `onValueCommit` (pointer up). The draft is reset to the server value
+  // whenever the canonical `fontSize` changes so outside updates flow in.
+  const [fontSizeDraft, setFontSizeDraft] = useState(fontSize);
+  useEffect(() => {
+    setFontSizeDraft(fontSize);
+  }, [fontSize]);
+
   const commitSettings = useCallback(
     (
       partial: Partial<{
@@ -197,15 +206,19 @@ export default function EPUBReader({
           : { fg: "#111111", bg: "#ffffff" };
 
     // foliate's `setStyles` takes a CSS string (or [beforeStyle, style] tuple).
-    // See app/libraries/foliate/paginator.js `setStyles(styles)`.
+    // See app/libraries/foliate/paginator.js `setStyles(styles)`. Books ship
+    // their own stylesheets with more specific selectors, so mark the
+    // user-visible theme properties as `!important` to ensure the selected
+    // theme overrides book-provided styles. This mirrors foliate's own theming
+    // (`setStylesImportant` in paginator.js).
     const css = `
       @namespace epub "http://www.idpf.org/2007/ops";
       html {
-        color: ${fg};
-        background: ${bg};
+        color: ${fg} !important;
+        background: ${bg} !important;
       }
       html, body {
-        font-size: ${fontSize}%;
+        font-size: ${fontSize}% !important;
       }
     `;
     renderer.setStyles?.(css);
@@ -315,18 +328,19 @@ export default function EPUBReader({
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">
-                    Font size: {fontSize}%
+                    Font size: {fontSizeDraft}%
                   </label>
                   <Slider
                     className="mt-2"
                     disabled={!settingsReady}
                     max={200}
                     min={50}
-                    onValueChange={([value]) =>
+                    onValueChange={([value]) => setFontSizeDraft(value)}
+                    onValueCommit={([value]) =>
                       commitSettings({ viewer_epub_font_size: value })
                     }
                     step={10}
-                    value={[fontSize]}
+                    value={[fontSizeDraft]}
                   />
                 </div>
                 <div>
