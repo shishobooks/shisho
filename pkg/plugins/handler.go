@@ -1685,6 +1685,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 
+	// Accumulate file-level column updates so Title/Narrator/Publisher/etc.
+	// can all contribute, then flush once at the end.
+	var fileColumns []string
+
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" {
@@ -1693,6 +1697,16 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		book.SortTitle = sortname.ForTitle(title)
 		book.SortTitleSource = pluginSource
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
+
+		// Mirror the identified title onto the target main file's Name so
+		// file organization and downloads reflect it. Supplements keep their
+		// own filename-based label.
+		if targetFile != nil && targetFile.FileRole == models.FileRoleMain {
+			titleCopy := title
+			targetFile.Name = &titleCopy
+			targetFile.NameSource = &pluginSource
+			fileColumns = append(fileColumns, "name", "name_source")
+		}
 	}
 
 	// Subtitle
@@ -1827,8 +1841,8 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// File-level metadata: accumulate column updates and flush once at the end
-	var fileColumns []string
+	// File-level metadata: accumulate column updates and flush once at the end.
+	// (fileColumns is declared above the Title block so the Title mirror can append to it.)
 
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -104,6 +105,24 @@ func newApplyTestBook(t *testing.T, title string) *models.Book {
 	return &models.Book{ID: 1, LibraryID: 1, Title: title, Filepath: t.TempDir()}
 }
 
+// newApplyTestBookWithFile builds a book with a single attached main file.
+// The returned file pointer is the same one persistMetadata will mutate, so
+// tests can assert on its fields directly after applyMetadata returns.
+func newApplyTestBookWithFile(t *testing.T, title string, fileType string) (*models.Book, *models.File) {
+	t.Helper()
+	book := newApplyTestBook(t, title)
+	file := &models.File{
+		ID:        1,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "main"+"."+fileType),
+		FileType:  fileType,
+		FileRole:  models.FileRoleMain,
+	}
+	book.Files = []*models.File{file}
+	return book, file
+}
+
 func TestApplyMetadata_OrganizesFiles_WhenTitleChanges(t *testing.T) {
 	t.Parallel()
 
@@ -193,4 +212,62 @@ func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when only description changes")
+}
+
+func TestApplyMetadata_UpdatesMainFileName_WhenTitleChanges(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name, "main file Name should be set")
+	assert.Equal(t, "New Title", *file.Name)
+	require.NotNil(t, file.NameSource, "main file NameSource should be set")
+	assert.Equal(t, "plugin:test/enricher", *file.NameSource)
+}
+
+func TestApplyMetadata_DoesNotUpdateSupplementFileName(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypePDF)
+	file.FileRole = models.FileRoleSupplement
+	originalName := "Supplement.pdf"
+	file.Name = &originalName
+
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "Supplement.pdf", *file.Name, "supplement Name must not be overwritten with book title")
+}
+
+func TestApplyMetadata_PreservesVolumeNotation_CBZ(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeCBZ)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "Naruto v1"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Naruto v1", book.Title, "book.Title must not be volume-normalized on identify")
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "Naruto v1", *file.Name, "file.Name must mirror the verbatim title")
 }
