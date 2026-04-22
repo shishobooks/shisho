@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-04-22
+
+### Features
+- Sync file name with book title on identify, align scan/identify consistency (#126)
+- Fix M4B title showing as 'Unknown' in audiobook players (#124)
+
+### Bug Fixes
+- Refresh plugin update availability on startup and repo sync, and surface updates on Discover (#125)
+
+
 ## [0.0.33] - 2026-04-21
 
 ### Features
