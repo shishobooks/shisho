@@ -1710,8 +1710,8 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Subtitle
-	if md.Subtitle != "" {
-		subtitle := strings.TrimSpace(md.Subtitle)
+	subtitle := strings.TrimSpace(md.Subtitle)
+	if subtitle != "" {
 		book.Subtitle = &subtitle
 		book.SubtitleSource = &pluginSource
 		columns = append(columns, "subtitle", "subtitle_source")

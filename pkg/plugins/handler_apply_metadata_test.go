@@ -262,6 +262,24 @@ func TestApplyMetadata_SkipsOrganize_WhenOnlyWhitespaceTitleAndSeries(t *testing
 	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when title and series are whitespace-only")
 }
 
+func TestApplyMetadata_SkipsSubtitle_WhenWhitespaceOnly(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"subtitle": "   ",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Nil(t, book.Subtitle, "book.Subtitle should not be set to a pointer-to-empty-string for whitespace-only input")
+}
+
 func TestApplyMetadata_UpdatesMainFileName_WhenTitleChanges(t *testing.T) {
 	t.Parallel()
 
