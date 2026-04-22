@@ -29,6 +29,8 @@ While investigating, two related inconsistencies between the scan path
   and downloads reflect the book the user just identified.
 - Stop rewriting user-curated titles with volume normalization.
 - Strip HTML from descriptions in all paths.
+- Trim whitespace consistently on Publisher, Imprint, and URL in the
+  identify path.
 
 ## Non-goals
 
@@ -157,10 +159,44 @@ This mirrors the existing sidecar branch (scan_unified.go:907) and the
 `persistMetadata` path. HTML from enrichers never reaches `book.Description`
 unstripped regardless of which path wrote it.
 
+### Change 4 — Trim whitespace on Publisher, Imprint, and URL in identify
+
+Scan trims `metadata.Publisher` and `metadata.Imprint` before
+`FindOrCreate*` (scan_unified.go:1553, 1612); `persistMetadata` does not.
+Neither path trims URL, but a plugin can easily return a URL with trailing
+whitespace. Add trimming in the identify path for all three.
+
+In `pkg/plugins/handler.go` `persistMetadata`:
+
+```go
+// Publisher (file-level, applied to target file)
+publisherName := strings.TrimSpace(md.Publisher)
+if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {
+    publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
+    ...
+}
+
+// Imprint (file-level, applied to target file)
+imprintName := strings.TrimSpace(md.Imprint)
+if imprintName != "" && targetFile != nil && h.enrich.imprintFinder != nil {
+    imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
+    ...
+}
+
+// URL (file-level, applied to target file)
+url := strings.TrimSpace(md.URL)
+if url != "" && targetFile != nil {
+    targetFile.URL = &url
+    targetFile.URLSource = &pluginSource
+    fileColumns = append(fileColumns, "url", "url_source")
+}
+```
+
+The log statements and `FindOrCreate*` calls use the trimmed value so
+stored entity names and lookups are consistent.
+
 ## Out of scope but noted
 
-- `persistMetadata` has minor formatting differences from scan (e.g., no
-  `TrimSpace` on URL) that aren't worth fixing in this change.
 - `applyFilepathFallbacks` extracts series + number from a normalized
   CBZ title as a filepath-only fallback. Identify doesn't do this — a
   plugin returning `title = "My Series v7"` with no explicit series field
@@ -171,7 +207,7 @@ unstripped regardless of which path wrote it.
 
 ## Files changed
 
-- `pkg/plugins/handler.go` — Change 1.
+- `pkg/plugins/handler.go` — Changes 1 and 4.
 - `pkg/worker/scan_unified.go` — Changes 2 and 3.
 - `pkg/plugins/handler_apply_metadata_test.go` — new tests (below).
 - `pkg/worker/scan_unified_test.go` and/or `scan_helpers_test.go` — new
@@ -196,6 +232,9 @@ Follow Red-Green-Refactor per the project's testing rules.
 - The existing `TestApplyMetadata_OrganizesFiles_WhenTitleChanges` should
   continue to pass; update its assertions if needed so the post-rename
   filename reflects the new title rather than the old.
+- `TestApplyMetadata_TrimsPublisherImprintURL` — apply a payload with
+  `"  Some Publisher  "`, `"  Imprint  "`, `"  https://example.com  "` and
+  assert the stored entity names and `file.URL` are trimmed.
 
 ### `scan_unified_test.go`
 
