@@ -2,9 +2,10 @@ import { useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import CBZReader from "@/components/pages/CBZReader";
+import EPUBReader from "@/components/pages/EPUBReader";
 import PDFReader from "@/components/pages/PDFReader";
 import { useBook } from "@/hooks/queries/books";
-import { FileTypeCBZ, FileTypePDF } from "@/types";
+import { FileTypeCBZ, FileTypeEPUB, FileTypePDF } from "@/types";
 
 export default function FileReader() {
   const { libraryId, bookId, fileId } = useParams<{
@@ -32,6 +33,14 @@ export default function FileReader() {
     case FileTypePDF:
       return (
         <PDFReader bookTitle={book?.title} file={file} libraryId={libraryId!} />
+      );
+    case FileTypeEPUB:
+      return (
+        <EPUBReader
+          bookTitle={book?.title}
+          file={file}
+          libraryId={libraryId!}
+        />
       );
     default:
       return (

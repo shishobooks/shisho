@@ -357,9 +357,10 @@ const FileRow = ({
               </Tooltip>
             )}
 
-            {/* Read button - CBZ and PDF */}
+            {/* Read button - CBZ, PDF, and EPUB */}
             {(file.file_type === FileTypeCBZ ||
-              file.file_type === FileTypePDF) && (
+              file.file_type === FileTypePDF ||
+              file.file_type === FileTypeEPUB) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link
@@ -514,9 +515,10 @@ const FileRow = ({
             </Tooltip>
           )}
 
-          {/* Read button - CBZ and PDF */}
+          {/* Read button - CBZ, PDF, and EPUB */}
           {(file.file_type === FileTypeCBZ ||
-            file.file_type === FileTypePDF) && (
+            file.file_type === FileTypePDF ||
+            file.file_type === FileTypeEPUB) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
