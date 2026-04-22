@@ -1517,11 +1517,13 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 	// Add file hints from the target file (non-modifiable context)
 	var fileType string
+	var targetFilePath string
 	if targetFile != nil {
 		f := targetFile
 		fileType = f.FileType
 		fileCtx := map[string]interface{}{
 			"fileType": f.FileType,
+			"filePath": f.Filepath,
 		}
 		if f.AudiobookDurationSeconds != nil {
 			fileCtx["duration"] = *f.AudiobookDurationSeconds
@@ -1531,6 +1533,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		}
 		fileCtx["filesizeBytes"] = f.FilesizeBytes
 		searchCtx["file"] = fileCtx
+		targetFilePath = f.Filepath
 	}
 
 	log := logger.FromContext(ctx)
@@ -1562,7 +1565,7 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			}
 		}
 
-		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx)
+		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath)
 		if sErr != nil {
 			log.Warn("enricher search failed", logger.Data{
 				"scope":  rt.Scope(),

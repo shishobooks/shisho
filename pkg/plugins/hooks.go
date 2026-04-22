@@ -202,7 +202,14 @@ type SearchResponse struct {
 }
 
 // RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
-func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}) (*SearchResponse, error) {
+//
+// targetFilePath, if non-empty, grants the enricher read-only access to
+// exactly that one file (the enrichment target) via FSContext's read-only
+// allowedPaths — without it, enrichers get no filesystem access beyond the
+// plugin's own directory unless they declare the broader fileAccess
+// capability. Writes to the target path are NOT granted; a plugin that
+// needs to modify files must declare fileAccess: readwrite explicitly.
+func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}, targetFilePath string) (*SearchResponse, error) {
 	if rt.metadataEnricher == nil {
 		return nil, errors.New("plugin does not have a metadataEnricher hook")
 	}
@@ -213,9 +220,14 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
-	// Set up FSContext (no extra allowed paths for enrichers)
+	// Scope FS access to the target file only, read-only. Using the read-only
+	// allowedPaths list means a malicious enricher cannot overwrite the user's
+	// book file — isWriteAllowed does not consult this list.
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
 	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
+	if targetFilePath != "" {
+		fsCtx.SetReadOnlyAllowedPaths([]string{targetFilePath})
+	}
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)

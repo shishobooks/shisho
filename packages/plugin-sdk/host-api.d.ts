@@ -238,6 +238,35 @@ export interface ShishoHTML {
   querySelectorAll(doc: HtmlElement, selector: string): HtmlElement[];
 }
 
+/**
+ * YAML parsing and serialization. No capability required.
+ *
+ * Backed by Go's gopkg.in/yaml.v3, which does not instantiate arbitrary
+ * objects from custom tags (unlike PyYAML's full loader or Ruby's Psych),
+ * so parsing untrusted YAML cannot execute code. Oversized inputs are still
+ * bounded by the plugin hook timeout.
+ */
+export interface ShishoYAML {
+  /**
+   * Parse a YAML string into a plain JS value (object, array, string, number, boolean, or null).
+   * Throws on invalid YAML.
+   *
+   * @example
+   * var config = shisho.yaml.parse("title: My Book\nauthor: Alice");
+   * config.title // "My Book"
+   */
+  parse(content: string): unknown;
+
+  /**
+   * Serialize a JS value to a YAML string.
+   *
+   * @example
+   * shisho.yaml.stringify({ title: "My Book", pages: 100 });
+   * // "title: My Book\npages: 100\n"
+   */
+  stringify(value: unknown): string;
+}
+
 /** Result from shisho.ffmpeg.transcode(). */
 export interface TranscodeResult {
   /** Process exit code (0 = success). */
@@ -425,6 +454,7 @@ export interface ShishoHostAPI {
   archive: ShishoArchive;
   xml: ShishoXML;
   html: ShishoHTML;
+  yaml: ShishoYAML;
   ffmpeg: ShishoFFmpeg;
   shell: ShishoShell;
 }

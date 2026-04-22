@@ -325,7 +325,7 @@ func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
 		},
 	}
 
-	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx)
+	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Len(t, resp.Results, 1)
@@ -420,7 +420,7 @@ func TestRunMetadataSearch_NoHook(t *testing.T) {
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
 
-	_, err := mgr.RunMetadataSearch(ctx, rt, map[string]interface{}{})
+	_, err := mgr.RunMetadataSearch(ctx, rt, map[string]interface{}{}, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have a metadataEnricher hook")
 }
@@ -442,7 +442,7 @@ func TestRunMetadataSearch_NewFields(t *testing.T) {
 		},
 	}
 
-	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx)
+	resp, err := mgr.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Len(t, resp.Results, 1)
@@ -538,7 +538,7 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 		"author": "Test Author",
 	}
 
-	resp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	resp, err := manager.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.Len(t, resp.Results, 1)
 
@@ -550,6 +550,126 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	assert.Nil(t, result.Genres)
 	assert.Nil(t, result.Tags)
 	assert.Nil(t, result.Narrators)
+}
+
+// TestRunMetadataSearch_TargetFilePathScopedAccess verifies that passing a
+// targetFilePath to RunMetadataSearch grants the enricher READ-ONLY access
+// to exactly that file — without needing to declare the broader fileAccess
+// capability — and that omitting it leaves the enricher without access.
+// Write access to the target path must be denied even when read is granted.
+func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	destDir := filepath.Join(pluginDir, "test", "scoped-enricher")
+	require.NoError(t, os.MkdirAll(destDir, 0755))
+
+	// Enricher dispatches on context.query: "read" reads the target,
+	// "write" tries to overwrite the target. Each branch returns a result
+	// prefixed with "ok:" or "denied:" plus the specific error message so
+	// the test can distinguish a permission denial from an unrelated
+	// runtime error.
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "scoped-enricher",
+  "name": "Scoped Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Reads the enrichment target",
+      "fileTypes": ["epub"],
+      "fields": ["title"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(context) {
+        try {
+          if (context.query === "write") {
+            shisho.fs.writeTextFile(context.file.filePath, "tampered");
+            return { results: [{ title: "ok:wrote" }] };
+          }
+          var content = shisho.fs.readTextFile(context.file.filePath);
+          return { results: [{ title: "ok:" + content }] };
+        } catch (e) {
+          return { results: [{ title: "denied:" + String(e) }] };
+        }
+      }
+    }
+  };
+})();`
+
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644))
+
+	manager := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+	plugin := &models.Plugin{
+		Scope: "test", ID: "scoped-enricher", Name: "Scoped Enricher",
+		Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now(),
+	}
+	require.NoError(t, service.InstallPlugin(ctx, plugin))
+	require.NoError(t, manager.LoadPlugin(ctx, "test", "scoped-enricher"))
+
+	rt := manager.GetRuntime("test", "scoped-enricher")
+	require.NotNil(t, rt)
+
+	// Create a target file outside the plugin dir.
+	libraryDir := t.TempDir()
+	targetPath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(targetPath, []byte("book-bytes"), 0644))
+
+	readCtx := map[string]interface{}{
+		"query": "read",
+		"file":  map[string]interface{}{"fileType": "epub", "filePath": targetPath},
+	}
+
+	// With targetFilePath set, the enricher can read the file.
+	resp, err := manager.RunMetadataSearch(ctx, rt, readCtx, targetPath)
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, "ok:book-bytes", resp.Results[0].Title)
+
+	// But writes to the same path are denied — scope is read-only.
+	writeCtx := map[string]interface{}{
+		"query": "write",
+		"file":  map[string]interface{}{"fileType": "epub", "filePath": targetPath},
+	}
+	resp, err = manager.RunMetadataSearch(ctx, rt, writeCtx, targetPath)
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Contains(t, resp.Results[0].Title, "denied:", "enricher must not have write access to the target file")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
+	// Confirm the target file was not actually modified.
+	actual, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, "book-bytes", string(actual), "target file must be unchanged")
+
+	// A sibling in the same directory must NOT be readable — scope is the
+	// target file only, not its parent directory.
+	siblingPath := filepath.Join(libraryDir, "sibling.opf")
+	require.NoError(t, os.WriteFile(siblingPath, []byte("sidecar"), 0644))
+	siblingCtx := map[string]interface{}{
+		"query": "read",
+		"file":  map[string]interface{}{"fileType": "epub", "filePath": siblingPath},
+	}
+	resp, err = manager.RunMetadataSearch(ctx, rt, siblingCtx, targetPath)
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Contains(t, resp.Results[0].Title, "denied:", "sibling file must not be readable when scope is the target file")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
+
+	// Without targetFilePath, the enricher gets no access to external paths.
+	resp, err = manager.RunMetadataSearch(ctx, rt, readCtx, "")
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Contains(t, resp.Results[0].Title, "denied:", "expected read to be denied without targetFilePath")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
 }
 
 func TestSearchMetadataCarriesAllFields(t *testing.T) {
@@ -627,7 +747,7 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
 		"author": "Test Author",
 	}
 
-	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.Len(t, searchResp.Results, 1)
 

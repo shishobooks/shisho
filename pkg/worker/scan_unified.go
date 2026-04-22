@@ -3083,9 +3083,11 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		}
 
 		// Add file hints (non-modifiable context)
+		var targetFilePath string
 		if file != nil {
 			fileCtx := map[string]interface{}{
 				"fileType": file.FileType,
+				"filePath": file.Filepath,
 			}
 			if file.AudiobookDurationSeconds != nil {
 				fileCtx["duration"] = *file.AudiobookDurationSeconds
@@ -3095,9 +3097,10 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			}
 			fileCtx["filesizeBytes"] = file.FilesizeBytes
 			searchCtx["file"] = fileCtx
+			targetFilePath = file.Filepath
 		}
 
-		searchResp, sErr := w.pluginManager.RunMetadataSearch(ctx, rt, searchCtx)
+		searchResp, sErr := w.pluginManager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath)
 		if sErr != nil {
 			logWarn("enricher search failed", logger.Data{
 				"plugin": rt.Manifest().ID,
