@@ -38,12 +38,14 @@ export interface SearchContext {
     fileType?: string;
     /**
      * Absolute path to the enrichment target file. The runtime grants the
-     * enricher scoped read access to exactly this one file via the sandbox's
-     * allowedPaths, so `shisho.fs.readFile(context.file.filePath)` works
-     * without the plugin declaring the broader `fileAccess` capability.
-     * Sibling files (sidecars, covers) are NOT included — the scope is the
-     * target file only. Omitted when there is no target file (e.g., a
-     * pre-scan enrichment with no file yet).
+     * enricher scoped **read-only** access to exactly this one file, so
+     * `shisho.fs.readFile(context.file.filePath)` works without the plugin
+     * declaring the broader `fileAccess` capability. Writes to this path
+     * are NOT granted — a plugin that needs to modify the file must declare
+     * `fileAccess: { level: "readwrite" }` in its manifest. Sibling files
+     * (sidecars, covers) are also not included; the scope is the target
+     * file only. Omitted when there is no target file (e.g. a pre-scan
+     * enrichment with no file yet).
      */
     filePath?: string;
     /** Audiobook duration in seconds. */

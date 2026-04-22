@@ -56,6 +56,11 @@ func injectYAMLNamespace(vm *goja.Runtime, shishoObj *goja.Object) error {
 // decodes maps as map[string]interface{} by default when the target is
 // interface{}, but non-string keys can still produce map[interface{}]interface{}
 // — this walk handles both shapes and also recurses into slices.
+//
+// Non-string keys are coerced via fmt.Sprintf("%v", ...). This means a YAML
+// document with e.g. both `1: a` and `"1": b` would collapse to a single
+// string key "1"; callers that need to preserve non-string key semantics
+// should decode into typed Go structs instead (not exposed via the JS API).
 func normalizeYAMLValue(v interface{}) interface{} {
 	switch val := v.(type) {
 	case map[interface{}]interface{}:

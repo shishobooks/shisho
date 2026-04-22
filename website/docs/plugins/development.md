@@ -495,7 +495,7 @@ search: function(context) {
 }
 ```
 
-**Reading the enrichment target.** `context.file.filePath` is the absolute path of the file being enriched. Shisho grants scoped read access to **exactly that one file** for the duration of the `search()` call, so you can inspect bytes directly without declaring the broader `fileAccess` capability:
+**Reading the enrichment target.** `context.file.filePath` is the absolute path of the file being enriched. Shisho grants scoped **read-only** access to **exactly that one file** for the duration of the `search()` call, so you can inspect bytes directly without declaring the broader `fileAccess` capability:
 
 ```javascript
 search: function(context) {
@@ -510,9 +510,10 @@ search: function(context) {
 
 Important caveats:
 
+- Scope is **read-only**. `shisho.fs.writeFile(context.file.filePath, ...)` throws "access denied" — a plugin that needs to modify the target file must declare `fileAccess: { level: "readwrite" }` in the manifest.
 - Scope is the **target file only**. Sibling files in the same directory (covers, sidecars like `.opf`, `.cbr` companions) are **not** readable. If your plugin needs them, declare `fileAccess: { level: "read" }` in the manifest — this grants read access to the full filesystem.
 - `filePath` is absent when there is no target file (e.g. a pre-scan enrichment path); always null-check.
-- The scoped access also covers the other `shisho.fs.*` read methods (`readTextFile`, `exists`) and the archive helpers for reading — it does not grant writes.
+- The scoped access also covers the other `shisho.fs.*` read methods (`readTextFile`, `exists`) and the archive helpers for reading.
 
 #### Confidence Scores
 

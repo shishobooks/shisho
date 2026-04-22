@@ -233,7 +233,7 @@ metadataEnricher: {
 
 **Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath) → *SearchResponse`
 
-The `targetFilePath` argument is the absolute path of the file being enriched and, when non-empty, is added to the FSContext's `allowedPaths` so the enricher can read exactly that file without declaring `fileAccess`. Scope is file-only — sibling files in the same directory are not included. Pass `""` when there is no target file.
+The `targetFilePath` argument is the absolute path of the file being enriched and, when non-empty, is added to the FSContext's **read-only** allowed-paths list (`SetReadOnlyAllowedPaths`) so the enricher can read exactly that file without declaring `fileAccess`. Writes to the target path are NOT granted — the read-only list is consulted only by `isReadAllowed`, not `isWriteAllowed`. A plugin that legitimately needs to modify files must declare `fileAccess: readwrite` in its manifest. Scope is file-only — sibling files in the same directory are not included. Pass `""` when there is no target file.
 
 **Search results are `ParsedMetadata` directly** — `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
 
@@ -457,11 +457,14 @@ Each hook invocation creates an `FSContext` controlling access:
 | Path | Read | Write |
 |------|------|-------|
 | Plugin's own directory | Always | Always |
-| Hook-provided paths (sourcePath, targetDir, enricher filePath, etc.) | Always | Always |
+| Hook-provided paths — RW (converter sourcePath/targetDir, parser filePath, generator destPath) | Always | Always |
+| Hook-provided paths — RO (enricher target `filePath`) | Always | **Never** |
 | Temp directory (lazy-created) | Always | Always |
 | Anywhere else | Only if `fileAccess.level` is `"read"` or `"readwrite"` | Only if `"readwrite"` |
 
-**Enrichers** get the enrichment target file only in `allowedPaths` (file-only scope, not the parent directory). A plugin that needs to read sibling files — e.g., an `.opf` sidecar next to the book — must declare `fileAccess: read` in its manifest.
+**Enrichers** get the enrichment target file only in the read-only allowed-paths list (file-only scope, not the parent directory; reads allowed, writes denied). A plugin that needs to read sibling files — e.g., an `.opf` sidecar next to the book — must declare `fileAccess: read` in its manifest. A plugin that needs to modify the target file must declare `fileAccess: readwrite`.
+
+**Known limitation (pre-existing, all hook types):** `isPathWithin` does not resolve symlinks, so a path containing a symlinked component is compared against the configured allowed paths literally. Tightening this would require `filepath.EvalSymlinks`, which fails for not-yet-existing write targets; handling both read and write paths cleanly needs care and is tracked separately.
 
 Temp dirs are auto-cleaned after hook returns.
 

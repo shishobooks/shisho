@@ -12,13 +12,23 @@ import (
 
 // FSContext tracks allowed paths and temp dir for a single hook invocation.
 // It controls what filesystem operations a plugin can perform.
+//
+// allowedPaths grants read+write on hook-provided paths (e.g. a file parser's
+// sourcePath, an output generator's destPath). Callers pass a file path for
+// file-only scope or a directory for subtree scope — there is no third option,
+// because isPathWithin does prefix matching against a trailing separator.
+//
+// allowedReadOnlyPaths is a strict subset of allowedPaths' semantics but only
+// grants reads. Used by the metadata enricher to expose the enrichment target
+// without letting the plugin overwrite the user's book file.
 type FSContext struct {
-	pluginDir     string         // Plugin's own directory (always accessible)
-	dataDir       string         // Persistent data directory (always accessible, read+write)
-	allowedPaths  []string       // Hook-provided paths (always accessible)
-	fileAccessCap *FileAccessCap // From manifest (nil = no global file access)
-	tempDir       string         // Lazy-created temp directory path
-	tempDirOnce   sync.Once      // Ensures tempDir is created only once
+	pluginDir            string         // Plugin's own directory (always accessible)
+	dataDir              string         // Persistent data directory (always accessible, read+write)
+	allowedPaths         []string       // Hook-provided paths (read+write)
+	allowedReadOnlyPaths []string       // Hook-provided paths (read-only)
+	fileAccessCap        *FileAccessCap // From manifest (nil = no global file access)
+	tempDir              string         // Lazy-created temp directory path
+	tempDirOnce          sync.Once      // Ensures tempDir is created only once
 }
 
 // NewFSContext creates a new FSContext for a hook invocation.
@@ -29,6 +39,13 @@ func NewFSContext(pluginDir, dataDir string, allowedPaths []string, fileAccessCa
 		allowedPaths:  allowedPaths,
 		fileAccessCap: fileAccessCap,
 	}
+}
+
+// SetReadOnlyAllowedPaths adds paths that the plugin may read but not write.
+// Pass a file path for file-only scope, or a directory for subtree scope
+// (same semantics as allowedPaths).
+func (ctx *FSContext) SetReadOnlyAllowedPaths(paths []string) {
+	ctx.allowedReadOnlyPaths = paths
 }
 
 // Cleanup removes the temp directory if it was created.
@@ -85,6 +102,17 @@ func (ctx *FSContext) isReadAllowed(path string) bool {
 			continue
 		}
 		// Exact match or prefix (for directory paths)
+		if absPath == absAllowed || isPathWithin(absPath, absAllowed) {
+			return true
+		}
+	}
+
+	// Read-only hook-provided paths also allow reads
+	for _, allowed := range ctx.allowedReadOnlyPaths {
+		absAllowed, err := filepath.Abs(allowed)
+		if err != nil {
+			continue
+		}
 		if absPath == absAllowed || isPathWithin(absPath, absAllowed) {
 			return true
 		}

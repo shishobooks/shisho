@@ -553,9 +553,10 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 }
 
 // TestRunMetadataSearch_TargetFilePathScopedAccess verifies that passing a
-// targetFilePath to RunMetadataSearch grants the enricher read access to
-// exactly that file — without needing to declare the broader fileAccess
+// targetFilePath to RunMetadataSearch grants the enricher READ-ONLY access
+// to exactly that file — without needing to declare the broader fileAccess
 // capability — and that omitting it leaves the enricher without access.
+// Write access to the target path must be denied even when read is granted.
 func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
 	t.Parallel()
 
@@ -566,8 +567,11 @@ func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
 	destDir := filepath.Join(pluginDir, "test", "scoped-enricher")
 	require.NoError(t, os.MkdirAll(destDir, 0755))
 
-	// Enricher returns the content it reads from the target file so we can
-	// observe whether the read succeeded or threw.
+	// Enricher dispatches on context.query: "read" reads the target,
+	// "write" tries to overwrite the target. Each branch returns a result
+	// prefixed with "ok:" or "denied:" plus the specific error message so
+	// the test can distinguish a permission denial from an unrelated
+	// runtime error.
 	manifest := `{
   "manifestVersion": 1,
   "id": "scoped-enricher",
@@ -586,10 +590,14 @@ func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
     metadataEnricher: {
       search: function(context) {
         try {
+          if (context.query === "write") {
+            shisho.fs.writeTextFile(context.file.filePath, "tampered");
+            return { results: [{ title: "ok:wrote" }] };
+          }
           var content = shisho.fs.readTextFile(context.file.filePath);
-          return { results: [{ title: "read:" + content }] };
+          return { results: [{ title: "ok:" + content }] };
         } catch (e) {
-          return { results: [{ title: "denied:" + e.message }] };
+          return { results: [{ title: "denied:" + String(e) }] };
         }
       }
     }
@@ -616,35 +624,52 @@ func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
 	targetPath := filepath.Join(libraryDir, "book.epub")
 	require.NoError(t, os.WriteFile(targetPath, []byte("book-bytes"), 0644))
 
-	searchCtx := map[string]interface{}{
-		"query": "Test",
+	readCtx := map[string]interface{}{
+		"query": "read",
 		"file":  map[string]interface{}{"fileType": "epub", "filePath": targetPath},
 	}
 
 	// With targetFilePath set, the enricher can read the file.
-	resp, err := manager.RunMetadataSearch(ctx, rt, searchCtx, targetPath)
+	resp, err := manager.RunMetadataSearch(ctx, rt, readCtx, targetPath)
 	require.NoError(t, err)
 	require.Len(t, resp.Results, 1)
-	assert.Equal(t, "read:book-bytes", resp.Results[0].Title)
+	assert.Equal(t, "ok:book-bytes", resp.Results[0].Title)
+
+	// But writes to the same path are denied — scope is read-only.
+	writeCtx := map[string]interface{}{
+		"query": "write",
+		"file":  map[string]interface{}{"fileType": "epub", "filePath": targetPath},
+	}
+	resp, err = manager.RunMetadataSearch(ctx, rt, writeCtx, targetPath)
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Contains(t, resp.Results[0].Title, "denied:", "enricher must not have write access to the target file")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
+	// Confirm the target file was not actually modified.
+	actual, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, "book-bytes", string(actual), "target file must be unchanged")
 
 	// A sibling in the same directory must NOT be readable — scope is the
 	// target file only, not its parent directory.
 	siblingPath := filepath.Join(libraryDir, "sibling.opf")
 	require.NoError(t, os.WriteFile(siblingPath, []byte("sidecar"), 0644))
 	siblingCtx := map[string]interface{}{
-		"query": "Test",
+		"query": "read",
 		"file":  map[string]interface{}{"fileType": "epub", "filePath": siblingPath},
 	}
 	resp, err = manager.RunMetadataSearch(ctx, rt, siblingCtx, targetPath)
 	require.NoError(t, err)
 	require.Len(t, resp.Results, 1)
 	assert.Contains(t, resp.Results[0].Title, "denied:", "sibling file must not be readable when scope is the target file")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
 
 	// Without targetFilePath, the enricher gets no access to external paths.
-	resp, err = manager.RunMetadataSearch(ctx, rt, searchCtx, "")
+	resp, err = manager.RunMetadataSearch(ctx, rt, readCtx, "")
 	require.NoError(t, err)
 	require.Len(t, resp.Results, 1)
 	assert.Contains(t, resp.Results[0].Title, "denied:", "expected read to be denied without targetFilePath")
+	assert.Contains(t, resp.Results[0].Title, "access denied", "expected permission-denial error, not unrelated failure")
 }
 
 func TestSearchMetadataCarriesAllFields(t *testing.T) {

@@ -341,6 +341,12 @@ function createHTMLImpl(): ShishoHTML {
 
 // ---------------------------------------------------------------------------
 // YAML implementation (eemeli/yaml — real parser, matches Go's yaml.v3 shape)
+//
+// Both this mock and the production runtime (gopkg.in/yaml.v3) target YAML
+// 1.2 semantics, so booleans like `yes`/`no`/`on`/`off` stay as strings in
+// both. Divergence is still possible on edge cases — empty documents,
+// non-string mapping keys, mapping-key ordering — so plugin authors should
+// run the real runtime when asserting against anything subtle.
 // ---------------------------------------------------------------------------
 
 function createYAMLImpl(): ShishoYAML {
