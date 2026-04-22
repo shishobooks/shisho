@@ -18,9 +18,17 @@ const (
 	FormatKepub    = "kepub"
 )
 
+// GeneratorVersion is a cache-busting token incorporated into every fingerprint.
+// Bump this when a generator's output changes in a way that existing cached
+// files no longer reflect — e.g. a bug fix that affects the bytes produced
+// for the same input. Without bumping, the cache would keep serving stale
+// files that were generated before the fix.
+const GeneratorVersion = 2
+
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
+	GeneratorVersion  int                     `json:"generator_version"`
 	Title             string                  `json:"title"`
 	Subtitle          *string                 `json:"subtitle,omitempty"`
 	Description       *string                 `json:"description,omitempty"`
@@ -160,15 +168,16 @@ func convertChaptersToFingerprint(chapters []*models.Chapter, fileType string) [
 // ComputeFingerprint creates a fingerprint from a book and file.
 func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, error) {
 	fp := &Fingerprint{
-		Title:       book.Title,
-		Subtitle:    book.Subtitle,
-		Description: book.Description,
-		Authors:     make([]FingerprintAuthor, 0),
-		Narrators:   make([]FingerprintNarrator, 0),
-		Series:      make([]FingerprintSeries, 0),
-		Genres:      make([]string, 0),
-		Tags:        make([]string, 0),
-		Identifiers: make([]FingerprintIdentifier, 0),
+		GeneratorVersion: GeneratorVersion,
+		Title:            book.Title,
+		Subtitle:         book.Subtitle,
+		Description:      book.Description,
+		Authors:          make([]FingerprintAuthor, 0),
+		Narrators:        make([]FingerprintNarrator, 0),
+		Series:           make([]FingerprintSeries, 0),
+		Genres:           make([]string, 0),
+		Tags:             make([]string, 0),
+		Identifiers:      make([]FingerprintIdentifier, 0),
 	}
 
 	// Add file-level metadata

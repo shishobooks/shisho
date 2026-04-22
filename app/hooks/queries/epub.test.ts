@@ -38,7 +38,7 @@ describe("useEpubBlob", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/books/files/42/download/original",
+      "/api/books/files/42/download",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(result.current.data).toBeInstanceOf(Blob);

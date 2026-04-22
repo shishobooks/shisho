@@ -19,10 +19,9 @@ export const useEpubBlob = (
     staleTime: 5 * 60 * 1000,
     gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
-      const response = await fetch(
-        `/api/books/files/${fileId}/download/original`,
-        { signal },
-      );
+      const response = await fetch(`/api/books/files/${fileId}/download`, {
+        signal,
+      });
       if (!response.ok) {
         throw new ShishoAPIError(
           `Failed to fetch EPUB: ${response.status} ${response.statusText}`,

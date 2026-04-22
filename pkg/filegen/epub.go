@@ -528,9 +528,15 @@ func identifierTypeToScheme(idType string) string {
 // OPF XML structures for parsing and modifying EPUB metadata.
 // These mirror the structure in pkg/epub/opf.go but are simplified for modification.
 
+// Go's encoding/xml resolves prefixes during parsing: elements appear to Go
+// under their namespace URI, not their source prefix. For marshaling to
+// produce elements that pass a strict namespace check (e.g. foliate-js's
+// `el.namespaceURI === NS.DC`), struct tags must declare the namespace URI
+// explicitly — e.g. `xml:"http://purl.org/dc/elements/1.1/ title"`.
+// Emitting the plain local name `<title>` without a namespace is what broke
+// the in-app reader and any other strict EPUB consumer.
 type opfPackage struct {
-	XMLName          xml.Name    `xml:"package"`
-	Xmlns            string      `xml:"xmlns,attr"`
+	XMLName          xml.Name    `xml:"http://www.idpf.org/2007/opf package"`
 	Version          string      `xml:"version,attr"`
 	UniqueIdentifier string      `xml:"unique-identifier,attr,omitempty"`
 	Metadata         opfMetadata `xml:"metadata"`
@@ -541,19 +547,17 @@ type opfPackage struct {
 
 type opfMetadata struct {
 	XMLName     xml.Name     `xml:"metadata"`
-	DC          string       `xml:"dc,attr,omitempty"`
-	OPF         string       `xml:"opf,attr,omitempty"`
-	Titles      []opfTitle   `xml:"title"`
-	Creators    []opfCreator `xml:"creator"`
-	Identifiers []opfID      `xml:"identifier"`
-	Language    string       `xml:"language,omitempty"`
-	Publisher   string       `xml:"publisher,omitempty"`
-	Date        string       `xml:"date,omitempty"`
-	Description string       `xml:"description,omitempty"`
-	Rights      string       `xml:"rights,omitempty"`
+	Titles      []opfTitle   `xml:"http://purl.org/dc/elements/1.1/ title"`
+	Creators    []opfCreator `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	Identifiers []opfID      `xml:"http://purl.org/dc/elements/1.1/ identifier"`
+	Language    string       `xml:"http://purl.org/dc/elements/1.1/ language,omitempty"`
+	Publisher   string       `xml:"http://purl.org/dc/elements/1.1/ publisher,omitempty"`
+	Date        string       `xml:"http://purl.org/dc/elements/1.1/ date,omitempty"`
+	Description string       `xml:"http://purl.org/dc/elements/1.1/ description,omitempty"`
+	Rights      string       `xml:"http://purl.org/dc/elements/1.1/ rights,omitempty"`
 	Meta        []opfMeta    `xml:"meta"`
-	Subjects    []string     `xml:"subject"`
-	Contributor *opfCreator  `xml:"contributor,omitempty"`
+	Subjects    []string     `xml:"http://purl.org/dc/elements/1.1/ subject"`
+	Contributor *opfCreator  `xml:"http://purl.org/dc/elements/1.1/ contributor,omitempty"`
 }
 
 type opfTitle struct {

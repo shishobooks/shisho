@@ -622,6 +622,55 @@ func createTestEPUB(t *testing.T, path string, opts testEPUBOptions) {
 	require.NoError(t, w.Close())
 }
 
+// TestEPUBGenerator_PreservesDCNamespace is a regression test for a bug where
+// the EPUB generator marshaled Dublin Core metadata without a namespace,
+// producing `<title>` instead of `<dc:title>` or `<title xmlns="...">`. Strict
+// EPUB consumers (foliate-js, some e-readers) look up metadata by namespace
+// URI and crash when DC elements have no namespace. This test guards the raw
+// XML output rather than going through opfPackage unmarshal, because the same
+// struct used for marshaling is tolerant enough to parse its own broken output.
+func TestEPUBGenerator_PreservesDCNamespace(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	createTestEPUB(t, srcPath, testEPUBOptions{
+		title:   "Source Title",
+		authors: []string{"Source Author"},
+	})
+	destPath := filepath.Join(tmpDir, "dest.epub")
+
+	book := &models.Book{
+		Title: "Regenerated Title",
+		Authors: []*models.Author{
+			{SortOrder: 0, Person: &models.Person{Name: "Regenerated Author"}},
+		},
+	}
+	file := &models.File{FileType: models.FileTypeEPUB}
+
+	gen := &EPUBGenerator{}
+	require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
+
+	opfBytes := readFileFromEPUB(t, destPath, "content.opf")
+	opfText := string(opfBytes)
+
+	// Title and creator must be resolvable to the Dublin Core namespace.
+	// Either <dc:title> with xmlns:dc="..." OR <title xmlns="..."> is acceptable;
+	// both resolve to the correct namespaceURI in a DOM.
+	assertDCNamespaced := func(localName string) {
+		t.Helper()
+		prefixed := strings.Contains(opfText, "<dc:"+localName) &&
+			strings.Contains(opfText, `xmlns:dc="http://purl.org/dc/elements/1.1/"`)
+		namespaced := strings.Contains(opfText, "<"+localName+` xmlns="http://purl.org/dc/elements/1.1/"`)
+		if !prefixed && !namespaced {
+			t.Errorf("<%s> element is not in the Dublin Core namespace.\nOPF:\n%s", localName, opfText)
+		}
+	}
+
+	assertDCNamespaced("title")
+	assertDCNamespaced("creator")
+}
+
 func readOPFFromEPUB(t *testing.T, path string) *opfPackage {
 	t.Helper()
 
