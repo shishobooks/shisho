@@ -69,6 +69,35 @@ func newApplyTestHandler(store *stubBookStoreForApply) *handler {
 	}
 }
 
+// stubPublisherFinder records the name FindOrCreatePublisher was called with.
+type stubPublisherFinder struct {
+	lastName string
+}
+
+func (s *stubPublisherFinder) FindOrCreatePublisher(_ context.Context, name string, _ int) (*models.Publisher, error) {
+	s.lastName = name
+	return &models.Publisher{ID: 1, Name: name}, nil
+}
+
+// stubImprintFinder records the name FindOrCreateImprint was called with.
+type stubImprintFinder struct {
+	lastName string
+}
+
+func (s *stubImprintFinder) FindOrCreateImprint(_ context.Context, name string, _ int) (*models.Imprint, error) {
+	s.lastName = name
+	return &models.Imprint{ID: 1, Name: name}, nil
+}
+
+// newApplyTestHandlerWithFinders wires publisher/imprint finders so tests can
+// assert on the exact names persistMetadata passed to FindOrCreate*.
+func newApplyTestHandlerWithFinders(store *stubBookStoreForApply, pub *stubPublisherFinder, imp *stubImprintFinder) *handler {
+	h := newApplyTestHandler(store)
+	h.enrich.publisherFinder = pub
+	h.enrich.imprintFinder = imp
+	return h
+}
+
 // newApplyEchoContext creates an Echo context with the given fields payload and an all-access user.
 func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 	t.Helper()
@@ -270,4 +299,29 @@ func TestApplyMetadata_PreservesVolumeNotation_CBZ(t *testing.T) {
 	assert.Equal(t, "Naruto v1", book.Title, "book.Title must not be volume-normalized on identify")
 	require.NotNil(t, file.Name)
 	assert.Equal(t, "Naruto v1", *file.Name, "file.Name must mirror the verbatim title")
+}
+
+func TestApplyMetadata_TrimsPublisherImprintURL(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	pub := &stubPublisherFinder{}
+	imp := &stubImprintFinder{}
+	h := newApplyTestHandlerWithFinders(store, pub, imp)
+	c := newApplyEchoContext(t, map[string]any{
+		"publisher": "  Some Publisher  ",
+		"imprint":   "  Penguin Classics  ",
+		"url":       "  https://example.com  ",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Some Publisher", pub.lastName, "publisher name must be trimmed before FindOrCreate")
+	assert.Equal(t, "Penguin Classics", imp.lastName, "imprint name must be trimmed before FindOrCreate")
+	require.NotNil(t, file.URL)
+	assert.Equal(t, "https://example.com", *file.URL, "file URL must be trimmed")
 }

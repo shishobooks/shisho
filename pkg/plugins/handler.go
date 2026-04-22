@@ -1871,10 +1871,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Publisher (file-level, applied to target file)
-	if md.Publisher != "" && targetFile != nil && h.enrich.publisherFinder != nil {
-		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, md.Publisher, book.LibraryID)
+	publisherName := strings.TrimSpace(md.Publisher)
+	if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {
+		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 		if pErr != nil {
-			log.Warn("failed to find/create publisher", logger.Data{"name": md.Publisher, "error": pErr.Error()})
+			log.Warn("failed to find/create publisher", logger.Data{"name": publisherName, "error": pErr.Error()})
 		} else {
 			targetFile.PublisherID = &publisher.ID
 			targetFile.PublisherSource = &pluginSource
@@ -1883,10 +1884,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Imprint (file-level, applied to target file)
-	if md.Imprint != "" && targetFile != nil && h.enrich.imprintFinder != nil {
-		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, md.Imprint, book.LibraryID)
+	imprintName := strings.TrimSpace(md.Imprint)
+	if imprintName != "" && targetFile != nil && h.enrich.imprintFinder != nil {
+		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
 		if iErr != nil {
-			log.Warn("failed to find/create imprint", logger.Data{"name": md.Imprint, "error": iErr.Error()})
+			log.Warn("failed to find/create imprint", logger.Data{"name": imprintName, "error": iErr.Error()})
 		} else {
 			targetFile.ImprintID = &imprint.ID
 			targetFile.ImprintSource = &pluginSource
@@ -1895,8 +1897,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// URL (file-level, applied to target file)
-	if md.URL != "" && targetFile != nil {
-		targetFile.URL = &md.URL
+	url := strings.TrimSpace(md.URL)
+	if url != "" && targetFile != nil {
+		targetFile.URL = &url
 		targetFile.URLSource = &pluginSource
 		fileColumns = append(fileColumns, "url", "url_source")
 	}
