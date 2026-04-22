@@ -3,6 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
+
 import { useEpubBlob } from "./epub";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -37,7 +39,7 @@ describe("useEpubBlob", () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/books/files/42/download",
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(result.current.data).toBeInstanceOf(Blob);
   });
@@ -47,5 +49,9 @@ describe("useEpubBlob", () => {
 
     const { result } = renderHook(() => useEpubBlob(42), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toBeInstanceOf(ShishoAPIError);
+    expect(result.current.error?.status).toBe(500);
+    expect(result.current.error?.code).toBe("epub_download_failed");
   });
 });

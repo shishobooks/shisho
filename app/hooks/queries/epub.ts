@@ -17,10 +17,9 @@ export const useEpubBlob = (
     ...options,
     queryKey: [QueryKey.EpubBlob, fileId],
     staleTime: 5 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
       const response = await fetch(`/api/books/files/${fileId}/download`, {
-        credentials: "include",
         signal,
       });
       if (!response.ok) {
