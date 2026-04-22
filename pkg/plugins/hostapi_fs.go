@@ -41,9 +41,9 @@ func NewFSContext(pluginDir, dataDir string, allowedPaths []string, fileAccessCa
 	}
 }
 
-// SetReadOnlyAllowedPaths adds paths that the plugin may read but not write.
-// Pass a file path for file-only scope, or a directory for subtree scope
-// (same semantics as allowedPaths).
+// SetReadOnlyAllowedPaths replaces the set of paths the plugin may read but
+// not write. Pass a file path for file-only scope, or a directory for subtree
+// scope (same semantics as allowedPaths).
 func (ctx *FSContext) SetReadOnlyAllowedPaths(paths []string) {
 	ctx.allowedReadOnlyPaths = paths
 }
