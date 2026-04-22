@@ -2217,8 +2217,10 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Organize files if title, authors, narrators, or series changed (these affect directory/file names).
+	// Trim title/series first so whitespace-only values don't trigger a no-op organize pass —
+	// persistMetadata already trims before persisting, so untrimmed values would never change the book.
 	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
-	if md.Title != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || md.Series != "" {
+	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})

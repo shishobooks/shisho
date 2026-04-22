@@ -243,6 +243,25 @@ func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when only description changes")
 }
 
+func TestApplyMetadata_SkipsOrganize_WhenOnlyWhitespaceTitleAndSeries(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"title":  "   ",
+		"series": "\t\n",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when title and series are whitespace-only")
+}
+
 func TestApplyMetadata_UpdatesMainFileName_WhenTitleChanges(t *testing.T) {
 	t.Parallel()
 

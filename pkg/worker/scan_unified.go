@@ -911,7 +911,7 @@ func (w *Worker) scanFileCore(
 		}
 		// Description (from sidecar, strip HTML for clean display)
 		if bookSidecarData != nil && bookSidecarData.Description != nil && *bookSidecarData.Description != "" {
-			sanitizedDesc := htmlutil.StripTags(*bookSidecarData.Description)
+			sanitizedDesc := htmlutil.StripTags(strings.TrimSpace(*bookSidecarData.Description))
 			existingDescription := ""
 			existingDescriptionSource := ""
 			if book.Description != nil {
