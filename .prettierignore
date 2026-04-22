@@ -16,6 +16,7 @@ website/versions.json
 pkg/plugins/testdata/
 packages/plugin-sdk/testing/index.js
 packages/plugin-sdk/testing/index.d.ts
+app/libraries/foliate/
 CHANGELOG.md
 pnpm-lock.yaml
 website/pnpm-lock.yaml
