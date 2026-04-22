@@ -130,6 +130,7 @@ export default function EPUBReader({
   const [currentTocHref, setCurrentTocHref] = useState<string | null>(null);
   const [currentTocLabel, setCurrentTocLabel] = useState<string | null>(null);
   const [bookReady, setBookReady] = useState(false);
+  const [loadError, setLoadError] = useState<Error | null>(null);
 
   // Load the blob into foliate once both are available.
   useEffect(() => {
@@ -142,10 +143,19 @@ export default function EPUBReader({
           };
         })
       | null;
-    if (!view || typeof view.open !== "function") return;
+    if (!view) return;
+    if (typeof view.open !== "function") {
+      setLoadError(
+        new Error(
+          "EPUB renderer did not register — the <foliate-view> custom element is missing its open() method.",
+        ),
+      );
+      return;
+    }
 
     let cancelled = false;
     setBookReady(false);
+    setLoadError(null);
 
     const bookFile = new globalThis.File(
       [blob],
@@ -158,8 +168,11 @@ export default function EPUBReader({
       if (cancelled) return;
       setToc(flattenToc(view.book?.toc));
       setBookReady(true);
-    })().catch(() => {
-      // Surfaced via the main error state if it fails; foliate typically rejects with a descriptive Error.
+    })().catch((err: unknown) => {
+      if (cancelled) return;
+      const asError = err instanceof Error ? err : new Error(String(err));
+      console.error("EPUBReader: foliate open() failed", err);
+      setLoadError(asError);
     });
 
     return () => {
@@ -274,18 +287,25 @@ export default function EPUBReader({
 
   const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
 
-  if (isError) {
+  if (isError || loadError) {
+    const displayError = loadError ?? error;
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
         <div>
           <p className="font-medium">We couldn't load this book.</p>
           <p className="text-sm text-muted-foreground mt-1">
-            {error?.message ?? "Unknown error"}
+            {displayError?.message ?? "Unknown error"}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => refetch()} variant="default">
+          <Button
+            onClick={() => {
+              setLoadError(null);
+              refetch();
+            }}
+            variant="default"
+          >
             Retry
           </Button>
           <Button asChild variant="outline">
