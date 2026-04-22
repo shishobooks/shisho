@@ -1,15 +1,35 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useEpubBlob } from "@/hooks/queries/epub";
 
 import EPUBReader from "./EPUBReader";
 
+// Prevent jsdom from trying to execute the real foliate view.js (it uses
+// browser-only module specifiers and dynamic imports that jsdom can't resolve).
+vi.mock("@/libraries/foliate/view.js", () => ({}));
+
 vi.mock("@/hooks/queries/epub", () => ({
   useEpubBlob: vi.fn(),
 }));
+
+beforeAll(() => {
+  if (!customElements.get("foliate-view")) {
+    customElements.define(
+      "foliate-view",
+      class extends HTMLElement {
+        open = vi.fn().mockResolvedValue(undefined);
+        goLeft = vi.fn();
+        goRight = vi.fn();
+        goTo = vi.fn();
+        goToFraction = vi.fn();
+        book = { toc: [] };
+      },
+    );
+  }
+});
 
 vi.mock("@/hooks/queries/settings", () => ({
   useViewerSettings: vi.fn(() => ({ data: undefined, isLoading: true })),

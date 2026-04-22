@@ -1,7 +1,7 @@
 // Type declarations for foliate-js's <foliate-view> custom element.
 // See app/libraries/foliate/view.js for the runtime definition.
 
-import "react";
+import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 interface FoliateTOCItem {
   label: string;
@@ -33,17 +33,40 @@ interface FoliateViewElement extends HTMLElement {
   };
 }
 
+type FoliateViewJSXProps = DetailedHTMLProps<
+  HTMLAttributes<FoliateViewElement>,
+  FoliateViewElement
+>;
+
 declare global {
   interface HTMLElementTagNameMap {
     "foliate-view": FoliateViewElement;
   }
+}
 
+// React 19 with `jsx: react-jsx` looks up intrinsic elements on the JSX
+// namespaces exported by `react` and `react/jsx-runtime`. Augment all three
+// so the tag type-checks regardless of how tsc resolves the JSX factory.
+declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "foliate-view": React.DetailedHTMLProps<
-        React.HTMLAttributes<FoliateViewElement>,
-        FoliateViewElement
-      >;
+      "foliate-view": FoliateViewJSXProps;
+    }
+  }
+}
+
+declare module "react/jsx-runtime" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "foliate-view": FoliateViewJSXProps;
+    }
+  }
+}
+
+declare module "react/jsx-dev-runtime" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "foliate-view": FoliateViewJSXProps;
     }
   }
 }
