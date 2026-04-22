@@ -888,8 +888,10 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		// Description (from metadata)
-		description := strings.TrimSpace(metadata.Description)
+		// Description (from metadata) — strip HTML so enricher-provided markup
+		// doesn't leak into the stored description. Matches the sidecar branch
+		// below and the identify apply path.
+		description := htmlutil.StripTags(strings.TrimSpace(metadata.Description))
 		if description != "" {
 			existingDescription := ""
 			existingDescriptionSource := ""

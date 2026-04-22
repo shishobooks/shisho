@@ -5153,3 +5153,44 @@ func TestScanFileCore_Title_FileMetadataSource_StillVolumeNormalized(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "Some Title v007", reloaded.Title, "file_metadata-sourced volume notation must still be normalized")
 }
+
+func TestScanFileCore_Description_StripsHTMLFromMetadata(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "book.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	metadata := &mediafile.ParsedMetadata{
+		Title:       "Book",
+		Description: "<p>Hello <b>world</b></p>",
+		DataSource:  models.PluginDataSource("test", "enricher"),
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Description)
+	assert.Equal(t, "Hello world", *reloaded.Description, "description HTML must be stripped from scan metadata")
+}
