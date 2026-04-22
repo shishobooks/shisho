@@ -6,10 +6,14 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import type { EpubFlow, EpubTheme, FitMode } from "@/types";
 
 export interface ViewerSettings {
   preload_count: number;
-  fit_mode: "fit-height" | "original";
+  fit_mode: FitMode;
+  viewer_epub_font_size: number;
+  viewer_epub_theme: EpubTheme;
+  viewer_epub_flow: EpubFlow;
 }
 
 export enum QueryKey {
@@ -33,7 +37,10 @@ export const useViewerSettings = (
 
 interface UpdateViewerSettingsVariables {
   preload_count: number;
-  fit_mode: "fit-height" | "original";
+  fit_mode: FitMode;
+  viewer_epub_font_size: number;
+  viewer_epub_theme: EpubTheme;
+  viewer_epub_flow: EpubFlow;
 }
 
 export const useUpdateViewerSettings = () => {

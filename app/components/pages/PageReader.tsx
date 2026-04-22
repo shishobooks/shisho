@@ -222,6 +222,12 @@ export default function PageReader({
                       updateSettings.mutate({
                         preload_count: value,
                         fit_mode: fitMode,
+                        viewer_epub_font_size:
+                          settings?.viewer_epub_font_size ?? 100,
+                        viewer_epub_theme:
+                          settings?.viewer_epub_theme ?? "light",
+                        viewer_epub_flow:
+                          settings?.viewer_epub_flow ?? "paginated",
                       });
                     }}
                     step={1}
@@ -237,6 +243,12 @@ export default function PageReader({
                         updateSettings.mutate({
                           preload_count: preloadCount,
                           fit_mode: "fit-height",
+                          viewer_epub_font_size:
+                            settings?.viewer_epub_font_size ?? 100,
+                          viewer_epub_theme:
+                            settings?.viewer_epub_theme ?? "light",
+                          viewer_epub_flow:
+                            settings?.viewer_epub_flow ?? "paginated",
                         })
                       }
                       size="sm"
@@ -250,6 +262,12 @@ export default function PageReader({
                         updateSettings.mutate({
                           preload_count: preloadCount,
                           fit_mode: "original",
+                          viewer_epub_font_size:
+                            settings?.viewer_epub_font_size ?? 100,
+                          viewer_epub_theme:
+                            settings?.viewer_epub_theme ?? "light",
+                          viewer_epub_flow:
+                            settings?.viewer_epub_flow ?? "paginated",
                         })
                       }
                       size="sm"
