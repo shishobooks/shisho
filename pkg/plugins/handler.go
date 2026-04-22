@@ -1841,9 +1841,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// File-level metadata: accumulate column updates and flush once at the end.
-	// (fileColumns is declared above the Title block so the Title mirror can append to it.)
-
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {

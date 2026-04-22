@@ -144,7 +144,7 @@ func newApplyTestBookWithFile(t *testing.T, title string, fileType string) (*mod
 		ID:        1,
 		BookID:    book.ID,
 		LibraryID: book.LibraryID,
-		Filepath:  filepath.Join(book.Filepath, "main"+"."+fileType),
+		Filepath:  filepath.Join(book.Filepath, "main."+fileType),
 		FileType:  fileType,
 		FileRole:  models.FileRoleMain,
 	}
