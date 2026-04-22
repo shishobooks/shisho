@@ -1,9 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useEpubBlob } from "@/hooks/queries/epub";
+import {
+  useUpdateViewerSettings,
+  useViewerSettings,
+} from "@/hooks/queries/settings";
 
 import EPUBReader from "./EPUBReader";
 
@@ -101,5 +106,37 @@ describe("EPUBReader", () => {
     expect(screen.getByText(/may take a moment/i)).toBeInTheDocument();
 
     vi.useRealTimers();
+  });
+
+  it("updates settings when the theme button is clicked", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const mutate = vi.fn();
+    vi.mocked(useViewerSettings).mockReturnValue({
+      data: {
+        preload_count: 3,
+        fit_mode: "fit-height",
+        viewer_epub_font_size: 100,
+        viewer_epub_theme: "light",
+        viewer_epub_flow: "paginated",
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateViewerSettings).mockReturnValue({ mutate } as never);
+
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(await screen.findByRole("button", { name: /settings/i }));
+    await user.click(screen.getByRole("button", { name: /dark/i }));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ viewer_epub_theme: "dark" }),
+    );
   });
 });

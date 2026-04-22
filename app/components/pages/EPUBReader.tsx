@@ -4,14 +4,25 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Settings,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
 import { useEpubBlob } from "@/hooks/queries/epub";
+import {
+  useUpdateViewerSettings,
+  useViewerSettings,
+} from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { File } from "@/types";
+import type { EpubFlow, EpubTheme, File, FitMode } from "@/types";
 
 import "@/libraries/foliate/view.js";
 
@@ -62,6 +73,37 @@ export default function EPUBReader({
     error,
     refetch,
   } = useEpubBlob(file.id);
+
+  const { data: settings, isLoading: settingsLoading } = useViewerSettings();
+  const updateSettings = useUpdateViewerSettings();
+  const settingsReady = !settingsLoading && settings != null;
+
+  const fontSize = settings?.viewer_epub_font_size ?? 100;
+  const theme = settings?.viewer_epub_theme ?? "light";
+  const flow = settings?.viewer_epub_flow ?? "paginated";
+
+  const commitSettings = useCallback(
+    (
+      partial: Partial<{
+        preload_count: number;
+        fit_mode: FitMode;
+        viewer_epub_font_size: number;
+        viewer_epub_theme: EpubTheme;
+        viewer_epub_flow: EpubFlow;
+      }>,
+    ) => {
+      if (!settings) return;
+      updateSettings.mutate({
+        preload_count: settings.preload_count,
+        fit_mode: settings.fit_mode,
+        viewer_epub_font_size: settings.viewer_epub_font_size,
+        viewer_epub_theme: settings.viewer_epub_theme,
+        viewer_epub_flow: settings.viewer_epub_flow,
+        ...partial,
+      });
+    },
+    [settings, updateSettings],
+  );
 
   const [showExtendedHint, setShowExtendedHint] = useState(false);
   useEffect(() => {
@@ -132,6 +174,43 @@ export default function EPUBReader({
     view.addEventListener("relocate", handleRelocate);
     return () => view.removeEventListener("relocate", handleRelocate);
   }, [bookReady]);
+
+  // Push viewer settings (font size / theme / flow) to the foliate renderer.
+  useEffect(() => {
+    if (!bookReady) return;
+    const view = viewRef.current as
+      | (HTMLElement & {
+          renderer?: {
+            setStyles?: (styles: string | [string, string]) => void;
+            setAttribute?: (name: string, value: string) => void;
+          };
+        })
+      | null;
+    const renderer = view?.renderer;
+    if (!renderer) return;
+
+    const { fg, bg } =
+      theme === "dark"
+        ? { fg: "#e8e8e8", bg: "#1a1a1a" }
+        : theme === "sepia"
+          ? { fg: "#5b4636", bg: "#f4ecd8" }
+          : { fg: "#111111", bg: "#ffffff" };
+
+    // foliate's `setStyles` takes a CSS string (or [beforeStyle, style] tuple).
+    // See app/libraries/foliate/paginator.js `setStyles(styles)`.
+    const css = `
+      @namespace epub "http://www.idpf.org/2007/ops";
+      html {
+        color: ${fg};
+        background: ${bg};
+      }
+      html, body {
+        font-size: ${fontSize}%;
+      }
+    `;
+    renderer.setStyles?.(css);
+    renderer.setAttribute?.("flow", flow);
+  }, [bookReady, fontSize, theme, flow]);
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
@@ -226,7 +305,65 @@ export default function EPUBReader({
               ))}
             </select>
           )}
-          {/* Settings popover added in Task 7 */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button aria-label="Settings" size="icon" variant="ghost">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">
+                    Font size: {fontSize}%
+                  </label>
+                  <Slider
+                    className="mt-2"
+                    disabled={!settingsReady}
+                    max={200}
+                    min={50}
+                    onValueChange={([value]) =>
+                      commitSettings({ viewer_epub_font_size: value })
+                    }
+                    step={10}
+                    value={[fontSize]}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Theme</label>
+                  <div className="flex gap-2 mt-2">
+                    {(["light", "dark", "sepia"] as const).map((t) => (
+                      <Button
+                        disabled={!settingsReady}
+                        key={t}
+                        onClick={() => commitSettings({ viewer_epub_theme: t })}
+                        size="sm"
+                        variant={theme === t ? "default" : "outline"}
+                      >
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Flow</label>
+                  <div className="flex gap-2 mt-2">
+                    {(["paginated", "scrolled"] as const).map((f) => (
+                      <Button
+                        disabled={!settingsReady}
+                        key={f}
+                        onClick={() => commitSettings({ viewer_epub_flow: f })}
+                        size="sm"
+                        variant={flow === f ? "default" : "outline"}
+                      >
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
 
