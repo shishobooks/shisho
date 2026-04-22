@@ -164,6 +164,10 @@ export default function EPUBReader({
 
     return () => {
       cancelled = true;
+      const current = viewRef.current as
+        | (HTMLElement & { close?: () => void })
+        | null;
+      current?.close?.();
     };
   }, [blob, bookTitle]);
 
@@ -311,8 +315,8 @@ export default function EPUBReader({
               value={currentTocHref ?? ""}
             >
               {currentTocHref === null && <option value="">—</option>}
-              {toc.map((entry) => (
-                <option key={entry.href} value={entry.href}>
+              {toc.map((entry, index) => (
+                <option key={`${index}-${entry.href}`} value={entry.href}>
                   {entry.label}
                 </option>
               ))}
