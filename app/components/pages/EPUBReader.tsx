@@ -152,6 +152,14 @@ export default function EPUBReader({
       );
       return;
     }
+    const viewInit = (
+      view as HTMLElement & {
+        init?: (opts: {
+          lastLocation?: unknown;
+          showTextStart?: boolean;
+        }) => Promise<void>;
+      }
+    ).init;
 
     let cancelled = false;
     setBookReady(false);
@@ -167,6 +175,13 @@ export default function EPUBReader({
       await view.open!(bookFile);
       if (cancelled) return;
       setToc(flattenToc(view.book?.toc));
+      // foliate's open() only parses; init() is what actually navigates to
+      // the first page and triggers rendering. Without it the view stays at
+      // 0% with an empty content area.
+      if (viewInit) {
+        await viewInit.call(view, { showTextStart: false });
+        if (cancelled) return;
+      }
       setBookReady(true);
     })().catch((err: unknown) => {
       if (cancelled) return;
@@ -180,7 +195,14 @@ export default function EPUBReader({
       const current = viewRef.current as
         | (HTMLElement & { close?: () => void })
         | null;
-      current?.close?.();
+      // close() tears down foliate's paginator, which throws if called before
+      // a book finished opening (e.g. under React StrictMode's mount/unmount
+      // dance). Swallow — cleanup failures shouldn't take down the reader.
+      try {
+        current?.close?.();
+      } catch {
+        // no-op
+      }
     };
   }, [blob, bookTitle]);
 
@@ -435,7 +457,11 @@ export default function EPUBReader({
           ref={(el) => {
             viewRef.current = el;
           }}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          style={{
+            display: "block",
+            position: "absolute",
+            inset: 0,
+          }}
         />
       </main>
 

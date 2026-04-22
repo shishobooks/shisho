@@ -284,6 +284,13 @@ class View {
     }
     render(layout) {
         if (!layout) return
+        // Shisho patch: bail if the iframe has been detached from the DOM (its
+        // contentDocument goes null). Happens when the reader unmounts and the
+        // ResizeObserver fires one last time before we tear the view down.
+        // Upstream crashes with "Cannot read properties of null (reading
+        // 'documentElement')" in columnize(). See:
+        // https://www.notion.so/Keep-foliate-EPUB-reader-compatible-if-a-CSP-header-is-added-...
+        if (!this.document) return
         this.#column = layout.flow !== 'scrolled'
         this.#layout = layout
         if (this.#column) this.columnize(layout)
@@ -1120,7 +1127,10 @@ export class Paginator extends HTMLElement {
     }
     destroy() {
         this.#observer.unobserve(this)
-        this.#view.destroy()
+        // Shisho patch: destroy() runs during React unmount even when open()
+        // never finished (StrictMode double-invoke). Upstream assumes #view
+        // is non-null here and crashes. Guarding makes cleanup idempotent.
+        this.#view?.destroy()
         this.#view = null
         this.sections[this.#index]?.unload?.()
         this.#mediaQuery.removeEventListener('change', this.#mediaQueryListener)
