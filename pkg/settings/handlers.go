@@ -29,6 +29,9 @@ func (h *handler) getViewerSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, ViewerSettingsResponse{
 		PreloadCount: settings.ViewerPreloadCount,
 		FitMode:      settings.ViewerFitMode,
+		EpubFontSize: settings.EpubFontSize,
+		EpubTheme:    settings.EpubTheme,
+		EpubFlow:     settings.EpubFlow,
 	})
 }
 
@@ -45,17 +48,31 @@ func (h *handler) updateViewerSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Validate preload count (1-10)
 	if payload.PreloadCount < 1 || payload.PreloadCount > 10 {
 		return errcodes.ValidationError("preload_count must be between 1 and 10")
 	}
 
-	// Validate fit mode
 	if !IsValidFitMode(payload.FitMode) {
 		return errcodes.ValidationError("fit_mode must be 'fit-height' or 'original'")
 	}
 
-	settings, err := h.settingsService.UpdateViewerSettings(ctx, user.ID, payload.PreloadCount, payload.FitMode)
+	if payload.EpubFontSize < 50 || payload.EpubFontSize > 200 {
+		return errcodes.ValidationError("viewer_epub_font_size must be between 50 and 200")
+	}
+
+	if !IsValidEpubTheme(payload.EpubTheme) {
+		return errcodes.ValidationError("viewer_epub_theme must be 'light', 'dark', or 'sepia'")
+	}
+
+	if !IsValidEpubFlow(payload.EpubFlow) {
+		return errcodes.ValidationError("viewer_epub_flow must be 'paginated' or 'scrolled'")
+	}
+
+	settings, err := h.settingsService.UpdateViewerSettings(
+		ctx, user.ID,
+		payload.PreloadCount, payload.FitMode,
+		payload.EpubFontSize, payload.EpubTheme, payload.EpubFlow,
+	)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -63,5 +80,8 @@ func (h *handler) updateViewerSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, ViewerSettingsResponse{
 		PreloadCount: settings.ViewerPreloadCount,
 		FitMode:      settings.ViewerFitMode,
+		EpubFontSize: settings.EpubFontSize,
+		EpubTheme:    settings.EpubTheme,
+		EpubFlow:     settings.EpubFlow,
 	})
 }

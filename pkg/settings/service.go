@@ -40,7 +40,15 @@ func (svc *Service) GetViewerSettings(ctx context.Context, userID int) (*models.
 }
 
 // UpdateViewerSettings updates viewer settings for a user, creating if not exists.
-func (svc *Service) UpdateViewerSettings(ctx context.Context, userID int, preloadCount int, fitMode string) (*models.UserSettings, error) {
+func (svc *Service) UpdateViewerSettings(
+	ctx context.Context,
+	userID int,
+	preloadCount int,
+	fitMode string,
+	epubFontSize int,
+	epubTheme string,
+	epubFlow string,
+) (*models.UserSettings, error) {
 	now := time.Now()
 
 	settings := &models.UserSettings{
@@ -49,6 +57,9 @@ func (svc *Service) UpdateViewerSettings(ctx context.Context, userID int, preloa
 		UserID:             userID,
 		ViewerPreloadCount: preloadCount,
 		ViewerFitMode:      fitMode,
+		EpubFontSize:       epubFontSize,
+		EpubTheme:          epubTheme,
+		EpubFlow:           epubFlow,
 	}
 
 	_, err := svc.db.NewInsert().
@@ -57,6 +68,9 @@ func (svc *Service) UpdateViewerSettings(ctx context.Context, userID int, preloa
 		Set("updated_at = EXCLUDED.updated_at").
 		Set("viewer_preload_count = EXCLUDED.viewer_preload_count").
 		Set("viewer_fit_mode = EXCLUDED.viewer_fit_mode").
+		Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
+		Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
+		Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
 		Returning("*").
 		Exec(ctx)
 

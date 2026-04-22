@@ -6,12 +6,18 @@ import "github.com/shishobooks/shisho/pkg/models"
 type ViewerSettingsPayload struct {
 	PreloadCount int    `json:"preload_count"`
 	FitMode      string `json:"fit_mode"`
+	EpubFontSize int    `json:"viewer_epub_font_size"`
+	EpubTheme    string `json:"viewer_epub_theme"`
+	EpubFlow     string `json:"viewer_epub_flow"`
 }
 
 // ViewerSettingsResponse is the response for viewer settings.
 type ViewerSettingsResponse struct {
 	PreloadCount int    `json:"preload_count"`
 	FitMode      string `json:"fit_mode"`
+	EpubFontSize int    `json:"viewer_epub_font_size"`
+	EpubTheme    string `json:"viewer_epub_theme"`
+	EpubFlow     string `json:"viewer_epub_flow"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -25,6 +31,24 @@ func IsValidFitMode(mode string) bool {
 		if mode == valid {
 			return true
 		}
+	}
+	return false
+}
+
+// IsValidEpubTheme returns true if the theme is a supported EPUB theme.
+func IsValidEpubTheme(theme string) bool {
+	switch theme {
+	case models.EpubThemeLight, models.EpubThemeDark, models.EpubThemeSepia:
+		return true
+	}
+	return false
+}
+
+// IsValidEpubFlow returns true if the flow is a supported EPUB flow mode.
+func IsValidEpubFlow(flow string) bool {
+	switch flow {
+	case models.EpubFlowPaginated, models.EpubFlowScrolled:
+		return true
 	}
 	return false
 }
