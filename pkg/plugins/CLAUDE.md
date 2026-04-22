@@ -17,6 +17,7 @@ pkg/plugins/
   hostapi_archive.go - ZIP operations
   hostapi_xml.go    - XML parsing
   hostapi_html.go   - HTML parsing with CSS selectors (cascadia)
+  hostapi_yaml.go   - YAML parse/stringify (gopkg.in/yaml.v3)
   hostapi_ffmpeg.go - FFmpeg transcode/probe/version
   hostapi_shell.go  - Shell exec with command allowlist
   generator.go      - PluginGenerator (filegen.Generator interface)
@@ -38,7 +39,7 @@ packages/plugin-sdk/
 ├── package.json       # @shisho/plugin-sdk
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
-├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, ffmpeg, shell)
+├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, yaml, ffmpeg, shell)
 ├── hooks.d.ts         # Hook contexts, return types, ShishoPlugin interface
 ├── metadata.d.ts      # ParsedMetadata, ParsedAuthor, ParsedIdentifier, ParsedChapter
 └── manifest.d.ts      # PluginManifest, Capabilities, ConfigSchema, ConfigField
@@ -200,6 +201,7 @@ metadataEnricher: {
 
     // context.file        - read-only file hints (non-modifiable)
     // context.file.fileType      - "epub", "cbz", "m4b", "pdf"
+    // context.file.filePath      - absolute path to the enrichment target (scoped read access via allowedPaths)
     // context.file.duration      - seconds (audiobooks only, float)
     // context.file.pageCount     - CBZ/PDF page count (integer)
     // context.file.filesizeBytes - file size in bytes (integer)
@@ -229,7 +231,9 @@ metadataEnricher: {
 }
 ```
 
-**Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx) → *SearchResponse`
+**Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath) → *SearchResponse`
+
+The `targetFilePath` argument is the absolute path of the file being enriched and, when non-empty, is added to the FSContext's `allowedPaths` so the enricher can read exactly that file without declaring `fileAccess`. Scope is file-only — sibling files in the same directory are not included. Pass `""` when there is no target file.
 
 **Search results are `ParsedMetadata` directly** — `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
 
@@ -393,6 +397,20 @@ elem.attributes   // Record<string, string>
 elem.children     // HtmlElement[]
 ```
 
+### shisho.yaml
+
+```javascript
+// No capability required — pure in-memory parser, no I/O.
+var doc = shisho.yaml.parse("title: My Book\npages: 100");
+doc.title  // "My Book"
+doc.pages  // 100
+
+var out = shisho.yaml.stringify({ title: "My Book", pages: 100 });
+// "title: My Book\npages: 100\n"
+```
+
+Backed by `gopkg.in/yaml.v3`, which does not instantiate arbitrary objects from custom tags (unlike PyYAML's full loader / Ruby's Psych), so parsing untrusted YAML cannot execute code. DoS risk from oversized or deeply-nested inputs is bounded by the plugin hook timeout — same class of risk as `shisho.xml`, `shisho.html`, and `resp.json()`.
+
 ### shisho.ffmpeg
 
 ```javascript
@@ -439,11 +457,11 @@ Each hook invocation creates an `FSContext` controlling access:
 | Path | Read | Write |
 |------|------|-------|
 | Plugin's own directory | Always | Always |
-| Hook-provided paths (sourcePath, targetDir, etc.) | Always | Always |
+| Hook-provided paths (sourcePath, targetDir, enricher filePath, etc.) | Always | Always |
 | Temp directory (lazy-created) | Always | Always |
 | Anywhere else | Only if `fileAccess.level` is `"read"` or `"readwrite"` | Only if `"readwrite"` |
 
-**Enrichers** get no extra allowed paths (only plugin dir + temp + fileAccess).
+**Enrichers** get the enrichment target file only in `allowedPaths` (file-only scope, not the parent directory). A plugin that needs to read sibling files — e.g., an `.opf` sidecar next to the book — must declare `fileAccess: read` in its manifest.
 
 Temp dirs are auto-cleaned after hook returns.
 

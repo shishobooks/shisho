@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { parseHTML } from "linkedom";
+import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
 
 import type {
   FetchResponse,
@@ -13,6 +14,7 @@ import type {
   ShishoLog,
   ShishoURL,
   ShishoXML,
+  ShishoYAML,
   XMLElement,
 } from "../index";
 
@@ -338,6 +340,31 @@ function createHTMLImpl(): ShishoHTML {
 }
 
 // ---------------------------------------------------------------------------
+// YAML implementation (eemeli/yaml — real parser, matches Go's yaml.v3 shape)
+// ---------------------------------------------------------------------------
+
+function createYAMLImpl(): ShishoYAML {
+  return {
+    parse(content: string): unknown {
+      try {
+        return parseYAML(content);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`shisho.yaml.parse: ${message}`);
+      }
+    },
+    stringify(value: unknown): string {
+      try {
+        return stringifyYAML(value);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`shisho.yaml.stringify: ${message}`);
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main factory
 // ---------------------------------------------------------------------------
 
@@ -345,7 +372,7 @@ function createHTMLImpl(): ShishoHTML {
  * Create a mock `shisho` host API object for testing plugins.
  *
  * Provides mock implementations of log, config, http, url, and fs.
- * Provides real implementations of xml and html (backed by fast-xml-parser and linkedom).
+ * Provides real implementations of xml, html, and yaml (backed by fast-xml-parser, linkedom, and the `yaml` package).
  *
  * @example
  * ```ts
@@ -606,6 +633,7 @@ export function createMockShisho(
     },
     xml: createXMLImpl(),
     html: createHTMLImpl(),
+    yaml: createYAMLImpl(),
     ffmpeg: {
       transcode: notImplemented("ffmpeg.transcode") as never,
       probe: notImplemented("ffmpeg.probe") as never,

@@ -329,6 +329,7 @@ var plugin = (function() {
 
         // context.file — read-only file metadata for matching
         // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+        // context.file.filePath      — absolute path (scoped read access, see File Hints below)
         // context.file.duration      — seconds (audiobooks only)
         // context.file.pageCount     — CBZ/PDF page count
         // context.file.filesizeBytes — file size in bytes
@@ -475,6 +476,7 @@ The `context.file` object provides read-only metadata about the file being enric
 search: function(context) {
   // context.file — read-only file metadata for matching
   // context.file.fileType      — "epub", "cbz", "m4b", "pdf"
+  // context.file.filePath      — absolute path to the enrichment target (see below)
   // context.file.duration      — seconds (audiobooks only)
   // context.file.pageCount     — CBZ/PDF page count
   // context.file.filesizeBytes — file size in bytes
@@ -492,6 +494,25 @@ search: function(context) {
   // ...
 }
 ```
+
+**Reading the enrichment target.** `context.file.filePath` is the absolute path of the file being enriched. Shisho grants scoped read access to **exactly that one file** for the duration of the `search()` call, so you can inspect bytes directly without declaring the broader `fileAccess` capability:
+
+```javascript
+search: function(context) {
+  if (context.file && context.file.filePath) {
+    // Scoped to just this file — reads work even without fileAccess in manifest.
+    var bytes = shisho.fs.readFile(context.file.filePath);
+    // Inspect the bytes to pull an embedded identifier, ISBN barcode, etc.
+  }
+  // ...
+}
+```
+
+Important caveats:
+
+- Scope is the **target file only**. Sibling files in the same directory (covers, sidecars like `.opf`, `.cbr` companions) are **not** readable. If your plugin needs them, declare `fileAccess: { level: "read" }` in the manifest — this grants read access to the full filesystem.
+- `filePath` is absent when there is no target file (e.g. a pre-scan enrichment path); always null-check.
+- The scoped access also covers the other `shisho.fs.*` read methods (`readTextFile`, `exists`) and the archive helpers for reading — it does not grant writes.
 
 #### Confidence Scores
 
@@ -744,6 +765,35 @@ Each returned element has:
 - `text` — recursive inner text content
 - `innerHTML` — raw inner HTML string
 - `children` — child elements
+
+### YAML
+
+Parse and serialize YAML. No capability required — it's a pure in-memory parser.
+
+```javascript
+// Parse a YAML string into a plain JS value
+var config = shisho.yaml.parse("title: My Book\npages: 100");
+config.title;  // "My Book"
+config.pages;  // 100
+
+// Nested structures and sequences map to nested objects and arrays
+var doc = shisho.yaml.parse(
+  "book:\n" +
+  "  title: My Book\n" +
+  "  authors:\n" +
+  "    - Alice\n" +
+  "    - Bob\n"
+);
+doc.book.authors[0];  // "Alice"
+
+// Serialize any JS value back to a YAML string
+var out = shisho.yaml.stringify({ title: "My Book", pages: 100 });
+// "title: My Book\npages: 100\n"
+```
+
+Invalid YAML throws — wrap in `try/catch` if you're parsing responses from an external source that might return malformed YAML.
+
+**Security.** The underlying parser (`gopkg.in/yaml.v3`) does not instantiate arbitrary objects from custom tags, so parsing untrusted YAML cannot execute code. This is unlike some other ecosystems' default loaders (e.g. PyYAML's full loader, Ruby's Psych). The residual risk from oversized or deeply-nested inputs is bounded by the plugin's hook timeout — the same risk profile as `shisho.xml`, `shisho.html`, or parsing JSON from an HTTP response.
 
 ### FFmpeg
 

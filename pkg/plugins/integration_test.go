@@ -222,7 +222,7 @@ func TestPluginLifecycle(t *testing.T) {
 		},
 	}
 
-	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	searchResp, err := manager.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.NotNil(t, searchResp)
 	require.Len(t, searchResp.Results, 1)
@@ -403,7 +403,7 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 		"file":  map[string]interface{}{"fileType": "epub"},
 	}
 
-	result, err := manager.RunMetadataSearch(ctx, rt, searchCtx)
+	result, err := manager.RunMetadataSearch(ctx, rt, searchCtx, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Results, 1)

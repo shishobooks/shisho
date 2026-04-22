@@ -202,7 +202,12 @@ type SearchResponse struct {
 }
 
 // RunMetadataSearch invokes a plugin's metadataEnricher.search() hook.
-func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}) (*SearchResponse, error) {
+//
+// targetFilePath, if non-empty, grants the enricher read/write access to
+// exactly that one file (the enrichment target) via FSContext.allowedPaths —
+// without it, enrichers get no filesystem access beyond the plugin's own
+// directory unless they declare the broader fileAccess capability.
+func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx map[string]interface{}, targetFilePath string) (*SearchResponse, error) {
 	if rt.metadataEnricher == nil {
 		return nil, errors.New("plugin does not have a metadataEnricher hook")
 	}
@@ -213,9 +218,15 @@ func (m *Manager) RunMetadataSearch(ctx context.Context, rt *Runtime, searchCtx 
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
-	// Set up FSContext (no extra allowed paths for enrichers)
+	// Scope FS access to the target file only. The allowedPaths list matches
+	// exact file paths (or descendants when the entry is a directory); passing
+	// just the file means the plugin cannot read siblings like sidecars.
+	var allowedPaths []string
+	if targetFilePath != "" {
+		allowedPaths = []string{targetFilePath}
+	}
 	pluginDir := filepath.Join(m.pluginDir, rt.scope, rt.pluginID)
-	fsCtx := NewFSContext(pluginDir, rt.dataDir, nil, rt.manifest.Capabilities.FileAccess)
+	fsCtx := NewFSContext(pluginDir, rt.dataDir, allowedPaths, rt.manifest.Capabilities.FileAccess)
 	rt.SetFSContext(fsCtx)
 	defer func() {
 		rt.SetFSContext(nil)
