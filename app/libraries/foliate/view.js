@@ -250,6 +250,18 @@ export class View extends HTMLElement {
                 toc: book.pageList ?? [], ids, splitHref, getFragment })
         }
 
+        // Shisho patch: open() is the only code path that appends a renderer
+        // to the shadow root, and it never cleans up existing ones. When React
+        // mounts/unmounts the host element rapidly (or calls open() multiple
+        // times), paginators stack and the newest one ends up below the
+        // previous one in block flow, invisible to the user. Remove any
+        // existing renderers before creating a fresh one.
+        for (const old of Array.from(this.#root.querySelectorAll(
+            'foliate-paginator, foliate-fxl'))) {
+            old.destroy?.()
+            old.remove()
+        }
+
         this.isFixedLayout = this.book.rendition?.layout === 'pre-paginated'
         if (this.isFixedLayout) {
             await import('./fixed-layout.js')

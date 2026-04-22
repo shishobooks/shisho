@@ -165,11 +165,12 @@ export default function EPUBReader({
     setBookReady(false);
     setLoadError(null);
 
-    const bookFile = new globalThis.File(
-      [blob],
-      `${bookTitle ?? "book"}.epub`,
-      { type: "application/epub+zip" },
-    );
+    // File name is not used by foliate; keep it stable so the effect doesn't
+    // re-fire when bookTitle resolves from undefined → real value (which would
+    // cause multiple overlapping open() calls on the same element).
+    const bookFile = new globalThis.File([blob], "book.epub", {
+      type: "application/epub+zip",
+    });
 
     (async () => {
       await view.open!(bookFile);
@@ -204,7 +205,7 @@ export default function EPUBReader({
         // no-op
       }
     };
-  }, [blob, bookTitle]);
+  }, [blob]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
