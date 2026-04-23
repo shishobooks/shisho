@@ -47,7 +47,7 @@ func setupSeriesTestDB(t *testing.T) *bun.DB {
 
 // seedSeriesWithCover creates a library, series, book, book_series join row,
 // and a file with a real cover image on disk. Returns the series ID.
-func seedSeriesWithCover(t *testing.T, db *bun.DB, ctx context.Context) int {
+func seedSeriesWithCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	t.Helper()
 
 	library := &models.Library{
@@ -132,7 +132,7 @@ func TestSeriesCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 		libraryService: libraries.NewService(db),
 	}
 
-	seriesID := seedSeriesWithCover(t, db, ctx)
+	seriesID := seedSeriesWithCover(ctx, t, db)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -160,7 +160,7 @@ func TestSeriesCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 		libraryService: libraries.NewService(db),
 	}
 
-	seriesID := seedSeriesWithCover(t, db, ctx)
+	seriesID := seedSeriesWithCover(ctx, t, db)
 
 	// First GET.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
