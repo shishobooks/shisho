@@ -59,4 +59,24 @@ describe("CoverGalleryTabs", () => {
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
   });
+
+  it("mounts a fresh <img> element when cacheKey changes (even without error)", () => {
+    const files = [
+      makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
+      makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
+    ];
+
+    const { container, rerender } = render(
+      <CoverGalleryTabs cacheKey={111} files={files} />,
+    );
+    const firstImg = container.querySelector("img");
+    expect(firstImg).not.toBeNull();
+
+    rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
+    const secondImg = container.querySelector("img");
+
+    expect(secondImg).not.toBeNull();
+    expect(secondImg).not.toBe(firstImg); // Different DOM node — React remounted
+    expect(secondImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
+  });
 });
