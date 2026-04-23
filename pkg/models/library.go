@@ -24,5 +24,4 @@ type Library struct {
 	CoverAspectRatio         string         `bun:",nullzero" json:"cover_aspect_ratio"`
 	DownloadFormatPreference string         `bun:",nullzero,default:'original'" json:"download_format_preference"`
 	LibraryPaths             []*LibraryPath `bun:"rel:has-many" json:"library_paths,omitempty" tstype:"LibraryPath[]"`
-	DeletedAt                *time.Time     `json:"deleted_at,omitempty"`
 }
