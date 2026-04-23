@@ -1201,14 +1201,14 @@ func (h *handler) updateFile(c echo.Context) error {
 // file-level metadata change (name or narrator) when the library has
 // OrganizeFileStructure enabled.
 //
-// For files that already live inside their organized folder this does a
-// same-folder rename (equivalent to the old RenameOrganizedFileOnly path).
-// For root-level files — which can happen when a library was previously
-// organize=false or when organize hasn't finished running after a toggle —
-// it delegates to OrganizeBookFiles so the file is moved into its
-// organized folder and book.Filepath is kept in sync. Previously a
-// rename-in-place at the library root left book.Filepath pointing at a
-// synthetic path that diverged from the actual file location.
+// For files that already live inside their organized folder this does an
+// in-folder rename via RenameOrganizedFileOnly. For root-level files —
+// which can happen when a library was previously organize=false or when
+// organize hasn't finished running after a toggle — it delegates to
+// OrganizeBookFiles so the file is moved into its organized folder and
+// book.Filepath is kept in sync. Rename-in-place at the library root
+// would otherwise leave book.Filepath pointing at a synthetic path that
+// diverges from the actual file location.
 //
 // Returns the (possibly reloaded) file model so the caller can pick up any
 // path/cover updates persisted by the book-organize path.

@@ -102,13 +102,12 @@ file.CoverImageFilename = &newCoverPath
 
 **Why this matters:** Handlers resolve the full path at runtime by joining `book.Filepath` with `CoverImageFilename`. If `CoverImageFilename` contains a full path, this results in an invalid doubled path like `/path/to/path/to/cover.jpg`.
 
-**Use the shared resolution helpers in `pkg/fileutils/operations.go`** rather than hand-rolling `os.Stat` / `!info.IsDir()` / `filepath.Dir` dances:
+**Always resolve cover paths via the file, not the book**, because `book.Filepath` can be a synthetic organized-folder path that never exists on disk (root-level books in libraries with `OrganizeFileStructure` disabled — see `scanFileCreateNew`). The cover lives alongside the file for both root-level and directory-backed books.
 
-- **`ResolveCoverPath(bookFilepath, coverFilename) string`** — read-side callers (serving, fingerprinting, file-generation) that already have a resolved `book.Filepath` from the DB. Example: `fileutils.ResolveCoverPath(file.Book.Filepath, *file.CoverImageFilename)` in the `fileCover` handler.
-- **`ResolveCoverDir(bookFilepath) string`** — same read-side contract but returns just the directory (e.g. for `uploadFileCover`, which enumerates existing cover files). Stat-failure fallback returns the path unchanged — **safe only for read-side callers** whose `bookFilepath` is known to exist.
-- **`ResolveCoverDirForWrite(bookFilepath, fileFilepath) string`** — write-side callers in the scanner where `bookFilepath` may be a synthetic organized-folder path that does not yet exist on disk (`scanFileCreateNew` computes `bookPath` for root-level new files before the organized directory is created). Falls back to `filepath.Dir(fileFilepath)` — the library directory where the file actually lives — when the book path doesn't resolve to a real directory.
+- **Read-side (serving, fingerprinting, file generation):** use `filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)`. Pure-string, no stat, no synthetic-path trap. Examples: `fileCover`/`bookCover` in `pkg/books/handlers.go`, `pkg/series/handlers.go`, `pkg/ereader/handlers.go`, `pkg/kobo/handlers.go`, `pkg/filegen/*`, `pkg/downloadcache/fingerprint.go`, and `deleteFileFromDisk`.
+- **Write-side (scanner, pre-organize):** use `fileutils.ResolveCoverDirForWrite(bookFilepath, fileFilepath)` when `bookFilepath` may be a synthetic organized-folder path that hasn't been created on disk yet. Falls back to `filepath.Dir(fileFilepath)` when the book path doesn't resolve to a real directory.
 
-For callers that only hold a `file.Filepath` (e.g. `deleteFileFromDisk`, `recoverMissingCover`), prefer the pure-string `filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)` — it's always correct (the cover lives alongside the file for both root-level and directory-backed books) and immune to stat races when the main file has already been removed.
+**Book sidecars** for root-level books are similarly anchored next to the file — `sidecar.WriteBookSidecarFromModel(book)` falls back via `book.Files[0].Filepath` when `book.Filepath` doesn't resolve to an existing directory. Reads use `sidecar.ReadBookSidecarFromModel(book, fileHint)` and pass the current file as a hint so resolution works before the book's Files relation is loaded.
 
 ### Data Source Priority System
 
