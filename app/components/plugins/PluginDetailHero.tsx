@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
-import { PluginStatusActive, type Plugin } from "@/types/generated/models";
+import {
+  PluginStatusActive,
+  PluginStatusMalfunctioned,
+  PluginStatusNotSupported,
+  type Plugin,
+} from "@/types/generated/models";
 
 import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
@@ -92,6 +97,24 @@ export const PluginDetailHero = ({
             <Badge variant="secondary">Not installed</Badge>
           )}
         </div>
+
+        {installed &&
+          (installed.status === PluginStatusMalfunctioned ||
+            installed.status === PluginStatusNotSupported ||
+            installed.load_error) && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <p className="font-medium text-destructive">
+                {installed.status === PluginStatusNotSupported
+                  ? "Plugin is not compatible with this Shisho version"
+                  : "Plugin failed to load"}
+              </p>
+              {installed.load_error && (
+                <p className="mt-1 break-words font-mono text-xs text-muted-foreground">
+                  {installed.load_error}
+                </p>
+              )}
+            </div>
+          )}
 
         {metaParts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
