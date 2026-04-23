@@ -385,6 +385,7 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	var loadErr error
 	if payload.Enabled != nil {
 		wasActive := plugin.Status == models.PluginStatusActive
 
@@ -392,6 +393,7 @@ func (h *handler) update(c echo.Context) error {
 			// Enabling: set Active and load the plugin
 			plugin.Status = models.PluginStatusActive
 			if err := h.manager.LoadPlugin(ctx, scope, id); err != nil {
+				loadErr = err
 				errMsg := err.Error()
 				plugin.LoadError = &errMsg
 				if isVersionIncompatible(err) {
@@ -426,6 +428,13 @@ func (h *handler) update(c echo.Context) error {
 
 	if err := h.service.UpdatePlugin(ctx, plugin); err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Surface enable-time load failures as a 422 so the frontend toast shows
+	// the real reason. The Malfunctioned/NotSupported status is already
+	// persisted above, so a follow-up GET reflects the broken state.
+	if loadErr != nil {
+		return errcodes.ValidationError(loadErr.Error())
 	}
 
 	if payload.Config != nil {
