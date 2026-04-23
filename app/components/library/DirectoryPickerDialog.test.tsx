@@ -30,9 +30,13 @@ type BrowseState = {
 let currentKey = "";
 let lastSettledData: BrowseResponse | undefined;
 let lastDataUpdatedAt = 0;
+let dataUpdatedAtTick = 0;
 let keyResponses: Record<string, BrowseResponse> = {};
 
-const keyOf = (q: BrowseQuery) => `${q.path}::${q.offset ?? 0}`;
+// Key on every BrowseQuery field the component varies (path, offset, search,
+// show_hidden) so the mock models placeholder transitions for all of them.
+const keyOf = (q: BrowseQuery) =>
+  `${q.path}::${q.offset ?? 0}::${q.search ?? ""}::${q.show_hidden ? 1 : 0}`;
 
 vi.mock("@/hooks/queries/filesystem", () => ({
   useFilesystemBrowse: (q: BrowseQuery): BrowseState => {
@@ -64,7 +68,9 @@ vi.mock("@/hooks/queries/filesystem", () => ({
 const settle = (key: string) => {
   currentKey = key;
   lastSettledData = keyResponses[key];
-  lastDataUpdatedAt = Date.now();
+  // Use a monotonic counter so re-settles always change `dataUpdatedAt` and
+  // re-trigger the accumulator effect, regardless of fake-timer state.
+  lastDataUpdatedAt = ++dataUpdatedAtTick;
 };
 
 const makeEntries = (start: number, count: number): Entry[] =>
@@ -99,25 +105,26 @@ describe("DirectoryPickerDialog", () => {
     currentKey = "";
     lastSettledData = undefined;
     lastDataUpdatedAt = 0;
+    dataUpdatedAtTick = 0;
     keyResponses = {};
   });
 
   it("does not duplicate entries when Load More transitions through placeholder data", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    keyResponses["/root::0"] = {
+    keyResponses["/root::0::::0"] = {
       current_path: "/root",
       entries: makeEntries(1, 50),
       total: 100,
       has_more: true,
     };
-    keyResponses["/root::50"] = {
+    keyResponses["/root::50::::0"] = {
       current_path: "/root",
       entries: makeEntries(51, 50),
       total: 100,
       has_more: false,
     };
-    settle("/root::0");
+    settle("/root::0::::0");
 
     const { rerender } = renderDialog();
 
@@ -129,7 +136,7 @@ describe("DirectoryPickerDialog", () => {
     await user.click(screen.getByRole("button", { name: /load more/i }));
 
     // Simulate the offset:50 fetch settling.
-    settle("/root::50");
+    settle("/root::50::::0");
     rerender(
       wrap(
         <DirectoryPickerDialog
@@ -150,13 +157,13 @@ describe("DirectoryPickerDialog", () => {
   it("does not retain previous directory's entries after navigating into a subdirectory", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    keyResponses["/root::0"] = {
+    keyResponses["/root::0::::0"] = {
       current_path: "/root",
       entries: makeEntries(1, 50),
       total: 50,
       has_more: false,
     };
-    keyResponses["/root/entry-1::0"] = {
+    keyResponses["/root/entry-1::0::::0"] = {
       current_path: "/root/entry-1",
       entries: [
         { name: "child-a", path: "/root/entry-1/child-a", is_dir: true },
@@ -164,7 +171,7 @@ describe("DirectoryPickerDialog", () => {
       total: 1,
       has_more: false,
     };
-    settle("/root::0");
+    settle("/root::0::::0");
 
     const { rerender } = renderDialog();
 
@@ -182,7 +189,7 @@ describe("DirectoryPickerDialog", () => {
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
 
     // Settle the new directory's fetch.
-    settle("/root/entry-1::0");
+    settle("/root/entry-1::0::::0");
     rerender(
       wrap(
         <DirectoryPickerDialog
@@ -196,5 +203,51 @@ describe("DirectoryPickerDialog", () => {
 
     expect(screen.getByText("child-a")).toBeInTheDocument();
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
+  });
+
+  it("does not retain previous results during a debounced search transition", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    keyResponses["/root::0::::0"] = {
+      current_path: "/root",
+      entries: makeEntries(1, 50),
+      total: 50,
+      has_more: false,
+    };
+    keyResponses["/root::0::book::0"] = {
+      current_path: "/root",
+      entries: [{ name: "book-1", path: "/root/book-1", is_dir: true }],
+      total: 1,
+      has_more: false,
+    };
+    settle("/root::0::::0");
+
+    const { rerender } = renderDialog();
+
+    expect(screen.getByText("entry-1")).toBeInTheDocument();
+
+    // Type a search term and let the 300ms debounce fire.
+    await user.type(screen.getByPlaceholderText(/search/i), "book");
+    await vi.advanceTimersByTimeAsync(400);
+
+    // Mid-flight: previous (unfiltered) entries must NOT be visible.
+    expect(screen.queryByText("entry-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
+
+    // Settle the search query.
+    settle("/root::0::book::0");
+    rerender(
+      wrap(
+        <DirectoryPickerDialog
+          initialPath="/root"
+          onOpenChange={() => {}}
+          onSelect={() => {}}
+          open
+        />,
+      ),
+    );
+
+    expect(screen.getByText("book-1")).toBeInTheDocument();
+    expect(screen.queryByText("entry-1")).not.toBeInTheDocument();
   });
 });

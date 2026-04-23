@@ -114,14 +114,16 @@ const DirectoryPickerDialog = ({
   }, [browseQuery.dataUpdatedAt]);
 
   // Repopulate from cache if entries were cleared but cached data exists.
-  // This handles the case when opening the dialog with a previously-browsed path.
+  // This handles the case when opening the dialog with a previously-browsed
+  // path. Skip placeholder data for the same reason as the accumulator above.
   useEffect(() => {
     if (
       accumulatedEntries.length === 0 &&
       browseQuery.data?.entries &&
       browseQuery.data.entries.length > 0 &&
       offset === 0 &&
-      !browseQuery.isFetching
+      !browseQuery.isFetching &&
+      !browseQuery.isPlaceholderData
     ) {
       setAccumulatedEntries(browseQuery.data.entries);
     }
@@ -129,6 +131,7 @@ const DirectoryPickerDialog = ({
     accumulatedEntries.length,
     browseQuery.data?.entries,
     browseQuery.isFetching,
+    browseQuery.isPlaceholderData,
     offset,
   ]);
 
@@ -189,8 +192,11 @@ const DirectoryPickerDialog = ({
     setOffset((prev) => prev + 50);
   }, []);
 
-  const hasMore = browseQuery.data?.has_more ?? false;
-  const total = browseQuery.data?.total ?? 0;
+  // Only trust pagination metadata from a settled fetch, not from the
+  // previous query's placeholder data.
+  const settled = browseQuery.isPlaceholderData ? undefined : browseQuery.data;
+  const hasMore = settled?.has_more ?? false;
+  const total = settled?.total ?? 0;
   const remaining = total - accumulatedEntries.length;
 
   const directories = accumulatedEntries.filter((e) => e.is_dir);
@@ -263,10 +269,11 @@ const DirectoryPickerDialog = ({
               {browseQuery.error?.message || "Failed to load directory"}
             </div>
           ) : accumulatedEntries.length === 0 ? (
-            // While accumulatedEntries is empty during a fetch (initial load
-            // or directory navigation), show a spinner instead of "No entries
-            // found". `isLoading` is false when placeholder data is active,
-            // so use `isFetching` to cover the placeholder transition too.
+            // While accumulatedEntries is empty during any fetch (initial
+            // load, navigation, search, or hidden-toggle), show a spinner
+            // instead of "No entries found". `isLoading` is false when
+            // placeholder data is active, so use `isFetching` to cover the
+            // placeholder transition too.
             browseQuery.isFetching ? (
               <div className="flex items-center justify-center h-full py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
