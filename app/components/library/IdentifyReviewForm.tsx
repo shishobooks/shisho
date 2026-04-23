@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -867,6 +868,16 @@ export function IdentifyReviewForm({
           value={title}
         />
       </FieldWrapper>
+
+      {!isDisabled("title") && !isDisabled("subtitle") && (
+        <ExtractSubtitleButton
+          onExtract={(t, s) => {
+            setTitle(t);
+            setSubtitle(s);
+          }}
+          title={title}
+        />
+      )}
 
       {/* Subtitle */}
       <FieldWrapper
