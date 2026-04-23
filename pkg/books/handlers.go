@@ -1408,6 +1408,8 @@ func containsColumn(cols []string, target string) bool {
 
 // removeColumn returns a new slice with the first occurrence of target
 // removed. Allocates a fresh backing array — does not alias cols.
+// Assumes target appears at most once (guaranteed by the single-append
+// contract at each column-queuing site in the handler).
 func removeColumn(cols []string, target string) []string {
 	out := make([]string, 0, len(cols))
 	removed := false
