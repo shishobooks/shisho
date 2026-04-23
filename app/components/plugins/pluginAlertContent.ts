@@ -17,5 +17,6 @@ export const pluginAlertContent = (
   if (installed.status === PluginStatusMalfunctioned) {
     return { body: installed.load_error, title: "Plugin failed to load" };
   }
+  // Active/Disabled: no alert, even if a stale load_error is still on the row.
   return null;
 };

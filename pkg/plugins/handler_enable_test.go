@@ -17,11 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestUpdate_EnableLoadFailure_ReturnsError confirms that toggling a plugin's
-// enable flag to true when the plugin cannot be loaded returns a 422 error and
-// still persists the Malfunctioned status + load_error to the database so the
-// UI can render it after a refetch.
-func TestUpdate_EnableLoadFailure_ReturnsError(t *testing.T) {
+// TestUpdate_EnableLoadFailure_Returns422AndPersistsConfig confirms that
+// toggling a plugin's enable flag to true when the plugin cannot be loaded
+// returns a 422 error, persists the Malfunctioned status + load_error, and —
+// when the same payload included a config update — persists the config too.
+func TestUpdate_EnableLoadFailure_Returns422AndPersistsConfig(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
