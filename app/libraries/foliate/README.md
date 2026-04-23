@@ -35,6 +35,8 @@ view.js
 
 Some of these (e.g. `fb2.js`, `mobi.js`, `pdf.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
+**`pdf.js` is intentionally stubbed.** Upstream foliate's `pdf.js` depends on a vendored pdfjs distribution under `vendor/pdfjs/` that we don't ship — PDFs are handled by the separate `PDFReader` component, so foliate's PDF path is never exercised. When re-vendoring, do not overwrite `pdf.js` with the upstream copy unless you also vendor the pdfjs files it imports.
+
 ## To update
 
 1. Clone or update the upstream repo:
