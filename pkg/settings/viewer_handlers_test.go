@@ -69,3 +69,35 @@ func TestUpdateViewerSettings_AcceptsValidEpubPayload(t *testing.T) {
 	assert.Equal(t, models.EpubThemeDark, resp.EpubTheme)
 	assert.Equal(t, models.EpubFlowScrolled, resp.EpubFlow)
 }
+
+// TestUpdateViewerSettings_AcceptsSingleFieldPayload verifies that a payload
+// containing only one field (omitting all others) updates just that field
+// and leaves unrelated settings at their existing values.
+func TestUpdateViewerSettings_AcceptsSingleFieldPayload(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "dave")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	// Only send viewer_epub_theme. Everything else must keep its default.
+	body := `{"viewer_epub_theme": "sepia"}`
+	req := httptest.NewRequest(http.MethodPut, "/settings/viewer", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	require.NoError(t, h.updateViewerSettings(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp ViewerSettingsResponse
+	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
+	assert.Equal(t, models.EpubThemeSepia, resp.EpubTheme)
+	// Other fields stay at defaults
+	assert.Equal(t, 3, resp.PreloadCount)
+	assert.Equal(t, models.FitModeHeight, resp.FitMode)
+	assert.Equal(t, 100, resp.EpubFontSize)
+	assert.Equal(t, models.EpubFlowPaginated, resp.EpubFlow)
+}

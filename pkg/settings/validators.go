@@ -3,12 +3,19 @@ package settings
 import "github.com/shishobooks/shisho/pkg/models"
 
 // ViewerSettingsPayload is the request body for updating viewer settings.
+//
+// All fields are pointers so clients can send partial updates. Omitting a
+// field (or sending it as null) leaves the current value untouched; sending
+// a value updates just that field. Without this, adding a new setting would
+// force every caller to read-then-write all other fields to avoid clobbering
+// them — see the "echo every field" comment in EPUBReader/PageReader's
+// commit helpers.
 type ViewerSettingsPayload struct {
-	PreloadCount int    `json:"preload_count"`
-	FitMode      string `json:"fit_mode"`
-	EpubFontSize int    `json:"viewer_epub_font_size"`
-	EpubTheme    string `json:"viewer_epub_theme"`
-	EpubFlow     string `json:"viewer_epub_flow"`
+	PreloadCount *int    `json:"preload_count,omitempty"`
+	FitMode      *string `json:"fit_mode,omitempty"`
+	EpubFontSize *int    `json:"viewer_epub_font_size,omitempty"`
+	EpubTheme    *string `json:"viewer_epub_theme,omitempty"`
+	EpubFlow     *string `json:"viewer_epub_flow,omitempty"`
 }
 
 // ViewerSettingsResponse is the response for viewer settings.

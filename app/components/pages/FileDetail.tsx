@@ -20,7 +20,7 @@ import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { FileTypeCBZ, FileTypeEPUB, type File } from "@/types";
+import { FileTypeCBZ, FileTypeEPUB, FileTypePDF, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 
 const validTabs = ["details", "chapters"] as const;
@@ -190,9 +190,10 @@ const FileDetail = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <h1 className="text-2xl md:text-3xl font-semibold">{filename}</h1>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Read button for CBZ and EPUB files */}
+          {/* Read button for CBZ, EPUB, and PDF files */}
           {(file.file_type === FileTypeCBZ ||
-            file.file_type === FileTypeEPUB) && (
+            file.file_type === FileTypeEPUB ||
+            file.file_type === FileTypePDF) && (
             <Button asChild size="sm">
               <Link
                 to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}

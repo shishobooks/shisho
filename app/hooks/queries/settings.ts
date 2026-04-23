@@ -35,12 +35,15 @@ export const useViewerSettings = (
   });
 };
 
-interface UpdateViewerSettingsVariables {
-  preload_count: number;
-  fit_mode: FitMode;
-  viewer_epub_font_size: number;
-  viewer_epub_theme: EpubTheme;
-  viewer_epub_flow: EpubFlow;
+// Partial update: callers send only the fields they want to change. Omitted
+// (or undefined) fields are left untouched on the server. Mirrors the backend
+// ViewerSettingsPayload shape, which has all fields as omitempty pointers.
+export interface UpdateViewerSettingsVariables {
+  preload_count?: number;
+  fit_mode?: FitMode;
+  viewer_epub_font_size?: number;
+  viewer_epub_theme?: EpubTheme;
+  viewer_epub_flow?: EpubFlow;
 }
 
 export const useUpdateViewerSettings = () => {

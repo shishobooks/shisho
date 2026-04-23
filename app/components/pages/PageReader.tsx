@@ -219,16 +219,7 @@ export default function PageReader({
                     max={10}
                     min={1}
                     onValueChange={([value]) => {
-                      updateSettings.mutate({
-                        preload_count: value,
-                        fit_mode: fitMode,
-                        viewer_epub_font_size:
-                          settings?.viewer_epub_font_size ?? 100,
-                        viewer_epub_theme:
-                          settings?.viewer_epub_theme ?? "light",
-                        viewer_epub_flow:
-                          settings?.viewer_epub_flow ?? "paginated",
-                      });
+                      updateSettings.mutate({ preload_count: value });
                     }}
                     step={1}
                     value={[preloadCount]}
@@ -240,16 +231,7 @@ export default function PageReader({
                     <Button
                       disabled={!settingsReady}
                       onClick={() =>
-                        updateSettings.mutate({
-                          preload_count: preloadCount,
-                          fit_mode: "fit-height",
-                          viewer_epub_font_size:
-                            settings?.viewer_epub_font_size ?? 100,
-                          viewer_epub_theme:
-                            settings?.viewer_epub_theme ?? "light",
-                          viewer_epub_flow:
-                            settings?.viewer_epub_flow ?? "paginated",
-                        })
+                        updateSettings.mutate({ fit_mode: "fit-height" })
                       }
                       size="sm"
                       variant={fitMode === "fit-height" ? "default" : "outline"}
@@ -259,16 +241,7 @@ export default function PageReader({
                     <Button
                       disabled={!settingsReady}
                       onClick={() =>
-                        updateSettings.mutate({
-                          preload_count: preloadCount,
-                          fit_mode: "original",
-                          viewer_epub_font_size:
-                            settings?.viewer_epub_font_size ?? 100,
-                          viewer_epub_theme:
-                            settings?.viewer_epub_theme ?? "light",
-                          viewer_epub_flow:
-                            settings?.viewer_epub_flow ?? "paginated",
-                        })
+                        updateSettings.mutate({ fit_mode: "original" })
                       }
                       size="sm"
                       variant={fitMode === "original" ? "default" : "outline"}

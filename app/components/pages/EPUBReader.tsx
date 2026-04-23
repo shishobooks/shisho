@@ -20,9 +20,10 @@ import { useEpubBlob } from "@/hooks/queries/epub";
 import {
   useUpdateViewerSettings,
   useViewerSettings,
+  type UpdateViewerSettingsVariables,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { EpubFlow, EpubTheme, File, FitMode } from "@/types";
+import type { File } from "@/types";
 
 import "@/libraries/foliate/view.js";
 
@@ -92,24 +93,9 @@ export default function EPUBReader({
   }, [fontSize]);
 
   const commitSettings = useCallback(
-    (
-      partial: Partial<{
-        preload_count: number;
-        fit_mode: FitMode;
-        viewer_epub_font_size: number;
-        viewer_epub_theme: EpubTheme;
-        viewer_epub_flow: EpubFlow;
-      }>,
-    ) => {
+    (partial: UpdateViewerSettingsVariables) => {
       if (!settings) return;
-      updateSettings.mutate({
-        preload_count: settings.preload_count,
-        fit_mode: settings.fit_mode,
-        viewer_epub_font_size: settings.viewer_epub_font_size,
-        viewer_epub_theme: settings.viewer_epub_theme,
-        viewer_epub_flow: settings.viewer_epub_flow,
-        ...partial,
-      });
+      updateSettings.mutate(partial);
     },
     [settings, updateSettings],
   );
@@ -165,9 +151,10 @@ export default function EPUBReader({
     setBookReady(false);
     setLoadError(null);
 
-    // File name is not used by foliate; keep it stable so the effect doesn't
-    // re-fire when bookTitle resolves from undefined → real value (which would
-    // cause multiple overlapping open() calls on the same element).
+    // Hardcoded name. foliate doesn't surface the synthetic File's name
+    // anywhere user-visible — using bookTitle would just cause the effect
+    // to re-fire when useBook resolves (undefined → real value), launching
+    // a second overlapping open() on the same element.
     const bookFile = new globalThis.File([blob], "book.epub", {
       type: "application/epub+zip",
     });
@@ -193,14 +180,15 @@ export default function EPUBReader({
 
     return () => {
       cancelled = true;
-      const current = viewRef.current as
-        | (HTMLElement & { close?: () => void })
-        | null;
-      // close() tears down foliate's paginator, which throws if called before
-      // a book finished opening (e.g. under React StrictMode's mount/unmount
-      // dance). Swallow — cleanup failures shouldn't take down the reader.
+      // Use the captured `view` reference from this effect's run, not
+      // viewRef.current — they're the same element in practice, but reading
+      // the ref again in cleanup would couple us to whatever element the
+      // ref happens to point at later.
+      // close() tears down foliate's paginator, which throws if called
+      // before a book finished opening. Swallow — cleanup failures
+      // shouldn't take down the reader.
       try {
-        current?.close?.();
+        (view as HTMLElement & { close?: () => void }).close?.();
       } catch {
         // no-op
       }
