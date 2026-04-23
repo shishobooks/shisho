@@ -1,6 +1,7 @@
 import { BadgeCheck, ExternalLink } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -102,18 +103,18 @@ export const PluginDetailHero = ({
           (installed.status === PluginStatusMalfunctioned ||
             installed.status === PluginStatusNotSupported ||
             installed.load_error) && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-              <p className="font-medium text-destructive">
+            <Alert className="p-3" variant="destructive">
+              <AlertTitle>
                 {installed.status === PluginStatusNotSupported
                   ? "Plugin is not compatible with this Shisho version"
                   : "Plugin failed to load"}
-              </p>
+              </AlertTitle>
               {installed.load_error && (
-                <p className="mt-1 break-words font-mono text-xs text-muted-foreground">
+                <AlertDescription className="break-all font-mono text-xs text-muted-foreground">
                   {installed.load_error}
-                </p>
+                </AlertDescription>
               )}
-            </div>
+            </Alert>
           )}
 
         {metaParts.length > 0 && (
