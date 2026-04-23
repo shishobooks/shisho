@@ -14,7 +14,7 @@ export const pluginAlertContent = (
       title: "Plugin is not compatible with this Shisho version",
     };
   }
-  if (installed.status === PluginStatusMalfunctioned || installed.load_error) {
+  if (installed.status === PluginStatusMalfunctioned) {
     return { body: installed.load_error, title: "Plugin failed to load" };
   }
   return null;

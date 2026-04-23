@@ -68,12 +68,9 @@ describe("pluginAlertContent", () => {
     });
   });
 
-  it("falls back to failed-to-load when load_error is set without a bad status", () => {
+  it("returns null for an Active plugin with a stale load_error, matching persisted status", () => {
     expect(
-      pluginAlertContent({
-        ...base,
-        load_error: "stale error text",
-      }),
-    ).toEqual({ body: "stale error text", title: "Plugin failed to load" });
+      pluginAlertContent({ ...base, load_error: "stale error text" }),
+    ).toBeNull();
   });
 });

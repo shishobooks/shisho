@@ -101,7 +101,7 @@ export const PluginDetailHero = ({
           <Alert className="p-3" variant="destructive">
             <AlertTitle>{alert.title}</AlertTitle>
             {alert.body && (
-              <AlertDescription className="break-all font-mono text-xs text-muted-foreground">
+              <AlertDescription className="break-words font-mono text-xs">
                 {alert.body}
               </AlertDescription>
             )}
