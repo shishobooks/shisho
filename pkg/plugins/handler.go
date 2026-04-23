@@ -434,7 +434,7 @@ func (h *handler) update(c echo.Context) error {
 	// the real reason. The Malfunctioned/NotSupported status is already
 	// persisted above, so a follow-up GET reflects the broken state.
 	if loadErr != nil {
-		return errcodes.ValidationError(loadErr.Error())
+		return errcodes.PluginLoadFailure(loadErr.Error())
 	}
 
 	if payload.Config != nil {

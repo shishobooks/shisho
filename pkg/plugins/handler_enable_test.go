@@ -77,6 +77,7 @@ func TestUpdate_EnableLoadFailure_ReturnsError(t *testing.T) {
 	var ec *errcodes.Error
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, http.StatusUnprocessableEntity, ec.HTTPCode)
+	assert.Equal(t, "plugin_load_failure", ec.Code)
 	assert.Contains(t, ec.Message, "nonsenseField")
 
 	// And the plugin row must be persisted as Malfunctioned with the load_error.
