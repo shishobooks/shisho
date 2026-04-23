@@ -310,18 +310,10 @@ References:
 - **Append `?v=${cacheKey}`** to cover URLs. `cacheKey` must be a value that changes when the underlying data is refetched (e.g., `bookQuery.dataUpdatedAt`), **not** `entity.updated_at` (which doesn't bump on file-cover changes).
 - **For pages that mutate covers** (BookDetail, FileEditDialog), also add `key={cacheKey}` to the `<img>` tag. React remounting combined with URL change gives reliable refresh.
 - **For child components that render covers**, accept a `cacheKey?: number` prop. Parents pass their query's `dataUpdatedAt` or the relevant entity's `updated_at` (for file covers, since `file.updated_at` bumps reliably on cover mutations).
-- **Source selection:**
-  - `/api/books/:id/cover` — use parent book query's `dataUpdatedAt` (or a cascaded `cacheKey` prop).
-  - `/api/books/files/:id/cover` — use `file.updated_at` (reliable) or the parent query's `dataUpdatedAt`.
-  - `/api/series/:id/cover` — use parent series query's `dataUpdatedAt`.
-
-### Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/api/books/{id}/cover` | Book cover (selected from files) |
-| `/api/books/files/{id}/cover` | Specific file's cover |
-| `/api/series/{id}/cover` | Series cover (from first book) |
+- **Source selection by endpoint:**
+  - `/api/books/:id/cover` (book cover, selected from files) — parent book query's `dataUpdatedAt` (or a cascaded `cacheKey` prop).
+  - `/api/books/files/:id/cover` (specific file's cover) — `file.updated_at` (reliable) or the parent query's `dataUpdatedAt`.
+  - `/api/series/:id/cover` (series cover, from first book) — parent series query's `dataUpdatedAt`.
 
 ### Checklist for new cover components
 
