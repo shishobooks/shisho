@@ -293,39 +293,28 @@ Center and constrain cover images on mobile:
 </div>
 ```
 
-## Cover Image Cache Busting
+## Cover Image Freshness
 
-**All cover image URLs MUST include a cache-busting query parameter** to ensure updated covers are displayed without browser caching issues.
+Cover endpoints set `Cache-Control: private, no-cache` and emit `Last-Modified` from the cover file's mtime. The browser stores the image but revalidates with the server on every `<img>` mount via a conditional `GET` carrying `If-Modified-Since`. The server returns `304 Not Modified` (no body) when the cover is unchanged, or `200 OK` with new bytes when it has changed.
 
-### Why Cache Busting is Required
+### Rules
 
-When a book or file's cover is updated (e.g., through metadata refresh or manual edit), the browser may continue showing the old cached version. Adding a timestamp parameter forces the browser to fetch the new image.
+- **Do not append `?t=...`** or any other cache-busting query parameter to cover URLs. Use stable URLs:
+  ```tsx
+  const coverUrl = `/api/books/${book.id}/cover`;
+  ```
+- **For pages that can trigger a cover mutation** (e.g., BookDetail, FileEditDialog), add `key={query.dataUpdatedAt}` to the `<img>` tag. A query invalidation bumps `dataUpdatedAt`, the key changes, React remounts the element, and the browser makes a fresh HTTP request that revalidates:
+  ```tsx
+  <img
+    key={bookQuery.dataUpdatedAt}
+    src={`/api/books/${book.id}/cover`}
+  />
+  ```
+- **Compound keys:** When a single `<img>` element can display different entities as its inputs change (e.g., `CoverGalleryTabs` switching between file tabs), include the entity id in the key (e.g., `key={`${file.id}-${cacheKey}`}`). For components with stable entity identity per mount (e.g., `BookDetail`'s main cover), a bare `key={cacheKey}` is sufficient.
+- **For pages that only display covers** (lists, grids, search results), no `key` is needed. Navigation naturally remounts the `<img>`, which triggers revalidation.
+- **For child components that render covers inside editing surfaces**, pass a `cacheKey` prop (typed as `number`) down and use it as part of the `<img key>`. Parents should pass `bookQuery.dataUpdatedAt`.
 
-### Patterns
-
-**Pattern 1: React Query timestamp** (preferred when query is available)
-```tsx
-const bookQuery = useBook(id);
-const coverUrl = `/api/books/${book.id}/cover?t=${bookQuery.dataUpdatedAt}`;
-```
-
-**Pattern 2: Entity timestamp** (for lists without query access)
-```tsx
-const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
-```
-
-**Pattern 3: Prop drilling** (for child components)
-```tsx
-// Parent component
-<FileCoverThumbnail file={file} cacheBuster={bookQuery.dataUpdatedAt} />
-
-// Child component
-const coverUrl = cacheBuster
-  ? `/api/books/files/${file.id}/cover?t=${cacheBuster}`
-  : `/api/books/files/${file.id}/cover`;
-```
-
-### Cover Endpoints
+### Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
@@ -333,11 +322,11 @@ const coverUrl = cacheBuster
 | `/api/books/files/{id}/cover` | Specific file's cover |
 | `/api/series/{id}/cover` | Series cover (from first book) |
 
-### Checklist for New Cover Components
+### Checklist for new cover components
 
-- [ ] Cover URL includes `?t=` cache buster parameter
-- [ ] Cache buster updates when data is refetched
-- [ ] Child components receive cache buster via props if needed
+- [ ] Cover URL does NOT include `?t=` query param
+- [ ] For pages that mutate covers, `<img>` has `key={query.dataUpdatedAt}` (or is driven by a `cacheKey` prop) so remount triggers revalidation
+- [ ] Cover-mutating mutations invalidate the query whose `dataUpdatedAt` drives the key (default: `RetrieveBook`, already invalidated by `useUploadFileCover` and `useSetFileCoverPage`)
 
 ### Breadcrumbs
 
