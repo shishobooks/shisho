@@ -55,19 +55,18 @@ const DirectoryPickerDialog = ({
     return () => clearTimeout(timer);
   }, [currentPath]);
 
-  // Debounce search input.
+  // Debounce search input. Reset pagination + accumulator in the same
+  // setState batch as the debounced commit so the listing flips to a
+  // spinner in a single render (no flash of pre-search results paired
+  // with the new query state).
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
+      setOffset(0);
+      setAccumulatedEntries([]);
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
-
-  // Reset when path changes or search/hidden toggles.
-  useEffect(() => {
-    setOffset(0);
-    setAccumulatedEntries([]);
-  }, [currentPath, debouncedSearch, showHidden]);
 
   // Reset when dialog opens.
   useEffect(() => {
@@ -156,10 +155,18 @@ const DirectoryPickerDialog = ({
     return result;
   }, [settled?.current_path, currentPath]);
 
+  // Each handler that changes the query key (path, debounced search, or
+  // hidden toggle) must reset offset+accumulatedEntries in the same setState
+  // batch so React commits a single render with both the new query state
+  // and an empty accumulator. Splitting the reset into a follow-up effect
+  // would commit one render with the new path but the previous directory's
+  // entries still showing.
   const handleNavigate = useCallback((path: string) => {
     setCurrentPath(path);
     setSearch("");
     setDebouncedSearch("");
+    setOffset(0);
+    setAccumulatedEntries([]);
   }, []);
 
   const handleEntryClick = useCallback((entry: Entry) => {
@@ -167,7 +174,15 @@ const DirectoryPickerDialog = ({
       setCurrentPath(entry.path);
       setSearch("");
       setDebouncedSearch("");
+      setOffset(0);
+      setAccumulatedEntries([]);
     }
+  }, []);
+
+  const handleShowHiddenChange = useCallback((checked: boolean) => {
+    setShowHidden(checked);
+    setOffset(0);
+    setAccumulatedEntries([]);
   }, []);
 
   const handleToggleSelect = useCallback((path: string) => {
@@ -258,7 +273,9 @@ const DirectoryPickerDialog = ({
           <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
             <Checkbox
               checked={showHidden}
-              onCheckedChange={(checked) => setShowHidden(checked as boolean)}
+              onCheckedChange={(checked) =>
+                handleShowHiddenChange(checked as boolean)
+              }
             />
             Show hidden files
           </label>
