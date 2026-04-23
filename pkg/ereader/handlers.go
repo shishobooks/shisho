@@ -737,6 +737,7 @@ func (h *handler) Cover(c echo.Context) error {
 	}
 
 	coverPath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return errors.WithStack(c.File(coverPath))
 }
 
