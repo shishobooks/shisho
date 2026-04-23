@@ -7,13 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
-import {
-  PluginStatusActive,
-  PluginStatusMalfunctioned,
-  PluginStatusNotSupported,
-  type Plugin,
-} from "@/types/generated/models";
+import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
+import { pluginAlertContent } from "./pluginAlertContent";
 import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
 
@@ -53,6 +49,8 @@ export const PluginDetailHero = ({
   const isOfficial = available?.is_official ?? false;
   const version = installed?.version;
   const updateAvailable = installed?.update_available_version ?? undefined;
+
+  const alert = pluginAlertContent(installed);
 
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
@@ -99,23 +97,16 @@ export const PluginDetailHero = ({
           )}
         </div>
 
-        {installed &&
-          (installed.status === PluginStatusMalfunctioned ||
-            installed.status === PluginStatusNotSupported ||
-            installed.load_error) && (
-            <Alert className="p-3" variant="destructive">
-              <AlertTitle>
-                {installed.status === PluginStatusNotSupported
-                  ? "Plugin is not compatible with this Shisho version"
-                  : "Plugin failed to load"}
-              </AlertTitle>
-              {installed.load_error && (
-                <AlertDescription className="break-all font-mono text-xs text-muted-foreground">
-                  {installed.load_error}
-                </AlertDescription>
-              )}
-            </Alert>
-          )}
+        {alert && (
+          <Alert className="p-3" variant="destructive">
+            <AlertTitle>{alert.title}</AlertTitle>
+            {alert.body && (
+              <AlertDescription className="break-all font-mono text-xs text-muted-foreground">
+                {alert.body}
+              </AlertDescription>
+            )}
+          </Alert>
+        )}
 
         {metaParts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
