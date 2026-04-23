@@ -240,6 +240,82 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	return e
 }
 
+// seedBookAndFile inserts a library, a book with the given title, and a file
+// with the given role/name/name-source. Returns the library, the book, and
+// the file. The book uses a directory-backed layout rooted at t.TempDir().
+func seedBookAndFile(
+	t *testing.T,
+	db *bun.DB,
+	bookTitle string,
+	fileName *string,
+	fileNameSource *string,
+	role string,
+) (*models.Library, *models.Book, *models.File) {
+	t.Helper()
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	bookDir := t.TempDir()
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           bookTitle,
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       bookTitle,
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	filePath := filepath.Join(bookDir, "test.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("epub content"), 0644))
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, filePath)
+	file.FileRole = role
+	_, err = db.NewUpdate().Model(file).Column("file_role").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	if fileName != nil || fileNameSource != nil {
+		file.Name = fileName
+		file.NameSource = fileNameSource
+		_, err = db.NewUpdate().Model(file).Column("name", "name_source").WherePK().Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	return library, book, file
+}
+
+// loadUserWithRole reloads a user with Role and Role.Permissions so the
+// RequirePermission middleware passes in tests.
+func loadUserWithRole(t *testing.T, db *bun.DB, user *models.User) *models.User {
+	t.Helper()
+	ctx := context.Background()
+	err := db.NewSelect().
+		Model(user).
+		Relation("Role").
+		Relation("Role.Permissions").
+		Where("u.id = ?", user.ID).
+		Scan(ctx)
+	require.NoError(t, err)
+	return user
+}
+
+// newUpdateTitleRequest builds a POST /books/:id request with a JSON body
+// containing only a title change.
+func newUpdateTitleRequest(bookID int, newTitle string) *http.Request {
+	body := `{"title": ` + strconv.Quote(newTitle) + `}`
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(bookID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func TestStreamFile_M4B_ReturnsAudioMp4ContentType(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
@@ -927,4 +1003,329 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 			return book, libraryDir, epubPath
 		})
 	})
+}
+
+func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Bar", *updated.Name)
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
+}
+
+func TestUpdateBook_Title_UpdatesNilFileName_ToNewTitle(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, file := seedBookAndFile(t, db, "Foo", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Bar", *updated.Name)
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
+}
+
+func TestUpdateBook_Title_UpdatesEmptyFileName_ToNewTitle(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	emptyName := ""
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &emptyName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Bar", *updated.Name)
+}
+
+func TestUpdateBook_Title_MatchesWithTrimAndCasefold(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	fileName := "  foo bar  "
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo Bar", &fileName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Baz")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Baz", *updated.Name)
+}
+
+func TestUpdateBook_Title_PreservesCustomFileName_WhenDiffers(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	customName := "Baz"
+	manualSource := models.DataSourceManual
+	library, book, file := seedBookAndFile(t, db, "Foo", &customName, &manualSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Baz", *updated.Name, "custom file.Name that differs from old title must be preserved")
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
+}
+
+func TestUpdateBook_Title_DoesNotTouchSupplementFileName(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, supplement := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleSupplement)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", supplement.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Foo", *updated.Name, "supplement file name must not be synced from book title")
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceFilepath, *updated.NameSource)
+}
+
+func TestUpdateBook_Title_MultipleMainFiles_IndependentlyChecked(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	bookDir := t.TempDir()
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Foo",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Foo",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	matchingPath := filepath.Join(bookDir, "match.epub")
+	require.NoError(t, os.WriteFile(matchingPath, []byte("x"), 0644))
+	matchingFile := setupTestFile(t, db, book, models.FileTypeEPUB, matchingPath)
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	matchingFile.Name = &matchingName
+	matchingFile.NameSource = &filepathSource
+	_, err = db.NewUpdate().Model(matchingFile).Column("name", "name_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	customPath := filepath.Join(bookDir, "custom.epub")
+	require.NoError(t, os.WriteFile(customPath, []byte("x"), 0644))
+	customFile := setupTestFile(t, db, book, models.FileTypeEPUB, customPath)
+	customName := "Totally Different"
+	manualSource := models.DataSourceManual
+	customFile.Name = &customName
+	customFile.NameSource = &manualSource
+	_, err = db.NewUpdate().Model(customFile).Column("name", "name_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedMatching models.File
+	err = db.NewSelect().Model(&updatedMatching).Where("id = ?", matchingFile.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedMatching.Name)
+	assert.Equal(t, "Bar", *updatedMatching.Name)
+
+	var updatedCustom models.File
+	err = db.NewSelect().Model(&updatedCustom).Where("id = ?", customFile.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedCustom.Name)
+	assert.Equal(t, "Totally Different", *updatedCustom.Name)
+}
+
+func TestUpdateBook_Title_Unchanged_DoesNotTouchFileName(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// file.Name intentionally set to a differently-cased variant of the title
+	// so if the sync ran it would normalize the value. We expect it NOT to run
+	// because the title itself is unchanged.
+	fileName := "foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &fileName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Foo")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "foo", *updated.Name, "no-op title change must not touch file.Name")
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceFilepath, *updated.NameSource,
+		"no-op title change must not touch file.NameSource")
+}
+
+func TestUpdateBook_Title_EmptyString_Returns422(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, _ := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+}
+
+func TestUpdateBook_Title_WhitespaceOnly_Returns422(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, _ := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "   ")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+}
+
+func TestUpdateBook_Title_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "  Bar  ")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedBook models.Book
+	err := db.NewSelect().Model(&updatedBook).Where("id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "Bar", updatedBook.Title, "book.Title must be stored without surrounding whitespace")
+
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedFile.Name)
+	assert.Equal(t, "Bar", *updatedFile.Name, "file.Name must be stored without surrounding whitespace")
+}
+
+func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, _, file := seedBookAndFile(t, db, "Foo", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "  custom name  "}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "custom name", *updated.Name, "file.Name must be stored trimmed")
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
 }

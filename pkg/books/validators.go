@@ -17,7 +17,7 @@ type ListBooksQuery struct {
 }
 
 type UpdateBookPayload struct {
-	Title       *string       `json:"title,omitempty" validate:"omitempty,max=300"`
+	Title       *string       `json:"title,omitempty" mod:"trim" validate:"omitempty,min=1,max=300"`
 	SortTitle   *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
 	Subtitle    *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
 	Description *string       `json:"description,omitempty" validate:"omitempty,max=10000"`
@@ -48,7 +48,7 @@ type IdentifierPayload struct {
 // UpdateFilePayload is the payload for updating a file's metadata.
 type UpdateFilePayload struct {
 	FileRole    *string              `json:"file_role,omitempty" validate:"omitempty,oneof=main supplement"`
-	Name        *string              `json:"name,omitempty" validate:"omitempty,max=500"`
+	Name        *string              `json:"name,omitempty" mod:"trim" validate:"omitempty,max=500"`
 	Narrators   []string             `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
 	URL         *string              `json:"url,omitempty" validate:"omitempty,max=500,url"`
 	Publisher   *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
