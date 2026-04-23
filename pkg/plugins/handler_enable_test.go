@@ -22,6 +22,7 @@ import (
 // still persists the Malfunctioned status + load_error to the database so the
 // UI can render it after a refetch.
 func TestUpdate_EnableLoadFailure_ReturnsError(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
