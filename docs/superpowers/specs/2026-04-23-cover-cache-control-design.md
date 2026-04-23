@@ -205,3 +205,16 @@ No retroactive edits — existing entries at lines 357 and 473 are release snaps
 ## Open questions
 
 None. Ready for implementation plan.
+
+---
+
+## Errata (post-merge)
+
+The original design assumed `Cache-Control: private, no-cache` + `Last-Modified` would force browsers to revalidate on every `<img>` mount with the same URL. **This was incorrect.** Chromium and Firefox maintain an in-memory image cache separate from the HTTP cache; when an `<img>` element's src matches a URL previously rendered, the browser serves the cached decoded bitmap without consulting HTTP.
+
+The corrective design:
+- Cover URLs include `?v=${cacheKey}` where `cacheKey` bumps on data refetches (typically `query.dataUpdatedAt` or `file.updated_at`).
+- Backend `Cache-Control: private, no-cache` + `Last-Modified` retained as defense-in-depth and for WebKit clients, which do revalidate correctly.
+- React `<img key>` remount pattern retained (still useful for same-page mutation flows).
+
+See `app/CLAUDE.md` "Cover Image Freshness" section for authoritative current documentation and references to the relevant browser bug reports.

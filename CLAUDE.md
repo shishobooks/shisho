@@ -85,10 +85,13 @@ file.CoverImageFilename = &filename
 
 ### Frontend
 
-**Cover images use HTTP revalidation, not URL cache-busting** — Cover endpoints set `Cache-Control: private, no-cache` and rely on `Last-Modified` for revalidation. Never append `?t=...` query params to cover URLs. For pages that can trigger cover mutations, add `key={query.dataUpdatedAt}` to the `<img>` so React remounts it and the browser refetches:
+**Cover images require both URL cache-busting AND HTTP revalidation** — Browsers maintain an in-memory image cache independent from the HTTP cache, so `Cache-Control: no-cache` alone doesn't force a fresh fetch on `<img>` remount with the same src. Cover URLs must include `?v=${cacheKey}` where `cacheKey` reliably bumps on data refetches (e.g., `bookQuery.dataUpdatedAt`). See `app/CLAUDE.md` for details.
 
 ```tsx
-<img key={bookQuery.dataUpdatedAt} src={`/api/books/${id}/cover`} />
+<img
+  key={bookQuery.dataUpdatedAt}
+  src={`/api/books/${id}/cover?v=${bookQuery.dataUpdatedAt}`}
+/>
 ```
 
 ### Plugins
