@@ -928,3 +928,71 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 		})
 	})
 }
+
+func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	bookDir := t.TempDir()
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Foo",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Foo",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(bookDir, "test.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Seed file.Name = old title ("Foo") so the sync rule triggers.
+	name := "Foo"
+	nameSource := models.DataSourceFilepath
+	file.Name = &name
+	file.NameSource = &nameSource
+	_, err = db.NewUpdate().
+		Model(file).
+		Column("name", "name_source").
+		WherePK().
+		Exec(ctx)
+	require.NoError(t, err)
+
+	user := setupTestUser(t, db, library.ID, true)
+	err = db.NewSelect().
+		Model(user).
+		Relation("Role").
+		Relation("Role.Permissions").
+		Where("u.id = ?", user.ID).
+		Scan(ctx)
+	require.NoError(t, err)
+
+	e := setupTestServer(t, db)
+	body := `{"title": "Bar"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err = db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Bar", *updated.Name)
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
+}

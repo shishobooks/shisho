@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -237,15 +238,40 @@ func (h *handler) update(c echo.Context) error {
 
 	// Update title
 	if params.Title != nil && *params.Title != book.Title {
-		book.Title = *params.Title
+		oldTitle := book.Title
+		newTitle := *params.Title
+		book.Title = newTitle
 		book.TitleSource = models.DataSourceManual
 		opts.Columns = append(opts.Columns, "title", "title_source")
 		shouldOrganizeFiles = true
 		// Regenerate sort title when title changes (unless sort_title_source is manual)
 		if book.SortTitleSource != models.DataSourceManual {
-			book.SortTitle = sortname.ForTitle(*params.Title)
+			book.SortTitle = sortname.ForTitle(newTitle)
 			book.SortTitleSource = models.DataSourceFilepath
 			opts.Columns = append(opts.Columns, "sort_title", "sort_title_source")
+		}
+		// Sync file.Name on each main file whose current Name is unset or
+		// matches the old title (trim + case-insensitive). Custom filenames
+		// that deliberately differ from the book title are preserved.
+		for _, f := range book.Files {
+			if f.FileRole != models.FileRoleMain {
+				continue
+			}
+			currentEmpty := f.Name == nil || *f.Name == ""
+			currentMatches := false
+			if f.Name != nil {
+				currentMatches = strings.EqualFold(strings.TrimSpace(*f.Name), strings.TrimSpace(oldTitle))
+			}
+			if !currentEmpty && !currentMatches {
+				continue
+			}
+			nameCopy := newTitle
+			manualSource := models.DataSourceManual
+			f.Name = &nameCopy
+			f.NameSource = &manualSource
+			if err := h.bookService.UpdateFile(ctx, f, UpdateFileOptions{Columns: []string{"name", "name_source"}}); err != nil {
+				log.Warn("failed to update file name on title change", logger.Data{"file_id": f.ID, "error": err.Error()})
+			}
 		}
 	}
 
