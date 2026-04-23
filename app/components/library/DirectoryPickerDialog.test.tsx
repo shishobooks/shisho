@@ -189,6 +189,12 @@ describe("DirectoryPickerDialog", () => {
     // must trigger when entries are empty + a fetch is in progress. (The
     // breadcrumb now correctly shows "entry-1" as a path segment, so we
     // assert against `entry-50`, which only ever appears in the listing.)
+    //
+    // Note: this asserts post-flush state. `userEvent.click` flushes both
+    // the click handler's render AND any follow-up effect renders, so this
+    // test does not by itself prove the single-render-batch invariant —
+    // only that final state is correct. The single-render guarantee is
+    // documented by the inline reset in the action handlers.
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
     expect(screen.queryByText("entry-2")).not.toBeInTheDocument();
 

@@ -179,11 +179,14 @@ const DirectoryPickerDialog = ({
     }
   }, []);
 
-  const handleShowHiddenChange = useCallback((checked: boolean) => {
-    setShowHidden(checked);
-    setOffset(0);
-    setAccumulatedEntries([]);
-  }, []);
+  const handleShowHiddenChange = useCallback(
+    (checked: boolean | "indeterminate") => {
+      setShowHidden(checked === true);
+      setOffset(0);
+      setAccumulatedEntries([]);
+    },
+    [],
+  );
 
   const handleToggleSelect = useCallback((path: string) => {
     setSelectedPaths((prev) => {
@@ -273,9 +276,7 @@ const DirectoryPickerDialog = ({
           <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
             <Checkbox
               checked={showHidden}
-              onCheckedChange={(checked) =>
-                handleShowHiddenChange(checked as boolean)
-              }
+              onCheckedChange={handleShowHiddenChange}
             />
             Show hidden files
           </label>
