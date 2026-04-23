@@ -10,8 +10,8 @@ import (
 
 // RegisterRoutesOptions configures optional behaviors for library routes.
 type RegisterRoutesOptions struct {
-	// OnLibraryChanged is called after a library is created or its paths/deletion state changes.
-	// Used by the monitor to refresh filesystem watches.
+	// OnLibraryChanged is called after a library is created, has its paths
+	// updated, or is deleted. Used by the monitor to refresh filesystem watches.
 	OnLibraryChanged func()
 }
 

@@ -30,7 +30,7 @@ Click the button, type the library name to confirm, and click **Delete**. The co
 - **Files on disk are not deleted.** Book files, audiobooks, comics, and PDFs remain exactly where they are.
 - **Sidecar and metadata files are not cleaned up.** `.shisho.json` sidecars, `.cover.jpg` images, and other generated metadata remain on disk. Remove them manually if you want a truly clean slate.
 
-### What is deleted
+### What Is Deleted
 
 - The library row itself.
 - All books, files, series, persons (authors and narrators), genres, tags, publishers, and imprints scoped to the library.
@@ -39,7 +39,7 @@ Click the button, type the library name to confirm, and click **Delete**. The co
 - Per-user library access grants and per-user library settings (sort spec, etc.).
 - Full-text search entries for the above so searches no longer surface stale results.
 
-### What happens to active jobs
+### What Happens to Active Jobs
 
 Any pending or in-progress scan, hash, or plugin job scoped to the deleted library is cancelled (marked `failed`) as part of the deletion. Global jobs and jobs targeting other libraries are untouched.
 

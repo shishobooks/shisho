@@ -281,3 +281,38 @@ func TestDeleteLibrary_NotFound(t *testing.T) {
 	require.ErrorAs(t, err, &codeErr, "error must wrap errcodes.Error, got %T: %v", err, err)
 	assert.Equal(t, "not_found", codeErr.Code)
 }
+
+func TestDeleteLibrary_Atomicity(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	seeded := seedLibraryWithContent(ctx, t, db, "Atomic")
+
+	// Cancel the context before calling DeleteLibrary so the transaction
+	// rolls back partway through. This exercises the single-transaction
+	// guarantee: if any step fails, nothing commits.
+	cancelledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	err := svc.DeleteLibrary(cancelledCtx, seeded.LibraryID)
+	require.Error(t, err, "cancelled context should fail the delete")
+
+	// Library row must still exist.
+	libCount, err := db.NewSelect().Model((*models.Library)(nil)).Where("id = ?", seeded.LibraryID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, libCount, "library row should survive a failed transaction")
+
+	// Books must still exist (CASCADE didn't run).
+	bookCount, err := db.NewSelect().Model((*models.Book)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, bookCount, "book row should survive a failed transaction")
+
+	// FTS entries must still exist.
+	var ftsCount int
+	err = db.NewSelect().TableExpr("books_fts").ColumnExpr("COUNT(*)").Where("library_id = ?", seeded.LibraryID).Scan(ctx, &ftsCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, ftsCount, "FTS entry should survive a failed transaction")
+}
