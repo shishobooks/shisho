@@ -24,7 +24,7 @@ func TestBookCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	libraryService := libraries.NewService(db)
 	h := &handler{bookService: bookService, libraryService: libraryService}
 
-	fileID, _ := seedBookWithFileCover(ctx, t, db)
+	fileID := seedBookWithFileCover(ctx, t, db)
 
 	// Look up the book ID via the seeded file.
 	file, err := bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &fileID})
@@ -54,7 +54,7 @@ func TestBookCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	libraryService := libraries.NewService(db)
 	h := &handler{bookService: bookService, libraryService: libraryService}
 
-	fileID, _ := seedBookWithFileCover(ctx, t, db)
+	fileID := seedBookWithFileCover(ctx, t, db)
 	file, err := bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &fileID})
 	require.NoError(t, err)
 

@@ -20,8 +20,8 @@ import (
 )
 
 // seedBookWithFileCover creates a library, book, and file with a real cover
-// image on disk. Returns the file ID and the on-disk cover path.
-func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) (fileID int, coverPath string) {
+// image on disk. Returns the file ID.
+func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	t.Helper()
 
 	library := &models.Library{
@@ -51,8 +51,8 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) (fileI
 	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0o644))
 
 	coverFilename := "test.epub.cover.jpg"
-	coverPath = filepath.Join(bookDir, coverFilename)
-	coverFile, err := os.Create(coverPath)
+	coverFullPath := filepath.Join(bookDir, coverFilename)
+	coverFile, err := os.Create(coverFullPath)
 	require.NoError(t, err)
 	require.NoError(t, jpeg.Encode(coverFile, image.NewRGBA(image.Rect(0, 0, 10, 10)), nil))
 	require.NoError(t, coverFile.Close())
@@ -71,7 +71,7 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) (fileI
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	return file.ID, coverPath
+	return file.ID
 }
 
 func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
@@ -82,7 +82,7 @@ func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}
 
-	fileID, _ := seedBookWithFileCover(ctx, t, db)
+	fileID := seedBookWithFileCover(ctx, t, db)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}
 
-	fileID, _ := seedBookWithFileCover(ctx, t, db)
+	fileID := seedBookWithFileCover(ctx, t, db)
 
 	// First GET to capture Last-Modified.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
