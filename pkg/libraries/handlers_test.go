@@ -55,7 +55,7 @@ func newDeleteTestServer(t *testing.T, db *bun.DB, user *models.User) (*echo.Ech
 	return e, &callbacks
 }
 
-func seedUser(t *testing.T, ctx context.Context, db *bun.DB, roleName string, allLibraryAccess bool) *models.User {
+func seedUser(ctx context.Context, t *testing.T, db *bun.DB, roleName string, allLibraryAccess bool) *models.User {
 	t.Helper()
 
 	role := &models.Role{}
@@ -93,10 +93,10 @@ func TestDeleteLibraryHandler_HappyPath(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	admin := seedUser(t, ctx, db, models.RoleAdmin, true)
+	admin := seedUser(ctx, t, db, models.RoleAdmin, true)
 	e, callbacks := newDeleteTestServer(t, db, admin)
 
-	seeded := seedLibraryWithContent(t, ctx, db, "Doomed")
+	seeded := seedLibraryWithContent(ctx, t, db, "Doomed")
 
 	req := httptest.NewRequest(http.MethodDelete, "/libraries/"+strconv.Itoa(seeded.LibraryID), nil)
 	rr := httptest.NewRecorder()
@@ -117,7 +117,7 @@ func TestDeleteLibraryHandler_NotFound(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	admin := seedUser(t, ctx, db, models.RoleAdmin, true)
+	admin := seedUser(ctx, t, db, models.RoleAdmin, true)
 	e, _ := newDeleteTestServer(t, db, admin)
 
 	req := httptest.NewRequest(http.MethodDelete, "/libraries/99999", nil)
@@ -133,10 +133,10 @@ func TestDeleteLibraryHandler_RequiresWritePermission(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	viewer := seedUser(t, ctx, db, models.RoleViewer, true)
+	viewer := seedUser(ctx, t, db, models.RoleViewer, true)
 	e, callbacks := newDeleteTestServer(t, db, viewer)
 
-	seeded := seedLibraryWithContent(t, ctx, db, "Protected")
+	seeded := seedLibraryWithContent(ctx, t, db, "Protected")
 
 	req := httptest.NewRequest(http.MethodDelete, "/libraries/"+strconv.Itoa(seeded.LibraryID), nil)
 	rr := httptest.NewRecorder()
@@ -157,10 +157,10 @@ func TestDeleteLibraryHandler_RequiresLibraryAccess(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	editor := seedUser(t, ctx, db, models.RoleEditor, false) // no library access
+	editor := seedUser(ctx, t, db, models.RoleEditor, false) // no library access
 	e, _ := newDeleteTestServer(t, db, editor)
 
-	seeded := seedLibraryWithContent(t, ctx, db, "NotYours")
+	seeded := seedLibraryWithContent(ctx, t, db, "NotYours")
 
 	req := httptest.NewRequest(http.MethodDelete, "/libraries/"+strconv.Itoa(seeded.LibraryID), nil)
 	rr := httptest.NewRecorder()

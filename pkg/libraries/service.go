@@ -244,7 +244,7 @@ func (svc *Service) DeleteLibrary(ctx context.Context, id int) error {
 			Set("status = ?", models.JobStatusFailed).
 			Set("updated_at = ?", time.Now()).
 			Where("library_id = ?", id).
-			Where("status IN (?)", bun.In([]string{models.JobStatusPending, models.JobStatusInProgress})).
+			Where("status IN (?)", bun.List([]string{models.JobStatusPending, models.JobStatusInProgress})).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)

@@ -3,7 +3,6 @@ package libraries
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
@@ -49,7 +48,7 @@ type seededIDs struct {
 	TagID     int
 }
 
-func seedLibraryWithContent(t *testing.T, ctx context.Context, db *bun.DB, name string) seededIDs {
+func seedLibraryWithContent(ctx context.Context, t *testing.T, db *bun.DB, name string) seededIDs {
 	t.Helper()
 
 	library := &models.Library{
@@ -157,7 +156,7 @@ func TestDeleteLibrary_RemovesRowAndCascades(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(db)
 
-	seeded := seedLibraryWithContent(t, ctx, db, "Test Library")
+	seeded := seedLibraryWithContent(ctx, t, db, "Test Library")
 
 	err := svc.DeleteLibrary(ctx, seeded.LibraryID)
 	require.NoError(t, err)
@@ -201,7 +200,7 @@ func TestDeleteLibrary_PurgesFTS(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(db)
 
-	seeded := seedLibraryWithContent(t, ctx, db, "FTS Library")
+	seeded := seedLibraryWithContent(ctx, t, db, "FTS Library")
 
 	err := svc.DeleteLibrary(ctx, seeded.LibraryID)
 	require.NoError(t, err)
@@ -279,6 +278,6 @@ func TestDeleteLibrary_NotFound(t *testing.T) {
 	require.Error(t, err)
 
 	var codeErr *errcodes.Error
-	require.True(t, errors.As(err, &codeErr), "error must wrap errcodes.Error, got %T: %v", err, err)
+	require.ErrorAs(t, err, &codeErr, "error must wrap errcodes.Error, got %T: %v", err, err)
 	assert.Equal(t, "not_found", codeErr.Code)
 }
