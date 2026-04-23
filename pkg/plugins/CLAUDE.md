@@ -24,7 +24,19 @@ pkg/plugins/
   installer.go      - Download, verify, extract
   repository.go     - Repository manifest fetching
   service.go        - Database CRUD operations
-  handler.go        - HTTP API handlers
+  handler.go        - Handler struct, shared interfaces, NewHandler
+  handler_install.go        - install / uninstall / scan (local directory)
+  handler_update.go         - update (enable/disable, auto_update, config, confidence), reload, updateVersion
+  handler_manifest.go       - getManifest, getConfig
+  handler_image.go          - getImage
+  handler_order.go          - plugin hook order (global + per-library)
+  handler_fields.go         - enricher field settings (global + per-library)
+  handler_repositories.go   - repository list/add/remove/sync
+  handler_list.go           - listInstalled, listAvailable, retrieveAvailable, listIdentifierTypes
+  handler_enrich.go         - searchMetadata (POST /search), DownloadCoverFromURL
+  handler_apply_metadata.go - applyMetadata (POST /apply)
+  handler_persist_metadata.go - persistMetadata (shared by apply path)
+  handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
 
