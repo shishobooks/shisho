@@ -800,12 +800,7 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// When downgrading from main to supplement, clear all main-file-only metadata
 		if oldRole == models.FileRoleMain && newRole == models.FileRoleSupplement {
-			// Delete cover image file if it exists. CoverImageFilename stores
-			// just the filename — use a pure-string join against
-			// filepath.Dir(file.Filepath) rather than stat'ing book.Filepath.
-			// book.Filepath may be a synthetic organized-folder path that
-			// never exists on disk for root-level files, and ResolveCoverPath
-			// would fall back to that junk path. The cover always lives
+			// Delete cover image file if it exists. The cover always lives
 			// alongside the file for both root-level and directory-backed
 			// books, so filepath.Dir(file.Filepath) is always correct.
 			if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
@@ -890,6 +885,21 @@ func (h *handler) updateFile(c echo.Context) error {
 		oldNarratorPersonIDs = append(oldNarratorPersonIDs, narrator.PersonID)
 	}
 
+	// narratorNames tracks the authoritative narrator list for this file —
+	// either the freshly-written names from this request, or (when narrators
+	// weren't touched) the in-memory relation from the initial file load.
+	// Any downstream branch that reorganizes the file must use this variable
+	// so that a name-triggered reorg following a narrator update doesn't
+	// fall back to stale file.Narrators.
+	var narratorNames []string
+	if file.FileType == models.FileTypeM4B && params.Narrators == nil {
+		for _, n := range file.Narrators {
+			if n.Person != nil {
+				narratorNames = append(narratorNames, n.Person.Name)
+			}
+		}
+	}
+
 	// Update narrators
 	if params.Narrators != nil {
 		narratorsChanged = true
@@ -902,7 +912,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		}
 
 		// Create new narrator associations
-		narratorNames := make([]string, 0, len(params.Narrators))
+		narratorNames = make([]string, 0, len(params.Narrators))
 		for i, narratorName := range params.Narrators {
 			if narratorName == "" {
 				continue
@@ -952,14 +962,9 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	// Reorganize file if name changed and library has OrganizeFileStructure enabled
 	if nameChanged && library.OrganizeFileStructure {
-		narratorNames := make([]string, 0)
-		if file.FileType == models.FileTypeM4B {
-			for _, n := range file.Narrators {
-				if n.Person != nil {
-					narratorNames = append(narratorNames, n.Person.Name)
-				}
-			}
-		}
+		// narratorNames is already authoritative — either set from the new
+		// narrator request above or populated from the pre-update in-memory
+		// relation (which is still current if narrators weren't touched).
 		file = h.reorganizeFileAfterMetadataChange(ctx, library, book, file, narratorNames, &opts)
 	}
 
@@ -1235,8 +1240,23 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 		// OrganizeBookFiles reads files fresh from the DB, so flush any
 		// pending in-memory updates (name, cover_image_filename, etc.) on
 		// this file first. Otherwise a just-changed file.Name would not be
-		// reflected in the organized path.
+		// reflected in the organized path. If the subsequent organize fails
+		// we roll back those DB writes so DB and disk stay consistent.
+		var preFlushFile *models.File
+		var flushedColumns []string
 		if len(opts.Columns) > 0 {
+			// Snapshot the pre-flush DB state so we can revert if organize
+			// fails and DB+disk would otherwise diverge.
+			snapshot, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID})
+			if err != nil {
+				log.Error("failed to snapshot file before organize", logger.Data{
+					"file_id": file.ID,
+					"error":   err.Error(),
+				})
+				return file
+			}
+			preFlushFile = snapshot
+
 			if err := h.bookService.UpdateFile(ctx, file, *opts); err != nil {
 				log.Error("failed to flush file updates before organize", logger.Data{
 					"file_id": file.ID,
@@ -1245,24 +1265,49 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 				return file
 			}
 			// Already persisted — prevent the outer UpdateFile call from
-			// writing the same columns again.
+			// writing the same columns again. Keep a copy for revert.
+			flushedColumns = append([]string{}, opts.Columns...)
 			opts.Columns = opts.Columns[:0]
 		}
 		// Delegate to book-level organize so the file is moved into its
 		// organized folder and book.Filepath is updated in lockstep.
-		if err := h.bookService.OrganizeBookFiles(ctx, book); err != nil {
+		organizeErr := h.bookService.OrganizeBookFiles(ctx, book)
+		if organizeErr != nil {
 			log.Error("failed to organize book files after file metadata change", logger.Data{
 				"file_id": file.ID,
 				"book_id": book.ID,
-				"error":   err.Error(),
+				"error":   organizeErr.Error(),
+			})
+		}
+
+		// Reload the file so we can detect whether organize actually moved
+		// it. OrganizeBookFiles logs and continues when an individual file's
+		// organize fails (e.g. the source was deleted out from under us), so
+		// a nil error doesn't guarantee the move happened.
+		updated, reloadErr := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID})
+		if reloadErr != nil {
+			log.Error("failed to reload file after organize", logger.Data{
+				"file_id": file.ID,
+				"error":   reloadErr.Error(),
 			})
 			return file
 		}
-		// Reload the file so the caller sees the updated filepath and cover.
-		if updated, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID}); err == nil {
-			return updated
+
+		// If the file didn't actually move (organize failed explicitly OR
+		// silently), revert the pre-organize flush so the DB doesn't show
+		// new metadata while disk still has the file at its old path.
+		if updated.Filepath == file.Filepath {
+			if preFlushFile != nil && len(flushedColumns) > 0 {
+				if rbErr := h.bookService.UpdateFile(ctx, preFlushFile, UpdateFileOptions{Columns: flushedColumns}); rbErr != nil {
+					log.Error("failed to revert file update after organize failure", logger.Data{
+						"file_id": file.ID,
+						"error":   rbErr.Error(),
+					})
+				}
+			}
+			return file
 		}
-		return file
+		return updated
 	}
 
 	// Same-folder rename. Book.Filepath already points at the book's
@@ -1339,11 +1384,9 @@ func (h *handler) fileCover(c echo.Context) error {
 	} else {
 		coverFilename = filepath.Base(file.Filepath) + ".cover" + file.CoverExtension()
 	}
-	// Resolve the cover via the file's parent dir rather than book.Filepath.
-	// book.Filepath may be a synthetic organized-folder path that never exists
-	// on disk (root-level files in libraries with OrganizeFileStructure
-	// disabled), in which case ResolveCoverPath would stat-fail and fall back
-	// to that junk path. The cover always lives alongside the file.
+	// Resolve the cover via the file's parent dir — book.Filepath may be a
+	// synthetic organized-folder path that never exists on disk for
+	// root-level files. The cover always lives alongside the file.
 	coverPath := filepath.Join(filepath.Dir(file.Filepath), coverFilename)
 
 	c.Response().Header().Set("Cache-Control", "private, no-cache")

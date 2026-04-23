@@ -213,6 +213,98 @@ func TestMoveFilesToBook_TargetBookHasSyntheticPath_CreatesDirAndMoves(t *testin
 	assert.Equal(t, newFilePath, moved.Filepath)
 }
 
+// Regression: when the target book has a synthetic path and the move fails
+// after MkdirAll created the destination directory chain, the rollback path
+// must remove the newly-created dirs so they don't accumulate as empty
+// orphans under the library root.
+func TestMoveFilesToBook_MoveFailure_CleansUpCreatedDestDirs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := setupTestDB(t)
+	svc := NewService(db)
+
+	tmpDir := t.TempDir()
+	sourceDir := filepath.Join(tmpDir, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0755))
+
+	sourceFile := filepath.Join(sourceDir, "test.epub")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("content"), 0644))
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: tmpDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	now := time.Now()
+	sourceBook := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Source",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Source",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        sourceDir,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	_, err = db.NewInsert().Model(sourceBook).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        sourceBook.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      sourceFile,
+		FilesizeBytes: 7,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	syntheticTargetDir := filepath.Join(tmpDir, "NewAuthor", "NewTitle")
+	targetBook := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "NewTitle",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "NewTitle",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticTargetDir,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	_, err = db.NewInsert().Model(targetBook).Exec(ctx)
+	require.NoError(t, err)
+
+	// Remove the source file on disk so os.Rename fails when MoveFilesToBook
+	// tries to move it, forcing the rollback path.
+	require.NoError(t, os.Remove(sourceFile))
+
+	_, err = svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:      []int{file.ID},
+		TargetBookID: &targetBook.ID,
+		LibraryID:    library.ID,
+	})
+	require.Error(t, err, "move should fail because source file is missing")
+
+	// The created dir chain must be removed on failure so we don't leave
+	// empty orphan directories in the library root.
+	_, statErr := os.Stat(syntheticTargetDir)
+	assert.True(t, os.IsNotExist(statErr),
+		"expected synthetic target dir to be cleaned up on move failure: %v", statErr)
+	_, statErr = os.Stat(filepath.Dir(syntheticTargetDir))
+	assert.True(t, os.IsNotExist(statErr),
+		"expected top-most created parent dir to also be cleaned up")
+}
+
 func TestMoveFilesToBook_WithoutOrganizeFileStructure_NoPhysicalMove(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

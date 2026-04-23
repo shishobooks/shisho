@@ -390,10 +390,10 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 // regression test for a bug where deleteFileFromDisk resolved the cover
 // path by stat'ing file.Filepath. If the main file had already been
 // removed from disk (e.g. the user manually deleted it before triggering
-// the app's delete), the stat would fail, ResolveCoverDir would fall
-// back to treating file.Filepath as a directory, and the resulting
-// cover path would be a junk location — silently leaving the cover file
-// orphaned on disk.
+// the app's delete), the stat would fail and the resulting cover path
+// would be a junk location — silently leaving the cover file orphaned.
+// The current implementation uses a pure-string join against
+// filepath.Dir(file.Filepath) which is stat-race-free.
 func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

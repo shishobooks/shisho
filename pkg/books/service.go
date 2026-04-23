@@ -1678,13 +1678,10 @@ func deleteFileFromDisk(file *models.File) error {
 		return errors.Wrap(err, "failed to delete main file")
 	}
 
-	// Delete cover image if exists (best effort). Use a pure-string join
-	// rather than fileutils.ResolveCoverPath here: that helper stats the
-	// first argument, and file.Filepath may have been removed manually
-	// by the user before this function runs (or just now, above). For
-	// both root-level and directory-backed books, the cover lives
-	// alongside the file, so filepath.Dir(file.Filepath) is always the
-	// cover dir regardless of whether the main file exists on disk.
+	// Delete cover image if exists (best effort). The cover lives alongside
+	// the file for both root-level and directory-backed books, so
+	// filepath.Dir(file.Filepath) is always the cover dir regardless of
+	// whether the main file exists on disk.
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
 		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 		_ = os.Remove(coverPath)

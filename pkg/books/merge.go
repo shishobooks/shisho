@@ -37,14 +37,35 @@ type MoveFilesResult struct {
 
 // fileMove tracks a file move operation for rollback purposes.
 type fileMove struct {
-	fileID    int
-	oldPath   string
-	newPath   string
-	oldDir    string // Source directory for cleanup
-	oldBookID int
-	newBookID int
-	fileMoved bool // True if the physical file was moved
-	dbUpdated bool // True if the database was updated
+	fileID         int
+	oldPath        string
+	newPath        string
+	oldDir         string // Source directory for cleanup
+	oldBookID      int
+	newBookID      int
+	fileMoved      bool   // True if the physical file was moved
+	dbUpdated      bool   // True if the database was updated
+	createdDirRoot string // Topmost ancestor dir we created via MkdirAll, or "" if none
+}
+
+// firstNonExistentAncestor walks up from dir and returns the topmost path in
+// the chain that does not exist on disk. Returns "" if dir already exists
+// (no MkdirAll would create anything).
+func firstNonExistentAncestor(dir string) string {
+	if _, err := os.Stat(dir); err == nil {
+		return ""
+	}
+	cur := dir
+	for {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return cur
+		}
+		if _, err := os.Stat(parent); err == nil {
+			return cur
+		}
+		cur = parent
+	}
 }
 
 // MoveFilesToBook moves files from their current books to a target book.
@@ -170,15 +191,23 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 					// may be a synthetic organized-folder path that hasn't been
 					// created on disk yet (e.g. the target book was root-level and
 					// organize hasn't run). moveFile below uses os.Rename and will
-					// fail if the parent dir is missing.
+					// fail if the parent dir is missing. Track the topmost dir we
+					// create so rollback can clean it up if the move fails.
+					createdRoot := firstNonExistentAncestor(filepath.Dir(newPath))
 					if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
 						failures := svc.rollbackFileMoves(ctx, moves)
 						baseErr := errors.Wrapf(err, "failed to create destination dir for file %d", file.ID)
 						return wrapErrorWithRollbackFailures(baseErr, failures)
 					}
+					move.createdDirRoot = createdRoot
 					// Move file along with associated files (covers, sidecars)
 					_, err := fileutils.MoveFileWithAssociatedFiles(file.Filepath, newPath)
 					if err != nil {
+						// Clean up the dir chain we just created — the move
+						// failed, so the tree is empty.
+						if move.createdDirRoot != "" {
+							_ = os.RemoveAll(move.createdDirRoot)
+						}
 						// Rollback any previous moves
 						failures := svc.rollbackFileMoves(ctx, moves)
 						baseErr := errors.Wrapf(err, "failed to move file %d to %s", file.ID, newPath)
@@ -232,6 +261,10 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 							newPath: move.newPath,
 							err:     rbErr,
 						})
+					} else if move.createdDirRoot != "" {
+						// File is back at its original location; the dir chain
+						// we created is now empty.
+						_ = os.RemoveAll(move.createdDirRoot)
 					}
 				}
 				// Rollback any previous moves
@@ -715,6 +748,12 @@ func (svc *Service) rollbackFileMoves(ctx context.Context, moves []fileMove) []r
 					newPath: move.newPath,
 					err:     err,
 				})
+				continue
+			}
+			if move.createdDirRoot != "" {
+				// File is back at its original location; the dir chain we
+				// created is now empty.
+				_ = os.RemoveAll(move.createdDirRoot)
 			}
 		}
 	}
