@@ -105,6 +105,10 @@ export function FileEditDialog({
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
   const isPageBased = isPageBasedFileType(file.file_type);
+  // Dialog-local cover cache key — bumped synchronously after cover mutations
+  // (upload / set-cover-page) so the preview `<img>` refreshes immediately on
+  // save, without waiting for the parent query to refetch. Elsewhere in the
+  // codebase we use `query.dataUpdatedAt` for this; intentional divergence.
   const [coverCacheKey, setCoverCacheKey] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
