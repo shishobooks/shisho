@@ -79,10 +79,11 @@ from replacing the value.
 Run the file-name sweep *before* the existing `UpdateBook` call so a
 failure to update a file row doesn't leave the book title persisted while
 the files are still out of sync. If a per-file `UpdateFile` call fails,
-log a warning (matches the rest of this handler's style — see the
-author/series/genre blocks that log and continue) and skip the remaining
-files. The book title still persists; we don't want to block the user's
-primary edit on a best-effort side effect.
+log a warning and continue to the next file — matches the rest of this
+handler's style (see the author/series/genre blocks that log and
+continue). Files are independent; one bad row shouldn't block the rest,
+and we don't want to block the user's primary edit on a best-effort side
+effect.
 
 ## Files changed
 
@@ -90,8 +91,8 @@ primary edit on a best-effort side effect.
   update block.
 - `pkg/books/handlers_test.go` (or whichever test file currently covers
   the update handler) — new tests.
-- `website/docs/metadata.md` — extend the existing note about identify
-  syncing file.Name to cover manual edits too.
+- `website/docs/directory-structure.md` — extend the existing Organize
+  Files note about identify syncing file.Name to cover manual edits too.
 
 ## Test plan
 
@@ -128,8 +129,9 @@ existing title-update coverage lives):
 
 ## Docs
 
-`website/docs/metadata.md` has a note about identify syncing file.Name
-from #126. Extend that note to say manual book-title edits now do the
-same thing, with the conditional rule ("unchanged from the old title,
-or not set") so users understand why a custom filename survives the
-edit. No config fields change; `shisho.example.yaml` unaffected.
+`website/docs/directory-structure.md` has a note about identify syncing
+file.Name from #126 (in the "Organize Files" section). Extend that note
+to say manual book-title edits now do the same thing, with the
+conditional rule ("unchanged from the old title, or not set") so users
+understand why a custom filename survives the edit. No config fields
+change; `shisho.example.yaml` unaffected.
