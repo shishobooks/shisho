@@ -27,8 +27,8 @@ Shisho works best when each book has its own directory. All editions of a book (
 
 ## Organize Files
 
-Shisho includes an optional "Organize Files" feature in library settings that can automatically organize your books into a consistent directory structure. When enabled, Shisho will move and rename files based on metadata — during scans, and also when you identify a book and apply a plugin search result (the target file is renamed to match the identified title).
+Shisho includes an optional "Organize Files" feature in library settings that can automatically organize your books into a consistent directory structure. When enabled, Shisho will move and rename files based on metadata — during scans, when you identify a book and apply a plugin search result (the target file is renamed to match the identified title), and when you manually edit a book's title (each main file whose stored name still matches the old title is renamed too; custom filenames that differ from the book title are preserved).
 
-If you prefer to manage your own file organization, you can leave this disabled and Shisho will work with whatever structure you have. With Organize Files disabled, identify still updates the book's title and the target file's stored name, but no files are moved or renamed on disk.
+If you prefer to manage your own file organization, you can leave this disabled and Shisho will work with whatever structure you have. With Organize Files disabled, these actions still update the book's title and the corresponding files' stored names in the database, but no files are moved or renamed on disk.
 
 Non-media files in a book's directory (like PDFs or text files) are automatically discovered as [supplement files](./supplement-files).
