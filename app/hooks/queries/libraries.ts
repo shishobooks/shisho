@@ -14,6 +14,7 @@ import type {
 } from "@/types";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 
 export enum QueryKey {
   RetrieveLibrary = "RetrieveLibrary",
@@ -107,6 +108,12 @@ export const useDeleteLibrary = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.removeQueries({
         queryKey: [QueryKey.RetrieveLibrary, String(id)],
+      });
+      queryClient.removeQueries({
+        queryKey: [QueryKey.LibraryLanguages, id],
+      });
+      queryClient.removeQueries({
+        queryKey: [LibrarySettingsQueryKey.LibrarySettings, id],
       });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { DeleteLibraryDialog } from "./DeleteLibraryDialog";
@@ -13,6 +14,13 @@ vi.mock("@/hooks/queries/libraries", () => ({
     mutateAsync: mockDelete,
     isPending: false,
   }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 const renderDialog = (
@@ -66,6 +74,23 @@ describe("DeleteLibraryDialog", () => {
     await user.click(screen.getByRole("button", { name: /^Delete$/ }));
 
     expect(mockDelete).toHaveBeenCalledWith({ id: 1 });
+  });
+
+  it("keeps the dialog open and shows an error toast when the mutation fails", async () => {
+    mockDelete.mockRejectedValueOnce(new Error("server exploded"));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { onOpenChange } = renderDialog();
+
+    await user.type(
+      screen.getByLabelText(/Type the library name to confirm/i),
+      "My Library",
+    );
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("server exploded");
+    });
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it("surfaces the three caveats in the warning banner", () => {
