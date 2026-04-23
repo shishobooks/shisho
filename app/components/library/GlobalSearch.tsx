@@ -49,7 +49,6 @@ interface SearchResultCoverProps {
   id: number;
   thumbnailClasses: string;
   variant: "book" | "audiobook";
-  cacheBuster: number;
 }
 
 const SearchResultCover = ({
@@ -57,9 +56,8 @@ const SearchResultCover = ({
   id,
   thumbnailClasses,
   variant,
-  cacheBuster,
 }: SearchResultCoverProps) => {
-  const coverUrl = `/api/${type === "book" ? "books" : "series"}/${id}/cover?t=${cacheBuster}`;
+  const coverUrl = `/api/${type === "book" ? "books" : "series"}/${id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
 
@@ -330,7 +328,6 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
           to={`/libraries/${libraryId}/books/${book.id}`}
         >
           <SearchResultCover
-            cacheBuster={searchQuery.dataUpdatedAt}
             id={book.id}
             thumbnailClasses={thumbnailClasses}
             type="book"
@@ -347,13 +344,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         </Link>
       );
     },
-    [
-      handleResultClick,
-      libraryId,
-      searchQuery.dataUpdatedAt,
-      coverAspectRatio,
-      selectedIndex,
-    ],
+    [handleResultClick, libraryId, coverAspectRatio, selectedIndex],
   );
 
   const renderSeriesResult = useCallback(
@@ -374,7 +365,6 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         to={`/libraries/${libraryId}/series/${series.id}`}
       >
         <SearchResultCover
-          cacheBuster={searchQuery.dataUpdatedAt}
           id={series.id}
           thumbnailClasses={seriesThumbnailClasses}
           type="series"
@@ -391,7 +381,6 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [
       handleResultClick,
       libraryId,
-      searchQuery.dataUpdatedAt,
       seriesThumbnailClasses,
       libraryVariant,
       selectedIndex,
