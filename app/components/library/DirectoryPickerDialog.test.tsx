@@ -29,7 +29,6 @@ type BrowseState = {
 
 let currentKey = "";
 let lastSettledData: BrowseResponse | undefined;
-let lastDataUpdatedAt = 0;
 let dataUpdatedAtTick = 0;
 let keyResponses: Record<string, BrowseResponse> = {};
 
@@ -38,13 +37,17 @@ let keyResponses: Record<string, BrowseResponse> = {};
 const keyOf = (q: BrowseQuery) =>
   `${q.path}::${q.offset ?? 0}::${q.search ?? ""}::${q.show_hidden ? 1 : 0}`;
 
+// Mirrors React Query's `placeholderData: keepPreviousData` semantics
+// synchronously on the same render where the key changed — exactly how
+// production behaves. Tests can therefore assert mid-flight state right after
+// the user action that changed the key, without awaiting flushes.
 vi.mock("@/hooks/queries/filesystem", () => ({
   useFilesystemBrowse: (q: BrowseQuery): BrowseState => {
     const requestedKey = keyOf(q);
     if (requestedKey === currentKey) {
       return {
         data: lastSettledData,
-        dataUpdatedAt: lastDataUpdatedAt,
+        dataUpdatedAt: dataUpdatedAtTick,
         isPlaceholderData: false,
         isFetching: false,
         isLoading: lastSettledData === undefined,
@@ -68,9 +71,9 @@ vi.mock("@/hooks/queries/filesystem", () => ({
 const settle = (key: string) => {
   currentKey = key;
   lastSettledData = keyResponses[key];
-  // Use a monotonic counter so re-settles always change `dataUpdatedAt` and
+  // Monotonic counter so re-settles always change `dataUpdatedAt` and
   // re-trigger the accumulator effect, regardless of fake-timer state.
-  lastDataUpdatedAt = ++dataUpdatedAtTick;
+  dataUpdatedAtTick++;
 };
 
 const makeEntries = (start: number, count: number): Entry[] =>
@@ -104,7 +107,6 @@ describe("DirectoryPickerDialog", () => {
   beforeEach(() => {
     currentKey = "";
     lastSettledData = undefined;
-    lastDataUpdatedAt = 0;
     dataUpdatedAtTick = 0;
     keyResponses = {};
   });
@@ -184,9 +186,11 @@ describe("DirectoryPickerDialog", () => {
 
     // Mid-flight: previous directory's entries must NOT be visible. The
     // accumulator must skip placeholder data, and the spinner condition
-    // must trigger when entries are empty + a fetch is in progress.
-    expect(screen.queryByText("entry-1")).not.toBeInTheDocument();
+    // must trigger when entries are empty + a fetch is in progress. (The
+    // breadcrumb now correctly shows "entry-1" as a path segment, so we
+    // assert against `entry-50`, which only ever appears in the listing.)
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
+    expect(screen.queryByText("entry-2")).not.toBeInTheDocument();
 
     // Settle the new directory's fetch.
     settle("/root/entry-1::0::::0");
@@ -203,6 +207,7 @@ describe("DirectoryPickerDialog", () => {
 
     expect(screen.getByText("child-a")).toBeInTheDocument();
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
+    expect(screen.queryByText("entry-2")).not.toBeInTheDocument();
   });
 
   it("does not retain previous results during a debounced search transition", async () => {

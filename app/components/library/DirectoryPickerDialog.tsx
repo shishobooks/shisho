@@ -135,8 +135,13 @@ const DirectoryPickerDialog = ({
     offset,
   ]);
 
+  // Only trust the response (entries, current_path, has_more, total) when
+  // it's the settled result for the current query key — placeholder data is
+  // the previous query's response and would render stale state.
+  const settled = browseQuery.isPlaceholderData ? undefined : browseQuery.data;
+
   const pathSegments = useMemo(() => {
-    const path = browseQuery.data?.current_path || currentPath;
+    const path = settled?.current_path || currentPath;
     if (path === "/") return [{ name: "/", path: "/" }];
 
     const segments = path.split("/").filter(Boolean);
@@ -149,7 +154,7 @@ const DirectoryPickerDialog = ({
     }
 
     return result;
-  }, [browseQuery.data?.current_path, currentPath]);
+  }, [settled?.current_path, currentPath]);
 
   const handleNavigate = useCallback((path: string) => {
     setCurrentPath(path);
@@ -178,10 +183,10 @@ const DirectoryPickerDialog = ({
   }, []);
 
   const handleSelectCurrentDirectory = useCallback(() => {
-    const path = browseQuery.data?.current_path || currentPath;
+    const path = settled?.current_path || currentPath;
     onSelect([path]);
     onOpenChange(false);
-  }, [browseQuery.data?.current_path, currentPath, onSelect, onOpenChange]);
+  }, [settled?.current_path, currentPath, onSelect, onOpenChange]);
 
   const handleConfirmSelection = useCallback(() => {
     onSelect(Array.from(selectedPaths));
@@ -192,9 +197,6 @@ const DirectoryPickerDialog = ({
     setOffset((prev) => prev + 50);
   }, []);
 
-  // Only trust pagination metadata from a settled fetch, not from the
-  // previous query's placeholder data.
-  const settled = browseQuery.isPlaceholderData ? undefined : browseQuery.data;
   const hasMore = settled?.has_more ?? false;
   const total = settled?.total ?? 0;
   const remaining = total - accumulatedEntries.length;
