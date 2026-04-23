@@ -33,7 +33,9 @@ vendor/zip.js
 view.js
 ```
 
-Some of these (e.g. `fb2.js`, `mobi.js`, `pdf.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
+**`pdf.js` is intentionally stubbed — do not re-copy it from upstream.** Upstream foliate's `pdf.js` depends on a vendored pdfjs distribution under `vendor/pdfjs/` that we don't ship. PDFs are handled by the separate `PDFReader` component, so foliate's PDF path is never exercised at runtime — but Vite/Rolldown resolves dynamic imports at build time, so `pdf.js` must still exist *and* all of its own imports must resolve. That's why we keep a stub rather than deleting the file, and why replacing it with upstream's version without also vendoring `vendor/pdfjs/` breaks `pnpm build`.
+
+Some of the other files (e.g. `fb2.js`, `mobi.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
 ## To update
 
@@ -48,7 +50,7 @@ Some of these (e.g. `fb2.js`, `mobi.js`, `pdf.js`, `progress.js`, `search.js`, `
    ```bash
    cp /tmp/foliate-js-src/LICENSE app/libraries/foliate/LICENSE
    ```
-4. Re-copy each file in the **Vendored file list** above from `/tmp/foliate-js-src/` to the matching path under `app/libraries/foliate/`. Preserve the `ui/` and `vendor/` subdirectories.
+4. Re-copy each file in the **Vendored file list** above from `/tmp/foliate-js-src/` to the matching path under `app/libraries/foliate/`. Preserve the `ui/` and `vendor/` subdirectories. **Exception:** do not re-copy `pdf.js` — see the stub note above. If you need to refresh it, also vendor `vendor/pdfjs/` from upstream.
 5. Check for new transitive imports that weren't in the previous snapshot:
    ```bash
    grep -rEn "from ['\"]\.|import\(['\"]\." app/libraries/foliate/
