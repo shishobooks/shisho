@@ -49,7 +49,7 @@ interface SearchResultCoverProps {
   id: number;
   thumbnailClasses: string;
   variant: "book" | "audiobook";
-  cacheBuster: number;
+  cacheKey?: number;
 }
 
 const SearchResultCover = ({
@@ -57,9 +57,11 @@ const SearchResultCover = ({
   id,
   thumbnailClasses,
   variant,
-  cacheBuster,
+  cacheKey,
 }: SearchResultCoverProps) => {
-  const coverUrl = `/api/${type === "book" ? "books" : "series"}/${id}/cover?t=${cacheBuster}`;
+  const coverUrl = cacheKey
+    ? `/api/${type === "book" ? "books" : "series"}/${id}/cover?v=${cacheKey}`
+    : `/api/${type === "book" ? "books" : "series"}/${id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
 
@@ -330,7 +332,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
           to={`/libraries/${libraryId}/books/${book.id}`}
         >
           <SearchResultCover
-            cacheBuster={searchQuery.dataUpdatedAt}
+            cacheKey={searchQuery.dataUpdatedAt}
             id={book.id}
             thumbnailClasses={thumbnailClasses}
             type="book"
@@ -350,9 +352,9 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [
       handleResultClick,
       libraryId,
-      searchQuery.dataUpdatedAt,
       coverAspectRatio,
       selectedIndex,
+      searchQuery.dataUpdatedAt,
     ],
   );
 
@@ -374,7 +376,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         to={`/libraries/${libraryId}/series/${series.id}`}
       >
         <SearchResultCover
-          cacheBuster={searchQuery.dataUpdatedAt}
+          cacheKey={searchQuery.dataUpdatedAt}
           id={series.id}
           thumbnailClasses={seriesThumbnailClasses}
           type="series"
@@ -391,10 +393,10 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [
       handleResultClick,
       libraryId,
-      searchQuery.dataUpdatedAt,
       seriesThumbnailClasses,
       libraryVariant,
       selectedIndex,
+      searchQuery.dataUpdatedAt,
     ],
   );
 

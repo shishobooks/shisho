@@ -449,6 +449,7 @@ const HomeContent = () => {
   const renderBookItem = (book: Book) => (
     <SelectableBookItem
       book={book}
+      cacheKey={booksQuery.dataUpdatedAt}
       coverAspectRatio={coverAspectRatio}
       key={book.id}
       libraryId={libraryId!}

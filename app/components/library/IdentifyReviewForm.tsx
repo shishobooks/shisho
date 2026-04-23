@@ -615,7 +615,7 @@ export function IdentifyReviewForm({
       ? `/api/books/files/${file.id}/page/${newCoverPage}`
       : undefined);
   const currentCoverUrl = file?.cover_image_filename
-    ? `/api/books/files/${file.id}/cover?t=${new Date(file.updated_at).getTime()}`
+    ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`
     : undefined;
   const hasCoverChoice = !!newCoverPreviewUrl;
   const [coverSelection, setCoverSelection] = useState<"current" | "new">(

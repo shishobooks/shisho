@@ -160,7 +160,12 @@ const TagDetail = () => {
           {tagBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
               {tagBooksQuery.data.map((book) => (
-                <BookItem book={book} key={book.id} libraryId={libraryId!} />
+                <BookItem
+                  book={book}
+                  cacheKey={tagBooksQuery.dataUpdatedAt}
+                  key={book.id}
+                  libraryId={libraryId!}
+                />
               ))}
             </div>
           )}

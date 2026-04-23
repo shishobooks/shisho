@@ -14,7 +14,12 @@ import { getFilename } from "@/utils/format";
 interface CoverGalleryTabsProps {
   files: File[];
   className?: string;
-  cacheBuster?: number;
+  /**
+   * Forces the <img> to remount (and thus re-request) when this value changes.
+   * Typically set to a React Query `dataUpdatedAt` so cover updates triggered
+   * by mutations on this page flow through HTTP revalidation.
+   */
+  cacheKey?: number;
 }
 
 interface FileWithLabel extends File {
@@ -59,7 +64,7 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
 function CoverGalleryTabs({
   files,
   className,
-  cacheBuster,
+  cacheKey,
 }: CoverGalleryTabsProps) {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [coverLoaded, setCoverLoaded] = useState(false);
@@ -81,8 +86,8 @@ function CoverGalleryTabs({
 
   const hasCover = selectedFile?.cover_image_filename && !coverError;
   const coverUrl = selectedFile
-    ? cacheBuster
-      ? `/api/books/files/${selectedFile.id}/cover?t=${cacheBuster}`
+    ? cacheKey
+      ? `/api/books/files/${selectedFile.id}/cover?v=${cacheKey}`
       : `/api/books/files/${selectedFile.id}/cover`
     : null;
 
@@ -99,13 +104,13 @@ function CoverGalleryTabs({
     setCoverLoaded(false);
   }, [selectedFileId]);
 
-  // Reset the error flag whenever the URL changes — either because the user
-  // picked a different tab, or because a rescan bumped the cache-buster. If
-  // we only reset on tab change, a previously-failed cover stays unmounted
-  // even after the underlying file gets a valid cover.
+  // Reset the error flag whenever the URL changes (tab switch) or when the
+  // cacheKey bumps (cover mutation). If we only reset on tab change, a
+  // previously-failed cover stays unmounted even after the underlying file
+  // gets a valid cover.
   useEffect(() => {
     setCoverError(false);
-  }, [coverUrl]);
+  }, [coverUrl, cacheKey]);
 
   const handleCoverLoad = () => {
     if (coverUrl) {
@@ -150,6 +155,7 @@ function CoverGalleryTabs({
               "absolute inset-0 w-full h-full object-cover",
               !coverLoaded && "opacity-0",
             )}
+            key={`${selectedFile?.id}-${cacheKey ?? 0}`}
             onError={() => setCoverError(true)}
             onLoad={handleCoverLoad}
             src={coverUrl}

@@ -274,6 +274,7 @@ const ListDetail = () => {
               ) : listBooksQuery.isSuccess ? (
                 <DraggableBookList
                   books={books}
+                  cacheKey={listBooksQuery.dataUpdatedAt}
                   isOwner={isOwner}
                   onReorder={handleReorder}
                 />
@@ -294,6 +295,7 @@ const ListDetail = () => {
                         !isOwner ? listBook.added_by_user?.username : undefined
                       }
                       book={listBook.book}
+                      cacheKey={listBooksQuery.dataUpdatedAt}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}
                     />

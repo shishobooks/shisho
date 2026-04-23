@@ -105,7 +105,11 @@ export function FileEditDialog({
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
   const isPageBased = isPageBasedFileType(file.file_type);
-  const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
+  // Dialog-local cover cache key — bumped synchronously after cover mutations
+  // (upload / set-cover-page) so the preview `<img>` refreshes immediately on
+  // save, without waiting for the parent query to refetch. Elsewhere in the
+  // codebase we use `query.dataUpdatedAt` for this; intentional divergence.
+  const [coverCacheKey, setCoverCacheKey] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
   const [pendingCoverFile, setPendingCoverFile] =
@@ -589,7 +593,7 @@ export function FileEditDialog({
         id: file.id,
         file: pendingCoverFile,
       });
-      setCoverCacheBuster(Date.now());
+      setCoverCacheKey(Date.now());
       setPendingCoverFile(null);
     }
 
@@ -603,7 +607,7 @@ export function FileEditDialog({
         id: file.id,
         page: pendingCoverPage,
       });
-      setCoverCacheBuster(Date.now());
+      setCoverCacheKey(Date.now());
       setPendingCoverPage(null);
     }
 
@@ -750,7 +754,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheKey}`}
+                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
                             />
                           ) : (
                             <CoverPlaceholder
@@ -777,7 +782,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheKey}`}
+                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
                             />
                           ) : (
                             <CoverPlaceholder

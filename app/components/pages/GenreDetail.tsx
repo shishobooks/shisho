@@ -162,7 +162,12 @@ const GenreDetail = () => {
           {genreBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
               {genreBooksQuery.data.map((book) => (
-                <BookItem book={book} key={book.id} libraryId={libraryId!} />
+                <BookItem
+                  book={book}
+                  cacheKey={genreBooksQuery.dataUpdatedAt}
+                  key={book.id}
+                  libraryId={libraryId!}
+                />
               ))}
             </div>
           )}

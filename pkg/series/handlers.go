@@ -273,7 +273,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 	coverImagePath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
 
 	// Set appropriate headers
-	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
 
 	return errors.WithStack(c.File(coverImagePath))
 }

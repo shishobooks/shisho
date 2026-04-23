@@ -53,6 +53,7 @@ interface BookItemProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onShiftSelect?: () => void;
+  cacheKey?: number;
 }
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
@@ -142,6 +143,7 @@ const BookItem = ({
   isSelected = false,
   onSelect,
   onShiftSelect,
+  cacheKey,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
 
@@ -151,7 +153,9 @@ const BookItem = ({
     : undefined;
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
-  const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
+  const coverUrl = cacheKey
+    ? `/api/books/${book.id}/cover?v=${cacheKey}`
+    : `/api/books/${book.id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const [showRescanDialog, setShowRescanDialog] = useState(false);

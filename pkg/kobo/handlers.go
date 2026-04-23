@@ -247,6 +247,25 @@ func (h *handler) handleCover(c echo.Context) error {
 
 	coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
 
+	// Stat source cover for Last-Modified + conditional GET short-circuit.
+	// This runs before the resize so revalidated requests skip the expensive
+	// decode/resize/encode work. In the no-dimensions branch below, c.File
+	// also sets Last-Modified from the same file mtime — the values match
+	// (second precision), so the overlap is harmless.
+	coverStat, err := os.Stat(coverPath)
+	if err != nil {
+		return errcodes.NotFound("Cover")
+	}
+	modTime := coverStat.ModTime().UTC().Truncate(time.Second)
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	c.Response().Header().Set("Last-Modified", modTime.Format(http.TimeFormat))
+	if ims := c.Request().Header.Get("If-Modified-Since"); ims != "" {
+		if t, parseErr := http.ParseTime(ims); parseErr == nil && !modTime.After(t) {
+			c.Response().WriteHeader(http.StatusNotModified)
+			return nil
+		}
+	}
+
 	// Parse requested dimensions
 	widthStr := c.Param("w")
 	heightStr := c.Param("h")
@@ -254,7 +273,8 @@ func (h *handler) handleCover(c echo.Context) error {
 	height, _ := strconv.Atoi(heightStr)
 
 	if width == 0 || height == 0 {
-		// Serve original if dimensions not specified
+		// Serve original if dimensions not specified. c.File handles
+		// Last-Modified/If-Modified-Since automatically for this branch.
 		return c.File(coverPath)
 	}
 
@@ -282,7 +302,6 @@ func (h *handler) handleCover(c echo.Context) error {
 	draw.BiLinear.Scale(dstImg, dstImg.Bounds(), srcImg, srcBounds, draw.Over, nil)
 
 	c.Response().Header().Set("Content-Type", "image/jpeg")
-	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 	c.Response().WriteHeader(http.StatusOK)
 	return jpeg.Encode(c.Response().Writer, dstImg, &jpeg.Options{Quality: 80})
 }

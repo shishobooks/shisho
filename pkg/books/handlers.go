@@ -1322,6 +1322,7 @@ func (h *handler) fileCover(c echo.Context) error {
 	}
 	coverPath := fileutils.ResolveCoverPath(file.Book.Filepath, coverFilename)
 
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return errors.WithStack(c.File(coverPath))
 }
 
@@ -1525,6 +1526,7 @@ func (h *handler) bookCover(c echo.Context) error {
 	}
 
 	coverPath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return errors.WithStack(c.File(coverPath))
 }
 
