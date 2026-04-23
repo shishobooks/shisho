@@ -22,38 +22,41 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("CoverGalleryTabs", () => {
-  it("re-renders cover image after error when cacheBuster changes", () => {
+  it("renders cover image with stable URL (no cache-buster query)", () => {
+    const files = [
+      makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
+      makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
+    ];
+
+    const { container } = render(<CoverGalleryTabs files={files} />);
+
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("/api/books/files/1/cover");
+  });
+
+  it("re-mounts cover image when cacheKey changes", () => {
     const files = [
       makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
       makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
     ];
 
     const { container, rerender } = render(
-      <CoverGalleryTabs cacheBuster={111} files={files} />,
+      <CoverGalleryTabs cacheKey={111} files={files} />,
     );
+    const firstImg = container.querySelector("img");
+    expect(firstImg).not.toBeNull();
+    expect(firstImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
 
-    // Initial render: the first file's cover <img> is present with cacheBuster=111
-    let img = container.querySelector("img");
-    expect(img).not.toBeNull();
-    expect(img?.getAttribute("src")).toContain(
-      "/api/books/files/1/cover?t=111",
-    );
-
-    // Simulate the cover failing to load (e.g. 404 because the cover didn't
-    // exist on disk at that time)
-    fireEvent.error(img!);
-
-    // Once errored, the <img> is unmounted and only the placeholder remains
+    // Simulate an error first so the img is unmounted, then a cacheKey bump
+    // should cause it to re-mount (simulating a "retry" after the cover was
+    // fixed on disk — equivalent to the old cacheBuster-driven retry flow).
+    fireEvent.error(firstImg!);
     expect(container.querySelector("img")).toBeNull();
 
-    // A rescan/refresh completes: cacheBuster changes, so the cover URL
-    // changes. The <img> must be re-rendered to attempt the new URL.
-    rerender(<CoverGalleryTabs cacheBuster={222} files={files} />);
-
-    img = container.querySelector("img");
-    expect(img).not.toBeNull();
-    expect(img?.getAttribute("src")).toContain(
-      "/api/books/files/1/cover?t=222",
-    );
+    rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
+    const secondImg = container.querySelector("img");
+    expect(secondImg).not.toBeNull();
+    expect(secondImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
   });
 });
