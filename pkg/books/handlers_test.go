@@ -1404,6 +1404,84 @@ func TestUpdateFile_Name_RootLevelFile_OrganizeFailure_RevertsDBState(t *testing
 		"file.NameSource must be reverted to the pre-update value when organize fails")
 }
 
+// Regression: when RenameOrganizedFileOnly fails on a directory-backed file
+// (e.g. the source file was removed out from under us), the helper must
+// revert the pending name/name_source columns so the outer UpdateFile
+// doesn't persist a new name while the file sits at its old path on disk.
+// Mirrors the same-class invariant that M5 enforces for the root-level
+// branch.
+func TestUpdateFile_Name_DirectoryBacked_RenameFailure_RevertsDBState(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	bookDir := filepath.Join(libraryDir, "Author", "Book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	epubPath := filepath.Join(bookDir, "book.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Author", LibraryID: library.ID, SortName: "Author"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	originalName := "Original Name"
+	originalNameSource := models.DataSourceManual
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	file.Name = &originalName
+	file.NameSource = &originalNameSource
+	_, err = db.NewUpdate().Model(file).Column("name", "name_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Force RenameOrganizedFileOnly to fail by removing the source file.
+	require.NoError(t, os.Remove(epubPath))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "Attempted New Name"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var reloaded models.File
+	err = db.NewSelect().Model(&reloaded).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Name)
+	assert.Equal(t, originalName, *reloaded.Name,
+		"file.Name must be reverted when rename fails in the directory-backed branch")
+	require.NotNil(t, reloaded.NameSource)
+	assert.Equal(t, originalNameSource, *reloaded.NameSource,
+		"file.NameSource must be reverted when rename fails in the directory-backed branch")
+}
+
 // Regression: uploading a cover to a root-level file previously resolved
 // the cover directory via book.Filepath (synthetic, non-existent), so the
 // write failed with "no such file or directory". The cover must be written

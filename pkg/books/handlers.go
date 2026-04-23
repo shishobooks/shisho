@@ -1337,6 +1337,13 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 			"path":    file.Filepath,
 			"error":   err.Error(),
 		})
+		// Revert the pending name/name_source DB writes so the outer
+		// UpdateFile doesn't persist the new name while the file stays at
+		// its old path on disk. Narrator-driven renames don't need reverting
+		// — narrators are their own table rows, already persisted before
+		// this call, and narrator_source reflects the user's manual intent
+		// regardless of whether the filename update succeeded.
+		revertRenameDrivenColumns(ctx, h.bookService, file, opts, log)
 		return file
 	}
 	if newPath != file.Filepath {
@@ -1354,6 +1361,66 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 		opts.Columns = append(opts.Columns, "filepath")
 	}
 	return file
+}
+
+// revertRenameDrivenColumns undoes in-memory file.Name / file.NameSource
+// changes queued for the outer UpdateFile when a rename failed, so the DB
+// doesn't end up carrying new metadata while the file sits at its old path
+// on disk. Reads the pre-update values from the DB snapshot. Silently
+// returns if there's nothing to revert.
+func revertRenameDrivenColumns(
+	ctx context.Context,
+	bookService bookServiceIface,
+	file *models.File,
+	opts *UpdateFileOptions,
+	log logger.Logger,
+) {
+	hasName := containsColumn(opts.Columns, "name")
+	hasNameSource := containsColumn(opts.Columns, "name_source")
+	if !hasName && !hasNameSource {
+		return
+	}
+	snapshot, err := bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID})
+	if err != nil {
+		log.Error("failed to snapshot file for rename-failure revert", logger.Data{
+			"file_id": file.ID,
+			"error":   err.Error(),
+		})
+		return
+	}
+	if hasName {
+		file.Name = snapshot.Name
+		opts.Columns = removeColumn(opts.Columns, "name")
+	}
+	if hasNameSource {
+		file.NameSource = snapshot.NameSource
+		opts.Columns = removeColumn(opts.Columns, "name_source")
+	}
+}
+
+func containsColumn(cols []string, target string) bool {
+	for _, c := range cols {
+		if c == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeColumn(cols []string, target string) []string {
+	out := cols[:0]
+	for _, c := range cols {
+		if c != target {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// bookServiceIface is the minimal slice of *Service that revertRenameDrivenColumns
+// needs. Allows easier testing without a full service wiring.
+type bookServiceIface interface {
+	RetrieveFile(ctx context.Context, opts RetrieveFileOptions) (*models.File, error)
 }
 
 func (h *handler) fileCover(c echo.Context) error {
