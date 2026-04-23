@@ -230,14 +230,27 @@ After dropping `DeletedAt` from the Go model, run `mise tygo` to regenerate `app
 
 ## Docs
 
-`website/docs/` update:
-- Update `website/docs/libraries.md` (or whichever page documents library management; we'll grep for the closest existing doc during implementation). Add a section "Deleting a library" describing:
-  - Where to find the action (library settings → Danger Zone).
-  - Required permission (`libraries:write`).
-  - Explicit enumeration of what is and is not deleted (DB rows yes; files on disk no; sidecars no; cover files no).
+There is currently no dedicated library-management page — library creation is mentioned only in passing in `getting-started.md:44` ("create a library pointing to `/media`"), and individual library settings are covered piecemeal (the "Organize Files" toggle lives in `directory-structure.md`). Adding delete documentation to any of those pages would be a poor fit.
+
+Create a new page: **`website/docs/libraries.md`**, titled `# Libraries`.
+
+Sidebar position: `15`. This slots between `getting-started.md` (10) and `directory-structure.md` (20), which is exactly what the increments-of-10 scheme in `website/CLAUDE.md` is designed to accommodate. No other doc currently uses 15.
+
+Initial content — keep it focused; we're not trying to document every existing library feature in this change:
+
+- **Creating a library** (~3 sentences): Admin → Libraries → Add Library, name and paths, scan triggers automatically. Cross-link from `getting-started.md:44` (update that line to link here).
+- **Library settings** (~2 sentences): Brief pointer that each library has its own settings page with cover aspect ratio, download format preference, and the Organize Files toggle. Link to `directory-structure.md` for the organize-files behavior.
+- **Deleting a library** (the substantive new section):
+  - Where to find it: library settings page → Danger Zone at the bottom.
+  - Required permission: `libraries:write` (Admin and Editor roles by default).
+  - Confirmation UX: type the library name to confirm.
+  - What is deleted: the library row and all associated DB records — books, files, series, persons, genres, tags, publishers, imprints, chapters, file identifiers, plugin configs and settings, user library access and settings. Search index entries are purged. Active scan jobs for the library are cancelled.
+  - What is **not** deleted: book files on disk, sidecar files (`.shisho.json`), cover files, or any other filesystem content. You must remove these manually if desired.
   - That the action is irreversible.
 
-No changes needed to `configuration.md`, `metadata.md`, `users-and-permissions.md` (existing permission is reused), or `supported-formats.md`.
+No changes needed to `configuration.md`, `metadata.md`, `users-and-permissions.md` (existing permission is reused — can optionally add a cross-link from the Libraries row in the permissions matrix), or `supported-formats.md`.
+
+Do **not** edit anything under `versioned_docs/` — those are frozen snapshots of prior releases, per `website/CLAUDE.md`.
 
 ## CLAUDE.md updates
 
