@@ -208,3 +208,21 @@ func (h *handler) update(c echo.Context) error {
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
 }
+
+func (h *handler) delete(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := h.libraryService.DeleteLibrary(ctx, id); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if h.onLibraryChanged != nil {
+		h.onLibraryChanged()
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
