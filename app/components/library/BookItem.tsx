@@ -151,7 +151,7 @@ const BookItem = ({
     : undefined;
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
-  const coverUrl = `/api/books/${book.id}/cover?t=${new Date(book.updated_at).getTime()}`;
+  const coverUrl = `/api/books/${book.id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const [showRescanDialog, setShowRescanDialog] = useState(false);
