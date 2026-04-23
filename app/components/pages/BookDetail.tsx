@@ -151,7 +151,7 @@ interface FileRowProps {
   isFileSelected?: boolean;
   onToggleSelect?: () => void;
   onMoveFile?: () => void;
-  cacheBuster?: number;
+  cacheKey?: number;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
   isPrimary?: boolean;
@@ -181,7 +181,7 @@ const FileRow = ({
   isFileSelected = false,
   onToggleSelect,
   onMoveFile,
-  cacheBuster,
+  cacheKey,
   onDeleteFile,
   isDeletingFile,
   isPrimary = false,
@@ -235,7 +235,7 @@ const FileRow = ({
       {!isSupplement && (
         <div className="shrink-0 self-start">
           <FileCoverThumbnail
-            cacheBuster={cacheBuster}
+            cacheKey={cacheKey}
             className="h-14"
             file={file}
           />
@@ -807,19 +807,20 @@ const BookDetail = () => {
     );
   };
 
-  // Cache-busting parameter for cover images - computed early for hook ordering
+  // Key source for cover images — used as <img key> so React remounts the
+  // element (triggering HTTP revalidation) when data is refreshed.
   const coverCacheBuster = bookQuery.dataUpdatedAt;
   const coverUrl = bookQuery.data?.id
-    ? `/api/books/${bookQuery.data.id}/cover?t=${coverCacheBuster}`
+    ? `/api/books/${bookQuery.data.id}/cover`
     : null;
 
   // Reset the error flag whenever the URL changes — either because we
   // navigated to a different book, or because a rescan bumped the
-  // cache-buster. If we only reset on book id, a previously-missing cover
+  // coverCacheBuster. If we only reset on book id, a previously-missing cover
   // stays unmounted after a successful rescan until the user refreshes.
   useEffect(() => {
     setCoverError(false);
-  }, [coverUrl]);
+  }, [coverUrl, coverCacheBuster]);
 
   // Check cache synchronously before paint to avoid placeholder flash
   // Must be called before early returns to maintain hook ordering
@@ -1069,10 +1070,7 @@ const BookDetail = () => {
         <div className="lg:col-span-1">
           {mainFiles.length > 1 ? (
             /* Multiple files - show cover gallery with tabs */
-            <CoverGalleryTabs
-              cacheBuster={coverCacheBuster}
-              files={mainFiles}
-            />
+            <CoverGalleryTabs cacheKey={coverCacheBuster} files={mainFiles} />
           ) : (
             /* Single file - show book cover directly */
             <div
@@ -1090,6 +1088,7 @@ const BookDetail = () => {
                 <img
                   alt={`${book.title} Cover`}
                   className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
+                  key={coverCacheBuster}
                   onError={() => setCoverError(true)}
                   onLoad={handleCoverLoad}
                   src={coverUrl!}
@@ -1352,7 +1351,7 @@ const BookDetail = () => {
               <div className="space-y-2">
                 {mainFiles.map((file) => (
                   <FileRow
-                    cacheBuster={coverCacheBuster}
+                    cacheKey={coverCacheBuster}
                     file={file}
                     hasExpandableMetadata={hasExpandableMetadata(file)}
                     isDeletingFile={deletingFileId === file.id}
@@ -1403,7 +1402,7 @@ const BookDetail = () => {
                   <div className="space-y-2">
                     {supplements.map((file) => (
                       <FileRow
-                        cacheBuster={coverCacheBuster}
+                        cacheKey={coverCacheBuster}
                         file={file}
                         hasExpandableMetadata={hasExpandableMetadata(file)}
                         isDeletingFile={deletingFileId === file.id}
