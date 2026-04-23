@@ -1232,10 +1232,24 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 	}
 
 	if isRootLevel {
+		// OrganizeBookFiles reads files fresh from the DB, so flush any
+		// pending in-memory updates (name, cover_image_filename, etc.) on
+		// this file first. Otherwise a just-changed file.Name would not be
+		// reflected in the organized path.
+		if len(opts.Columns) > 0 {
+			if err := h.bookService.UpdateFile(ctx, file, *opts); err != nil {
+				log.Error("failed to flush file updates before organize", logger.Data{
+					"file_id": file.ID,
+					"error":   err.Error(),
+				})
+				return file
+			}
+			// Already persisted — prevent the outer UpdateFile call from
+			// writing the same columns again.
+			opts.Columns = opts.Columns[:0]
+		}
 		// Delegate to book-level organize so the file is moved into its
-		// organized folder and book.Filepath is updated in lockstep. The
-		// narrators already persisted above (and the new file name if
-		// relevant) are picked up by organizeBookFiles via a fresh DB read.
+		// organized folder and book.Filepath is updated in lockstep.
 		if err := h.bookService.OrganizeBookFiles(ctx, book); err != nil {
 			log.Error("failed to organize book files after file metadata change", logger.Data{
 				"file_id": file.ID,
@@ -1384,15 +1398,10 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errcodes.ValidationError("Cover upload is not supported for this file type.")
 	}
 
-	// Get the parent book for the cover directory
-	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-		ID: &file.BookID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	coverDir := fileutils.ResolveCoverDir(book.Filepath)
+	// The cover always lives next to the file — using book.Filepath here
+	// would fail for root-level books where book.Filepath is a synthetic
+	// path that doesn't exist on disk.
+	coverDir := filepath.Dir(file.Filepath)
 
 	// Generate the cover filename: {filename}.cover.{ext}
 	filename := filepath.Base(file.Filepath)

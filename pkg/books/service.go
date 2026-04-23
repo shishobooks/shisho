@@ -934,6 +934,16 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
 
+			// Prefer file.Name for the per-file title (consistent with the
+			// isDirectoryBased and else branches below). Without this, a
+			// user-edited file name on a root-level file would be dropped
+			// when organize moves the file into its folder.
+			if file.Name != nil && *file.Name != "" {
+				organizeOpts.Title = *file.Name
+			} else {
+				organizeOpts.Title = book.Title
+			}
+
 			// Populate narrator names from file's narrators for M4B files
 			organizeOpts.NarratorNames = nil
 			for _, n := range file.Narrators {

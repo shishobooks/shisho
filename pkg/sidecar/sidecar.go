@@ -115,24 +115,25 @@ func ReadBookSidecar(bookPath string) (*BookSidecar, error) {
 // ReadBookSidecarFromModel reads the book sidecar for a Book, using the same
 // anchor-resolution logic as WriteBookSidecarFromModel. For root-level books
 // with a synthetic book.Filepath, the sidecar is read from next to a file in
-// the book instead of from the non-existent synthetic directory. The optional
-// fileHint is used as a fallback anchor when book.Files is not populated —
-// pass the current file being scanned so resolution works even before the
-// book has been reloaded with its files relation.
+// the book instead of from the non-existent synthetic directory.
+//
+// fileHint (may be nil) is consulted when the resolved anchor doesn't exist
+// on disk — typically because book.Files was not loaded and book.Filepath is
+// the synthetic pre-organize path. Pass the current file being scanned so
+// resolution works before the book is reloaded with its files relation.
 func ReadBookSidecarFromModel(book *models.Book, fileHint *models.File) (*BookSidecar, error) {
 	anchor := resolveBookSidecarAnchor(book)
-	// If the anchor still resolves to a non-existent directory (no files on
-	// the book model yet), fall back to the hint's filepath.
-	if anchor != "" {
-		if info, err := os.Stat(anchor); err != nil || (!info.IsDir() && filepath.Ext(anchor) == "") {
-			if fileHint != nil && fileHint.Filepath != "" {
-				anchor = fileHint.Filepath
-			}
+	if anchor == "" || !pathExists(anchor) {
+		if fileHint != nil && fileHint.Filepath != "" {
+			anchor = fileHint.Filepath
 		}
-	} else if fileHint != nil && fileHint.Filepath != "" {
-		anchor = fileHint.Filepath
 	}
 	return ReadBookSidecar(anchor)
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ReadFileSidecar reads and parses a file sidecar.

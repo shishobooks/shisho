@@ -2148,6 +2148,9 @@ func (w *Worker) scanFileCore(
 		// move the file into it and the book sidecar lands at the final path.
 		// When OrganizeFileStructure is disabled, WriteBookSidecarFromModel's
 		// fallback anchors the sidecar next to the file, so no MkdirAll here.
+		// If MkdirAll fails (permissions, etc.) we still attempt the write —
+		// the fallback will anchor next to the file so metadata isn't silently
+		// lost, just ends up at the pre-organize path.
 		if info, statErr := os.Stat(reloadedBook.Filepath); statErr != nil || !info.IsDir() {
 			lib, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 				ID: &reloadedBook.LibraryID,

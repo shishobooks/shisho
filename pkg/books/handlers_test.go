@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1174,6 +1176,154 @@ func TestUpdateFile_Narrators_RootLevelM4B_OrganizesFileAndSyncsBookPath(t *test
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Dir(updatedFile.Filepath), updatedBook.Filepath,
 		"book.Filepath should track the organized folder")
+}
+
+// Regression: when file.Name is updated on a root-level file in a library
+// with OrganizeFileStructure enabled, the new name must be reflected in the
+// organized filename. Previously the root-level branch of organizeBookFiles
+// always used book.Title (ignoring file.Name), and the handler persisted
+// file.Name after reorganize, so the new name was lost.
+func TestUpdateFile_Name_RootLevelFile_OrganizesWithNewName(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	libraryPath := &models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}
+	_, err = db.NewInsert().Model(libraryPath).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "original.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book Title",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book Title",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Author Name", LibraryID: library.ID, SortName: "Author Name"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	authorAssoc := &models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(authorAssoc).Exec(ctx)
+	require.NoError(t, err)
+
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "Custom Name"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+
+	// The organized filename should reflect the new file.Name, not the original
+	// filename or book.Title.
+	assert.Contains(t, filepath.Base(updatedFile.Filepath), "Custom Name",
+		"organized filename should include the new file.Name; got %s", updatedFile.Filepath)
+	_, err = os.Stat(updatedFile.Filepath)
+	require.NoError(t, err, "file should exist at new organized location %s", updatedFile.Filepath)
+}
+
+// Regression: uploading a cover to a root-level file previously resolved
+// the cover directory via book.Filepath (synthetic, non-existent), so the
+// write failed with "no such file or directory". The cover must be written
+// next to the file.
+func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "root-book.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Root Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Root Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Build multipart upload body with a tiny valid PNG.
+	pngData := []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+		0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+		0x54, 0x08, 0x99, 0x63, 0xF8, 0x0F, 0x00, 0x00,
+		0x01, 0x01, 0x00, 0x01, 0x1B, 0xB6, 0xEE, 0x56,
+		0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
+		0xAE, 0x42, 0x60, 0x82,
+	}
+
+	var body strings.Builder
+	writer := multipart.NewWriter(&body)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="cover"; filename="cover.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+	_, err = part.Write(pngData)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID)+"/cover", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Cover should have been written alongside the file, not under the synthetic book dir.
+	expectedCover := filepath.Join(libraryDir, "root-book.epub.cover.png")
+	_, err = os.Stat(expectedCover)
+	require.NoError(t, err, "cover should exist at %s", expectedCover)
+
+	// Synthetic book dir must not have been created.
+	_, err = os.Stat(syntheticBookPath)
+	assert.True(t, os.IsNotExist(err), "synthetic book dir must not be created for cover upload")
 }
 
 func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) {
