@@ -6,10 +6,11 @@ import "github.com/shishobooks/shisho/pkg/models"
 //
 // All fields are pointers so clients can send partial updates. Omitting a
 // field (or sending it as null) leaves the current value untouched; sending
-// a value updates just that field. Without this, adding a new setting would
-// force every caller to read-then-write all other fields to avoid clobbering
-// them — see the "echo every field" comment in EPUBReader/PageReader's
-// commit helpers.
+// a value updates just that field.
+//
+// Field shape must stay identical to ViewerSettingsUpdate (same field names,
+// same types, same order) — the handler converts between them with
+// `ViewerSettingsUpdate(payload)`. Drifting either one breaks that cast.
 type ViewerSettingsPayload struct {
 	PreloadCount *int    `json:"preload_count,omitempty"`
 	FitMode      *string `json:"fit_mode,omitempty"`

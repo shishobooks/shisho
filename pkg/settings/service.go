@@ -42,7 +42,7 @@ func (svc *Service) GetViewerSettings(ctx context.Context, userID int) (*models.
 // ViewerSettingsUpdate describes a partial update to viewer settings. Any
 // field left nil is left untouched; fields set to a non-nil value are
 // persisted. This lets clients change one setting without having to read
-// and echo every other setting first (which races on concurrent updates).
+// and echo every other setting first.
 type ViewerSettingsUpdate struct {
 	PreloadCount *int
 	FitMode      *string
@@ -52,58 +52,76 @@ type ViewerSettingsUpdate struct {
 }
 
 // UpdateViewerSettings applies a partial update to a user's viewer settings,
-// creating a row if none exists. It reads the current row (or defaults),
-// overlays any non-nil fields from the update, and writes the result back.
+// creating a row if none exists. Runs in a transaction so that the
+// read-current-then-write-merged sequence is atomic — otherwise two
+// concurrent updates from the same user (rapid toggles in one tab, or two
+// tabs racing) could lose one of the writes.
 func (svc *Service) UpdateViewerSettings(
 	ctx context.Context,
 	userID int,
 	update ViewerSettingsUpdate,
 ) (*models.UserSettings, error) {
-	// Load the current row so missing fields in the partial update keep
-	// their current values. GetViewerSettings returns defaults on miss.
-	current, err := svc.GetViewerSettings(ctx, userID)
+	var result *models.UserSettings
+	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// Load the current row inside the tx so a concurrent update can't
+		// slip in between the read and the write. GetViewerSettings doesn't
+		// take a tx, so inline the select here.
+		current := &models.UserSettings{}
+		err := tx.NewSelect().
+			Model(current).
+			Where("user_id = ?", userID).
+			Scan(ctx)
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return errors.WithStack(err)
+			}
+			// No row yet — start from defaults.
+			current = models.DefaultUserSettings()
+			current.UserID = userID
+		}
+
+		if update.PreloadCount != nil {
+			current.ViewerPreloadCount = *update.PreloadCount
+		}
+		if update.FitMode != nil {
+			current.ViewerFitMode = *update.FitMode
+		}
+		if update.EpubFontSize != nil {
+			current.EpubFontSize = *update.EpubFontSize
+		}
+		if update.EpubTheme != nil {
+			current.EpubTheme = *update.EpubTheme
+		}
+		if update.EpubFlow != nil {
+			current.EpubFlow = *update.EpubFlow
+		}
+
+		now := time.Now()
+		current.UserID = userID
+		current.UpdatedAt = now
+		if current.CreatedAt.IsZero() {
+			current.CreatedAt = now
+		}
+
+		_, err = tx.NewInsert().
+			Model(current).
+			On("CONFLICT (user_id) DO UPDATE").
+			Set("updated_at = EXCLUDED.updated_at").
+			Set("viewer_preload_count = EXCLUDED.viewer_preload_count").
+			Set("viewer_fit_mode = EXCLUDED.viewer_fit_mode").
+			Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
+			Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
+			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
+			Returning("*").
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		result = current
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if update.PreloadCount != nil {
-		current.ViewerPreloadCount = *update.PreloadCount
-	}
-	if update.FitMode != nil {
-		current.ViewerFitMode = *update.FitMode
-	}
-	if update.EpubFontSize != nil {
-		current.EpubFontSize = *update.EpubFontSize
-	}
-	if update.EpubTheme != nil {
-		current.EpubTheme = *update.EpubTheme
-	}
-	if update.EpubFlow != nil {
-		current.EpubFlow = *update.EpubFlow
-	}
-
-	now := time.Now()
-	current.UserID = userID
-	current.UpdatedAt = now
-	if current.CreatedAt.IsZero() {
-		current.CreatedAt = now
-	}
-
-	_, err = svc.db.NewInsert().
-		Model(current).
-		On("CONFLICT (user_id) DO UPDATE").
-		Set("updated_at = EXCLUDED.updated_at").
-		Set("viewer_preload_count = EXCLUDED.viewer_preload_count").
-		Set("viewer_fit_mode = EXCLUDED.viewer_fit_mode").
-		Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
-		Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
-		Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
-		Returning("*").
-		Exec(ctx)
-
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return current, nil
+	return result, nil
 }

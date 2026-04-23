@@ -94,10 +94,9 @@ export default function EPUBReader({
 
   const commitSettings = useCallback(
     (partial: UpdateViewerSettingsVariables) => {
-      if (!settings) return;
       updateSettings.mutate(partial);
     },
-    [settings, updateSettings],
+    [updateSettings],
   );
 
   const [showExtendedHint, setShowExtendedHint] = useState(false);

@@ -23,6 +23,12 @@ const (
 // files no longer reflect — e.g. a bug fix that affects the bytes produced
 // for the same input. Without bumping, the cache would keep serving stale
 // files that were generated before the fix.
+//
+// Version history:
+//   - 1: initial.
+//   - 2: OPF regeneration preserves the Dublin Core namespace
+//     (pkg/filegen/epub.go). Pre-v2 cached EPUBs have `<title>` without a
+//     namespace, which strict readers (foliate-js, some e-readers) reject.
 const GeneratorVersion = 2
 
 // Fingerprint represents the metadata that affects file generation.
