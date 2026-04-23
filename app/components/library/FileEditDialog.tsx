@@ -750,7 +750,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheBuster}`}
+                              src={`/api/books/files/${file.id}/cover`}
                             />
                           ) : (
                             <CoverPlaceholder
@@ -777,7 +778,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              src={`/api/books/files/${file.id}/cover?t=${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheBuster}`}
+                              src={`/api/books/files/${file.id}/cover`}
                             />
                           ) : (
                             <CoverPlaceholder
