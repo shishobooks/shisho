@@ -17,7 +17,7 @@ type ListBooksQuery struct {
 }
 
 type UpdateBookPayload struct {
-	Title       *string       `json:"title,omitempty" validate:"omitempty,max=300"`
+	Title       *string       `json:"title,omitempty" mod:"trim" validate:"omitempty,min=1,max=300"`
 	SortTitle   *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`
 	Subtitle    *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
 	Description *string       `json:"description,omitempty" validate:"omitempty,max=10000"`

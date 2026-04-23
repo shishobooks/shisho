@@ -1244,3 +1244,63 @@ func TestUpdateBook_Title_Unchanged_DoesNotTouchFileName(t *testing.T) {
 	assert.Equal(t, models.DataSourceFilepath, *updated.NameSource,
 		"no-op title change must not touch file.NameSource")
 }
+
+func TestUpdateBook_Title_EmptyString_Returns422(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, _ := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+}
+
+func TestUpdateBook_Title_WhitespaceOnly_Returns422(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, _ := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "   ")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+}
+
+func TestUpdateBook_Title_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	matchingName := "Foo"
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &matchingName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "  Bar  ")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedBook models.Book
+	err := db.NewSelect().Model(&updatedBook).Where("id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "Bar", updatedBook.Title, "book.Title must be stored without surrounding whitespace")
+
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updatedFile.Name)
+	assert.Equal(t, "Bar", *updatedFile.Name, "file.Name must be stored without surrounding whitespace")
+}
