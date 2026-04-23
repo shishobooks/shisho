@@ -86,7 +86,9 @@ function CoverGalleryTabs({
 
   const hasCover = selectedFile?.cover_image_filename && !coverError;
   const coverUrl = selectedFile
-    ? `/api/books/files/${selectedFile.id}/cover`
+    ? cacheKey
+      ? `/api/books/files/${selectedFile.id}/cover?v=${cacheKey}`
+      : `/api/books/files/${selectedFile.id}/cover`
     : null;
 
   // Check cache synchronously before paint

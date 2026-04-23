@@ -41,6 +41,7 @@ interface SeriesCardProps {
   libraryId: string;
   aspectClass: string;
   isAudiobook: boolean;
+  cacheKey?: number;
 }
 
 const SeriesCard = ({
@@ -48,9 +49,12 @@ const SeriesCard = ({
   libraryId,
   aspectClass,
   isAudiobook,
+  cacheKey,
 }: SeriesCardProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
-  const coverUrl = `/api/series/${seriesItem.id}/cover`;
+  const coverUrl = cacheKey
+    ? `/api/series/${seriesItem.id}/cover?v=${cacheKey}`
+    : `/api/series/${seriesItem.id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const bookCount = seriesItem.book_count ?? 0;
@@ -178,6 +182,7 @@ const SeriesList = () => {
     return (
       <SeriesCard
         aspectClass={aspectClass}
+        cacheKey={seriesQuery.dataUpdatedAt}
         isAudiobook={isAudiobook}
         key={seriesItem.id}
         libraryId={libraryId ?? ""}

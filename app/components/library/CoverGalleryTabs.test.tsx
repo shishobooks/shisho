@@ -22,7 +22,7 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("CoverGalleryTabs", () => {
-  it("renders cover image with stable URL (no cache-buster query)", () => {
+  it("renders cover image with stable URL when no cacheKey is provided", () => {
     const files = [
       makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
       makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
@@ -46,7 +46,9 @@ describe("CoverGalleryTabs", () => {
     );
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
-    expect(firstImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
+    expect(firstImg?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=111",
+    );
 
     // Simulate an error first so the img is unmounted, then a cacheKey bump
     // should cause it to re-mount (simulating a "retry" after the cover was
@@ -57,7 +59,9 @@ describe("CoverGalleryTabs", () => {
     rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
-    expect(secondImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
+    expect(secondImg?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=222",
+    );
   });
 
   it("mounts a fresh <img> element when cacheKey changes (even without error)", () => {
@@ -71,12 +75,17 @@ describe("CoverGalleryTabs", () => {
     );
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
+    expect(firstImg?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=111",
+    );
 
     rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
     const secondImg = container.querySelector("img");
 
     expect(secondImg).not.toBeNull();
     expect(secondImg).not.toBe(firstImg); // Different DOM node — React remounted
-    expect(secondImg?.getAttribute("src")).toBe("/api/books/files/1/cover");
+    expect(secondImg?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=222",
+    );
   });
 });

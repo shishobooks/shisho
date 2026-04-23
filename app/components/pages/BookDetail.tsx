@@ -808,10 +808,13 @@ const BookDetail = () => {
   };
 
   // Key source for cover images — used as <img key> so React remounts the
-  // element (triggering HTTP revalidation) when data is refreshed.
+  // element (triggering revalidation) when data is refreshed. Also included
+  // in the URL as ?v= to bypass the browser's in-memory image cache.
   const coverCacheKey = bookQuery.dataUpdatedAt;
   const coverUrl = bookQuery.data?.id
-    ? `/api/books/${bookQuery.data.id}/cover`
+    ? coverCacheKey
+      ? `/api/books/${bookQuery.data.id}/cover?v=${coverCacheKey}`
+      : `/api/books/${bookQuery.data.id}/cover`
     : null;
 
   // Reset the error flag whenever the URL changes — either because we

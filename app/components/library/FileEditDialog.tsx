@@ -751,7 +751,7 @@ export function FileEditDialog({
                               alt="File cover"
                               className="w-full h-full object-cover"
                               key={`${file.id}-${coverCacheKey}`}
-                              src={`/api/books/files/${file.id}/cover`}
+                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
                             />
                           ) : (
                             <CoverPlaceholder
@@ -779,7 +779,7 @@ export function FileEditDialog({
                               alt="File cover"
                               className="w-full h-full object-cover"
                               key={`${file.id}-${coverCacheKey}`}
-                              src={`/api/books/files/${file.id}/cover`}
+                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
                             />
                           ) : (
                             <CoverPlaceholder

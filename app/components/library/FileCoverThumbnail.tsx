@@ -34,7 +34,9 @@ function FileCoverThumbnail({
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
   const hasCover = file.cover_image_filename && !imageError;
-  const coverUrl = `/api/books/files/${file.id}/cover`;
+  const coverUrl = cacheKey
+    ? `/api/books/files/${file.id}/cover?v=${cacheKey}`
+    : `/api/books/files/${file.id}/cover`;
 
   return (
     <div

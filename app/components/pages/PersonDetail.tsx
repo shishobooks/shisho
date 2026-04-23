@@ -185,7 +185,12 @@ const PersonDetail = () => {
           {authoredBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
               {authoredBooksQuery.data.map((book) => (
-                <BookItem book={book} key={book.id} libraryId={libraryId!} />
+                <BookItem
+                  book={book}
+                  cacheKey={authoredBooksQuery.dataUpdatedAt}
+                  key={book.id}
+                  libraryId={libraryId!}
+                />
               ))}
             </div>
           )}

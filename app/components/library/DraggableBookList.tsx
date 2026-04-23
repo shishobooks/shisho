@@ -32,6 +32,7 @@ interface DraggableBookItemProps {
   addedByUsername?: string;
   isDragOverlay?: boolean;
   insertPosition?: InsertPosition;
+  cacheKey?: number;
 }
 
 const DraggableBookItem = ({
@@ -39,6 +40,7 @@ const DraggableBookItem = ({
   addedByUsername,
   isDragOverlay = false,
   insertPosition = null,
+  cacheKey,
 }: DraggableBookItemProps) => {
   const {
     attributes,
@@ -63,6 +65,7 @@ const DraggableBookItem = ({
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
+          cacheKey={cacheKey}
           libraryId={listBook.book.library_id.toString()}
         />
       </div>
@@ -89,6 +92,7 @@ const DraggableBookItem = ({
       <BookItem
         addedByUsername={addedByUsername}
         book={listBook.book}
+        cacheKey={cacheKey}
         libraryId={listBook.book.library_id.toString()}
       />
     </div>
@@ -99,12 +103,14 @@ interface DraggableBookListProps {
   books: ListBook[];
   isOwner: boolean;
   onReorder: (bookIds: number[]) => void;
+  cacheKey?: number;
 }
 
 export const DraggableBookList = ({
   books,
   isOwner,
   onReorder,
+  cacheKey,
 }: DraggableBookListProps) => {
   const [items, setItems] = useState(books);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -219,6 +225,7 @@ export const DraggableBookList = ({
               addedByUsername={
                 !isOwner ? listBook.added_by_user?.username : undefined
               }
+              cacheKey={cacheKey}
               insertPosition={getInsertPosition(listBook.book_id)}
               key={listBook.id}
               listBook={listBook}
@@ -232,6 +239,7 @@ export const DraggableBookList = ({
             addedByUsername={
               !isOwner ? activeItem.added_by_user?.username : undefined
             }
+            cacheKey={cacheKey}
             isDragOverlay
             listBook={activeItem}
           />

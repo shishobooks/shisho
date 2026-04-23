@@ -10,6 +10,7 @@ interface SelectableBookItemProps {
   coverAspectRatio?: string;
   addedByUsername?: string;
   pageBookIds: number[];
+  cacheKey?: number;
 }
 
 export const SelectableBookItem = ({
@@ -19,6 +20,7 @@ export const SelectableBookItem = ({
   coverAspectRatio,
   addedByUsername,
   pageBookIds,
+  cacheKey,
 }: SelectableBookItemProps) => {
   const { isSelectionMode, isSelected, toggleBook, selectRange } =
     useBulkSelection();
@@ -27,6 +29,7 @@ export const SelectableBookItem = ({
     <BookItem
       addedByUsername={addedByUsername}
       book={book}
+      cacheKey={cacheKey}
       coverAspectRatio={coverAspectRatio}
       isSelected={isSelected(book.id)}
       isSelectionMode={isSelectionMode}
