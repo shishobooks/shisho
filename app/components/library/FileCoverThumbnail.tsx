@@ -8,7 +8,11 @@ interface FileCoverThumbnailProps {
   file: File;
   className?: string;
   onClick?: () => void;
-  cacheBuster?: number;
+  /**
+   * Forces the <img> to remount (and thus re-request) when this value changes.
+   * Typically a React Query `dataUpdatedAt` from a mutation-aware query.
+   */
+  cacheKey?: number;
 }
 
 /**
@@ -20,7 +24,7 @@ function FileCoverThumbnail({
   file,
   className,
   onClick,
-  cacheBuster,
+  cacheKey,
 }: FileCoverThumbnailProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -30,9 +34,7 @@ function FileCoverThumbnail({
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
   const hasCover = file.cover_image_filename && !imageError;
-  const coverUrl = cacheBuster
-    ? `/api/books/files/${file.id}/cover?t=${cacheBuster}`
-    : `/api/books/files/${file.id}/cover`;
+  const coverUrl = `/api/books/files/${file.id}/cover`;
 
   return (
     <div
@@ -44,7 +46,6 @@ function FileCoverThumbnail({
       )}
       onClick={onClick}
     >
-      {/* Placeholder shown until image loads or on error */}
       {(!imageLoaded || !hasCover) && (
         <CoverPlaceholder
           className="absolute inset-0"
@@ -52,7 +53,6 @@ function FileCoverThumbnail({
         />
       )}
 
-      {/* Image hidden until loaded */}
       {hasCover && (
         <img
           alt=""
@@ -60,6 +60,7 @@ function FileCoverThumbnail({
             "absolute inset-0 w-full h-full object-cover",
             !imageLoaded && "opacity-0",
           )}
+          key={`${file.id}-${cacheKey ?? 0}`}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoaded(true)}
           src={coverUrl}
