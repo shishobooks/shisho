@@ -85,9 +85,10 @@ file.CoverImageFilename = &filename
 
 ### Frontend
 
-**Cover images need cache busting** — All cover image URLs must include a `?t=` parameter to ensure updated covers display without caching issues:
+**Cover images use HTTP revalidation, not URL cache-busting** — Cover endpoints set `Cache-Control: private, no-cache` and rely on `Last-Modified` for revalidation. Never append `?t=...` query params to cover URLs. For pages that can trigger cover mutations, add `key={query.dataUpdatedAt}` to the `<img>` so React remounts it and the browser refetches:
+
 ```tsx
-const coverUrl = `/api/books/${id}/cover?t=${query.dataUpdatedAt}`;
+<img key={bookQuery.dataUpdatedAt} src={`/api/books/${id}/cover`} />
 ```
 
 ### Plugins
