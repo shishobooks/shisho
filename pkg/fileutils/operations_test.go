@@ -886,32 +886,6 @@ func TestMoveFileWithAssociatedFiles(t *testing.T) {
 	}
 }
 
-func TestResolveCoverDir(t *testing.T) {
-	t.Parallel()
-
-	t.Run("directory-backed book returns book dir unchanged", func(t *testing.T) {
-		t.Parallel()
-		bookDir := t.TempDir()
-		assert.Equal(t, bookDir, ResolveCoverDir(bookDir))
-	})
-
-	t.Run("root-level book returns parent of file", func(t *testing.T) {
-		t.Parallel()
-		libraryDir := t.TempDir()
-		bookFilepath := filepath.Join(libraryDir, "book.epub")
-		if err := os.WriteFile(bookFilepath, []byte("epub"), 0644); err != nil {
-			t.Fatalf("failed to write test file: %v", err)
-		}
-		assert.Equal(t, libraryDir, ResolveCoverDir(bookFilepath))
-	})
-
-	t.Run("nonexistent path is treated as a directory path", func(t *testing.T) {
-		t.Parallel()
-		bookDir := filepath.Join(t.TempDir(), "missing")
-		assert.Equal(t, bookDir, ResolveCoverDir(bookDir))
-	})
-}
-
 func TestResolveCoverDirForWrite(t *testing.T) {
 	t.Parallel()
 
@@ -947,43 +921,5 @@ func TestResolveCoverDirForWrite(t *testing.T) {
 		// new file in a library with OrganizeFileStructure enabled.
 		syntheticBookPath := filepath.Join(libraryDir, "Author", "Title")
 		assert.Equal(t, libraryDir, ResolveCoverDirForWrite(syntheticBookPath, filePath))
-	})
-}
-
-func TestResolveCoverPath(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty cover filename returns empty", func(t *testing.T) {
-		t.Parallel()
-		got := ResolveCoverPath(t.TempDir(), "")
-		assert.Empty(t, got)
-	})
-
-	t.Run("directory-backed book joins cover filename to book dir", func(t *testing.T) {
-		t.Parallel()
-		bookDir := t.TempDir()
-		got := ResolveCoverPath(bookDir, "book.epub.cover.jpg")
-		assert.Equal(t, filepath.Join(bookDir, "book.epub.cover.jpg"), got)
-	})
-
-	t.Run("root-level book joins cover filename to parent of file", func(t *testing.T) {
-		t.Parallel()
-		libraryDir := t.TempDir()
-		bookFilepath := filepath.Join(libraryDir, "book.epub")
-		if err := os.WriteFile(bookFilepath, []byte("epub"), 0644); err != nil {
-			t.Fatalf("failed to write test file: %v", err)
-		}
-		got := ResolveCoverPath(bookFilepath, "book.epub.cover.jpg")
-		assert.Equal(t, filepath.Join(libraryDir, "book.epub.cover.jpg"), got)
-	})
-
-	t.Run("nonexistent bookFilepath is treated as a directory path", func(t *testing.T) {
-		t.Parallel()
-		// If we can't stat the book path (e.g., because it was moved or deleted),
-		// fall back to treating it as a directory — matches the existing
-		// behavior in filegen.resolveCoverPath and the fileCover handler.
-		bookDir := filepath.Join(t.TempDir(), "missing")
-		got := ResolveCoverPath(bookDir, "book.epub.cover.jpg")
-		assert.Equal(t, filepath.Join(bookDir, "book.epub.cover.jpg"), got)
 	})
 }

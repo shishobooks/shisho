@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1003,6 +1005,559 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 			return book, libraryDir, epubPath
 		})
 	})
+}
+
+// Regression: when a user drops a file at the library root with
+// OrganizeFileStructure disabled, scanFileCreateNew writes a synthetic
+// organized-folder path into book.Filepath that never exists on disk. The
+// actual cover lives alongside the file at filepath.Dir(file.Filepath),
+// not under the synthetic book path. The bookCover and fileCover handlers
+// must resolve the cover via the file's parent dir, not book.Filepath.
+func TestServeCover_RootLevelFile_SyntheticBookPath_ServesCoverFromFileDir(t *testing.T) {
+	t.Parallel()
+
+	runServe := func(t *testing.T, fetchURL func(bookID, fileID int) string) {
+		t.Helper()
+		db := setupTestDB(t)
+		ctx := context.Background()
+
+		library := &models.Library{
+			Name:                     "Test Library",
+			CoverAspectRatio:         "book",
+			DownloadFormatPreference: models.DownloadFormatOriginal,
+		}
+		_, err := db.NewInsert().Model(library).Exec(ctx)
+		require.NoError(t, err)
+
+		libraryDir := t.TempDir()
+		epubPath := filepath.Join(libraryDir, "root-book.epub")
+		require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+
+		// Synthetic organized-folder path — same shape scanFileCreateNew
+		// produces for root-level files regardless of OrganizeFileStructure.
+		syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+		book := &models.Book{
+			LibraryID:       library.ID,
+			Title:           "Root Book",
+			TitleSource:     models.DataSourceFilepath,
+			SortTitle:       "Root Book",
+			SortTitleSource: models.DataSourceFilepath,
+			AuthorSource:    models.DataSourceFilepath,
+			Filepath:        syntheticBookPath,
+		}
+		_, err = db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
+
+		file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+		coverFilename := filepath.Base(epubPath) + ".cover.jpg"
+		coverFullPath := filepath.Join(libraryDir, coverFilename)
+		coverData := []byte("cover-bytes")
+		require.NoError(t, os.WriteFile(coverFullPath, coverData, 0644))
+
+		mimeType := "image/jpeg"
+		coverSource := models.DataSourceExistingCover
+		file.CoverImageFilename = &coverFilename
+		file.CoverMimeType = &mimeType
+		file.CoverSource = &coverSource
+		_, err = db.NewUpdate().
+			Model(file).
+			Column("cover_image_filename", "cover_mime_type", "cover_source").
+			WherePK().
+			Exec(ctx)
+		require.NoError(t, err)
+
+		user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+		e := setupTestServer(t, db)
+		req := httptest.NewRequest(http.MethodGet, fetchURL(book.ID, file.ID), nil)
+		rr := executeRequestWithUser(t, e, req, user)
+
+		require.Equal(t, http.StatusOK, rr.Code,
+			"expected 200 serving cover for root-level file with synthetic book path, got %d: %s",
+			rr.Code, rr.Body.String())
+		assert.Equal(t, coverData, rr.Body.Bytes(),
+			"expected cover body to match the file planted next to the root-level file")
+	}
+
+	t.Run("bookCover", func(t *testing.T) {
+		t.Parallel()
+		runServe(t, func(bookID, _ int) string {
+			return "/books/" + strconv.Itoa(bookID) + "/cover"
+		})
+	})
+
+	t.Run("fileCover", func(t *testing.T) {
+		t.Parallel()
+		runServe(t, func(_, fileID int) string {
+			return "/books/files/" + strconv.Itoa(fileID) + "/cover"
+		})
+	})
+}
+
+// Regression: when narrators are updated on a root-level M4B file in a
+// library with OrganizeFileStructure enabled, the handler must move the
+// file into its organized folder AND keep book.Filepath in sync. The
+// previous behavior called RenameOrganizedFileOnly, which renamed the file
+// in place at the library root and left book.Filepath pointing at the
+// synthetic organized path — a desync that broke book-level sidecar
+// resolution and future reorganize attempts.
+func TestUpdateFile_Narrators_RootLevelM4B_OrganizesFileAndSyncsBookPath(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "audiobook",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	libraryPath := &models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}
+	_, err = db.NewInsert().Model(libraryPath).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a real M4B file at the library root.
+	m4bPath := filepath.Join(libraryDir, "book.m4b")
+	require.NoError(t, os.WriteFile(m4bPath, []byte("m4b content"), 0644))
+
+	// Book with synthetic organized-folder path (what scanFileCreateNew
+	// writes) — doesn't exist on disk.
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book Title",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book Title",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Author association so organize can compute the folder name.
+	author := &models.Person{Name: "Author Name", LibraryID: library.ID, SortName: "Author Name"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	authorAssoc := &models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(authorAssoc).Exec(ctx)
+	require.NoError(t, err)
+
+	file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"narrators": ["Narrator Name"]}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// File must have been moved out of the library root and into an
+	// organized folder under the library path.
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.NotEqual(t, libraryDir, filepath.Dir(updatedFile.Filepath),
+		"file should no longer be at the library root after organize; path=%s", updatedFile.Filepath)
+	_, err = os.Stat(updatedFile.Filepath)
+	require.NoError(t, err, "renamed file should exist at %s", updatedFile.Filepath)
+
+	// book.Filepath must match the file's containing directory — no more
+	// synthetic-path desync.
+	var updatedBook models.Book
+	err = db.NewSelect().Model(&updatedBook).Where("id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Dir(updatedFile.Filepath), updatedBook.Filepath,
+		"book.Filepath should track the organized folder")
+}
+
+// Regression: when both narrators and name are updated on a directory-backed
+// M4B in the same request, the name-triggered reorganize must use the NEW
+// narrator names (just persisted this request), not the stale in-memory
+// file.Narrators relation. Previously the name branch built narratorNames
+// from the in-memory file.Narrators which wasn't refreshed after the
+// narrator-update DB writes, producing a filename with stale narrators.
+func TestUpdateFile_NarratorsAndName_DirectoryBacked_UsesNewNarratorsInFilename(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	bookDir := filepath.Join(libraryDir, "Old Author", "Old Title")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	m4bPath := filepath.Join(bookDir, "original.m4b")
+	require.NoError(t, os.WriteFile(m4bPath, []byte("m4b"), 0644))
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "audiobook",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Old Title",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Old Title",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Old Author", LibraryID: library.ID, SortName: "Old Author"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	// Pre-existing stale narrator so file.Narrators is non-empty on load.
+	stalePerson := &models.Person{Name: "Stale Narrator", LibraryID: library.ID, SortName: "Stale Narrator"}
+	_, err = db.NewInsert().Model(stalePerson).Exec(ctx)
+	require.NoError(t, err)
+	file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
+	_, err = db.NewInsert().Model(&models.Narrator{FileID: file.ID, PersonID: stalePerson.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	// Update BOTH narrators (swap Stale for Fresh) AND name in one request.
+	body := `{"narrators": ["Fresh Narrator"], "name": "Fresh Title"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+
+	// The organized filename must reflect the NEW narrator, not the stale one.
+	assert.Contains(t, filepath.Base(updatedFile.Filepath), "Fresh Narrator",
+		"organized filename should include the new narrator; got %s", updatedFile.Filepath)
+	assert.NotContains(t, filepath.Base(updatedFile.Filepath), "Stale Narrator",
+		"organized filename should NOT include the replaced stale narrator; got %s", updatedFile.Filepath)
+}
+
+// Regression: when file.Name is updated on a root-level file in a library
+// with OrganizeFileStructure enabled, the new name must be reflected in the
+// organized filename. Previously the root-level branch of organizeBookFiles
+// always used book.Title (ignoring file.Name), and the handler persisted
+// file.Name after reorganize, so the new name was lost.
+func TestUpdateFile_Name_RootLevelFile_OrganizesWithNewName(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	libraryPath := &models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}
+	_, err = db.NewInsert().Model(libraryPath).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "original.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book Title",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book Title",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Author Name", LibraryID: library.ID, SortName: "Author Name"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	authorAssoc := &models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(authorAssoc).Exec(ctx)
+	require.NoError(t, err)
+
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "Custom Name"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedFile models.File
+	err = db.NewSelect().Model(&updatedFile).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+
+	// The organized filename should reflect the new file.Name, not the original
+	// filename or book.Title.
+	assert.Contains(t, filepath.Base(updatedFile.Filepath), "Custom Name",
+		"organized filename should include the new file.Name; got %s", updatedFile.Filepath)
+	_, err = os.Stat(updatedFile.Filepath)
+	require.NoError(t, err, "file should exist at new organized location %s", updatedFile.Filepath)
+}
+
+// Regression: when OrganizeBookFiles fails partway through a file metadata
+// change on a root-level file, the helper must revert the DB write it just
+// made so the DB and on-disk state stay consistent. Without the revert the
+// user would see the new metadata in the UI while the file sits unchanged
+// on disk.
+func TestUpdateFile_Name_RootLevelFile_OrganizeFailure_RevertsDBState(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "original.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
+
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book Title",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book Title",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Author Name", LibraryID: library.ID, SortName: "Author Name"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	originalName := "Original Name"
+	originalNameSource := models.DataSourceManual
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	file.Name = &originalName
+	file.NameSource = &originalNameSource
+	_, err = db.NewUpdate().Model(file).Column("name", "name_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Force OrganizeBookFiles to fail by removing the file on disk between
+	// the DB insert and the update request. OrganizeRootLevelFile will try
+	// to move the missing file and fail.
+	require.NoError(t, os.Remove(epubPath))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "Attempted New Name"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	// The handler doesn't surface organize errors as HTTP failures (they
+	// are logged), so we still get 200 — but the DB must be reverted.
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var reloaded models.File
+	err = db.NewSelect().Model(&reloaded).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Name)
+	assert.Equal(t, originalName, *reloaded.Name,
+		"file.Name must be reverted to the pre-update value when organize fails")
+	require.NotNil(t, reloaded.NameSource)
+	assert.Equal(t, originalNameSource, *reloaded.NameSource,
+		"file.NameSource must be reverted to the pre-update value when organize fails")
+}
+
+// Regression: when RenameOrganizedFileOnly fails on a directory-backed file
+// (e.g. the source file was removed out from under us), the helper must
+// revert the pending name/name_source columns so the outer UpdateFile
+// doesn't persist a new name while the file sits at its old path on disk.
+// Mirrors the same-class invariant that M5 enforces for the root-level
+// branch.
+func TestUpdateFile_Name_DirectoryBacked_RenameFailure_RevertsDBState(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	bookDir := filepath.Join(libraryDir, "Author", "Book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	epubPath := filepath.Join(bookDir, "book.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Person{Name: "Author", LibraryID: library.ID, SortName: "Author"}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: author.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	originalName := "Original Name"
+	originalNameSource := models.DataSourceManual
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	file.Name = &originalName
+	file.NameSource = &originalNameSource
+	_, err = db.NewUpdate().Model(file).Column("name", "name_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Force RenameOrganizedFileOnly to fail by removing the source file.
+	require.NoError(t, os.Remove(epubPath))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "Attempted New Name"}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var reloaded models.File
+	err = db.NewSelect().Model(&reloaded).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Name)
+	assert.Equal(t, originalName, *reloaded.Name,
+		"file.Name must be reverted when rename fails in the directory-backed branch")
+	require.NotNil(t, reloaded.NameSource)
+	assert.Equal(t, originalNameSource, *reloaded.NameSource,
+		"file.NameSource must be reverted when rename fails in the directory-backed branch")
+}
+
+// Regression: uploading a cover to a root-level file previously resolved
+// the cover directory via book.Filepath (synthetic, non-existent), so the
+// write failed with "no such file or directory". The cover must be written
+// next to the file.
+func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "root-book.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+
+	syntheticBookPath := filepath.Join(libraryDir, "Author Name", "Book Title")
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Root Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Root Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        syntheticBookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Build multipart upload body with a tiny valid PNG.
+	pngData := []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+		0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+		0x54, 0x08, 0x99, 0x63, 0xF8, 0x0F, 0x00, 0x00,
+		0x01, 0x01, 0x00, 0x01, 0x1B, 0xB6, 0xEE, 0x56,
+		0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
+		0xAE, 0x42, 0x60, 0x82,
+	}
+
+	var body strings.Builder
+	writer := multipart.NewWriter(&body)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="cover"; filename="cover.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+	_, err = part.Write(pngData)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID)+"/cover", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Cover should have been written alongside the file, not under the synthetic book dir.
+	expectedCover := filepath.Join(libraryDir, "root-book.epub.cover.png")
+	_, err = os.Stat(expectedCover)
+	require.NoError(t, err, "cover should exist at %s", expectedCover)
+
+	// Synthetic book dir must not have been created.
+	_, err = os.Stat(syntheticBookPath)
+	assert.True(t, os.IsNotExist(err), "synthetic book dir must not be created for cover upload")
 }
 
 func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) {

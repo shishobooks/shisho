@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -81,13 +80,13 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	var newCoverData []byte
 	var newCoverMimeType string
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
-		if coverPath != "" {
-			newCoverData, err = os.ReadFile(coverPath)
-			if err == nil {
-				if file.CoverMimeType != nil {
-					newCoverMimeType = *file.CoverMimeType
-				}
+		// Resolve via the file's parent dir — book.Filepath may be a synthetic
+		// organized-folder path that doesn't exist on disk for root-level files.
+		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		newCoverData, err = os.ReadFile(coverPath)
+		if err == nil {
+			if file.CoverMimeType != nil {
+				newCoverMimeType = *file.CoverMimeType
 			}
 		}
 	}

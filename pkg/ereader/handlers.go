@@ -17,7 +17,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -736,7 +735,9 @@ func (h *handler) Cover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	coverPath := fileutils.ResolveCoverPath(book.Filepath, *coverFile.CoverImageFilename)
+	// Resolve via the file's parent dir — book.Filepath may be a synthetic
+	// organized-folder path that doesn't exist on disk for root-level files.
+	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
 	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return errors.WithStack(c.File(coverPath))
 }

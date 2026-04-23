@@ -934,6 +934,16 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
 
+			// Prefer file.Name for the per-file title (consistent with the
+			// isDirectoryBased and else branches below). Without this, a
+			// user-edited file name on a root-level file would be dropped
+			// when organize moves the file into its folder.
+			if file.Name != nil && *file.Name != "" {
+				organizeOpts.Title = *file.Name
+			} else {
+				organizeOpts.Title = book.Title
+			}
+
 			// Populate narrator names from file's narrators for M4B files
 			organizeOpts.NarratorNames = nil
 			for _, n := range file.Narrators {
@@ -1668,13 +1678,10 @@ func deleteFileFromDisk(file *models.File) error {
 		return errors.Wrap(err, "failed to delete main file")
 	}
 
-	// Delete cover image if exists (best effort). Use a pure-string join
-	// rather than fileutils.ResolveCoverPath here: that helper stats the
-	// first argument, and file.Filepath may have been removed manually
-	// by the user before this function runs (or just now, above). For
-	// both root-level and directory-backed books, the cover lives
-	// alongside the file, so filepath.Dir(file.Filepath) is always the
-	// cover dir regardless of whether the main file exists on disk.
+	// Delete cover image if exists (best effort). The cover lives alongside
+	// the file for both root-level and directory-backed books, so
+	// filepath.Dir(file.Filepath) is always the cover dir regardless of
+	// whether the main file exists on disk.
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
 		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 		_ = os.Remove(coverPath)

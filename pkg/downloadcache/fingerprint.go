@@ -5,10 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -293,10 +293,11 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 	}
 
 	// Add cover information if present. CoverImageFilename stores only the
-	// filename; resolve it against the book's cover directory so Path is
-	// usable and Stat sees the real file for modtime.
+	// filename; resolve it via the file's parent dir (where the cover always
+	// lives for both directory-backed and root-level books) so Stat sees the
+	// real file for modtime.
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
+		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 		mimeType := ""
 		if file.CoverMimeType != nil {
 			mimeType = *file.CoverMimeType
