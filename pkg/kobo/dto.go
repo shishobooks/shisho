@@ -21,8 +21,11 @@ type EntitlementWrapper struct {
 }
 
 // EntitlementChangeWrapper wraps a change (e.g., removal) to an entitlement.
+// BookMetadata carries a stub for removed books — some Kobo firmware versions
+// require a metadata object even for removals to deindex cleanly.
 type EntitlementChangeWrapper struct {
 	BookEntitlement *BookEntitlementChange `json:"BookEntitlement"`
+	BookMetadata    *BookMetadata          `json:"BookMetadata,omitempty"`
 }
 
 // BookEntitlement contains the full entitlement info for a book.
@@ -69,6 +72,7 @@ type BookMetadata struct {
 	Publisher           *Publisher         `json:"Publisher,omitempty"`
 	RevisionID          string             `json:"RevisionId"`
 	Series              *Series            `json:"Series,omitempty"`
+	SubTitle            string             `json:"SubTitle,omitempty"`
 	Title               string             `json:"Title"`
 	WorkID              string             `json:"WorkId"`
 }
@@ -104,9 +108,24 @@ type Series struct {
 	NumberFloat float64 `json:"NumberFloat"`
 }
 
+// syncItemLimit caps the number of entitlement entries returned per sync
+// response. Larger libraries are paged across multiple sync requests using
+// the X-Kobo-Sync: continue header and the OngoingSyncPointID/Cursor token
+// fields.
+const syncItemLimit = 100
+
 // SyncToken is the base64-encoded JSON sent/received in X-Kobo-SyncToken header.
+//
+// On a fresh sync only LastSyncPointID is set (or nothing on the very first
+// sync). When pagination is in flight, OngoingSyncPointID identifies the
+// in-progress snapshot, PrevSyncPointID is the baseline we're diffing against
+// (frozen for the duration of the pagination), and Cursor is the offset into
+// the combined Added/Changed/Removed list that we've already emitted.
 type SyncToken struct {
-	LastSyncPointID string `json:"lastSyncPointId"`
+	LastSyncPointID    string `json:"lastSyncPointId,omitempty"`
+	OngoingSyncPointID string `json:"ongoingSyncPointId,omitempty"`
+	PrevSyncPointID    string `json:"prevSyncPointId,omitempty"`
+	Cursor             int    `json:"cursor,omitempty"`
 }
 
 // DeviceAuthRequest is the body sent by the Kobo to POST /v1/auth/device.

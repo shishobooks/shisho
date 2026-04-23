@@ -79,7 +79,7 @@ func TestCreateSyncPoint(t *testing.T) {
 
 	assert.NotEmpty(t, sp.ID, "SyncPoint should have a generated ID")
 	assert.Equal(t, "api-key-1", sp.APIKeyID)
-	assert.NotNil(t, sp.CompletedAt, "SyncPoint should be marked as complete")
+	assert.Nil(t, sp.CompletedAt, "SyncPoint should be created as in-progress")
 	assert.Len(t, sp.Books, 2, "SyncPoint should have 2 books")
 
 	// Verify books have correct data.
@@ -106,8 +106,32 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 
 	assert.NotEmpty(t, sp.ID)
 	assert.Equal(t, "api-key-1", sp.APIKeyID)
-	assert.NotNil(t, sp.CompletedAt)
+	assert.Nil(t, sp.CompletedAt, "SyncPoint should be created as in-progress")
 	assert.Empty(t, sp.Books)
+}
+
+func TestMarkSyncPointCompleted(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", []ScopedFile{
+		{FileID: 1, FileHash: "h", FileSize: 1, MetadataHash: "m"},
+	})
+	require.NoError(t, err)
+	require.Nil(t, sp.CompletedAt)
+
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp.ID))
+
+	got, err := svc.GetSyncPointByID(ctx, sp.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.CompletedAt, "CompletedAt should be set after MarkSyncPointCompleted")
+
+	// GetLastSyncPoint filters on completed_at IS NOT NULL — it should now find this point.
+	last, err := svc.GetLastSyncPoint(ctx, "api-key-1")
+	require.NoError(t, err)
+	assert.Equal(t, sp.ID, last.ID)
 }
 
 func TestDetectChanges_FirstSync(t *testing.T) {
@@ -293,22 +317,66 @@ func TestParseShishoID(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestScopedFilesFromSnapshot_RoundTrip(t *testing.T) {
+	t.Parallel()
+	books := []*SyncPointBook{
+		{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"},
+		{FileID: 2, FileHash: "h2", FileSize: 200, MetadataHash: "m2"},
+	}
+	out := ScopedFilesFromSnapshot(books)
+	require.Len(t, out, 2)
+	assert.Equal(t, 1, out[0].FileID)
+	assert.Equal(t, "h1", out[0].FileHash)
+	assert.Equal(t, int64(100), out[0].FileSize)
+	assert.Equal(t, "m1", out[0].MetadataHash)
+	assert.Equal(t, 2, out[1].FileID)
+}
+
+func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	files := []ScopedFile{{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
+
+	// One completed, one in-progress (e.g. an in-flight pagination).
+	completed, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
+	require.NoError(t, err)
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, completed.ID))
+
+	inProgress, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
+	require.NoError(t, err)
+
+	// Cleanup must not delete the in-progress point even though it's not the
+	// "most recent completed" — it represents a paginated sync the device is
+	// actively walking through.
+	require.NoError(t, svc.CleanupOldSyncPoints(ctx, "api-key-1"))
+
+	got, err := svc.GetSyncPointByID(ctx, inProgress.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, got)
+}
+
 func TestCleanupOldSyncPoints(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
-	// Create 3 sync points
+	// Create 3 sync points and mark all completed (cleanup only touches completed points).
 	files := []ScopedFile{{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
 	sp1, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp1.ID))
 
 	sp2, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp2.ID))
 
 	sp3, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp3.ID))
 
 	// Cleanup should keep only the most recent
 	err = svc.CleanupOldSyncPoints(ctx, "api-key-1")
