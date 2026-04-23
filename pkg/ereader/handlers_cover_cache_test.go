@@ -225,5 +225,6 @@ func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	require.NoError(t, h.Cover(c2))
 
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
+	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
 	assert.Empty(t, rec2.Body.Bytes())
 }

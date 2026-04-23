@@ -105,7 +105,7 @@ export function FileEditDialog({
   const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
   const [narratorOpen, setNarratorOpen] = useState(false);
   const isPageBased = isPageBasedFileType(file.file_type);
-  const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
+  const [coverCacheKey, setCoverCacheKey] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
   const [pendingCoverFile, setPendingCoverFile] =
@@ -589,7 +589,7 @@ export function FileEditDialog({
         id: file.id,
         file: pendingCoverFile,
       });
-      setCoverCacheBuster(Date.now());
+      setCoverCacheKey(Date.now());
       setPendingCoverFile(null);
     }
 
@@ -603,7 +603,7 @@ export function FileEditDialog({
         id: file.id,
         page: pendingCoverPage,
       });
-      setCoverCacheBuster(Date.now());
+      setCoverCacheKey(Date.now());
       setPendingCoverPage(null);
     }
 
@@ -750,7 +750,7 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              key={`${file.id}-${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheKey}`}
                               src={`/api/books/files/${file.id}/cover`}
                             />
                           ) : (
@@ -778,7 +778,7 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              key={`${file.id}-${coverCacheBuster}`}
+                              key={`${file.id}-${coverCacheKey}`}
                               src={`/api/books/files/${file.id}/cover`}
                             />
                           ) : (

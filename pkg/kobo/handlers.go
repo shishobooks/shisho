@@ -249,7 +249,9 @@ func (h *handler) handleCover(c echo.Context) error {
 
 	// Stat source cover for Last-Modified + conditional GET short-circuit.
 	// This runs before the resize so revalidated requests skip the expensive
-	// decode/resize/encode work.
+	// decode/resize/encode work. In the no-dimensions branch below, c.File
+	// also sets Last-Modified from the same file mtime — the values match
+	// (second precision), so the overlap is harmless.
 	coverStat, err := os.Stat(coverPath)
 	if err != nil {
 		return errcodes.NotFound("Cover")

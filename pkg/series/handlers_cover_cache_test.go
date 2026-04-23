@@ -183,4 +183,5 @@ func TestSeriesCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
+	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
 }
