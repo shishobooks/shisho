@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { DeleteLibraryDialog } from "@/components/library/DeleteLibraryDialog";
 import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LibraryPluginsTab from "@/components/library/LibraryPluginsTab";
@@ -22,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import {
@@ -34,6 +36,8 @@ const LibrarySettings = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const libraryQuery = useLibrary(libraryId);
   const updateLibraryMutation = useUpdateLibrary();
+  const { hasPermission } = useAuth();
+  const canDeleteLibrary = hasPermission("libraries", "write");
 
   usePageTitle(
     libraryQuery.data?.name
@@ -51,6 +55,7 @@ const LibrarySettings = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [pluginsHaveChanges, setPluginsHaveChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pickerTargetIndex, setPickerTargetIndex] = useState<number | null>(
     null,
   );
@@ -414,6 +419,40 @@ const LibrarySettings = () => {
           </Button>
         </div>
       </div>
+
+      {canDeleteLibrary && libraryQuery.data && (
+        <section className="max-w-2xl mt-8 border border-destructive/40 rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold text-destructive mb-1">
+            Danger Zone
+          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-2">
+            <div className="min-w-0">
+              <p className="font-medium">Delete this library</p>
+              <p className="text-sm text-muted-foreground">
+                Permanently removes this library and all of its books, files,
+                and metadata from the database. Files on disk are not touched.
+              </p>
+            </div>
+            <Button
+              className="shrink-0"
+              onClick={() => setDeleteDialogOpen(true)}
+              size="sm"
+              variant="destructive"
+            >
+              <Trash2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Delete library</span>
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {libraryQuery.data && (
+        <DeleteLibraryDialog
+          library={{ id: libraryQuery.data.id, name: libraryQuery.data.name }}
+          onOpenChange={setDeleteDialogOpen}
+          open={deleteDialogOpen}
+        />
+      )}
 
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}
