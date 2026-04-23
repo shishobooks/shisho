@@ -2,13 +2,10 @@ package libraries
 
 import (
 	"net/http"
-	"slices"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -116,9 +113,8 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	opts := ListLibrariesOptions{
-		Limit:          &params.Limit,
-		Offset:         &params.Offset,
-		IncludeDeleted: params.Deleted,
+		Limit:  &params.Limit,
+		Offset: &params.Offset,
 	}
 
 	// Filter by user's library access if user is in context
@@ -191,14 +187,6 @@ func (h *handler) update(c echo.Context) error {
 		}
 		opts.UpdateLibraryPaths = true
 	}
-	if params.Deleted != nil && (*params.Deleted && library.DeletedAt == nil || !*params.Deleted && library.DeletedAt != nil) {
-		if *params.Deleted {
-			library.DeletedAt = pointerutil.Time(time.Now())
-		} else {
-			library.DeletedAt = nil
-		}
-		opts.Columns = append(opts.Columns, "deleted_at")
-	}
 
 	// Update the model.
 	err = h.libraryService.UpdateLibrary(ctx, library, opts)
@@ -214,10 +202,27 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Notify monitor of library changes (paths added/removed, library deleted/restored).
-	if h.onLibraryChanged != nil && (opts.UpdateLibraryPaths || slices.Contains(opts.Columns, "deleted_at")) {
+	if h.onLibraryChanged != nil && opts.UpdateLibraryPaths {
 		h.onLibraryChanged()
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
+}
+
+func (h *handler) delete(c echo.Context) error {
+	ctx := c.Request().Context()
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Library")
+	}
+
+	if err := h.libraryService.DeleteLibrary(ctx, id); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if h.onLibraryChanged != nil {
+		h.onLibraryChanged()
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }

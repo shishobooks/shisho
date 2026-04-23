@@ -41,7 +41,7 @@ Start the container:
 docker compose up -d
 ```
 
-Access Shisho at `http://localhost:5173` and create a library pointing to `/media` (or wherever you mounted your books).
+Access Shisho at `http://localhost:5173` and [create a library](./libraries.md) pointing to `/media` (or wherever you mounted your books).
 
 ## File Permissions (PUID/PGID)
 
