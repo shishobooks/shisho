@@ -136,9 +136,10 @@ func TestComputeFingerprint(t *testing.T) {
 		assert.Empty(t, fp.Narrators)
 	})
 
-	t.Run("cover information is resolved against book directory", func(t *testing.T) {
+	t.Run("cover information is resolved against file directory", func(t *testing.T) {
 		// CoverImageFilename stores just the filename; the full path is
-		// resolved at runtime against book.Filepath.
+		// resolved at runtime against the file's parent dir (where the cover
+		// always lives for both directory-backed and root-level books).
 		tmpDir := t.TempDir()
 		coverFilename := "book.epub.cover.jpg"
 		coverAbsPath := filepath.Join(tmpDir, coverFilename)
@@ -151,6 +152,7 @@ func TestComputeFingerprint(t *testing.T) {
 
 		book := &models.Book{Title: "Book with Cover", Filepath: tmpDir}
 		file := &models.File{
+			Filepath:           filepath.Join(tmpDir, "book.epub"),
 			CoverImageFilename: strPtr(coverFilename),
 			CoverMimeType:      strPtr("image/jpeg"),
 		}
@@ -167,6 +169,7 @@ func TestComputeFingerprint(t *testing.T) {
 	t.Run("cover with non-existent filename uses zero time", func(t *testing.T) {
 		book := &models.Book{Title: "Book", Filepath: "/nonexistent"}
 		file := &models.File{
+			Filepath:           "/nonexistent/book.epub",
 			CoverImageFilename: strPtr("missing.jpg"),
 			CoverMimeType:      strPtr("image/jpeg"),
 		}
@@ -175,8 +178,8 @@ func TestComputeFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, fp.Cover)
-		// Path is still resolved via ResolveCoverPath even when stat fails —
-		// locks in the join contract.
+		// Path is resolved via filepath.Dir(file.Filepath) even when stat
+		// fails — locks in the join contract.
 		assert.Equal(t, filepath.Join("/nonexistent", "missing.jpg"), fp.Cover.Path)
 		assert.True(t, fp.Cover.ModTime.IsZero())
 	})

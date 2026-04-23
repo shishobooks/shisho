@@ -112,6 +112,29 @@ func ReadBookSidecar(bookPath string) (*BookSidecar, error) {
 	return &s, nil
 }
 
+// ReadBookSidecarFromModel reads the book sidecar for a Book, using the same
+// anchor-resolution logic as WriteBookSidecarFromModel. For root-level books
+// with a synthetic book.Filepath, the sidecar is read from next to a file in
+// the book instead of from the non-existent synthetic directory. The optional
+// fileHint is used as a fallback anchor when book.Files is not populated —
+// pass the current file being scanned so resolution works even before the
+// book has been reloaded with its files relation.
+func ReadBookSidecarFromModel(book *models.Book, fileHint *models.File) (*BookSidecar, error) {
+	anchor := resolveBookSidecarAnchor(book)
+	// If the anchor still resolves to a non-existent directory (no files on
+	// the book model yet), fall back to the hint's filepath.
+	if anchor != "" {
+		if info, err := os.Stat(anchor); err != nil || (!info.IsDir() && filepath.Ext(anchor) == "") {
+			if fileHint != nil && fileHint.Filepath != "" {
+				anchor = fileHint.Filepath
+			}
+		}
+	} else if fileHint != nil && fileHint.Filepath != "" {
+		anchor = fileHint.Filepath
+	}
+	return ReadBookSidecar(anchor)
+}
+
 // ReadFileSidecar reads and parses a file sidecar.
 // Returns nil, nil if the sidecar doesn't exist or filePath is empty.
 func ReadFileSidecar(filePath string) (*FileSidecar, error) {
@@ -280,9 +303,45 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 }
 
 // WriteBookSidecarFromModel writes a book sidecar from a Book model.
+//
+// For root-level books in libraries with OrganizeFileStructure disabled,
+// the scanner writes a synthetic organized-folder path into book.Filepath
+// that never exists on disk. Writing a sidecar to that path would fail, so
+// if book.Filepath doesn't resolve to an existing directory we fall back to
+// anchoring the sidecar next to a file in the book (preferring a main file).
+// The cover always lives next to the file in that case, so co-locating the
+// book sidecar matches how the rest of the system resolves paths.
 func WriteBookSidecarFromModel(book *models.Book) error {
 	s := BookSidecarFromModel(book)
-	return WriteBookSidecar(book.Filepath, s)
+	return WriteBookSidecar(resolveBookSidecarAnchor(book), s)
+}
+
+// resolveBookSidecarAnchor returns the path to pass to BookSidecarPath for
+// writing. Prefers book.Filepath when it resolves to an existing directory;
+// otherwise falls back to a file in the book. Returns an empty string only
+// when both book.Filepath and any file path are empty — WriteBookSidecar
+// guards empty input.
+func resolveBookSidecarAnchor(book *models.Book) string {
+	if book == nil {
+		return ""
+	}
+	if book.Filepath != "" {
+		if info, err := os.Stat(book.Filepath); err == nil && info.IsDir() {
+			return book.Filepath
+		}
+	}
+	// Fall back to a file's path. Prefer a main file for stable naming.
+	for _, f := range book.Files {
+		if f != nil && f.FileRole == models.FileRoleMain && f.Filepath != "" {
+			return f.Filepath
+		}
+	}
+	for _, f := range book.Files {
+		if f != nil && f.Filepath != "" {
+			return f.Filepath
+		}
+	}
+	return book.Filepath
 }
 
 // WriteFileSidecarFromModel writes a file sidecar from a File model.

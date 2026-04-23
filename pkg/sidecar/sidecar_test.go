@@ -494,6 +494,50 @@ func TestWriteBookSidecarFromModel(t *testing.T) {
 	assert.Equal(t, "Jane Smith", readBack.Authors[0].Name)
 }
 
+// Regression: scanFileCreateNew writes a synthetic organized-folder path
+// into book.Filepath for root-level files regardless of OrganizeFileStructure.
+// When OrganizeFileStructure=false, that synthetic directory never exists on
+// disk, so WriteBookSidecarFromModel's write fails and the book sidecar is
+// never persisted. The fix falls back to anchoring the sidecar next to a file
+// in the book.
+func TestWriteBookSidecarFromModel_SyntheticBookPath_AnchorsToFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Real file at the library root, matching the root-level scenario.
+	filePath := filepath.Join(tmpDir, "root-book.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("epub content"), 0644))
+
+	// book.Filepath is a synthetic organized folder path that does NOT exist.
+	syntheticBookPath := filepath.Join(tmpDir, "Author Name", "Book Title")
+
+	book := &models.Book{
+		Filepath: syntheticBookPath,
+		Title:    "Root Book",
+		Authors: []*models.Author{
+			{Person: &models.Person{Name: "Author Name", SortName: "Name, Author"}, SortOrder: 0},
+		},
+		Files: []*models.File{
+			{Filepath: filePath, FileRole: models.FileRoleMain},
+		},
+	}
+
+	err := WriteBookSidecarFromModel(book)
+	require.NoError(t, err, "write should succeed by anchoring to file path")
+
+	// Read back from the file-anchored location.
+	readBack, err := ReadBookSidecar(filePath)
+	require.NoError(t, err)
+	require.NotNil(t, readBack)
+	assert.Equal(t, "Root Book", readBack.Title)
+	assert.Len(t, readBack.Authors, 1)
+	assert.Equal(t, "Author Name", readBack.Authors[0].Name)
+
+	// Synthetic directory must not have been created as a side effect.
+	_, err = os.Stat(syntheticBookPath)
+	assert.True(t, os.IsNotExist(err), "synthetic book dir should not be created by sidecar write")
+}
+
 func TestWriteFileSidecar_SetsVersion(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

@@ -166,6 +166,16 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 				newPath = fileutils.GenerateUniqueFilepathIfExists(newPath)
 
 				if newPath != file.Filepath {
+					// Ensure the destination directory exists. targetBook.Filepath
+					// may be a synthetic organized-folder path that hasn't been
+					// created on disk yet (e.g. the target book was root-level and
+					// organize hasn't run). moveFile below uses os.Rename and will
+					// fail if the parent dir is missing.
+					if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+						failures := svc.rollbackFileMoves(ctx, moves)
+						baseErr := errors.Wrapf(err, "failed to create destination dir for file %d", file.ID)
+						return wrapErrorWithRollbackFailures(baseErr, failures)
+					}
 					// Move file along with associated files (covers, sidecars)
 					_, err := fileutils.MoveFileWithAssociatedFiles(file.Filepath, newPath)
 					if err != nil {

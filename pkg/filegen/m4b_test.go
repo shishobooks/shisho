@@ -339,6 +339,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		}
 		file := &models.File{
 			FileType:           models.FileTypeM4B,
+			Filepath:           srcPath,
 			CoverImageFilename: &coverFilename,
 			CoverMimeType:      &mimeType,
 		}

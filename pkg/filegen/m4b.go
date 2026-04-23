@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
@@ -39,7 +38,7 @@ func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	newMeta := g.buildMetadata(book, file, srcMeta)
 
 	// Handle cover replacement
-	if err := g.loadCover(book, file, newMeta); err != nil {
+	if err := g.loadCover(file, newMeta); err != nil {
 		return NewGenerationError(models.FileTypeM4B, err, "failed to load cover image")
 	}
 
@@ -243,14 +242,13 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 }
 
 // loadCover reads the cover image from the file system and sets it on the metadata.
-func (g *M4BGenerator) loadCover(book *models.Book, file *models.File, meta *mp4.Metadata) error {
-	if file.CoverImageFilename == nil {
+func (g *M4BGenerator) loadCover(file *models.File, meta *mp4.Metadata) error {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return nil
 	}
-	coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
-	if coverPath == "" {
-		return nil
-	}
+	// Resolve via the file's parent dir — book.Filepath may be a synthetic
+	// organized-folder path that doesn't exist on disk for root-level files.
+	coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 
 	data, err := os.ReadFile(coverPath)
 	if err != nil {

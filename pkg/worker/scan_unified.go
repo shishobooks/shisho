@@ -782,7 +782,7 @@ func (w *Worker) scanFileCore(
 
 	// Read sidecar files if they exist (higher priority than file metadata)
 	// Sidecars can override file metadata but not manual user edits
-	bookSidecarData, err := sidecar.ReadBookSidecar(book.Filepath)
+	bookSidecarData, err := sidecar.ReadBookSidecarFromModel(book, file)
 	if err != nil {
 		logWarn("failed to read book sidecar", logger.Data{"error": err.Error()})
 	}
@@ -2143,37 +2143,26 @@ func (w *Worker) scanFileCore(
 	if err != nil {
 		logWarn("failed to reload book for sidecar", logger.Data{"error": err.Error()})
 	} else {
-		// Check if the book directory exists. For root-level files with OrganizeFileStructure
-		// enabled, we need to create the directory before writing the sidecar.
-		// If the directory doesn't exist and org is disabled, we skip writing the book sidecar
-		// since the files haven't been organized yet.
-		bookDirExists := false
-		if info, statErr := os.Stat(reloadedBook.Filepath); statErr == nil && info.IsDir() {
-			bookDirExists = true
-		}
-
-		if !bookDirExists {
-			// Check if the library has OrganizeFileStructure enabled
+		// For root-level files with OrganizeFileStructure enabled, pre-create
+		// the synthetic organized folder so the soon-to-run organize step can
+		// move the file into it and the book sidecar lands at the final path.
+		// When OrganizeFileStructure is disabled, WriteBookSidecarFromModel's
+		// fallback anchors the sidecar next to the file, so no MkdirAll here.
+		if info, statErr := os.Stat(reloadedBook.Filepath); statErr != nil || !info.IsDir() {
 			lib, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 				ID: &reloadedBook.LibraryID,
 			})
 			if libErr != nil {
 				logWarn("failed to retrieve library for sidecar", logger.Data{"error": libErr.Error()})
 			} else if lib.OrganizeFileStructure {
-				// Create the directory for root-level files that will be organized
 				if mkdirErr := os.MkdirAll(reloadedBook.Filepath, 0755); mkdirErr != nil {
 					logWarn("failed to create book directory for sidecar", logger.Data{"error": mkdirErr.Error()})
-				} else {
-					bookDirExists = true
 				}
 			}
-			// If org is disabled, skip writing book sidecar (files are at root level)
 		}
 
-		if bookDirExists {
-			if err := sidecar.WriteBookSidecarFromModel(reloadedBook); err != nil {
-				logWarn("failed to write book sidecar", logger.Data{"error": err.Error()})
-			}
+		if err := sidecar.WriteBookSidecarFromModel(reloadedBook); err != nil {
+			logWarn("failed to write book sidecar", logger.Data{"error": err.Error()})
 		}
 		book = reloadedBook
 	}

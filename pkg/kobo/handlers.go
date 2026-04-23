@@ -10,6 +10,7 @@ import (
 	_ "image/png" // Register PNG decoder
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +22,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
-	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
 	"golang.org/x/image/draw"
 )
@@ -239,13 +239,9 @@ func (h *handler) handleCover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	// Get the book to determine the cover path base dir
-	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	coverPath := fileutils.ResolveCoverPath(book.Filepath, *file.CoverImageFilename)
+	// Resolve via the file's parent dir — book.Filepath may be a synthetic
+	// organized-folder path that doesn't exist on disk for root-level files.
+	coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
 
 	// Stat source cover for Last-Modified + conditional GET short-circuit.
 	// This runs before the resize so revalidated requests skip the expensive

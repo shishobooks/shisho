@@ -232,6 +232,7 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 		// CoverImageFilename is just the filename, not the full path
 		file := &models.File{
 			FileType:           models.FileTypeEPUB,
+			Filepath:           srcPath,
 			CoverImageFilename: &coverFilename,
 			CoverMimeType:      &mimeType,
 		}
@@ -278,6 +279,7 @@ func TestEPUBGenerator_Generate(t *testing.T) {
 		mimeType := "image/jpeg"
 		file := &models.File{
 			FileType:           models.FileTypeEPUB,
+			Filepath:           srcPath,
 			CoverImageFilename: &coverFilename,
 			CoverMimeType:      &mimeType,
 		}
