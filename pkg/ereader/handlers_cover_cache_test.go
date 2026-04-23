@@ -180,7 +180,6 @@ func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, jpeg.Encode(coverFile, image.NewRGBA(image.Rect(0, 0, 10, 10)), nil))
 	require.NoError(t, coverFile.Close())
-	_ = coverPath
 
 	mimeType := "image/jpeg"
 	file := &models.File{
