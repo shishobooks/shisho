@@ -55,19 +55,18 @@ const DirectoryPickerDialog = ({
     return () => clearTimeout(timer);
   }, [currentPath]);
 
-  // Debounce search input.
+  // Debounce search input. Reset pagination + accumulator in the same
+  // setState batch as the debounced commit so the listing flips to a
+  // spinner in a single render (no flash of pre-search results paired
+  // with the new query state).
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
+      setOffset(0);
+      setAccumulatedEntries([]);
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
-
-  // Reset when path changes or search/hidden toggles.
-  useEffect(() => {
-    setOffset(0);
-    setAccumulatedEntries([]);
-  }, [currentPath, debouncedSearch, showHidden]);
 
   // Reset when dialog opens.
   useEffect(() => {
@@ -96,7 +95,13 @@ const DirectoryPickerDialog = ({
 
   // Accumulate entries for "load more" functionality.
   // Use dataUpdatedAt to detect when new data actually arrives.
+  // Skip placeholder data: the global QueryClient enables
+  // `placeholderData: keepPreviousData`, so when the query key changes (load
+  // more or directory navigation) `data` briefly holds the previous query's
+  // entries. Appending those would duplicate the prior page or pollute the
+  // accumulator with entries from a different directory.
   useEffect(() => {
+    if (browseQuery.isPlaceholderData) return;
     if (browseQuery.data?.entries) {
       if (offset === 0) {
         setAccumulatedEntries(browseQuery.data.entries);
@@ -108,14 +113,16 @@ const DirectoryPickerDialog = ({
   }, [browseQuery.dataUpdatedAt]);
 
   // Repopulate from cache if entries were cleared but cached data exists.
-  // This handles the case when opening the dialog with a previously-browsed path.
+  // This handles the case when opening the dialog with a previously-browsed
+  // path. Skip placeholder data for the same reason as the accumulator above.
   useEffect(() => {
     if (
       accumulatedEntries.length === 0 &&
       browseQuery.data?.entries &&
       browseQuery.data.entries.length > 0 &&
       offset === 0 &&
-      !browseQuery.isFetching
+      !browseQuery.isFetching &&
+      !browseQuery.isPlaceholderData
     ) {
       setAccumulatedEntries(browseQuery.data.entries);
     }
@@ -123,11 +130,17 @@ const DirectoryPickerDialog = ({
     accumulatedEntries.length,
     browseQuery.data?.entries,
     browseQuery.isFetching,
+    browseQuery.isPlaceholderData,
     offset,
   ]);
 
+  // Only trust the response (entries, current_path, has_more, total) when
+  // it's the settled result for the current query key — placeholder data is
+  // the previous query's response and would render stale state.
+  const settled = browseQuery.isPlaceholderData ? undefined : browseQuery.data;
+
   const pathSegments = useMemo(() => {
-    const path = browseQuery.data?.current_path || currentPath;
+    const path = settled?.current_path || currentPath;
     if (path === "/") return [{ name: "/", path: "/" }];
 
     const segments = path.split("/").filter(Boolean);
@@ -140,12 +153,20 @@ const DirectoryPickerDialog = ({
     }
 
     return result;
-  }, [browseQuery.data?.current_path, currentPath]);
+  }, [settled?.current_path, currentPath]);
 
+  // Each handler that changes the query key (path, debounced search, or
+  // hidden toggle) must reset offset+accumulatedEntries in the same setState
+  // batch so React commits a single render with both the new query state
+  // and an empty accumulator. Splitting the reset into a follow-up effect
+  // would commit one render with the new path but the previous directory's
+  // entries still showing.
   const handleNavigate = useCallback((path: string) => {
     setCurrentPath(path);
     setSearch("");
     setDebouncedSearch("");
+    setOffset(0);
+    setAccumulatedEntries([]);
   }, []);
 
   const handleEntryClick = useCallback((entry: Entry) => {
@@ -153,8 +174,19 @@ const DirectoryPickerDialog = ({
       setCurrentPath(entry.path);
       setSearch("");
       setDebouncedSearch("");
+      setOffset(0);
+      setAccumulatedEntries([]);
     }
   }, []);
+
+  const handleShowHiddenChange = useCallback(
+    (checked: boolean | "indeterminate") => {
+      setShowHidden(checked === true);
+      setOffset(0);
+      setAccumulatedEntries([]);
+    },
+    [],
+  );
 
   const handleToggleSelect = useCallback((path: string) => {
     setSelectedPaths((prev) => {
@@ -169,10 +201,10 @@ const DirectoryPickerDialog = ({
   }, []);
 
   const handleSelectCurrentDirectory = useCallback(() => {
-    const path = browseQuery.data?.current_path || currentPath;
+    const path = settled?.current_path || currentPath;
     onSelect([path]);
     onOpenChange(false);
-  }, [browseQuery.data?.current_path, currentPath, onSelect, onOpenChange]);
+  }, [settled?.current_path, currentPath, onSelect, onOpenChange]);
 
   const handleConfirmSelection = useCallback(() => {
     onSelect(Array.from(selectedPaths));
@@ -183,8 +215,8 @@ const DirectoryPickerDialog = ({
     setOffset((prev) => prev + 50);
   }, []);
 
-  const hasMore = browseQuery.data?.has_more ?? false;
-  const total = browseQuery.data?.total ?? 0;
+  const hasMore = settled?.has_more ?? false;
+  const total = settled?.total ?? 0;
   const remaining = total - accumulatedEntries.length;
 
   const directories = accumulatedEntries.filter((e) => e.is_dir);
@@ -244,7 +276,7 @@ const DirectoryPickerDialog = ({
           <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
             <Checkbox
               checked={showHidden}
-              onCheckedChange={(checked) => setShowHidden(checked as boolean)}
+              onCheckedChange={handleShowHiddenChange}
             />
             Show hidden files
           </label>
@@ -252,18 +284,25 @@ const DirectoryPickerDialog = ({
 
         {/* Directory listing */}
         <div className="h-[400px] border rounded-md overflow-y-auto">
-          {browseQuery.isLoading && offset === 0 ? (
-            <div className="flex items-center justify-center h-full py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : browseQuery.isError ? (
+          {browseQuery.isError ? (
             <div className="flex items-center justify-center h-full py-12 text-destructive">
               {browseQuery.error?.message || "Failed to load directory"}
             </div>
           ) : accumulatedEntries.length === 0 ? (
-            <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
-              No entries found
-            </div>
+            // While accumulatedEntries is empty during any fetch (initial
+            // load, navigation, search, or hidden-toggle), show a spinner
+            // instead of "No entries found". `isLoading` is false when
+            // placeholder data is active, so use `isFetching` to cover the
+            // placeholder transition too.
+            browseQuery.isFetching ? (
+              <div className="flex items-center justify-center h-full py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
+                No entries found
+              </div>
+            )
           ) : (
             <div className="p-2">
               {/* Directories */}
