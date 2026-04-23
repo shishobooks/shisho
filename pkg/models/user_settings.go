@@ -12,6 +12,19 @@ const (
 	FitModeOriginal = "original"
 )
 
+const (
+	//tygo:emit export type EpubTheme = typeof EpubThemeLight | typeof EpubThemeDark | typeof EpubThemeSepia;
+	EpubThemeLight = "light"
+	EpubThemeDark  = "dark"
+	EpubThemeSepia = "sepia"
+)
+
+const (
+	//tygo:emit export type EpubFlow = typeof EpubFlowPaginated | typeof EpubFlowScrolled;
+	EpubFlowPaginated = "paginated"
+	EpubFlowScrolled  = "scrolled"
+)
+
 type UserSettings struct {
 	bun.BaseModel `bun:"table:user_settings,alias:us" tstype:"-"`
 
@@ -21,6 +34,9 @@ type UserSettings struct {
 	UserID             int       `bun:",notnull,unique" json:"user_id"`
 	ViewerPreloadCount int       `bun:",notnull,default:3" json:"viewer_preload_count"`
 	ViewerFitMode      string    `bun:",notnull,default:'fit-height'" json:"viewer_fit_mode" tstype:"FitMode"`
+	EpubFontSize       int       `bun:"viewer_epub_font_size,notnull,default:100" json:"viewer_epub_font_size"`
+	EpubTheme          string    `bun:"viewer_epub_theme,notnull,default:'light'" json:"viewer_epub_theme" tstype:"EpubTheme"`
+	EpubFlow           string    `bun:"viewer_epub_flow,notnull,default:'paginated'" json:"viewer_epub_flow" tstype:"EpubFlow"`
 }
 
 // DefaultUserSettings returns a UserSettings with default values.
@@ -28,5 +44,8 @@ func DefaultUserSettings() *UserSettings {
 	return &UserSettings{
 		ViewerPreloadCount: 3,
 		ViewerFitMode:      FitModeHeight,
+		EpubFontSize:       100,
+		EpubTheme:          EpubThemeLight,
+		EpubFlow:           EpubFlowPaginated,
 	}
 }

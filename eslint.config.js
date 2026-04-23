@@ -15,6 +15,7 @@ export default tseslint.config(
       "website/.docusaurus/**",
       "app/types/generated/*",
       "app/components/ui",
+      "app/libraries/foliate/**",
       "test-results",
       "pkg/plugins/testdata/*",
       "packages/plugin-sdk/testing/index.js",

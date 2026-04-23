@@ -13,7 +13,7 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Ebooks
 
-- **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more
+- **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more. Includes an in-app reader with font size, theme, and flow controls
 - **PDF** — Full [metadata extraction](./metadata#pdf) including title, authors, description, cover art, page count, language, and chapter extraction from PDF bookmarks. Includes an in-app viewer with page-by-page reading
 
 ## Audiobooks
