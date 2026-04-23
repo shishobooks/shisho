@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -854,19 +855,31 @@ export function IdentifyReviewForm({
       )}
 
       {/* Title */}
-      <FieldWrapper
-        currentValue={book.title || undefined}
-        disabled={isDisabled("title")}
-        field="title"
-        onUseCurrent={() => setTitle(book.title)}
-        status={defaults.title.status}
-      >
-        <Input
+      <div className="space-y-1.5">
+        <FieldWrapper
+          currentValue={book.title || undefined}
           disabled={isDisabled("title")}
-          onChange={(e) => setTitle(e.target.value)}
-          value={title}
-        />
-      </FieldWrapper>
+          field="title"
+          onUseCurrent={() => setTitle(book.title)}
+          status={defaults.title.status}
+        >
+          <Input
+            disabled={isDisabled("title")}
+            onChange={(e) => setTitle(e.target.value)}
+            value={title}
+          />
+        </FieldWrapper>
+
+        {!isDisabled("title") && !isDisabled("subtitle") && (
+          <ExtractSubtitleButton
+            onExtract={(t, s) => {
+              setTitle(t);
+              setSubtitle(s);
+            }}
+            title={title}
+          />
+        )}
+      </div>
 
       {/* Subtitle */}
       <FieldWrapper
