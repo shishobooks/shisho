@@ -430,13 +430,6 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Surface enable-time load failures as a 422 so the frontend toast shows
-	// the real reason. The Malfunctioned/NotSupported status is already
-	// persisted above, so a follow-up GET reflects the broken state.
-	if loadErr != nil {
-		return errcodes.PluginLoadFailure(loadErr.Error())
-	}
-
 	if payload.Config != nil {
 		for key, value := range payload.Config {
 			if err := h.service.SetConfig(ctx, scope, id, key, value); err != nil {
@@ -458,6 +451,13 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		plugin.ConfidenceThreshold = payload.ConfidenceThreshold
+	}
+
+	// Surface enable-time load failures as a 422 after applying config/threshold
+	// writes, so a caller mixing enable+config in one payload still gets their
+	// config persisted and the Malfunctioned state + error message reported.
+	if loadErr != nil {
+		return errcodes.PluginLoadFailure(loadErr.Error())
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))

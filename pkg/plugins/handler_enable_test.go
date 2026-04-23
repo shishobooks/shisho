@@ -64,7 +64,10 @@ func TestUpdate_EnableLoadFailure_ReturnsError(t *testing.T) {
 	h := NewHandler(svc, mgr, nil)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(`{"enabled": true}`))
+	// Mix enable+config in one payload; config writes must still persist even
+	// when the load fails so the user doesn't silently lose their config edits.
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(
+		`{"enabled": true, "config": {"api_key": "abc"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -86,4 +89,10 @@ func TestUpdate_EnableLoadFailure_ReturnsError(t *testing.T) {
 	assert.Equal(t, models.PluginStatusMalfunctioned, retrieved.Status)
 	require.NotNil(t, retrieved.LoadError)
 	assert.Contains(t, *retrieved.LoadError, "nonsenseField")
+
+	// Config writes are independent of load success — they must survive.
+	apiKey, err := svc.GetConfigRaw(ctx, scope, id, "api_key")
+	require.NoError(t, err)
+	require.NotNil(t, apiKey)
+	assert.Equal(t, "abc", *apiKey)
 }
