@@ -13,6 +13,8 @@ import type {
   UpdateLibraryPayload,
 } from "@/types";
 
+import { QueryKey as BooksQueryKey } from "./books";
+
 export enum QueryKey {
   RetrieveLibrary = "RetrieveLibrary",
   ListLibraries = "ListLibraries",
@@ -90,6 +92,24 @@ export const useUpdateLibrary = () => {
     onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.setQueryData([QueryKey.RetrieveLibrary, data.id], data);
+    },
+  });
+};
+
+export const useDeleteLibrary = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, ShishoAPIError, { id: number }>({
+    mutationFn: ({ id }) => {
+      return API.request("DELETE", `/libraries/${id}`);
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
+      queryClient.removeQueries({
+        queryKey: [QueryKey.RetrieveLibrary, String(id)],
+      });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
 };
