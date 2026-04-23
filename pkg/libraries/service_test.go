@@ -83,9 +83,11 @@ func seedLibraryWithContent(t *testing.T, ctx context.Context, db *bun.DB, name 
 	require.NoError(t, err)
 
 	series := &models.Series{
-		LibraryID:  library.ID,
-		Name:       "Seeded Series",
-		NameSource: models.DataSourceFilepath,
+		LibraryID:      library.ID,
+		Name:           "Seeded Series",
+		NameSource:     models.DataSourceFilepath,
+		SortName:       "Seeded Series",
+		SortNameSource: models.DataSourceFilepath,
 	}
 	_, err = db.NewInsert().Model(series).Returning("*").Exec(ctx)
 	require.NoError(t, err)
