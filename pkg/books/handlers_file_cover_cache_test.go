@@ -21,7 +21,7 @@ import (
 
 // seedBookWithFileCover creates a library, book, and file with a real cover
 // image on disk. Returns the file ID and the on-disk cover path.
-func seedBookWithFileCover(t *testing.T, ctx context.Context, db *bun.DB) (fileID int, coverPath string) {
+func seedBookWithFileCover(t *testing.T, db *bun.DB, ctx context.Context) (fileID int, coverPath string) {
 	t.Helper()
 
 	library := &models.Library{
@@ -82,7 +82,7 @@ func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}
 
-	fileID, _ := seedBookWithFileCover(t, ctx, db)
+	fileID, _ := seedBookWithFileCover(t, db, ctx)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}
 
-	fileID, _ := seedBookWithFileCover(t, ctx, db)
+	fileID, _ := seedBookWithFileCover(t, db, ctx)
 
 	// First GET to capture Last-Modified.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
