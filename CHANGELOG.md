@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-04-22
+
+### Bug Fixes
+- Stub foliate pdf.js so vite build resolves (#129)
+
+
 ## [0.0.35] - 2026-04-22
 
 ### Features
