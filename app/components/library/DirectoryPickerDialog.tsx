@@ -96,7 +96,13 @@ const DirectoryPickerDialog = ({
 
   // Accumulate entries for "load more" functionality.
   // Use dataUpdatedAt to detect when new data actually arrives.
+  // Skip placeholder data: the global QueryClient enables
+  // `placeholderData: keepPreviousData`, so when the query key changes (load
+  // more or directory navigation) `data` briefly holds the previous query's
+  // entries. Appending those would duplicate the prior page or pollute the
+  // accumulator with entries from a different directory.
   useEffect(() => {
+    if (browseQuery.isPlaceholderData) return;
     if (browseQuery.data?.entries) {
       if (offset === 0) {
         setAccumulatedEntries(browseQuery.data.entries);
@@ -252,18 +258,24 @@ const DirectoryPickerDialog = ({
 
         {/* Directory listing */}
         <div className="h-[400px] border rounded-md overflow-y-auto">
-          {browseQuery.isLoading && offset === 0 ? (
-            <div className="flex items-center justify-center h-full py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : browseQuery.isError ? (
+          {browseQuery.isError ? (
             <div className="flex items-center justify-center h-full py-12 text-destructive">
               {browseQuery.error?.message || "Failed to load directory"}
             </div>
           ) : accumulatedEntries.length === 0 ? (
-            <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
-              No entries found
-            </div>
+            // While accumulatedEntries is empty during a fetch (initial load
+            // or directory navigation), show a spinner instead of "No entries
+            // found". `isLoading` is false when placeholder data is active,
+            // so use `isFetching` to cover the placeholder transition too.
+            browseQuery.isFetching ? (
+              <div className="flex items-center justify-center h-full py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
+                No entries found
+              </div>
+            )
           ) : (
             <div className="p-2">
               {/* Directories */}
