@@ -1304,3 +1304,28 @@ func TestUpdateBook_Title_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T)
 	require.NotNil(t, updatedFile.Name)
 	assert.Equal(t, "Bar", *updatedFile.Name, "file.Name must be stored without surrounding whitespace")
 }
+
+func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, _, file := seedBookAndFile(t, db, "Foo", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"name": "  custom name  "}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "custom name", *updated.Name, "file.Name must be stored trimmed")
+	require.NotNil(t, updated.NameSource)
+	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
+}
