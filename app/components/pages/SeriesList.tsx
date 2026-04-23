@@ -50,7 +50,7 @@ const SeriesCard = ({
   isAudiobook,
 }: SeriesCardProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
-  const coverUrl = `/api/series/${seriesItem.id}/cover?t=${new Date(seriesItem.updated_at).getTime()}`;
+  const coverUrl = `/api/series/${seriesItem.id}/cover`;
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const bookCount = seriesItem.book_count ?? 0;
