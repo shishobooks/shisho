@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-04-22
+
+### Features
+- In-app EPUB reader (#128)
+- Add shisho.yaml host API and scoped filePath access for enrichers (#127)
+
+
 ## [0.0.34] - 2026-04-22
 
 ### Features
