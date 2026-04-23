@@ -31,6 +31,19 @@ To install a plugin:
 
 Plugins can also be installed by placing them directly in the plugin directory for [development or testing](./development#local-development) purposes.
 
+## Plugin Status
+
+Each installed plugin has a status that determines whether it runs. You can see the status on the **Installed** tab and on each plugin's detail page.
+
+| Status | What it means |
+|--------|---------------|
+| **Active** | Plugin is loaded and participating in scans/enrichment per its mode. |
+| **Disabled** | You turned the plugin off via its enable toggle. Turn it back on to re-enable. |
+| **Error** | The plugin is installed but failed to load — usually a manifest or runtime problem. The detail page shows the underlying error. |
+| **Incompatible** | The plugin's `minShishoVersion` is higher than your running version. Update Shisho to use this plugin. |
+
+When enabling a plugin fails, a toast shows the load error and the plugin row is marked **Error**. Open the plugin's detail page to see the full error text in monospace; use it to fix the plugin's manifest or code. If the plugin came from a repository, check for an updated version — the error may already be fixed upstream.
+
 ## Configuring Plugins
 
 Many plugins have configuration options, such as API keys for external services. After installing a plugin:

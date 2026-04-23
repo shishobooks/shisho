@@ -58,7 +58,6 @@ export const InstalledTab = () => {
     const capabilityLabels = deriveCapabilityLabels(caps);
     const imageUrl = availableEntry?.imageUrl || undefined;
     const isOfficial = availableEntry?.is_official ?? false;
-    const isDisabled = plugin.status !== PluginStatusActive;
     const isThisUpdating =
       updatePluginVersion.isPending &&
       updatePluginVersion.variables?.scope === plugin.scope &&
@@ -97,15 +96,16 @@ export const InstalledTab = () => {
         }
         capabilities={capabilityLabels}
         description={plugin.description}
-        disabled={isDisabled}
         href={`/settings/plugins/${plugin.scope}/${plugin.id}`}
         id={plugin.id}
         imageUrl={imageUrl}
         isOfficial={isOfficial}
         key={`${plugin.scope}/${plugin.id}`}
+        loadError={plugin.load_error}
         name={plugin.name}
         repoName={repoNameByScope.get(plugin.scope)}
         scope={plugin.scope}
+        status={plugin.status}
         updateAvailable={plugin.update_available_version ?? undefined}
         version={plugin.version}
       />

@@ -4,6 +4,13 @@ import React from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  PluginStatusActive,
+  PluginStatusDisabled,
+  PluginStatusMalfunctioned,
+  PluginStatusNotSupported,
+} from "@/types/generated/models";
+
 import { PluginRow } from "./PluginRow";
 
 const base = {
@@ -31,9 +38,39 @@ describe("PluginRow", () => {
     expect(screen.getByText("Official Shisho Plugins")).toBeInTheDocument();
   });
 
-  it("renders the Disabled badge when disabled=true", () => {
-    render(wrap(<PluginRow {...base} disabled />));
+  it("renders no status badge when status is Active", () => {
+    render(wrap(<PluginRow {...base} status={PluginStatusActive} />));
+    expect(screen.queryByText(/disabled/i)).toBeNull();
+    expect(screen.queryByText(/error/i)).toBeNull();
+    expect(screen.queryByText(/incompatible/i)).toBeNull();
+  });
+
+  it("renders the Disabled badge when status is Disabled", () => {
+    render(wrap(<PluginRow {...base} status={PluginStatusDisabled} />));
     expect(screen.getByText(/disabled/i)).toBeInTheDocument();
+  });
+
+  it("renders the Error badge with load_error as title when status is Malfunctioned", () => {
+    render(
+      wrap(
+        <PluginRow
+          {...base}
+          loadError="failed to load plugin: invalid field"
+          status={PluginStatusMalfunctioned}
+        />,
+      ),
+    );
+    const badge = screen.getByText(/error/i);
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute(
+      "title",
+      "failed to load plugin: invalid field",
+    );
+  });
+
+  it("renders the Incompatible badge when status is NotSupported", () => {
+    render(wrap(<PluginRow {...base} status={PluginStatusNotSupported} />));
+    expect(screen.getByText(/incompatible/i)).toBeInTheDocument();
   });
 
   it("renders capability badges on meta line", () => {

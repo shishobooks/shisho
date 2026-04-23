@@ -1,6 +1,7 @@
 import { BadgeCheck, ExternalLink } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -8,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
+import { pluginAlertContent } from "./pluginAlertContent";
 import { PluginHeroActions } from "./PluginHeroActions";
 import { PluginLogo } from "./PluginLogo";
 
@@ -47,6 +49,8 @@ export const PluginDetailHero = ({
   const isOfficial = available?.is_official ?? false;
   const version = installed?.version;
   const updateAvailable = installed?.update_available_version ?? undefined;
+
+  const alert = pluginAlertContent(installed);
 
   const metaParts: ReactNode[] = [];
   if (version) metaParts.push(`v${version}`);
@@ -92,6 +96,17 @@ export const PluginDetailHero = ({
             <Badge variant="secondary">Not installed</Badge>
           )}
         </div>
+
+        {alert && (
+          <Alert className="p-3" variant="destructive">
+            <AlertTitle>{alert.title}</AlertTitle>
+            {alert.body && (
+              <AlertDescription className="break-words font-mono text-xs">
+                {alert.body}
+              </AlertDescription>
+            )}
+          </Alert>
+        )}
 
         {metaParts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

@@ -1,0 +1,22 @@
+import {
+  PluginStatusMalfunctioned,
+  PluginStatusNotSupported,
+  type Plugin,
+} from "@/types/generated/models";
+
+export const pluginAlertContent = (
+  installed: Plugin | undefined,
+): { body?: string; title: string } | null => {
+  if (!installed) return null;
+  if (installed.status === PluginStatusNotSupported) {
+    return {
+      body: installed.load_error,
+      title: "Plugin is not compatible with this Shisho version",
+    };
+  }
+  if (installed.status === PluginStatusMalfunctioned) {
+    return { body: installed.load_error, title: "Plugin failed to load" };
+  }
+  // Active/Disabled: no alert, even if a stale load_error is still on the row.
+  return null;
+};

@@ -87,6 +87,17 @@ func ValidationError(msg string) error {
 	}
 }
 
+// PluginLoadFailure returns a 422 error for a plugin that failed to load at
+// runtime (e.g., malformed manifest, incompatible host version). The request
+// itself was well-formed — the side effect failed.
+func PluginLoadFailure(msg string) error {
+	return &Error{
+		http.StatusUnprocessableEntity,
+		msg,
+		"plugin_load_failure",
+	}
+}
+
 func MalformedPayload() error {
 	return &Error{
 		http.StatusBadRequest,

@@ -298,7 +298,10 @@ export const useUpdatePlugin = () => {
     mutationFn: ({ scope, id, payload }) => {
       return API.request("PATCH", `/plugins/installed/${scope}/${id}`, payload);
     },
-    onSuccess: () => {
+    // Refetch on both success and failure: a failed enable still mutates
+    // server state (Malfunctioned status + load_error get persisted), which
+    // the detail page needs to render the error alert without a manual reload.
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
       });

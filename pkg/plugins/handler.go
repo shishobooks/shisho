@@ -385,6 +385,7 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	var loadErr error
 	if payload.Enabled != nil {
 		wasActive := plugin.Status == models.PluginStatusActive
 
@@ -392,6 +393,7 @@ func (h *handler) update(c echo.Context) error {
 			// Enabling: set Active and load the plugin
 			plugin.Status = models.PluginStatusActive
 			if err := h.manager.LoadPlugin(ctx, scope, id); err != nil {
+				loadErr = err
 				errMsg := err.Error()
 				plugin.LoadError = &errMsg
 				if isVersionIncompatible(err) {
@@ -449,6 +451,13 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		plugin.ConfidenceThreshold = payload.ConfidenceThreshold
+	}
+
+	// Surface enable-time load failures as a 422 after applying config/threshold
+	// writes, so a caller mixing enable+config in one payload still gets their
+	// config persisted and the Malfunctioned state + error message reported.
+	if loadErr != nil {
+		return errcodes.PluginLoadFailure(loadErr.Error())
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, plugin))

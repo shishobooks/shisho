@@ -4,6 +4,12 @@ import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libraries/utils";
+import {
+  PluginStatusActive,
+  PluginStatusMalfunctioned,
+  PluginStatusNotSupported,
+  type PluginStatus,
+} from "@/types/generated/models";
 
 import { PluginLogo } from "./PluginLogo";
 
@@ -11,38 +17,59 @@ export interface PluginRowProps {
   actions?: ReactNode;
   capabilities: string[];
   description?: string;
-  disabled?: boolean;
   href: string;
   id: string;
   imageUrl?: string | null;
   isOfficial?: boolean;
+  loadError?: string;
   name: string;
   repoName?: string;
   scope: string;
+  status?: PluginStatus;
   updateAvailable?: string;
   version?: string;
 }
+
+const renderStatusBadge = (
+  status: PluginStatus | undefined,
+  loadError?: string,
+) => {
+  if (status === undefined || status === PluginStatusActive) return null;
+  if (status === PluginStatusMalfunctioned) {
+    return (
+      <Badge title={loadError} variant="destructive">
+        Error
+      </Badge>
+    );
+  }
+  if (status === PluginStatusNotSupported) {
+    return <Badge variant="outline">Incompatible</Badge>;
+  }
+  return <Badge variant="secondary">Disabled</Badge>;
+};
 
 export const PluginRow = ({
   actions,
   capabilities,
   description,
-  disabled,
   href,
   id,
   imageUrl,
   isOfficial,
+  loadError,
   name,
   repoName,
   scope,
+  status,
   updateAvailable,
   version,
 }: PluginRowProps) => {
+  const isInactive = status !== undefined && status !== PluginStatusActive;
   return (
     <Link
       className={cn(
         "group flex items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors hover:bg-accent/30",
-        disabled && "opacity-50 saturate-50",
+        isInactive && "opacity-50 saturate-50",
       )}
       to={href}
     >
@@ -56,7 +83,7 @@ export const PluginRow = ({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate font-medium">{name}</span>
-          {disabled && <Badge variant="secondary">Disabled</Badge>}
+          {renderStatusBadge(status, loadError)}
           {updateAvailable && <Badge>Update {updateAvailable}</Badge>}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

@@ -3,7 +3,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { QueryKey, useUninstallPlugin } from "./plugins";
+import { API } from "@/libraries/api";
+
+import { QueryKey, useUninstallPlugin, useUpdatePlugin } from "./plugins";
 
 // Mock the API layer so the mutation completes without a real HTTP call.
 vi.mock("@/libraries/api", async () => {
@@ -89,5 +91,40 @@ describe("useUninstallPlugin", () => {
     expect(
       client.getQueryState(["libraries", "lib-1", "settings"])?.isInvalidated,
     ).toBe(false);
+  });
+});
+
+describe("useUpdatePlugin", () => {
+  // A failed enable still mutates server state (the plugin row gets
+  // Malfunctioned + load_error persisted), so the detail page needs the
+  // installed-plugins query refetched on error too — otherwise the error
+  // alert doesn't appear until the user reloads.
+  it("invalidates PluginsInstalled when the mutation fails", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData([QueryKey.PluginsInstalled], []);
+
+    vi.mocked(API.request).mockRejectedValueOnce(new Error("422"));
+
+    const { result } = renderHook(() => useUpdatePlugin(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current
+        .mutateAsync({
+          id: "test",
+          payload: { enabled: true },
+          scope: "shisho",
+        })
+        .catch(() => undefined);
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.PluginsInstalled])?.isInvalidated,
+      ).toBe(true);
+    });
   });
 });
