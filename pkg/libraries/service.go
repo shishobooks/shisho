@@ -213,3 +213,54 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, 
 
 	return nil
 }
+
+// DeleteLibrary hard-deletes a library and all of its DB-resident content.
+// Files on disk are not touched. The operation runs in a single transaction:
+//
+//  1. Cancel any pending/in-progress jobs scoped to this library.
+//  2. Purge FTS rows (books_fts, series_fts, persons_fts, genres_fts, tags_fts)
+//     for this library. FTS purge must happen before the CASCADE so rows are
+//     still resolvable.
+//  3. Delete the library row; SQLite cascades the rest.
+//
+// Returns errcodes.NotFound if the library does not exist.
+func (svc *Service) DeleteLibrary(ctx context.Context, id int) error {
+	return errors.WithStack(svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Verify the library exists so we can return NotFound rather than
+		// silently succeeding on a non-existent ID.
+		exists, err := tx.NewSelect().Model((*models.Library)(nil)).Where("id = ?", id).Exists(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if !exists {
+			return errcodes.NotFound("Library")
+		}
+
+		// 1. Cancel active jobs. jobs.library_id is ON DELETE SET NULL, so rows
+		//    survive the cascade; we still update them here so the audit trail
+		//    shows they were cancelled as part of the delete.
+		_, err = tx.NewUpdate().
+			Model((*models.Job)(nil)).
+			Set("status = ?", models.JobStatusFailed).
+			Set("updated_at = ?", time.Now()).
+			Where("library_id = ?", id).
+			Where("status IN (?)", bun.In([]string{models.JobStatusPending, models.JobStatusInProgress})).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// 2. Purge FTS rows. Each FTS table carries library_id directly, so
+		//    we can delete by that filter without first collecting child IDs.
+		for _, table := range []string{"books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"} {
+			_, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE library_id = ?", id)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		// 3. Delete the library. ON DELETE CASCADE handles children.
+		_, err = tx.NewDelete().Model((*models.Library)(nil)).Where("id = ?", id).Exec(ctx)
+		return errors.WithStack(err)
+	}))
+}

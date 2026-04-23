@@ -61,25 +61,31 @@ func seedLibraryWithContent(t *testing.T, ctx context.Context, db *bun.DB, name 
 	require.NoError(t, err)
 
 	book := &models.Book{
-		LibraryID: library.ID,
-		Title:     "Seeded Book",
-		Filepath:  "/tmp/seeded",
+		LibraryID:       library.ID,
+		Title:           "Seeded Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Seeded Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        "/tmp/seeded",
 	}
 	_, err = db.NewInsert().Model(book).Returning("*").Exec(ctx)
 	require.NoError(t, err)
 
 	file := &models.File{
-		LibraryID: library.ID,
-		BookID:    book.ID,
-		Filepath:  "/tmp/seeded/book.epub",
-		FileType:  "epub",
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		Filepath:      "/tmp/seeded/book.epub",
+		FileType:      "epub",
+		FilesizeBytes: 1,
 	}
 	_, err = db.NewInsert().Model(file).Returning("*").Exec(ctx)
 	require.NoError(t, err)
 
 	series := &models.Series{
-		LibraryID: library.ID,
-		Name:      "Seeded Series",
+		LibraryID:  library.ID,
+		Name:       "Seeded Series",
+		NameSource: models.DataSourceFilepath,
 	}
 	_, err = db.NewInsert().Model(series).Returning("*").Exec(ctx)
 	require.NoError(t, err)
