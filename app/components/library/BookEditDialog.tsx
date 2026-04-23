@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
+import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -495,6 +496,13 @@ export function BookEditDialog({
               id="title"
               onChange={(e) => setTitle(e.target.value)}
               value={title}
+            />
+            <ExtractSubtitleButton
+              onExtract={(t, s) => {
+                setTitle(t);
+                setSubtitle(s);
+              }}
+              title={title}
             />
           </div>
 
