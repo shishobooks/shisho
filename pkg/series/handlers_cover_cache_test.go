@@ -147,6 +147,10 @@ func TestSeriesCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("ETag"))
+	// Last-Modified is intentionally NOT emitted: it would re-enable IMS-based
+	// revalidation inside http.ServeContent, which can return stale 304s when
+	// the series' first book switches to one with an older cover mtime.
+	assert.Empty(t, rec.Header().Get("Last-Modified"))
 	assert.NotEmpty(t, rec.Body.Bytes())
 }
 
