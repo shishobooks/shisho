@@ -2,7 +2,6 @@ package cache
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,17 +30,25 @@ func (f *fakeCache) Clear() error {
 	return f.clearErr
 }
 
+func newTestFakes() (*fakeCache, *fakeCache, *fakeCache) {
+	return &fakeCache{bytes: 100, count: 2},
+		&fakeCache{bytes: 50, count: 5},
+		&fakeCache{bytes: 25, count: 1}
+}
+
 func newTestHandler() (*Handler, *fakeCache, *fakeCache, *fakeCache) {
-	dl := &fakeCache{bytes: 100, count: 2}
-	cbz := &fakeCache{bytes: 50, count: 5}
-	pdf := &fakeCache{bytes: 25, count: 1}
-	h := NewHandler(dl, cbz, pdf)
-	return h, dl, cbz, pdf
+	dl, cbz, pdf := newTestFakes()
+	return NewHandler(dl, cbz, pdf), dl, cbz, pdf
+}
+
+func newTestHandlerOnly() *Handler {
+	dl, cbz, pdf := newTestFakes()
+	return NewHandler(dl, cbz, pdf)
 }
 
 func TestList_ReturnsAllThreeCaches(t *testing.T) {
 	t.Parallel()
-	h, _, _, _ := newTestHandler()
+	h := newTestHandlerOnly()
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/cache", nil)
@@ -117,7 +124,7 @@ func TestClear_DispatchesByID(t *testing.T) {
 
 func TestClear_UnknownIDReturns404(t *testing.T) {
 	t.Parallel()
-	h, _, _, _ := newTestHandler()
+	h := newTestHandlerOnly()
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/cache/unknown/clear", nil)
@@ -129,7 +136,7 @@ func TestClear_UnknownIDReturns404(t *testing.T) {
 	err := h.clear(c)
 	require.Error(t, err)
 	var ce *errcodes.Error
-	require.True(t, errors.As(err, &ce), "expected *errcodes.Error, got %T", err)
+	require.ErrorAs(t, err, &ce)
 	assert.Equal(t, http.StatusNotFound, ce.HTTPCode)
 }
 

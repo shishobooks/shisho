@@ -127,7 +127,7 @@ func (c *Cache) SizeBytes() (int64, int, error) {
 	var totalCount int
 
 	root := c.rootDir()
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil

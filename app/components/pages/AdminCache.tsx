@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCaches, useClearCache } from "@/hooks/queries/cache";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { CacheInfo } from "@/types/generated/cache";
+import type { Info as CacheInfo } from "@/types/generated/cache";
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
