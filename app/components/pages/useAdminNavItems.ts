@@ -1,6 +1,7 @@
 import {
   Briefcase,
   Cog,
+  HardDrive,
   Library,
   Puzzle,
   ScrollText,
@@ -64,6 +65,13 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       Icon: Puzzle,
       label: "Plugins",
       isActive: location.pathname.startsWith("/settings/plugins"),
+      show: canViewConfig,
+    },
+    {
+      to: "/settings/cache",
+      Icon: HardDrive,
+      label: "Cache",
+      isActive: location.pathname.startsWith("/settings/cache"),
       show: canViewConfig,
     },
     {
