@@ -115,6 +115,46 @@ func (c *Cache) Invalidate(fileID int) error {
 	return os.RemoveAll(c.pageDir(fileID))
 }
 
+// rootDir returns the directory this cache owns.
+func (c *Cache) rootDir() string {
+	return filepath.Join(c.dir, "pdf")
+}
+
+// SizeBytes returns the total bytes and file count under the cache root.
+// A missing root is treated as empty.
+func (c *Cache) SizeBytes() (int64, int, error) {
+	var totalBytes int64
+	var totalCount int
+
+	root := c.rootDir()
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		totalBytes += info.Size()
+		totalCount++
+		return nil
+	})
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to walk cache")
+	}
+	return totalBytes, totalCount, nil
+}
+
+// Clear removes the cache root directory entirely. Safe when missing.
+func (c *Cache) Clear() error {
+	if err := os.RemoveAll(c.rootDir()); err != nil {
+		return errors.Wrap(err, "failed to clear cache")
+	}
+	return nil
+}
+
 // pageDir returns the cache directory for a file's rendered pages.
 func (c *Cache) pageDir(fileID int) string {
 	return filepath.Join(c.dir, "pdf", strconv.Itoa(fileID))
