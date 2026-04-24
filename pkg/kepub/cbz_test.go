@@ -556,33 +556,18 @@ func TestNaturalLess(t *testing.T) {
 		{"page10", "page2", false},
 		{"1", "2", true},
 		{"page001", "page002", true},
+		// Filenames with a leading number (from the title) followed by the page number.
+		// Must compare ALL numeric runs, not just the first.
+		{"365 Days - c001 - p000.jpg", "365 Days - c001 - p001.jpg", true},
+		{"365 Days - c001 - p001.jpg", "365 Days - c001 - p000.jpg", false},
+		{"365 Days - c001 - p197.jpg", "365 Days - c002 - p000.jpg", true},
+		{"365 Days - c002 - p000.jpg", "365 Days - c001 - p197.jpg", false},
+		{"365 Days - c001 - p002-p003.jpg", "365 Days - c001 - p004.jpg", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
 			result := naturalLess(tt.a, tt.b)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestExtractNumber(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    string
-		expected int
-	}{
-		{"page1", 1},
-		{"page10", 10},
-		{"123", 123},
-		{"page001.jpg", 1},
-		{"nonum", 0},
-		{"", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := extractNumber(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
