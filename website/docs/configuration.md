@@ -75,6 +75,8 @@ macOS (FSEvents) and Docker containers typically don't need this adjustment.
 | `pdf_render_dpi` | `PDF_RENDER_DPI` | `200` | DPI for rendering PDF pages in the viewer. Higher values produce sharper images but larger files. Range: 72-600 |
 | `pdf_render_quality` | `PDF_RENDER_QUALITY` | `85` | JPEG quality for rendered PDF pages (1-100). Higher values produce better quality but larger files |
 
+See [Cache Management](./cache-management.md) for how to inspect and clear these caches from the admin UI.
+
 ### Plugins
 
 | Setting | Env Variable | Default | Description |
