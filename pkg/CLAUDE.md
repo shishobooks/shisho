@@ -109,6 +109,8 @@ file.CoverImageFilename = &newCoverPath
 
 **Book sidecars** for root-level books are similarly anchored next to the file — `sidecar.WriteBookSidecarFromModel(book)` falls back via `book.Files[0].Filepath` when `book.Filepath` doesn't resolve to an existing directory. Reads use `sidecar.ReadBookSidecarFromModel(book, fileHint)` and pass the current file as a hint so resolution works before the book's Files relation is loaded.
 
+**Conditional-GET for cover endpoints:** `/books/:id/cover` and `/files/:id/cover` serve via `c.File()` — `http.ServeContent` handles `Last-Modified`/`If-Modified-Since` from the cover file's on-disk mtime, which is sufficient because the served file's identity is pinned by the URL. `/series/:id/cover` is different: the served file is the cover of the series' *first book* (by `series_number ASC, title ASC`), and that selection can change — first book deleted, new book sorts earlier, series numbers reordered — without any change to the newly-selected cover file's mtime. Mtime-only revalidation returns stale 304s in that case. The series handler therefore issues an `ETag: "<file_id>-<mtime_unix>"` that bakes the selected file's identity into the validator, checks `If-None-Match` manually, and passes `time.Time{}` to `http.ServeContent` so it omits `Last-Modified` and skips IMS handling (which would otherwise shortcut to 304 using just the new file's mtime).
+
 ### Data Source Priority System
 
 Metadata sources ranked (lower number = higher precedence):
