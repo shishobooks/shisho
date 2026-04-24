@@ -15,23 +15,6 @@ export enum QueryKey {
   LatestScanJob = "LatestScanJob",
 }
 
-export const useJob = (
-  id?: string,
-  options: Omit<
-    UseQueryOptions<Job, ShishoAPIError>,
-    "queryKey" | "queryFn"
-  > = {},
-) => {
-  return useQuery<Job, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
-    ...options,
-    queryKey: [QueryKey.RetrieveJob, id],
-    queryFn: ({ signal }) => {
-      return API.request("GET", `/jobs/${id}`, null, null, signal);
-    },
-  });
-};
-
 interface ListJobsData {
   jobs: Job[];
   total: number;
@@ -130,10 +113,9 @@ export const useCreateJob = () => {
     mutationFn: ({ payload }) => {
       return API.request("POST", "/jobs", payload, null);
     },
-    onSuccess: (data: Job) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListJobs] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.LatestScanJob] });
-      queryClient.setQueryData([QueryKey.RetrieveJob, data.id], data);
     },
   });
 };

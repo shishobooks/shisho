@@ -11,7 +11,6 @@ import type { PermissionInput, Role, User } from "@/types";
 export enum QueryKey {
   RetrieveUser = "RetrieveUser",
   ListUsers = "ListUsers",
-  RetrieveRole = "RetrieveRole",
   ListRoles = "ListRoles",
 }
 
@@ -163,23 +162,6 @@ export const useRoles = (
   });
 };
 
-export const useRole = (
-  id?: number,
-  options: Omit<
-    UseQueryOptions<Role, ShishoAPIError>,
-    "queryKey" | "queryFn"
-  > = {},
-) => {
-  return useQuery<Role, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
-    ...options,
-    queryKey: [QueryKey.RetrieveRole, id],
-    queryFn: ({ signal }) => {
-      return API.request("GET", `/roles/${id}`, null, null, signal);
-    },
-  });
-};
-
 interface CreateRolePayload {
   name: string;
   permissions: PermissionInput[];
@@ -215,9 +197,8 @@ export const useUpdateRole = () => {
     mutationFn: ({ id, payload }) => {
       return API.request("POST", `/roles/${id}`, payload);
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListRoles] });
-      queryClient.setQueryData([QueryKey.RetrieveRole, data.id], data);
     },
   });
 };

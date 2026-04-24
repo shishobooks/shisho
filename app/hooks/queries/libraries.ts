@@ -73,7 +73,10 @@ export const useCreateLibrary = () => {
     },
     onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
-      queryClient.setQueryData([QueryKey.RetrieveLibrary, data.id], data);
+      queryClient.setQueryData(
+        [QueryKey.RetrieveLibrary, String(data.id)],
+        data,
+      );
     },
   });
 };
@@ -92,7 +95,10 @@ export const useUpdateLibrary = () => {
     },
     onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
-      queryClient.setQueryData([QueryKey.RetrieveLibrary, data.id], data);
+      queryClient.setQueryData(
+        [QueryKey.RetrieveLibrary, String(data.id)],
+        data,
+      );
     },
   });
 };
