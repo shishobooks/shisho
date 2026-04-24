@@ -1,6 +1,17 @@
 # Shisho Production Configuration
 # Serves frontend on / and proxies /api/* to the Go backend
 
+{
+    servers {
+        # Trust X-Forwarded-* headers from upstream reverse proxies on private
+        # networks (e.g. Nginx Proxy Manager in a Docker network). Without this,
+        # Caddy overwrites X-Forwarded-Proto with its own scheme (http) and the
+        # Go backend emits http:// hrefs in OPDS feeds — which causes KOReader
+        # to follow an http->https redirect and drop its Authorization header.
+        trusted_proxies static private_ranges
+    }
+}
+
 :5173 {
     # Logging
     log {
