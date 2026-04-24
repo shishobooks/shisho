@@ -624,12 +624,18 @@ export function IdentifyReviewForm({
   const currentCoverDims = useImageDimensions(currentCoverUrl);
   const newCoverDims = useImageDimensions(newCoverPreviewUrl);
 
-  // Prefer keeping the current cover when it's at least as high-resolution
-  // as the plugin cover (by pixel count) — avoids unnecessary writes/churn.
-  const preferCurrentCover =
-    !!currentCoverDims &&
-    !!newCoverDims &&
-    currentCoverDims.w * currentCoverDims.h >= newCoverDims.w * newCoverDims.h;
+  // For page-based files with a plugin-supplied cover_page, compare by page
+  // number instead of pixel resolution — the cover is a page of the file
+  // itself, so resolution is a function of the source file, not the choice.
+  // Same page → unchanged (prefer current); different page → prefer new.
+  const currentCoverPage = file?.cover_page ?? null;
+  const isPageBasedCoverChoice = isFilePageBased && newCoverPage != null;
+  const preferCurrentCover = isPageBasedCoverChoice
+    ? currentCoverPage !== null && currentCoverPage === newCoverPage
+    : !!currentCoverDims &&
+      !!newCoverDims &&
+      currentCoverDims.w * currentCoverDims.h >=
+        newCoverDims.w * newCoverDims.h;
   const [coverUserTouched, setCoverUserTouched] = useState(false);
   useEffect(() => {
     if (preferCurrentCover && !coverUserTouched) {
@@ -840,15 +846,21 @@ export function IdentifyReviewForm({
           <div className="flex gap-4 text-xs text-muted-foreground">
             {currentCoverUrl && (
               <span className="w-[calc(6rem+4px)] text-center">
-                {currentCoverDims
-                  ? `${currentCoverDims.w} × ${currentCoverDims.h}`
-                  : "\u00A0"}
+                {isPageBasedCoverChoice
+                  ? currentCoverPage !== null
+                    ? `Page ${currentCoverPage + 1}`
+                    : "\u00A0"
+                  : currentCoverDims
+                    ? `${currentCoverDims.w} × ${currentCoverDims.h}`
+                    : "\u00A0"}
               </span>
             )}
             <span className="w-[calc(6rem+4px)] text-center">
-              {newCoverDims
-                ? `${newCoverDims.w} × ${newCoverDims.h}`
-                : "\u00A0"}
+              {isPageBasedCoverChoice
+                ? `Page ${newCoverPage + 1}`
+                : newCoverDims
+                  ? `${newCoverDims.w} × ${newCoverDims.h}`
+                  : "\u00A0"}
             </span>
           </div>
         </div>
