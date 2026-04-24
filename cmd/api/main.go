@@ -14,12 +14,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/robinjoseph08/golib/signals"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/logs"
 	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/server"
 	"github.com/shishobooks/shisho/pkg/version"
@@ -89,10 +91,12 @@ func main() {
 	}
 
 	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
+	cbzCache := cbzpages.NewCache(cfg.CacheDir)
+	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
 	wrkr := worker.New(cfg, db, pluginManager, broker, dlCache)
 
-	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache, logBuffer)
+	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache, cbzCache, pdfCache, logBuffer)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}
