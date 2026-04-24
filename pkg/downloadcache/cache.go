@@ -331,3 +331,48 @@ func (c *Cache) Dir() string {
 func (c *Cache) MaxSize() int64 {
 	return c.maxSize
 }
+
+// SizeBytes returns the total size in bytes and file count of the cache.
+// Includes individual cached files (tracked via metadata) and bulk zip files.
+// A missing root directory is treated as empty.
+func (c *Cache) SizeBytes() (int64, int, error) {
+	var totalBytes int64
+	var totalCount int
+
+	entries, err := ListCacheEntries(c.dir)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to list cache entries")
+	}
+	for _, e := range entries {
+		totalBytes += e.SizeBytes
+		totalCount++
+	}
+
+	bulkEntries, bulkBytes, err := listBulkZipEntries(c.dir)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to list bulk entries")
+	}
+	totalBytes += bulkBytes
+	totalCount += len(bulkEntries)
+
+	return totalBytes, totalCount, nil
+}
+
+// Clear removes all cached content while preserving the root directory itself.
+// Safe to call when the root does not exist.
+func (c *Cache) Clear() error {
+	entries, err := os.ReadDir(c.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return errors.Wrap(err, "failed to read cache directory")
+	}
+	for _, e := range entries {
+		path := filepath.Join(c.dir, e.Name())
+		if err := os.RemoveAll(path); err != nil {
+			return errors.Wrapf(err, "failed to remove %s", path)
+		}
+	}
+	return nil
+}

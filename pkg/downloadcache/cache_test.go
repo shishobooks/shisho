@@ -3,6 +3,7 @@ package downloadcache
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -336,6 +337,82 @@ func TestCache_Invalidate(t *testing.T) {
 		// Wait for background cleanup goroutine to finish
 		time.Sleep(50 * time.Millisecond)
 	})
+}
+
+func TestCache_SizeBytes_Empty(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	c := NewCache(dir, 1<<30)
+
+	bytes, count, err := c.SizeBytes()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), bytes)
+	assert.Equal(t, 0, count)
+}
+
+func TestCache_SizeBytes_MissingRoot(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "does-not-exist")
+	c := NewCache(dir, 1<<30)
+
+	bytes, count, err := c.SizeBytes()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), bytes)
+	assert.Equal(t, 0, count)
+}
+
+func TestCache_SizeBytes_CountsIndividualAndBulk(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	c := NewCache(dir, 1<<30)
+
+	// Individual cached file: data + .meta.json
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub"), []byte("hello"), 0644))
+	meta := CacheMetadata{FileID: 1, SizeBytes: 5, LastAccessedAt: time.Now()}
+	metaBytes, err := json.Marshal(meta)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub.meta.json"), metaBytes, 0644))
+
+	// Bulk zip
+	bulkDir := filepath.Join(dir, "bulk")
+	require.NoError(t, os.MkdirAll(bulkDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bulkDir, "abc.zip"), []byte("zipdata!!"), 0644))
+
+	bytes, count, err := c.SizeBytes()
+	require.NoError(t, err)
+	// 5 bytes from metadata-recorded individual file + 9 bytes from bulk zip
+	assert.Equal(t, int64(14), bytes)
+	assert.Equal(t, 2, count)
+}
+
+func TestCache_Clear_RemovesAllChildrenKeepsRoot(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	c := NewCache(dir, 1<<30)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub"), []byte("x"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub.meta.json"), []byte("{}"), 0644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bulk"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bulk", "abc.zip"), []byte("z"), 0644))
+
+	require.NoError(t, c.Clear())
+
+	// Root still exists
+	_, err := os.Stat(dir)
+	require.NoError(t, err)
+
+	// Contents are gone
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestCache_Clear_IdempotentOnMissingRoot(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "does-not-exist")
+	c := NewCache(dir, 1<<30)
+
+	require.NoError(t, c.Clear())
 }
 
 // createTestEPUB creates a minimal valid EPUB file for testing.
