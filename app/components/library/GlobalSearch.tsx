@@ -65,6 +65,13 @@ const SearchResultCover = ({
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
 
+  // Reset the error flag when the URL changes so a previously-failed cover
+  // can re-mount after the underlying image becomes available (e.g., after
+  // a rescan). Without this, the placeholder is latched until full reload.
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverUrl]);
+
   const handleCoverLoad = () => {
     markCoverLoaded(coverUrl);
     setCoverLoaded(true);
