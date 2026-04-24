@@ -618,30 +618,43 @@ export function IdentifyReviewForm({
     ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`
     : undefined;
   const hasCoverChoice = !!newCoverPreviewUrl;
-  const [coverSelection, setCoverSelection] = useState<"current" | "new">(
-    hasCoverChoice && !isDisabled("cover") ? "new" : "current",
-  );
-  const currentCoverDims = useImageDimensions(currentCoverUrl);
-  const newCoverDims = useImageDimensions(newCoverPreviewUrl);
-
+  const currentCoverPage = file?.cover_page ?? null;
   // For page-based files with a plugin-supplied cover_page, compare by page
   // number instead of pixel resolution — the cover is a page of the file
   // itself, so resolution is a function of the source file, not the choice.
-  // Same page → unchanged (prefer current); different page → prefer new.
-  const currentCoverPage = file?.cover_page ?? null;
   const isPageBasedCoverChoice = isFilePageBased && newCoverPage != null;
+  // Dimensions only matter for the resolution-based comparison on non-page
+  // formats. Skip the image preload entirely for page-based choices.
+  const currentCoverDims = useImageDimensions(
+    isPageBasedCoverChoice ? undefined : currentCoverUrl,
+  );
+  const newCoverDims = useImageDimensions(
+    isPageBasedCoverChoice ? undefined : newCoverPreviewUrl,
+  );
+  // Same page → unchanged (prefer current); different page → prefer new.
   const preferCurrentCover = isPageBasedCoverChoice
     ? currentCoverPage !== null && currentCoverPage === newCoverPage
     : !!currentCoverDims &&
       !!newCoverDims &&
       currentCoverDims.w * currentCoverDims.h >=
         newCoverDims.w * newCoverDims.h;
+  // The selection we'd land on if the user didn't touch anything. Used to
+  // seed useState and to detect drift in `hasChanges` — factoring this out
+  // keeps the two in lockstep so a future refactor of the auto-select
+  // effect can't leave them subtly out of sync.
+  const defaultCoverSelection: "current" | "new" =
+    hasCoverChoice && !isDisabled("cover") && !preferCurrentCover
+      ? "new"
+      : "current";
+  const [coverSelection, setCoverSelection] = useState<"current" | "new">(
+    defaultCoverSelection,
+  );
   const [coverUserTouched, setCoverUserTouched] = useState(false);
   useEffect(() => {
-    if (preferCurrentCover && !coverUserTouched) {
-      setCoverSelection("current");
+    if (!coverUserTouched) {
+      setCoverSelection(defaultCoverSelection);
     }
-  }, [preferCurrentCover, coverUserTouched]);
+  }, [defaultCoverSelection, coverUserTouched]);
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -662,10 +675,7 @@ export function IdentifyReviewForm({
       language !== defaults.language.value ||
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
-      coverSelection !==
-        (hasCoverChoice && !disabledFields.has("cover") && !preferCurrentCover
-          ? "new"
-          : "current")
+      coverSelection !== defaultCoverSelection
     );
   }, [
     title,
@@ -686,9 +696,7 @@ export function IdentifyReviewForm({
     identifiers,
     coverSelection,
     defaults,
-    hasCoverChoice,
-    disabledFields,
-    preferCurrentCover,
+    defaultCoverSelection,
   ]);
 
   useEffect(() => {
