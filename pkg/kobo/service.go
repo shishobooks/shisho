@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -90,12 +91,17 @@ func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files 
 // MarkSyncPointCompleted stamps completed_at on a previously-created
 // in-progress sync point, making it eligible to act as the prev baseline for
 // future syncs and eligible for cleanup.
-func (svc *Service) MarkSyncPointCompleted(ctx context.Context, syncPointID string) error {
+//
+// apiKeyID is required at the SQL layer (defense-in-depth alongside the
+// resolveSyncPoint ownership check) so a stale or forged sync-point ID can't
+// finalize someone else's snapshot.
+func (svc *Service) MarkSyncPointCompleted(ctx context.Context, apiKeyID, syncPointID string) error {
 	now := time.Now()
 	_, err := svc.db.NewUpdate().
 		Model((*SyncPoint)(nil)).
 		Set("completed_at = ?", now).
 		Where("id = ?", syncPointID).
+		Where("api_key_id = ?", apiKeyID).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -118,12 +124,17 @@ func ScopedFilesFromSnapshot(books []*SyncPointBook) []ScopedFile {
 }
 
 // GetSyncPointByID retrieves a sync point by ID with its Books relation loaded.
-func (svc *Service) GetSyncPointByID(ctx context.Context, syncPointID string) (*SyncPoint, error) {
+//
+// apiKeyID is enforced at the SQL layer so a token bearing another tenant's
+// sync-point UUID can't surface that tenant's snapshot. Returns sql.ErrNoRows
+// (wrapped) when no point matches both ID and owner.
+func (svc *Service) GetSyncPointByID(ctx context.Context, apiKeyID, syncPointID string) (*SyncPoint, error) {
 	sp := new(SyncPoint)
 	err := svc.db.NewSelect().
 		Model(sp).
 		Relation("Books").
 		Where("ksp.id = ?", syncPointID).
+		Where("ksp.api_key_id = ?", apiKeyID).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -150,7 +161,13 @@ func (svc *Service) GetLastSyncPoint(ctx context.Context, apiKeyID string) (*Syn
 
 // DetectChanges compares currentFiles against the last sync point.
 // If lastSyncPointID is empty, this is the first sync and all files are Added.
-func (svc *Service) DetectChanges(ctx context.Context, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
+//
+// apiKeyID scopes the prev-snapshot lookup so a forged or stale ID can't
+// surface another tenant's snapshot as our baseline. If the named sync point
+// doesn't exist or doesn't belong to this api key, we silently degrade to a
+// fresh sync (logging at warn so the unexpected re-send is observable).
+func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
+	log := logger.FromContext(ctx)
 	changes := &SyncChanges{}
 
 	// First sync: all files are new.
@@ -161,9 +178,14 @@ func (svc *Service) DetectChanges(ctx context.Context, lastSyncPointID string, c
 	}
 
 	// Load previous sync point books.
-	sp, err := svc.GetSyncPointByID(ctx, lastSyncPointID)
+	sp, err := svc.GetSyncPointByID(ctx, apiKeyID, lastSyncPointID)
 	if err != nil {
 		// If the sync point was deleted or is invalid, treat as fresh sync.
+		log.Warn("kobo prev sync point not found, falling back to fresh sync", logger.Data{
+			"api_key_id":         apiKeyID,
+			"last_sync_point_id": lastSyncPointID,
+			"error":              err.Error(),
+		})
 		changes.Added = make([]ScopedFile, len(currentFiles))
 		copy(changes.Added, currentFiles)
 		return changes, nil

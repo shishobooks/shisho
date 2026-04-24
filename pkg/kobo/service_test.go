@@ -48,13 +48,15 @@ func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
 	err := db.QueryRow("SELECT id FROM roles WHERE name = 'admin'").Scan(&roleID)
 	require.NoError(t, err)
 
-	// Insert a user (use unique name to avoid conflicts with test-specific users)
+	// Insert a user (use the keyID as a suffix so the helper can be called
+	// more than once per DB without colliding on the unique username).
+	username := "_apikey_owner_" + keyID
 	_, err = db.Exec("INSERT INTO users (username, password_hash, role_id, is_active) VALUES (?, ?, ?, ?)",
-		"_apikey_owner", "fakehash", roleID, true)
+		username, "fakehash", roleID, true)
 	require.NoError(t, err)
 
 	var userID int
-	err = db.QueryRow("SELECT id FROM users WHERE username = '_apikey_owner'").Scan(&userID)
+	err = db.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID)
 	require.NoError(t, err)
 
 	// Insert API key
@@ -110,6 +112,34 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 	assert.Empty(t, sp.Books)
 }
 
+func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	insertTestAPIKey(t, db, "api-key-2")
+	ctx := context.Background()
+	svc := NewService(db)
+
+	// Sync point owned by api-key-1.
+	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", []ScopedFile{
+		{FileID: 1, FileHash: "h", FileSize: 1, MetadataHash: "m"},
+	})
+	require.NoError(t, err)
+
+	// api-key-2 must not be able to read it even with the correct UUID.
+	_, err = svc.GetSyncPointByID(ctx, "api-key-2", sp.ID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, sql.ErrNoRows),
+		"GetSyncPointByID must return ErrNoRows when api_key_id does not match the row owner")
+
+	// MarkSyncPointCompleted from the wrong owner must be a no-op (the WHERE
+	// clause matches no rows, so completed_at stays nil for the real owner).
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-2", sp.ID))
+	got, err := svc.GetSyncPointByID(ctx, "api-key-1", sp.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.CompletedAt,
+		"MarkSyncPointCompleted from a non-owner must not stamp completed_at on the row")
+}
+
 func TestMarkSyncPointCompleted(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
@@ -122,9 +152,9 @@ func TestMarkSyncPointCompleted(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, sp.CompletedAt)
 
-	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp.ID))
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", sp.ID))
 
-	got, err := svc.GetSyncPointByID(ctx, sp.ID)
+	got, err := svc.GetSyncPointByID(ctx, "api-key-1", sp.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.CompletedAt, "CompletedAt should be set after MarkSyncPointCompleted")
 
@@ -146,7 +176,7 @@ func TestDetectChanges_FirstSync(t *testing.T) {
 		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
-	changes, err := svc.DetectChanges(ctx, "", currentFiles)
+	changes, err := svc.DetectChanges(ctx, "api-key-1", "", currentFiles)
 	require.NoError(t, err)
 
 	assert.Len(t, changes.Added, 3, "First sync should mark all files as Added")
@@ -184,7 +214,7 @@ func TestDetectChanges_AddedBooks(t *testing.T) {
 		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
-	changes, err := svc.DetectChanges(ctx, sp.ID, currentFiles)
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
 	require.NoError(t, err)
 
 	assert.Len(t, changes.Added, 1, "Should detect 1 added book")
@@ -215,7 +245,7 @@ func TestDetectChanges_RemovedBooks(t *testing.T) {
 		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
-	changes, err := svc.DetectChanges(ctx, sp.ID, currentFiles)
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
 	require.NoError(t, err)
 
 	assert.Empty(t, changes.Added)
@@ -245,7 +275,7 @@ func TestDetectChanges_ChangedBooks(t *testing.T) {
 		{FileID: 2, FileHash: "hash2-updated", FileSize: 250, MetadataHash: "meta2"},
 	}
 
-	changes, err := svc.DetectChanges(ctx, sp.ID, currentFiles)
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
 	require.NoError(t, err)
 
 	assert.Empty(t, changes.Added)
@@ -275,7 +305,7 @@ func TestDetectChanges_MetadataChange(t *testing.T) {
 		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
 	}
 
-	changes, err := svc.DetectChanges(ctx, sp.ID, currentFiles)
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
 	require.NoError(t, err)
 
 	assert.Empty(t, changes.Added)
@@ -343,7 +373,7 @@ func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
 	// One completed, one in-progress (e.g. an in-flight pagination).
 	completed, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
-	require.NoError(t, svc.MarkSyncPointCompleted(ctx, completed.ID))
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", completed.ID))
 
 	inProgress, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
@@ -353,7 +383,7 @@ func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
 	// actively walking through.
 	require.NoError(t, svc.CleanupOldSyncPoints(ctx, "api-key-1"))
 
-	got, err := svc.GetSyncPointByID(ctx, inProgress.ID)
+	got, err := svc.GetSyncPointByID(ctx, "api-key-1", inProgress.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, got)
 }
@@ -368,31 +398,31 @@ func TestCleanupOldSyncPoints(t *testing.T) {
 	files := []ScopedFile{{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
 	sp1, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
-	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp1.ID))
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", sp1.ID))
 
 	sp2, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
-	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp2.ID))
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", sp2.ID))
 
 	sp3, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
-	require.NoError(t, svc.MarkSyncPointCompleted(ctx, sp3.ID))
+	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", sp3.ID))
 
 	// Cleanup should keep only the most recent
 	err = svc.CleanupOldSyncPoints(ctx, "api-key-1")
 	require.NoError(t, err)
 
 	// sp1 and sp2 should be gone (sql.ErrNoRows)
-	_, err = svc.GetSyncPointByID(ctx, sp1.ID)
+	_, err = svc.GetSyncPointByID(ctx, "api-key-1", sp1.ID)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sql.ErrNoRows))
 
-	_, err = svc.GetSyncPointByID(ctx, sp2.ID)
+	_, err = svc.GetSyncPointByID(ctx, "api-key-1", sp2.ID)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sql.ErrNoRows))
 
 	// sp3 should still exist
-	got3, err := svc.GetSyncPointByID(ctx, sp3.ID)
+	got3, err := svc.GetSyncPointByID(ctx, "api-key-1", sp3.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, got3)
 	assert.Equal(t, sp3.ID, got3.ID)

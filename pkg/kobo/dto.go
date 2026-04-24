@@ -121,6 +121,12 @@ const syncItemLimit = 100
 // in-progress snapshot, PrevSyncPointID is the baseline we're diffing against
 // (frozen for the duration of the pagination), and Cursor is the offset into
 // the combined Added/Changed/Removed list that we've already emitted.
+//
+// All fields use omitempty. Tokens written by an older server (which only
+// emitted LastSyncPointID) round-trip cleanly through this struct: missing
+// pagination fields decode as their zero values, OngoingSyncPointID stays
+// empty, and resolveSyncPoint routes the request through the fresh-sync path
+// using LastSyncPointID as the prev baseline.
 type SyncToken struct {
 	LastSyncPointID    string `json:"lastSyncPointId,omitempty"`
 	OngoingSyncPointID string `json:"ongoingSyncPointId,omitempty"`

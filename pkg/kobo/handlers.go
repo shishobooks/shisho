@@ -107,7 +107,7 @@ func (h *handler) handleSync(c echo.Context) error {
 	// completed sync point. For continuations, we re-derive ScopedFiles from
 	// the frozen snapshot so paging stays consistent across calls.
 	currentFiles := ScopedFilesFromSnapshot(ongoing.Books)
-	changes, err := h.service.DetectChanges(ctx, prevID, currentFiles)
+	changes, err := h.service.DetectChanges(ctx, apiKey.ID, prevID, currentFiles)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -138,14 +138,22 @@ func (h *handler) handleSync(c echo.Context) error {
 			Cursor:             end,
 		}
 	} else {
-		if err := h.service.MarkSyncPointCompleted(ctx, ongoing.ID); err != nil {
+		if err := h.service.MarkSyncPointCompleted(ctx, apiKey.ID, ongoing.ID); err != nil {
 			return errors.WithStack(err)
 		}
 		outToken = SyncToken{LastSyncPointID: ongoing.ID}
 
-		// Cleanup older completed sync points (fire and forget).
+		// Cleanup older completed sync points (fire and forget). Run on a
+		// detached context but keep the request logger so a hung/failed cleanup
+		// is observable instead of silently swallowed.
+		cleanupLog := log
 		go func() {
-			_ = h.service.CleanupOldSyncPoints(context.Background(), apiKey.ID)
+			if err := h.service.CleanupOldSyncPoints(context.Background(), apiKey.ID); err != nil {
+				cleanupLog.Warn("kobo cleanup old sync points failed", logger.Data{
+					"api_key_id": apiKey.ID,
+					"error":      err.Error(),
+				})
+			}
 		}()
 	}
 
@@ -201,7 +209,9 @@ func (h *handler) resolveSyncPoint(
 	inToken SyncToken,
 ) (*SyncPoint, string, bool, error) {
 	if inToken.OngoingSyncPointID != "" {
-		sp, err := h.service.GetSyncPointByID(ctx, inToken.OngoingSyncPointID)
+		// GetSyncPointByID enforces apiKeyID at the SQL layer, so a token
+		// bearing another tenant's sync-point UUID won't match.
+		sp, err := h.service.GetSyncPointByID(ctx, apiKeyID, inToken.OngoingSyncPointID)
 		// Only honor the ongoing point if it still exists and has not been
 		// completed by another concurrent caller (which would mean re-emitting
 		// changes we've already sent).
@@ -413,22 +423,28 @@ type changeEntry struct {
 // ordered list. The order — Added (by FileID asc), Changed (by FileID asc),
 // Removed (by FileID asc) — must be stable across calls so a paginated cursor
 // remains valid.
+//
+// Input slices are cloned before sorting so callers that retain a reference
+// to the source SyncChanges don't observe an ordering side effect.
 func combineChanges(c *SyncChanges) []changeEntry {
-	sortByFileID := func(s []ScopedFile) {
-		sort.Slice(s, func(i, j int) bool { return s[i].FileID < s[j].FileID })
+	sortedClone := func(in []ScopedFile) []ScopedFile {
+		out := make([]ScopedFile, len(in))
+		copy(out, in)
+		sort.Slice(out, func(i, j int) bool { return out[i].FileID < out[j].FileID })
+		return out
 	}
-	sortByFileID(c.Added)
-	sortByFileID(c.Changed)
-	sortByFileID(c.Removed)
+	added := sortedClone(c.Added)
+	changed := sortedClone(c.Changed)
+	removed := sortedClone(c.Removed)
 
-	out := make([]changeEntry, 0, len(c.Added)+len(c.Changed)+len(c.Removed))
-	for _, f := range c.Added {
+	out := make([]changeEntry, 0, len(added)+len(changed)+len(removed))
+	for _, f := range added {
 		out = append(out, changeEntry{File: f, Kind: changeAdded})
 	}
-	for _, f := range c.Changed {
+	for _, f := range changed {
 		out = append(out, changeEntry{File: f, Kind: changeChanged})
 	}
-	for _, f := range c.Removed {
+	for _, f := range removed {
 		out = append(out, changeEntry{File: f, Kind: changeRemoved})
 	}
 	return out
@@ -505,6 +521,14 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
 	now := time.Now()
 
+	// Mirror the coverCacheKey guard above — computeFileHash returns 16 chars
+	// today, but that's not statically enforced and a future hash change
+	// shouldn't be able to panic the sync loop.
+	revisionSuffix := f.FileHash
+	if len(revisionSuffix) >= 8 {
+		revisionSuffix = revisionSuffix[:8]
+	}
+
 	return &NewEntitlement{
 		NewEntitlement: &EntitlementWrapper{
 			BookEntitlement: &BookEntitlement{
@@ -518,7 +542,7 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 				IsRemoved:           false,
 				LastModified:        now,
 				OriginCategory:      "Imported",
-				RevisionID:          fmt.Sprintf("%s-%s", ShishoID(f.FileID), f.FileHash[:8]),
+				RevisionID:          fmt.Sprintf("%s-%s", ShishoID(f.FileID), revisionSuffix),
 				Status:              "Active",
 			},
 			BookMetadata: metadata,
