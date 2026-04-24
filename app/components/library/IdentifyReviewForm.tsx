@@ -618,24 +618,46 @@ export function IdentifyReviewForm({
     ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`
     : undefined;
   const hasCoverChoice = !!newCoverPreviewUrl;
-  const [coverSelection, setCoverSelection] = useState<"current" | "new">(
-    hasCoverChoice && !isDisabled("cover") ? "new" : "current",
+  const currentCoverPage = file?.cover_page ?? null;
+  // For page-based files with a plugin-supplied cover_page, compare by page
+  // number instead of pixel resolution — the cover is a page of the file
+  // itself, so resolution is a function of the source file, not the choice.
+  const isPageBasedCoverChoice = isFilePageBased && newCoverPage != null;
+  // Dimensions only matter for the resolution-based comparison on non-page
+  // formats. Skip the image preload entirely for page-based choices.
+  const currentCoverDims = useImageDimensions(
+    isPageBasedCoverChoice ? undefined : currentCoverUrl,
   );
-  const currentCoverDims = useImageDimensions(currentCoverUrl);
-  const newCoverDims = useImageDimensions(newCoverPreviewUrl);
-
-  // Prefer keeping the current cover when it's at least as high-resolution
-  // as the plugin cover (by pixel count) — avoids unnecessary writes/churn.
-  const preferCurrentCover =
-    !!currentCoverDims &&
-    !!newCoverDims &&
-    currentCoverDims.w * currentCoverDims.h >= newCoverDims.w * newCoverDims.h;
+  const newCoverDims = useImageDimensions(
+    isPageBasedCoverChoice ? undefined : newCoverPreviewUrl,
+  );
+  // Same page → unchanged (prefer current); different page → prefer new.
+  // Requires `currentCoverUrl` so we don't default to a "Current" thumbnail
+  // that isn't rendered (the current button is guarded by `currentCoverUrl`).
+  const preferCurrentCover = isPageBasedCoverChoice
+    ? !!currentCoverUrl &&
+      currentCoverPage !== null &&
+      currentCoverPage === newCoverPage
+    : !!currentCoverDims &&
+      !!newCoverDims &&
+      currentCoverDims.w * currentCoverDims.h >=
+        newCoverDims.w * newCoverDims.h;
+  // The selection we'd land on if the user didn't touch anything. Used by
+  // useState init, the auto-select effect, and `hasChanges` — keeping it in
+  // one place avoids the three sites drifting.
+  const defaultCoverSelection: "current" | "new" =
+    hasCoverChoice && !isDisabled("cover") && !preferCurrentCover
+      ? "new"
+      : "current";
+  const [coverSelection, setCoverSelection] = useState<"current" | "new">(
+    defaultCoverSelection,
+  );
   const [coverUserTouched, setCoverUserTouched] = useState(false);
   useEffect(() => {
-    if (preferCurrentCover && !coverUserTouched) {
-      setCoverSelection("current");
+    if (!coverUserTouched) {
+      setCoverSelection(defaultCoverSelection);
     }
-  }, [preferCurrentCover, coverUserTouched]);
+  }, [defaultCoverSelection, coverUserTouched]);
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -656,10 +678,7 @@ export function IdentifyReviewForm({
       language !== defaults.language.value ||
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
-      coverSelection !==
-        (hasCoverChoice && !disabledFields.has("cover") && !preferCurrentCover
-          ? "new"
-          : "current")
+      coverSelection !== defaultCoverSelection
     );
   }, [
     title,
@@ -680,9 +699,7 @@ export function IdentifyReviewForm({
     identifiers,
     coverSelection,
     defaults,
-    hasCoverChoice,
-    disabledFields,
-    preferCurrentCover,
+    defaultCoverSelection,
   ]);
 
   useEffect(() => {
@@ -840,15 +857,21 @@ export function IdentifyReviewForm({
           <div className="flex gap-4 text-xs text-muted-foreground">
             {currentCoverUrl && (
               <span className="w-[calc(6rem+4px)] text-center">
-                {currentCoverDims
-                  ? `${currentCoverDims.w} × ${currentCoverDims.h}`
-                  : "\u00A0"}
+                {isPageBasedCoverChoice
+                  ? currentCoverPage !== null
+                    ? `Page ${currentCoverPage + 1}`
+                    : "\u00A0"
+                  : currentCoverDims
+                    ? `${currentCoverDims.w} × ${currentCoverDims.h}`
+                    : "\u00A0"}
               </span>
             )}
             <span className="w-[calc(6rem+4px)] text-center">
-              {newCoverDims
-                ? `${newCoverDims.w} × ${newCoverDims.h}`
-                : "\u00A0"}
+              {isPageBasedCoverChoice
+                ? `Page ${newCoverPage + 1}`
+                : newCoverDims
+                  ? `${newCoverDims.w} × ${newCoverDims.h}`
+                  : "\u00A0"}
             </span>
           </div>
         </div>
