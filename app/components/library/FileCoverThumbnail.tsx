@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { cn } from "@/libraries/utils";
@@ -28,6 +28,17 @@ function FileCoverThumbnail({
 }: FileCoverThumbnailProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+
+  // Reset both flags when the URL would change — either the cover filename
+  // was replaced or the cacheKey bumped from a data refetch. Without resetting
+  // imageError, a transient load failure latches the placeholder forever
+  // because the <img> is conditionally unrendered and the `key` bump can't
+  // remount it. Without resetting imageLoaded, the remounted <img> renders at
+  // full opacity during the fresh fetch, skipping the fade-in.
+  useEffect(() => {
+    setImageError(false);
+    setImageLoaded(false);
+  }, [cacheKey, file.cover_image_filename]);
 
   const isAudiobook = file.file_type === "m4b";
   const aspectClass = isAudiobook ? "aspect-square" : "aspect-[2/3]";
