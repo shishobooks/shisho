@@ -294,8 +294,6 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 	return result, nil
 }
 
-// CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
-// This prevents the database from growing unbounded.
 // ClearAllSyncPoints deletes all sync points for an API key, forcing a fresh sync.
 func (svc *Service) ClearAllSyncPoints(ctx context.Context, apiKeyID string) error {
 	_, err := svc.db.NewDelete().
@@ -305,6 +303,8 @@ func (svc *Service) ClearAllSyncPoints(ctx context.Context, apiKeyID string) err
 	return errors.WithStack(err)
 }
 
+// CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
+// This prevents the database from growing unbounded.
 func (svc *Service) CleanupOldSyncPoints(ctx context.Context, apiKeyID string) error {
 	// Keep only the most recent completed sync point per API key
 	_, err := svc.db.NewDelete().
