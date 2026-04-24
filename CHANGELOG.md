@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-04-23
+
+### Features
+- Harden Kobo sync flow and bust device cover cache (#139)
+- Split pkg/plugins/handler.go into per-operation files (#138)
+- Surface plugin load errors in the UI (#137)
+- Remove unused search query scaffolding types (#134)
+- Replace cover URL cache-busting with HTTP revalidation (#132)
+- Add delete library action to admin settings (#133)
+- Sync file.Name on manual book title edit (#130)
+- Add Extract Subtitle affordance to book edit forms (#131)
+
+### Bug Fixes
+- Sort CBZ pages naturally across all numeric runs in kepub (#140)
+- Serve covers and persist metadata for root-level library files (#135)
+- Skip placeholder data when accumulating directory picker entries (#136)
+
+
 ## [0.0.36] - 2026-04-22
 
 ### Bug Fixes
