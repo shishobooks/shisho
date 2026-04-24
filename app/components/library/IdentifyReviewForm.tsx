@@ -632,16 +632,19 @@ export function IdentifyReviewForm({
     isPageBasedCoverChoice ? undefined : newCoverPreviewUrl,
   );
   // Same page → unchanged (prefer current); different page → prefer new.
+  // Requires `currentCoverUrl` so we don't default to a "Current" thumbnail
+  // that isn't rendered (the current button is guarded by `currentCoverUrl`).
   const preferCurrentCover = isPageBasedCoverChoice
-    ? currentCoverPage !== null && currentCoverPage === newCoverPage
+    ? !!currentCoverUrl &&
+      currentCoverPage !== null &&
+      currentCoverPage === newCoverPage
     : !!currentCoverDims &&
       !!newCoverDims &&
       currentCoverDims.w * currentCoverDims.h >=
         newCoverDims.w * newCoverDims.h;
-  // The selection we'd land on if the user didn't touch anything. Used to
-  // seed useState and to detect drift in `hasChanges` — factoring this out
-  // keeps the two in lockstep so a future refactor of the auto-select
-  // effect can't leave them subtly out of sync.
+  // The selection we'd land on if the user didn't touch anything. Used by
+  // useState init, the auto-select effect, and `hasChanges` — keeping it in
+  // one place avoids the three sites drifting.
   const defaultCoverSelection: "current" | "new" =
     hasCoverChoice && !isDisabled("cover") && !preferCurrentCover
       ? "new"
