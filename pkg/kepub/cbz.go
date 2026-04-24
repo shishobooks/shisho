@@ -726,27 +726,43 @@ func generateUUID() string {
 		now&0xFFFFFFFFFFFF)
 }
 
-// naturalLess compares strings naturally (so "page2" < "page10").
+// naturalLess compares strings naturally by alternating non-digit and digit
+// runs: digit runs compare numerically (so "page2" < "page10"), non-digit runs
+// compare byte-wise. This correctly orders filenames with multiple numbers,
+// e.g. "Foo 365 - c001 - p000.jpg" < "Foo 365 - c001 - p001.jpg".
 func naturalLess(a, b string) bool {
-	// Simple natural sort: extract numbers and compare
-	return extractNumber(a) < extractNumber(b)
-}
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		aDigit := a[i] >= '0' && a[i] <= '9'
+		bDigit := b[j] >= '0' && b[j] <= '9'
 
-// extractNumber extracts the first number found in a string.
-func extractNumber(s string) int {
-	var numStr string
-	for _, c := range s {
-		if c >= '0' && c <= '9' {
-			numStr += string(c)
-		} else if numStr != "" {
-			break
+		if aDigit && bDigit {
+			aStart := i
+			for i < len(a) && a[i] >= '0' && a[i] <= '9' {
+				i++
+			}
+			bStart := j
+			for j < len(b) && b[j] >= '0' && b[j] <= '9' {
+				j++
+			}
+			aNum := strings.TrimLeft(a[aStart:i], "0")
+			bNum := strings.TrimLeft(b[bStart:j], "0")
+			if len(aNum) != len(bNum) {
+				return len(aNum) < len(bNum)
+			}
+			if aNum != bNum {
+				return aNum < bNum
+			}
+			continue
 		}
+
+		if a[i] != b[j] {
+			return a[i] < b[j]
+		}
+		i++
+		j++
 	}
-	if numStr == "" {
-		return 0
-	}
-	n, _ := strconv.Atoi(numStr)
-	return n
+	return len(a)-i < len(b)-j
 }
 
 // Kobo Libra Color screen dimensions (from KCC profiles).
