@@ -33,6 +33,13 @@ func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath str
 
 // Invalidate removes all cached pages for a file.
 func (c *Cache) Invalidate(fileID int) error
+
+// SizeBytes returns the total bytes and file count under the cache root ({dir}/pdf).
+// A missing root is treated as empty.
+func (c *Cache) SizeBytes() (int64, int, error)
+
+// Clear removes the cache root directory entirely. Safe when missing.
+func (c *Cache) Clear() error
 ```
 
 ## Relationship to cbzpages
