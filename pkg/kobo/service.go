@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -40,14 +41,17 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db: db}
 }
 
-// CreateSyncPoint creates a new sync point with the given files and marks it as complete.
+// CreateSyncPoint creates a new in-progress sync point with the given files.
+// The point is marked complete only after the final paginated sync response is
+// emitted, via MarkSyncPointCompleted. CleanupOldSyncPoints and
+// GetLastSyncPoint both filter on completed_at, so an abandoned in-progress
+// snapshot is invisible to the next fresh sync.
 func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files []ScopedFile) (*SyncPoint, error) {
 	now := time.Now()
 	sp := &SyncPoint{
-		ID:          uuid.New().String(),
-		APIKeyID:    apiKeyID,
-		CreatedAt:   now,
-		CompletedAt: &now,
+		ID:        uuid.New().String(),
+		APIKeyID:  apiKeyID,
+		CreatedAt: now,
 	}
 
 	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -84,13 +88,53 @@ func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files 
 	return sp, nil
 }
 
+// MarkSyncPointCompleted stamps completed_at on a previously-created
+// in-progress sync point, making it eligible to act as the prev baseline for
+// future syncs and eligible for cleanup.
+//
+// apiKeyID is required at the SQL layer (defense-in-depth alongside the
+// resolveSyncPoint ownership check) so a stale or forged sync-point ID can't
+// finalize someone else's snapshot.
+func (svc *Service) MarkSyncPointCompleted(ctx context.Context, apiKeyID, syncPointID string) error {
+	now := time.Now()
+	_, err := svc.db.NewUpdate().
+		Model((*SyncPoint)(nil)).
+		Set("completed_at = ?", now).
+		Where("id = ?", syncPointID).
+		Where("api_key_id = ?", apiKeyID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// ScopedFilesFromSnapshot rebuilds the ScopedFile list from a sync point's
+// stored Books rows. Used during continuation pagination so we diff against
+// the same frozen snapshot as the first page rather than re-querying live DB
+// state (which could shift between pages).
+func ScopedFilesFromSnapshot(books []*SyncPointBook) []ScopedFile {
+	out := make([]ScopedFile, len(books))
+	for i, b := range books {
+		out[i] = ScopedFile{
+			FileID:       b.FileID,
+			FileHash:     b.FileHash,
+			FileSize:     b.FileSize,
+			MetadataHash: b.MetadataHash,
+		}
+	}
+	return out
+}
+
 // GetSyncPointByID retrieves a sync point by ID with its Books relation loaded.
-func (svc *Service) GetSyncPointByID(ctx context.Context, syncPointID string) (*SyncPoint, error) {
+//
+// apiKeyID is enforced at the SQL layer so a token bearing another tenant's
+// sync-point UUID can't surface that tenant's snapshot. Returns sql.ErrNoRows
+// (wrapped) when no point matches both ID and owner.
+func (svc *Service) GetSyncPointByID(ctx context.Context, apiKeyID, syncPointID string) (*SyncPoint, error) {
 	sp := new(SyncPoint)
 	err := svc.db.NewSelect().
 		Model(sp).
 		Relation("Books").
 		Where("ksp.id = ?", syncPointID).
+		Where("ksp.api_key_id = ?", apiKeyID).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -117,7 +161,13 @@ func (svc *Service) GetLastSyncPoint(ctx context.Context, apiKeyID string) (*Syn
 
 // DetectChanges compares currentFiles against the last sync point.
 // If lastSyncPointID is empty, this is the first sync and all files are Added.
-func (svc *Service) DetectChanges(ctx context.Context, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
+//
+// apiKeyID scopes the prev-snapshot lookup so a forged or stale ID can't
+// surface another tenant's snapshot as our baseline. If the named sync point
+// doesn't exist or doesn't belong to this api key, we silently degrade to a
+// fresh sync (logging at warn so the unexpected re-send is observable).
+func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
+	log := logger.FromContext(ctx)
 	changes := &SyncChanges{}
 
 	// First sync: all files are new.
@@ -128,9 +178,14 @@ func (svc *Service) DetectChanges(ctx context.Context, lastSyncPointID string, c
 	}
 
 	// Load previous sync point books.
-	sp, err := svc.GetSyncPointByID(ctx, lastSyncPointID)
+	sp, err := svc.GetSyncPointByID(ctx, apiKeyID, lastSyncPointID)
 	if err != nil {
 		// If the sync point was deleted or is invalid, treat as fresh sync.
+		log.Warn("kobo prev sync point not found, falling back to fresh sync", logger.Data{
+			"api_key_id":         apiKeyID,
+			"last_sync_point_id": lastSyncPointID,
+			"error":              err.Error(),
+		})
 		changes.Added = make([]ScopedFile, len(currentFiles))
 		copy(changes.Added, currentFiles)
 		return changes, nil
@@ -239,8 +294,6 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 	return result, nil
 }
 
-// CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
-// This prevents the database from growing unbounded.
 // ClearAllSyncPoints deletes all sync points for an API key, forcing a fresh sync.
 func (svc *Service) ClearAllSyncPoints(ctx context.Context, apiKeyID string) error {
 	_, err := svc.db.NewDelete().
@@ -250,6 +303,8 @@ func (svc *Service) ClearAllSyncPoints(ctx context.Context, apiKeyID string) err
 	return errors.WithStack(err)
 }
 
+// CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
+// This prevents the database from growing unbounded.
 func (svc *Service) CleanupOldSyncPoints(ctx context.Context, apiKeyID string) error {
 	// Keep only the most recent completed sync point per API key
 	_, err := svc.db.NewDelete().
@@ -276,29 +331,35 @@ func computeFileHash(file *models.File) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// computeMetadataHash creates a hash from title, author names, and cover path, truncated to 16 hex chars.
+// computeMetadataHash creates a hash from title, author names, and cover
+// filename, truncated to 16 hex chars. Used both as a sync-diff signal (a
+// metadata change marks the book as Changed) and as a CoverImageID suffix
+// for the device thumbnail cache (see ComputeMetadataHashFromBook).
 func computeMetadataHash(file *models.File) string {
-	var parts []string
-
-	// Title from book.
-	if file.Book != nil {
-		parts = append(parts, file.Book.Title)
+	var coverFilename string
+	if file.CoverImageFilename != nil {
+		coverFilename = *file.CoverImageFilename
 	}
+	return ComputeMetadataHashFromBook(file.Book, coverFilename)
+}
 
-	// Author names.
-	if file.Book != nil {
-		for _, a := range file.Book.Authors {
+// ComputeMetadataHashFromBook produces the same hash as computeMetadataHash
+// but accepts the book and cover filename directly, for callers (like
+// handleMetadata) that loaded the book via a separate query rather than via
+// the file's Book relation.
+func ComputeMetadataHashFromBook(book *models.Book, coverFilename string) string {
+	var parts []string
+	if book != nil {
+		parts = append(parts, book.Title)
+		for _, a := range book.Authors {
 			if a.Person != nil {
 				parts = append(parts, a.Person.Name)
 			}
 		}
 	}
-
-	// Cover path.
-	if file.CoverImageFilename != nil {
-		parts = append(parts, *file.CoverImageFilename)
+	if coverFilename != "" {
+		parts = append(parts, coverFilename)
 	}
-
 	data := strings.Join(parts, "\x00")
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])[:16]
@@ -309,14 +370,24 @@ func ShishoID(fileID int) string {
 	return fmt.Sprintf("shisho-%d", fileID)
 }
 
-// ParseShishoID parses a "shisho-{id}" format string and returns the file ID.
-// Returns (0, false) if the format is invalid.
+// ParseShishoID parses a "shisho-{id}" or "shisho-{id}-{suffix}" string and
+// returns the file ID. The suffixed form is used for cover IDs (suffix = a
+// short hash of the book metadata) so device-side thumbnail caches refresh
+// when the underlying book changes; the cover handler still needs the bare
+// file ID. Returns (0, false) if the format is invalid.
 func ParseShishoID(id string) (int, bool) {
 	if !strings.HasPrefix(id, "shisho-") {
 		return 0, false
 	}
-	numStr := strings.TrimPrefix(id, "shisho-")
-	n, err := strconv.Atoi(numStr)
+	rest := strings.TrimPrefix(id, "shisho-")
+	end := 0
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(rest[:end])
 	if err != nil {
 		return 0, false
 	}

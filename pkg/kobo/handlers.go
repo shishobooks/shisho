@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -41,52 +42,27 @@ func newHandler(service *Service, bookService *books.Service, downloadCache *dow
 }
 
 // handleInitialization handles GET /v1/initialization.
-// Proxies to Kobo store and injects custom image URL templates.
+//
+// We deliberately do NOT proxy this request to the real Kobo store. Without a
+// valid Kobo OAuth token (we only ever send our own dummy token), the proxied
+// response either fails outright or returns a body that includes firmware
+// update prompts and other URLs the device follows and aborts on. Instead we
+// return a snapshot of the upstream Resources map (sourced verbatim from
+// Komga's nativeKoboResources fallback) with the three image URL keys
+// overridden to point back at our cover handler. This keeps the device's
+// store-related operations pointing at Kobo (so wishlist/store browsing isn't
+// broken in stranger ways) while ensuring covers and sync URLs resolve to us.
 func (h *handler) handleInitialization(c echo.Context) error {
-	koboPath := StripKoboPrefix(c.Request().URL.Path)
-	targetURL := koboStoreBaseURL + koboPath
+	// Stub api token header expected by some Kobo firmware versions on
+	// initialization (base64 of "{}").
+	c.Response().Header().Set("x-kobo-apitoken", "e30=")
 
-	proxyReq, err := http.NewRequestWithContext(c.Request().Context(), "GET", targetURL, nil)
+	resources, err := buildInitResources(getBaseURL(c))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Forward headers
-	for _, hdr := range []string{"Authorization", "User-Agent"} {
-		if v := c.Request().Header.Get(hdr); v != "" {
-			proxyReq.Header.Set(hdr, v)
-		}
-	}
-
-	resp, err := koboStoreClient.Do(proxyReq)
-	if err != nil {
-		// Return minimal initialization response if Kobo store is unreachable
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"Resources": map[string]interface{}{},
-		})
-	}
-	defer resp.Body.Close()
-
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"Resources": map[string]interface{}{},
-		})
-	}
-
-	// Inject custom image URLs
-	resources, ok := data["Resources"].(map[string]interface{})
-	if !ok {
-		resources = map[string]interface{}{}
-		data["Resources"] = resources
-	}
-
-	baseURL := getBaseURL(c)
-	resources["image_host"] = baseURL
-	resources["image_url_template"] = baseURL + "/v1/books/{ImageId}/thumbnail/{Width}/{Height}/false/image.jpg"
-	resources["image_url_quality_template"] = baseURL + "/v1/books/{ImageId}/thumbnail/{Width}/{Height}/{Quality}/{IsGreyscale}/image.jpg"
-
-	return c.JSON(http.StatusOK, data)
+	return c.JSON(http.StatusOK, map[string]interface{}{"Resources": resources})
 }
 
 // handleAuth handles POST /v1/auth/device.
@@ -102,7 +78,15 @@ func (h *handler) handleAuth(c echo.Context) error {
 }
 
 // handleSync handles GET /v1/library/sync.
-// Returns changes since the last sync point.
+//
+// Returns changes since the last sync point, paginated. The first call snapshots
+// current library state into a new in-progress sync point and emits the first
+// page of the diff against the previous completed sync point. Subsequent calls
+// (signalled by the OngoingSyncPointID/Cursor in the inbound token) continue
+// from where the prior page left off, diffing against the frozen snapshot.
+// When the final page is emitted, the sync point is marked complete and stale
+// snapshots are cleaned up. While more pages remain, X-Kobo-Sync: continue is
+// set to tell the device to immediately fetch the next page.
 func (h *handler) handleSync(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
@@ -112,60 +96,140 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 	scope := GetScopeFromContext(ctx)
 
-	// Parse sync token
-	var lastSyncPointID string
-	if tokenHeader := c.Request().Header.Get("X-Kobo-SyncToken"); tokenHeader != "" {
-		tokenBytes, err := base64.StdEncoding.DecodeString(tokenHeader)
-		if err == nil {
-			var token SyncToken
-			if err := json.Unmarshal(tokenBytes, &token); err == nil {
-				lastSyncPointID = token.LastSyncPointID
+	inToken := decodeSyncToken(c.Request().Header.Get("X-Kobo-SyncToken"))
+
+	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, apiKey.ID, apiKey.UserID, scope, inToken)
+	if err != nil {
+		return err
+	}
+
+	// Diff the (possibly snapshotted) current state against the previous
+	// completed sync point. For continuations, we re-derive ScopedFiles from
+	// the frozen snapshot so paging stays consistent across calls.
+	currentFiles := ScopedFilesFromSnapshot(ongoing.Books)
+	changes, err := h.service.DetectChanges(ctx, apiKey.ID, prevID, currentFiles)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	allEntries := combineChanges(changes)
+	start := inToken.Cursor
+	if start < 0 || start > len(allEntries) {
+		start = 0
+	}
+	end := start + syncItemLimit
+	hasMore := end < len(allEntries)
+	if !hasMore {
+		end = len(allEntries)
+	}
+	page := allEntries[start:end]
+
+	baseURL := getBaseURL(c)
+	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService)
+
+	// Token + completion bookkeeping.
+	var outToken SyncToken
+	if hasMore {
+		c.Response().Header().Set("X-Kobo-Sync", "continue")
+		outToken = SyncToken{
+			LastSyncPointID:    inToken.LastSyncPointID,
+			OngoingSyncPointID: ongoing.ID,
+			PrevSyncPointID:    prevID,
+			Cursor:             end,
+		}
+	} else {
+		if err := h.service.MarkSyncPointCompleted(ctx, apiKey.ID, ongoing.ID); err != nil {
+			return errors.WithStack(err)
+		}
+		outToken = SyncToken{LastSyncPointID: ongoing.ID}
+
+		// Cleanup older completed sync points (fire and forget). Run on a
+		// detached context but keep the request logger so a hung/failed cleanup
+		// is observable instead of silently swallowed.
+		cleanupLog := log
+		go func() {
+			if err := h.service.CleanupOldSyncPoints(context.Background(), apiKey.ID); err != nil {
+				cleanupLog.Warn("kobo cleanup old sync points failed", logger.Data{
+					"api_key_id": apiKey.ID,
+					"error":      err.Error(),
+				})
 			}
+		}()
+	}
+
+	tokenJSON, _ := json.Marshal(outToken)
+	c.Response().Header().Set("X-Kobo-SyncToken", base64.StdEncoding.EncodeToString(tokenJSON))
+
+	log.Info("kobo sync page emitted", logger.Data{
+		"api_key_id":     apiKey.ID,
+		"scope":          scope.Type,
+		"continuation":   isContinuation,
+		"page_start":     start,
+		"page_end":       end,
+		"total_entries":  len(allEntries),
+		"has_more":       hasMore,
+		"sync_point_id":  ongoing.ID,
+		"prev_sync_id":   prevID,
+		"snapshot_files": len(currentFiles),
+	})
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// decodeSyncToken parses the base64-encoded JSON token from the X-Kobo-SyncToken
+// header. Malformed or empty tokens silently produce a zero-value token, which
+// triggers a fresh sync.
+func decodeSyncToken(header string) SyncToken {
+	var token SyncToken
+	if header == "" {
+		return token
+	}
+	tokenBytes, err := base64.StdEncoding.DecodeString(header)
+	if err != nil {
+		return SyncToken{}
+	}
+	if err := json.Unmarshal(tokenBytes, &token); err != nil {
+		return SyncToken{}
+	}
+	return token
+}
+
+// resolveSyncPoint returns the sync point we should page out, the prev sync
+// point ID to diff against, and whether this is a continuation.
+//
+//   - If the inbound token names an in-progress ongoing point that still exists,
+//     we reuse it (continuation).
+//   - Otherwise we snapshot current scoped files into a new in-progress point
+//     and use the inbound LastSyncPointID as the prev baseline.
+func (h *handler) resolveSyncPoint(
+	ctx context.Context,
+	apiKeyID string,
+	userID int,
+	scope *SyncScope,
+	inToken SyncToken,
+) (*SyncPoint, string, bool, error) {
+	if inToken.OngoingSyncPointID != "" {
+		// GetSyncPointByID enforces apiKeyID at the SQL layer, so a token
+		// bearing another tenant's sync-point UUID won't match.
+		sp, err := h.service.GetSyncPointByID(ctx, apiKeyID, inToken.OngoingSyncPointID)
+		// Only honor the ongoing point if it still exists and has not been
+		// completed by another concurrent caller (which would mean re-emitting
+		// changes we've already sent).
+		if err == nil && sp.CompletedAt == nil {
+			return sp, inToken.PrevSyncPointID, true, nil
 		}
 	}
 
-	// Get current files in scope
-	scopedFiles, err := h.service.GetScopedFiles(ctx, apiKey.UserID, scope)
+	// Fresh sync: snapshot current state.
+	scopedFiles, err := h.service.GetScopedFiles(ctx, userID, scope)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, "", false, errors.WithStack(err)
 	}
-
-	// Detect changes
-	changes, err := h.service.DetectChanges(ctx, lastSyncPointID, scopedFiles)
+	sp, err := h.service.CreateSyncPoint(ctx, apiKeyID, scopedFiles)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, "", false, errors.WithStack(err)
 	}
-
-	// Create new sync point
-	sp, err := h.service.CreateSyncPoint(ctx, apiKey.ID, scopedFiles)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Cleanup old sync points (fire and forget)
-	go func() {
-		_ = h.service.CleanupOldSyncPoints(context.Background(), apiKey.ID)
-	}()
-
-	log.Info("kobo sync completed", logger.Data{
-		"api_key_id": apiKey.ID,
-		"scope":      scope.Type,
-		"added":      len(changes.Added),
-		"removed":    len(changes.Removed),
-		"changed":    len(changes.Changed),
-		"total":      len(scopedFiles),
-	})
-
-	// Build response
-	baseURL := getBaseURL(c)
-	response := buildSyncResponse(ctx, changes, baseURL, h.bookService)
-
-	// Set new sync token
-	newToken := SyncToken{LastSyncPointID: sp.ID}
-	tokenJSON, _ := json.Marshal(newToken)
-	c.Response().Header().Set("X-Kobo-SyncToken", base64.StdEncoding.EncodeToString(tokenJSON))
-
-	return c.JSON(http.StatusOK, response)
+	return sp, inToken.LastSyncPointID, false, nil
 }
 
 // handleDownload handles GET /v1/books/:bookId/file/epub.
@@ -324,46 +388,115 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	metadata := buildBookMetadata(book, file, baseURL)
+	var coverFilename string
+	if file.CoverImageFilename != nil {
+		coverFilename = *file.CoverImageFilename
+	}
+	coverCacheKey := ComputeMetadataHashFromBook(book, coverFilename)
+	if len(coverCacheKey) > 8 {
+		coverCacheKey = coverCacheKey[:8]
+	}
+	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
 
 	// Kobo expects metadata wrapped in an array
 	return c.JSON(http.StatusOK, []*BookMetadata{metadata})
 }
 
-// buildSyncResponse creates the array of sync change entries.
-func buildSyncResponse(ctx context.Context, changes *SyncChanges, baseURL string, bookService *books.Service) []interface{} {
-	// Initialize as empty slice (not nil) so JSON marshals to [] not null
-	response := make([]interface{}, 0)
+// changeKind tags the type of a single sync entry so the page builder can
+// emit the right wrapper without a second pass.
+type changeKind int
 
-	// Added books
-	for _, f := range changes.Added {
-		entry := buildNewEntitlement(ctx, f, baseURL, bookService)
-		if entry != nil {
-			response = append(response, entry)
-		}
+const (
+	changeAdded changeKind = iota
+	changeChanged
+	changeRemoved
+)
+
+// changeEntry is one item in the deterministically-ordered combined diff list
+// that handleSync slices for pagination.
+type changeEntry struct {
+	File ScopedFile
+	Kind changeKind
+}
+
+// combineChanges flattens Added/Changed/Removed into a single deterministically
+// ordered list. The order — Added (by FileID asc), Changed (by FileID asc),
+// Removed (by FileID asc) — must be stable across calls so a paginated cursor
+// remains valid.
+//
+// Input slices are cloned before sorting so callers that retain a reference
+// to the source SyncChanges don't observe an ordering side effect.
+func combineChanges(c *SyncChanges) []changeEntry {
+	sortedClone := func(in []ScopedFile) []ScopedFile {
+		out := make([]ScopedFile, len(in))
+		copy(out, in)
+		sort.Slice(out, func(i, j int) bool { return out[i].FileID < out[j].FileID })
+		return out
 	}
+	added := sortedClone(c.Added)
+	changed := sortedClone(c.Changed)
+	removed := sortedClone(c.Removed)
 
-	// Changed books
-	for _, f := range changes.Changed {
-		entry := buildNewEntitlement(ctx, f, baseURL, bookService)
-		if entry != nil {
-			response = append(response, entry)
-		}
+	out := make([]changeEntry, 0, len(added)+len(changed)+len(removed))
+	for _, f := range added {
+		out = append(out, changeEntry{File: f, Kind: changeAdded})
 	}
+	for _, f := range changed {
+		out = append(out, changeEntry{File: f, Kind: changeChanged})
+	}
+	for _, f := range removed {
+		out = append(out, changeEntry{File: f, Kind: changeRemoved})
+	}
+	return out
+}
 
-	// Removed books
-	for _, f := range changes.Removed {
-		response = append(response, &ChangedEntitlement{
-			ChangedEntitlement: &EntitlementChangeWrapper{
-				BookEntitlement: &BookEntitlementChange{
-					ID:        ShishoID(f.FileID),
-					IsRemoved: true,
+// buildSyncResponseFromEntries materializes a slice of changeEntry into the
+// JSON array Kobo expects. nil result for missing books (e.g. deleted between
+// snapshot and emit) is silently dropped.
+func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, baseURL string, bookService *books.Service) []interface{} {
+	response := make([]interface{}, 0, len(entries))
+	for _, e := range entries {
+		switch e.Kind {
+		case changeAdded, changeChanged:
+			entry := buildNewEntitlement(ctx, e.File, baseURL, bookService)
+			if entry != nil {
+				response = append(response, entry)
+			}
+		case changeRemoved:
+			response = append(response, &ChangedEntitlement{
+				ChangedEntitlement: &EntitlementChangeWrapper{
+					BookEntitlement: &BookEntitlementChange{
+						ID:        ShishoID(e.File.FileID),
+						IsRemoved: true,
+					},
+					BookMetadata: buildRemovedBookMetadata(e.File.FileID),
 				},
-			},
-		})
+			})
+		}
 	}
-
 	return response
+}
+
+// buildRemovedBookMetadata returns a stub BookMetadata for a removed book.
+// The book record may already be gone, so we synthesize the required GUID-shaped
+// fields from the file ID. Kobo firmware requires a metadata object alongside
+// the IsRemoved entitlement to deindex the book on-device.
+func buildRemovedBookMetadata(fileID int) *BookMetadata {
+	bookID := ShishoID(fileID)
+	return &BookMetadata{
+		Categories:      []string{dummyCategoryID},
+		CoverImageID:    bookID,
+		CrossRevisionID: bookID,
+		CurrentDisplayPrice: &DisplayPrice{
+			CurrencyCode: "USD",
+			TotalAmount:  0,
+		},
+		EntitlementID: bookID,
+		Genre:         dummyCategoryID,
+		Language:      "en",
+		RevisionID:    bookID,
+		WorkID:        bookID,
+	}
 }
 
 // buildNewEntitlement creates a NewEntitlement sync entry for a file.
@@ -378,8 +511,23 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 		return nil
 	}
 
-	metadata := buildBookMetadata(book, file, baseURL)
+	// MetadataHash already captures title + author + cover filename. Use a
+	// short prefix as the device-cache-busting suffix so the device refreshes
+	// thumbnails when any of those change.
+	coverCacheKey := ""
+	if len(f.MetadataHash) >= 8 {
+		coverCacheKey = f.MetadataHash[:8]
+	}
+	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
 	now := time.Now()
+
+	// Mirror the coverCacheKey guard above — computeFileHash returns 16 chars
+	// today, but that's not statically enforced and a future hash change
+	// shouldn't be able to panic the sync loop.
+	revisionSuffix := f.FileHash
+	if len(revisionSuffix) >= 8 {
+		revisionSuffix = revisionSuffix[:8]
+	}
 
 	return &NewEntitlement{
 		NewEntitlement: &EntitlementWrapper{
@@ -394,7 +542,7 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 				IsRemoved:           false,
 				LastModified:        now,
 				OriginCategory:      "Imported",
-				RevisionID:          fmt.Sprintf("%s-%s", ShishoID(f.FileID), f.FileHash[:8]),
+				RevisionID:          fmt.Sprintf("%s-%s", ShishoID(f.FileID), revisionSuffix),
 				Status:              "Active",
 			},
 			BookMetadata: metadata,
@@ -406,8 +554,19 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 const dummyCategoryID = "00000000-0000-0000-0000-000000000001"
 
 // buildBookMetadata constructs the Kobo BookMetadata from our book/file.
-func buildBookMetadata(book *models.Book, file *models.File, baseURL string) *BookMetadata {
+//
+// coverCacheKey is appended to CoverImageID so the device's thumbnail cache
+// refreshes whenever the underlying book/cover changes (otherwise the device
+// reuses the cached image at "shisho-{fileID}" indefinitely, even if the
+// underlying file ID gets remapped to a different book on a rescan). Pass an
+// empty string to disable suffixing — only safe when the caller has confirmed
+// no device-cache risk (e.g. unit tests).
+func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey string, baseURL string) *BookMetadata {
 	bookID := ShishoID(file.ID)
+	coverImageID := bookID
+	if coverCacheKey != "" {
+		coverImageID = bookID + "-" + coverCacheKey
+	}
 
 	language := "en"
 	if file.Language != nil && *file.Language != "" {
@@ -415,7 +574,7 @@ func buildBookMetadata(book *models.Book, file *models.File, baseURL string) *Bo
 	}
 	metadata := &BookMetadata{
 		Categories:      []string{dummyCategoryID},
-		CoverImageID:    bookID,
+		CoverImageID:    coverImageID,
 		CrossRevisionID: bookID,
 		CurrentDisplayPrice: &DisplayPrice{
 			CurrencyCode: "USD",
@@ -452,6 +611,11 @@ func buildBookMetadata(book *models.Book, file *models.File, baseURL string) *Bo
 	// Description
 	if book.Description != nil {
 		metadata.Description = *book.Description
+	}
+
+	// Subtitle
+	if book.Subtitle != nil && *book.Subtitle != "" {
+		metadata.SubTitle = *book.Subtitle
 	}
 
 	// Series (NOTE: field is SeriesNumber *float64, not Number)

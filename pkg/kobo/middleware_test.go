@@ -41,6 +41,12 @@ func TestParseShishoID_TableDriven(t *testing.T) {
 		{"invalid", 0, false},
 		{"shisho-", 0, false},
 		{"shisho-abc", 0, false},
+		// Cover IDs append a short hash suffix to bust the device's
+		// thumbnail cache when the underlying book changes. The cover
+		// handler still needs to parse out the leading file ID.
+		{"shisho-51-abc12345", 51, true},
+		{"shisho-1-deadbeef", 1, true},
+		{"shisho-99-", 99, true},
 	}
 
 	for _, tt := range tests {
