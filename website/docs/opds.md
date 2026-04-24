@@ -40,6 +40,12 @@ This serves the same catalog but EPUB and CBZ downloads are converted to KePub f
 
 OPDS uses HTTP Basic Authentication with your Shisho username and password — the same credentials you use to log in to the web UI. Most OPDS apps prompt for these when you add a new catalog.
 
+### Behind a reverse proxy
+
+If you're running Shisho behind an HTTPS-terminating reverse proxy (Nginx Proxy Manager, Traefik, etc.), the upstream proxy must forward `X-Forwarded-Proto: https` so Shisho generates `https://` hrefs in feed entries. OPDS clients like KOReader drop the `Authorization` header when following an `http://` → `https://` redirect, which surfaces as 401s on sub-feeds.
+
+The bundled Caddy config trusts `X-Forwarded-*` headers from any RFC1918 private-range address, which covers the usual Docker/LAN topology. If your upstream proxy is on a public IP or in a non-RFC1918 range (some VPN networks, CGNAT, etc.), you'll need to override the Caddyfile and add the upstream's address to Caddy's [`trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies).
+
 ## Catalog Structure
 
 The feed is organized as:
