@@ -143,6 +143,12 @@ describe("resolveIdentifiers", () => {
     expect(result.status).toBe("unchanged");
   });
 
+  it("returns unchanged with empty value when both current and incoming are empty", () => {
+    const result = resolveIdentifiers([], []);
+    expect(result.status).toBe("unchanged");
+    expect(result.value).toEqual([]);
+  });
+
   it("returns new with deduped value when current is empty", () => {
     const incoming = [
       { type: "asin", value: "B01ABC1234" },
