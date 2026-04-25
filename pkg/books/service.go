@@ -531,16 +531,6 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 	return nil
 }
 
-// CreateFileIdentifier creates a new file identifier record.
-func (svc *Service) CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error {
-	now := time.Now()
-	identifier.CreatedAt = now
-	identifier.UpdatedAt = now
-	identifier.Value = identifiers.NormalizeValue(identifier.Type, identifier.Value)
-	_, err := svc.db.NewInsert().Model(identifier).Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // DeleteFileIdentifiers deletes all identifiers for a file.
 func (svc *Service) DeleteFileIdentifiers(ctx context.Context, fileID int) error {
 	_, err := svc.db.NewDelete().Model((*models.FileIdentifier)(nil)).Where("file_id = ?", fileID).Exec(ctx)
