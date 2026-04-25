@@ -24,7 +24,7 @@ import {
   Save,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -334,14 +334,14 @@ const SortSheet = ({
   );
 };
 
-export const SortButton = ({
-  isDirty,
-  onClick,
-}: {
-  isDirty: boolean;
-  onClick?: () => void;
-}) => (
-  <Button className="relative" onClick={onClick} size="sm" variant="outline">
+// forwardRef + spread so SheetTrigger/DrawerTrigger asChild can attach its DOM
+// ref and merge handlers onto the underlying button. See app/CLAUDE.md →
+// "asChild trigger components must forwardRef".
+export const SortButton = forwardRef<
+  HTMLButtonElement,
+  { isDirty: boolean } & React.ComponentPropsWithoutRef<typeof Button>
+>(({ isDirty, ...props }, ref) => (
+  <Button className="relative" ref={ref} size="sm" variant="outline" {...props}>
     <ArrowDownUp className="h-4 w-4" />
     Sort
     {isDirty && (
@@ -351,6 +351,7 @@ export const SortButton = ({
       />
     )}
   </Button>
-);
+));
+SortButton.displayName = "SortButton";
 
 export default SortSheet;
