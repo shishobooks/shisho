@@ -1,13 +1,11 @@
 import {
   AlertCircle,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Loader2,
   Settings,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +27,6 @@ import "@/libraries/foliate/view.js";
 
 interface EPUBReaderProps {
   file: File;
-  libraryId: string;
   bookTitle?: string;
 }
 
@@ -60,11 +57,7 @@ const flattenToc = (
   return out;
 };
 
-export default function EPUBReader({
-  file,
-  libraryId,
-  bookTitle,
-}: EPUBReaderProps) {
+export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   usePageTitle(bookTitle ? `Reading: ${bookTitle}` : "Reader");
 
   const {
@@ -277,8 +270,6 @@ export default function EPUBReader({
     return () => window.removeEventListener("keydown", handler);
   }, [bookReady, goNext, goPrev]);
 
-  const backHref = `/libraries/${libraryId}/books/${file.book_id}`;
-
   const handleTocChange = (href: string) => {
     const view = viewRef.current as
       | (HTMLElement & { goTo?: (target: string) => void })
@@ -308,35 +299,22 @@ export default function EPUBReader({
             {displayError?.message ?? "Unknown error"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => {
-              setLoadError(null);
-              refetch();
-            }}
-            variant="default"
-          >
-            Retry
-          </Button>
-          <Button asChild variant="outline">
-            <Link to={backHref}>Back</Link>
-          </Button>
-        </div>
+        <Button
+          onClick={() => {
+            setLoadError(null);
+            refetch();
+          }}
+          variant="default"
+        >
+          Retry
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
-      <header className="flex items-center justify-between px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <Link
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-          to={backHref}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm">Back</span>
-        </Link>
-
+      <header className="flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-2">
           {toc.length > 0 && (
             <select

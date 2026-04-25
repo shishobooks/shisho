@@ -1,10 +1,4 @@
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Settings,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Settings } from "lucide-react";
 import React, {
   useCallback,
   useEffect,
@@ -12,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -168,15 +162,7 @@ export default function PageReader({
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <Link
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-          to={`/libraries/${libraryId}/books/${bookId}`}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm">Back</span>
-        </Link>
-
+      <header className="flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-2">
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
