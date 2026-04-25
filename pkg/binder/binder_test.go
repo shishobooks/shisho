@@ -85,6 +85,11 @@ func TestBind_DiveRequiredForSliceModTraversal(t *testing.T) {
 	type withDive struct {
 		Items []inner `json:"items" mod:"dive"`
 	}
+	// withDivePtrSlice mirrors the exact shape used in production by
+	// UpdateFilePayload.Identifiers (*[]IdentifierPayload).
+	type withDivePtrSlice struct {
+		Items *[]inner `json:"items" mod:"dive"`
+	}
 
 	body := `{"items":[{"value":"  hi  "}]}`
 
@@ -102,6 +107,15 @@ func TestBind_DiveRequiredForSliceModTraversal(t *testing.T) {
 		require.NoError(tt, b.Bind(&p, c))
 		require.Len(tt, p.Items, 1)
 		assert.Equal(tt, "hi", p.Items[0].Value, "with mod:\"dive\", inner modifiers must fire on each element")
+	})
+
+	t.Run("with dive on pointer-to-slice, inner mod:trim is applied", func(tt *testing.T) {
+		c := newContext(body, echo.MIMEApplicationJSON)
+		p := withDivePtrSlice{}
+		require.NoError(tt, b.Bind(&p, c))
+		require.NotNil(tt, p.Items)
+		require.Len(tt, *p.Items, 1)
+		assert.Equal(tt, "hi", (*p.Items)[0].Value, "with mod:\"dive\" on *[]Inner, inner modifiers must fire (matches UpdateFilePayload.Identifiers shape)")
 	})
 }
 
