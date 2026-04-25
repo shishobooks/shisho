@@ -81,7 +81,8 @@ func newTestContext(t *testing.T) *testContext {
 	}
 
 	// Create services
-	bookService := books.NewService(db)
+	appSettingsService := appsettings.NewService(db)
+	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
@@ -93,7 +94,6 @@ func newTestContext(t *testing.T) *testContext {
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
-	appSettingsService := appsettings.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -294,7 +294,8 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	}
 
 	// Create services
-	bookService := books.NewService(db)
+	appSettingsService := appsettings.NewService(db)
+	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
@@ -307,7 +308,6 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
-	appSettingsService := appsettings.NewService(db)
 
 	// Create worker with search service
 	cfg := &config.Config{

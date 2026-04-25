@@ -2227,6 +2227,20 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// ==========================================================================
+	// Safety-net recompute of reviewed state
+	// ==========================================================================
+	//
+	// Relationship rows (narrators, authors, genres, tags, series, identifiers)
+	// are bulk-inserted via UpdateBookRelationships *after* the per-relationship
+	// source-column UpdateFile/UpdateBook calls that trigger recompute. Those
+	// earlier triggers fire while the old rows are still in place, so the final
+	// reviewed value can be stale. A single recompute here, after all mutations
+	// are complete, ensures the flag is accurate. Non-fatal: a missed recompute
+	// is self-healing (the recompute_review background job or the next file
+	// mutation will correct it).
+	w.bookService.RecomputeReviewedForFile(ctx, file.ID)
+
 	return &ScanResult{File: file, Book: book, FileCreated: false}, nil
 }
 
