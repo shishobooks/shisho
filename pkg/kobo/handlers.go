@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"golang.org/x/image/draw"
 )
@@ -678,7 +679,7 @@ func getBaseURL(c echo.Context) string {
 // serveFileWithHeaders serves a file with proper Content-Type and Content-Disposition headers.
 func serveFileWithHeaders(c echo.Context, filepath, filename string) error {
 	c.Response().Header().Set("Content-Type", "application/octet-stream")
-	c.Response().Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	httputil.SetAttachmentFilename(c.Response(), filename)
 	return c.File(filepath)
 }
 

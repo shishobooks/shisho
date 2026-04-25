@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -198,7 +199,7 @@ func (h *handler) download(c echo.Context) error {
 	}
 
 	filename := fmt.Sprintf("shisho-download-%d-books.zip", data.FileCount)
-	c.Response().Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	httputil.SetAttachmentFilename(c.Response(), filename)
 
 	return c.File(zipPath)
 }

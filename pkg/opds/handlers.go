@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -730,14 +731,13 @@ func (h *handler) download(c echo.Context) error {
 			})
 			// Fall back to original file
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
-	// Set content disposition for download with the formatted filename
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 
 	return c.File(cachedPath)
 }
@@ -801,7 +801,7 @@ func (h *handler) downloadKepub(c echo.Context) error {
 			})
 			// Fall back to original file for unsupported types (M4B)
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		// For other errors, also fall back to original
@@ -813,14 +813,13 @@ func (h *handler) downloadKepub(c echo.Context) error {
 				"error":     genErr.Message,
 			})
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
-	// Set content disposition for download with the formatted filename
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 
 	return c.File(cachedPath)
 }
