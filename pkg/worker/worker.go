@@ -90,7 +90,8 @@ type Worker struct {
 }
 
 func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
-	bookService := books.NewService(db)
+	appSettingsService := appsettings.NewService(db)
+	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
 	imprintService := imprints.NewService(db)
@@ -104,7 +105,6 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	tagService := tags.NewService(db)
 	pluginService := plugins.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
-	appSettingsService := appsettings.NewService(db)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

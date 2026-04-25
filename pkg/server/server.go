@@ -13,6 +13,7 @@ import (
 	"github.com/robinjoseph08/golib/echo/v4/middleware/logger"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/audnexus"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
@@ -217,7 +218,8 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 
 	// Plugin identify routes (editors can search/apply metadata)
 	pluginService := plugins.NewService(db)
-	bookSvc := books.NewService(db)
+	appSettingsSvc := appsettings.NewService(db)
+	bookSvc := books.NewService(db).WithAppSettings(appSettingsSvc)
 	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
 	pageExtractor := books.NewPluginPageExtractor(cbzCache, pdfCache)
 	enrichDeps := &plugins.EnrichDeps{

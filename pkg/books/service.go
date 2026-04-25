@@ -10,6 +10,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/identifiers"
@@ -80,11 +82,58 @@ type UpdateFileOptions struct {
 }
 
 type Service struct {
-	db *bun.DB
+	db                 *bun.DB
+	appSettingsService *appsettings.Service
 }
 
+// NewService creates a book service without review-criteria support.
+// Pass the result to WithAppSettings to enable automatic reviewed recomputation.
 func NewService(db *bun.DB) *Service {
-	return &Service{db}
+	return &Service{db: db}
+}
+
+// WithAppSettings attaches an appsettings.Service so that mutation methods
+// automatically recompute files.reviewed after each successful write.
+func (svc *Service) WithAppSettings(s *appsettings.Service) *Service {
+	svc.appSettingsService = s
+	return svc
+}
+
+// RecomputeReviewedForFile loads the active criteria and refreshes
+// files.reviewed for the given file. Errors are logged but do not propagate
+// to the caller — review state is non-critical metadata.
+func (svc *Service) RecomputeReviewedForFile(ctx context.Context, fileID int) {
+	if svc.appSettingsService == nil {
+		return
+	}
+	criteria, err := review.Load(ctx, svc.appSettingsService)
+	if err != nil {
+		log := logger.FromContext(ctx)
+		log.Warn("review: load criteria failed", logger.Data{"err": err.Error()})
+		return
+	}
+	if err := review.RecomputeForFile(ctx, svc.db, fileID, criteria); err != nil {
+		log := logger.FromContext(ctx)
+		log.Warn("review: recompute for file failed", logger.Data{"err": err.Error(), "file_id": fileID})
+	}
+}
+
+// RecomputeReviewedForBook refreshes files.reviewed for every file of the book.
+// Errors are logged but do not propagate to the caller.
+func (svc *Service) RecomputeReviewedForBook(ctx context.Context, bookID int) {
+	if svc.appSettingsService == nil {
+		return
+	}
+	criteria, err := review.Load(ctx, svc.appSettingsService)
+	if err != nil {
+		log := logger.FromContext(ctx)
+		log.Warn("review: load criteria failed", logger.Data{"err": err.Error()})
+		return
+	}
+	if err := review.RecomputeForBook(ctx, svc.db, bookID, criteria); err != nil {
+		log := logger.FromContext(ctx)
+		log.Warn("review: recompute for book failed", logger.Data{"err": err.Error(), "book_id": bookID})
+	}
 }
 
 func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
@@ -484,6 +533,11 @@ func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts Upda
 		}
 	}
 
+	// Recompute reviewed state for all files in the book after any successful mutation.
+	if hasDBWork {
+		svc.RecomputeReviewedForBook(ctx, book.ID)
+	}
+
 	return nil
 }
 
@@ -528,13 +582,19 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 
 	// Note: FileNarrators are created separately via CreateFileNarrator after person creation
 
+	svc.RecomputeReviewedForFile(ctx, file.ID)
+
 	return nil
 }
 
 // DeleteFileIdentifiers deletes all identifiers for a file.
 func (svc *Service) DeleteFileIdentifiers(ctx context.Context, fileID int) error {
 	_, err := svc.db.NewDelete().Model((*models.FileIdentifier)(nil)).Where("file_id = ?", fileID).Exec(ctx)
-	return errors.WithStack(err)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	svc.RecomputeReviewedForFile(ctx, fileID)
+	return nil
 }
 
 // escapeLikePattern escapes the SQLite LIKE wildcards (%, _) and the escape
@@ -695,6 +755,8 @@ func (svc *Service) UpdateFile(ctx context.Context, file *models.File, opts Upda
 		}
 		return errors.WithStack(err)
 	}
+
+	svc.RecomputeReviewedForFile(ctx, file.ID)
 
 	return nil
 }
@@ -1432,7 +1494,19 @@ func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifie
 		return nil
 	}
 	_, err := svc.db.NewInsert().Model(&deduped).Exec(ctx)
-	return errors.WithStack(err)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	// Recompute review state for every file whose identifiers changed.
+	seenFiles := make(map[int]struct{}, len(deduped))
+	for _, fi := range deduped {
+		if _, ok := seenFiles[fi.FileID]; ok {
+			continue
+		}
+		seenFiles[fi.FileID] = struct{}{}
+		svc.RecomputeReviewedForFile(ctx, fi.FileID)
+	}
+	return nil
 }
 
 // DeleteNarratorsForFile deletes all narrators for a file.
