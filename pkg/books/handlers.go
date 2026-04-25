@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -65,22 +66,23 @@ type Scanner interface {
 }
 
 type handler struct {
-	config           *config.Config
-	bookService      *Service
-	libraryService   *libraries.Service
-	personService    *people.Service
-	searchService    *search.Service
-	genreService     *genres.Service
-	tagService       *tags.Service
-	publisherService *publishers.Service
-	imprintService   *imprints.Service
-	listsService     *lists.Service
-	settingsService  *settings.Service
-	downloadCache    *downloadcache.Cache
-	pageCache        *cbzpages.Cache
-	pdfPageCache     *pdfpages.Cache
-	scanner          Scanner
-	pluginManager    pluginManager
+	config             *config.Config
+	bookService        *Service
+	libraryService     *libraries.Service
+	personService      *people.Service
+	searchService      *search.Service
+	genreService       *genres.Service
+	tagService         *tags.Service
+	publisherService   *publishers.Service
+	imprintService     *imprints.Service
+	listsService       *lists.Service
+	settingsService    *settings.Service
+	appSettingsService *appsettings.Service
+	downloadCache      *downloadcache.Cache
+	pageCache          *cbzpages.Cache
+	pdfPageCache       *pdfpages.Cache
+	scanner            Scanner
+	pluginManager      pluginManager
 }
 
 // pluginManager defines the interface for plugin operations needed by the books handler.

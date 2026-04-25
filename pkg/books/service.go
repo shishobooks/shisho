@@ -92,6 +92,11 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db: db}
 }
 
+// DB returns the underlying database connection. Used by review override APIs.
+func (svc *Service) DB() *bun.DB {
+	return svc.db
+}
+
 // WithAppSettings attaches an appsettings.Service so that mutation methods
 // automatically recompute files.reviewed after each successful write.
 func (svc *Service) WithAppSettings(s *appsettings.Service) *Service {

@@ -235,9 +235,9 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
 	authMiddleware := auth.NewMiddleware(authService)
 
-	// Register routes (pass nil for plugin manager in tests)
+	// Register routes (pass nil for plugin manager and nil for appSettingsSvc in tests)
 	g := e.Group("/books")
-	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil)
+	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil, nil)
 
 	return e
 }
