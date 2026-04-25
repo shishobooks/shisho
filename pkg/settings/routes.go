@@ -27,6 +27,9 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
 	g.GET("/libraries/:library_id", libraryH.getLibrarySettings)
 	g.PUT("/libraries/:library_id", libraryH.updateLibrarySettings)
 
-	g.GET("/review-criteria", reviewCriteriaH.getReviewCriteria, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationRead))
+	// GET is books:read so the ReviewPanel can render the missing-fields hint
+	// for any user who can view books (editors and viewers, not just admins).
+	// PUT remains admin-only via config:write.
+	g.GET("/review-criteria", reviewCriteriaH.getReviewCriteria, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	g.PUT("/review-criteria", reviewCriteriaH.putReviewCriteria, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 }

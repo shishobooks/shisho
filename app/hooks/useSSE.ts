@@ -69,6 +69,17 @@ export function useSSE() {
           });
         }
 
+        // When a recompute_review job completes, refresh book lists and
+        // detail views so the new reviewed states show up.
+        if (data.status === "completed" && data.type === "recompute_review") {
+          queryClient.invalidateQueries({
+            queryKey: [BooksQueryKey.ListBooks],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [BooksQueryKey.RetrieveBook],
+          });
+        }
+
         // Handle bulk download completion/failure
         const bd = bulkDownloadRef.current;
         if (data.type === "bulk_download" && bd) {

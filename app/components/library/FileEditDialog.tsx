@@ -78,7 +78,6 @@ import {
   FileTypeEPUB,
   FileTypeM4B,
   ReviewOverrideReviewed,
-  ReviewOverrideUnreviewed,
   type Book,
   type File,
   type FileRole,
@@ -295,6 +294,7 @@ export function FileEditDialog({
 
   // Draft review override — toggling the panel updates this; the actual
   // setFileReview mutation only fires on Save.
+  // null means "auto" (no explicit override on the file).
   const [draftReviewOverride, setDraftReviewOverride] =
     useState<ReviewOverride | null>(null);
 
@@ -311,7 +311,8 @@ export function FileEditDialog({
     coverPage: number | null;
     language: string;
     abridged: string;
-    reviewOverride: ReviewOverride;
+    /** null means "auto" — no explicit override on the file. */
+    reviewOverride: ReviewOverride | null;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -350,10 +351,11 @@ export function FileEditDialog({
     // for the reasoning.
     const initialAbridged = file.abridged === true ? "true" : "";
 
-    const initialReviewOverride: ReviewOverride =
-      file.reviewed === true
-        ? ReviewOverrideReviewed
-        : ReviewOverrideUnreviewed;
+    // Capture the actual override (not the aggregate `reviewed`) so the user
+    // can toggle a currently-auto-reviewed file and have that intent persist.
+    // null = "auto" (no explicit override).
+    const initialReviewOverride: ReviewOverride | null =
+      file.review_override ?? null;
 
     setNarrators(initialNarrators);
     setNarratorSearch("");
@@ -699,10 +701,13 @@ export function FileEditDialog({
       setPendingCoverPage(null);
     }
 
-    // Apply pending review override change
+    // Apply pending review override change. Only fire if the user toggled
+    // to an explicit value that differs from the file's saved override.
+    // draftReviewOverride === null means "auto" — never set by the user
+    // gesture, only by initial load when no override exists.
     if (
       draftReviewOverride !== null &&
-      draftReviewOverride !== initialValues?.reviewOverride
+      draftReviewOverride !== (initialValues?.reviewOverride ?? null)
     ) {
       await setFileReviewMutation.mutateAsync({
         fileId: file.id,
@@ -734,7 +739,7 @@ export function FileEditDialog({
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
       language: canonicalLanguage,
       abridged: canonicalAbridged,
-      reviewOverride: draftReviewOverride ?? ReviewOverrideUnreviewed,
+      reviewOverride: draftReviewOverride,
     });
     requestClose();
   };
@@ -1454,14 +1459,20 @@ export function FileEditDialog({
             </>
           )}
 
-          {/* Review Panel — controlled (deferred to Save button) */}
+          {/* Review Panel — controlled (deferred to Save button).
+              When draftReviewOverride is null (auto), pass undefined so the
+              panel falls back to the file-derived `reviewed` state. */}
           {(book ?? file.book) && (
             <ReviewPanel
               book={(book ?? file.book)!}
               files={[file]}
               isPending={setFileReviewMutation.isPending}
               onChange={(override) => setDraftReviewOverride(override)}
-              toggleValue={draftReviewOverride === ReviewOverrideReviewed}
+              toggleValue={
+                draftReviewOverride === null
+                  ? undefined
+                  : draftReviewOverride === ReviewOverrideReviewed
+              }
             />
           )}
         </div>

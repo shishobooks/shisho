@@ -1,6 +1,7 @@
 package books
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -42,6 +43,11 @@ func (h *handler) setFileReview(c echo.Context) error {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
+	// Supplements never participate in review state — reject overrides
+	// rather than silently persisting orphan rows.
+	if file.FileRole != models.FileRoleMain {
+		return errcodes.BadRequest("Cannot set review state on a supplement file")
+	}
 
 	criteria, err := review.Load(ctx, h.appSettingsService)
 	if err != nil {
@@ -55,7 +61,7 @@ func (h *handler) setFileReview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(200, updated)
+	return c.JSON(http.StatusOK, updated)
 }
 
 // setBookReview cascades a review override to all main files of a book.
@@ -98,7 +104,7 @@ func (h *handler) setBookReview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(200, updated)
+	return c.JSON(http.StatusOK, updated)
 }
 
 // bulkSetReview applies a review override to all main files across multiple books.
@@ -134,5 +140,5 @@ func (h *handler) bulkSetReview(c echo.Context) error {
 			}
 		}
 	}
-	return c.NoContent(204)
+	return c.NoContent(http.StatusNoContent)
 }

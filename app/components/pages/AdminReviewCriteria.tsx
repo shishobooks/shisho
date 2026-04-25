@@ -163,7 +163,7 @@ const AdminReviewCriteria = () => {
       clear_overrides: overrideClear,
     });
     setInitialValues({ bookFields, audioFields });
-    toast.success("Review state recompute queued.");
+    toast.success("Saved. Recompute queued.");
   };
 
   const handleSave = async () => {

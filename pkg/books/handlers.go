@@ -678,6 +678,11 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Recompute reviewed for the book — covers the cases where relations
+	// changed but no source column did (e.g. series-only edits don't touch
+	// any *_source column, so UpdateBook short-circuits its own recompute).
+	h.bookService.RecomputeReviewedForBook(ctx, book.ID)
+
 	return errors.WithStack(c.JSON(http.StatusOK, book))
 }
 

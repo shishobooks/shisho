@@ -27,15 +27,27 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		}
 	}
 
+	// Reset reviewed for supplements in a single statement; supplements never
+	// participate in the per-file iteration below.
+	if _, err := w.db.NewUpdate().
+		Model((*models.File)(nil)).
+		Set("reviewed = NULL").
+		Where("file_role = ?", models.FileRoleSupplement).
+		Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+
 	criteria, err := review.Load(ctx, w.appSettingsService)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	// Iterate only main files. Order by id for stable progress %.
 	var fileIDs []int
 	if err := w.db.NewSelect().
 		Model((*models.File)(nil)).
 		Column("id").
+		Where("file_role = ?", models.FileRoleMain).
 		Order("id ASC").
 		Scan(ctx, &fileIDs); err != nil {
 		return errors.WithStack(err)
