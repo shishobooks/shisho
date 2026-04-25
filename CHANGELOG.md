@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-04-24
+
+### Features
+- Cache management admin page (#146)
+- Compare cover pages by number in identify review (#141)
+
+### Bug Fixes
+- Discard stale sidecars on rescan so replaced files re-extract metadata (#147)
+- Trust upstream proxy X-Forwarded-Proto in Caddy (#145)
+- Reset cover error flag so failed thumbnails can recover (#143)
+- Use ETag for series cover revalidation (#144)
+- Coerce library ID to string in setQueryData cache writes (#142)
+
+
 ## [0.0.37] - 2026-04-23
 
 ### Features
