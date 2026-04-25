@@ -344,6 +344,7 @@ const ListDetail = () => {
                 <DraggableBookList
                   books={books}
                   cacheKey={listBooksQuery.dataUpdatedAt}
+                  gallerySize={effectiveSize}
                   isOwner={isOwner}
                   onReorder={handleReorder}
                 />

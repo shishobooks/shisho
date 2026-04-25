@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  COVER_WIDTH_CLASS,
   DEFAULT_GALLERY_SIZE,
   ITEMS_PER_PAGE_BY_SIZE,
 } from "@/constants/gallerySize";
@@ -50,6 +51,7 @@ interface SeriesCardProps {
   aspectClass: string;
   isAudiobook: boolean;
   cacheKey?: number;
+  gallerySize?: GallerySize;
 }
 
 const SeriesCard = ({
@@ -58,6 +60,7 @@ const SeriesCard = ({
   aspectClass,
   isAudiobook,
   cacheKey,
+  gallerySize = DEFAULT_GALLERY_SIZE,
 }: SeriesCardProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   const coverUrl = cacheKey
@@ -76,7 +79,7 @@ const SeriesCard = ({
 
   return (
     <div
-      className="w-[calc(50%-0.5rem)] sm:w-32"
+      className={cn("w-[calc(50%-0.5rem)]", COVER_WIDTH_CLASS[gallerySize])}
       title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
     >
       <Link
@@ -238,6 +241,7 @@ const SeriesList = () => {
       <SeriesCard
         aspectClass={aspectClass}
         cacheKey={seriesQuery.dataUpdatedAt}
+        gallerySize={effectiveSize}
         isAudiobook={isAudiobook}
         key={seriesItem.id}
         libraryId={libraryId ?? ""}
