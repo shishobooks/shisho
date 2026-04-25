@@ -38,7 +38,11 @@ Publishers and imprints are attached at the **file level**, not the book level. 
 
 ### Identifiers
 
-Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple identifiers of different types: `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and custom types registered by [plugins](./plugins/overview).
+Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple identifiers of **different** types: `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and custom types registered by [plugins](./plugins/overview).
+
+A file has at most **one identifier per type**. You can have an ISBN-13 and an ASIN on the same file, but you cannot have two ASINs. The file edit dialog enforces this in the type dropdown — types already in use are greyed out until you remove the existing entry.
+
+When you confirm an identify match (via the Identify dialog) and the match brings in an identifier whose type already exists on the file, the incoming value **replaces** the existing one. Identifiers of types not in the match are kept untouched.
 
 Identifier values are **canonicalized on write** so comparisons and lookups are insensitive to cosmetic formatting:
 
