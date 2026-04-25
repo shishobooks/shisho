@@ -1,5 +1,5 @@
 import { Maximize2, Save } from "lucide-react";
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 
 import { SizeSelector } from "@/components/library/SizeSelector";
 import { Button } from "@/components/ui/button";
@@ -53,14 +53,14 @@ export const SizePopover = ({
   );
 };
 
-export const SizeButton = ({
-  isDirty,
-  onClick,
-}: {
-  isDirty: boolean;
-  onClick?: () => void;
-}) => (
-  <Button className="relative" onClick={onClick} size="sm" variant="outline">
+// forwardRef is required so PopoverTrigger asChild can attach its DOM ref to
+// the underlying button — without it, Radix's Floating UI falls back to the
+// document origin and the popover renders off-screen.
+export const SizeButton = forwardRef<
+  HTMLButtonElement,
+  { isDirty: boolean } & React.ComponentPropsWithoutRef<typeof Button>
+>(({ isDirty, ...props }, ref) => (
+  <Button className="relative" ref={ref} size="sm" variant="outline" {...props}>
     <Maximize2 className="h-4 w-4" />
     Size
     {isDirty && (
@@ -70,4 +70,5 @@ export const SizeButton = ({
       />
     )}
   </Button>
-);
+));
+SizeButton.displayName = "SizeButton";
