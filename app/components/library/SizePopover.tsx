@@ -33,7 +33,10 @@ export const SizePopover = ({
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-3">
+      {/* z-20 keeps the popover below the sticky top nav (z-30 in
+          topNavClasses) so a long gallery scroll never lets the popover
+          float over the persistent navigation. */}
+      <PopoverContent align="start" className="z-20 w-auto p-3">
         {/* items-start (not the flex-col default of items-stretch) keeps the
             segmented control at its intrinsic width when the save-as-default
             card forces the popover wider — buttons under the user's cursor
