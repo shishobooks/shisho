@@ -27,8 +27,9 @@ func SetAttachmentFilename(w http.ResponseWriter, filename string) {
 	w.Header().Set("Content-Disposition", header)
 }
 
-// asciiFallback strips bytes outside printable ASCII and tidies the result so
-// it is safe to drop into a quoted-string. Returns "download" if nothing
+// asciiFallback strips runes outside printable ASCII and tidies the result so
+// it is safe to drop into a quoted-string. Invalid UTF-8 decodes to U+FFFD
+// which is also out of range and gets stripped. Returns "download" if nothing
 // usable remains, and prepends "download" to results that would start with a
 // dot (e.g. "тест.epub" -> ".epub" -> "download.epub").
 func asciiFallback(s string) string {
