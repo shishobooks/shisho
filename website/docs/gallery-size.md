@@ -18,12 +18,12 @@ The popover is hidden on small screens, where covers always render two per row r
 
 | Size | Cover width (desktop) | Items per page |
 |------|----------------------|----------------|
-| S    | 96px                 | 48 |
+| S    | 96px                 | 33 |
 | M    | 128px (default)      | 24 |
-| L    | 176px                | 16 |
-| XL   | 224px                | 12 |
+| L    | 176px                | 18 |
+| XL   | 224px                | 15 |
 
-Items per page scale so screen density stays roughly constant — bigger covers, fewer per page. The same scale applies to series cards on the Series list and to books on every other gallery page.
+Items per page are tuned to fill exactly three rows at each size's natural column count on a typical desktop gallery — bigger covers, fewer per row, same row count. The same scale applies to series cards on the Series list and to books on every other gallery page.
 
 ## URL-addressable size
 

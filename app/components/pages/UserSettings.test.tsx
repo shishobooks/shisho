@@ -99,6 +99,9 @@ describe("UserSettings – gallery size section", () => {
 
     await user.click(screen.getByRole("button", { name: "XL" }));
 
-    expect(mutate).toHaveBeenCalledWith({ gallery_size: "xl" });
+    expect(mutate).toHaveBeenCalledWith(
+      { gallery_size: "xl" },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
   });
 });

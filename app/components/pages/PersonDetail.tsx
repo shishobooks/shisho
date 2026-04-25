@@ -58,6 +58,10 @@ const PersonDetail = () => {
   const userSettingsResolved =
     userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
+  // No page recalc here — this gallery is unpaginated (single unbounded
+  // fetch). The paginated pages (Home / SeriesList / ListDetail) call
+  // pageForSizeChange to preserve the user's first-visible book across
+  // size changes; that math is meaningless when there's only one page.
   const applyGallerySize = (next: GallerySize) => {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
