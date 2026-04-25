@@ -86,7 +86,9 @@ const TagDetail = () => {
   const tagQuery = useTag(tagId);
 
   usePageTitle(tagQuery.data?.name ?? "Tag");
-  const tagBooksQuery = useTagBooks(tagId, { enabled: userSettingsResolved });
+  const tagBooksQuery = useTagBooks(tagId, {
+    enabled: userSettingsResolved && Boolean(tagId),
+  });
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);

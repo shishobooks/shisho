@@ -87,7 +87,7 @@ const SeriesDetail = () => {
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
   const seriesBooksQuery = useSeriesBooks(seriesId, {
-    enabled: userSettingsResolved,
+    enabled: userSettingsResolved && Boolean(seriesId),
   });
 
   const [editOpen, setEditOpen] = useState(false);

@@ -87,7 +87,7 @@ const GenreDetail = () => {
 
   usePageTitle(genreQuery.data?.name ?? "Genre");
   const genreBooksQuery = useGenreBooks(genreId, {
-    enabled: userSettingsResolved,
+    enabled: userSettingsResolved && Boolean(genreId),
   });
 
   const [editOpen, setEditOpen] = useState(false);

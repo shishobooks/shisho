@@ -94,7 +94,7 @@ const PersonDetail = () => {
 
   usePageTitle(personQuery.data?.name ?? "Person");
   const authoredBooksQuery = usePersonAuthoredBooks(personId, {
-    enabled: userSettingsResolved,
+    enabled: userSettingsResolved && Boolean(personId),
   });
   const narratedFilesQuery = usePersonNarratedFiles(personId);
 

@@ -126,7 +126,7 @@ const ListDetail = () => {
   const listBooksQuery = useListBooks(
     listId,
     { sort, limit, offset },
-    { enabled: userSettingsResolved },
+    { enabled: userSettingsResolved && Boolean(listId) },
   );
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();
