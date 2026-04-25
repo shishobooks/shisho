@@ -65,6 +65,60 @@ func TestNew(t *testing.T) {
 	})
 }
 
+// TestBind_DiveRequiredForSliceModTraversal documents that mold/v4 only
+// applies inner-field modifiers (e.g. mod:"trim") to slice elements when the
+// parent slice field carries mod:"dive". Without dive, the modifiers on the
+// inner struct are silently no-ops. This is the latent gap PR #153 closed
+// for UpdateFilePayload.Identifiers; this test pins the underlying behavior
+// so future regressions surface here at the binder level.
+func TestBind_DiveRequiredForSliceModTraversal(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+
+	type inner struct {
+		Value string `json:"value" mod:"trim"`
+	}
+	type withoutDive struct {
+		Items []inner `json:"items"`
+	}
+	type withDive struct {
+		Items []inner `json:"items" mod:"dive"`
+	}
+	// withDivePtrSlice mirrors the exact shape used in production by
+	// UpdateFilePayload.Identifiers (*[]IdentifierPayload).
+	type withDivePtrSlice struct {
+		Items *[]inner `json:"items" mod:"dive"`
+	}
+
+	body := `{"items":[{"value":"  hi  "}]}`
+
+	t.Run("without dive, inner mod:trim is a no-op", func(tt *testing.T) {
+		c := newContext(body, echo.MIMEApplicationJSON)
+		p := withoutDive{}
+		require.NoError(tt, b.Bind(&p, c))
+		require.Len(tt, p.Items, 1)
+		assert.Equal(tt, "  hi  ", p.Items[0].Value, "without mod:\"dive\", inner modifiers must not fire")
+	})
+
+	t.Run("with dive, inner mod:trim is applied", func(tt *testing.T) {
+		c := newContext(body, echo.MIMEApplicationJSON)
+		p := withDive{}
+		require.NoError(tt, b.Bind(&p, c))
+		require.Len(tt, p.Items, 1)
+		assert.Equal(tt, "hi", p.Items[0].Value, "with mod:\"dive\", inner modifiers must fire on each element")
+	})
+
+	t.Run("with dive on pointer-to-slice, inner mod:trim is applied", func(tt *testing.T) {
+		c := newContext(body, echo.MIMEApplicationJSON)
+		p := withDivePtrSlice{}
+		require.NoError(tt, b.Bind(&p, c))
+		require.NotNil(tt, p.Items)
+		require.Len(tt, *p.Items, 1)
+		assert.Equal(tt, "hi", (*p.Items)[0].Value, "with mod:\"dive\" on *[]Inner, inner modifiers must fire (matches UpdateFilePayload.Identifiers shape)")
+	})
+}
+
 func newContext(payload, mime string) echo.Context {
 	e := echo.New()
 	req := httptest.NewRequest(echo.POST, "/", strings.NewReader(payload))
