@@ -26,6 +26,7 @@ export interface ListBooksQuery {
   language?: string;
   ids?: number[];
   sort?: string;
+  reviewed_filter?: string; // "" or "all" = all books, "needs_review", "reviewed"
 }
 export * from "./generated/filesystem";
 export * from "./generated/jobs";
