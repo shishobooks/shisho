@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -115,4 +116,68 @@ func TestListBooks_PersonIDFilter_ScopesToLibrary(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1, "LibraryID restricts to libA only")
 	assert.Equal(t, bookInA.ID, got[0].ID)
+}
+
+// TestListBooks_ReviewedFilter confirms that:
+//   - "needs_review" returns books where any main file has reviewed=FALSE or NULL
+//   - "reviewed" returns books where all main files have reviewed=TRUE
+//   - NULL is treated as "needs review" (migration gap state)
+func TestListBooks_ReviewedFilter(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	db := setupBooksTestDB(t)
+	svc := NewService(db)
+	lib := seedLibrary(t, db, "L")
+
+	bookCounter := 0
+	mkBook := func(reviewed *bool) int {
+		bookCounter++
+		book := seedBook(t, db, lib, "T"+strconv.Itoa(bookCounter), "T"+strconv.Itoa(bookCounter), time.Now())
+		f := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book.ID,
+			Filepath:      "/tmp/" + strconv.Itoa(book.ID),
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			FilesizeBytes: 1,
+			Reviewed:      reviewed,
+		}
+		_, err := db.NewInsert().Model(f).Exec(ctx)
+		require.NoError(t, err)
+		return book.ID
+	}
+
+	tru := true
+	fal := false
+	_ = mkBook(&tru)          // reviewed=TRUE  → should NOT appear in needs_review
+	bookFalse := mkBook(&fal) // reviewed=FALSE → needs_review
+	bookNull := mkBook(nil)   // reviewed=NULL  → needs_review (migration gap)
+
+	// needs_review: FALSE + NULL should appear; TRUE should not
+	books, _, err := svc.ListBooksWithTotal(ctx, ListBooksOptions{
+		LibraryID:      &lib.ID,
+		ReviewedFilter: "needs_review",
+	})
+	require.NoError(t, err)
+	gotIDs := make([]int, 0, len(books))
+	for _, b := range books {
+		gotIDs = append(gotIDs, b.ID)
+	}
+	require.ElementsMatch(t, []int{bookFalse, bookNull}, gotIDs, "needs_review: FALSE and NULL books only")
+
+	// reviewed: only TRUE should appear
+	books, _, err = svc.ListBooksWithTotal(ctx, ListBooksOptions{
+		LibraryID:      &lib.ID,
+		ReviewedFilter: "reviewed",
+	})
+	require.NoError(t, err)
+	gotIDs = make([]int, 0, len(books))
+	for _, b := range books {
+		gotIDs = append(gotIDs, b.ID)
+	}
+	// Only the TRUE book should appear; FALSE and NULL are excluded
+	require.Len(t, gotIDs, 1, "reviewed: only the TRUE book")
+	assert.NotContains(t, gotIDs, bookFalse)
+	assert.NotContains(t, gotIDs, bookNull)
 }

@@ -30,18 +30,19 @@ type RetrieveBookOptions struct {
 }
 
 type ListBooksOptions struct {
-	Limit      *int
-	Offset     *int
-	LibraryID  *int
-	LibraryIDs []int // Filter by multiple library IDs (for access control)
-	SeriesID   *int
-	PersonID   *int     // Filter to books authored by this person (joins through authors)
-	FileTypes  []string // Filter by file types (e.g., ["epub", "cbz"])
-	GenreIDs   []int    // Filter by genre IDs
-	TagIDs     []int    // Filter by tag IDs
-	Language   *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
-	IDs        []int    // Filter by specific book IDs
-	Search     *string  // Search query for title/author
+	Limit          *int
+	Offset         *int
+	LibraryID      *int
+	LibraryIDs     []int // Filter by multiple library IDs (for access control)
+	SeriesID       *int
+	PersonID       *int     // Filter to books authored by this person (joins through authors)
+	FileTypes      []string // Filter by file types (e.g., ["epub", "cbz"])
+	GenreIDs       []int    // Filter by genre IDs
+	TagIDs         []int    // Filter by tag IDs
+	Language       *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
+	IDs            []int    // Filter by specific book IDs
+	Search         *string  // Search query for title/author
+	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
 
 	// Sort overrides the default ordering. When nil and SeriesID is set,
 	// books are ordered by series_number ASC + sort_title ASC. When nil
@@ -452,6 +453,27 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by language (exact match + subtag variants, e.g., "en" matches "en-US", "en-GB")
 	if opts.Language != nil && *opts.Language != "" {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE language = ? OR language LIKE ?)", *opts.Language, *opts.Language+"-%")
+	}
+
+	// Filter by reviewed state
+	switch opts.ReviewedFilter {
+	case "needs_review":
+		q = q.Where(`EXISTS (
+            SELECT 1 FROM files f_rev
+            WHERE f_rev.book_id = b.id
+              AND f_rev.file_role = 'main'
+              AND (f_rev.reviewed = FALSE OR f_rev.reviewed IS NULL)
+        )`)
+	case "reviewed":
+		q = q.Where(`NOT EXISTS (
+            SELECT 1 FROM files f_rev
+            WHERE f_rev.book_id = b.id
+              AND f_rev.file_role = 'main'
+              AND (f_rev.reviewed = FALSE OR f_rev.reviewed IS NULL)
+        )`).Where(`EXISTS (
+            SELECT 1 FROM files f_rev2
+            WHERE f_rev2.book_id = b.id AND f_rev2.file_role = 'main'
+        )`)
 	}
 
 	// Search using FTS5

@@ -147,17 +147,23 @@ func (h *handler) list(c echo.Context) error {
 		explicitSort = parsed
 	}
 
+	reviewedFilter := params.ReviewedFilter
+	if reviewedFilter == "all" {
+		reviewedFilter = ""
+	}
+
 	opts := ListBooksOptions{
-		Limit:     &params.Limit,
-		Offset:    &params.Offset,
-		LibraryID: params.LibraryID,
-		SeriesID:  params.SeriesID,
-		Search:    params.Search,
-		FileTypes: params.FileTypes,
-		GenreIDs:  params.GenreIDs,
-		TagIDs:    params.TagIDs,
-		Language:  languageFilter,
-		IDs:       params.IDs,
+		Limit:          &params.Limit,
+		Offset:         &params.Offset,
+		LibraryID:      params.LibraryID,
+		SeriesID:       params.SeriesID,
+		Search:         params.Search,
+		FileTypes:      params.FileTypes,
+		GenreIDs:       params.GenreIDs,
+		TagIDs:         params.TagIDs,
+		Language:       languageFilter,
+		IDs:            params.IDs,
+		ReviewedFilter: reviewedFilter,
 	}
 
 	// Filter by user's library access if user is in context.
