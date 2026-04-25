@@ -174,6 +174,71 @@ func TestSetFileReview_ClearsOverride(t *testing.T) {
 	assert.Nil(t, updated.ReviewOverriddenAt)
 }
 
+func TestSetFileReview_RejectsSupplement(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		Filepath:        "/tmp",
+		TitleSource:     "file",
+		SortTitle:       "T",
+		SortTitleSource: "file",
+		AuthorSource:    "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	supplement := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypePDF,
+		FileRole:      models.FileRoleSupplement,
+		Filepath:      "/tmp/extra.pdf",
+		FilesizeBytes: 1,
+	}
+	_, err = db.NewInsert().Model(supplement).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	h := &handler{
+		bookService:        svc,
+		appSettingsService: appsettings.NewService(db),
+	}
+
+	e := newTestEchoBooks(t)
+	body := []byte(`{"override":"reviewed"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(supplement.ID))
+
+	user := setupTestUser(t, db, library.ID, true)
+	c.Set("user", user)
+
+	err = h.setFileReview(c)
+	require.Error(t, err, "expected supplement override to be rejected")
+
+	// Verify nothing persisted to the supplement row.
+	var unchanged models.File
+	require.NoError(t, db.NewSelect().Model(&unchanged).Where("f.id = ?", supplement.ID).Scan(ctx))
+	assert.Nil(t, unchanged.ReviewOverride)
+	assert.Nil(t, unchanged.ReviewOverriddenAt)
+}
+
 func TestSetBookReview_CascadesToAllFiles(t *testing.T) {
 	t.Parallel()
 

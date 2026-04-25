@@ -385,4 +385,90 @@ describe("ReviewPanel", () => {
 
     expect(container.firstChild).toBeNull();
   });
+
+  describe("controlled mode (toggleValue prop)", () => {
+    it("toggle reflects toggleValue=true even when committed reviewed is false", () => {
+      const files: File[] = [
+        { ...baseFile, reviewed: false, review_override: undefined },
+      ];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          toggleValue={true}
+        />,
+        { wrapper },
+      );
+
+      expect(screen.getByRole("switch")).toBeChecked();
+    });
+
+    it("toggle reflects toggleValue=false even when committed reviewed is true", () => {
+      const files: File[] = [
+        { ...baseFile, reviewed: true, review_override: undefined },
+      ];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          toggleValue={false}
+        />,
+        { wrapper },
+      );
+
+      expect(screen.getByRole("switch")).not.toBeChecked();
+    });
+
+    it("falls back to committed reviewed when toggleValue is undefined", () => {
+      const files: File[] = [
+        { ...baseFile, reviewed: true, review_override: undefined },
+      ];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          toggleValue={undefined}
+        />,
+        { wrapper },
+      );
+
+      expect(screen.getByRole("switch")).toBeChecked();
+    });
+
+    it("missing-fields hint follows committed state, not toggleValue", () => {
+      const bookWithoutDescription: Book = {
+        ...baseBook,
+        description: undefined,
+      };
+      const files: File[] = [
+        {
+          ...baseFile,
+          reviewed: false,
+          review_override: undefined,
+          cover_image_filename: "x.jpg",
+          cover_mime_type: "image/jpeg",
+        },
+      ];
+
+      // Even with toggleValue=true (drafted as reviewed), the missing-fields
+      // hint anchors to the saved data and still reports description missing.
+      render(
+        <ReviewPanel
+          book={bookWithoutDescription}
+          files={files}
+          onChange={vi.fn()}
+          toggleValue={true}
+        />,
+        { wrapper },
+      );
+
+      expect(screen.getByText(/Missing:.*description/)).toBeInTheDocument();
+    });
+  });
 });

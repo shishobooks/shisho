@@ -325,22 +325,24 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           </Button>
         </PopoverTrigger>
         <PopoverContent align="center" className="w-56 p-1" side="top">
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer"
+          <Button
+            className="w-full justify-start gap-2 font-normal"
             onClick={() => handleBulkReview("reviewed")}
-            type="button"
+            size="sm"
+            variant="ghost"
           >
             <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="truncate">Mark reviewed</span>
-          </button>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer"
+          </Button>
+          <Button
+            className="w-full justify-start gap-2 font-normal"
             onClick={() => handleBulkReview("unreviewed")}
-            type="button"
+            size="sm"
+            variant="ghost"
           >
             <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="truncate">Mark needs review</span>
-          </button>
+          </Button>
         </PopoverContent>
       </Popover>
 
