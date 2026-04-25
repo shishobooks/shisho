@@ -130,11 +130,95 @@ describe("computeIdentifyEmptyState", () => {
 });
 
 describe("resolveIdentifiers", () => {
-  it("re-exports and works (smoke test)", () => {
-    const result = resolveIdentifiers(
-      [{ type: "goodreads", value: "1" }],
-      [{ type: "goodreads", value: "1" }],
-    );
+  it("returns unchanged when current and incoming are identical by type and value", () => {
+    const current = [
+      { type: "isbn_13", value: "9780316769488" },
+      { type: "asin", value: "B01ABC1234" },
+    ];
+    const incoming = [
+      { type: "asin", value: "B01ABC1234" },
+      { type: "isbn_13", value: "9780316769488" },
+    ];
+    const result = resolveIdentifiers(current, incoming);
     expect(result.status).toBe("unchanged");
+  });
+
+  it("returns new with deduped value when current is empty", () => {
+    const incoming = [
+      { type: "asin", value: "B01ABC1234" },
+      { type: "asin", value: "B02DEF5678" }, // intra-incoming duplicate type
+      { type: "isbn_13", value: "9780316769488" },
+    ];
+    const result = resolveIdentifiers([], incoming);
+    expect(result.status).toBe("new");
+    expect(result.value).toEqual([
+      { type: "asin", value: "B02DEF5678" }, // last-wins
+      { type: "isbn_13", value: "9780316769488" },
+    ]);
+  });
+
+  it("returns unchanged when incoming is empty", () => {
+    const current = [{ type: "asin", value: "B01ABC1234" }];
+    const result = resolveIdentifiers(current, []);
+    expect(result.status).toBe("unchanged");
+    expect(result.value).toEqual(current);
+  });
+
+  it("returns changed and replaces existing value when incoming has same type with different value", () => {
+    const current = [{ type: "asin", value: "B01ABC1234" }];
+    const incoming = [{ type: "asin", value: "B02DEF5678" }];
+    const result = resolveIdentifiers(current, incoming);
+    expect(result.status).toBe("changed");
+    expect(result.value).toEqual([{ type: "asin", value: "B02DEF5678" }]);
+  });
+
+  it("returns changed and adds incoming type when current has different types", () => {
+    const current = [{ type: "isbn_13", value: "9780316769488" }];
+    const incoming = [{ type: "asin", value: "B01ABC1234" }];
+    const result = resolveIdentifiers(current, incoming);
+    expect(result.status).toBe("changed");
+    expect(result.value).toEqual([
+      { type: "isbn_13", value: "9780316769488" },
+      { type: "asin", value: "B01ABC1234" },
+    ]);
+  });
+
+  it("merges by type with incoming winning on conflict and current order preserved", () => {
+    const current = [
+      { type: "isbn_13", value: "9780316769488" },
+      { type: "asin", value: "B01ABC1234" },
+    ];
+    const incoming = [
+      { type: "asin", value: "B02DEF5678" }, // replaces
+      { type: "goodreads", value: "12345" }, // new
+    ];
+    const result = resolveIdentifiers(current, incoming);
+    expect(result.status).toBe("changed");
+    expect(result.value).toEqual([
+      { type: "isbn_13", value: "9780316769488" }, // unchanged, current order
+      { type: "asin", value: "B02DEF5678" }, // replaced, current order
+      { type: "goodreads", value: "12345" }, // new, appended
+    ]);
+  });
+
+  it("dedupes intra-incoming duplicates with last-wins before merging", () => {
+    const current: { type: string; value: string }[] = [];
+    const incoming = [
+      { type: "asin", value: "OLD" },
+      { type: "asin", value: "NEW" },
+    ];
+    const result = resolveIdentifiers(current, incoming);
+    expect(result.value).toEqual([{ type: "asin", value: "NEW" }]);
+  });
+
+  it("returns unchanged when incoming is a subset of current with matching values", () => {
+    const current = [
+      { type: "isbn_13", value: "9780316769488" },
+      { type: "asin", value: "B01ABC1234" },
+    ];
+    const incoming = [{ type: "isbn_13", value: "9780316769488" }];
+    const result = resolveIdentifiers(current, incoming);
+    expect(result.status).toBe("unchanged");
+    expect(result.value).toEqual(current);
   });
 });
