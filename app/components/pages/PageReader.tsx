@@ -249,18 +249,18 @@ export default function PageReader({
         }`}
       >
         {/* Tap zones for mobile navigation */}
-        <button
+        <Button
           aria-label="Previous page"
-          className="absolute left-0 top-0 w-1/3 h-full z-10 cursor-pointer opacity-0"
+          className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
           disabled={currentPage === 0}
           onClick={() => goToPage(currentPage - 1)}
-          type="button"
+          variant="ghost"
         />
-        <button
+        <Button
           aria-label="Next page"
-          className="absolute right-0 top-0 w-1/3 h-full z-10 cursor-pointer opacity-0"
+          className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
           onClick={() => goToPage(currentPage + 1)}
-          type="button"
+          variant="ghost"
         />
 
         {/* Loading spinner */}
