@@ -192,6 +192,16 @@ func TestCache_SizeBytes_EmptyCacheDir(t *testing.T) {
 	assert.Equal(t, 0, count)
 }
 
+func TestCache_SizeBytes_MissingRoot(t *testing.T) {
+	t.Parallel()
+	c := NewCache(filepath.Join(t.TempDir(), "does-not-exist"), 150, 85)
+
+	bytes, count, err := c.SizeBytes()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), bytes)
+	assert.Equal(t, 0, count)
+}
+
 func TestCache_SizeBytes_CountsRenderedPages(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

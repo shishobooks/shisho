@@ -137,9 +137,6 @@ func (c *Cache) SizeBytes() (int64, int, error) {
 		return nil
 	})
 	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, 0, nil
-		}
 		return 0, 0, errors.Wrap(err, "failed to walk cache")
 	}
 	return totalBytes, totalCount, nil
