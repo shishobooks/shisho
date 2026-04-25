@@ -23,13 +23,15 @@ const (
 
 // Middleware provides authentication middleware.
 type Middleware struct {
-	authService *Service
+	authService    *Service
+	basicAuthCache *basicAuthCache
 }
 
 // NewMiddleware creates a new auth middleware.
 func NewMiddleware(authService *Service) *Middleware {
 	return &Middleware{
-		authService: authService,
+		authService:    authService,
+		basicAuthCache: newBasicAuthCache(defaultBasicAuthCacheTTL),
 	}
 }
 
@@ -168,9 +170,20 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		username := parts[0]
 		password := parts[1]
 
-		user, err := m.authService.Authenticate(ctx, username, password)
-		if err != nil {
-			return respondBasicAuthRequired(c)
+		cacheKey := basicAuthCacheKey(username, password)
+		user, ok := m.basicAuthCache.get(cacheKey)
+		if !ok {
+			authed, authErr := m.authService.Authenticate(ctx, username, password)
+			if authErr != nil {
+				return respondBasicAuthRequired(c)
+			}
+			user = authed
+			// Skip caching while a password reset is required so that
+			// completing the reset takes effect on the very next OPDS hit
+			// without waiting for the TTL.
+			if !user.MustChangePassword {
+				m.basicAuthCache.put(cacheKey, user)
+			}
 		}
 		if user.MustChangePassword {
 			return respondBasicAuthRequired(c)

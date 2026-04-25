@@ -169,6 +169,163 @@ func TestMiddlewareAuthenticate_BlocksCrossUserPasswordReset(t *testing.T) {
 	assert.Equal(t, "password_reset_required", codeErr.Code)
 }
 
+func TestMiddlewareBasicAuth_CachesSuccessfulAuth(t *testing.T) {
+	t.Parallel()
+
+	db := setupMiddlewareDB(t)
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
+	middleware := NewMiddleware(authService)
+	ctx := context.Background()
+
+	role := new(models.Role)
+	require.NoError(t, db.NewSelect().Model(role).Where("name = ?", models.RoleViewer).Scan(ctx))
+
+	hashed, err := HashPassword("password1")
+	require.NoError(t, err)
+	user := &models.User{
+		Username:     "cacheuser",
+		PasswordHash: hashed,
+		RoleID:       role.ID,
+		IsActive:     true,
+	}
+	_, err = db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+
+	access := &models.UserLibraryAccess{UserID: user.ID, LibraryID: nil}
+	_, err = db.NewInsert().Model(access).Exec(ctx)
+	require.NoError(t, err)
+
+	doRequest := func() (called bool, status int) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
+		req.SetBasicAuth("cacheuser", "password1")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := middleware.BasicAuth(func(_ echo.Context) error {
+			called = true
+			return nil
+		})(c)
+		require.NoError(t, err)
+		return called, rec.Code
+	}
+
+	called, _ := doRequest()
+	require.True(t, called, "first request should authenticate")
+
+	// Break the password hash in the DB. If the cache is working, the next
+	// request still succeeds because it never touches the DB or bcrypt.
+	_, err = db.NewUpdate().
+		Model((*models.User)(nil)).
+		Set("password_hash = ?", "$2a$12$broken.hash.that.cannot.match.any.password.at.all.aaaaaaaaaaa").
+		Where("id = ?", user.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	called, _ = doRequest()
+	assert.True(t, called, "second request should hit the cache and succeed despite invalidated DB hash")
+}
+
+func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
+	t.Parallel()
+
+	db := setupMiddlewareDB(t)
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
+	middleware := NewMiddleware(authService)
+	middleware.basicAuthCache = newBasicAuthCache(20 * time.Millisecond)
+	ctx := context.Background()
+
+	role := new(models.Role)
+	require.NoError(t, db.NewSelect().Model(role).Where("name = ?", models.RoleViewer).Scan(ctx))
+
+	hashed, err := HashPassword("password1")
+	require.NoError(t, err)
+	user := &models.User{
+		Username:     "ttluser",
+		PasswordHash: hashed,
+		RoleID:       role.ID,
+		IsActive:     true,
+	}
+	_, err = db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+
+	access := &models.UserLibraryAccess{UserID: user.ID, LibraryID: nil}
+	_, err = db.NewInsert().Model(access).Exec(ctx)
+	require.NoError(t, err)
+
+	doRequest := func() (called bool, status int) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
+		req.SetBasicAuth("ttluser", "password1")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := middleware.BasicAuth(func(_ echo.Context) error {
+			called = true
+			return nil
+		})(c)
+		require.NoError(t, err)
+		return called, rec.Code
+	}
+
+	called, _ := doRequest()
+	require.True(t, called)
+
+	// Break the hash and wait for the cache entry to expire.
+	_, err = db.NewUpdate().
+		Model((*models.User)(nil)).
+		Set("password_hash = ?", "$2a$12$broken.hash.that.cannot.match.any.password.at.all.aaaaaaaaaaa").
+		Where("id = ?", user.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(40 * time.Millisecond)
+
+	called, status := doRequest()
+	assert.False(t, called, "after TTL expiry the cache must miss and the broken hash should reject the request")
+	assert.Equal(t, http.StatusUnauthorized, status)
+}
+
+func TestMiddlewareBasicAuth_DoesNotCacheFailedAuth(t *testing.T) {
+	t.Parallel()
+
+	db := setupMiddlewareDB(t)
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
+	middleware := NewMiddleware(authService)
+	ctx := context.Background()
+
+	role := new(models.Role)
+	require.NoError(t, db.NewSelect().Model(role).Where("name = ?", models.RoleViewer).Scan(ctx))
+
+	hashed, err := HashPassword("rightpassword")
+	require.NoError(t, err)
+	user := &models.User{
+		Username:     "neguser",
+		PasswordHash: hashed,
+		RoleID:       role.ID,
+		IsActive:     true,
+	}
+	_, err = db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+
+	access := &models.UserLibraryAccess{UserID: user.ID, LibraryID: nil}
+	_, err = db.NewInsert().Model(access).Exec(ctx)
+	require.NoError(t, err)
+
+	doRequest := func(password string) int {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
+		req.SetBasicAuth("neguser", password)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		require.NoError(t, middleware.BasicAuth(func(_ echo.Context) error { return nil })(c))
+		return rec.Code
+	}
+
+	assert.Equal(t, http.StatusUnauthorized, doRequest("wrong"))
+	assert.Equal(t, http.StatusOK, doRequest("rightpassword"))
+}
+
 func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
 	t.Parallel()
 
