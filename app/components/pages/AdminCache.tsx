@@ -103,6 +103,7 @@ const AdminCache = () => {
                 </div>
                 {canClear && (
                   <Button
+                    aria-label={`Clear ${cache.name} cache`}
                     disabled={isClearing || cache.file_count === 0}
                     onClick={() => setPending(cache)}
                     variant="outline"

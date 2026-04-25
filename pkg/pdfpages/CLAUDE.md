@@ -14,6 +14,8 @@ Where `N` is the 0-indexed page number.
 
 Concurrent calls to `renderPage` are serialized by the pdfium pool's `MaxTotal: 1` configuration (set in `pkg/pdf/cover.go`). When multiple goroutines call `renderPage` simultaneously, they queue at `GetInstance` — so no explicit mutex is needed in this package.
 
+**`Clear()` vs in-flight `GetPage()`:** `Clear()` removes the entire `{cacheDir}/pdf/` tree via `os.RemoveAll`. If an admin triggers a clear while a `GetPage` call is mid-`renderPage`, the `os.MkdirAll(pageDir)` → `os.WriteFile(outPath)` sequence in `renderPage` can race the removal and fail with `ENOENT`. The in-flight request returns an error; the next attempt recreates the directory and succeeds. This is acceptable for an admin-initiated operation but callers should not assume `Clear()` is transparent to concurrent readers.
+
 ## Configuration
 
 DPI and JPEG quality are configurable via server config:
