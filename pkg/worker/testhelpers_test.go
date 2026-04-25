@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -92,6 +93,7 @@ func newTestContext(t *testing.T) *testContext {
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
+	appSettingsService := appsettings.NewService(db)
 
 	// Create worker
 	cfg := &config.Config{
@@ -114,6 +116,7 @@ func newTestContext(t *testing.T) *testContext {
 		publisherService:   publisherService,
 		imprintService:     imprintService,
 		fingerprintService: fingerprintService,
+		appSettingsService: appSettingsService,
 	}
 
 	// Create context with logger
@@ -304,6 +307,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
+	appSettingsService := appsettings.NewService(db)
 
 	// Create worker with search service
 	cfg := &config.Config{
@@ -327,6 +331,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		publisherService:   publisherService,
 		imprintService:     imprintService,
 		fingerprintService: fingerprintService,
+		appSettingsService: appSettingsService,
 	}
 
 	// Create context with logger
