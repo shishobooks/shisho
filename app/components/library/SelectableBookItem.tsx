@@ -1,5 +1,5 @@
 import { useBulkSelection } from "@/hooks/useBulkSelection";
-import type { Book } from "@/types";
+import type { Book, GallerySize } from "@/types";
 
 import BookItem from "./BookItem";
 
@@ -11,6 +11,7 @@ interface SelectableBookItemProps {
   addedByUsername?: string;
   pageBookIds: number[];
   cacheKey?: number;
+  gallerySize?: GallerySize;
 }
 
 export const SelectableBookItem = ({
@@ -21,6 +22,7 @@ export const SelectableBookItem = ({
   addedByUsername,
   pageBookIds,
   cacheKey,
+  gallerySize,
 }: SelectableBookItemProps) => {
   const { isSelectionMode, isSelected, toggleBook, selectRange } =
     useBulkSelection();
@@ -31,6 +33,7 @@ export const SelectableBookItem = ({
       book={book}
       cacheKey={cacheKey}
       coverAspectRatio={coverAspectRatio}
+      gallerySize={gallerySize}
       isSelected={isSelected(book.id)}
       isSelectionMode={isSelectionMode}
       libraryId={libraryId}

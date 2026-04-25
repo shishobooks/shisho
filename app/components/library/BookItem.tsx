@@ -30,6 +30,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  COVER_WIDTH_CLASS,
+  DEFAULT_GALLERY_SIZE,
+} from "@/constants/gallerySize";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { type RescanMode } from "@/hooks/queries/resync";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
@@ -40,6 +44,7 @@ import {
   FileTypeCBZ,
   type Book,
   type File,
+  type GallerySize,
 } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
@@ -54,6 +59,7 @@ interface BookItemProps {
   onSelect?: () => void;
   onShiftSelect?: () => void;
   cacheKey?: number;
+  gallerySize?: GallerySize;
 }
 
 // Selects the file that would be used for the cover based on cover_aspect_ratio setting
@@ -144,6 +150,7 @@ const BookItem = ({
   onSelect,
   onShiftSelect,
   cacheKey,
+  gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
 
@@ -212,7 +219,8 @@ const BookItem = ({
   return (
     <div
       className={cn(
-        "w-[calc(50%-0.5rem)] sm:w-32 group/card relative",
+        "w-[calc(50%-0.5rem)] group/card relative",
+        COVER_WIDTH_CLASS[gallerySize],
         isSelectionMode && "cursor-pointer",
       )}
       key={book.id}
