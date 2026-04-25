@@ -18,8 +18,8 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db: db}
 }
 
-// GetViewerSettings retrieves viewer settings for a user, returning defaults if none exist.
-func (svc *Service) GetViewerSettings(ctx context.Context, userID int) (*models.UserSettings, error) {
+// GetUserSettings retrieves user settings for a user, returning defaults if none exist.
+func (svc *Service) GetUserSettings(ctx context.Context, userID int) (*models.UserSettings, error) {
 	settings := &models.UserSettings{}
 	err := svc.db.NewSelect().
 		Model(settings).
@@ -39,32 +39,33 @@ func (svc *Service) GetViewerSettings(ctx context.Context, userID int) (*models.
 	return settings, nil
 }
 
-// ViewerSettingsUpdate describes a partial update to viewer settings. Any
+// UserSettingsUpdate describes a partial update to user settings. Any
 // field left nil is left untouched; fields set to a non-nil value are
 // persisted. This lets clients change one setting without having to read
 // and echo every other setting first.
-type ViewerSettingsUpdate struct {
+type UserSettingsUpdate struct {
 	PreloadCount *int
 	FitMode      *string
 	EpubFontSize *int
 	EpubTheme    *string
 	EpubFlow     *string
+	GallerySize  *string
 }
 
-// UpdateViewerSettings applies a partial update to a user's viewer settings,
+// UpdateUserSettings applies a partial update to a user's settings,
 // creating a row if none exists. Runs in a transaction so that the
 // read-current-then-write-merged sequence is atomic — otherwise two
 // concurrent updates from the same user (rapid toggles in one tab, or two
 // tabs racing) could lose one of the writes.
-func (svc *Service) UpdateViewerSettings(
+func (svc *Service) UpdateUserSettings(
 	ctx context.Context,
 	userID int,
-	update ViewerSettingsUpdate,
+	update UserSettingsUpdate,
 ) (*models.UserSettings, error) {
 	var result *models.UserSettings
 	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		// Load the current row inside the tx so a concurrent update can't
-		// slip in between the read and the write. GetViewerSettings doesn't
+		// slip in between the read and the write. GetUserSettings doesn't
 		// take a tx, so inline the select here.
 		current := &models.UserSettings{}
 		err := tx.NewSelect().
@@ -95,6 +96,9 @@ func (svc *Service) UpdateViewerSettings(
 		if update.EpubFlow != nil {
 			current.EpubFlow = *update.EpubFlow
 		}
+		if update.GallerySize != nil {
+			current.GallerySize = *update.GallerySize
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -112,6 +116,7 @@ func (svc *Service) UpdateViewerSettings(
 			Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
 			Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
 			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
+			Set("gallery_size = EXCLUDED.gallery_size").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {

@@ -7,6 +7,7 @@ import {
   SquareCheckBig,
   Tags,
 } from "lucide-react";
+import { forwardRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -292,22 +293,30 @@ const FilterContent = ({
   </div>
 );
 
-const FilterButton = ({
-  hasActiveFilters,
-  ...props
-}: {
-  hasActiveFilters: boolean;
-} & Omit<
-  React.ComponentPropsWithoutRef<typeof Button>,
-  "hasActiveFilters"
->) => (
-  <Button aria-label="Filters" size="icon" variant="outline" {...props}>
+// forwardRef so SheetTrigger/DrawerTrigger asChild can attach its DOM ref
+// onto the underlying button. See app/CLAUDE.md →
+// "asChild trigger components must forwardRef".
+const FilterButton = forwardRef<
+  HTMLButtonElement,
+  { hasActiveFilters: boolean } & Omit<
+    React.ComponentPropsWithoutRef<typeof Button>,
+    "hasActiveFilters"
+  >
+>(({ hasActiveFilters, ...props }, ref) => (
+  <Button
+    aria-label="Filters"
+    ref={ref}
+    size="icon"
+    variant="outline"
+    {...props}
+  >
     <ListFilter className={cn("h-4 w-4", hasActiveFilters && "text-primary")} />
     {hasActiveFilters && (
       <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
     )}
   </Button>
-);
+));
+FilterButton.displayName = "FilterButton";
 
 export const FilterSheet = (props: FilterSheetProps) => {
   const { onClearAll, hasActiveFilters, ...filterContentProps } = props;

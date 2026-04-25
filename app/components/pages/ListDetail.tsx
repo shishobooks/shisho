@@ -10,6 +10,7 @@ import { DraggableBookList } from "@/components/library/DraggableBookList";
 import Gallery from "@/components/library/Gallery";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { ShareListDialog } from "@/components/library/ShareListDialog";
+import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,13 +23,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DEFAULT_GALLERY_SIZE,
+  ITEMS_PER_PAGE_BY_SIZE,
+} from "@/constants/gallerySize";
+import {
   useDeleteList,
   useList,
   useListBooks,
   useReorderListBooks,
   useUpdateList,
 } from "@/hooks/queries/lists";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -36,11 +46,10 @@ import {
   ListSortAuthorDesc,
   ListSortTitleAsc,
   ListSortTitleDesc,
+  type GallerySize,
   type ListBook,
   type UpdateListPayload,
 } from "@/types";
-
-const ITEMS_PER_PAGE = 24;
 
 const SORT_OPTIONS = [
   { value: ListSortAddedAtDesc, label: "Recently Added" },
@@ -54,13 +63,57 @@ const SORT_OPTIONS = [
 const ListDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const listId = id ? parseInt(id, 10) : undefined;
+
+  const userSettingsQuery = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  const urlSize: GallerySize | null = parseGallerySize(
+    searchParams.get("size"),
+  );
+  const savedSize: GallerySize =
+    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+  const effectiveSize: GallerySize = urlSize ?? savedSize;
+  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
+  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
   // Get current page from URL
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const limit = ITEMS_PER_PAGE;
+  const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
+
+  const applyGallerySize = (next: GallerySize) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === savedSize) {
+        params.delete("size");
+      } else {
+        params.set("size", next);
+      }
+      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
+      params.set("page", String(newPage));
+      return params;
+    });
+  };
+
+  const handleSaveSizeAsDefault = () => {
+    updateUserSettings.mutate(
+      { gallery_size: effectiveSize },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("size");
+            return params;
+          });
+        },
+      },
+    );
+  };
 
   const [sort, setSort] = useState<string | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -70,7 +123,11 @@ const ListDetail = () => {
   const listQuery = useList(listId);
 
   usePageTitle(listQuery.data?.list?.name ?? "List");
-  const listBooksQuery = useListBooks(listId, { sort, limit, offset });
+  const listBooksQuery = useListBooks(
+    listId,
+    { sort, limit, offset },
+    { enabled: userSettingsResolved && Boolean(listId) },
+  );
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();
   const reorderMutation = useReorderListBooks();
@@ -253,28 +310,41 @@ const ListDetail = () => {
         {/* Books in List */}
         {bookCount > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-semibold mb-4">
-              Books
-              {list.is_ordered &&
-                canEdit &&
-                currentPage === 1 &&
-                bookCount <= ITEMS_PER_PAGE && (
-                  <span className="text-sm font-normal text-muted-foreground ml-2">
-                    (drag to reorder)
-                  </span>
-                )}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">
+                Books
+                {list.is_ordered &&
+                  canEdit &&
+                  currentPage === 1 &&
+                  bookCount <= itemsPerPage && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      (drag to reorder)
+                    </span>
+                  )}
+              </h2>
+              <div className="hidden sm:flex">
+                <SizePopover
+                  effectiveSize={effectiveSize}
+                  isSaving={updateUserSettings.isPending}
+                  onChange={applyGallerySize}
+                  onSaveAsDefault={handleSaveSizeAsDefault}
+                  savedSize={savedSize}
+                  trigger={<SizeButton isDirty={isSizeDirty} />}
+                />
+              </div>
+            </div>
             {/* Use DraggableBookList for ordered lists when on page 1 and all books fit */}
             {list.is_ordered &&
             canEdit &&
             currentPage === 1 &&
-            bookCount <= ITEMS_PER_PAGE ? (
+            bookCount <= itemsPerPage ? (
               listBooksQuery.isLoading ? (
                 <LoadingSpinner />
               ) : listBooksQuery.isSuccess ? (
                 <DraggableBookList
                   books={books}
                   cacheKey={listBooksQuery.dataUpdatedAt}
+                  gallerySize={effectiveSize}
                   isOwner={isOwner}
                   onReorder={handleReorder}
                 />
@@ -287,7 +357,7 @@ const ListDetail = () => {
                 isSuccess={listBooksQuery.isSuccess}
                 itemLabel="books"
                 items={books}
-                itemsPerPage={ITEMS_PER_PAGE}
+                itemsPerPage={itemsPerPage}
                 renderItem={(listBook: ListBook) =>
                   listBook.book ? (
                     <BookItem
@@ -296,6 +366,7 @@ const ListDetail = () => {
                       }
                       book={listBook.book}
                       cacheKey={listBooksQuery.dataUpdatedAt}
+                      gallerySize={effectiveSize}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}
                     />

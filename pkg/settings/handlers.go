@@ -13,7 +13,7 @@ type handler struct {
 	settingsService *Service
 }
 
-func (h *handler) getViewerSettings(c echo.Context) error {
+func (h *handler) getUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	user, ok := c.Get("user").(*models.User)
@@ -21,21 +21,22 @@ func (h *handler) getViewerSettings(c echo.Context) error {
 		return errcodes.Unauthorized("Authentication required")
 	}
 
-	settings, err := h.settingsService.GetViewerSettings(ctx, user.ID)
+	settings, err := h.settingsService.GetUserSettings(ctx, user.ID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, ViewerSettingsResponse{
+	return c.JSON(http.StatusOK, UserSettingsResponse{
 		PreloadCount: settings.ViewerPreloadCount,
 		FitMode:      settings.ViewerFitMode,
 		EpubFontSize: settings.EpubFontSize,
 		EpubTheme:    settings.EpubTheme,
 		EpubFlow:     settings.EpubFlow,
+		GallerySize:  settings.GallerySize,
 	})
 }
 
-func (h *handler) updateViewerSettings(c echo.Context) error {
+func (h *handler) updateUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	user, ok := c.Get("user").(*models.User)
@@ -43,7 +44,7 @@ func (h *handler) updateViewerSettings(c echo.Context) error {
 		return errcodes.Unauthorized("Authentication required")
 	}
 
-	var payload ViewerSettingsPayload
+	var payload UserSettingsPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}
@@ -65,18 +66,22 @@ func (h *handler) updateViewerSettings(c echo.Context) error {
 	if payload.EpubFlow != nil && !IsValidEpubFlow(*payload.EpubFlow) {
 		return errcodes.ValidationError("viewer_epub_flow must be 'paginated' or 'scrolled'")
 	}
+	if payload.GallerySize != nil && !IsValidGallerySize(*payload.GallerySize) {
+		return errcodes.ValidationError("gallery_size must be 's', 'm', 'l', or 'xl'")
+	}
 
-	settings, err := h.settingsService.UpdateViewerSettings(
-		ctx, user.ID, ViewerSettingsUpdate(payload))
+	settings, err := h.settingsService.UpdateUserSettings(
+		ctx, user.ID, UserSettingsUpdate(payload))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, ViewerSettingsResponse{
+	return c.JSON(http.StatusOK, UserSettingsResponse{
 		PreloadCount: settings.ViewerPreloadCount,
 		FitMode:      settings.ViewerFitMode,
 		EpubFontSize: settings.EpubFontSize,
 		EpubTheme:    settings.EpubTheme,
 		EpubFlow:     settings.EpubFlow,
+		GallerySize:  settings.GallerySize,
 	})
 }

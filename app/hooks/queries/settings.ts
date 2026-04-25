@@ -6,59 +6,59 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { EpubFlow, EpubTheme, FitMode } from "@/types";
+import type { EpubFlow, EpubTheme, FitMode, GallerySize } from "@/types";
 
-export interface ViewerSettings {
+export interface UserSettings {
   preload_count: number;
   fit_mode: FitMode;
   viewer_epub_font_size: number;
   viewer_epub_theme: EpubTheme;
   viewer_epub_flow: EpubFlow;
+  gallery_size: GallerySize;
 }
 
 export enum QueryKey {
-  ViewerSettings = "ViewerSettings",
+  UserSettings = "UserSettings",
 }
 
-export const useViewerSettings = (
+export const useUserSettings = (
   options: Omit<
-    UseQueryOptions<ViewerSettings, ShishoAPIError>,
+    UseQueryOptions<UserSettings, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ViewerSettings, ShishoAPIError>({
+  return useQuery<UserSettings, ShishoAPIError>({
     ...options,
-    queryKey: [QueryKey.ViewerSettings],
+    queryKey: [QueryKey.UserSettings],
     queryFn: ({ signal }) => {
-      return API.request("GET", "/settings/viewer", null, null, signal);
+      return API.request("GET", "/settings/user", null, null, signal);
     },
   });
 };
 
 // Partial update: callers send only the fields they want to change. Omitted
 // (or undefined) fields are left untouched on the server. Mirrors the backend
-// ViewerSettingsPayload shape, which has all fields as omitempty pointers.
-export interface UpdateViewerSettingsVariables {
+// UserSettingsPayload shape, which has all fields as omitempty pointers.
+export interface UpdateUserSettingsVariables {
   preload_count?: number;
   fit_mode?: FitMode;
   viewer_epub_font_size?: number;
   viewer_epub_theme?: EpubTheme;
   viewer_epub_flow?: EpubFlow;
+  gallery_size?: GallerySize;
 }
 
-export const useUpdateViewerSettings = () => {
+export const useUpdateUserSettings = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    ViewerSettings,
-    ShishoAPIError,
-    UpdateViewerSettingsVariables
-  >({
-    mutationFn: (payload) => {
-      return API.request("PUT", "/settings/viewer", payload, null);
+  return useMutation<UserSettings, ShishoAPIError, UpdateUserSettingsVariables>(
+    {
+      mutationFn: (payload) => {
+        return API.request("PUT", "/settings/user", payload, null);
+      },
+      onSuccess: (data) => {
+        queryClient.setQueryData([QueryKey.UserSettings], data);
+      },
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData([QueryKey.ViewerSettings], data);
-    },
-  });
+  );
 };

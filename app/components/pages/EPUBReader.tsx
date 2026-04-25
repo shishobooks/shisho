@@ -18,9 +18,9 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { useEpubBlob } from "@/hooks/queries/epub";
 import {
-  useUpdateViewerSettings,
-  useViewerSettings,
-  type UpdateViewerSettingsVariables,
+  useUpdateUserSettings,
+  useUserSettings,
+  type UpdateUserSettingsVariables,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { File } from "@/types";
@@ -75,8 +75,8 @@ export default function EPUBReader({
     refetch,
   } = useEpubBlob(file.id);
 
-  const { data: settings, isLoading: settingsLoading } = useViewerSettings();
-  const updateSettings = useUpdateViewerSettings();
+  const { data: settings, isLoading: settingsLoading } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
   const settingsReady = !settingsLoading && settings != null;
 
   const fontSize = settings?.viewer_epub_font_size ?? 100;
@@ -93,7 +93,7 @@ export default function EPUBReader({
   }, [fontSize]);
 
   const commitSettings = useCallback(
-    (partial: UpdateViewerSettingsVariables) => {
+    (partial: UpdateUserSettingsVariables) => {
       updateSettings.mutate(partial);
     },
     [updateSettings],

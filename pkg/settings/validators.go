@@ -2,30 +2,32 @@ package settings
 
 import "github.com/shishobooks/shisho/pkg/models"
 
-// ViewerSettingsPayload is the request body for updating viewer settings.
+// UserSettingsPayload is the request body for updating user settings.
 //
 // All fields are pointers so clients can send partial updates. Omitting a
 // field (or sending it as null) leaves the current value untouched; sending
 // a value updates just that field.
 //
-// Field shape must stay identical to ViewerSettingsUpdate (same field names,
+// Field shape must stay identical to UserSettingsUpdate (same field names,
 // same types, same order) — the handler converts between them with
-// `ViewerSettingsUpdate(payload)`. Drifting either one breaks that cast.
-type ViewerSettingsPayload struct {
+// `UserSettingsUpdate(payload)`. Drifting either one breaks that cast.
+type UserSettingsPayload struct {
 	PreloadCount *int    `json:"preload_count,omitempty"`
 	FitMode      *string `json:"fit_mode,omitempty"`
 	EpubFontSize *int    `json:"viewer_epub_font_size,omitempty"`
 	EpubTheme    *string `json:"viewer_epub_theme,omitempty"`
 	EpubFlow     *string `json:"viewer_epub_flow,omitempty"`
+	GallerySize  *string `json:"gallery_size,omitempty"`
 }
 
-// ViewerSettingsResponse is the response for viewer settings.
-type ViewerSettingsResponse struct {
+// UserSettingsResponse is the response for user settings.
+type UserSettingsResponse struct {
 	PreloadCount int    `json:"preload_count"`
 	FitMode      string `json:"fit_mode"`
 	EpubFontSize int    `json:"viewer_epub_font_size"`
 	EpubTheme    string `json:"viewer_epub_theme"`
 	EpubFlow     string `json:"viewer_epub_flow"`
+	GallerySize  string `json:"gallery_size"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -56,6 +58,16 @@ func IsValidEpubTheme(theme string) bool {
 func IsValidEpubFlow(flow string) bool {
 	switch flow {
 	case models.EpubFlowPaginated, models.EpubFlowScrolled:
+		return true
+	}
+	return false
+}
+
+// IsValidGallerySize returns true if the size is a supported gallery size.
+func IsValidGallerySize(size string) bool {
+	switch size {
+	case models.GallerySizeSmall, models.GallerySizeMedium,
+		models.GallerySizeLarge, models.GallerySizeExtraLarge:
 		return true
 	}
 	return false

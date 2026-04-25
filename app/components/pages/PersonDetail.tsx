@@ -1,6 +1,11 @@
 import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
@@ -9,8 +14,10 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
 import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
+import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeletePerson,
@@ -21,20 +28,74 @@ import {
   usePersonNarratedFiles,
   useUpdatePerson,
 } from "@/hooks/queries/people";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { parseGallerySize } from "@/libraries/gallerySize";
+import type { GallerySize } from "@/types";
 
 const PersonDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const personId = id ? parseInt(id, 10) : undefined;
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const userSettingsQuery = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  const urlSize: GallerySize | null = parseGallerySize(
+    searchParams.get("size"),
+  );
+  const savedSize: GallerySize =
+    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+  const effectiveSize: GallerySize = urlSize ?? savedSize;
+  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
+
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
+
+  // No page recalc here — this gallery is unpaginated (single unbounded
+  // fetch). The paginated pages (Home / SeriesList / ListDetail) call
+  // pageForSizeChange to preserve the user's first-visible book across
+  // size changes; that math is meaningless when there's only one page.
+  const applyGallerySize = (next: GallerySize) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === savedSize) {
+        params.delete("size");
+      } else {
+        params.set("size", next);
+      }
+      return params;
+    });
+  };
+
+  const handleSaveSizeAsDefault = () => {
+    updateUserSettings.mutate(
+      { gallery_size: effectiveSize },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("size");
+            return params;
+          });
+        },
+      },
+    );
+  };
 
   const libraryQuery = useLibrary(libraryId);
   const personQuery = usePerson(personId);
 
   usePageTitle(personQuery.data?.name ?? "Person");
-  const authoredBooksQuery = usePersonAuthoredBooks(personId);
+  const authoredBooksQuery = usePersonAuthoredBooks(personId, {
+    enabled: userSettingsResolved && Boolean(personId),
+  });
   const narratedFilesQuery = usePersonNarratedFiles(personId);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -180,7 +241,19 @@ const PersonDetail = () => {
       {/* Authored Books Section */}
       {person.authored_book_count > 0 && (
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-4">Books Authored</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Books Authored</h2>
+            <div className="hidden sm:flex">
+              <SizePopover
+                effectiveSize={effectiveSize}
+                isSaving={updateUserSettings.isPending}
+                onChange={applyGallerySize}
+                onSaveAsDefault={handleSaveSizeAsDefault}
+                savedSize={savedSize}
+                trigger={<SizeButton isDirty={isSizeDirty} />}
+              />
+            </div>
+          </div>
           {authoredBooksQuery.isLoading && <LoadingSpinner />}
           {authoredBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
@@ -188,6 +261,7 @@ const PersonDetail = () => {
                 <BookItem
                   book={book}
                   cacheKey={authoredBooksQuery.dataUpdatedAt}
+                  gallerySize={effectiveSize}
                   key={book.id}
                   libraryId={libraryId!}
                 />

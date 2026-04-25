@@ -25,6 +25,14 @@ const (
 	EpubFlowScrolled  = "scrolled"
 )
 
+const (
+	//tygo:emit export type GallerySize = typeof GallerySizeSmall | typeof GallerySizeMedium | typeof GallerySizeLarge | typeof GallerySizeExtraLarge;
+	GallerySizeSmall      = "s"
+	GallerySizeMedium     = "m"
+	GallerySizeLarge      = "l"
+	GallerySizeExtraLarge = "xl"
+)
+
 type UserSettings struct {
 	bun.BaseModel `bun:"table:user_settings,alias:us" tstype:"-"`
 
@@ -37,6 +45,7 @@ type UserSettings struct {
 	EpubFontSize       int       `bun:"viewer_epub_font_size,notnull,default:100" json:"viewer_epub_font_size"`
 	EpubTheme          string    `bun:"viewer_epub_theme,notnull,default:'light'" json:"viewer_epub_theme" tstype:"EpubTheme"`
 	EpubFlow           string    `bun:"viewer_epub_flow,notnull,default:'paginated'" json:"viewer_epub_flow" tstype:"EpubFlow"`
+	GallerySize        string    `bun:",notnull,default:'m'" json:"gallery_size" tstype:"GallerySize"`
 }
 
 // DefaultUserSettings returns a UserSettings with default values.
@@ -47,5 +56,6 @@ func DefaultUserSettings() *UserSettings {
 		EpubFontSize:       100,
 		EpubTheme:          EpubThemeLight,
 		EpubFlow:           EpubFlowPaginated,
+		GallerySize:        GallerySizeMedium,
 	}
 }

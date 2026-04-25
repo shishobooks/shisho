@@ -980,6 +980,40 @@ The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complet
 
 **Related:** DropdownMenu components that trigger dialogs should also have `onCloseAutoFocus={(e) => e.preventDefault()}` on `DropdownMenuContent` to prevent focus management conflicts.
 
+### asChild trigger components must forwardRef
+
+**Problem:** When a Radix `XxxTrigger asChild` wraps a custom React function component (instead of a direct `<Button>` or DOM element), the component must be a `forwardRef` that spreads incoming props onto the underlying button. Otherwise:
+
+- For **floating** primitives (`Popover`, `DropdownMenu`, `HoverCard`, `Tooltip` with positioning, `ContextMenu`): the popper has no DOM ref to anchor to, so Floating UI falls back to the document origin `(0, 0)` and the content renders **off-screen** (often above the viewport). The trigger's onClick still fires — the component appears to do nothing.
+- For **non-floating** primitives (`Sheet`, `Drawer`, `Dialog`): the panel still renders correctly because it's positioned relative to the viewport, not the trigger. But focus management on close can't restore focus to the trigger, and screen reader / keyboard semantics suffer.
+
+This bug is **invisible in jsdom unit tests** — Radix's positioning math doesn't run there. Caught only in a real browser.
+
+**Required pattern for any custom component used as an asChild trigger:**
+
+```tsx
+import { forwardRef } from "react";
+
+export const MyButton = forwardRef<
+  HTMLButtonElement,
+  { isDirty: boolean } & React.ComponentPropsWithoutRef<typeof Button>
+>(({ isDirty, ...props }, ref) => (
+  <Button ref={ref} {...props}>
+    {/* ... */}
+  </Button>
+));
+MyButton.displayName = "MyButton";
+```
+
+Three things matter:
+1. `forwardRef` — receives the ref from Radix's Slot
+2. `ref={ref}` on the underlying `<Button>` — passes the ref to a DOM element (Button itself is forwardRef'd)
+3. `{...props}` — Radix's Slot adds `onClick`, `aria-expanded`, `aria-controls`, `data-state` etc. via `React.cloneElement`; these must reach the button
+
+Direct `<Button>` (the shadcn/ui primitive) is already forwardRef'd, so the common case `<PopoverTrigger asChild><Button>...</Button></PopoverTrigger>` works without ceremony. The footgun is when you wrap that Button in a custom presentational component (`SizeButton`, `SortButton`, `FilterButton`).
+
+**Existing forwardRef'd trigger components:** `SizeButton`, `SortButton`, `FilterButton`. Follow the same shape if you add another.
+
 ## Key Files
 
 | Purpose | Location |
