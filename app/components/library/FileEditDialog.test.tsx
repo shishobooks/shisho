@@ -333,6 +333,70 @@ describe("FileEditDialog", () => {
     });
   });
 
+  describe("identifier add form", () => {
+    const renderFileEditDialogWithIdentifiers = (
+      identifiers: Array<{ type: string; value: string }>,
+    ) => {
+      const queryClient = createQueryClient();
+      const onOpenChange = vi.fn();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <FileEditDialog
+            file={{
+              ...mockFile,
+              identifiers: identifiers as typeof mockFile.identifiers,
+            }}
+            onOpenChange={onOpenChange}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      return { onOpenChange };
+    };
+
+    it("disables identifier types that are already present in the form", async () => {
+      const user = createUser();
+
+      renderFileEditDialogWithIdentifiers([
+        { type: "asin", value: "B01ABC1234" },
+      ]);
+
+      await user.click(
+        screen.getByRole("combobox", { name: /identifier type/i }),
+      );
+
+      // Radix Select uses role="option"; the disabled state is exposed via aria-disabled.
+      const asinOption = await screen.findByRole("option", { name: /asin/i });
+      expect(asinOption).toHaveAttribute("aria-disabled", "true");
+
+      // Hover surfaces the explanatory tooltip.
+      await user.hover(asinOption);
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent(
+        /this file already has an asin identifier\. remove it first/i,
+      );
+    });
+
+    it("re-enables a previously-disabled type after the existing identifier is removed", async () => {
+      const user = createUser();
+      renderFileEditDialogWithIdentifiers([
+        { type: "asin", value: "B01ABC1234" },
+      ]);
+
+      // Remove the existing ASIN badge.
+      const removeButtons = screen.getAllByRole("button", { name: /remove/i });
+      await user.click(removeButtons[0]);
+
+      await user.click(
+        screen.getByRole("combobox", { name: /identifier type/i }),
+      );
+      const asinOption = await screen.findByRole("option", { name: /asin/i });
+      expect(asinOption).not.toHaveAttribute("aria-disabled", "true");
+    });
+  });
+
   describe("memory management", () => {
     it("should revoke blob URL when dialog closes", async () => {
       // Setup: spy on URL.revokeObjectURL

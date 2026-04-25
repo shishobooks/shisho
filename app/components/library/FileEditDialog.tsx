@@ -53,6 +53,11 @@ import {
   type DragHandleProps,
 } from "@/components/ui/SortableList";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useSetFileCoverPage,
   useUpdateFile,
   useUploadFileCover,
@@ -126,6 +131,11 @@ export function FileEditDialog({
   const [newIdentifierType, setNewIdentifierType] = useState<string>("isbn_13");
   const [newIdentifierValue, setNewIdentifierValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const presentIdentifierTypes = useMemo(
+    () => new Set(identifiers.map((id) => id.type)),
+    [identifiers],
+  );
 
   // New file metadata fields
   const [name, setName] = useState(file.name || "");
@@ -1276,6 +1286,7 @@ export function FileEditDialog({
                       </span>
                       : {id.value}
                       <button
+                        aria-label="Remove"
                         className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                         onClick={() => {
                           setIdentifiers(
@@ -1294,35 +1305,57 @@ export function FileEditDialog({
                     onValueChange={setNewIdentifierType}
                     value={newIdentifierType}
                   >
-                    <SelectTrigger className="w-auto min-w-32 shrink-0 gap-2">
+                    <SelectTrigger
+                      aria-label="Identifier type"
+                      className="w-auto min-w-32 shrink-0 gap-2"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="isbn_10">ISBN-10</SelectItem>
-                      <SelectItem value="isbn_13">ISBN-13</SelectItem>
-                      <SelectItem value="asin">ASIN</SelectItem>
-                      <SelectItem value="uuid">UUID</SelectItem>
-                      <SelectItem value="goodreads">Goodreads</SelectItem>
-                      <SelectItem value="google">Google</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                      {pluginIdentifierTypes
-                        ?.filter(
-                          (pt) =>
-                            ![
-                              "isbn_10",
-                              "isbn_13",
-                              "asin",
-                              "uuid",
-                              "goodreads",
-                              "google",
-                              "other",
-                            ].includes(pt.id),
-                        )
-                        .map((pt) => (
-                          <SelectItem key={pt.id} value={pt.id}>
-                            {pt.name}
+                      {[
+                        { id: "isbn_10", label: "ISBN-10" },
+                        { id: "isbn_13", label: "ISBN-13" },
+                        { id: "asin", label: "ASIN" },
+                        { id: "uuid", label: "UUID" },
+                        { id: "goodreads", label: "Goodreads" },
+                        { id: "google", label: "Google" },
+                        { id: "other", label: "Other" },
+                        ...(pluginIdentifierTypes
+                          ?.filter(
+                            (pt) =>
+                              ![
+                                "isbn_10",
+                                "isbn_13",
+                                "asin",
+                                "uuid",
+                                "goodreads",
+                                "google",
+                                "other",
+                              ].includes(pt.id),
+                          )
+                          .map((pt) => ({ id: pt.id, label: pt.name })) ?? []),
+                      ].map(({ id, label }) => {
+                        const isPresent = presentIdentifierTypes.has(id);
+                        const article = /^[aeiou]/i.test(label) ? "an" : "a";
+                        const item = (
+                          <SelectItem disabled={isPresent} key={id} value={id}>
+                            {label}
                           </SelectItem>
-                        ))}
+                        );
+                        if (!isPresent) return item;
+                        return (
+                          <Tooltip key={id}>
+                            <TooltipTrigger asChild>
+                              <span className="block">{item}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This file already has {article} {label}{" "}
+                              identifier. Remove it first to add a different
+                              value.
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <Input
