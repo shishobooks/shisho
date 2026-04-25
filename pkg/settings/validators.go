@@ -17,6 +17,7 @@ type UserSettingsPayload struct {
 	EpubFontSize *int    `json:"viewer_epub_font_size,omitempty"`
 	EpubTheme    *string `json:"viewer_epub_theme,omitempty"`
 	EpubFlow     *string `json:"viewer_epub_flow,omitempty"`
+	GallerySize  *string `json:"gallery_size,omitempty"`
 }
 
 // UserSettingsResponse is the response for user settings.
@@ -26,6 +27,7 @@ type UserSettingsResponse struct {
 	EpubFontSize int    `json:"viewer_epub_font_size"`
 	EpubTheme    string `json:"viewer_epub_theme"`
 	EpubFlow     string `json:"viewer_epub_flow"`
+	GallerySize  string `json:"gallery_size"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -56,6 +58,16 @@ func IsValidEpubTheme(theme string) bool {
 func IsValidEpubFlow(flow string) bool {
 	switch flow {
 	case models.EpubFlowPaginated, models.EpubFlowScrolled:
+		return true
+	}
+	return false
+}
+
+// IsValidGallerySize returns true if the size is a supported gallery size.
+func IsValidGallerySize(size string) bool {
+	switch size {
+	case models.GallerySizeSmall, models.GallerySizeMedium,
+		models.GallerySizeLarge, models.GallerySizeExtraLarge:
 		return true
 	}
 	return false

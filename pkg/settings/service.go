@@ -49,6 +49,7 @@ type UserSettingsUpdate struct {
 	EpubFontSize *int
 	EpubTheme    *string
 	EpubFlow     *string
+	GallerySize  *string
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -95,6 +96,9 @@ func (svc *Service) UpdateUserSettings(
 		if update.EpubFlow != nil {
 			current.EpubFlow = *update.EpubFlow
 		}
+		if update.GallerySize != nil {
+			current.GallerySize = *update.GallerySize
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -112,6 +116,7 @@ func (svc *Service) UpdateUserSettings(
 			Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
 			Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
 			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
+			Set("gallery_size = EXCLUDED.gallery_size").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {

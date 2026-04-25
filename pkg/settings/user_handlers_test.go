@@ -133,3 +133,67 @@ func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 	assert.Equal(t, 100, resp.EpubFontSize)
 	assert.Equal(t, models.EpubFlowPaginated, resp.EpubFlow)
 }
+
+func TestUpdateUserSettings_AcceptsValidGallerySize(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "gally-valid")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	body := `{"gallery_size": "l"}`
+	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	require.NoError(t, h.updateUserSettings(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp UserSettingsResponse
+	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
+	assert.Equal(t, models.GallerySizeLarge, resp.GallerySize)
+}
+
+func TestUpdateUserSettings_RejectsInvalidGallerySize(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "gally-bad")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	body := `{"gallery_size": "huge"}`
+	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	err := h.updateUserSettings(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gallery_size")
+}
+
+func TestGetUserSettings_DefaultsToMediumGallerySize(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "gally-default")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/user", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	require.NoError(t, h.getUserSettings(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp UserSettingsResponse
+	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
+	assert.Equal(t, models.GallerySizeMedium, resp.GallerySize)
+}
