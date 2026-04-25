@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -808,13 +809,13 @@ func (h *handler) DownloadFile(c echo.Context) error {
 				"error":     genErr.Message,
 			})
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 	return c.File(cachedPath)
 }
 
@@ -882,7 +883,7 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 				"file_type": file.FileType,
 			})
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		var genErr *filegen.GenerationError
@@ -893,13 +894,13 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 				"error":     genErr.Message,
 			})
 			filename := filepath.Base(file.Filepath)
-			c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+			httputil.SetAttachmentFilename(c.Response(), filename)
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 	return c.File(cachedPath)
 }
 

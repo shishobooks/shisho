@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
@@ -1767,8 +1768,7 @@ func (h *handler) downloadFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Set content disposition for download with the formatted filename
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 
 	return c.File(cachedPath)
 }
@@ -1802,9 +1802,8 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 		return errcodes.NotFound("File not found on disk")
 	}
 
-	// Set content disposition for download with the original filename
 	filename := filepath.Base(file.Filepath)
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), filename)
 
 	return c.File(file.Filepath)
 }
@@ -1874,8 +1873,7 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Set content disposition for download with the formatted filename
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+downloadFilename+"\"")
+	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 
 	return c.File(cachedPath)
 }
