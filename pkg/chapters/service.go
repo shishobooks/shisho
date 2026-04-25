@@ -12,15 +12,20 @@ import (
 
 // ShouldUpdateChapters determines if chapters should be updated based on priority rules.
 // Returns true if the new chapters should replace existing ones.
+//
+// When forceRefresh is true, sidecar-sourced chapters are skipped so that the
+// embedded file metadata wins — matching the convention used by
+// shouldApplySidecarScalar / shouldApplySidecarRelationship in pkg/worker.
+// All non-sidecar sources still apply unconditionally under forceRefresh.
 func ShouldUpdateChapters(newChapters []mediafile.ParsedChapter, newSource string, existingSource *string, forceRefresh bool) bool {
 	// Never update with empty chapters
 	if len(newChapters) == 0 {
 		return false
 	}
 
-	// Force refresh bypasses priority checks
 	if forceRefresh {
-		return true
+		// Skip sidecar so embedded file metadata wins; everything else applies.
+		return newSource != models.DataSourceSidecar
 	}
 
 	// Treat nil/empty existing source as filepath priority (lowest priority)

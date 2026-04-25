@@ -513,11 +513,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// it when:
 	//   - Reset mode handles its own wipe via resetBookFileState below.
 	//   - Refresh mode ("re-scan as if this were the first time") — wipe so
-	//     re-derivation from file/plugins actually takes effect. Note that
-	//     scalar/relationship sidecar applies are short-circuited by
-	//     forceRefresh in scan_helpers.go, but chapters.ShouldUpdateChapters
-	//     does NOT short-circuit on forceRefresh, so this deletion is the
-	//     load-bearing fix for chapters in Refresh mode specifically.
+	//     re-derivation from file/plugins actually takes effect.
 	//   - Scan mode when the file on disk has changed since we last recorded
 	//     its size/mtime — the cached sidecar is stale extraction data and
 	//     would mask the new file's metadata.
@@ -2667,7 +2663,7 @@ func removeFileSidecar(filePath string, logWarn func(msg string, data logger.Dat
 // removeBookSidecar deletes the book sidecar for a book. Mirrors the
 // anchor-resolution logic in resolveBookSidecarAnchor: prefers book.Filepath
 // when it resolves to an existing directory, otherwise falls back to file
-// paths (covers root-level books whose synthetic organized book.Filepath
+// anchors (covers root-level books whose synthetic organized book.Filepath
 // never exists on disk). ENOENT is silent; other errors are logged via
 // logWarn.
 func removeBookSidecar(book *models.Book, logWarn func(msg string, data logger.Data)) {
@@ -2693,8 +2689,9 @@ func removeBookSidecar(book *models.Book, logWarn func(msg string, data logger.D
 		}
 	}
 	// book.Filepath isn't a real directory — fall back to file anchors used
-	// by root-level books with synthetic organized paths.
-	tryRemove(book.Filepath)
+	// by root-level books with synthetic organized paths. Skip the redundant
+	// retry on book.Filepath itself; we already established it doesn't anchor
+	// a real sidecar location.
 	for _, f := range book.Files {
 		if f != nil {
 			tryRemove(f.Filepath)
@@ -3966,9 +3963,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 // per-file.
 func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file *models.File, skipBookWipe bool) error {
 	log := logger.FromContext(ctx)
-	logWarn := func(msg string, data logger.Data) {
-		log.Warn(msg, data)
-	}
+	logWarn := func(msg string, data logger.Data) { log.Warn(msg, data) }
 	if !skipBookWipe {
 		if err := w.resetBookState(ctx, book); err != nil {
 			return errors.Wrap(err, "failed to reset book state")
