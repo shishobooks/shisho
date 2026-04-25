@@ -16,15 +16,19 @@ export const SizeSelector = ({
 }: SizeSelectorProps) => {
   return (
     <div
-      // overflow-hidden clips the active button's bg to the parent's rounded
-      // corners (otherwise the first/last selected button shows square corners
-      // outside the rounded border).
+      // inline-flex keeps the segmented control at its intrinsic width
+      // so clicking between sizes never resizes the buttons under the
+      // user's cursor — even when the parent (e.g. the size popover)
+      // grows or shrinks as the save-as-default card appears/disappears.
       //
-      // Default to inline-flex (intrinsic width) so the selector stays
-      // compact on the User Settings page. The popover passes
-      // className="flex w-full" to stretch buttons across the full popover
-      // width when the save-as-default card forces the popover wider than
-      // the buttons' natural size.
+      // overflow-hidden clips the active button's bg to the rounded
+      // outer corners (otherwise the first/last selected button shows
+      // square corners outside the rounded border).
+      //
+      // When the parent is itself a stretching flex container (e.g. the
+      // User Settings Appearance card uses flex flex-col), the
+      // align-items: stretch default fills the parent width naturally —
+      // no className override needed for that case.
       className={cn(
         "inline-flex overflow-hidden rounded-md border bg-background",
         className,
@@ -36,9 +40,6 @@ export const SizeSelector = ({
         return (
           <Button
             aria-pressed={isActive}
-            // flex-1 only takes effect when the parent is a full-width
-            // flex container (popover case). In intrinsic-width mode it's
-            // harmless — there's no extra space to distribute.
             className={cn(
               "h-8 flex-1 rounded-none border-0 px-3 text-xs font-semibold",
               index > 0 && "border-l",

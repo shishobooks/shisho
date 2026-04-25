@@ -34,12 +34,12 @@ export const SizePopover = ({
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
-        <div className="flex flex-col gap-3">
-          <SizeSelector
-            className="flex w-full"
-            onChange={onChange}
-            value={effectiveSize}
-          />
+        {/* items-start (not the flex-col default of items-stretch) keeps the
+            segmented control at its intrinsic width when the save-as-default
+            card forces the popover wider — buttons under the user's cursor
+            shouldn't resize between clicks. */}
+        <div className="flex flex-col gap-3 items-start">
+          <SizeSelector onChange={onChange} value={effectiveSize} />
           {isDirty && (
             <div className="border border-dashed rounded-md p-3">
               <p className="text-xs text-muted-foreground mb-2">
