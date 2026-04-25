@@ -8,7 +8,7 @@ Pick how large book covers display in your gallery — Small, Medium, Large, or 
 
 ## Using the Size popover
 
-Click **Size** in the gallery toolbar to open the size popover. Pick S / M / L / XL — covers resize immediately and the gallery jumps to a page that contains the book you were last looking at, so you don't lose your place.
+Click **Size** in the gallery toolbar to open the size popover. Pick S / M / L / XL — covers resize immediately and the gallery jumps to a page that contains the item you were last looking at, so you don't lose your place.
 
 A dot on the Size button means your current size differs from your saved default.
 
@@ -16,14 +16,14 @@ The popover is hidden on small screens, where covers always render two per row r
 
 ## Sizes
 
-| Size | Cover width (desktop) | Books per page |
+| Size | Cover width (desktop) | Items per page |
 |------|----------------------|----------------|
 | S    | 96px                 | 48 |
 | M    | 128px (default)      | 24 |
 | L    | 176px                | 16 |
 | XL   | 224px                | 12 |
 
-Items per page scale so screen density stays roughly constant — bigger covers, fewer per page.
+Items per page scale so screen density stays roughly constant — bigger covers, fewer per page. The same scale applies to series cards on the Series list and to books on every other gallery page.
 
 ## URL-addressable size
 
