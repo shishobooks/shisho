@@ -5,18 +5,28 @@ import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
+import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DEFAULT_GALLERY_SIZE,
+  ITEMS_PER_PAGE_BY_SIZE,
+} from "@/constants/gallerySize";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import { cn } from "@/libraries/utils";
-import type { Series } from "@/types";
+import type { GallerySize, Series } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 // For series, we don't have access to the underlying files, so we use the
@@ -33,8 +43,6 @@ const getSeriesAspectRatioClass = (coverAspectRatio: string): string => {
       return "aspect-[2/3]";
   }
 };
-
-const ITEMS_PER_PAGE = 24;
 
 interface SeriesCardProps {
   seriesItem: Series;
@@ -149,18 +157,65 @@ const SeriesList = () => {
     }
   };
 
-  const limit = ITEMS_PER_PAGE;
+  const userSettingsQuery = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  const urlSize: GallerySize | null = parseGallerySize(
+    searchParams.get("size"),
+  );
+  const savedSize: GallerySize =
+    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+  const effectiveSize: GallerySize = urlSize ?? savedSize;
+  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
+  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
+
+  const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
+
+  const applyGallerySize = (next: GallerySize) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === savedSize) {
+        params.delete("size");
+      } else {
+        params.set("size", next);
+      }
+      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
+      params.set("page", String(newPage));
+      return params;
+    });
+  };
+
+  const handleSaveSizeAsDefault = () => {
+    updateUserSettings.mutate(
+      { gallery_size: effectiveSize },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("size");
+            return params;
+          });
+        },
+      },
+    );
+  };
 
   const libraryQuery = useLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
-  const seriesQuery = useSeriesList({
-    limit,
-    offset,
-    library_id: libraryId ? parseInt(libraryId, 10) : undefined,
-    search: debouncedSearch || undefined,
-  });
+  const seriesQuery = useSeriesList(
+    {
+      limit,
+      offset,
+      library_id: libraryId ? parseInt(libraryId, 10) : undefined,
+      search: debouncedSearch || undefined,
+    },
+    { enabled: userSettingsResolved },
+  );
 
   // Track the search value that produced the currently displayed data
   const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
@@ -200,12 +255,22 @@ const SeriesList = () => {
         </p>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <SearchInput
           initialValue={searchQuery}
           onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search series..."
         />
+        <div className="hidden sm:flex">
+          <SizePopover
+            effectiveSize={effectiveSize}
+            isSaving={updateUserSettings.isPending}
+            onChange={applyGallerySize}
+            onSaveAsDefault={handleSaveSizeAsDefault}
+            savedSize={savedSize}
+            trigger={<SizeButton isDirty={isSizeDirty} />}
+          />
+        </div>
       </div>
 
       <Gallery
@@ -222,7 +287,7 @@ const SeriesList = () => {
         }
         itemLabel="series"
         items={seriesQuery.data?.series ?? []}
-        itemsPerPage={ITEMS_PER_PAGE}
+        itemsPerPage={itemsPerPage}
         renderItem={renderSeriesItem}
         total={seriesQuery.data?.total ?? 0}
       />
