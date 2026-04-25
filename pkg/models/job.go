@@ -17,11 +17,12 @@ const (
 )
 
 const (
-	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration;
-	JobTypeExport         = "export"
-	JobTypeScan           = "scan"
-	JobTypeBulkDownload   = "bulk_download"
-	JobTypeHashGeneration = "hash_generation"
+	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration | typeof JobTypeRecomputeReview;
+	JobTypeExport          = "export"
+	JobTypeScan            = "scan"
+	JobTypeBulkDownload    = "bulk_download"
+	JobTypeHashGeneration  = "hash_generation"
+	JobTypeRecomputeReview = "recompute_review"
 )
 
 type Job struct {
@@ -33,7 +34,7 @@ type Job struct {
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
-	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData"`
+	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData | JobRecomputeReviewData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
@@ -49,6 +50,8 @@ func (job *Job) UnmarshalData() error {
 		job.DataParsed = &JobBulkDownloadData{}
 	case JobTypeHashGeneration:
 		job.DataParsed = &JobHashGenerationData{}
+	case JobTypeRecomputeReview:
+		job.DataParsed = &JobRecomputeReviewData{}
 	}
 
 	err := json.Unmarshal([]byte(job.Data), job.DataParsed)
@@ -68,6 +71,12 @@ type JobScanData struct{}
 // a sha256 fingerprint in file_fingerprints.
 type JobHashGenerationData struct {
 	LibraryID int `json:"library_id"`
+}
+
+type JobRecomputeReviewData struct {
+	// ClearOverrides, when true, sets review_override and review_overridden_at to NULL
+	// for every main file before recomputing reviewed.
+	ClearOverrides bool `json:"clear_overrides"`
 }
 
 type JobBulkDownloadData struct {
