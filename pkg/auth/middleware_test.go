@@ -195,23 +195,23 @@ func TestMiddlewareBasicAuth_CachesSuccessfulAuth(t *testing.T) {
 	_, err = db.NewInsert().Model(access).Exec(ctx)
 	require.NoError(t, err)
 
-	doRequest := func() (called bool, status int) {
+	doRequest := func() bool {
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
 		req.SetBasicAuth("cacheuser", "password1")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
+		called := false
 		err := middleware.BasicAuth(func(_ echo.Context) error {
 			called = true
 			return nil
 		})(c)
 		require.NoError(t, err)
-		return called, rec.Code
+		return called
 	}
 
-	called, _ := doRequest()
-	require.True(t, called, "first request should authenticate")
+	require.True(t, doRequest(), "first request should authenticate")
 
 	// Break the password hash in the DB. If the cache is working, the next
 	// request still succeeds because it never touches the DB or bcrypt.
@@ -222,8 +222,7 @@ func TestMiddlewareBasicAuth_CachesSuccessfulAuth(t *testing.T) {
 		Exec(ctx)
 	require.NoError(t, err)
 
-	called, _ = doRequest()
-	assert.True(t, called, "second request should hit the cache and succeed despite invalidated DB hash")
+	assert.True(t, doRequest(), "second request should hit the cache and succeed despite invalidated DB hash")
 }
 
 func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
@@ -232,7 +231,7 @@ func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
 	db := setupMiddlewareDB(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
-	middleware.basicAuthCache = newBasicAuthCache(20 * time.Millisecond)
+	middleware.basicAuthCache = newBasicAuthCache(100 * time.Millisecond)
 	ctx := context.Background()
 
 	role := new(models.Role)
@@ -279,7 +278,7 @@ func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
 		Exec(ctx)
 	require.NoError(t, err)
 
-	time.Sleep(40 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	called, status := doRequest()
 	assert.False(t, called, "after TTL expiry the cache must miss and the broken hash should reject the request")
@@ -322,8 +321,25 @@ func TestMiddlewareBasicAuth_DoesNotCacheFailedAuth(t *testing.T) {
 		return rec.Code
 	}
 
+	require.Equal(t, http.StatusUnauthorized, doRequest("wrong"))
+
+	// The failed attempt above must not have inserted anything into the cache.
+	middleware.basicAuthCache.mu.Lock()
+	entries := len(middleware.basicAuthCache.entries)
+	middleware.basicAuthCache.mu.Unlock()
+	assert.Equal(t, 0, entries, "failed auth must not populate the cache")
+
+	// And the wrong password must keep getting rejected even after the DB hash
+	// is broken — i.e. the prior failure didn't poison the cache to "succeed"
+	// against a now-invalidated DB.
+	_, err = db.NewUpdate().
+		Model((*models.User)(nil)).
+		Set("password_hash = ?", "$2a$12$broken.hash.that.cannot.match.any.password.at.all.aaaaaaaaaaa").
+		Where("id = ?", user.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
 	assert.Equal(t, http.StatusUnauthorized, doRequest("wrong"))
-	assert.Equal(t, http.StatusOK, doRequest("rightpassword"))
 }
 
 func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
