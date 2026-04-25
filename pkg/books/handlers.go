@@ -1113,6 +1113,16 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	// Update identifiers
 	if params.Identifiers != nil {
+		// Reject blank/whitespace-only type or value before any DB mutation.
+		// The binder's `required` tag catches empty strings, but whitespace-only
+		// strings pass validation and would either insert garbage (type) or hit a
+		// NOT NULL constraint (value after normalization strips whitespace).
+		for _, id := range *params.Identifiers {
+			if strings.TrimSpace(id.Type) == "" || strings.TrimSpace(id.Value) == "" {
+				return errcodes.ValidationError("identifier type and value must be non-empty")
+			}
+		}
+
 		// Reject duplicate types before any DB mutation. The DB enforces
 		// UNIQUE(file_id, type); surface the contract violation explicitly
 		// instead of silently dropping the second insert.

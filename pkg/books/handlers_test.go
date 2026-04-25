@@ -1988,3 +1988,61 @@ func TestUpdateFile_AssignsManualSourceWhenIdentifierValueChanges(t *testing.T) 
 	assert.Equal(t, "B02NEW", stored[0].Value)
 	assert.Equal(t, models.DataSourceManual, stored[0].Source, "value-changed entry gets manual source")
 }
+
+func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "blank type",
+			body: `{"identifiers":[{"type":"","value":"B01ABC1234"}]}`,
+		},
+		{
+			name: "blank value",
+			body: `{"identifiers":[{"type":"asin","value":""}]}`,
+		},
+		{
+			name: "whitespace-only type",
+			body: `{"identifiers":[{"type":"   ","value":"B01ABC1234"}]}`,
+		},
+		{
+			name: "whitespace-only value",
+			body: `{"identifiers":[{"type":"asin","value":"   "}]}`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db := setupTestDB(t)
+			ctx := context.Background()
+			svc := NewService(db)
+
+			library, book := setupTestLibraryAndBook(t, db)
+			epubPath := createTestEPUBFile(t)
+			file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+			require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+				{FileID: file.ID, Type: "asin", Value: "B01ORIGINAL", Source: models.DataSourceManual},
+			}))
+
+			user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+			e := setupTestServer(t, db)
+			req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := executeRequestWithUser(t, e, req, user)
+
+			assert.GreaterOrEqual(t, rr.Code, 400, "expected 4xx, got %d body=%s", rr.Code, rr.Body.String())
+			assert.Less(t, rr.Code, 500, "expected 4xx, got %d body=%s", rr.Code, rr.Body.String())
+
+			var stored []*models.FileIdentifier
+			require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+			require.Len(t, stored, 1)
+			assert.Equal(t, "B01ORIGINAL", stored[0].Value, "existing identifier must not be touched")
+		})
+	}
+}
