@@ -20,11 +20,16 @@ export const COVER_WIDTH_CLASS: Record<GallerySize, string> = {
   xl: "sm:w-56",
 };
 
+// Counts are tuned to fill exactly 3 rows at the column count each size
+// produces on a typical desktop gallery width (S=11, M=8, L=6, XL=5). Three
+// rows everywhere keeps perceived density consistent across sizes and avoids
+// half-empty trailing rows.
+//
 // Backend max list limit is 50. If you raise any of these to >50 the API
 // will silently clip and pagination will break.
 export const ITEMS_PER_PAGE_BY_SIZE: Record<GallerySize, number> = {
-  s: 48,
+  s: 33,
   m: 24,
-  l: 16,
-  xl: 12,
+  l: 18,
+  xl: 15,
 };

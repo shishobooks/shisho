@@ -35,7 +35,11 @@ export const SizePopover = ({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         <div className="flex flex-col gap-3">
-          <SizeSelector onChange={onChange} value={effectiveSize} />
+          <SizeSelector
+            className="flex w-full"
+            onChange={onChange}
+            value={effectiveSize}
+          />
           {isDirty && (
             <div className="border border-dashed rounded-md p-3">
               <p className="text-xs text-muted-foreground mb-2">
