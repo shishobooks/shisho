@@ -9,10 +9,15 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
+import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
+import {
+  DEFAULT_GALLERY_SIZE,
+  ITEMS_PER_PAGE_BY_SIZE,
+} from "@/constants/gallerySize";
 import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
@@ -23,10 +28,15 @@ import {
   useUpdateLibrarySettings,
 } from "@/hooks/queries/librarySettings";
 import { useSeries } from "@/hooks/queries/series";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -34,9 +44,7 @@ import {
   sortSpecsEqual,
   type SortLevel,
 } from "@/libraries/sortSpec";
-import type { Book, Genre, Tag } from "@/types";
-
-const ITEMS_PER_PAGE = 24;
+import type { Book, GallerySize, Genre, Tag } from "@/types";
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -115,6 +123,17 @@ const HomeContent = () => {
   const librarySettingsQuery = useLibrarySettings(libraryIdNum ?? 0);
   const updateLibrarySettings = useUpdateLibrarySettings(libraryIdNum ?? 0);
 
+  const userSettingsQuery = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  const sizeParam = searchParams.get("size");
+  const urlSize: GallerySize | null = parseGallerySize(sizeParam);
+  const savedSize: GallerySize =
+    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+  const effectiveSize: GallerySize = urlSize ?? savedSize;
+  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
+  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+
   // Resolve effective sort: URL wins if valid; else stored preference; else builtin.
   const storedSort: SortLevel[] | null = librarySettingsQuery.data?.sort_spec
     ? parseSortSpec(librarySettingsQuery.data.sort_spec)
@@ -127,12 +146,15 @@ const HomeContent = () => {
   // "Dirty" = a sort was explicitly provided via URL and differs from default.
   const isSortDirty = urlSort !== null && !sortSpecsEqual(urlSort, defaultSort);
 
-  // Gate gallery render on the settings query having resolved, so we
-  // don't flash the builtin default before the stored preference loads.
-  const settingsResolved =
+  // Gate gallery render on the settings queries having resolved, so we
+  // don't flash the builtin defaults before the stored preferences load.
+  const librarySettingsResolved =
     libraryIdNum === undefined ||
     librarySettingsQuery.isSuccess ||
     librarySettingsQuery.isError;
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
+  const settingsResolved = librarySettingsResolved && userSettingsResolved;
 
   // Group languages by base subtag for the filter dropdown.
   // If a library has both "en" and "en-US", show only "English" (the bare "en" subsumes variants).
@@ -230,7 +252,7 @@ const HomeContent = () => {
     .filter((t): t is Tag => t !== undefined);
 
   // Calculate pagination parameters
-  const limit = ITEMS_PER_PAGE;
+  const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
@@ -339,6 +361,35 @@ const HomeContent = () => {
       params.set("page", "1");
       return params;
     });
+  };
+
+  const applyGallerySize = (next: GallerySize) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === savedSize) {
+        params.delete("size");
+      } else {
+        params.set("size", next);
+      }
+      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
+      params.set("page", String(newPage));
+      return params;
+    });
+  };
+
+  const handleSaveSizeAsDefault = () => {
+    updateUserSettings.mutate(
+      { gallery_size: effectiveSize },
+      {
+        onSuccess: () => {
+          setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete("size");
+            return params;
+          });
+        },
+      },
+    );
   };
 
   const hasActiveFilters =
@@ -451,6 +502,7 @@ const HomeContent = () => {
       book={book}
       cacheKey={booksQuery.dataUpdatedAt}
       coverAspectRatio={coverAspectRatio}
+      gallerySize={effectiveSize}
       key={book.id}
       libraryId={libraryId!}
       pageBookIds={pageBookIds}
@@ -513,6 +565,16 @@ const HomeContent = () => {
             onSaveAsDefault={handleSaveSortAsDefault}
             trigger={<SortButton isDirty={isSortDirty} />}
           />
+          <div className="hidden sm:flex">
+            <SizePopover
+              effectiveSize={effectiveSize}
+              isSaving={updateUserSettings.isPending}
+              onChange={applyGallerySize}
+              onSaveAsDefault={handleSaveSizeAsDefault}
+              savedSize={savedSize}
+              trigger={<SizeButton isDirty={isSizeDirty} />}
+            />
+          </div>
           <div className="flex-1" />
           {isSelectionMode ? (
             <Button onClick={exitSelectionMode} variant="outline">
@@ -572,7 +634,7 @@ const HomeContent = () => {
           }
           itemLabel="books"
           items={booksQuery.data?.books ?? []}
-          itemsPerPage={ITEMS_PER_PAGE}
+          itemsPerPage={itemsPerPage}
           renderItem={renderBookItem}
           total={booksQuery.data?.total ?? 0}
         />

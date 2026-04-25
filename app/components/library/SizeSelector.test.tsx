@@ -6,7 +6,7 @@ import { SizeSelector } from "@/components/library/SizeSelector";
 
 describe("SizeSelector", () => {
   it("renders one button per size", () => {
-    render(<SizeSelector value="m" onChange={vi.fn()} />);
+    render(<SizeSelector onChange={vi.fn()} value="m" />);
     expect(screen.getByRole("button", { name: "S" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "M" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "L" })).toBeInTheDocument();
@@ -14,7 +14,7 @@ describe("SizeSelector", () => {
   });
 
   it("marks the active size with aria-pressed", () => {
-    render(<SizeSelector value="l" onChange={vi.fn()} />);
+    render(<SizeSelector onChange={vi.fn()} value="l" />);
     expect(screen.getByRole("button", { name: "L" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -28,7 +28,7 @@ describe("SizeSelector", () => {
   it("calls onChange with the clicked size", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();
-    render(<SizeSelector value="m" onChange={onChange} />);
+    render(<SizeSelector onChange={onChange} value="m" />);
     await user.click(screen.getByRole("button", { name: "L" }));
     expect(onChange).toHaveBeenCalledWith("l");
   });

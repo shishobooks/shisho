@@ -3,26 +3,27 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
+import type { GallerySize } from "@/types";
 
 describe("SizePopover", () => {
   const renderPopover = (
     overrides: Partial<{
-      effectiveSize: "s" | "m" | "l" | "xl";
-      savedSize: "s" | "m" | "l" | "xl";
-      onChange: ReturnType<typeof vi.fn>;
-      onSaveAsDefault: ReturnType<typeof vi.fn>;
+      effectiveSize: GallerySize;
       isSaving: boolean;
+      onChange: (size: GallerySize) => void;
+      onSaveAsDefault: () => void;
+      savedSize: GallerySize;
     }> = {},
   ) => {
-    const onChange = overrides.onChange ?? vi.fn();
-    const onSaveAsDefault = overrides.onSaveAsDefault ?? vi.fn();
+    const onChange = overrides.onChange ?? vi.fn<(size: GallerySize) => void>();
+    const onSaveAsDefault = overrides.onSaveAsDefault ?? vi.fn<() => void>();
     render(
       <SizePopover
         effectiveSize={overrides.effectiveSize ?? "m"}
-        savedSize={overrides.savedSize ?? "m"}
         isSaving={overrides.isSaving ?? false}
         onChange={onChange}
         onSaveAsDefault={onSaveAsDefault}
+        savedSize={overrides.savedSize ?? "m"}
         trigger={<SizeButton isDirty={false} />}
       />,
     );
