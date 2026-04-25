@@ -7,6 +7,7 @@ import AdminLayout from "@/components/pages/AdminLayout";
 import AdminLibraries from "@/components/pages/AdminLibraries";
 import AdminLogs from "@/components/pages/AdminLogs";
 import AdminPlugins from "@/components/pages/AdminPlugins";
+import AdminReviewCriteria from "@/components/pages/AdminReviewCriteria";
 import AdminSettings from "@/components/pages/AdminSettings";
 import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
@@ -218,6 +219,16 @@ export const router = createBrowserRouter([
                 requiredPermission={{ resource: "config", operation: "read" }}
               >
                 <AdminLogs />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "review-criteria",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminReviewCriteria />
               </ProtectedRoute>
             ),
           },

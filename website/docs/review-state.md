@@ -31,7 +31,7 @@ When multi-selecting books in the gallery, use the **More** menu in the action b
 
 ## Configuring Required Fields
 
-Admins can change the required-field set in **Server Settings → Review Criteria**. Saving updated criteria triggers a background recompute of every main file. If you have manual overrides, you'll see a prompt asking whether to clear them — pick what fits your situation.
+Admins can change the required-field set on the **Settings → Review Criteria** page. Saving updated criteria triggers a background recompute of every main file. If you have manual overrides, you'll see a prompt asking whether to clear them — pick what fits your situation.
 
 ## Cross-reference
 

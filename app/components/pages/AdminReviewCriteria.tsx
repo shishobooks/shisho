@@ -20,6 +20,7 @@ import {
   useReviewCriteria,
   useUpdateReviewCriteria,
 } from "@/hooks/queries/review";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { JobTypeRecomputeReview } from "@/types";
 
@@ -99,7 +100,8 @@ const RecomputeDialog = ({
   );
 };
 
-const ReviewCriteriaSection = () => {
+const AdminReviewCriteria = () => {
+  usePageTitle("Review Criteria");
   const criteriaQuery = useReviewCriteria();
   const updateMutation = useUpdateReviewCriteria();
   const createJobMutation = useCreateJob();
@@ -220,12 +222,22 @@ const ReviewCriteriaSection = () => {
     }
   };
 
+  const pageHeader = (
+    <div className="mb-6 md:mb-8">
+      <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+        Review Criteria
+      </h1>
+      <p className="text-sm md:text-base text-muted-foreground">
+        Choose which metadata fields must be present for a book to be considered
+        reviewed.
+      </p>
+    </div>
+  );
+
   if (criteriaQuery.isLoading) {
     return (
-      <div className="border border-border rounded-md p-4 md:p-6">
-        <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
-          Review Criteria
-        </h2>
+      <div>
+        {pageHeader}
         <LoadingSpinner />
       </div>
     );
@@ -233,10 +245,8 @@ const ReviewCriteriaSection = () => {
 
   if (criteriaQuery.isError || !criteriaQuery.data) {
     return (
-      <div className="border border-border rounded-md p-4 md:p-6">
-        <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
-          Review Criteria
-        </h2>
+      <div>
+        {pageHeader}
         <p className="text-sm text-muted-foreground">
           Failed to load review criteria.
         </p>
@@ -253,15 +263,8 @@ const ReviewCriteriaSection = () => {
 
   return (
     <>
+      {pageHeader}
       <div className="border border-border rounded-md p-4 md:p-6">
-        <h2 className="text-base md:text-lg font-semibold mb-1 md:mb-2">
-          Review Criteria
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4 md:mb-6">
-          Choose which metadata fields must be present for a book to be
-          considered reviewed.
-        </p>
-
         <div className="space-y-6">
           {/* Universal fields */}
           <div className="space-y-3">
@@ -394,4 +397,4 @@ const ReviewCriteriaSection = () => {
   );
 };
 
-export default ReviewCriteriaSection;
+export default AdminReviewCriteria;

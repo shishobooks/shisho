@@ -2,8 +2,6 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { useConfig } from "@/hooks/queries/config";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-import ReviewCriteriaSection from "./ReviewCriteriaSection";
-
 const formatDuration = (nanoseconds: number): string => {
   const seconds = nanoseconds / 1_000_000_000;
   if (seconds < 60) {
@@ -79,9 +77,6 @@ const AdminSettings = () => {
       </div>
 
       <div className="grid gap-6">
-        {/* Review Criteria (editable) */}
-        <ReviewCriteriaSection />
-
         {/* Database Settings */}
         <div className="border border-border rounded-md p-4 md:p-6">
           <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">

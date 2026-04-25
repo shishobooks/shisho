@@ -276,9 +276,9 @@ export function ReviewPanel({
               <TooltipContent className="max-w-xs">
                 <p>
                   Reviewed state is determined automatically from the required
-                  fields configured in Server Settings. Fill in all required
-                  fields and this will flip to reviewed; remove one and it flips
-                  back. Toggle manually to override.
+                  fields configured on the Review Criteria settings page. Fill
+                  in all required fields and this will flip to reviewed; remove
+                  one and it flips back. Toggle manually to override.
                 </p>
               </TooltipContent>
             </Tooltip>

@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import AdminReviewCriteria from "./AdminReviewCriteria";
 import { humanizeField } from "./review-criteria-utils";
-import ReviewCriteriaSection from "./ReviewCriteriaSection";
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -82,7 +82,7 @@ describe("humanizeField", () => {
   });
 });
 
-describe("ReviewCriteriaSection", () => {
+describe("AdminReviewCriteria", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCriteriaData.override_count = 0;
@@ -90,7 +90,7 @@ describe("ReviewCriteriaSection", () => {
 
   it("renders checked checkboxes for current book_fields", () => {
     mockCriteriaData.override_count = 0;
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     // authors and cover are in book_fields → checked
     expect(screen.getByRole("checkbox", { name: "Authors" })).toBeChecked();
@@ -103,7 +103,7 @@ describe("ReviewCriteriaSection", () => {
 
   it("renders checked checkbox for current audio_fields", () => {
     mockCriteriaData.override_count = 0;
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("checkbox", { name: "Narrators" })).toBeChecked();
     expect(
@@ -113,7 +113,7 @@ describe("ReviewCriteriaSection", () => {
 
   it("Save button is disabled when no changes", () => {
     mockCriteriaData.override_count = 0;
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
@@ -121,7 +121,7 @@ describe("ReviewCriteriaSection", () => {
   it("Save button enables after toggling a checkbox", async () => {
     const user = createUser();
     mockCriteriaData.override_count = 0;
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     await user.click(screen.getByRole("checkbox", { name: "Description" }));
 
@@ -133,7 +133,7 @@ describe("ReviewCriteriaSection", () => {
     mockCriteriaData.override_count = 0;
     mockUpdateMutateAsync.mockResolvedValueOnce(undefined);
 
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     // Toggle description on
     await user.click(screen.getByRole("checkbox", { name: "Description" }));
@@ -152,7 +152,7 @@ describe("ReviewCriteriaSection", () => {
     const user = createUser();
     mockCriteriaData.override_count = 3;
 
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     // Toggle description to enable the Save button
     await user.click(screen.getByRole("checkbox", { name: "Description" }));
@@ -175,7 +175,7 @@ describe("ReviewCriteriaSection", () => {
     mockCriteriaData.override_count = 3;
     mockUpdateMutateAsync.mockResolvedValueOnce(undefined);
 
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     // Toggle a field to make Save enabled, then click Save
     await user.click(screen.getByRole("checkbox", { name: "Description" }));
@@ -209,7 +209,7 @@ describe("ReviewCriteriaSection", () => {
     mockCriteriaData.override_count = 0;
     mockCreateJobMutateAsync.mockResolvedValueOnce({ id: 42 });
 
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     await user.click(screen.getByRole("button", { name: "Recompute now" }));
 
@@ -227,7 +227,7 @@ describe("ReviewCriteriaSection", () => {
     const user = createUser();
     mockCriteriaData.override_count = 5;
 
-    wrap(<ReviewCriteriaSection />);
+    wrap(<AdminReviewCriteria />);
 
     await user.click(screen.getByRole("button", { name: "Recompute now" }));
 

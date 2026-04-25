@@ -1,4 +1,5 @@
 import {
+  BookCheck,
   Briefcase,
   Cog,
   HardDrive,
@@ -45,6 +46,13 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       label: "Libraries",
       isActive: location.pathname.startsWith("/settings/libraries"),
       show: canViewLibraries,
+    },
+    {
+      to: "/settings/review-criteria",
+      Icon: BookCheck,
+      label: "Review Criteria",
+      isActive: location.pathname.startsWith("/settings/review-criteria"),
+      show: canViewConfig,
     },
     {
       to: "/settings/users",
