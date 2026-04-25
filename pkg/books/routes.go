@@ -100,4 +100,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.PATCH("/files/:id/review", h.setFileReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.DELETE("/files/:id", h.deleteFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.PATCH("/:id/review", h.setBookReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.POST("/bulk/review", h.bulkSetReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 }
