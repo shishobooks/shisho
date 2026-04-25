@@ -51,7 +51,7 @@ const renderReader = () => {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <EPUBReader bookTitle="Test Book" file={file} libraryId="1" />
+        <EPUBReader bookTitle="Test Book" file={file} />
       </MemoryRouter>
     </QueryClientProvider>,
   );

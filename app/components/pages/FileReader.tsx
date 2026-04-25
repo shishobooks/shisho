@@ -35,13 +35,7 @@ export default function FileReader() {
         <PDFReader bookTitle={book?.title} file={file} libraryId={libraryId!} />
       );
     case FileTypeEPUB:
-      return (
-        <EPUBReader
-          bookTitle={book?.title}
-          file={file}
-          libraryId={libraryId!}
-        />
-      );
+      return <EPUBReader bookTitle={book?.title} file={file} />;
     default:
       return (
         <div className="fixed inset-0 bg-background flex items-center justify-center">
