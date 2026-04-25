@@ -110,6 +110,51 @@ func (c *Cache) Invalidate(fileID int) error {
 	return os.RemoveAll(c.pageDir(fileID))
 }
 
+// rootDir returns the directory this cache owns.
+func (c *Cache) rootDir() string {
+	return filepath.Join(c.dir, "cbz")
+}
+
+// SizeBytes returns the total bytes and file count under the cache root.
+// A missing root is treated as empty.
+func (c *Cache) SizeBytes() (int64, int, error) {
+	var totalBytes int64
+	var totalCount int
+
+	root := c.rootDir()
+	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		totalBytes += info.Size()
+		totalCount++
+		return nil
+	})
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to walk cache")
+	}
+	return totalBytes, totalCount, nil
+}
+
+// Clear removes the cache root directory entirely. Safe when missing.
+//
+// A concurrent GetPage call may race the removal and fail with ENOENT as its
+// MkdirAll/WriteFile sequence hits the deleted tree; the next attempt recreates
+// the directory and succeeds. Acceptable for admin-initiated clears; callers
+// should not assume Clear is transparent to in-flight readers.
+func (c *Cache) Clear() error {
+	if err := os.RemoveAll(c.rootDir()); err != nil {
+		return errors.Wrap(err, "failed to clear cache")
+	}
+	return nil
+}
+
 // getSortedImageFiles returns a sorted list of image files from a zip reader.
 func getSortedImageFiles(zipReader *zip.Reader) []*zip.File {
 	var imageFiles []*zip.File

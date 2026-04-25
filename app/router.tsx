@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "@/components/library/ProtectedRoute";
+import AdminCache from "@/components/pages/AdminCache";
 import AdminJobs from "@/components/pages/AdminJobs";
 import AdminLayout from "@/components/pages/AdminLayout";
 import AdminLibraries from "@/components/pages/AdminLibraries";
@@ -197,6 +198,16 @@ export const router = createBrowserRouter([
                 requiredPermission={{ resource: "config", operation: "read" }}
               >
                 <PluginDetail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "cache",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminCache />
               </ProtectedRoute>
             ),
           },

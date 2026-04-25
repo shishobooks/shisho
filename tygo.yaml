@@ -86,3 +86,7 @@ packages:
     output_path: "app/types/generated/settings.ts"
     include_files:
       - validators.go
+  - path: "github.com/shishobooks/shisho/pkg/cache"
+    output_path: "app/types/generated/cache.ts"
+    include_files:
+      - handlers.go

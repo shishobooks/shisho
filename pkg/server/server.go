@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cache"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -51,7 +52,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, logBuffer *logs.RingBuffer) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache, logBuffer *logs.RingBuffer) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -92,7 +93,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker, dlCache)
+	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker, dlCache, cbzCache, pdfCache)
 
 	// Register OPDS routes with Basic Auth
 	opds.RegisterRoutes(e, db, cfg, authMiddleware)
@@ -124,6 +125,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	})
 	audnexus.RegisterRoutes(e, audnexusService, authMiddleware)
 
+	// Cache management routes (admin only; requires config:read to list, config:write to clear)
+	cacheHandler := cache.NewHandler(dlCache, cbzCache, pdfCache)
+	cache.RegisterRoutes(e, cacheHandler, authMiddleware)
+
 	echo.NotFoundHandler = notFoundHandler
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 
@@ -137,7 +142,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) {
+func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
@@ -214,8 +219,6 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	pluginService := plugins.NewService(db)
 	bookSvc := books.NewService(db)
 	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
-	cbzCache := cbzpages.NewCache(cfg.CacheDir)
-	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 	pageExtractor := books.NewPluginPageExtractor(cbzCache, pdfCache)
 	enrichDeps := &plugins.EnrichDeps{
 		BookStore:       bookAdapter,
