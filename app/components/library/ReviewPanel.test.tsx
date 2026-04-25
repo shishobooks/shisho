@@ -118,7 +118,7 @@ describe("ReviewPanel", () => {
     expect(toggle).not.toBeChecked();
   });
 
-  it("shows Auto indicator when no overrides are set", () => {
+  it("renders status icon in green when book is reviewed", () => {
     const files: File[] = [
       { ...baseFile, reviewed: true, review_override: undefined },
     ];
@@ -127,10 +127,40 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    expect(screen.getByText("Auto")).toBeInTheDocument();
+    const icon = screen.getByLabelText("Reviewed status");
+    expect(icon.getAttribute("class")).toMatch(/text-green/);
   });
 
-  it("shows manually reviewed indicator when all files have reviewed override", () => {
+  it("renders status icon in muted color when book needs review", () => {
+    const files: File[] = [
+      { ...baseFile, reviewed: false, review_override: undefined },
+    ];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const icon = screen.getByLabelText("Needs review status");
+    expect(icon.getAttribute("class")).toMatch(/text-muted-foreground/);
+  });
+
+  it("status icon has tooltip describing auto behavior when no overrides are set", async () => {
+    const files: File[] = [
+      { ...baseFile, reviewed: true, review_override: undefined },
+    ];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const icon = screen.getByLabelText("Reviewed status");
+    const user = createUser();
+    await user.hover(icon);
+    const tip = await screen.findAllByText(/automatically from the required/);
+    expect(tip.length).toBeGreaterThan(0);
+  });
+
+  it("status icon has tooltip with date when all files have reviewed override", async () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -144,10 +174,14 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    expect(screen.getByText(/Manually marked reviewed on/)).toBeInTheDocument();
+    const icon = screen.getByLabelText("Reviewed status");
+    const user = createUser();
+    await user.hover(icon);
+    const tip = await screen.findAllByText(/Manually marked reviewed on/);
+    expect(tip.length).toBeGreaterThan(0);
   });
 
-  it("shows manually needs review indicator when all files have unreviewed override", () => {
+  it("status icon has tooltip with date when all files have unreviewed override", async () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -161,12 +195,14 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    expect(
-      screen.getByText(/Manually marked needs review on/),
-    ).toBeInTheDocument();
+    const icon = screen.getByLabelText("Needs review status");
+    const user = createUser();
+    await user.hover(icon);
+    const tip = await screen.findAllByText(/Manually marked needs review on/);
+    expect(tip.length).toBeGreaterThan(0);
   });
 
-  it("shows Mixed indicator when overrides differ across files", () => {
+  it("status icon has tooltip indicating mixed state when overrides differ across files", async () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -190,9 +226,11 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    expect(
-      screen.getByText("Manually set on multiple files"),
-    ).toBeInTheDocument();
+    const icon = screen.getByLabelText("Needs review status");
+    const user = createUser();
+    await user.hover(icon);
+    const tip = await screen.findAllByText("Manually set on multiple files");
+    expect(tip.length).toBeGreaterThan(0);
   });
 
   it("shows missing fields list when book needs review", () => {

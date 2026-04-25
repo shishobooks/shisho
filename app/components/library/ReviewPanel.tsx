@@ -1,4 +1,5 @@
-import { Badge } from "@/components/ui/badge";
+import { CircleCheck } from "lucide-react";
+
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -193,7 +194,6 @@ export function ReviewPanel({
   const allOverrideUnreviewed = mainFiles.every(
     (f) => f.review_override === ReviewOverrideUnreviewed,
   );
-  const hasAnyOverride = mainFiles.some((f) => f.review_override != null);
   const allNoOverride = mainFiles.every((f) => f.review_override == null);
 
   // Find most recent override date
@@ -203,21 +203,18 @@ export function ReviewPanel({
     .sort();
   const mostRecentDate = sortedDates[sortedDates.length - 1];
 
-  let indicatorText: string;
-  let indicatorVariant: "secondary" | "success" | "outline" = "secondary";
   const isAuto = allNoOverride;
 
-  if (allNoOverride) {
-    indicatorText = "Auto";
+  let tooltipText: string;
+  if (isAuto) {
+    tooltipText =
+      "Reviewed state is determined automatically from the required fields configured on the Review Criteria settings page. Fill in all required fields and this will flip to reviewed; remove one and it flips back. Toggle manually to override.";
   } else if (allOverrideReviewed && mostRecentDate) {
-    indicatorText = `Manually marked reviewed on ${formatDate(mostRecentDate)}`;
-    indicatorVariant = "success";
+    tooltipText = `Manually marked reviewed on ${formatDate(mostRecentDate)}`;
   } else if (allOverrideUnreviewed && mostRecentDate) {
-    indicatorText = `Manually marked needs review on ${formatDate(mostRecentDate)}`;
-  } else if (hasAnyOverride) {
-    indicatorText = "Manually set on multiple files";
+    tooltipText = `Manually marked needs review on ${formatDate(mostRecentDate)}`;
   } else {
-    indicatorText = "Auto";
+    tooltipText = "Manually set on multiple files";
   }
 
   // Build missing-fields hint (only when book needs review)
@@ -238,15 +235,6 @@ export function ReviewPanel({
     onChange(checked ? ReviewOverrideReviewed : ReviewOverrideUnreviewed);
   };
 
-  const indicatorBadge = (
-    <Badge
-      className={cn("text-xs", isAuto && "cursor-help")}
-      variant={indicatorVariant}
-    >
-      {indicatorText}
-    </Badge>
-  );
-
   return (
     <div className="border rounded-md p-4 space-y-2 bg-muted/30">
       <div className="flex items-center gap-3">
@@ -266,26 +254,26 @@ export function ReviewPanel({
         >
           Reviewed
         </Label>
-      </div>
-
-      <div>
-        {isAuto ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>{indicatorBadge}</TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p>
-                  Reviewed state is determined automatically from the required
-                  fields configured on the Review Criteria settings page. Fill
-                  in all required fields and this will flip to reviewed; remove
-                  one and it flips back. Toggle manually to override.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          indicatorBadge
-        )}
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <CircleCheck
+                aria-label={
+                  allReviewed ? "Reviewed status" : "Needs review status"
+                }
+                className={cn(
+                  "h-4 w-4 cursor-help",
+                  allReviewed
+                    ? "text-green-600 dark:text-green-500"
+                    : "text-muted-foreground",
+                )}
+              />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p>{tooltipText}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {missingHint && (
