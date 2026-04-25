@@ -87,6 +87,15 @@ interface FileEditDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Returns the correct indefinite article for an identifier type label.
+// UUID starts with the vowel letter U but the consonant sound "yoo", so it
+// takes "a" rather than "an". Fall back to a vowel-start regex for all other
+// types, including future plugin-defined types whose pronunciation is unknown.
+const articleFor = (typeId: string, label: string): string => {
+  if (typeId === "uuid") return "a";
+  return /^[aeiou]/i.test(label) ? "an" : "a";
+};
+
 // Helper to format date to YYYY-MM-DD for input[type="date"]
 const formatDateForInput = (dateString: string | undefined): string => {
   if (!dateString) return "";
@@ -1358,7 +1367,7 @@ export function FileEditDialog({
                     <SelectContent>
                       {availableIdentifierTypes.map(({ id, label }) => {
                         const isPresent = presentIdentifierTypes.has(id);
-                        const article = /^[aeiou]/i.test(label) ? "an" : "a";
+                        const article = articleFor(id, label);
                         const item = (
                           <SelectItem disabled={isPresent} key={id} value={id}>
                             {label}
