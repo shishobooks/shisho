@@ -35,6 +35,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
 import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
 import { RescanDialog } from "@/components/library/RescanDialog";
+import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +71,7 @@ import {
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { type RescanMode } from "@/hooks/queries/resync";
+import { useSetBookReview } from "@/hooks/queries/review";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import {
@@ -734,6 +736,7 @@ const BookDetail = () => {
   const deleteBookMutation = useDeleteBook();
   const deleteFileMutation = useDeleteFile();
   const setPrimaryFileMutation = useSetPrimaryFile();
+  const setBookReviewMutation = useSetBookReview();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [showBookRescanDialog, setShowBookRescanDialog] = useState(false);
   const [rescanFileId, setRescanFileId] = useState<number | null>(null);
@@ -1183,6 +1186,18 @@ const BookDetail = () => {
             )}
           </div>
 
+          {/* Review Panel — visible when book has files, fires mutation immediately */}
+          {(book.files?.length ?? 0) > 0 && (
+            <ReviewPanel
+              book={book}
+              files={book.files ?? []}
+              isPending={setBookReviewMutation.isPending}
+              onChange={(override) =>
+                setBookReviewMutation.mutate({ bookId: book.id, override })
+              }
+            />
+          )}
+
           <div className="space-y-4 md:space-y-6">
             {/* Authors */}
             {book.authors &&
@@ -1490,6 +1505,7 @@ const BookDetail = () => {
 
       {editingFile && (
         <FileEditDialog
+          book={book}
           file={editingFile}
           onOpenChange={(open) => {
             if (!open) setEditingFile(null);

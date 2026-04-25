@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
+import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -50,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
 import { usePeopleList } from "@/hooks/queries/people";
+import { useSetBookReview } from "@/hooks/queries/review";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -136,6 +138,7 @@ export function BookEditDialog({
   const debouncedAuthorSearch = useDebounce(authorSearch, 200);
 
   const updateBookMutation = useUpdateBook();
+  const setBookReviewMutation = useSetBookReview();
 
   // Check if book has CBZ files (determines whether to show role selection)
   const hasCBZFiles = book.files?.some((f) => f.file_type === FileTypeCBZ);
@@ -489,6 +492,16 @@ export function BookEditDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Review Panel — fires immediately, independent of Save button */}
+          <ReviewPanel
+            book={book}
+            files={book.files ?? []}
+            isPending={setBookReviewMutation.isPending}
+            onChange={(override) =>
+              setBookReviewMutation.mutate({ bookId: book.id, override })
+            }
+          />
+
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>

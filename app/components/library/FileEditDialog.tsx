@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { LanguageCombobox } from "@/components/library/LanguageCombobox";
+import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +67,7 @@ import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
+import { useSetFileReview } from "@/hooks/queries/review";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
@@ -75,6 +77,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  type Book,
   type File,
   type FileRole,
 } from "@/types";
@@ -83,6 +86,8 @@ import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
   file: File;
+  /** Parent book — used by ReviewPanel for book-level field checks */
+  book?: Book;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -109,6 +114,7 @@ const formatDateForInput = (dateString: string | undefined): string => {
 
 export function FileEditDialog({
   file,
+  book,
   open,
   onOpenChange,
 }: FileEditDialogProps) {
@@ -187,6 +193,7 @@ export function FileEditDialog({
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
   const setCoverPageMutation = useSetFileCoverPage();
+  const setFileReviewMutation = useSetFileReview();
 
   // Query for publishers in this library with server-side search
   const { data: publishersData, isLoading: isLoadingPublishers } =
@@ -741,6 +748,18 @@ export function FileEditDialog({
               </span>
             </div>
           </div>
+
+          {/* Review Panel — fires immediately, independent of Save button */}
+          {(book ?? file.book) && (
+            <ReviewPanel
+              book={(book ?? file.book)!}
+              files={[file]}
+              isPending={setFileReviewMutation.isPending}
+              onChange={(override) =>
+                setFileReviewMutation.mutate({ fileId: file.id, override })
+              }
+            />
+          )}
 
           {/* Name */}
           <div className="space-y-2">
