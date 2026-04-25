@@ -21,10 +21,16 @@ func TestScheduler_SkipsWhenNoLibraries(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, hasActive)
 
-	// List jobs - should be empty
+	// List scan jobs - should be empty (migrations may seed non-scan jobs like recompute_review)
 	allJobs, err := tc.jobService.ListJobs(tc.ctx, jobs.ListJobsOptions{})
 	require.NoError(t, err)
-	assert.Empty(t, allJobs)
+	scanJobs := make([]*models.Job, 0)
+	for _, j := range allJobs {
+		if j.Type == models.JobTypeScan {
+			scanJobs = append(scanJobs, j)
+		}
+	}
+	assert.Empty(t, scanJobs)
 }
 
 func TestScheduler_SkipsWhenScanJobPending(t *testing.T) {
