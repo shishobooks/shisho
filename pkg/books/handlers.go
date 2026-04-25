@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
@@ -1123,21 +1124,43 @@ func (h *handler) updateFile(c echo.Context) error {
 			seen[id.Type] = struct{}{}
 		}
 
-		// Delete existing identifiers
+		// Read existing identifiers so we can preserve `source` when an entry's
+		// (type, normalized value) is unchanged from what's already stored.
+		// Replacements and net-new entries get DataSourceManual since the user
+		// explicitly applied them via this endpoint.
+		existingFile, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		type sourceKey struct {
+			Type            string
+			NormalizedValue string
+		}
+		existingSources := make(map[sourceKey]string, len(existingFile.Identifiers))
+		for _, ex := range existingFile.Identifiers {
+			existingSources[sourceKey{Type: ex.Type, NormalizedValue: ex.Value}] = ex.Source
+		}
+
 		if err := h.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
 			return errors.WithStack(err)
 		}
-		// Create new identifiers
+
+		toInsert := make([]*models.FileIdentifier, 0, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
-			fileID := &models.FileIdentifier{
+			source := models.DataSourceManual
+			normValue := identifiers.NormalizeValue(id.Type, id.Value)
+			if prev, ok := existingSources[sourceKey{Type: id.Type, NormalizedValue: normValue}]; ok {
+				source = prev
+			}
+			toInsert = append(toInsert, &models.FileIdentifier{
 				FileID: file.ID,
 				Type:   id.Type,
 				Value:  id.Value,
-				Source: models.DataSourceManual,
-			}
-			if err := h.bookService.CreateFileIdentifier(ctx, fileID); err != nil {
-				log.Error("failed to create file identifier", logger.Data{"file_id": file.ID, "type": id.Type, "error": err.Error()})
-			}
+				Source: source,
+			})
+		}
+		if err := h.bookService.BulkCreateFileIdentifiers(ctx, toInsert); err != nil {
+			return errors.WithStack(err)
 		}
 		file.IdentifierSource = strPtr(models.DataSourceManual)
 		opts.Columns = append(opts.Columns, "identifier_source")
