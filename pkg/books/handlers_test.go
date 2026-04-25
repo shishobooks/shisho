@@ -2036,8 +2036,7 @@ func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rr := executeRequestWithUser(t, e, req, user)
 
-			assert.GreaterOrEqual(t, rr.Code, 400, "expected 4xx, got %d body=%s", rr.Code, rr.Body.String())
-			assert.Less(t, rr.Code, 500, "expected 4xx, got %d body=%s", rr.Code, rr.Body.String())
+			assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "expected 422, got %d body=%s", rr.Code, rr.Body.String())
 
 			var stored []*models.FileIdentifier
 			require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))

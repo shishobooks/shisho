@@ -472,6 +472,7 @@ export function FileEditDialog({
   };
 
   const handleAddIdentifier = () => {
+    if (presentIdentifierTypes.has(newIdentifierType)) return;
     if (!newIdentifierValue.trim()) return;
 
     const pluginType = pluginIdentifierTypes?.find(
@@ -1392,6 +1393,10 @@ export function FileEditDialog({
                     value={newIdentifierValue}
                   />
                   <Button
+                    disabled={
+                      presentIdentifierTypes.size >=
+                      availableIdentifierTypes.length
+                    }
                     onClick={handleAddIdentifier}
                     type="button"
                     variant="outline"
