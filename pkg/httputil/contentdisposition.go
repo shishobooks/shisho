@@ -13,7 +13,8 @@ import (
 // For ASCII-only filenames, only the legacy quoted form is emitted. When the
 // filename contains anything outside printable ASCII, both a sanitized ASCII
 // fallback (filename=) and a percent-encoded UTF-8 form (filename*=) are
-// emitted; clients that understand filename* take precedence per RFC 6266 §4.3.
+// emitted; per RFC 6266 §4.3 modern clients prefer filename* while legacy
+// clients ignore the unknown parameter and use the ASCII fallback.
 //
 // This matters for OPDS clients like KOReader's "Use server filenames" mode,
 // which parses the header to name the downloaded file on the device.
@@ -60,6 +61,8 @@ func escapeQuoted(s string) string {
 
 // needsExtendedForm reports whether the filename contains any byte that
 // can't be represented losslessly in a printable-ASCII quoted-string.
+// Iterates runes, so invalid UTF-8 bytes (decoded as U+FFFD) also trigger
+// the extended form, matching the byte-level encoding done by percentEncode.
 func needsExtendedForm(s string) bool {
 	for _, r := range s {
 		if r < 0x20 || r > 0x7E {

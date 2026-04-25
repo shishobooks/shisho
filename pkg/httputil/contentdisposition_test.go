@@ -56,6 +56,16 @@ func TestSetAttachmentFilename(t *testing.T) {
 			expected: `attachment; filename="book.epub"; filename*=UTF-8''book%01.epub`,
 		},
 		{
+			name:     "DEL byte triggers extended form and is percent-encoded",
+			filename: "book\x7f.epub",
+			expected: `attachment; filename="book.epub"; filename*=UTF-8''book%7F.epub`,
+		},
+		{
+			name:     "CR/LF cannot inject extra headers",
+			filename: "a\r\nX-Evil: yes\r\nb.epub",
+			expected: `attachment; filename="aX-Evil: yesb.epub"; filename*=UTF-8''a%0D%0AX-Evil%3A%20yes%0D%0Ab.epub`,
+		},
+		{
 			name:     "empty filename falls back to download",
 			filename: "",
 			expected: `attachment; filename="download"`,
