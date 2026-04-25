@@ -2,9 +2,16 @@ import { Check, KeyRound, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
+import { SizeSelector } from "@/components/library/SizeSelector";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import type { GallerySize } from "@/types";
 
 interface ThemeOptionProps {
   theme: Theme;
@@ -40,6 +47,14 @@ const UserSettings = () => {
   usePageTitle("User Settings");
 
   const { theme, setTheme } = useTheme();
+  const userSettingsQuery = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+  const gallerySize: GallerySize =
+    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+
+  const handleGallerySizeChange = (next: GallerySize) => {
+    updateUserSettings.mutate({ gallery_size: next });
+  };
 
   return (
     <div>
@@ -83,6 +98,20 @@ const UserSettings = () => {
                 onSelect={setTheme}
                 theme="system"
               />
+              <div className="mt-6 flex flex-col gap-2">
+                <label className="text-sm font-medium">
+                  Gallery cover size
+                </label>
+                <SizeSelector
+                  onChange={handleGallerySizeChange}
+                  value={gallerySize}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Applies to every gallery page. Used as your default; changes
+                  made inline on a gallery page override this until you save
+                  them.
+                </p>
+              </div>
             </div>
           </div>
 
