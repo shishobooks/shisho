@@ -1,6 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useReviewCriteria } from "@/hooks/queries/review";
 import { cn } from "@/libraries/utils";
 import {
@@ -199,6 +205,7 @@ export function ReviewPanel({
 
   let indicatorText: string;
   let indicatorVariant: "secondary" | "success" | "outline" = "secondary";
+  const isAuto = allNoOverride;
 
   if (allNoOverride) {
     indicatorText = "Auto";
@@ -231,6 +238,15 @@ export function ReviewPanel({
     onChange(checked ? ReviewOverrideReviewed : ReviewOverrideUnreviewed);
   };
 
+  const indicatorBadge = (
+    <Badge
+      className={cn("text-xs", isAuto && "cursor-help")}
+      variant={indicatorVariant}
+    >
+      {indicatorText}
+    </Badge>
+  );
+
   return (
     <div className="border rounded-md p-4 space-y-2 bg-muted/30">
       <div className="flex items-center gap-3">
@@ -250,9 +266,26 @@ export function ReviewPanel({
         >
           Reviewed
         </Label>
-        <Badge className="ml-1 text-xs" variant={indicatorVariant}>
-          {indicatorText}
-        </Badge>
+      </div>
+
+      <div>
+        {isAuto ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>{indicatorBadge}</TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p>
+                  Reviewed state is determined automatically from the required
+                  fields configured in Server Settings. Fill in all required
+                  fields and this will flip to reviewed; remove one and it flips
+                  back. Toggle manually to override.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          indicatorBadge
+        )}
       </div>
 
       {missingHint && (
