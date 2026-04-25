@@ -260,23 +260,28 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		fileColumns = append(fileColumns, "abridged", "abridged_source")
 	}
 
-	// Identifiers (file-level, applied to target file)
+	// Identifiers (file-level, applied to target file). Filter out blanks the
+	// plugin may have emitted, then bulk-insert. The bulk helper dedupes by
+	// type with last-wins and warns, so a misbehaving plugin never trips the
+	// UNIQUE(file_id, type) constraint.
 	if len(md.Identifiers) > 0 && targetFile != nil {
 		if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete identifiers")
 		}
+		toInsert := make([]*models.FileIdentifier, 0, len(md.Identifiers))
 		for _, ident := range md.Identifiers {
 			if ident.Type == "" || ident.Value == "" {
 				continue
 			}
-			if err := h.enrich.identStore.CreateFileIdentifier(ctx, &models.FileIdentifier{
+			toInsert = append(toInsert, &models.FileIdentifier{
 				FileID: targetFile.ID,
 				Type:   ident.Type,
 				Value:  ident.Value,
 				Source: pluginSource,
-			}); err != nil {
-				log.Warn("failed to create identifier", logger.Data{"error": err.Error()})
-			}
+			})
+		}
+		if err := h.enrich.identStore.BulkCreateFileIdentifiers(ctx, toInsert); err != nil {
+			return errors.Wrap(err, "failed to bulk-create identifiers")
 		}
 	}
 
