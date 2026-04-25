@@ -48,7 +48,13 @@ export const SizeSelector = ({
                 : "bg-transparent",
             )}
             key={size}
-            onClick={() => onChange(size)}
+            // Skip onChange when the user clicks the already-active size:
+            // callers push to ?size= or fire a server mutation, both of which
+            // are pointless no-ops here and the URL push specifically breaks
+            // the back button by stacking duplicate history entries.
+            onClick={() => {
+              if (!isActive) onChange(size);
+            }}
             type="button"
             variant="ghost"
           >
