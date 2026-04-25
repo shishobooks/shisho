@@ -119,7 +119,9 @@ describe("SortSheet", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: /Open Sort/i }));
-    await user.click(screen.getByRole("button", { name: /Save as default/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Save as my default/i }),
+    );
     expect(onSaveAsDefault).toHaveBeenCalled();
   });
 

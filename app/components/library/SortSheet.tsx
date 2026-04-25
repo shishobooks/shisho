@@ -283,12 +283,12 @@ const SortSheetContent = ({
 
       {isDirty && (
         <div className="border border-dashed rounded-md p-3">
-          <p className="text-sm text-muted-foreground mb-2">
-            Save this as the default for this library?
+          <p className="text-xs text-muted-foreground mb-2">
+            Other users won't be affected.
           </p>
           <Button disabled={isSaving} onClick={onSaveAsDefault} size="sm">
             <Save className="h-4 w-4" />
-            {isSaving ? "Saving…" : "Save as default"}
+            {isSaving ? "Saving…" : "Save as my default for this library"}
           </Button>
         </div>
       )}

@@ -153,7 +153,7 @@ test.describe("Gallery sort", () => {
     await page
       .getByRole("button", { name: "Sort Sort differs from default" })
       .click();
-    await page.getByRole("button", { name: /Save as default/i }).click();
+    await page.getByRole("button", { name: /Save as my default/i }).click();
     await expect(page).not.toHaveURL(/[?&]sort=/);
     await expect(page.getByText(/^Sorted by:/)).not.toBeVisible();
     await expect(
