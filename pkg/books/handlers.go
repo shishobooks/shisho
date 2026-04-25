@@ -1112,6 +1112,17 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	// Update identifiers
 	if params.Identifiers != nil {
+		// Reject duplicate types before any DB mutation. The DB enforces
+		// UNIQUE(file_id, type); surface the contract violation explicitly
+		// instead of silently dropping the second insert.
+		seen := make(map[string]struct{}, len(*params.Identifiers))
+		for _, id := range *params.Identifiers {
+			if _, dup := seen[id.Type]; dup {
+				return errcodes.ValidationError("duplicate identifier type: " + id.Type)
+			}
+			seen[id.Type] = struct{}{}
+		}
+
 		// Delete existing identifiers
 		if err := h.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
 			return errors.WithStack(err)

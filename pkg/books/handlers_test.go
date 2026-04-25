@@ -1884,3 +1884,37 @@ func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) 
 	require.NotNil(t, updated.NameSource)
 	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
 }
+
+func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Seed an existing identifier so we can assert it's preserved when the
+	// 422 short-circuits the handler.
+	require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+		{FileID: file.ID, Type: "asin", Value: "B01ORIGINAL", Source: models.DataSourceManual},
+	}))
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"identifiers":[{"type":"asin","value":"B01AAA"},{"type":"asin","value":"B02BBB"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "asin")
+
+	// Existing identifier untouched (request short-circuited before DB mutation).
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "B01ORIGINAL", stored[0].Value)
+}
