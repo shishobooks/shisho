@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { EpubFlow, EpubTheme, FitMode } from "@/types";
+import type { EpubFlow, EpubTheme, FitMode, GallerySize } from "@/types";
 
 export interface UserSettings {
   preload_count: number;
@@ -14,6 +14,7 @@ export interface UserSettings {
   viewer_epub_font_size: number;
   viewer_epub_theme: EpubTheme;
   viewer_epub_flow: EpubFlow;
+  gallery_size: GallerySize;
 }
 
 export enum QueryKey {
@@ -44,6 +45,7 @@ export interface UpdateUserSettingsVariables {
   viewer_epub_font_size?: number;
   viewer_epub_theme?: EpubTheme;
   viewer_epub_flow?: EpubFlow;
+  gallery_size?: GallerySize;
 }
 
 export const useUpdateUserSettings = () => {
