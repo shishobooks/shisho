@@ -12,10 +12,7 @@ import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
-} from "@/constants/gallerySize";
+import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useUpdateUserSettings,
@@ -31,7 +28,7 @@ import {
 } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import { parseGallerySize } from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
 
 const TagDetail = () => {
@@ -54,8 +51,6 @@ const TagDetail = () => {
   const userSettingsResolved =
     userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
-  const offset = 0;
-
   const applyGallerySize = (next: GallerySize) => {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
@@ -64,8 +59,6 @@ const TagDetail = () => {
       } else {
         params.set("size", next);
       }
-      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
-      params.set("page", String(newPage));
       return params;
     });
   };
