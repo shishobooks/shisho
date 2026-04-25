@@ -56,7 +56,7 @@ type UpdateFilePayload struct {
 	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 	Language    *string              `json:"language,omitempty" validate:"omitempty,max=35"`
 	Abridged    *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
-	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
+	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
 }
 
 // ResyncPayload contains the request parameters for resync operations.

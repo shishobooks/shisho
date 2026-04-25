@@ -1113,27 +1113,17 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	// Update identifiers
 	if params.Identifiers != nil {
-		// Reject blank/whitespace-only type or value before any DB mutation.
-		// The binder's `required` tag catches empty strings, but whitespace-only
-		// strings pass validation and would either insert garbage (type) or hit a
-		// NOT NULL constraint (value after normalization strips whitespace).
-		for _, id := range *params.Identifiers {
-			if strings.TrimSpace(id.Type) == "" || strings.TrimSpace(id.Value) == "" {
-				return errcodes.ValidationError("identifier type and value must be non-empty")
-			}
-		}
-
 		// Reject duplicate types before any DB mutation. The DB enforces
 		// UNIQUE(file_id, type); surface the contract violation explicitly
-		// instead of silently dropping the second insert. Key on the trimmed
-		// type so that " asin" and "asin" are correctly detected as duplicates.
+		// instead of silently dropping the second insert. The binder has already
+		// trimmed id.Type via mod:"dive" + mod:"trim", so keying on the raw
+		// field is equivalent to keying on the trimmed value.
 		seen := make(map[string]struct{}, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
-			trimmedType := strings.TrimSpace(id.Type)
-			if _, dup := seen[trimmedType]; dup {
-				return errcodes.ValidationError("duplicate identifier type: " + trimmedType)
+			if _, dup := seen[id.Type]; dup {
+				return errcodes.ValidationError("duplicate identifier type: " + id.Type)
 			}
-			seen[trimmedType] = struct{}{}
+			seen[id.Type] = struct{}{}
 		}
 
 		// Read existing identifiers so we can preserve `source` when an entry's
@@ -1159,15 +1149,14 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		toInsert := make([]*models.FileIdentifier, 0, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
-			trimmedType := strings.TrimSpace(id.Type)
 			source := models.DataSourceManual
-			normValue := identifiers.NormalizeValue(trimmedType, id.Value)
-			if prev, ok := existingSources[sourceKey{Type: trimmedType, NormalizedValue: normValue}]; ok {
+			normValue := identifiers.NormalizeValue(id.Type, id.Value)
+			if prev, ok := existingSources[sourceKey{Type: id.Type, NormalizedValue: normValue}]; ok {
 				source = prev
 			}
 			toInsert = append(toInsert, &models.FileIdentifier{
 				FileID: file.ID,
-				Type:   trimmedType,
+				Type:   id.Type,
 				Value:  id.Value,
 				Source: source,
 			})
