@@ -77,3 +77,29 @@ func TestService_BulkCreateFileIdentifiers_EmptySliceIsNoop(t *testing.T) {
 	err = svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{})
 	require.NoError(t, err)
 }
+
+func TestService_BulkCreateFileIdentifiers_TrimsType(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
+
+	// Caller passes type with leading whitespace; helper must dedupe and store
+	// using the trimmed canonical form.
+	identifiers := []*models.FileIdentifier{
+		{FileID: file.ID, Type: " asin", Value: "B01", Source: models.DataSourceManual},
+		{FileID: file.ID, Type: "asin", Value: "B02", Source: models.DataSourceManual},
+	}
+
+	err := svc.BulkCreateFileIdentifiers(ctx, identifiers)
+	require.NoError(t, err)
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1, "whitespace-only type difference must dedupe to one row")
+	assert.Equal(t, "asin", stored[0].Type)
+	assert.Equal(t, "B02", stored[0].Value, "last-wins after type trim")
+}

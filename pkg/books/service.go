@@ -1409,7 +1409,8 @@ func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifie
 	deduped := make([]*models.FileIdentifier, 0, len(fileIdentifiers))
 	for _, fi := range fileIdentifiers {
 		clone := *fi
-		clone.Value = identifiers.NormalizeValue(fi.Type, fi.Value)
+		clone.Type = strings.TrimSpace(fi.Type)
+		clone.Value = identifiers.NormalizeValue(clone.Type, fi.Value)
 		k := key{FileID: clone.FileID, Type: clone.Type}
 		if existingIdx, ok := indexByKey[k]; ok {
 			dropped := deduped[existingIdx]

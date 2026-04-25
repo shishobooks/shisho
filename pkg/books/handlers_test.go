@@ -2045,3 +2045,54 @@ func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateFile_TrimsIdentifierTypeAndValue(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Payload has leading/trailing whitespace on both type and value.
+	body := `{"identifiers":[{"type":"  asin  ","value":"  B01ABC1234  "}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "asin", stored[0].Type, "type stored without leading/trailing whitespace")
+	assert.Equal(t, "B01ABC1234", stored[0].Value, "value stored normalized (trim + uppercase ASIN)")
+}
+
+func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Two entries that differ only in whitespace must be detected as duplicates.
+	body := `{"identifiers":[{"type":" asin","value":"B01"},{"type":"asin","value":"B02"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "expected 422, got %d body=%s", rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "duplicate identifier type: asin")
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Empty(t, stored)
+}

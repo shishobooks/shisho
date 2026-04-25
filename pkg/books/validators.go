@@ -41,8 +41,8 @@ type SeriesInput struct {
 
 // IdentifierPayload represents an identifier in update requests.
 type IdentifierPayload struct {
-	Type  string `json:"type" validate:"required,min=1,max=50"`
-	Value string `json:"value" validate:"required,max=100"`
+	Type  string `json:"type" mod:"trim" validate:"required,min=1,max=50"`
+	Value string `json:"value" mod:"trim" validate:"required,max=100"`
 }
 
 // UpdateFilePayload is the payload for updating a file's metadata.

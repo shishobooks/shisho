@@ -1125,13 +1125,15 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// Reject duplicate types before any DB mutation. The DB enforces
 		// UNIQUE(file_id, type); surface the contract violation explicitly
-		// instead of silently dropping the second insert.
+		// instead of silently dropping the second insert. Key on the trimmed
+		// type so that " asin" and "asin" are correctly detected as duplicates.
 		seen := make(map[string]struct{}, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
-			if _, dup := seen[id.Type]; dup {
-				return errcodes.ValidationError("duplicate identifier type: " + id.Type)
+			trimmedType := strings.TrimSpace(id.Type)
+			if _, dup := seen[trimmedType]; dup {
+				return errcodes.ValidationError("duplicate identifier type: " + trimmedType)
 			}
-			seen[id.Type] = struct{}{}
+			seen[trimmedType] = struct{}{}
 		}
 
 		// Read existing identifiers so we can preserve `source` when an entry's
@@ -1157,14 +1159,15 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		toInsert := make([]*models.FileIdentifier, 0, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
+			trimmedType := strings.TrimSpace(id.Type)
 			source := models.DataSourceManual
-			normValue := identifiers.NormalizeValue(id.Type, id.Value)
-			if prev, ok := existingSources[sourceKey{Type: id.Type, NormalizedValue: normValue}]; ok {
+			normValue := identifiers.NormalizeValue(trimmedType, id.Value)
+			if prev, ok := existingSources[sourceKey{Type: trimmedType, NormalizedValue: normValue}]; ok {
 				source = prev
 			}
 			toInsert = append(toInsert, &models.FileIdentifier{
 				FileID: file.ID,
-				Type:   id.Type,
+				Type:   trimmedType,
 				Value:  id.Value,
 				Source: source,
 			})
