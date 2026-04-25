@@ -23,8 +23,8 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { useFileChapters } from "@/hooks/queries/chapters";
 import {
-  useUpdateViewerSettings,
-  useViewerSettings,
+  useUpdateUserSettings,
+  useUserSettings,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Chapter } from "@/types";
@@ -89,8 +89,8 @@ export default function PageReader({
   const flatChapters = useMemo(() => flattenChapters(chapters), [chapters]);
 
   // Fetch and update viewer settings
-  const { data: settings, isLoading: settingsLoading } = useViewerSettings();
-  const updateSettings = useUpdateViewerSettings();
+  const { data: settings, isLoading: settingsLoading } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
   const preloadCount = settings?.preload_count ?? 3;
   const fitMode = settings?.fit_mode ?? "fit-height";
   const settingsReady = !settingsLoading && settings != null;

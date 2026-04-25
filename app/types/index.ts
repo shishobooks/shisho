@@ -55,7 +55,7 @@ export {
   type ListBooksQuery as ListBooksInListQuery,
 } from "./generated/lists";
 
-export type { ViewerSettings } from "@/hooks/queries/settings";
+export type { UserSettings } from "@/hooks/queries/settings";
 
 // Delete operation types
 // TODO: Move these to validators.go and regenerate via tygo

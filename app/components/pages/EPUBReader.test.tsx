@@ -6,8 +6,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useEpubBlob } from "@/hooks/queries/epub";
 import {
-  useUpdateViewerSettings,
-  useViewerSettings,
+  useUpdateUserSettings,
+  useUserSettings,
 } from "@/hooks/queries/settings";
 
 import EPUBReader from "./EPUBReader";
@@ -37,8 +37,8 @@ beforeAll(() => {
 });
 
 vi.mock("@/hooks/queries/settings", () => ({
-  useViewerSettings: vi.fn(() => ({ data: undefined, isLoading: true })),
-  useUpdateViewerSettings: vi.fn(() => ({ mutate: vi.fn() })),
+  useUserSettings: vi.fn(() => ({ data: undefined, isLoading: true })),
+  useUpdateUserSettings: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 const renderReader = () => {
@@ -111,7 +111,7 @@ describe("EPUBReader", () => {
   it("updates settings when the theme button is clicked", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const mutate = vi.fn();
-    vi.mocked(useViewerSettings).mockReturnValue({
+    vi.mocked(useUserSettings).mockReturnValue({
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
@@ -121,7 +121,7 @@ describe("EPUBReader", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useUpdateViewerSettings).mockReturnValue({ mutate } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);
 
     vi.mocked(useEpubBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
