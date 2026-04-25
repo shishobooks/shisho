@@ -749,18 +749,6 @@ export function FileEditDialog({
             </div>
           </div>
 
-          {/* Review Panel — fires immediately, independent of Save button */}
-          {(book ?? file.book) && (
-            <ReviewPanel
-              book={(book ?? file.book)!}
-              files={[file]}
-              isPending={setFileReviewMutation.isPending}
-              onChange={(override) =>
-                setFileReviewMutation.mutate({ fileId: file.id, override })
-              }
-            />
-          )}
-
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
@@ -1434,6 +1422,18 @@ export function FileEditDialog({
                 </div>
               </div>
             </>
+          )}
+
+          {/* Review Panel — fires immediately, independent of Save button */}
+          {(book ?? file.book) && (
+            <ReviewPanel
+              book={(book ?? file.book)!}
+              files={[file]}
+              isPending={setFileReviewMutation.isPending}
+              onChange={(override) =>
+                setFileReviewMutation.mutate({ fileId: file.id, override })
+              }
+            />
           )}
         </div>
 

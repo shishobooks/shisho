@@ -492,16 +492,6 @@ export function BookEditDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Review Panel — fires immediately, independent of Save button */}
-          <ReviewPanel
-            book={book}
-            files={book.files ?? []}
-            isPending={setBookReviewMutation.isPending}
-            onChange={(override) =>
-              setBookReviewMutation.mutate({ bookId: book.id, override })
-            }
-          />
-
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
@@ -952,6 +942,16 @@ export function BookEditDialog({
               values={tags}
             />
           </div>
+
+          {/* Review Panel — fires immediately, independent of Save button */}
+          <ReviewPanel
+            book={book}
+            files={book.files ?? []}
+            isPending={setBookReviewMutation.isPending}
+            onChange={(override) =>
+              setBookReviewMutation.mutate({ bookId: book.id, override })
+            }
+          />
         </div>
 
         <DialogFooter>
