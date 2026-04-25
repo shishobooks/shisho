@@ -2664,10 +2664,12 @@ func removeFileSidecar(filePath string, logWarn func(msg string, data logger.Dat
 	}
 }
 
-// removeBookSidecar deletes the book sidecar for a book. Tries both the
-// directory-anchored path and the file-anchored fallback used for root-level
-// books with a synthetic organized book.Filepath that never exists on disk.
-// ENOENT is silent; other errors are logged via logWarn.
+// removeBookSidecar deletes the book sidecar for a book. Mirrors the
+// anchor-resolution logic in resolveBookSidecarAnchor: prefers book.Filepath
+// when it resolves to an existing directory, otherwise falls back to file
+// paths (covers root-level books whose synthetic organized book.Filepath
+// never exists on disk). ENOENT is silent; other errors are logged via
+// logWarn.
 func removeBookSidecar(book *models.Book, logWarn func(msg string, data logger.Data)) {
 	tryRemove := func(anchor string) {
 		if anchor == "" {
@@ -2684,6 +2686,14 @@ func removeBookSidecar(book *models.Book, logWarn func(msg string, data logger.D
 	if book == nil {
 		return
 	}
+	if book.Filepath != "" {
+		if info, err := os.Stat(book.Filepath); err == nil && info.IsDir() {
+			tryRemove(book.Filepath)
+			return
+		}
+	}
+	// book.Filepath isn't a real directory — fall back to file anchors used
+	// by root-level books with synthetic organized paths.
 	tryRemove(book.Filepath)
 	for _, f := range book.Files {
 		if f != nil {

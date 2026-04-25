@@ -5318,12 +5318,11 @@ func TestScanBook_ResetMode_DiscardsStaleBookSidecar(t *testing.T) {
 	// Manually plant a stale subtitle in the book sidecar. If the sidecar
 	// isn't dropped before scanFileCore runs, this stale value will be
 	// re-applied on top of the freshly-derived (empty) subtitle.
-	bookSidecarPath := sidecar.BookSidecarPath(bookDir)
-	require.NotEmpty(t, bookSidecarPath)
 	staleSubtitle := "Stale Subtitle From Old Sidecar"
 	require.NoError(t, sidecar.WriteBookSidecar(bookDir, &sidecar.BookSidecar{
 		Subtitle: &staleSubtitle,
 	}))
+	require.FileExists(t, sidecar.BookSidecarPath(bookDir), "planted book sidecar should be on disk before reset runs")
 
 	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
 		BookID:       bookID,
