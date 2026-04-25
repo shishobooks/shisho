@@ -15,7 +15,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/jobs"
     output_path: "app/types/generated/jobs.ts"
     frontmatter: |
-      import { JobBulkDownloadData, JobExportData, JobScanData } from "@/types";
+      import { JobBulkDownloadData, JobExportData, JobRecomputeReviewData, JobScanData } from "@/types";
     include_files:
       - validators.go
   - path: "github.com/shishobooks/shisho/pkg/joblogs"
