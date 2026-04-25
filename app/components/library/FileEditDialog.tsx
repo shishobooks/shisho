@@ -213,6 +213,49 @@ export function FileEditDialog({
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
+  // All identifier types available for selection, in display order.
+  // Memoized so it can be a stable useEffect dependency without causing
+  // an infinite update loop.
+  const availableIdentifierTypes = useMemo(
+    () => [
+      { id: "isbn_10", label: "ISBN-10" },
+      { id: "isbn_13", label: "ISBN-13" },
+      { id: "asin", label: "ASIN" },
+      { id: "uuid", label: "UUID" },
+      { id: "goodreads", label: "Goodreads" },
+      { id: "google", label: "Google" },
+      { id: "other", label: "Other" },
+      ...(pluginIdentifierTypes
+        ?.filter(
+          (pt) =>
+            ![
+              "isbn_10",
+              "isbn_13",
+              "asin",
+              "uuid",
+              "goodreads",
+              "google",
+              "other",
+            ].includes(pt.id),
+        )
+        .map((pt) => ({ id: pt.id, label: pt.name })) ?? []),
+    ],
+    [pluginIdentifierTypes],
+  );
+
+  // Auto-switch the selected identifier type away from one that is already
+  // present. This prevents the dropdown from showing a disabled type as the
+  // selected value when the dialog opens (or when identifiers change).
+  useEffect(() => {
+    if (!presentIdentifierTypes.has(newIdentifierType)) return;
+    const firstAvailable = availableIdentifierTypes.find(
+      (t) => !presentIdentifierTypes.has(t.id),
+    );
+    if (firstAvailable) {
+      setNewIdentifierType(firstAvailable.id);
+    }
+  }, [presentIdentifierTypes, newIdentifierType, availableIdentifierTypes]);
+
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
     if (pendingCoverPreviewRef.current) {
@@ -1312,29 +1355,7 @@ export function FileEditDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[
-                        { id: "isbn_10", label: "ISBN-10" },
-                        { id: "isbn_13", label: "ISBN-13" },
-                        { id: "asin", label: "ASIN" },
-                        { id: "uuid", label: "UUID" },
-                        { id: "goodreads", label: "Goodreads" },
-                        { id: "google", label: "Google" },
-                        { id: "other", label: "Other" },
-                        ...(pluginIdentifierTypes
-                          ?.filter(
-                            (pt) =>
-                              ![
-                                "isbn_10",
-                                "isbn_13",
-                                "asin",
-                                "uuid",
-                                "goodreads",
-                                "google",
-                                "other",
-                              ].includes(pt.id),
-                          )
-                          .map((pt) => ({ id: pt.id, label: pt.name })) ?? []),
-                      ].map(({ id, label }) => {
+                      {availableIdentifierTypes.map(({ id, label }) => {
                         const isPresent = presentIdentifierTypes.has(id);
                         const article = /^[aeiou]/i.test(label) ? "an" : "a";
                         const item = (

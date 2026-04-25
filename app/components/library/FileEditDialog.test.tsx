@@ -379,6 +379,18 @@ describe("FileEditDialog", () => {
       );
     });
 
+    it("auto-switches the default type away from one that is already present", async () => {
+      renderFileEditDialogWithIdentifiers([
+        { type: "isbn_13", value: "9780060519537" },
+      ]);
+
+      // The Select trigger should NOT show "ISBN-13" — that type is in use and disabled.
+      const trigger = screen.getByRole("combobox", {
+        name: /identifier type/i,
+      });
+      expect(trigger).not.toHaveTextContent(/ISBN-13/i);
+    });
+
     it("re-enables a previously-disabled type after the existing identifier is removed", async () => {
       const user = createUser();
       renderFileEditDialogWithIdentifiers([
