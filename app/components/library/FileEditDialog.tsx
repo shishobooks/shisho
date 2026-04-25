@@ -77,9 +77,12 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  ReviewOverrideReviewed,
+  ReviewOverrideUnreviewed,
   type Book,
   type File,
   type FileRole,
+  type ReviewOverride,
 } from "@/types";
 import { formatIdentifierType } from "@/utils/format";
 import { validateIdentifier } from "@/utils/identifiers";
@@ -290,6 +293,11 @@ export function FileEditDialog({
     };
   }, []);
 
+  // Draft review override — toggling the panel updates this; the actual
+  // setFileReview mutation only fires on Save.
+  const [draftReviewOverride, setDraftReviewOverride] =
+    useState<ReviewOverride | null>(null);
+
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
     narrators: string[];
@@ -303,6 +311,7 @@ export function FileEditDialog({
     coverPage: number | null;
     language: string;
     abridged: string;
+    reviewOverride: ReviewOverride;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -341,6 +350,11 @@ export function FileEditDialog({
     // for the reasoning.
     const initialAbridged = file.abridged === true ? "true" : "";
 
+    const initialReviewOverride: ReviewOverride =
+      file.reviewed === true
+        ? ReviewOverrideReviewed
+        : ReviewOverrideUnreviewed;
+
     setNarrators(initialNarrators);
     setNarratorSearch("");
     setName(initialName);
@@ -360,6 +374,7 @@ export function FileEditDialog({
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
+    setDraftReviewOverride(initialReviewOverride);
 
     // Store initial values for comparison
     setInitialValues({
@@ -374,6 +389,7 @@ export function FileEditDialog({
       coverPage: file.cover_page ?? null,
       language: initialLanguage,
       abridged: initialAbridged,
+      reviewOverride: initialReviewOverride,
     });
   }, [open, file, updatePendingCoverPreview]);
 
@@ -393,7 +409,8 @@ export function FileEditDialog({
       abridged !== initialValues.abridged ||
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
-        pendingCoverPage !== initialValues.coverPage)
+        pendingCoverPage !== initialValues.coverPage) ||
+      draftReviewOverride !== initialValues.reviewOverride
     );
   }, [
     narrators,
@@ -408,6 +425,7 @@ export function FileEditDialog({
     abridged,
     pendingCoverFile,
     pendingCoverPage,
+    draftReviewOverride,
     initialValues,
   ]);
 
@@ -681,6 +699,17 @@ export function FileEditDialog({
       setPendingCoverPage(null);
     }
 
+    // Apply pending review override change
+    if (
+      draftReviewOverride !== null &&
+      draftReviewOverride !== initialValues?.reviewOverride
+    ) {
+      await setFileReviewMutation.mutateAsync({
+        fileId: file.id,
+        override: draftReviewOverride,
+      });
+    }
+
     // Reset initial values so hasChanges becomes false, then close via effect.
     // For coverPage, use pendingCoverPage if set, otherwise keep the current
     // initial value. For language/abridged, use the canonicalized values
@@ -705,6 +734,7 @@ export function FileEditDialog({
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
       language: canonicalLanguage,
       abridged: canonicalAbridged,
+      reviewOverride: draftReviewOverride ?? ReviewOverrideUnreviewed,
     });
     requestClose();
   };
@@ -1424,15 +1454,14 @@ export function FileEditDialog({
             </>
           )}
 
-          {/* Review Panel — fires immediately, independent of Save button */}
+          {/* Review Panel — controlled (deferred to Save button) */}
           {(book ?? file.book) && (
             <ReviewPanel
               book={(book ?? file.book)!}
               files={[file]}
               isPending={setFileReviewMutation.isPending}
-              onChange={(override) =>
-                setFileReviewMutation.mutate({ fileId: file.id, override })
-              }
+              onChange={(override) => setDraftReviewOverride(override)}
+              toggleValue={draftReviewOverride === ReviewOverrideReviewed}
             />
           )}
         </div>

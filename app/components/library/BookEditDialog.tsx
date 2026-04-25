@@ -66,9 +66,13 @@ import {
   AuthorRoleTranslator,
   AuthorRoleWriter,
   DataSourceManual,
+  FileRoleMain,
   FileTypeCBZ,
+  ReviewOverrideReviewed,
+  ReviewOverrideUnreviewed,
   type AuthorInput,
   type Book,
+  type ReviewOverride,
   type SeriesInput,
 } from "@/types";
 import { forTitle } from "@/utils/sortname";
@@ -183,6 +187,11 @@ export function BookEditDialog({
     { enabled: open && !!book.library_id },
   );
 
+  // Draft review override — toggling the panel updates this; the actual
+  // setBookReview mutation only fires on Save.
+  const [draftReviewOverride, setDraftReviewOverride] =
+    useState<ReviewOverride | null>(null);
+
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
     title: string;
@@ -193,6 +202,7 @@ export function BookEditDialog({
     series: SeriesEntry[];
     genres: string[];
     tags: string[];
+    reviewOverride: ReviewOverride;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -231,6 +241,15 @@ export function BookEditDialog({
     const initialTags =
       book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [];
 
+    // Aggregate reviewed state across the book's main files.
+    const mainFiles =
+      book.files?.filter((f) => f.file_role === FileRoleMain) ?? [];
+    const allReviewed =
+      mainFiles.length > 0 && mainFiles.every((f) => f.reviewed === true);
+    const initialReviewOverride: ReviewOverride = allReviewed
+      ? ReviewOverrideReviewed
+      : ReviewOverrideUnreviewed;
+
     setTitle(initialTitle);
     // Use semantic value for state (what we send to server)
     setSortTitle(semanticSortTitle);
@@ -243,6 +262,7 @@ export function BookEditDialog({
     setTags(initialTags);
     setTagSearch("");
     setAuthorSearch("");
+    setDraftReviewOverride(initialReviewOverride);
 
     // Store initial values for comparison (use effective sort title, not semantic)
     setInitialValues({
@@ -254,6 +274,7 @@ export function BookEditDialog({
       series: initialSeries,
       genres: [...initialGenres].sort(),
       tags: [...initialTags].sort(),
+      reviewOverride: initialReviewOverride,
     });
   }, [open, book]);
 
@@ -271,7 +292,8 @@ export function BookEditDialog({
       !equal(authors, initialValues.authors) ||
       !equal(seriesEntries, initialValues.series) ||
       !equal([...genres].sort(), initialValues.genres) ||
-      !equal([...tags].sort(), initialValues.tags)
+      !equal([...tags].sort(), initialValues.tags) ||
+      draftReviewOverride !== initialValues.reviewOverride
     );
   }, [
     title,
@@ -282,6 +304,7 @@ export function BookEditDialog({
     seriesEntries,
     genres,
     tags,
+    draftReviewOverride,
     initialValues,
   ]);
 
@@ -424,16 +447,29 @@ export function BookEditDialog({
       payload.tags = tags.filter((t) => t.trim());
     }
 
+    const reviewChanged =
+      draftReviewOverride !== null &&
+      draftReviewOverride !== initialValues?.reviewOverride;
+
     // Only submit if something changed
-    if (Object.keys(payload).length === 0) {
+    if (Object.keys(payload).length === 0 && !reviewChanged) {
       onOpenChange(false);
       return;
     }
 
-    await updateBookMutation.mutateAsync({
-      id: String(book.id),
-      payload,
-    });
+    if (Object.keys(payload).length > 0) {
+      await updateBookMutation.mutateAsync({
+        id: String(book.id),
+        payload,
+      });
+    }
+
+    if (reviewChanged) {
+      await setBookReviewMutation.mutateAsync({
+        bookId: book.id,
+        override: draftReviewOverride,
+      });
+    }
 
     // Reset initial values so hasChanges becomes false, then close via effect
     // Use effective sort title (not semantic) to match hasChanges comparison
@@ -446,6 +482,7 @@ export function BookEditDialog({
       series: [...seriesEntries],
       genres: [...genres].sort(),
       tags: [...tags].sort(),
+      reviewOverride: draftReviewOverride ?? ReviewOverrideUnreviewed,
     });
     requestClose();
   };
@@ -943,14 +980,13 @@ export function BookEditDialog({
             />
           </div>
 
-          {/* Review Panel — fires immediately, independent of Save button */}
+          {/* Review Panel — controlled (deferred to Save button) */}
           <ReviewPanel
             book={book}
             files={book.files ?? []}
             isPending={setBookReviewMutation.isPending}
-            onChange={(override) =>
-              setBookReviewMutation.mutate({ bookId: book.id, override })
-            }
+            onChange={(override) => setDraftReviewOverride(override)}
+            toggleValue={draftReviewOverride === ReviewOverrideReviewed}
           />
         </div>
 

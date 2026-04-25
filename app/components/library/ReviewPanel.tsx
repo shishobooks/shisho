@@ -26,6 +26,14 @@ interface ReviewPanelProps {
   files: File[];
   onChange: (override: ReviewOverride) => void;
   isPending?: boolean;
+  /**
+   * When provided, the toggle (and the status icon's color) reflects this
+   * value instead of the aggregate `reviewed` state computed from `files`.
+   * Use for controlled / draft mode (e.g. edit dialogs that defer to Save).
+   * The committed-state-driven tooltip text and missing-fields hint are
+   * unaffected.
+   */
+  toggleValue?: boolean;
 }
 
 /**
@@ -175,6 +183,7 @@ export function ReviewPanel({
   files,
   onChange,
   isPending = false,
+  toggleValue,
 }: ReviewPanelProps) {
   const { data: criteria } = useReviewCriteria();
 
@@ -183,9 +192,14 @@ export function ReviewPanel({
 
   if (mainFiles.length === 0) return null;
 
-  // Aggregate reviewed state: true iff ALL main files are reviewed
-  const allReviewed =
+  // Committed aggregate reviewed state: true iff ALL main files are reviewed.
+  // Used for the missing-fields hint (which always reflects saved state).
+  const committedAllReviewed =
     mainFiles.length > 0 && mainFiles.every((f) => f.reviewed === true);
+
+  // The toggle's checked state and the icon's color follow `toggleValue`
+  // when caller is in controlled mode; otherwise default to committed state.
+  const allReviewed = toggleValue ?? committedAllReviewed;
 
   // Determine override indicator
   const allOverrideReviewed = mainFiles.every(
@@ -217,8 +231,10 @@ export function ReviewPanel({
     tooltipText = "Manually set on multiple files";
   }
 
-  // Build missing-fields hint (only when book needs review)
-  const needsReview = !allReviewed;
+  // Build missing-fields hint (only when book needs review).
+  // Uses committed state — the hint reflects what's actually missing on disk,
+  // not the draft toggle state in controlled mode.
+  const needsReview = !committedAllReviewed;
   let missingHint: string | null = null;
 
   if (needsReview && criteria) {
