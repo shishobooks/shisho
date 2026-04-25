@@ -53,6 +53,11 @@ import {
   type DragHandleProps,
 } from "@/components/ui/SortableList";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useSetFileCoverPage,
   useUpdateFile,
   useUploadFileCover,
@@ -81,6 +86,15 @@ interface FileEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+// Returns the correct indefinite article for an identifier type label.
+// UUID starts with the vowel letter U but the consonant sound "yoo", so it
+// takes "a" rather than "an". Fall back to a vowel-start regex for all other
+// types, including future plugin-defined types whose pronunciation is unknown.
+const articleFor = (typeId: string, label: string): string => {
+  if (typeId === "uuid") return "a";
+  return /^[aeiou]/i.test(label) ? "an" : "a";
+};
 
 // Helper to format date to YYYY-MM-DD for input[type="date"]
 const formatDateForInput = (dateString: string | undefined): string => {
@@ -126,6 +140,11 @@ export function FileEditDialog({
   const [newIdentifierType, setNewIdentifierType] = useState<string>("isbn_13");
   const [newIdentifierValue, setNewIdentifierValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const presentIdentifierTypes = useMemo(
+    () => new Set(identifiers.map((id) => id.type)),
+    [identifiers],
+  );
 
   // New file metadata fields
   const [name, setName] = useState(file.name || "");
@@ -202,6 +221,49 @@ export function FileEditDialog({
 
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
+
+  // All identifier types available for selection, in display order.
+  // Memoized so it can be a stable useEffect dependency without causing
+  // an infinite update loop.
+  const availableIdentifierTypes = useMemo(
+    () => [
+      { id: "isbn_10", label: "ISBN-10" },
+      { id: "isbn_13", label: "ISBN-13" },
+      { id: "asin", label: "ASIN" },
+      { id: "uuid", label: "UUID" },
+      { id: "goodreads", label: "Goodreads" },
+      { id: "google", label: "Google" },
+      { id: "other", label: "Other" },
+      ...(pluginIdentifierTypes
+        ?.filter(
+          (pt) =>
+            ![
+              "isbn_10",
+              "isbn_13",
+              "asin",
+              "uuid",
+              "goodreads",
+              "google",
+              "other",
+            ].includes(pt.id),
+        )
+        .map((pt) => ({ id: pt.id, label: pt.name })) ?? []),
+    ],
+    [pluginIdentifierTypes],
+  );
+
+  // Auto-switch the selected identifier type away from one that is already
+  // present. This prevents the dropdown from showing a disabled type as the
+  // selected value when the dialog opens (or when identifiers change).
+  useEffect(() => {
+    if (!presentIdentifierTypes.has(newIdentifierType)) return;
+    const firstAvailable = availableIdentifierTypes.find(
+      (t) => !presentIdentifierTypes.has(t.id),
+    );
+    if (firstAvailable) {
+      setNewIdentifierType(firstAvailable.id);
+    }
+  }, [presentIdentifierTypes, newIdentifierType, availableIdentifierTypes]);
 
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
@@ -419,6 +481,7 @@ export function FileEditDialog({
   };
 
   const handleAddIdentifier = () => {
+    if (presentIdentifierTypes.has(newIdentifierType)) return;
     if (!newIdentifierValue.trim()) return;
 
     const pluginType = pluginIdentifierTypes?.find(
@@ -1276,6 +1339,7 @@ export function FileEditDialog({
                       </span>
                       : {id.value}
                       <button
+                        aria-label="Remove"
                         className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                         onClick={() => {
                           setIdentifiers(
@@ -1294,35 +1358,35 @@ export function FileEditDialog({
                     onValueChange={setNewIdentifierType}
                     value={newIdentifierType}
                   >
-                    <SelectTrigger className="w-auto min-w-32 shrink-0 gap-2">
+                    <SelectTrigger
+                      aria-label="Identifier type"
+                      className="w-auto min-w-32 shrink-0 gap-2"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="isbn_10">ISBN-10</SelectItem>
-                      <SelectItem value="isbn_13">ISBN-13</SelectItem>
-                      <SelectItem value="asin">ASIN</SelectItem>
-                      <SelectItem value="uuid">UUID</SelectItem>
-                      <SelectItem value="goodreads">Goodreads</SelectItem>
-                      <SelectItem value="google">Google</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                      {pluginIdentifierTypes
-                        ?.filter(
-                          (pt) =>
-                            ![
-                              "isbn_10",
-                              "isbn_13",
-                              "asin",
-                              "uuid",
-                              "goodreads",
-                              "google",
-                              "other",
-                            ].includes(pt.id),
-                        )
-                        .map((pt) => (
-                          <SelectItem key={pt.id} value={pt.id}>
-                            {pt.name}
+                      {availableIdentifierTypes.map(({ id, label }) => {
+                        const isPresent = presentIdentifierTypes.has(id);
+                        const article = articleFor(id, label);
+                        const item = (
+                          <SelectItem disabled={isPresent} key={id} value={id}>
+                            {label}
                           </SelectItem>
-                        ))}
+                        );
+                        if (!isPresent) return item;
+                        return (
+                          <Tooltip key={id}>
+                            <TooltipTrigger asChild>
+                              <span className="block">{item}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This file already has {article} {label}{" "}
+                              identifier. Remove it first to add a different
+                              value.
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <Input
@@ -1338,6 +1402,10 @@ export function FileEditDialog({
                     value={newIdentifierValue}
                   />
                   <Button
+                    disabled={
+                      presentIdentifierTypes.size >=
+                      availableIdentifierTypes.length
+                    }
                     onClick={handleAddIdentifier}
                     type="button"
                     variant="outline"

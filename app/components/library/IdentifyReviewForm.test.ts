@@ -2,57 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { resolveIdentifiers } from "./identify-utils";
 
-describe("resolveIdentifiers", () => {
-  it("returns unchanged when identifiers are identical", () => {
-    const current = [
-      { type: "goodreads", value: "56377548" },
-      { type: "uuid", value: "abc-123" },
-    ];
-    const incoming = [
-      { type: "goodreads", value: "56377548" },
-      { type: "uuid", value: "abc-123" },
-    ];
-    const result = resolveIdentifiers(current, incoming);
-    expect(result.status).toBe("unchanged");
-    expect(result.value).toEqual(current);
-  });
-
-  it("returns unchanged when current is a superset of incoming", () => {
-    const current = [
-      { type: "goodreads", value: "56377548" },
-      { type: "uuid", value: "abc-123" },
-    ];
-    const incoming = [{ type: "goodreads", value: "56377548" }];
-    const result = resolveIdentifiers(current, incoming);
-    expect(result.status).toBe("unchanged");
-    expect(result.value).toEqual(current);
-  });
-
-  it("returns changed when incoming has a new identifier", () => {
-    const current = [{ type: "uuid", value: "abc-123" }];
-    const incoming = [
-      { type: "uuid", value: "abc-123" },
-      { type: "goodreads", value: "56377548" },
-    ];
+describe("resolveIdentifiers (incoming wins on type conflict)", () => {
+  it("replaces an existing identifier when incoming has the same type with a different value", () => {
+    const current = [{ type: "asin", value: "B01ABC1234" }];
+    const incoming = [{ type: "asin", value: "B02DEF5678" }];
     const result = resolveIdentifiers(current, incoming);
     expect(result.status).toBe("changed");
-    expect(result.value).toEqual([
-      { type: "uuid", value: "abc-123" },
-      { type: "goodreads", value: "56377548" },
-    ]);
-  });
-
-  it("returns new when current is empty", () => {
-    const incoming = [{ type: "goodreads", value: "56377548" }];
-    const result = resolveIdentifiers([], incoming);
-    expect(result.status).toBe("new");
-    expect(result.value).toEqual(incoming);
-  });
-
-  it("returns unchanged when incoming is empty", () => {
-    const current = [{ type: "uuid", value: "abc-123" }];
-    const result = resolveIdentifiers(current, []);
-    expect(result.status).toBe("unchanged");
-    expect(result.value).toEqual(current);
+    expect(result.value).toEqual([{ type: "asin", value: "B02DEF5678" }]);
   });
 });

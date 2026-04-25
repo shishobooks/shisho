@@ -1884,3 +1884,215 @@ func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) 
 	require.NotNil(t, updated.NameSource)
 	assert.Equal(t, models.DataSourceManual, *updated.NameSource)
 }
+
+func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Seed an existing identifier so we can assert it's preserved when the
+	// 422 short-circuits the handler.
+	require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+		{FileID: file.ID, Type: "asin", Value: "B01ORIGINAL", Source: models.DataSourceManual},
+	}))
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	body := `{"identifiers":[{"type":"asin","value":"B01AAA"},{"type":"asin","value":"B02BBB"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "duplicate identifier type: asin")
+
+	// Existing identifier untouched (request short-circuited before DB mutation).
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "B01ORIGINAL", stored[0].Value)
+}
+
+func TestUpdateFile_PreservesSourceForUnchangedIdentifiers(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Seed identifiers with two distinct sources.
+	pluginSource := models.PluginDataSource("shisho", "audnexus")
+	require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+		{FileID: file.ID, Type: "asin", Value: "B01ABC1234", Source: pluginSource},
+		{FileID: file.ID, Type: "isbn_13", Value: "9780316769488", Source: models.DataSourceEPUBMetadata},
+	}))
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Re-submit ASIN with the same value, ISBN unchanged. Add a new goodreads.
+	body := `{"identifiers":[{"type":"asin","value":"B01ABC1234"},{"type":"isbn_13","value":"9780316769488"},{"type":"goodreads","value":"12345"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Order("type ASC").Scan(ctx))
+	require.Len(t, stored, 3)
+	byType := map[string]*models.FileIdentifier{}
+	for _, id := range stored {
+		byType[id.Type] = id
+	}
+	assert.Equal(t, pluginSource, byType["asin"].Source, "asin source preserved (unchanged value)")
+	assert.Equal(t, models.DataSourceEPUBMetadata, byType["isbn_13"].Source, "isbn_13 source preserved (unchanged value)")
+	assert.Equal(t, models.DataSourceManual, byType["goodreads"].Source, "new identifier gets manual source")
+}
+
+func TestUpdateFile_AssignsManualSourceWhenIdentifierValueChanges(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	pluginSource := models.PluginDataSource("shisho", "audnexus")
+	require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+		{FileID: file.ID, Type: "asin", Value: "B01ORIG", Source: pluginSource},
+	}))
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"identifiers":[{"type":"asin","value":"B02NEW"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "B02NEW", stored[0].Value)
+	assert.Equal(t, models.DataSourceManual, stored[0].Source, "value-changed entry gets manual source")
+}
+
+func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "blank type",
+			body: `{"identifiers":[{"type":"","value":"B01ABC1234"}]}`,
+		},
+		{
+			name: "blank value",
+			body: `{"identifiers":[{"type":"asin","value":""}]}`,
+		},
+		{
+			name: "whitespace-only type",
+			body: `{"identifiers":[{"type":"   ","value":"B01ABC1234"}]}`,
+		},
+		{
+			name: "whitespace-only value",
+			body: `{"identifiers":[{"type":"asin","value":"   "}]}`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db := setupTestDB(t)
+			ctx := context.Background()
+			svc := NewService(db)
+
+			library, book := setupTestLibraryAndBook(t, db)
+			epubPath := createTestEPUBFile(t)
+			file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+			require.NoError(t, svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+				{FileID: file.ID, Type: "asin", Value: "B01ORIGINAL", Source: models.DataSourceManual},
+			}))
+
+			user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+			e := setupTestServer(t, db)
+			req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := executeRequestWithUser(t, e, req, user)
+
+			assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "expected 422, got %d body=%s", rr.Code, rr.Body.String())
+
+			var stored []*models.FileIdentifier
+			require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+			require.Len(t, stored, 1)
+			assert.Equal(t, "B01ORIGINAL", stored[0].Value, "existing identifier must not be touched")
+		})
+	}
+}
+
+func TestUpdateFile_TrimsIdentifierTypeAndValue(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Payload has leading/trailing whitespace on both type and value.
+	body := `{"identifiers":[{"type":"  asin  ","value":"  B01ABC1234  "}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "asin", stored[0].Type, "type stored without leading/trailing whitespace")
+	assert.Equal(t, "B01ABC1234", stored[0].Value, "value stored normalized (trim + uppercase ASIN)")
+}
+
+func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	// Two entries that differ only in whitespace must be detected as duplicates.
+	body := `{"identifiers":[{"type":" asin","value":"B01"},{"type":"asin","value":"B02"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "expected 422, got %d body=%s", rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "duplicate identifier type: asin")
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Empty(t, stored)
+}

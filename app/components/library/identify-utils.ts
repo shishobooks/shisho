@@ -69,25 +69,52 @@ export function resolveIdentifiers(
   current: IdentifierEntry[],
   incoming: IdentifierEntry[],
 ): { value: IdentifierEntry[]; status: FieldStatus } {
-  if (current.length === 0 && incoming.length > 0)
-    return { value: incoming, status: "new" };
-  if (current.length > 0 && incoming.length === 0)
-    return { value: current, status: "unchanged" };
-  const key = (id: IdentifierEntry) => `${id.type}:${id.value}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
+  // Dedupe incoming by type (last-wins) so a misbehaving plugin can't propagate
+  // a duplicate-type set forward. The DB invariant is one identifier per type
+  // per file; "incoming wins on conflict" extends naturally to "the last
+  // incoming entry wins" within the same payload.
+  const dedupedIncoming: IdentifierEntry[] = [];
+  const incomingByType = new Map<string, number>();
+  for (const entry of incoming) {
+    const existingIdx = incomingByType.get(entry.type);
+    if (existingIdx === undefined) {
+      incomingByType.set(entry.type, dedupedIncoming.length);
+      dedupedIncoming.push(entry);
+    } else {
+      dedupedIncoming[existingIdx] = entry;
+    }
+  }
+
+  if (current.length === 0 && dedupedIncoming.length === 0) {
+    return { value: [], status: "unchanged" };
+  }
+  if (current.length === 0) {
+    return { value: dedupedIncoming, status: "new" };
+  }
+  if (dedupedIncoming.length === 0) {
     return { value: current, status: "unchanged" };
   }
-  // Merge: keep all current, add new incoming identifiers
-  const existingKeys = new Set(current.map(key));
-  const newFromIncoming = incoming.filter((id) => !existingKeys.has(key(id)));
-  if (newFromIncoming.length === 0) {
-    // Incoming is a subset of current — nothing new to add
-    return { value: current, status: "unchanged" };
+
+  // Merge: keep current's order; for each current entry, replace value with
+  // incoming's value if the type matches. Append new types from incoming
+  // (in incoming order) at the end.
+  const incomingMap = new Map(dedupedIncoming.map((id) => [id.type, id.value]));
+  let changed = false;
+  const merged: IdentifierEntry[] = current.map((id) => {
+    const incomingValue = incomingMap.get(id.type);
+    if (incomingValue !== undefined && incomingValue !== id.value) {
+      changed = true;
+      return { type: id.type, value: incomingValue };
+    }
+    return id;
+  });
+  const currentTypes = new Set(current.map((id) => id.type));
+  for (const entry of dedupedIncoming) {
+    if (!currentTypes.has(entry.type)) {
+      merged.push(entry);
+      changed = true;
+    }
   }
-  return { value: [...current, ...newFromIncoming], status: "changed" };
+
+  return { value: merged, status: changed ? "changed" : "unchanged" };
 }

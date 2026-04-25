@@ -41,8 +41,8 @@ type SeriesInput struct {
 
 // IdentifierPayload represents an identifier in update requests.
 type IdentifierPayload struct {
-	Type  string `json:"type" validate:"required,min=1,max=50"`
-	Value string `json:"value" validate:"required,max=100"`
+	Type  string `json:"type" mod:"trim" validate:"required,min=1,max=50"`
+	Value string `json:"value" mod:"trim" validate:"required,max=100"`
 }
 
 // UpdateFilePayload is the payload for updating a file's metadata.
@@ -56,7 +56,7 @@ type UpdateFilePayload struct {
 	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 	Language    *string              `json:"language,omitempty" validate:"omitempty,max=35"`
 	Abridged    *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
-	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" validate:"omitempty,dive"`
+	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
 }
 
 // ResyncPayload contains the request parameters for resync operations.

@@ -531,16 +531,6 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 	return nil
 }
 
-// CreateFileIdentifier creates a new file identifier record.
-func (svc *Service) CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error {
-	now := time.Now()
-	identifier.CreatedAt = now
-	identifier.UpdatedAt = now
-	identifier.Value = identifiers.NormalizeValue(identifier.Type, identifier.Value)
-	_, err := svc.db.NewInsert().Model(identifier).Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // DeleteFileIdentifiers deletes all identifiers for a file.
 func (svc *Service) DeleteFileIdentifiers(ctx context.Context, fileID int) error {
 	_, err := svc.db.NewDelete().Model((*models.FileIdentifier)(nil)).Where("file_id = ?", fileID).Exec(ctx)
@@ -1402,20 +1392,46 @@ func (svc *Service) BulkCreateBookSeries(ctx context.Context, bookSeries []*mode
 
 // BulkCreateFileIdentifiers creates multiple file identifier records in a
 // single query. Identifier values are canonicalized via
-// identifiers.NormalizeValue before insert. The input slice and its elements
-// are not mutated — callers retain the exact structs they passed in.
-// Returns nil if the slice is empty.
+// identifiers.NormalizeValue before insert. Defensively dedupes by type
+// (last-wins) so a misbehaving caller never trips the UNIQUE(file_id, type)
+// constraint; each dropped duplicate is logged at warn level so upstream
+// bugs are visible. Returns nil if the slice is empty after dedupe.
 func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error {
 	if len(fileIdentifiers) == 0 {
 		return nil
 	}
-	toInsert := make([]*models.FileIdentifier, len(fileIdentifiers))
-	for i, fi := range fileIdentifiers {
-		clone := *fi
-		clone.Value = identifiers.NormalizeValue(fi.Type, fi.Value)
-		toInsert[i] = &clone
+	log := logger.FromContext(ctx)
+	type key struct {
+		FileID int
+		Type   string
 	}
-	_, err := svc.db.NewInsert().Model(&toInsert).Exec(ctx)
+	indexByKey := make(map[key]int, len(fileIdentifiers))
+	deduped := make([]*models.FileIdentifier, 0, len(fileIdentifiers))
+	for _, fi := range fileIdentifiers {
+		clone := *fi
+		clone.Type = strings.TrimSpace(fi.Type)
+		clone.Value = identifiers.NormalizeValue(clone.Type, fi.Value)
+		k := key{FileID: clone.FileID, Type: clone.Type}
+		if existingIdx, ok := indexByKey[k]; ok {
+			dropped := deduped[existingIdx]
+			log.Warn("dropping duplicate file identifier of same type", logger.Data{
+				"file_id":        clone.FileID,
+				"type":           clone.Type,
+				"dropped_value":  dropped.Value,
+				"dropped_source": dropped.Source,
+				"kept_value":     clone.Value,
+				"kept_source":    clone.Source,
+			})
+			deduped[existingIdx] = &clone
+			continue
+		}
+		indexByKey[k] = len(deduped)
+		deduped = append(deduped, &clone)
+	}
+	if len(deduped) == 0 {
+		return nil
+	}
+	_, err := svc.db.NewInsert().Model(&deduped).Exec(ctx)
 	return errors.WithStack(err)
 }
 

@@ -344,6 +344,129 @@ func TestPersistMetadata_CoverPage_CBZ_BeatsCoverData(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "coverData should not have been written for a page-based file (jpg path)")
 }
 
+// stubIdentStoreForPersist is a minimal identifierStore implementation that
+// records writes for assertion. It does NOT enforce the unique-by-type
+// constraint — that's the job of BulkCreateFileIdentifiers in the real impl,
+// and the unit-level tests for that helper live in pkg/books.
+type stubIdentStoreForPersist struct {
+	deleteCalls []int
+	bulkCalls   [][]*models.FileIdentifier
+}
+
+func (s *stubIdentStoreForPersist) DeleteIdentifiersForFile(_ context.Context, fileID int) (int, error) {
+	s.deleteCalls = append(s.deleteCalls, fileID)
+	return 0, nil
+}
+
+func (s *stubIdentStoreForPersist) BulkCreateFileIdentifiers(_ context.Context, ids []*models.FileIdentifier) error {
+	s.bulkCalls = append(s.bulkCalls, ids)
+	return nil
+}
+
+// TestPersistMetadata_BulkInsertsIdentifiers verifies that a plugin payload
+// of identifiers is forwarded as a single BulkCreateFileIdentifiers call
+// (instead of the legacy per-item CreateFileIdentifier loop). Blank
+// type/value entries are filtered out before the bulk call.
+func TestPersistMetadata_BulkInsertsIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0600))
+
+	file := &models.File{
+		ID:       1,
+		BookID:   1,
+		Filepath: filePath,
+		FileType: models.FileTypeEPUB,
+	}
+	book := &models.Book{
+		ID:        1,
+		LibraryID: 1,
+		Filepath:  libraryDir,
+		Files:     []*models.File{file},
+	}
+
+	identStore := &stubIdentStoreForPersist{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:  &stubBookStoreForPersist{book: book},
+			identStore: identStore,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{
+			{Type: "asin", Value: "B01ABC1234"},
+			{Type: "", Value: "ignored"}, // blank type filtered
+			{Type: "isbn_13", Value: ""}, // blank value filtered
+			{Type: "isbn_13", Value: "9780316769488"},
+		},
+	}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", testLogger())
+	require.NoError(t, err)
+
+	require.Equal(t, []int{file.ID}, identStore.deleteCalls)
+	require.Len(t, identStore.bulkCalls, 1, "exactly one BulkCreateFileIdentifiers call")
+
+	got := identStore.bulkCalls[0]
+	require.Len(t, got, 2, "blanks filtered out, two valid identifiers remain")
+	expectedSource := models.PluginDataSource("shisho", "audnexus")
+	assert.Equal(t, "asin", got[0].Type)
+	assert.Equal(t, "B01ABC1234", got[0].Value)
+	assert.Equal(t, expectedSource, got[0].Source)
+	assert.Equal(t, "isbn_13", got[1].Type)
+	assert.Equal(t, "9780316769488", got[1].Value)
+	assert.Equal(t, expectedSource, got[1].Source)
+}
+
+// TestPersistMetadata_AllBlanksPreservesExistingIdentifiers documents that a
+// plugin payload containing only blank type/value entries does NOT delete the
+// file's existing identifiers. The delete must be gated on having at least
+// one valid identifier to insert; otherwise blanks would silently wipe data.
+func TestPersistMetadata_AllBlanksPreservesExistingIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0600))
+
+	file := &models.File{
+		ID:       1,
+		BookID:   1,
+		Filepath: filePath,
+		FileType: models.FileTypeEPUB,
+	}
+	book := &models.Book{
+		ID:        1,
+		LibraryID: 1,
+		Filepath:  libraryDir,
+		Files:     []*models.File{file},
+	}
+
+	identStore := &stubIdentStoreForPersist{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:  &stubBookStoreForPersist{book: book},
+			identStore: identStore,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{
+			{Type: "", Value: "ignored"},
+			{Type: "isbn_13", Value: ""},
+		},
+	}
+
+	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", testLogger())
+	require.NoError(t, err)
+
+	assert.Empty(t, identStore.deleteCalls, "delete must NOT fire when no valid identifiers to insert")
+	assert.Empty(t, identStore.bulkCalls, "bulk insert must NOT fire when no valid identifiers")
+}
+
 // Plugin returns coverPage for a non-page-based format (EPUB) — coverPage is
 // silently ignored, coverData (if provided) is applied.
 func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {

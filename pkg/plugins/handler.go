@@ -50,7 +50,7 @@ type relationStore interface {
 // identifierStore provides file identifier CRUD operations.
 type identifierStore interface {
 	DeleteIdentifiersForFile(ctx context.Context, fileID int) (int, error)
-	CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error
+	BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error
 }
 
 // personFinder finds or creates persons for author and narrator associations.

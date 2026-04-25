@@ -303,8 +303,8 @@ func (a *bookUpdaterAdapter) DeleteIdentifiersForFile(ctx context.Context, fileI
 	return a.svc.DeleteIdentifiersForFile(ctx, fileID)
 }
 
-func (a *bookUpdaterAdapter) CreateFileIdentifier(ctx context.Context, identifier *models.FileIdentifier) error {
-	return a.svc.CreateFileIdentifier(ctx, identifier)
+func (a *bookUpdaterAdapter) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error {
+	return a.svc.BulkCreateFileIdentifiers(ctx, fileIdentifiers)
 }
 
 func (a *bookUpdaterAdapter) UpdateFile(ctx context.Context, file *models.File, columns []string) error {
