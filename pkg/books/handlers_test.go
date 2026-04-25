@@ -1910,7 +1910,7 @@ func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
 	rr := executeRequestWithUser(t, e, req, user)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
-	assert.Contains(t, rr.Body.String(), "asin")
+	assert.Contains(t, rr.Body.String(), "duplicate identifier type: asin")
 
 	// Existing identifier untouched (request short-circuited before DB mutation).
 	var stored []*models.FileIdentifier
