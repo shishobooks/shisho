@@ -1,4 +1,4 @@
-import { Bookmark, File, Languages, Tags, X } from "lucide-react";
+import { Bookmark, Eye, File, Languages, Tags, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ interface FilterTypeConfig {
 }
 
 const FILTER_TYPES: Record<
-  "fileType" | "genre" | "tag" | "language",
+  "fileType" | "genre" | "tag" | "language" | "reviewState",
   FilterTypeConfig
 > = {
   fileType: {
@@ -31,6 +31,15 @@ const FILTER_TYPES: Record<
     icon: <Languages className="h-3 w-3 shrink-0" />,
     colorClass: "text-chart-5",
   },
+  reviewState: {
+    icon: <Eye className="h-3 w-3 shrink-0" />,
+    colorClass: "text-chart-3",
+  },
+};
+
+const REVIEWED_FILTER_LABELS: Record<string, string> = {
+  needs_review: "Needs review",
+  reviewed: "Reviewed",
 };
 
 interface ActiveFilterChipsProps {
@@ -39,10 +48,12 @@ interface ActiveFilterChipsProps {
   selectedGenres: Genre[];
   selectedTags: Tag[];
   languageParam: string;
+  reviewedFilter: string;
   onToggleFileType: (fileType: string) => void;
   onToggleGenre: (genreId: number) => void;
   onToggleTag: (tagId: number) => void;
   onClearLanguage: () => void;
+  onClearReviewedFilter: () => void;
   onClearAll: () => void;
 }
 
@@ -52,10 +63,12 @@ export const ActiveFilterChips = ({
   selectedGenres,
   selectedTags,
   languageParam,
+  reviewedFilter,
   onToggleFileType,
   onToggleGenre,
   onToggleTag,
   onClearLanguage,
+  onClearReviewedFilter,
   onClearAll,
 }: ActiveFilterChipsProps) => {
   if (!hasActiveFilters) return null;
@@ -116,6 +129,19 @@ export const ActiveFilterChips = ({
             {FILTER_TYPES.language.icon}
           </span>
           {getLanguageName(languageParam) ?? languageParam}
+          <X className="h-3 w-3 text-muted-foreground" />
+        </Badge>
+      )}
+      {reviewedFilter && reviewedFilter !== "all" && (
+        <Badge
+          className="cursor-pointer gap-1.5"
+          onClick={onClearReviewedFilter}
+          variant="secondary"
+        >
+          <span className={FILTER_TYPES.reviewState.colorClass}>
+            {FILTER_TYPES.reviewState.icon}
+          </span>
+          {REVIEWED_FILTER_LABELS[reviewedFilter] ?? reviewedFilter}
           <X className="h-3 w-3 text-muted-foreground" />
         </Badge>
       )}

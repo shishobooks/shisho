@@ -46,6 +46,7 @@ import {
   type File,
   type GallerySize,
 } from "@/types";
+import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 interface BookItemProps {
@@ -328,6 +329,15 @@ const BookItem = ({
               onLoad={handleCoverLoad}
               src={coverUrl}
             />
+          )}
+          {/* Needs review badge */}
+          {isBookNeedsReview(book) && (
+            <Badge
+              className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0 pointer-events-none"
+              variant="secondary"
+            >
+              Needs review
+            </Badge>
           )}
         </div>
         <Tooltip

@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  Eye,
   File,
   Languages,
   ListFilter,
@@ -28,6 +29,8 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -70,6 +73,8 @@ interface FilterSheetProps {
   languageParam: string;
   languageOptions: { value: string; label: string }[];
   onLanguageChange: (value: string) => void;
+  reviewedFilter: string;
+  onReviewedFilterChange: (value: string) => void;
   onClearAll: () => void;
   hasActiveFilters: boolean;
 }
@@ -124,6 +129,8 @@ const FilterContent = ({
   languageParam,
   languageOptions,
   onLanguageChange,
+  reviewedFilter,
+  onReviewedFilterChange,
 }: Omit<FilterSheetProps, "onClearAll" | "hasActiveFilters">) => (
   <div className="space-y-6">
     {/* File Type */}
@@ -290,6 +297,42 @@ const FilterContent = ({
         </Select>
       </div>
     )}
+
+    {/* Review state */}
+    <div>
+      <SectionHeader
+        colorClass="bg-chart-3/20 text-chart-3"
+        icon={<Eye className="h-3 w-3" />}
+        label="Review state"
+      />
+      <RadioGroup
+        className="gap-2"
+        onValueChange={onReviewedFilterChange}
+        value={reviewedFilter || "all"}
+      >
+        <div className="flex items-center gap-2">
+          <RadioGroupItem id="review-all" value="all" />
+          <Label className="cursor-pointer font-normal" htmlFor="review-all">
+            All
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <RadioGroupItem id="review-needs" value="needs_review" />
+          <Label className="cursor-pointer font-normal" htmlFor="review-needs">
+            Needs review
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <RadioGroupItem id="review-reviewed" value="reviewed" />
+          <Label
+            className="cursor-pointer font-normal"
+            htmlFor="review-reviewed"
+          >
+            Reviewed
+          </Label>
+        </div>
+      </RadioGroup>
+    </div>
   </div>
 );
 
