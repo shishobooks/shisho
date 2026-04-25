@@ -33,7 +33,7 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service) {
-	bookService := NewService(db)
+	bookService := NewService(db).WithAppSettings(appSettingsSvc)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)

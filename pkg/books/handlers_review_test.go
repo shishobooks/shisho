@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -305,4 +308,99 @@ func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 		require.NotNil(t, f.ReviewOverride)
 		assert.Equal(t, "reviewed", *f.ReviewOverride)
 	}
+}
+
+// TestUpdateBook_AddingGenre_FlipsReviewedToTrue is a regression test for the
+// case where a book was unreviewed solely because it lacked a required genre.
+// Adding a genre via the book update handler should fire the recompute and
+// flip files.reviewed to TRUE.
+//
+// The bug this guards against: pkg/books/routes.go was instantiating the books
+// service without WithAppSettings(...), so RecomputeReviewedForBook silently
+// no-op'd — the toggle never auto-flipped after edits even though the data
+// became complete.
+func TestUpdateBook_AddingGenre_FlipsReviewedToTrue(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Seed a book that satisfies the default review criteria EXCEPT genres:
+	// authors present, description present, cover present, narrators not
+	// required (epub). After the update adds a genre, completeness should
+	// flip to TRUE.
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	desc := "A complete description"
+	bookDir := t.TempDir()
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+		Description:     &desc,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Author so completeness has authors covered.
+	person := &models.Person{Name: "Author One", LibraryID: library.ID}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	author := &models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+
+	// Main file with a cover so file-level cover requirement is satisfied.
+	coverFilename := "test.epub.cover.jpg"
+	coverMime := "image/jpeg"
+	filePath := filepath.Join(bookDir, "test.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("epub content"), 0644))
+	file := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           filePath,
+		FilesizeBytes:      1,
+		CoverImageFilename: &coverFilename,
+		CoverMimeType:      &coverMime,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Pre-condition: no genres → file should evaluate to NOT reviewed.
+	// Run a recompute manually so files.reviewed reflects current state
+	// (mirrors what the migration job would do for existing books).
+	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc.RecomputeReviewedForBook(ctx, book.ID)
+
+	var preFile models.File
+	require.NoError(t, db.NewSelect().Model(&preFile).Where("f.id = ?", file.ID).Scan(ctx))
+	require.NotNil(t, preFile.Reviewed)
+	require.False(t, *preFile.Reviewed, "file should not be reviewed when genres are missing")
+
+	// Now PATCH the book to add a genre, going through the full HTTP handler.
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+	body := `{"genres": ["Fiction"]}`
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Post-condition: file should now be reviewed=TRUE.
+	var postFile models.File
+	require.NoError(t, db.NewSelect().Model(&postFile).Where("f.id = ?", file.ID).Scan(ctx))
+	require.NotNil(t, postFile.Reviewed)
+	assert.True(t, *postFile.Reviewed, "file should auto-flip to reviewed after adding the missing genre")
 }
