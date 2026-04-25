@@ -4,6 +4,7 @@ import { API } from "@/libraries/api";
 import { Book, File } from "@/types";
 
 import { QueryKey } from "./books";
+import { QueryKey as ChaptersQueryKey } from "./chapters";
 
 export type RescanMode = "scan" | "refresh" | "reset";
 
@@ -37,7 +38,7 @@ export const useResyncFile = () => {
         payload,
       );
     },
-    onSuccess: (result) => {
+    onSuccess: (result, { fileId }) => {
       // If not deleted, invalidate queries to refresh data
       if (!("file_deleted" in result && result.file_deleted)) {
         const file = result as File;
@@ -46,6 +47,9 @@ export const useResyncFile = () => {
         });
       }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({
+        queryKey: [ChaptersQueryKey.FileChapters, fileId],
+      });
     },
   });
 };
@@ -72,6 +76,9 @@ export const useResyncBook = () => {
         queryKey: [QueryKey.RetrieveBook, String(bookId)],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({
+        queryKey: [ChaptersQueryKey.FileChapters],
+      });
     },
   });
 };

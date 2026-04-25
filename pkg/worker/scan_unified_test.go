@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -4925,6 +4926,222 @@ func TestScanFileByID_ResetMode_ClearsNonFileMetadata(t *testing.T) {
 	assert.FileExists(t, newCoverPath, "new cover file should exist on disk after reset")
 }
 
+func TestScanFileByID_ResetMode_ReExtractsChapters(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Chaptered Book")
+	testgen.GenerateM4B(t, bookDir, "chaptered.m4b", testgen.M4BOptions{
+		Title:    "Chaptered Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Intro", Start: 0},
+			{Title: "Middle", Start: 10},
+			{Title: "End", Start: 20},
+		},
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	initialChapters := tc.listChapters(fileID)
+	require.Len(t, initialChapters, 3, "chapters should be extracted on initial scan")
+
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	chaptersAfterReset := tc.listChapters(fileID)
+	assert.Len(t, chaptersAfterReset, 3, "chapters should be re-extracted from file after reset")
+}
+
+// Refresh mode wipes the file sidecar so re-derivation from file/plugins
+// actually takes effect — otherwise the cached sidecar would override the new
+// file's chapters even with forceRefresh=true.
+func TestScanFileByID_RefreshMode_ReplacedFile_UsesNewChapters(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Refresh Book")
+	m4bPath := testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Refresh Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Old A", Start: 0},
+			{Title: "Old B", Start: 15},
+		},
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	require.NoError(t, os.Remove(m4bPath))
+	testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Refresh Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "New A", Start: 0},
+			{Title: "New B", Start: 10},
+			{Title: "New C", Start: 20},
+		},
+	})
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  false,
+		Reset:        false,
+	}, nil)
+	require.NoError(t, err)
+
+	chaptersAfterRefresh := tc.listChapters(fileID)
+	require.Len(t, chaptersAfterRefresh, 3)
+	assert.Equal(t, "New A", chaptersAfterRefresh[0].Title)
+}
+
+// Scan mode wipes the file sidecar when the file on disk has changed since
+// the last scan (size/mtime differ). Without this, the stale sidecar would
+// mask the replaced file's metadata.
+func TestScanFileByID_ScanMode_ReplacedFile_UsesNewChapters(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Scan Book")
+	m4bPath := testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Scan Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Old A", Start: 0},
+			{Title: "Old B", Start: 15},
+		},
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	originalStat, err := os.Stat(m4bPath)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(m4bPath))
+	testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Scan Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "New A", Start: 0},
+			{Title: "New B", Start: 10},
+			{Title: "New C", Start: 20},
+		},
+	})
+	// Force the new file's mtime to be at least a second later than the
+	// original so the size/mtime change-detection in scanFileByID fires
+	// regardless of how fast the test ran.
+	newMtime := originalStat.ModTime().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(m4bPath, newMtime, newMtime))
+
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: false,
+		SkipPlugins:  false,
+		Reset:        false,
+	}, nil)
+	require.NoError(t, err)
+
+	chaptersAfterScan := tc.listChapters(fileID)
+	require.Len(t, chaptersAfterScan, 3)
+	assert.Equal(t, "New A", chaptersAfterScan[0].Title)
+}
+
+// Reproduces a real-world reset bug: user replaces a file on disk with one that
+// has different chapters, then rescans with reset-to-file-metadata. The new
+// file's chapters should win — but the stale sidecar (written during the
+// initial scan) holds the old chapter list and overrides them because sidecar
+// has higher priority than file metadata.
+func TestScanFileByID_ResetMode_ReplacedFile_UsesNewChapters(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Replaced Book")
+	m4bPath := testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Replaced Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Bad 1", Start: 0},
+			{Title: "Bad 2", Start: 15},
+		},
+	})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	initialChapters := tc.listChapters(fileID)
+	require.Len(t, initialChapters, 2)
+	require.Equal(t, "Bad 1", initialChapters[0].Title)
+
+	require.NoError(t, os.Remove(m4bPath))
+	testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
+		Title:    "Replaced Book",
+		Artist:   "Test Author",
+		Duration: 30,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Good 1", Start: 0},
+			{Title: "Good 2", Start: 10},
+			{Title: "Good 3", Start: 20},
+		},
+	})
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+
+	chaptersAfterReset := tc.listChapters(fileID)
+	require.Len(t, chaptersAfterReset, 3, "should pick up the 3 new chapters from the replaced file")
+	assert.Equal(t, "Good 1", chaptersAfterReset[0].Title)
+	assert.Equal(t, "Good 2", chaptersAfterReset[1].Title)
+	assert.Equal(t, "Good 3", chaptersAfterReset[2].Title)
+}
+
 func TestScanFileByID_ResetMode_FilepathFallbackTitle(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
@@ -5073,6 +5290,51 @@ func TestScanBook_ResetMode_WipesBookOnce(t *testing.T) {
 
 	// Authors should be repopulated from EPUB
 	assert.NotEmpty(t, book.Authors, "authors should be repopulated after reset")
+}
+
+// Book-level Reset routes through scanBook, which calls scanFileByID with
+// BookResetDone=true — so the book-sidecar deletion in resetBookFileState's
+// !skipBookWipe branch never runs in this path. Verify scanBook itself drops
+// a stale book sidecar so its old fields don't get re-applied.
+func TestScanBook_ResetMode_DiscardsStaleBookSidecar(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author Name] Sidecar Reset Book")
+	testgen.GenerateEPUB(t, bookDir, "file1.epub", testgen.EPUBOptions{
+		Title:   "Sidecar Reset Book",
+		Authors: []string{"Author Name"},
+	})
+
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+
+	// Manually plant a stale subtitle in the book sidecar. If the sidecar
+	// isn't dropped before scanFileCore runs, this stale value will be
+	// re-applied on top of the freshly-derived (empty) subtitle.
+	staleSubtitle := "Stale Subtitle From Old Sidecar"
+	require.NoError(t, sidecar.WriteBookSidecar(bookDir, &sidecar.BookSidecar{
+		Subtitle: &staleSubtitle,
+	}))
+	require.FileExists(t, sidecar.BookSidecarPath(bookDir), "planted book sidecar should be on disk before reset runs")
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		BookID:       bookID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Nil(t, book.Subtitle, "stale subtitle from book sidecar must not survive book-level reset")
 }
 
 func TestScanFileCore_Title_PluginSource_NotVolumeNormalized(t *testing.T) {

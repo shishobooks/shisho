@@ -144,9 +144,9 @@ This means:
 
 The **Rescan** dialog on a book or file offers three modes that interact with sidecars differently:
 
-- **Scan for new metadata** — Reads file metadata and runs plugins. Sidecar values are applied as usual according to the priority system. Won't overwrite manual edits.
-- **Refresh all metadata** — Re-reads file metadata and runs plugins, bypassing the priority system. Sidecar values are skipped. Overwrites all fields including manual edits.
-- **Reset to file metadata** — Re-reads only the metadata embedded in the source file(s), skipping both plugins and sidecars. Use this when plugin enrichment has matched incorrectly and you want to start fresh with just what's in the file.
+- **Scan for new metadata** — Reads file metadata and runs plugins. Sidecar values are applied as usual according to the priority system. Won't overwrite manual edits. If the underlying file has been replaced on disk (its size or modification time differs from what was last scanned), the cached file sidecar is dropped first so the new file's metadata takes effect instead of being masked by the old sidecar.
+- **Refresh all metadata** — Re-reads file metadata and runs plugins, bypassing the priority system. Cached sidecars are dropped before the scan runs so re-derivation actually takes effect; manual edits stored in the database are still subject to being overwritten by the fresh scan since this mode bypasses priority. The sidecar is rewritten from the new state at the end of the scan.
+- **Reset to file metadata** — Re-reads only the metadata embedded in the source file(s), skipping plugins. Cached sidecars are dropped along with the rest of the prior metadata state. Use this when plugin enrichment has matched incorrectly and you want to start fresh with just what's in the file.
 
 ## When Sidecars Are Read
 

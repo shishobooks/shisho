@@ -506,6 +506,29 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		logWarn("failed to recover missing cover", logger.Data{"file_id": file.ID, "error": err.Error()})
 	}
 
+	// Decide whether the cached file sidecar should be discarded before
+	// scanFileCore reads it. The sidecar overrides file metadata (sidecar has
+	// higher priority), so a stale sidecar from a previous scan will revert
+	// freshly-extracted values (chapters, narrators, identifiers, etc.). Drop
+	// it when:
+	//   - Reset mode handles its own wipe via resetBookFileState below.
+	//   - Refresh mode ("re-scan as if this were the first time") — wipe so
+	//     re-derivation from file/plugins actually takes effect.
+	//   - Scan mode when the file on disk has changed since we last recorded
+	//     its size/mtime — the cached sidecar is stale extraction data and
+	//     would mask the new file's metadata.
+	if !opts.Reset && file.FileRole != models.FileRoleSupplement {
+		// Only treat the file as "swapped" on positive evidence of change. A
+		// nil FileModifiedAt means we don't know — could be a pre-migration
+		// row whose sidecar we shouldn't discard.
+		fileSwapped := file.FileModifiedAt != nil &&
+			(fileStat.Size() != file.FilesizeBytes ||
+				!fileStat.ModTime().Truncate(time.Second).Equal(file.FileModifiedAt.Truncate(time.Second)))
+		if opts.ForceRefresh || fileSwapped {
+			removeFileSidecar(file.Filepath, logWarn)
+		}
+	}
+
 	// File exists on disk - parse metadata
 	// For supplements (PDF, txt, etc.), derive minimal metadata from filename since they don't have embedded metadata
 	var metadata *mediafile.ParsedMetadata
@@ -685,6 +708,17 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		if err := w.resetBookState(ctx, book); err != nil {
 			return nil, errors.Wrap(err, "failed to reset book state")
 		}
+	}
+
+	// Drop the book sidecar so previously-cached book-level fields (subtitle,
+	// description, authors, etc.) don't get re-applied as higher-priority
+	// "sidecar" data on the next scan. Done once at the book level rather
+	// than per-file because the book sidecar is shared across files. Fires in
+	// Reset (matches the wipe semantics) and Refresh ("as if first time")
+	// modes — Scan mode preserves the sidecar since other files in the book
+	// may not have changed.
+	if opts.Reset || opts.ForceRefresh {
+		removeBookSidecar(book, logWarn)
 	}
 
 	// Initialize file results
@@ -2609,6 +2643,62 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	return title
 }
 
+// removeFileSidecar deletes the file sidecar at filePath. ENOENT is silent;
+// other errors are logged via logWarn. Used when the cached sidecar is known
+// to be stale (file replaced, Reset/Refresh requested) so that fresh scan
+// results aren't re-overridden by old sidecar data.
+func removeFileSidecar(filePath string, logWarn func(msg string, data logger.Data)) {
+	if filePath == "" {
+		return
+	}
+	sidecarPath := sidecar.FileSidecarPath(filePath)
+	if sidecarPath == "" {
+		return
+	}
+	if err := os.Remove(sidecarPath); err != nil && !os.IsNotExist(err) {
+		logWarn("failed to remove stale file sidecar", logger.Data{"path": sidecarPath, "error": err.Error()})
+	}
+}
+
+// removeBookSidecar deletes the book sidecar for a book. Mirrors the
+// anchor-resolution logic in resolveBookSidecarAnchor: prefers book.Filepath
+// when it resolves to an existing directory, otherwise falls back to file
+// anchors (covers root-level books whose synthetic organized book.Filepath
+// never exists on disk). ENOENT is silent; other errors are logged via
+// logWarn.
+func removeBookSidecar(book *models.Book, logWarn func(msg string, data logger.Data)) {
+	tryRemove := func(anchor string) {
+		if anchor == "" {
+			return
+		}
+		sidecarPath := sidecar.BookSidecarPath(anchor)
+		if sidecarPath == "" {
+			return
+		}
+		if err := os.Remove(sidecarPath); err != nil && !os.IsNotExist(err) {
+			logWarn("failed to remove stale book sidecar", logger.Data{"path": sidecarPath, "error": err.Error()})
+		}
+	}
+	if book == nil {
+		return
+	}
+	if book.Filepath != "" {
+		if info, err := os.Stat(book.Filepath); err == nil && info.IsDir() {
+			tryRemove(book.Filepath)
+			return
+		}
+	}
+	// book.Filepath isn't a real directory — fall back to file anchors used
+	// by root-level books with synthetic organized paths. Skip the redundant
+	// retry on book.Filepath itself; we already established it doesn't anchor
+	// a real sidecar location.
+	for _, f := range book.Files {
+		if f != nil {
+			tryRemove(f.Filepath)
+		}
+	}
+}
+
 // applyFilepathFallbacks populates empty metadata fields from the filepath.
 // This fills in title, authors, narrators, and series using the same logic
 // that scanFileCreateNew uses when creating a book for the first time.
@@ -3872,10 +3962,13 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 // scanBook which handles the book-level wipe once for all files rather than
 // per-file.
 func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file *models.File, skipBookWipe bool) error {
+	log := logger.FromContext(ctx)
+	logWarn := func(msg string, data logger.Data) { log.Warn(msg, data) }
 	if !skipBookWipe {
 		if err := w.resetBookState(ctx, book); err != nil {
 			return errors.Wrap(err, "failed to reset book state")
 		}
+		removeBookSidecar(book, logWarn)
 	}
 
 	// --- File-level columns ---
@@ -3937,6 +4030,12 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 	if err := w.chapterService.DeleteChaptersForFile(ctx, file.ID); err != nil {
 		return errors.Wrap(err, "failed to delete file chapters")
 	}
+
+	// Remove the file sidecar so previously-written values (chapters,
+	// narrators, identifiers, etc.) don't get re-applied as higher-priority
+	// "sidecar" data on the next scan. The sidecar is rewritten at the end of
+	// the scan with the freshly-derived state.
+	removeFileSidecar(file.Filepath, logWarn)
 
 	return nil
 }
