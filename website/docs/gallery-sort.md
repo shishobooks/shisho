@@ -61,3 +61,7 @@ When a non-default sort is active, a **reset to default** link appears next to t
 ## How this affects other surfaces
 
 Your saved library sort also applies to the OPDS feeds and the eReader browser for that library. See [OPDS](./opds.md) and [eReader browser](./ereader-browser.md) for details.
+
+## See also
+
+- [Gallery Size](./gallery-size.md) for resizing book covers in the gallery.
