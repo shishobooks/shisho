@@ -48,6 +48,8 @@ import {
 } from "@/types";
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { getPrimaryFileType } from "@/utils/primaryFile";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
   book: Book;
@@ -155,10 +157,13 @@ const BookItem = ({
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
 
-  // Find the series number for the specific series context (if provided)
-  const seriesNumber = seriesId
-    ? book.book_series?.find((bs) => bs.series_id === seriesId)?.series_number
+  // Find the series number and unit for the specific series context (if provided)
+  const seriesEntry = seriesId
+    ? book.book_series?.find((bs) => bs.series_id === seriesId)
     : undefined;
+  const seriesNumber = seriesEntry?.series_number;
+  const seriesNumberUnit = seriesEntry?.series_number_unit;
+  const primaryFileType = getPrimaryFileType(book);
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
   const coverUrl = cacheKey
@@ -354,7 +359,11 @@ const BookItem = ({
             >
               {seriesNumber && (
                 <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
-                  {seriesNumber}
+                  {formatSeriesNumber(
+                    seriesNumber,
+                    seriesNumberUnit,
+                    primaryFileType,
+                  )}
                 </span>
               )}
               {book.title}

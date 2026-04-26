@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -559,6 +560,29 @@ func TestWriteFileSidecar_SetsVersion(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func floatPtr(f float64) *float64 {
+	return &f
+}
+
+func TestSeriesMetadataUnitRoundTrip(t *testing.T) {
+	t.Parallel()
+	chapterUnit := "chapter"
+	original := SeriesMetadata{
+		Name:   "One Piece",
+		Number: floatPtr(42),
+		Unit:   &chapterUnit,
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"unit":"chapter"`)
+
+	var decoded SeriesMetadata
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.NotNil(t, decoded.Unit)
+	assert.Equal(t, "chapter", *decoded.Unit)
 }
 
 // =============================================================================

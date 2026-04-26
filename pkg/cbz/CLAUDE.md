@@ -121,7 +121,7 @@ Multiple creators per role are comma-separated:
 3. Use first image file alphabetically
 
 **Series Number Fallback:**
-If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, or ` 7` at end of filename.
+If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, `c7`, `ch.7`, ` 7` at end of filename. Volume indicators (`v`, `#`, bare numbers) set the unit to `volume`; chapter indicators (`c`, `ch.`, `chapter`) set it to `chapter`.
 
 **Data Source:** All extracted metadata tagged with `models.DataSourceCBZMetadata`
 
@@ -244,6 +244,19 @@ Supported page image formats:
 
 Images are sorted **naturally** (page2 < page10) to determine page order.
 
+## Filename Parsing for Series Number Unit
+
+CBZ filenames can encode either a volume (`v01`, `vol.5`, `volume 12`, `#001`, bare trailing number) or a chapter (`Ch.5`, `chapter 5`, `c042`). The scanner normalizes both into the title (`Title v003` for volumes, `Title c042` for chapters) and stores the parsed unit on `book_series.series_number_unit`.
+
+Volume vs chapter is determined by the explicit indicator. Ambiguous indicators (`#001`, bare trailing numbers like `Title 5`) default to `volume` to preserve historical behavior; existing scanned files don't shift semantics on rescan.
+
+The pipeline lives in `pkg/fileutils/naming.go`:
+- `NormalizeSeriesNumberInTitle` — recognizes the indicators and produces a normalized title with the parsed unit.
+- `ExtractSeriesFromTitle` — splits a normalized title into series name and number, returning the unit alongside.
+- `formatSeriesNumber` / `IsOrganizedName` — handle the inverse, formatting numbers as `v{N}` or `c{N}` for organized filenames.
+
+When a library has file organization enabled, chapter-numbered files are renamed to `Title c042.cbz` and volume-numbered files to `Title v042.cbz` — the unit round-trips through organize → rescan.
+
 ## Scanner Integration
 
 **File Discovery:**
@@ -251,7 +264,7 @@ Images are sorted **naturally** (page2 < page10) to determine page order.
 - MIME type: `application/zip`
 
 **CBZ-Specific Processing:**
-- Volume indicator removal from title during normalization
+- Volume/chapter indicator removal from title during normalization
 - Series inference from title if not in metadata or sidecar
 - Cover page index tracked in `metadata.CoverPage`
 

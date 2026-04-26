@@ -6,6 +6,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
+const (
+	//tygo:emit export type SeriesNumberUnit = typeof SeriesNumberUnitVolume | typeof SeriesNumberUnitChapter;
+	SeriesNumberUnitVolume  = "volume"
+	SeriesNumberUnitChapter = "chapter"
+)
+
 type Series struct {
 	bun.BaseModel `bun:"table:series,alias:s" tstype:"-"`
 
@@ -28,10 +34,11 @@ type Series struct {
 type BookSeries struct {
 	bun.BaseModel `bun:"table:book_series,alias:bs" tstype:"-"`
 
-	ID           int      `bun:",pk,nullzero" json:"id"`
-	BookID       int      `bun:",nullzero" json:"book_id"`
-	SeriesID     int      `bun:",nullzero" json:"series_id"`
-	Series       *Series  `bun:"rel:belongs-to,join:series_id=id" json:"series,omitempty" tstype:"Series"`
-	SeriesNumber *float64 `json:"series_number,omitempty"`
-	SortOrder    int      `bun:",nullzero" json:"sort_order"`
+	ID               int      `bun:",pk,nullzero" json:"id"`
+	BookID           int      `bun:",nullzero" json:"book_id"`
+	SeriesID         int      `bun:",nullzero" json:"series_id"`
+	Series           *Series  `bun:"rel:belongs-to,join:series_id=id" json:"series,omitempty" tstype:"Series"`
+	SeriesNumber     *float64 `json:"series_number,omitempty"`
+	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" tstype:"SeriesNumberUnit"`
+	SortOrder        int      `bun:",nullzero" json:"sort_order"`
 }

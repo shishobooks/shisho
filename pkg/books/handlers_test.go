@@ -2099,3 +2099,69 @@ func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
 	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
 	require.Empty(t, stored)
 }
+
+func TestUpdateBook_SeriesNumberUnit_StoresChapterUnit(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "One Piece", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"One Piece","number":5,"series_number_unit":"chapter"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var bs models.BookSeries
+	err := db.NewSelect().Model(&bs).Where("book_id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, bs.SeriesNumberUnit)
+	assert.Equal(t, "chapter", *bs.SeriesNumberUnit)
+}
+
+func TestUpdateBook_SeriesNumberUnit_StoresVolumeUnit(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Naruto", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"Naruto","number":3,"series_number_unit":"volume"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var bs models.BookSeries
+	err := db.NewSelect().Model(&bs).Where("book_id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, bs.SeriesNumberUnit)
+	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
+}
+
+func TestUpdateBook_SeriesNumberUnit_RejectsBogusUnit(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Naruto", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"Naruto","number":3,"series_number_unit":"bogus"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "expected 422 for invalid unit, got %d body=%s", rr.Code, rr.Body.String())
+
+	// No BookSeries row should be created
+	var bsRows []models.BookSeries
+	err := db.NewSelect().Model(&bsRows).Where("book_id = ?", book.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.Empty(t, bsRows)
+}

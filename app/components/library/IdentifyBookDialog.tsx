@@ -31,6 +31,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import { computeIdentifyEmptyState } from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
@@ -482,7 +483,7 @@ export function IdentifyBookDialog({
                                   <p className="text-xs text-muted-foreground font-medium mt-0.5">
                                     {result.series}
                                     {result.series_number != null &&
-                                      ` #${result.series_number}`}
+                                      ` ${formatSeriesNumber(result.series_number, result.series_number_unit, selectedFileType)}`}
                                   </p>
                                 )}
                               </div>

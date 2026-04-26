@@ -23,7 +23,7 @@ type UpdateBookPayload struct {
 	Subtitle    *string       `json:"subtitle,omitempty" validate:"omitempty,max=500"`
 	Description *string       `json:"description,omitempty" validate:"omitempty,max=10000"`
 	Authors     []AuthorInput `json:"authors,omitempty"`
-	Series      []SeriesInput `json:"series,omitempty"`
+	Series      []SeriesInput `json:"series,omitempty" validate:"omitempty,dive"`
 	Genres      []string      `json:"genres,omitempty" validate:"omitempty,dive,max=100"` // Genre names
 	Tags        []string      `json:"tags,omitempty" validate:"omitempty,dive,max=100"`   // Tag names
 }
@@ -36,8 +36,9 @@ type AuthorInput struct {
 
 // SeriesInput represents a series association with optional number.
 type SeriesInput struct {
-	Name   string   `json:"name" validate:"required,max=200"`
-	Number *float64 `json:"number,omitempty"`
+	Name             string   `json:"name" validate:"required,max=200"`
+	Number           *float64 `json:"number,omitempty"`
+	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" validate:"omitempty,oneof=volume chapter"`
 }
 
 // IdentifierPayload represents an identifier in update requests.

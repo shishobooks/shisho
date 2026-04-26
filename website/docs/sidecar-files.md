@@ -57,6 +57,7 @@ There are two types of sidecar files, corresponding to the two levels of [metada
     {
       "name": "Classic American Literature",
       "number": 5,
+      "unit": "volume",
       "sort_order": 0
     }
   ],
@@ -64,6 +65,8 @@ There are two types of sidecar files, corresponding to the two levels of [metada
   "tags": ["american-literature", "1920s"]
 }
 ```
+
+The `unit` field on series entries is optional and applies to CBZ files only. Valid values are `"volume"` and `"chapter"`. When omitted, CBZ files default to volume rendering. Non-CBZ files always ignore this field (it is stored as `null`).
 
 For CBZ comics, authors can include a `role` field:
 

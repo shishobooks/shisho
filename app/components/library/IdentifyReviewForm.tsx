@@ -32,6 +32,8 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import { getPrimaryFileType } from "@/utils/primaryFile";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
   resolveIdentifiers,
@@ -474,6 +476,7 @@ export function IdentifyReviewForm({
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
+  const primaryFileType = getPrimaryFileType(book);
   const applyMutation = usePluginApply();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const disabledFields = useMemo(
@@ -500,6 +503,8 @@ export function IdentifyReviewForm({
   const currentSeries = book.book_series?.[0]?.series?.name ?? "";
   const currentSeriesNumber =
     book.book_series?.[0]?.series_number?.toString() ?? "";
+  const currentSeriesNumberUnit =
+    book.book_series?.[0]?.series_number_unit ?? "";
 
   const currentGenres: string[] = useMemo(
     () => (book.book_genres ?? []).map((bg) => bg.genre?.name ?? ""),
@@ -541,6 +546,10 @@ export function IdentifyReviewForm({
         currentSeriesNumber,
         result.series_number?.toString(),
       ),
+      seriesNumberUnit: resolveScalar(
+        currentSeriesNumberUnit,
+        result.series_number_unit ?? undefined,
+      ),
       genres: resolveArray(currentGenres, result.genres ?? []),
       tags: resolveArray(currentTags, result.tags ?? []),
       publisher: resolveScalar(file?.publisher?.name, result.publisher),
@@ -561,6 +570,7 @@ export function IdentifyReviewForm({
     currentNarrators,
     currentSeries,
     currentSeriesNumber,
+    currentSeriesNumberUnit,
     currentGenres,
     currentTags,
     currentIdentifiers,
@@ -577,6 +587,9 @@ export function IdentifyReviewForm({
   );
   const [series, setSeries] = useState(defaults.series.value);
   const [seriesNumber, setSeriesNumber] = useState(defaults.seriesNumber.value);
+  const [seriesNumberUnit, setSeriesNumberUnit] = useState(
+    defaults.seriesNumberUnit.value,
+  );
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
   const [publisher, setPublisher] = useState(defaults.publisher.value);
@@ -669,6 +682,7 @@ export function IdentifyReviewForm({
       !equal(narrators, defaults.narrators.value) ||
       series !== defaults.series.value ||
       seriesNumber !== defaults.seriesNumber.value ||
+      seriesNumberUnit !== defaults.seriesNumberUnit.value ||
       !equal(genres, defaults.genres.value) ||
       !equal(tags, defaults.tags.value) ||
       publisher !== defaults.publisher.value ||
@@ -688,6 +702,7 @@ export function IdentifyReviewForm({
     narrators,
     series,
     seriesNumber,
+    seriesNumberUnit,
     genres,
     tags,
     publisher,
@@ -716,6 +731,8 @@ export function IdentifyReviewForm({
       narrators,
       series,
       series_number: seriesNumber !== "" ? parseFloat(seriesNumber) : undefined,
+      series_number_unit:
+        seriesNumberUnit !== "" ? seriesNumberUnit : undefined,
       genres,
       tags,
       publisher,
@@ -966,7 +983,11 @@ export function IdentifyReviewForm({
       <FieldWrapper
         currentValue={
           currentSeries
-            ? `${currentSeries}${currentSeriesNumber ? ` #${currentSeriesNumber}` : ""}`
+            ? `${currentSeries}${
+                currentSeriesNumber
+                  ? ` ${formatSeriesNumber(parseFloat(currentSeriesNumber), currentSeriesNumberUnit || null, primaryFileType)}`
+                  : ""
+              }`
             : undefined
         }
         disabled={isDisabled("series")}
@@ -974,13 +995,16 @@ export function IdentifyReviewForm({
         onUseCurrent={() => {
           setSeries(currentSeries);
           setSeriesNumber(currentSeriesNumber);
+          setSeriesNumberUnit(currentSeriesNumberUnit);
         }}
         status={
           defaults.series.status === "changed" ||
-          defaults.seriesNumber.status === "changed"
+          defaults.seriesNumber.status === "changed" ||
+          defaults.seriesNumberUnit.status === "changed"
             ? "changed"
             : defaults.series.status === "new" ||
-                defaults.seriesNumber.status === "new"
+                defaults.seriesNumber.status === "new" ||
+                defaults.seriesNumberUnit.status === "new"
               ? "new"
               : "unchanged"
         }

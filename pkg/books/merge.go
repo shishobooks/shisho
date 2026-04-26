@@ -660,10 +660,11 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		newSeries := make([]*models.BookSeries, len(sourceSeries))
 		for i, bs := range sourceSeries {
 			newSeries[i] = &models.BookSeries{
-				BookID:       book.ID,
-				SeriesID:     bs.SeriesID,
-				SeriesNumber: bs.SeriesNumber,
-				SortOrder:    bs.SortOrder,
+				BookID:           book.ID,
+				SeriesID:         bs.SeriesID,
+				SeriesNumber:     bs.SeriesNumber,
+				SeriesNumberUnit: bs.SeriesNumberUnit,
+				SortOrder:        bs.SortOrder,
 			}
 		}
 

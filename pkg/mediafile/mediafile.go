@@ -31,23 +31,26 @@ type ParsedChapter struct {
 }
 
 type ParsedMetadata struct {
-	Title         string         `json:"title"`
-	Subtitle      string         `json:"subtitle"` // from M4B freeform SUBTITLE atom
-	Authors       []ParsedAuthor `json:"authors"`
-	Narrators     []string       `json:"narrators"`
-	Series        string         `json:"series"`
-	SeriesNumber  *float64       `json:"series_number,omitempty"`
-	Genres        []string       `json:"genres"` // Genre names from file metadata
-	Tags          []string       `json:"tags"`   // Tag names from file metadata
-	Description   string         `json:"description"`
-	Publisher     string         `json:"publisher"`
-	Imprint       string         `json:"imprint"`
-	URL           string         `json:"url"`
-	ReleaseDate   *time.Time     `json:"release_date,omitempty"`
-	CoverMimeType string         `json:"cover_mime_type"`
-	CoverURL      string         `json:"cover_url"`
-	CoverData     []byte         `json:"-"`
-	CoverPage     *int           `json:"cover_page,omitempty"` // 0-indexed page number for CBZ cover, nil for other file types
+	Title        string         `json:"title"`
+	Subtitle     string         `json:"subtitle"` // from M4B freeform SUBTITLE atom
+	Authors      []ParsedAuthor `json:"authors"`
+	Narrators    []string       `json:"narrators"`
+	Series       string         `json:"series"`
+	SeriesNumber *float64       `json:"series_number,omitempty"`
+	// SeriesNumberUnit indicates whether SeriesNumber refers to a volume or a
+	// chapter. CBZ-only — null for other formats. Valid values: "volume", "chapter".
+	SeriesNumberUnit *string    `json:"series_number_unit,omitempty"`
+	Genres           []string   `json:"genres"` // Genre names from file metadata
+	Tags             []string   `json:"tags"`   // Tag names from file metadata
+	Description      string     `json:"description"`
+	Publisher        string     `json:"publisher"`
+	Imprint          string     `json:"imprint"`
+	URL              string     `json:"url"`
+	ReleaseDate      *time.Time `json:"release_date,omitempty"`
+	CoverMimeType    string     `json:"cover_mime_type"`
+	CoverURL         string     `json:"cover_url"`
+	CoverData        []byte     `json:"-"`
+	CoverPage        *int       `json:"cover_page,omitempty"` // 0-indexed page number for CBZ cover, nil for other file types
 	// DataSource should be a value of books.DataSource
 	DataSource string `json:"-"`
 	// FieldDataSources maps individual field names to the data source that provided them.

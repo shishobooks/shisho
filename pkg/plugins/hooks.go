@@ -432,6 +432,15 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			md.SeriesNumber = &f
 		}
 
+		// seriesNumberUnit -> *string ("volume" | "chapter"); ignore other values
+		unitVal := itemObj.Get("seriesNumberUnit")
+		if unitVal != nil && !goja.IsUndefined(unitVal) && !goja.IsNull(unitVal) {
+			s := unitVal.String()
+			if s == models.SeriesNumberUnitVolume || s == models.SeriesNumberUnitChapter {
+				md.SeriesNumberUnit = &s
+			}
+		}
+
 		// confidence -> *float64 (0-1 score)
 		confidenceVal := itemObj.Get("confidence")
 		if confidenceVal != nil && !goja.IsUndefined(confidenceVal) && !goja.IsNull(confidenceVal) {
@@ -525,6 +534,15 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 	if seriesNumVal != nil && !goja.IsUndefined(seriesNumVal) && !goja.IsNull(seriesNumVal) {
 		f := seriesNumVal.ToFloat()
 		md.SeriesNumber = &f
+	}
+
+	// seriesNumberUnit -> *string ("volume" | "chapter"); ignore other values
+	unitVal := obj.Get("seriesNumberUnit")
+	if unitVal != nil && !goja.IsUndefined(unitVal) && !goja.IsNull(unitVal) {
+		s := unitVal.String()
+		if s == models.SeriesNumberUnitVolume || s == models.SeriesNumberUnitChapter {
+			md.SeriesNumberUnit = &s
+		}
 	}
 
 	// authors -> []ParsedAuthor

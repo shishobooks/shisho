@@ -2687,3 +2687,58 @@ func TestProcessScanJob_OrganizeFileStructure_RootLevelMultiFormatSameBook(t *te
 		assert.Contains(t, file.Filepath, organizedDir, "file path should be in organized directory")
 	}
 }
+
+func TestScan_CBZ_ChapterFilenameStoresUnit(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create root-level CBZ with chapter indicator in filename — no ComicInfo metadata
+	testgen.GenerateCBZ(t, libraryPath, "One Piece Ch.5.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	require.NotEmpty(t, book.BookSeries, "book should have a series inferred from chapter filename")
+	bs := book.BookSeries[0]
+	require.NotNil(t, bs.SeriesNumber, "series number should be set from chapter filename")
+	assert.InDelta(t, 5.0, *bs.SeriesNumber, 0.001)
+	require.NotNil(t, bs.SeriesNumberUnit, "series number unit should be 'chapter'")
+	assert.Equal(t, "chapter", *bs.SeriesNumberUnit)
+}
+
+func TestScan_CBZ_VolumeFilenameStoresUnit(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create root-level CBZ with volume indicator in filename — no ComicInfo metadata
+	testgen.GenerateCBZ(t, libraryPath, "Naruto v01.cbz", testgen.CBZOptions{
+		HasComicInfo: false,
+		PageCount:    3,
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+
+	book := allBooks[0]
+	require.NotEmpty(t, book.BookSeries, "book should have a series inferred from volume filename")
+	bs := book.BookSeries[0]
+	require.NotNil(t, bs.SeriesNumber, "series number should be set from volume filename")
+	require.NotNil(t, bs.SeriesNumberUnit, "series number unit should be 'volume'")
+	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
+}

@@ -394,6 +394,21 @@ func (h *handler) update(c echo.Context) error {
 			if oldSeriesNum != newSeriesNum {
 				shouldOrganizeFiles = true
 			}
+
+			// Compare old and new series number units
+			var oldUnit *string
+			if len(book.BookSeries) > 0 {
+				oldUnit = book.BookSeries[0].SeriesNumberUnit
+			}
+			var newUnit *string
+			if len(params.Series) > 0 {
+				newUnit = params.Series[0].SeriesNumberUnit
+			}
+			if (oldUnit == nil) != (newUnit == nil) {
+				shouldOrganizeFiles = true
+			} else if oldUnit != nil && newUnit != nil && *oldUnit != *newUnit {
+				shouldOrganizeFiles = true
+			}
 		}
 
 		// Delete existing series associations
@@ -412,10 +427,11 @@ func (h *handler) update(c echo.Context) error {
 				continue
 			}
 			bookSeries := &models.BookSeries{
-				BookID:       book.ID,
-				SeriesID:     seriesRecord.ID,
-				SeriesNumber: seriesInput.Number,
-				SortOrder:    i + 1,
+				BookID:           book.ID,
+				SeriesID:         seriesRecord.ID,
+				SeriesNumber:     seriesInput.Number,
+				SeriesNumberUnit: seriesInput.SeriesNumberUnit,
+				SortOrder:        i + 1,
 			}
 			if err := h.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
 				log.Error("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
@@ -1372,6 +1388,9 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 	if file.Name != nil && *file.Name != "" {
 		title = *file.Name
 	}
+	// File-level renames intentionally omit SeriesNumber/SeriesNumberUnit:
+	// GenerateOrganizedFileName clears them before generating the filename
+	// since the series number is already encoded in the parent folder name.
 	organizeOpts := fileutils.OrganizedNameOptions{
 		AuthorNames:   authorNames,
 		NarratorNames: narratorNames,

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.
@@ -39,6 +40,13 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	// Series number
 	if v, ok := fields["series_number"].(float64); ok {
 		md.SeriesNumber = &v
+	}
+
+	// Series number unit
+	if v, ok := fields["series_number_unit"].(string); ok {
+		if v == models.SeriesNumberUnitVolume || v == models.SeriesNumberUnitChapter {
+			md.SeriesNumberUnit = &v
+		}
 	}
 
 	// Cover page (0-indexed page number for CBZ/PDF). Only accept finite

@@ -12,6 +12,7 @@ import type {
   PluginHookConfig,
   PluginIdentifierType,
   PluginRepository,
+  SeriesNumberUnit,
 } from "@/types/generated/models";
 
 // Re-export generated types so consumers can import from this module
@@ -611,6 +612,7 @@ export interface PluginSearchResult {
   subtitle?: string;
   series?: string;
   series_number?: number;
+  series_number_unit?: SeriesNumberUnit;
   genres?: string[];
   tags?: string[];
   narrators?: string[];
