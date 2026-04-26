@@ -116,11 +116,13 @@ export function BookEditDialog({
     })) || [],
   );
   const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
-    book.book_series?.map((bs) => ({
-      name: bs.series?.name || "",
-      number: bs.series_number?.toString() || "",
-      unit: (bs.series_number_unit as "volume" | "chapter") ?? "",
-    })) || [],
+    book.book_series?.map(
+      (bs): SeriesEntry => ({
+        name: bs.series?.name || "",
+        number: bs.series_number?.toString() || "",
+        unit: bs.series_number_unit ?? "",
+      }),
+    ) || [],
   );
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [seriesSearch, setSeriesSearch] = useState("");
@@ -233,11 +235,11 @@ export function BookEditDialog({
         name: a.person?.name || "",
         role: a.role,
       })) || [];
-    const initialSeries =
+    const initialSeries: SeriesEntry[] =
       book.book_series?.map((bs) => ({
         name: bs.series?.name || "",
         number: bs.series_number?.toString() || "",
-        unit: (bs.series_number_unit as "volume" | "chapter") ?? "",
+        unit: bs.series_number_unit ?? "",
       })) || [];
     const initialGenres =
       book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [];
@@ -435,12 +437,14 @@ export function BookEditDialog({
     }
 
     // Check if series changed
-    const originalSeries =
-      book.book_series?.map((bs) => ({
-        name: bs.series?.name || "",
-        number: bs.series_number?.toString() || "",
-        unit: (bs.series_number_unit as "volume" | "chapter") ?? "",
-      })) || [];
+    const originalSeries: SeriesEntry[] =
+      book.book_series?.map(
+        (bs): SeriesEntry => ({
+          name: bs.series?.name || "",
+          number: bs.series_number?.toString() || "",
+          unit: bs.series_number_unit ?? "",
+        }),
+      ) || [];
     if (JSON.stringify(seriesEntries) !== JSON.stringify(originalSeries)) {
       payload.series = seriesEntries
         .filter((s) => s.name.trim())

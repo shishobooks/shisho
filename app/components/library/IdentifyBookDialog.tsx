@@ -483,7 +483,7 @@ export function IdentifyBookDialog({
                                   <p className="text-xs text-muted-foreground font-medium mt-0.5">
                                     {result.series}
                                     {result.series_number != null &&
-                                      ` ${formatSeriesNumber(result.series_number, result.series_number_unit as "volume" | "chapter" | undefined, selectedFileType)}`}
+                                      ` ${formatSeriesNumber(result.series_number, result.series_number_unit, selectedFileType)}`}
                                   </p>
                                 )}
                               </div>

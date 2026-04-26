@@ -1261,11 +1261,7 @@ const BookDetail = () => {
                         <Badge className="text-xs" variant="outline">
                           {formatSeriesNumber(
                             bs.series_number,
-                            bs.series_number_unit as
-                              | "volume"
-                              | "chapter"
-                              | null
-                              | undefined,
+                            bs.series_number_unit,
                             primaryFileType,
                           )}
                         </Badge>

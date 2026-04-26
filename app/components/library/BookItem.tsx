@@ -364,7 +364,7 @@ const BookItem = ({
                 <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
                   {formatSeriesNumber(
                     seriesNumber,
-                    seriesNumberUnit as "volume" | "chapter" | null | undefined,
+                    seriesNumberUnit,
                     primaryFileType,
                   )}
                 </span>

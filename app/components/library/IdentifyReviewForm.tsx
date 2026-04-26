@@ -32,6 +32,7 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
   resolveIdentifiers,
@@ -474,6 +475,11 @@ export function IdentifyReviewForm({
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
+  const primaryFile =
+    (book.primary_file_id != null
+      ? book.files?.find((f) => f.id === book.primary_file_id)
+      : null) ?? book.files?.[0];
+  const primaryFileType = primaryFile?.file_type ?? null;
   const applyMutation = usePluginApply();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const disabledFields = useMemo(
@@ -980,7 +986,11 @@ export function IdentifyReviewForm({
       <FieldWrapper
         currentValue={
           currentSeries
-            ? `${currentSeries}${currentSeriesNumber ? ` #${currentSeriesNumber}` : ""}`
+            ? `${currentSeries}${
+                currentSeriesNumber
+                  ? ` ${formatSeriesNumber(parseFloat(currentSeriesNumber), currentSeriesNumberUnit || null, primaryFileType)}`
+                  : ""
+              }`
             : undefined
         }
         disabled={isDisabled("series")}
@@ -992,10 +1002,12 @@ export function IdentifyReviewForm({
         }}
         status={
           defaults.series.status === "changed" ||
-          defaults.seriesNumber.status === "changed"
+          defaults.seriesNumber.status === "changed" ||
+          defaults.seriesNumberUnit.status === "changed"
             ? "changed"
             : defaults.series.status === "new" ||
-                defaults.seriesNumber.status === "new"
+                defaults.seriesNumber.status === "new" ||
+                defaults.seriesNumberUnit.status === "new"
               ? "new"
               : "unchanged"
         }
