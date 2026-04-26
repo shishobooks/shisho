@@ -146,6 +146,14 @@ export function FileEditDialog({
   const [narrators, setNarrators] = useState<string[]>(
     file.narrators?.map((n) => n.person?.name || "") || [],
   );
+  // Memoize the {name}-wrapped items so SortableEntityList sees stable
+  // references across renders. Without this, the WeakMap-keyed row id
+  // tracker (in SortableEntityList) would assign a new key every render
+  // and confuse dnd-kit's drag tracking.
+  const narratorItems = useMemo(
+    () => narrators.map((n) => ({ name: n })),
+    [narrators],
+  );
   const isPageBased = isPageBasedFileType(file.file_type);
   // Dialog-local cover cache key — bumped synchronously after cover mutations
   // (upload / set-cover-page) so the preview `<img>` refreshes immediately on
@@ -848,7 +856,7 @@ export function FileEditDialog({
                       },
                       label: "Narrator",
                     }}
-                    items={narrators.map((n) => ({ name: n }))}
+                    items={narratorItems}
                     onAppend={(next) => {
                       const nextName =
                         "__create" in next ? next.__create : next.name;

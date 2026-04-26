@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 
 export type { EntityStatus };
@@ -51,7 +52,12 @@ export function EntityCombobox<T extends object>({
 }: EntityComboboxProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { data: items = [], isLoading } = hook(search);
+  // Debounce the query before fanning out to the consumer's hook so
+  // typing-fast doesn't fire one query per keystroke. The pre-refactor
+  // edit-dialog blocks debounced at the parent level via useDebounce; we
+  // hold that contract here so callers don't need to repeat the pattern.
+  const debouncedSearch = useDebounce(search, 200);
+  const { data: items = [], isLoading } = hook(debouncedSearch);
 
   const filtered = exclude ? items.filter((i) => !exclude(i)) : items;
   const trimmed = search.trim();

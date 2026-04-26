@@ -969,6 +969,8 @@ When using raw `<button>` elements outside of the Button component, always add `
 
 **Don't** rely on labels, indices, or any field that changes during normal editing as the sortable id. Use a server-side stable id (e.g., `chapter.id`) only when every row actually has one — newly-added rows that haven't been persisted yet need a client-side counter or WeakMap-tracked id.
 
+**Caller responsibility for `SortableEntityList`:** the WeakMap is keyed by item *reference*, so callers must pass stable item references across renders. `items={list.map((x) => ({ name: x }))}` re-creates the wrapper objects every render and defeats the WeakMap — each row gets a fresh key every render and dnd-kit sees a brand-new identity set. Either store the wrapped shape in `useState`, or wrap the `.map()` in a `useMemo` keyed on the source array. See `IdentifyReviewForm.tsx`'s `narratorItems` for the pattern.
+
 ## Known Radix UI Issues
 
 ### Dialog + DropdownMenu pointer-events Bug
