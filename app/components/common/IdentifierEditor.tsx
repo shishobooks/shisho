@@ -154,7 +154,11 @@ export function IdentifierEditor({
                     )}
                     data-testid="identifier-status-badge"
                   >
-                    {rowStatus}
+                    {rowStatus === "new"
+                      ? "New"
+                      : rowStatus === "changed"
+                        ? "Changed"
+                        : "Unchanged"}
                   </span>
                 )}
                 <button

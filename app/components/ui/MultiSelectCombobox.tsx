@@ -107,7 +107,11 @@ export function MultiSelectCombobox({
                     )}
                     data-testid="ms-status-badge"
                   >
-                    {s}
+                    {s === "new"
+                      ? "New"
+                      : s === "changed"
+                        ? "Changed"
+                        : "Unchanged"}
                   </span>
                 )}
                 <button
