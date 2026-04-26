@@ -4,9 +4,11 @@ import type { ReactNode } from "react";
 import {
   EntityCombobox,
   type EntityComboboxProps,
-  type EntityStatus,
 } from "@/components/common/EntityCombobox";
-import { Badge } from "@/components/ui/badge";
+import {
+  StatusBadge,
+  type EntityStatus,
+} from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   SortableList,
@@ -84,20 +86,7 @@ export function SortableEntityList<T extends object>({
                 {label}
               </div>
               {renderExtras?.(item, index)}
-              {rowStatus && (
-                <Badge
-                  className={cn(
-                    rowStatus === "new" && "bg-green-600",
-                    rowStatus === "changed" && "bg-amber-600",
-                    rowStatus === "unchanged" &&
-                      "bg-muted text-muted-foreground",
-                  )}
-                  data-testid="entity-status-badge"
-                  variant="default"
-                >
-                  {rowStatus}
-                </Badge>
-              )}
+              {rowStatus && <StatusBadge size="sm" status={rowStatus} />}
               <Button
                 aria-label={`Remove ${label}`}
                 className="cursor-pointer"

@@ -82,41 +82,43 @@ export function MultiSelectCombobox({
 
   return (
     <div className="space-y-2">
-      {/* Selected values as badges */}
+      {/* Selected values as unified chips: label + status text + X */}
       {values.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {values.map((value) => {
             const s = status?.(value);
             return (
-              <div
-                className="flex items-center gap-1"
+              <Badge
+                className="flex items-center gap-1 max-w-full"
                 data-testid="ms-chip"
                 key={value}
+                variant="secondary"
               >
-                <Badge className="flex items-center gap-1" variant="secondary">
+                <span className="truncate" title={value}>
                   {value}
-                  <button
-                    className="ml-1 cursor-pointer hover:text-destructive"
-                    onClick={() => handleRemove(value)}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
+                </span>
                 {s && (
-                  <Badge
+                  <span
                     className={cn(
-                      "ml-1",
-                      s === "new" && "bg-green-600",
-                      s === "changed" && "bg-amber-600",
-                      s === "unchanged" && "bg-muted text-muted-foreground",
+                      "ml-1 text-[10px]",
+                      s === "new" && "text-emerald-700 dark:text-emerald-400",
+                      s === "changed" && "text-primary",
+                      s === "unchanged" && "text-muted-foreground",
                     )}
                     data-testid="ms-status-badge"
                   >
                     {s}
-                  </Badge>
+                  </span>
                 )}
-              </div>
+                <button
+                  aria-label={`Remove ${value}`}
+                  className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                  onClick={() => handleRemove(value)}
+                  type="button"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
             );
           })}
           {values.length > 1 && (

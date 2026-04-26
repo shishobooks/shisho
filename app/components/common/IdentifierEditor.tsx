@@ -146,11 +146,11 @@ export function IdentifierEditor({
                 {rowStatus && (
                   <span
                     className={cn(
-                      "ml-1 inline-flex items-center rounded px-1 text-[10px] font-medium",
-                      rowStatus === "new" && "bg-green-600 text-white",
-                      rowStatus === "changed" && "bg-amber-600 text-white",
-                      rowStatus === "unchanged" &&
-                        "bg-muted text-muted-foreground",
+                      "ml-1 inline-flex items-center rounded px-1 text-[10px]",
+                      rowStatus === "new" &&
+                        "text-emerald-700 dark:text-emerald-400",
+                      rowStatus === "changed" && "text-primary",
+                      rowStatus === "unchanged" && "text-muted-foreground",
                     )}
                     data-testid="identifier-status-badge"
                   >

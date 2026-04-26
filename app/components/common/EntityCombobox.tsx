@@ -1,7 +1,10 @@
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  StatusBadge,
+  type EntityStatus,
+} from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -17,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/libraries/utils";
 
-export type EntityStatus = "new" | "changed" | "unchanged";
+export type { EntityStatus };
 
 export interface EntityComboboxProps<T extends object> {
   hook: (query: string) => { data?: T[]; isLoading: boolean };
@@ -145,19 +148,7 @@ export function EntityCombobox<T extends object>({
           </Command>
         </PopoverContent>
       </Popover>
-      {status && (
-        <Badge
-          className={cn(
-            status === "new" && "bg-green-600",
-            status === "changed" && "bg-amber-600",
-            status === "unchanged" && "bg-muted text-muted-foreground",
-          )}
-          data-testid="entity-status-badge"
-          variant="default"
-        >
-          {status}
-        </Badge>
-      )}
+      {status && <StatusBadge status={status} />}
     </div>
   );
 }

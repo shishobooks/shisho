@@ -14,8 +14,8 @@ import { EntityCombobox } from "@/components/common/EntityCombobox";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import { SortNameInput } from "@/components/common/SortNameInput";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -282,6 +282,27 @@ function resolveAuthors(
   return { value: incoming, status: "changed" };
 }
 
+/** Per-row status for an author against the current set. Considers both
+ * name and role: a name match with a different role counts as "changed". */
+function authorRowStatus(
+  author: AuthorEntry,
+  current: AuthorEntry[],
+): FieldStatus {
+  const match = current.find(
+    (c) => c.name.toLowerCase() === author.name.toLowerCase(),
+  );
+  if (!match) return "new";
+  if ((match.role ?? "") !== (author.role ?? "")) return "changed";
+  return "unchanged";
+}
+
+/** Per-row status for a name-only entry (narrators) against the current set. */
+function nameRowStatus(name: string, current: string[]): FieldStatus {
+  return current.some((c) => c.toLowerCase() === name.toLowerCase())
+    ? "unchanged"
+    : "new";
+}
+
 /** Extract current file from book. */
 function findFile(book: Book, fileId?: number): File | undefined {
   if (!fileId) return book.files?.[0];
@@ -291,34 +312,6 @@ function findFile(book: Book, fileId?: number): File | undefined {
 // ---------------------------------------------------------------------------
 // Sub-components (inline, single-use)
 // ---------------------------------------------------------------------------
-
-function StatusBadge({ status }: { status: FieldStatus }) {
-  if (status === "new") {
-    return (
-      <Badge
-        className="text-[0.65rem] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-transparent"
-        variant="outline"
-      >
-        New
-      </Badge>
-    );
-  }
-  if (status === "changed") {
-    return (
-      <Badge
-        className="text-[0.65rem] bg-primary/10 text-primary dark:bg-primary/20 border-transparent"
-        variant="outline"
-      >
-        Changed
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="text-[0.65rem]" variant="outline">
-      Unchanged
-    </Badge>
-  );
-}
 
 function CurrentBar({
   children,
@@ -1084,6 +1077,7 @@ export function IdentifyReviewForm({
                 )
               : undefined
           }
+          status={(a) => authorRowStatus(a, currentAuthors)}
         />
       </FieldWrapper>
 
@@ -1126,6 +1120,7 @@ export function IdentifyReviewForm({
               );
               return !!m && m.existing == null;
             }}
+            status={(n) => nameRowStatus(n.name, currentNarrators)}
           />
         </FieldWrapper>
       )}
