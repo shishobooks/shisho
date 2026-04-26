@@ -16,7 +16,7 @@ type OrganizedNameOptions struct {
 	NarratorNames    []string // Narrator names for M4B file naming
 	Title            string
 	SeriesNumber     *float64
-	SeriesNumberUnit *string // for CBZ: "volume" or "chapter"; nil treated as volume
+	SeriesNumberUnit *string // for CBZ: models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter; nil treated as volume
 	FileType         string  // for determining number formatting
 }
 
@@ -91,7 +91,7 @@ func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath strin
 func formatSeriesNumber(number float64, unit string, fileType string) string {
 	if fileType == models.FileTypeCBZ {
 		prefix := "v"
-		if unit == "chapter" {
+		if unit == models.SeriesNumberUnitChapter {
 			prefix = "c"
 		}
 		if number == float64(int(number)) {
@@ -148,7 +148,7 @@ func IsOrganizedName(name string) bool {
 // in CBZ titles. For volume indicators (v01, vol.5, volume 12, #001, bare trailing
 // number) the title becomes "Title v{NNN}". For chapter indicators (chapter 5,
 // Ch.5, c042) the title becomes "Title c{NNN}". Returns the normalized title,
-// the parsed unit ("volume" or "chapter", "" when no match), and whether a number
+// the parsed unit (models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter, "" when no match), and whether a number
 // was found. Non-CBZ files are returned unchanged.
 func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string, bool) {
 	if fileType != models.FileTypeCBZ {
@@ -162,14 +162,14 @@ func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string
 		re   *regexp.Regexp
 		unit string
 	}{
-		{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), "chapter"},
-		{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), "chapter"},
-		{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), "chapter"},
-		{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), "volume"},
-		{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), "volume"},
-		{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), "volume"},
-		{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), "volume"},
-		{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), "volume"},
+		{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+		{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+		{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+		{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+		{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+		{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+		{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+		{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
 	}
 
 	for _, p := range patterns {
@@ -183,7 +183,7 @@ func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string
 			continue
 		}
 		prefix := "v"
-		if p.unit == "chapter" {
+		if p.unit == models.SeriesNumberUnitChapter {
 			prefix = "c"
 		}
 		var normalized string
@@ -214,9 +214,9 @@ func extractSeriesNumberFromTitle(title string) (*float64, string) {
 	if err != nil {
 		return nil, ""
 	}
-	unit := "volume"
+	unit := models.SeriesNumberUnitVolume
 	if strings.EqualFold(matches[1], "c") {
-		unit = "chapter"
+		unit = models.SeriesNumberUnitChapter
 	}
 	return &number, unit
 }
@@ -242,7 +242,7 @@ func SplitNames(s string) []string {
 }
 
 // ExtractSeriesFromTitle extracts series name and number from a normalized CBZ title.
-// Returns the base title (series name), number, unit ("volume" or "chapter"), and
+// Returns the base title (series name), number, unit (models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter), and
 // whether extraction succeeded. Only applies to CBZ files with normalized "v{N}"
 // or "c{N}" suffixes.
 func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, number *float64, unit string, ok bool) {
@@ -262,9 +262,9 @@ func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, n
 	if err != nil {
 		return "", nil, "", false
 	}
-	parsedUnit := "volume"
+	parsedUnit := models.SeriesNumberUnitVolume
 	if strings.EqualFold(matches[2], "c") {
-		parsedUnit = "chapter"
+		parsedUnit = models.SeriesNumberUnitChapter
 	}
 	return seriesName, &parsed, parsedUnit, true
 }
