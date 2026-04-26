@@ -412,10 +412,11 @@ func (h *handler) update(c echo.Context) error {
 				continue
 			}
 			bookSeries := &models.BookSeries{
-				BookID:       book.ID,
-				SeriesID:     seriesRecord.ID,
-				SeriesNumber: seriesInput.Number,
-				SortOrder:    i + 1,
+				BookID:           book.ID,
+				SeriesID:         seriesRecord.ID,
+				SeriesNumber:     seriesInput.Number,
+				SeriesNumberUnit: seriesInput.SeriesNumberUnit,
+				SortOrder:        i + 1,
 			}
 			if err := h.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
 				log.Error("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})
