@@ -128,6 +128,7 @@ Used to determine which metadata to keep when conflicts occur. During scans, enr
 
 - OPDS v1.2 server hosted in the application
 - As new functionality is added, keep the OPDS server up-to-date with the new features
+- **Cover URLs in feeds must point at `/opds/v1/books/:id/cover`**, not the books API. Reasons mirror eReader: OPDS uses Basic Auth (the books group requires session auth), and in production the Caddy `/opds/*` handler proxies to the backend while bare `/books/*` falls through to the SPA. The cover endpoint lives in `pkg/opds/handlers.go` (`bookCover`) and is built off `apiBase + "/opds/v1"` in `bookToEntryWithKepub` so an `X-Forwarded-Prefix` (e.g. `/api` in dev) is preserved.
 
 ### eReader Browser UI (`pkg/ereader/`)
 

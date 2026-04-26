@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -29,6 +30,7 @@ const (
 type handler struct {
 	opdsService     *Service
 	bookService     *books.Service
+	libraryService  *libraries.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
 }
@@ -822,6 +824,46 @@ func (h *handler) downloadKepub(c echo.Context) error {
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
 
 	return c.File(cachedPath)
+}
+
+// bookCover serves a book's cover image. Mirrors the books bookCover
+// handler but lives under the OPDS group so it accepts Basic Auth and
+// is reachable through the production /opds/* Caddy route.
+func (h *handler) bookCover(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Book")
+	}
+
+	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := checkLibraryAccess(c, book.LibraryID); err != nil {
+		return err
+	}
+
+	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+		ID: &book.LibraryID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
+	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
+		return errcodes.NotFound("Cover")
+	}
+
+	// Resolve the cover via the file's parent dir — book.Filepath may be
+	// a synthetic organized-folder path that never exists on disk for
+	// root-level files. The cover always lives alongside the file.
+	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	return errors.WithStack(c.File(coverPath))
 }
 
 // respondXML sends an XML response with the correct content type.
