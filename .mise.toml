@@ -160,6 +160,7 @@ if command -v flock >/dev/null 2>&1; then
 else
   echo "flock not found — running without host-wide lock (install with 'brew install flock' on macOS)"
 fi
+echo "Running checks..."
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 for step in lint test test:js:fast lint:js; do
