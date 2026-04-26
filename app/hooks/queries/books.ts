@@ -22,8 +22,14 @@ import type {
   UpdateFilePayload,
 } from "@/types";
 
+import { QueryKey as GenresQueryKey } from "./genres";
+import { QueryKey as ImprintsQueryKey } from "./imprints";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
+import { QueryKey as PeopleQueryKey } from "./people";
+import { QueryKey as PublishersQueryKey } from "./publishers";
 import { QueryKey as SearchQueryKey } from "./search";
+import { QueryKey as SeriesQueryKey } from "./series";
+import { QueryKey as TagsQueryKey } from "./tags";
 
 export enum QueryKey {
   RetrieveBook = "RetrieveBook",
@@ -83,6 +89,13 @@ export const useUpdateBook = () => {
     onSuccess: (data: Book) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.setQueryData([QueryKey.RetrieveBook, String(data.id)], data);
+      // Book updates accept entity names; the server creates new persons,
+      // series, genres, or tags as needed. Invalidate those caches so the
+      // newly-created entities show up in admin pages and combobox results.
+      queryClient.invalidateQueries({ queryKey: [PeopleQueryKey.ListPeople] });
+      queryClient.invalidateQueries({ queryKey: [SeriesQueryKey.ListSeries] });
+      queryClient.invalidateQueries({ queryKey: [GenresQueryKey.ListGenres] });
+      queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
     },
   });
 };
@@ -106,6 +119,16 @@ export const useUpdateFile = () => {
       // Invalidate library languages in case a new language was set
       queryClient.invalidateQueries({
         queryKey: [LibrariesQueryKey.LibraryLanguages],
+      });
+      // File updates accept entity names; the server creates new narrators
+      // (persons), publishers, or imprints as needed. Invalidate those caches
+      // so the newly-created entities show up in admin pages and combobox results.
+      queryClient.invalidateQueries({ queryKey: [PeopleQueryKey.ListPeople] });
+      queryClient.invalidateQueries({
+        queryKey: [PublishersQueryKey.ListPublishers],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ImprintsQueryKey.ListImprints],
       });
     },
   });

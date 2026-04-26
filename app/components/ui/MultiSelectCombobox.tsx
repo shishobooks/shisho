@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Undo2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/libraries/utils";
+
+type ChipStatus = "new" | "changed" | "unchanged";
 
 interface MultiSelectComboboxProps {
   values: string[];
@@ -25,6 +28,8 @@ interface MultiSelectComboboxProps {
   placeholder?: string;
   isLoading?: boolean;
   label: string;
+  status?: (value: string) => ChipStatus | undefined;
+  removed?: string[];
 }
 
 export function MultiSelectCombobox({
@@ -36,6 +41,8 @@ export function MultiSelectCombobox({
   placeholder = "Search...",
   isLoading = false,
   label,
+  status,
+  removed,
 }: MultiSelectComboboxProps) {
   const [open, setOpen] = useState(false);
 
@@ -75,25 +82,49 @@ export function MultiSelectCombobox({
 
   return (
     <div className="space-y-2">
-      {/* Selected values as badges */}
+      {/* Selected values as unified chips: label + status text + X */}
       {values.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {values.map((value) => (
-            <Badge
-              className="flex items-center gap-1"
-              key={value}
-              variant="secondary"
-            >
-              {value}
-              <button
-                className="ml-1 cursor-pointer hover:text-destructive"
-                onClick={() => handleRemove(value)}
-                type="button"
+        <div className="flex flex-wrap items-center gap-2">
+          {values.map((value) => {
+            const s = status?.(value);
+            return (
+              <Badge
+                className="flex items-center gap-1 max-w-full"
+                data-testid="ms-chip"
+                key={value}
+                variant="secondary"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
+                <span className="truncate" title={value}>
+                  {value}
+                </span>
+                {s && (
+                  <span
+                    className={cn(
+                      "ml-1 text-[10px]",
+                      s === "new" && "text-emerald-700 dark:text-emerald-400",
+                      s === "changed" && "text-primary",
+                      s === "unchanged" && "text-muted-foreground",
+                    )}
+                    data-testid="ms-status-badge"
+                  >
+                    {s === "new"
+                      ? "New"
+                      : s === "changed"
+                        ? "Changed"
+                        : "Unchanged"}
+                  </span>
+                )}
+                <button
+                  aria-label={`Remove ${value}`}
+                  className="ml-1 cursor-pointer hover:text-destructive shrink-0"
+                  onClick={() => handleRemove(value)}
+                  type="button"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
           {values.length > 1 && (
             <button
               className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
@@ -103,6 +134,29 @@ export function MultiSelectCombobox({
               Clear all
             </button>
           )}
+        </div>
+      )}
+
+      {/* Removed values shown as strikethrough chips with undo */}
+      {removed && removed.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {removed.map((value) => (
+            <Badge
+              className="line-through text-muted-foreground flex items-center gap-1 max-w-full"
+              key={`removed-${value}`}
+              variant="outline"
+            >
+              {value}
+              <button
+                aria-label={`Restore ${value}`}
+                className="ml-1 cursor-pointer hover:text-foreground"
+                onClick={() => onChange([...values, value])}
+                type="button"
+              >
+                <Undo2 className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
         </div>
       )}
 
