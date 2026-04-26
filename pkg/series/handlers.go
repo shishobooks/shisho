@@ -421,9 +421,16 @@ func (h *handler) deleteSeries(c echo.Context) error {
 		}
 	}
 
-	err = h.seriesService.DeleteSeries(ctx, id)
+	affectedBookIDs, err := h.seriesService.DeleteSeries(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Removing the join rows can flip the books' Reviewed completeness state
+	// (e.g. when `series` is a required field) so each affected book needs a
+	// fresh recompute.
+	for _, bookID := range affectedBookIDs {
+		h.bookService.RecomputeReviewedForBook(ctx, bookID)
 	}
 
 	// Remove from FTS index

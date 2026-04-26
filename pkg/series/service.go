@@ -229,17 +229,40 @@ func (svc *Service) UpdateSeries(ctx context.Context, series *models.Series, opt
 	return nil
 }
 
-// DeleteSeries soft-deletes a series.
-func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) error {
-	_, err := svc.db.
-		NewDelete().
-		Model((*models.Series)(nil)).
-		Where("id = ?", seriesID).
-		Exec(ctx)
-	if err != nil {
+// DeleteSeries soft-deletes a series and hard-deletes its book_series join
+// rows so they don't masquerade as live series associations on the affected
+// books. Returns the IDs of books that had a join row removed; callers should
+// use these to recompute review state.
+func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, error) {
+	var affectedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().
+			Model((*models.BookSeries)(nil)).
+			ColumnExpr("DISTINCT bs.book_id").
+			Where("bs.series_id = ?", seriesID).
+			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("series_id = ?", seriesID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewDelete().
+			Model((*models.Series)(nil)).
+			Where("id = ?", seriesID).
+			Exec(ctx)
 		return errors.WithStack(err)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return affectedBookIDs, nil
 }
 
 // RestoreSeries restores a soft-deleted series.

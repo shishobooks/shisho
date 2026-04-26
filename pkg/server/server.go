@@ -179,7 +179,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	seriesGroup := e.Group("/series")
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
-	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware)
+	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware, appsettings.NewService(db))
 
 	// Lists routes
 	listsGroup := e.Group("/lists")
