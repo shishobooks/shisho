@@ -93,6 +93,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 // Determines which file type would provide the cover based on library preference.
 // This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
@@ -1042,6 +1043,13 @@ const BookDetail = () => {
 
   const book = bookQuery.data;
 
+  // Determine primary file type for series number display
+  const primaryFile =
+    (book.primary_file_id != null
+      ? book.files?.find((f) => f.id === book.primary_file_id)
+      : null) ?? book.files?.[0];
+  const primaryFileType = primaryFile?.file_type ?? null;
+
   // Separate main files and supplements
   const mainFiles =
     book.files?.filter((f) => f.file_role !== "supplement") ?? [];
@@ -1251,7 +1259,15 @@ const BookDetail = () => {
                       </Link>
                       {bs.series_number && (
                         <Badge className="text-xs" variant="outline">
-                          #{bs.series_number}
+                          {formatSeriesNumber(
+                            bs.series_number,
+                            bs.series_number_unit as
+                              | "volume"
+                              | "chapter"
+                              | null
+                              | undefined,
+                            primaryFileType,
+                          )}
                         </Badge>
                       )}
                     </div>
