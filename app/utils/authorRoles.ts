@@ -20,3 +20,19 @@ export function getAuthorRoleLabel(
   };
   return roleLabels[role] || role;
 }
+
+/**
+ * Author role options for CBZ files, in the order they should appear in
+ * dropdowns. Shared between BookEditDialog and IdentifyReviewForm so the
+ * two stay in sync.
+ */
+export const AUTHOR_ROLES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "writer", label: "Writer" },
+  { value: "penciller", label: "Penciller" },
+  { value: "inker", label: "Inker" },
+  { value: "colorist", label: "Colorist" },
+  { value: "letterer", label: "Letterer" },
+  { value: "cover_artist", label: "Cover Artist" },
+  { value: "editor", label: "Editor" },
+  { value: "translator", label: "Translator" },
+];

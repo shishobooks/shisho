@@ -45,7 +45,7 @@ interface IdentifierEditorProps {
   status?: (row: IdentifierRow) => IdentifierStatus | undefined;
 }
 
-function articleFor(_id: string, label: string): string {
+function articleFor(label: string): string {
   if (!label) return "a";
   const first = label.trim().charAt(0).toLowerCase();
   return ["a", "e", "i", "o", "u"].includes(first) ? "an" : "a";
@@ -185,7 +185,7 @@ export function IdentifierEditor({
           <SelectContent>
             {identifierTypes.map(({ id, label }) => {
               const isPresent = presentTypes.has(id);
-              const article = articleFor(id, label);
+              const article = articleFor(label);
               const item = (
                 <SelectItem disabled={isPresent} key={id} value={id}>
                   {label}

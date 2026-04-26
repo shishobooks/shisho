@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/libraries/utils";
 
 export type EntityStatus = "new" | "changed" | "unchanged";
 
@@ -15,12 +16,16 @@ interface StatusBadgeProps {
  * aware so all the per-field and per-row badges share one visual language.
  */
 export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
-  const text = size === "sm" ? "text-[0.6rem] px-1.5 py-0" : "text-[0.65rem]";
+  const sizeClass =
+    size === "sm" ? "text-[0.6rem] px-1.5 py-0" : "text-[0.65rem]";
 
   if (status === "new") {
     return (
       <Badge
-        className={`${text} bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-transparent`}
+        className={cn(
+          sizeClass,
+          "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-transparent",
+        )}
         data-testid="entity-status-badge"
         variant="outline"
       >
@@ -31,7 +36,10 @@ export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
   if (status === "changed") {
     return (
       <Badge
-        className={`${text} bg-primary/10 text-primary dark:bg-primary/20 border-transparent`}
+        className={cn(
+          sizeClass,
+          "bg-primary/10 text-primary dark:bg-primary/20 border-transparent",
+        )}
         data-testid="entity-status-badge"
         variant="outline"
       >
@@ -40,7 +48,11 @@ export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
     );
   }
   return (
-    <Badge className={text} data-testid="entity-status-badge" variant="outline">
+    <Badge
+      className={sizeClass}
+      data-testid="entity-status-badge"
+      variant="outline"
+    >
       Unchanged
     </Badge>
   );

@@ -50,20 +50,8 @@ import { useTagsList } from "@/hooks/queries/tags";
 import { useAutoMatchEntities } from "@/hooks/useAutoMatchEntities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
-import {
-  AuthorRoleColorist,
-  AuthorRoleCoverArtist,
-  AuthorRoleEditor,
-  AuthorRoleInker,
-  AuthorRoleLetterer,
-  AuthorRolePenciller,
-  AuthorRoleTranslator,
-  AuthorRoleWriter,
-  FileTypeCBZ,
-  type Book,
-  type File,
-} from "@/types";
-import { getAuthorRoleLabel } from "@/utils/authorRoles";
+import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
+import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatMetadataFieldLabel } from "@/utils/format";
 import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
@@ -96,18 +84,6 @@ interface AuthorEntry {
 interface NameOption {
   name: string;
 }
-
-// Author role options for CBZ files
-const AUTHOR_ROLES = [
-  { value: AuthorRoleWriter, label: "Writer" },
-  { value: AuthorRolePenciller, label: "Penciller" },
-  { value: AuthorRoleInker, label: "Inker" },
-  { value: AuthorRoleColorist, label: "Colorist" },
-  { value: AuthorRoleLetterer, label: "Letterer" },
-  { value: AuthorRoleCoverArtist, label: "Cover Artist" },
-  { value: AuthorRoleEditor, label: "Editor" },
-  { value: AuthorRoleTranslator, label: "Translator" },
-] as const;
 
 // Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
 // signature. Defined at module scope so they're stable references and the same
@@ -606,17 +582,32 @@ export function IdentifyReviewForm({
   );
 
   // ---- Auto-match incoming entity names against this library ----
-  const autoMatch = useAutoMatchEntities({
-    libraryId: book.library_id ?? 0,
-    enabled: !!book.library_id,
-    authors: (result.authors ?? []).map((a) => a.name),
-    narrators: result.narrators ?? [],
-    series: result.series ? [result.series] : [],
-    publisher: result.publisher,
-    imprint: result.imprint,
-    genres: result.genres ?? [],
-    tags: result.tags ?? [],
-  });
+  // Memoize the input so the inline `.map`/`?? []` calls don't churn
+  // useAutoMatchEntities's useQueries on every keystroke in unrelated fields.
+  const autoMatchInput = useMemo(
+    () => ({
+      libraryId: book.library_id ?? 0,
+      enabled: !!book.library_id,
+      authors: (result.authors ?? []).map((a) => a.name),
+      narrators: result.narrators ?? [],
+      series: result.series ? [result.series] : [],
+      publisher: result.publisher,
+      imprint: result.imprint,
+      genres: result.genres ?? [],
+      tags: result.tags ?? [],
+    }),
+    [
+      book.library_id,
+      result.authors,
+      result.narrators,
+      result.series,
+      result.publisher,
+      result.imprint,
+      result.genres,
+      result.tags,
+    ],
+  );
+  const autoMatch = useAutoMatchEntities(autoMatchInput);
 
   // ---- Identifier types for the editor (built-ins + plugin-defined) ----
   const availableIdentifierTypes = useMemo(
@@ -1037,7 +1028,9 @@ export function IdentifyReviewForm({
           onRemove={(idx) => setAuthors(authors.filter((_, i) => i !== idx))}
           onReorder={setAuthors}
           pendingCreate={(a) => {
-            const m = autoMatch.matches.authors.find((x) => x.name === a.name);
+            const m = autoMatch.matches.authors.find(
+              (x) => x.name.toLowerCase() === a.name.toLowerCase(),
+            );
             return !!m && m.existing == null;
           }}
           renderExtras={
@@ -1116,7 +1109,7 @@ export function IdentifyReviewForm({
             onReorder={(next) => setNarrators(next.map((n) => n.name))}
             pendingCreate={(n) => {
               const m = autoMatch.matches.narrators.find(
-                (x) => x.name === n.name,
+                (x) => x.name.toLowerCase() === n.name.toLowerCase(),
               );
               return !!m && m.existing == null;
             }}
@@ -1170,7 +1163,7 @@ export function IdentifyReviewForm({
               pendingCreate={(() => {
                 if (!series) return false;
                 const m = autoMatch.matches.series.find(
-                  (x) => x.name === series,
+                  (x) => x.name.toLowerCase() === series.toLowerCase(),
                 );
                 return !!m && m.existing == null;
               })()}
@@ -1308,7 +1301,11 @@ export function IdentifyReviewForm({
               pendingCreate={(() => {
                 if (!publisher) return false;
                 const m = autoMatch.matches.publisher;
-                return !!m && m.name === publisher && m.existing == null;
+                return (
+                  !!m &&
+                  m.name.toLowerCase() === publisher.toLowerCase() &&
+                  m.existing == null
+                );
               })()}
               value={publisher ? { name: publisher } : null}
             />
@@ -1351,7 +1348,11 @@ export function IdentifyReviewForm({
               pendingCreate={(() => {
                 if (!imprint) return false;
                 const m = autoMatch.matches.imprint;
-                return !!m && m.name === imprint && m.existing == null;
+                return (
+                  !!m &&
+                  m.name.toLowerCase() === imprint.toLowerCase() &&
+                  m.existing == null
+                );
               })()}
               value={imprint ? { name: imprint } : null}
             />

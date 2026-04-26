@@ -63,10 +63,12 @@ function dedupe(names: (string | undefined)[]): string[] {
   const out: string[] = [];
   for (const name of names) {
     if (!name) continue;
-    const key = name.toLowerCase();
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(name);
+    out.push(trimmed);
   }
   return out;
 }

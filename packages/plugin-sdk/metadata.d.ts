@@ -31,6 +31,8 @@ export interface ParsedChapter {
 /** Full metadata object returned by file parsers and metadata enrichers. */
 export interface ParsedMetadata {
   title?: string;
+  /** When set, overrides the auto-generated sort title derived from `title`. */
+  sortTitle?: string;
   subtitle?: string;
   authors?: ParsedAuthor[];
   narrators?: string[];

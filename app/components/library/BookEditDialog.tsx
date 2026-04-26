@@ -35,13 +35,6 @@ import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import {
-  AuthorRoleColorist,
-  AuthorRoleCoverArtist,
-  AuthorRoleEditor,
-  AuthorRoleInker,
-  AuthorRoleLetterer,
-  AuthorRolePenciller,
-  AuthorRoleTranslator,
   AuthorRoleWriter,
   DataSourceManual,
   FileRoleMain,
@@ -52,6 +45,7 @@ import {
   type ReviewOverride,
   type SeriesInput,
 } from "@/types";
+import { AUTHOR_ROLES } from "@/utils/authorRoles";
 import { forTitle } from "@/utils/sortname";
 
 interface BookEditDialogProps {
@@ -121,18 +115,6 @@ function useSeriesSearch(
   }));
   return { data: adapted, isLoading };
 }
-
-// Author role options for CBZ files
-const AUTHOR_ROLES = [
-  { value: AuthorRoleWriter, label: "Writer" },
-  { value: AuthorRolePenciller, label: "Penciller" },
-  { value: AuthorRoleInker, label: "Inker" },
-  { value: AuthorRoleColorist, label: "Colorist" },
-  { value: AuthorRoleLetterer, label: "Letterer" },
-  { value: AuthorRoleCoverArtist, label: "Cover Artist" },
-  { value: AuthorRoleEditor, label: "Editor" },
-  { value: AuthorRoleTranslator, label: "Translator" },
-] as const;
 
 export function BookEditDialog({
   book,
