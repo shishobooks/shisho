@@ -50,7 +50,13 @@ import { useTagsList } from "@/hooks/queries/tags";
 import { useAutoMatchEntities } from "@/hooks/useAutoMatchEntities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
-import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
+import {
+  AuthorRoleWriter,
+  DataSourceManual,
+  FileTypeCBZ,
+  type Book,
+  type File,
+} from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatMetadataFieldLabel } from "@/utils/format";
 import { getPrimaryFileType } from "@/utils/primaryFile";
@@ -535,6 +541,12 @@ export function IdentifyReviewForm({
   const [narrators, setNarrators] = useState<string[]>(
     defaults.narrators.value,
   );
+  // Memoize the {name}-wrapped items so SortableEntityList sees stable
+  // identities across re-renders driven by unrelated fields.
+  const narratorItems = useMemo(
+    () => narrators.map((name) => ({ name })),
+    [narrators],
+  );
   const [series, setSeries] = useState(defaults.series.value);
   const [seriesNumber, setSeriesNumber] = useState(defaults.seriesNumber.value);
   const [seriesNumberUnit, setSeriesNumberUnit] = useState(
@@ -556,7 +568,13 @@ export function IdentifyReviewForm({
   // Sort title is intentionally not part of `defaults` — plugin results don't
   // surface a sort title, so there's no diff to render. We wire it through
   // SortNameInput which auto-generates from the title when in auto mode.
-  const [sortTitle, setSortTitle] = useState(book.sort_title || "");
+  // Mirror BookEditDialog's semantic: "" means auto-generate, a non-empty
+  // string is a manual override. Only initialize with the stored value when
+  // the source is Manual; otherwise the auto-derived current sort title
+  // would get pinned as if the user had typed it.
+  const [sortTitle, setSortTitle] = useState(
+    book.sort_title_source === DataSourceManual ? book.sort_title || "" : "",
+  );
 
   // ---- Genre / tag option pools (server-side search) ----
   const [genreSearch, setGenreSearch] = useState("");
@@ -1096,7 +1114,7 @@ export function IdentifyReviewForm({
               },
               label: "Narrator",
             }}
-            items={narrators.map((name) => ({ name }))}
+            items={narratorItems}
             onAppend={(next) => {
               const name = "__create" in next ? next.__create : next.name;
               if (!name.trim()) return;
