@@ -26,6 +26,12 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 			return errors.WithStack(err)
 		}
 	}
+	// Bail out cleanly between stages if shutdown was requested. Each bulk
+	// statement above already respects ctx via Exec(ctx); these checks just
+	// avoid starting the next stage when cancellation is already in flight.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Reset reviewed for supplements in a single statement; supplements never
 	// participate in the per-file iteration below.
@@ -35,6 +41,9 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		Where("file_role = ?", models.FileRoleSupplement).
 		Exec(ctx); err != nil {
 		return errors.WithStack(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	criteria, err := review.Load(ctx, w.appSettingsService)
@@ -51,6 +60,9 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		Order("id ASC").
 		Scan(ctx, &fileIDs); err != nil {
 		return errors.WithStack(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	total := len(fileIDs)
