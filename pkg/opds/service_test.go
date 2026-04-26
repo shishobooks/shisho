@@ -113,3 +113,78 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 func intPtr(i int) *int {
 	return &i
 }
+
+// TestBookToEntry_CoverLinkUsesOPDSPath verifies that the cover image link
+// in an OPDS entry stays inside the /opds/v1 path. The cover endpoint must
+// live under the OPDS group so it can authenticate via Basic Auth and so
+// the Caddy /opds/* handler proxies it to the backend in production —
+// linking to /books/:id/cover (the React route) returns the SPA shell to
+// OPDS clients.
+func TestBookToEntry_CoverLinkUsesOPDSPath(t *testing.T) {
+	t.Parallel()
+
+	coverFilename := "book.cover.jpg"
+	book := &models.Book{
+		ID:    42,
+		Title: "Test Book",
+		Files: []*models.File{
+			{
+				ID:                 1,
+				FileType:           models.FileTypeEPUB,
+				CoverImageFilename: &coverFilename,
+			},
+		},
+	}
+
+	svc := &Service{}
+	baseURL := "http://example.com/opds/v1"
+	entry := svc.bookToEntryWithKepub(baseURL, book, "book", nil, false)
+
+	wantHref := "http://example.com/opds/v1/books/42/cover"
+	var imageHref, thumbHref string
+	for _, link := range entry.Links {
+		switch link.Rel {
+		case "http://opds-spec.org/image":
+			imageHref = link.Href
+		case "http://opds-spec.org/image/thumbnail":
+			thumbHref = link.Href
+		}
+	}
+	assert.Equal(t, wantHref, imageHref, "image link must point at the OPDS cover endpoint")
+	assert.Equal(t, wantHref, thumbHref, "thumbnail link must point at the OPDS cover endpoint")
+}
+
+// TestBookToEntry_CoverLinkRespectsForwardedPrefix verifies that when the
+// baseURL carries a reverse-proxy prefix (e.g. Caddy adds X-Forwarded-Prefix
+// /api in dev), the cover URL keeps the prefix so it round-trips through
+// the same proxy. Stripping /opds/v1 and reattaching to a bare host would
+// drop the prefix and route the cover to a different handler.
+func TestBookToEntry_CoverLinkRespectsForwardedPrefix(t *testing.T) {
+	t.Parallel()
+
+	coverFilename := "book.cover.jpg"
+	book := &models.Book{
+		ID:    42,
+		Title: "Test Book",
+		Files: []*models.File{
+			{
+				ID:                 1,
+				FileType:           models.FileTypeEPUB,
+				CoverImageFilename: &coverFilename,
+			},
+		},
+	}
+
+	svc := &Service{}
+	baseURL := "https://example.com/api/opds/v1"
+	entry := svc.bookToEntryWithKepub(baseURL, book, "book", nil, false)
+
+	wantHref := "https://example.com/api/opds/v1/books/42/cover"
+	for _, link := range entry.Links {
+		if link.Rel == "http://opds-spec.org/image" {
+			assert.Equal(t, wantHref, link.Href)
+			return
+		}
+	}
+	t.Fatalf("expected an image link with rel http://opds-spec.org/image, got %+v", entry.Links)
+}

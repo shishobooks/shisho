@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
 )
@@ -21,6 +22,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	h := &handler{
 		opdsService:     opdsService,
 		bookService:     bookService,
+		libraryService:  libraries.NewService(db),
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
 	}
@@ -44,6 +46,11 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	// Search within library
 	v1.GET("/:types/libraries/:libraryID/search", h.librarySearch)
 	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
+
+	// Book cover (lives under /opds so it accepts Basic Auth and so the
+	// production /opds/* Caddy handler proxies it to the backend instead
+	// of returning the SPA shell).
+	v1.GET("/books/:id/cover", h.bookCover)
 
 	// KePub routes - same structure but downloads as KePub format
 	// These routes generate feeds with KePub download links for EPUB and CBZ files
