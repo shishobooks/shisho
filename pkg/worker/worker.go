@@ -457,10 +457,15 @@ func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger)
 		log.Info("cleaned up orphaned series", logger.Data{"count": len(deletedIDs)})
 	}
 
-	if n, err := w.personService.CleanupOrphanedPeople(ctx); err != nil {
+	if deletedIDs, err := w.personService.CleanupOrphanedPeople(ctx); err != nil {
 		log.Err(err).Warn("failed to cleanup orphaned people")
-	} else if n > 0 {
-		log.Info("cleaned up orphaned people", logger.Data{"count": n})
+	} else if len(deletedIDs) > 0 {
+		for _, id := range deletedIDs {
+			if err := w.searchService.DeleteFromPersonIndex(ctx, id); err != nil {
+				log.Err(err).Warn("failed to remove orphaned person from search index", logger.Data{"person_id": id})
+			}
+		}
+		log.Info("cleaned up orphaned people", logger.Data{"count": len(deletedIDs)})
 	}
 
 	if deletedIDs, err := w.genreService.CleanupOrphanedGenres(ctx); err != nil {

@@ -217,6 +217,11 @@ export const useMoveFiles = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Filenames and narrators on both source and target books shift —
+      // books_fts changes for both.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };

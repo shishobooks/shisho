@@ -17,9 +17,11 @@ func init() {
 		if _, err := db.Exec(`DELETE FROM series WHERE deleted_at IS NOT NULL`); err != nil {
 			return errors.WithStack(err)
 		}
-		// Defensive: purge any series_fts rows whose series_id is gone.
-		// Handlers already call DeleteFromSeriesIndex on soft-delete today,
-		// so this should be a no-op in practice.
+		// Defensive: catches any series_fts orphans pointing at rows that no
+		// longer exist in `series`. The pre-existing CleanupOrphanedSeries
+		// path didn't purge FTS (fixed in this branch), so DBs that hit
+		// orphan-cleanup before this migration may have accumulated stale
+		// series_fts rows. Likely a no-op on most DBs; cheap insurance.
 		if _, err := db.Exec(`DELETE FROM series_fts WHERE series_id NOT IN (SELECT id FROM series)`); err != nil {
 			return errors.WithStack(err)
 		}

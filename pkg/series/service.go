@@ -231,24 +231,30 @@ func (svc *Service) UpdateSeries(ctx context.Context, series *models.Series, opt
 
 // DeleteSeries deletes a series. CASCADE on book_series.series_id removes
 // the join rows. Returns the IDs of books that had a join row removed;
-// callers should use these to recompute review state.
+// callers should use these to recompute review state. The SELECT and DELETE
+// run in a transaction so a concurrent insert into book_series cannot land
+// between them — that row would be CASCADE-deleted but its book_id would
+// be missing from the returned set.
 func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, error) {
 	var affectedBookIDs []int
-	err := svc.db.NewSelect().
-		Model((*models.BookSeries)(nil)).
-		ColumnExpr("DISTINCT bs.book_id").
-		Where("bs.series_id = ?", seriesID).
-		Scan(ctx, &affectedBookIDs)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().
+			Model((*models.BookSeries)(nil)).
+			ColumnExpr("DISTINCT bs.book_id").
+			Where("bs.series_id = ?", seriesID).
+			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
-	_, err = svc.db.NewDelete().
-		Model((*models.Series)(nil)).
-		Where("id = ?", seriesID).
-		Exec(ctx)
+		_, err = tx.NewDelete().
+			Model((*models.Series)(nil)).
+			Where("id = ?", seriesID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 	return affectedBookIDs, nil
 }

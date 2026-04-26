@@ -328,18 +328,23 @@ func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) err
 	})
 }
 
-// CleanupOrphanedPeople deletes people with no authors or narrators.
-func (svc *Service) CleanupOrphanedPeople(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedPeople deletes people with no authors or narrators and
+// returns the IDs of deleted people. Callers must pass the returned IDs to
+// searchService.DeleteFromPersonIndex to keep persons_fts in sync —
+// persons_fts is a virtual FTS5 table not tied to persons via foreign keys,
+// so it is not cleaned up automatically.
+func (svc *Service) CleanupOrphanedPeople(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Person)(nil)).
 		Where("id NOT IN (SELECT DISTINCT person_id FROM authors)").
 		Where("id NOT IN (SELECT DISTINCT person_id FROM narrators)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.
