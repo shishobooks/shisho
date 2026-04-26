@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-04-26
+
+### Features
+- Hard-delete series + close FTS leak in orphan cleanup (#166)
+- Consolidate cover selection and serving into pkg/covers (#164)
+- Bring identify review form to parity with edit forms (#158)
+- Consolidate book actions into the ... menu (#161)
+- Chapter filename parsing for CBZ files (#157)
+
+### Bug Fixes
+- Bake selected file identity into book cover ETag (#165)
+- Clean up book_series rows when soft-deleting a series (#163)
+- Accept HEAD on OPDS download routes (#159)
+- Serve OPDS cover images from the OPDS group (#160)
+
+### Other
+- Coordinate concurrent mise check:quiet across worktrees (#162)
+- Bump the minor-and-patch group with 12 updates (#149)
+- Bump github.com/pdfcpu/pdfcpu from 0.11.1 to 0.12.0 in the minor-and-patch group (#148)
+
+
 ## [0.0.39] - 2026-04-25
 
 ### Features
