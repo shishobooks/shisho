@@ -1,8 +1,4 @@
-export type SeriesNumberUnit = "volume" | "chapter";
-
-function formatNumber(n: number): string {
-  return n.toString();
-}
+import type { SeriesNumberUnit } from "@/types/generated/models";
 
 export function formatSeriesNumber(
   number: number | null | undefined,
@@ -11,8 +7,8 @@ export function formatSeriesNumber(
 ): string {
   if (number === null || number === undefined) return "";
   if (fileType === "cbz") {
-    if (unit === "chapter") return `Ch. ${formatNumber(number)}`;
-    return `Vol. ${formatNumber(number)}`;
+    if (unit === "chapter") return `Ch. ${number}`;
+    return `Vol. ${number}`;
   }
-  return `#${formatNumber(number)}`;
+  return `#${number}`;
 }
