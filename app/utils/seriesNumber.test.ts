@@ -12,8 +12,8 @@ describe("formatSeriesNumber", () => {
   it("defaults null unit to volume for CBZ", () => {
     expect(formatSeriesNumber(5, null, "cbz")).toBe("Vol. 5");
   });
-  it("uses #N for non-CBZ", () => {
-    expect(formatSeriesNumber(3, null, "epub")).toBe("#3");
+  it("uses bare number for non-CBZ", () => {
+    expect(formatSeriesNumber(3, null, "epub")).toBe("3");
   });
   it("returns empty for null number", () => {
     expect(formatSeriesNumber(null, null, "cbz")).toBe("");

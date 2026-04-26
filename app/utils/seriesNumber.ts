@@ -10,5 +10,5 @@ export function formatSeriesNumber(
     if (unit === "chapter") return `Ch. ${number}`;
     return `Vol. ${number}`;
   }
-  return `#${number}`;
+  return `${number}`;
 }

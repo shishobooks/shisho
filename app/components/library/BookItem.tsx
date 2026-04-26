@@ -48,6 +48,7 @@ import {
 } from "@/types";
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -162,11 +163,7 @@ const BookItem = ({
     : undefined;
   const seriesNumber = seriesEntry?.series_number;
   const seriesNumberUnit = seriesEntry?.series_number_unit;
-  const primaryFile =
-    (book.primary_file_id != null
-      ? book.files?.find((f) => f.id === book.primary_file_id)
-      : null) ?? book.files?.[0];
-  const primaryFileType = primaryFile?.file_type ?? null;
+  const primaryFileType = getPrimaryFileType(book);
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
   const coverUrl = cacheKey

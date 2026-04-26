@@ -32,6 +32,7 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import type { Book, File } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
@@ -475,11 +476,7 @@ export function IdentifyReviewForm({
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
-  const primaryFile =
-    (book.primary_file_id != null
-      ? book.files?.find((f) => f.id === book.primary_file_id)
-      : null) ?? book.files?.[0];
-  const primaryFileType = primaryFile?.file_type ?? null;
+  const primaryFileType = getPrimaryFileType(book);
   const applyMutation = usePluginApply();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const disabledFields = useMemo(

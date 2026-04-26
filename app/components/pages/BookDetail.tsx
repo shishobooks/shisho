@@ -93,6 +93,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 // Determines which file type would provide the cover based on library preference.
@@ -1044,11 +1045,7 @@ const BookDetail = () => {
   const book = bookQuery.data;
 
   // Determine primary file type for series number display
-  const primaryFile =
-    (book.primary_file_id != null
-      ? book.files?.find((f) => f.id === book.primary_file_id)
-      : null) ?? book.files?.[0];
-  const primaryFileType = primaryFile?.file_type ?? null;
+  const primaryFileType = getPrimaryFileType(book);
 
   // Separate main files and supplements
   const mainFiles =

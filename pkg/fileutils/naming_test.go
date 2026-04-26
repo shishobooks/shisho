@@ -34,6 +34,9 @@ func TestNormalizeSeriesNumberInTitle(t *testing.T) {
 		{"m4b returns false", "Some Book v3", "m4b", "Some Book v3", "", false},
 		// No match
 		{"no number", "Just A Title", "cbz", "Just A Title", "", false},
+		// Compact c/v require leading whitespace — no false positives mid-word
+		{"compact c not eaten mid-word", "Abc123", "cbz", "Abc123", "", false},
+		{"compact v not eaten mid-word", "Marv7", "cbz", "Marv7", "", false},
 	}
 
 	for _, tt := range tests {

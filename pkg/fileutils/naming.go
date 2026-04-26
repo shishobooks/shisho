@@ -155,9 +155,9 @@ var seriesNumberPatterns = []struct {
 }{
 	{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
 	{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s+c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
 	{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s+v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
