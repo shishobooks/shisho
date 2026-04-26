@@ -15,12 +15,14 @@ A precedent for ripping out unused soft-delete plumbing already exists: `2026042
 - Recreate the unique index on `(name COLLATE NOCASE, library_id)` without the partial WHERE clause so it enforces uniqueness over the whole table.
 - Hard-delete any rows currently in the soft-deleted state as part of the migration. CASCADE on `book_series.series_id` (set in `20260406100000_add_fk_cascades.go`) cleans their join rows; a defensive purge handles any orphaned `series_fts` rows.
 - Pin the new behavior with a regression test that fails on the pre-change tree.
-- No user-visible behavior change. Soft-deleted series are already filtered everywhere; making them actually gone has no observable effect on the UI, OPDS, eReader, Kobo sync, plugins, or sidecars.
+- Fix a pre-existing latent bug exposed by smoke testing: `CleanupOrphanedSeries` deletes orphan rows from `series` but never purges the corresponding `series_fts` rows, leaving the search index pointing at non-existent series. The fix changes `CleanupOrphanedSeries` to return the deleted IDs (atomically via `RETURNING id`) and updates all five callers (4 in `pkg/books/handlers.go`, 1 in `pkg/worker/worker.go`) to pair the call with `searchService.DeleteFromSeriesIndex` — same shape as the existing `people` cleanup pattern.
+- No user-visible behavior change for the soft-delete removal itself. Soft-deleted series are already filtered everywhere; making them actually gone has no observable effect on the UI, OPDS, eReader, Kobo sync, plugins, or sidecars. The `CleanupOrphanedSeries` fix corrects an observable bug (stale search results pointing at deleted series).
 
 ## Non-Goals
 
 - Touching the `users.is_active` "deactivation" toggle in `pkg/users/service.go`. That's a different mechanism (a boolean flag, not a `deleted_at` timestamp), it's actively used, and removing it would require user-facing UX changes.
-- Deduplicating the two copies of `CleanupOrphanedSeries` (`pkg/series/service.go:321` and `pkg/books/service.go:1363`). The duplication exists to avoid an import cycle; resolving it is a separate refactor.
+- Deduplicating the two copies of `CleanupOrphanedSeries` (`pkg/series/service.go` and `pkg/books/service.go`). The duplication exists to avoid an import cycle; resolving it is a separate refactor.
+- Fixing the analogous "FTS not cleaned up" bug for genres, tags, or other entities with their own FTS indexes. The same problem may exist there (`CleanupOrphanedGenres` / `CleanupOrphanedTags` are called without paired FTS purges in `pkg/books/handlers.go`). Out of scope for this branch; worth a follow-up.
 - Adding any new restore mechanism. There was no working one before; we're not building one.
 - Frontend, OPDS, eReader, plugin SDK, sidecar, or `website/docs/` changes. Verified during exploration that none of these reference soft-delete.
 
@@ -82,9 +84,19 @@ New regression test: `TestDeleteSeries_HardDeletesRowAndFTS` in `pkg/series/serv
 
 Follows the Red-Green-Refactor rule from `CLAUDE.md`: write the test first, run on a tree that still has the soft-delete tag (and the migration applied) to confirm assertion 1 fails, then drop the tag + dead code and confirm green.
 
-### CleanupOrphanedSeries — unchanged
+### CleanupOrphanedSeries — signature change + caller updates
 
-`CleanupOrphanedSeries` has 5 callers (4 in `pkg/books/handlers.go` and 1 in `pkg/worker/worker.go`) and is still useful after this change. Deleting a book CASCADEs to remove `book_series` rows but does not remove the series itself; `CleanupOrphanedSeries` exists to clear empty series after their last book leaves. Behavior change is from a soft-delete UPDATE to a real DELETE — same end-state observable to users (the series disappears from listings).
+`CleanupOrphanedSeries` has 5 callers (4 in `pkg/books/handlers.go` and 1 in `pkg/worker/worker.go`) and is still useful after this change — deleting a book CASCADEs to remove `book_series` rows but does not remove the series itself, so `CleanupOrphanedSeries` clears empty series after their last book leaves.
+
+However, smoke testing surfaced a pre-existing bug: `CleanupOrphanedSeries` only deletes from the `series` table, leaving stale rows in `series_fts`. The series search path (`searchSeriesInternal` in `pkg/search/service.go`) queries `series_fts` directly with no JOIN to `series`, so deleted-via-cleanup series remain in search results forever. This was masked under soft-delete (the listings filtered on `deleted_at`, but search still showed them), and is more visible under hard-delete (clicking a stale search result 404s rather than showing a hidden "deleted" page).
+
+Fix:
+
+- Change both copies of `CleanupOrphanedSeries` (`pkg/series/service.go` and `pkg/books/service.go`) to return `([]int, error)` — the IDs of deleted series — using `NewDelete().Returning("id").Scan(ctx, &ids)`. SQLite's `RETURNING` clause makes this atomic, so the IDs returned are exactly the rows the same statement deleted (no race between a SELECT and a DELETE).
+- Update all 5 callers to iterate the returned IDs and call `searchService.DeleteFromSeriesIndex` for each. This mirrors the existing `people` cleanup pattern at `pkg/books/handlers.go:680-689`.
+- The worker's `cleanupOrphanedEntities` previously logged a count from `result.RowsAffected()`; switch to `len(deletedIDs)`.
+
+A new test `TestCleanupOrphanedSeries_ReturnsDeletedIDs` in `pkg/series/service_test.go` pins the signature and behavior.
 
 ## Verification
 

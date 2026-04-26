@@ -397,3 +397,79 @@ func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
 		Scan(ctx, &post))
 	assert.Equal(t, 0, post, "series_fts row must be removed after DeleteFromSeriesIndex")
 }
+
+// TestCleanupOrphanedSeries_ReturnsDeletedIDs pins the requirement that
+// CleanupOrphanedSeries returns the IDs of deleted series so callers can keep
+// series_fts in sync. Without this, orphan-series cleanup silently leaves
+// stale FTS rows that surface in search results pointing at non-existent
+// series.
+func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
+	t.Parallel()
+
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Series with a book — must NOT be cleaned up.
+	keep := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Kept Series",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Kept Series",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(keep).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	bs := &models.BookSeries{BookID: book.ID, SeriesID: keep.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(bs).Exec(ctx)
+	require.NoError(t, err)
+
+	// Orphan series with no book — must be cleaned up.
+	orphan := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Orphan Series",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Orphan Series",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(orphan).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	deletedIDs, err := svc.CleanupOrphanedSeries(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{orphan.ID}, deletedIDs,
+		"CleanupOrphanedSeries must return the IDs of deleted series so callers can purge FTS")
+
+	// Orphan row is gone.
+	count, err := db.NewSelect().Model((*models.Series)(nil)).
+		Where("id = ?", orphan.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "orphan series row should be deleted")
+
+	// Kept series remains.
+	count, err = db.NewSelect().Model((*models.Series)(nil)).
+		Where("id = ?", keep.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "series with books must not be cleaned up")
+}

@@ -291,17 +291,22 @@ func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]
 	return movedBookIDs, nil
 }
 
-// CleanupOrphanedSeries deletes series with no books.
-func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedSeries deletes series with no books and returns the IDs of
+// deleted series. Callers must pass the returned IDs to
+// searchService.DeleteFromSeriesIndex to keep series_fts in sync — series_fts
+// is a virtual table not tied to series via foreign keys, so it is not
+// cleaned up automatically.
+func (svc *Service) CleanupOrphanedSeries(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Series)(nil)).
 		Where("id NOT IN (SELECT DISTINCT series_id FROM book_series)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
 
 // GetSeriesBookCount returns the number of books in a series.
