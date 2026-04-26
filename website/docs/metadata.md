@@ -101,6 +101,10 @@ Searches by identifier accept any of the cosmetic variants above — you can pas
 
 Shisho automatically generates sort names from display names (e.g., "J.R.R. Tolkien" becomes "Tolkien, J.R.R."). If you manually set a sort name, it won't be overwritten. Clearing a manual sort name reverts to auto-generation.
 
+### Identify Review
+
+When you identify a book against a metadata plugin, the review screen lets you edit every field — authors, narrators, series, publisher, imprint, genres, tags, identifiers — using the same combobox inputs as the regular edit forms, with autocomplete against your existing library entities. Names that already exist in your library show as plain chips; names that don't yet exist render with a dashed-outline indicator and will be created automatically when you apply the changes. Identifiers can be added, edited, and removed inline; release date uses a calendar picker. Per-field "New" / "Changed" / "Unchanged" badges show how the incoming match compares to what you already have.
+
 ## How Metadata Is Extracted
 
 During library scans, Shisho reads embedded metadata from each file format:
