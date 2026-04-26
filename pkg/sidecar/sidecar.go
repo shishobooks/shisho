@@ -236,6 +236,7 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 				Name:      bs.Series.Name,
 				SortName:  bs.Series.SortName,
 				Number:    bs.SeriesNumber,
+				Unit:      bs.SeriesNumberUnit,
 				SortOrder: bs.SortOrder,
 			})
 		}

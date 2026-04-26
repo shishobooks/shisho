@@ -1151,10 +1151,11 @@ func (w *Worker) scanFileCore(
 						continue
 					}
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
-						BookID:       book.ID,
-						SeriesID:     seriesRecord.ID,
-						SeriesNumber: sidecarSeries.Number,
-						SortOrder:    i + 1,
+						BookID:           book.ID,
+						SeriesID:         seriesRecord.ID,
+						SeriesNumber:     sidecarSeries.Number,
+						SeriesNumberUnit: sidecarSeries.Unit,
+						SortOrder:        i + 1,
 					})
 				}
 			}

@@ -61,6 +61,7 @@ type SeriesMetadata struct {
 	Name      string   `json:"name"`
 	SortName  string   `json:"sort_name,omitempty"`
 	Number    *float64 `json:"number,omitempty"`
+	Unit      *string  `json:"unit,omitempty"` // models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter; CBZ only
 	SortOrder int      `json:"sort_order,omitempty"`
 }
 
