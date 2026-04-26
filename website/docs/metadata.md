@@ -174,6 +174,26 @@ This means your manual edits are never overwritten by a normal scan. If you need
 
 For CBZ files, titles with volume notation (e.g., `Series Name #7`, `Series Name Vol. 7`) are normalized to the canonical `Series Name v007` form so books sort correctly by volume. This normalization applies only to titles that came from **File metadata** or **Filepath** sources. Titles from **Manual**, **Sidecar**, or **Plugin** sources are stored verbatim — if a plugin search result shows `Naruto v1` and you apply it, the stored title stays `Naruto v1` instead of being rewritten.
 
+### Series Number Unit (CBZ)
+
+CBZ books have an additional field — **series number unit** — that records whether the series number refers to a **volume** or a **chapter**. This matters for manga and comics where chapter numbering is common alongside traditional volume numbering.
+
+**How it's set automatically:** The scanner reads the indicator embedded in the CBZ filename:
+
+| Filename pattern | Unit |
+|-----------------|------|
+| `Title v01.cbz`, `Title Vol.5.cbz`, `Title volume 12.cbz` | volume |
+| `Title #001.cbz`, `Title 5.cbz` (bare number) | volume (default) |
+| `Title Ch.5.cbz`, `Title chapter 5.cbz`, `Title c042.cbz` | chapter |
+
+Ambiguous indicators (`#001`, bare trailing numbers) default to **volume** to preserve historical behavior.
+
+**Other sources:** Plugin metadata and [sidecar files](./sidecar-files) can also supply the unit via a `unit` field on the series entry. Manual edits via the book edit dialog let you change the unit using the unit dropdown next to the series number field.
+
+**CBZ books with no unit set** render as volumes for backward compatibility — the unit field being `null` is treated the same as `volume` in the reader and in file organization.
+
+**Other formats:** EPUB, M4B, and PDF don't use this field. Their series numbering is always implicit (the number alone is sufficient without a volume/chapter distinction).
+
 ## Content fingerprints
 
 Shisho stores a sha256 hash of every file's contents to preserve file identity
