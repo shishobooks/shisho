@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -853,17 +854,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
-		return errcodes.NotFound("Cover")
-	}
-
-	// Resolve the cover via the file's parent dir — book.Filepath may be
-	// a synthetic organized-folder path that never exists on disk for
-	// root-level files. The cover always lives alongside the file.
-	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
-	return errors.WithStack(c.File(coverPath))
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio)
 }
 
 // respondXML sends an XML response with the correct content type.

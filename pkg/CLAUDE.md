@@ -104,7 +104,7 @@ file.CoverImageFilename = &newCoverPath
 
 **Always resolve cover paths via the file, not the book**, because `book.Filepath` can be a synthetic organized-folder path that never exists on disk (root-level books in libraries with `OrganizeFileStructure` disabled — see `scanFileCreateNew`). The cover lives alongside the file for both root-level and directory-backed books.
 
-- **Read-side (serving, fingerprinting, file generation):** use `filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)`. Pure-string, no stat, no synthetic-path trap. Examples: `fileCover`/`bookCover` in `pkg/books/handlers.go`, `pkg/series/handlers.go`, `pkg/ereader/handlers.go`, `pkg/kobo/handlers.go`, `pkg/filegen/*`, `pkg/downloadcache/fingerprint.go`, and `deleteFileFromDisk`.
+- **Read-side (serving, fingerprinting, file generation):** use `filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)`. Pure-string, no stat, no synthetic-path trap. Book-cover serving across the books, OPDS, and eReader handlers shares `pkg/covers.ServeBookCover`, which encapsulates this resolution; the series handler uses `pkg/covers.SelectFile` and resolves the path itself because the *selected file* can change while the newly-selected cover's mtime stays put, so it has to bake the file ID into an ETag (see "Conditional-GET for cover endpoints" below). Other examples: `fileCover` in `pkg/books/handlers.go`, `pkg/kobo/handlers.go`, `pkg/filegen/*`, `pkg/downloadcache/fingerprint.go`, and `deleteFileFromDisk`.
 - **Write-side (scanner, pre-organize):** use `fileutils.ResolveCoverDirForWrite(bookFilepath, fileFilepath)` when `bookFilepath` may be a synthetic organized-folder path that hasn't been created on disk yet. Falls back to `filepath.Dir(fileFilepath)` when the book path doesn't resolve to a real directory.
 
 **Book sidecars** for root-level books are similarly anchored next to the file — `sidecar.WriteBookSidecarFromModel(book)` falls back via `book.Files[0].Filepath` when `book.Filepath` doesn't resolve to an existing directory. Reads use `sidecar.ReadBookSidecarFromModel(book, fileHint)` and pass the current file as a hint so resolution works before the book's Files relation is loaded.
@@ -158,7 +158,7 @@ Server-rendered HTML pages for stock eReader browsers (Kobo, Kindle) that can't 
 **Cover Images:**
 - eReader routes use API key auth, so covers need their own endpoint at `/ereader/key/:apiKey/cover/:bookId`
 - Cannot use `/api/books/{id}/cover` (requires session auth)
-- The `selectCoverFile()` function must fall back to any available cover type, not just the preferred aspect ratio
+- Selection goes through `pkg/covers.SelectFile`, shared with the books, series, and OPDS handlers. The shared selector must continue to fall back to any available cover type when the preferred aspect ratio has no covers — eReaders showing an audiobook-only book still need to get a cover
 
 ### Authentication & Authorization
 
