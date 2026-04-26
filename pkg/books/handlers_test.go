@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -235,9 +236,11 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
 	authMiddleware := auth.NewMiddleware(authService)
 
-	// Register routes (pass nil for plugin manager in tests)
+	// Register routes (pass nil for plugin manager). appSettingsSvc must be a
+	// real instance so RecomputeReviewedFor{File,Book} actually runs after
+	// mutations — otherwise reviewed flag tests give false greens.
 	g := e.Group("/books")
-	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil)
+	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil, appsettings.NewService(db))
 
 	return e
 }

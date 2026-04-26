@@ -6,6 +6,8 @@ sidebar_position: 50
 
 Shisho extracts metadata from your book files and organizes it into a structured set of resources. You can edit metadata through the web interface, and Shisho tracks the source of each field so your manual edits are never overwritten by automated scans.
 
+> See also: [Review State](./review-state.md) for how field completeness drives the "Needs review" queue.
+
 ## Resources
 
 ### Books

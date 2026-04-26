@@ -20,6 +20,12 @@ const (
 	FileRoleSupplement = "supplement"
 )
 
+const (
+	//tygo:emit export type ReviewOverride = typeof ReviewOverrideReviewed | typeof ReviewOverrideUnreviewed;
+	ReviewOverrideReviewed   = "reviewed"
+	ReviewOverrideUnreviewed = "unreviewed"
+)
+
 type File struct {
 	bun.BaseModel `bun:"table:files,alias:f" tstype:"-"`
 
@@ -64,6 +70,9 @@ type File struct {
 	LanguageSource           *string           `json:"language_source" tstype:"DataSource"`
 	Abridged                 *bool             `json:"abridged"`
 	AbridgedSource           *string           `json:"abridged_source" tstype:"DataSource"`
+	ReviewOverride           *string           `json:"review_override" tstype:"ReviewOverride"`
+	ReviewOverriddenAt       *time.Time        `json:"review_overridden_at"`
+	Reviewed                 *bool             `json:"reviewed"`
 }
 
 func (f *File) CoverExtension() string {

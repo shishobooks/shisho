@@ -2,6 +2,7 @@ package chapters
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -9,9 +10,10 @@ import (
 )
 
 func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+	appSettingsSvc := appsettings.NewService(db)
 	h := &handler{
 		chapterService: NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db).WithAppSettings(appSettingsSvc),
 	}
 
 	g.GET("/files/:id/chapters", h.list)

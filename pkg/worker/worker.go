@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -58,6 +59,8 @@ type Worker struct {
 	tagService         *tags.Service
 	fingerprintService *fingerprints.Service
 
+	appSettingsService *appsettings.Service
+
 	pluginService *plugins.Service
 	pluginManager *plugins.Manager
 
@@ -87,7 +90,8 @@ type Worker struct {
 }
 
 func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
-	bookService := books.NewService(db)
+	appSettingsService := appsettings.NewService(db)
+	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
 	imprintService := imprints.NewService(db)
@@ -112,6 +116,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 		ctx:    ctx,
 		cancel: cancel,
 
+		appSettingsService: appSettingsService,
 		bookService:        bookService,
 		chapterService:     chapterService,
 		genreService:       genreService,
@@ -140,9 +145,10 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	}
 
 	w.processFuncs = map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error{
-		models.JobTypeScan:           w.ProcessScanJob,
-		models.JobTypeBulkDownload:   w.ProcessBulkDownloadJob,
-		models.JobTypeHashGeneration: w.ProcessHashGenerationJob,
+		models.JobTypeScan:            w.ProcessScanJob,
+		models.JobTypeBulkDownload:    w.ProcessBulkDownloadJob,
+		models.JobTypeHashGeneration:  w.ProcessHashGenerationJob,
+		models.JobTypeRecomputeReview: w.ProcessRecomputeReviewJob,
 	}
 
 	if dlCache != nil {

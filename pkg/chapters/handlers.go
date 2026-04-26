@@ -87,6 +87,9 @@ func (h *handler) replace(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Recompute reviewed state — chapters are a configurable audio_field
+	h.bookService.RecomputeReviewedForFile(ctx, fileID)
+
 	// Return updated chapters
 	updatedChapters, err := h.chapterService.ListChapters(ctx, fileID)
 	if err != nil {

@@ -2,6 +2,7 @@ package books
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -31,8 +32,8 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 }
 
 // RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache) {
-	bookService := NewService(db)
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service) {
+	bookService := NewService(db).WithAppSettings(appSettingsSvc)
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
@@ -46,21 +47,22 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	pdfPageCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
 	h := &handler{
-		config:           cfg,
-		bookService:      bookService,
-		libraryService:   libraryService,
-		personService:    personService,
-		searchService:    searchService,
-		genreService:     genreService,
-		tagService:       tagService,
-		publisherService: publisherService,
-		imprintService:   imprintService,
-		listsService:     listsService,
-		settingsService:  settingsService,
-		downloadCache:    dlCache,
-		pageCache:        pageCache,
-		pdfPageCache:     pdfPageCache,
-		scanner:          scanner,
+		config:             cfg,
+		bookService:        bookService,
+		libraryService:     libraryService,
+		personService:      personService,
+		searchService:      searchService,
+		genreService:       genreService,
+		tagService:         tagService,
+		publisherService:   publisherService,
+		imprintService:     imprintService,
+		listsService:       listsService,
+		settingsService:    settingsService,
+		appSettingsService: appSettingsSvc,
+		downloadCache:      dlCache,
+		pageCache:          pageCache,
+		pdfPageCache:       pdfPageCache,
+		scanner:            scanner,
 	}
 	// Only set pluginManager if it's not nil to avoid interface holding nil pointer
 	if pm != nil {
@@ -96,5 +98,8 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	g.GET("/files/:id/page/:pageNum", h.getPage)
 	g.GET("/files/:id/stream", h.streamFile)
 	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.PATCH("/files/:id/review", h.setFileReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.DELETE("/files/:id", h.deleteFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.PATCH("/:id/review", h.setBookReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+	g.POST("/bulk/review", h.bulkSetReview, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 }

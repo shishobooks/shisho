@@ -1,11 +1,16 @@
 package worker
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -682,4 +687,183 @@ func TestCoverPageProtection_NoCoverPage_EnricherCoverPreserved(t *testing.T) {
 	assert.Equal(t, "image/png", enrichedMeta.CoverMimeType)
 	assert.Nil(t, enrichedMeta.CoverPage)
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["cover"])
+}
+
+// TestScanEnricher_FullEnrichment_SetsReviewedTrue verifies that when an
+// enricher provides all fields required by the review criteria, the file's
+// reviewed column is set to TRUE after the scan.
+func TestScanEnricher_FullEnrichment_SetsReviewedTrue(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	// Set review criteria to require only authors and description (no cover/genres
+	// so we don't need real image files on disk).
+	appSvc := tc.worker.appSettingsService
+	require.NoError(t, review.Save(tc.ctx, appSvc, review.Criteria{
+		BookFields:  []string{review.FieldAuthors, review.FieldDescription},
+		AudioFields: []string{},
+	}))
+
+	// Install a file parser for ".revtest" files so the scanner recognises them.
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "revtest-parser",
+  "name": "RevTest Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses revtest files",
+      "types": ["revtest"]
+    }
+  }
+}`
+	parserJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Rev Book" };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "revtest-parser", parserManifest, parserJS)
+
+	// Install an enricher that returns BOTH required fields (authors + description).
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "full-enricher",
+  "name": "Full Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Provides authors and description",
+      "fileTypes": ["revtest"],
+      "fields": ["authors", "description"]
+    }
+  }
+}`
+	enricherJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{
+          authors: [{ name: "Enriched Author", role: "" }],
+          description: "Enriched description"
+        }] };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "full-enricher", enricherManifest, enricherJS)
+
+	pluginService := plugins.NewService(tc.db)
+	require.NoError(t, pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "full-enricher"))
+	require.NoError(t, tc.worker.pluginManager.LoadAll(context.Background()))
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Rev Book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.revtest"), []byte("content"), 0644))
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	var reviewed *bool
+	require.NoError(t, tc.db.NewSelect().Table("files").Column("reviewed").Where("id = ?", files[0].ID).Scan(tc.ctx, &reviewed))
+	require.NotNil(t, reviewed, "reviewed should not be NULL for a main file")
+	assert.True(t, *reviewed, "file with all required fields provided by enricher should be reviewed=TRUE")
+}
+
+// TestScanEnricher_PartialEnrichment_SetsReviewedFalse verifies that when an
+// enricher provides only some required fields (leaving others missing), the
+// file's reviewed column is set to FALSE after the scan.
+func TestScanEnricher_PartialEnrichment_SetsReviewedFalse(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	// Require both authors and description; enricher will only supply authors.
+	appSvc := tc.worker.appSettingsService
+	require.NoError(t, review.Save(tc.ctx, appSvc, review.Criteria{
+		BookFields:  []string{review.FieldAuthors, review.FieldDescription},
+		AudioFields: []string{},
+	}))
+
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "revtest2-parser",
+  "name": "RevTest2 Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses revtest2 files",
+      "types": ["revtest2"]
+    }
+  }
+}`
+	parserJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Partial Book" };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "revtest2-parser", parserManifest, parserJS)
+
+	// This enricher only returns authors — description is still missing.
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "partial-enricher",
+  "name": "Partial Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Provides authors only",
+      "fileTypes": ["revtest2"],
+      "fields": ["authors"]
+    }
+  }
+}`
+	enricherJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(ctx) {
+        return { results: [{
+          authors: [{ name: "Partial Author", role: "" }]
+        }] };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "partial-enricher", enricherManifest, enricherJS)
+
+	pluginService := plugins.NewService(tc.db)
+	require.NoError(t, pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "partial-enricher"))
+	require.NoError(t, tc.worker.pluginManager.LoadAll(context.Background()))
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Partial Book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.revtest2"), []byte("content"), 0644))
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	var reviewed *bool
+	require.NoError(t, tc.db.NewSelect().Table("files").Column("reviewed").Where("id = ?", files[0].ID).Scan(tc.ctx, &reviewed))
+	require.NotNil(t, reviewed, "reviewed should not be NULL for a main file")
+	assert.False(t, *reviewed, "file missing required description field should be reviewed=FALSE")
 }

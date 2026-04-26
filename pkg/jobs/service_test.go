@@ -346,20 +346,23 @@ func TestListJobs_FilterByLibraryIDOrGlobal(t *testing.T) {
 	err = svc.CreateJob(ctx, lib2Job)
 	require.NoError(t, err)
 
-	// Filter for library 1 or global - should get global and lib1 jobs
+	// Filter for library 1 or global - should get global and lib1 jobs (but not lib2)
 	jobs, err := svc.ListJobs(ctx, ListJobsOptions{LibraryIDOrGlobal: &libraryID1})
 	require.NoError(t, err)
-	assert.Len(t, jobs, 2)
 
-	// Verify we got the right jobs
-	var foundGlobal, foundLib1 bool
+	// Verify we got the right jobs (use booleans rather than Len, since
+	// migrations may seed additional global jobs that also appear here).
+	var foundGlobal, foundLib1, foundLib2 bool
 	for _, j := range jobs {
 		if j.LibraryID == nil {
 			foundGlobal = true
 		} else if *j.LibraryID == libraryID1 {
 			foundLib1 = true
+		} else if *j.LibraryID == libraryID2 {
+			foundLib2 = true
 		}
 	}
 	assert.True(t, foundGlobal, "should include global job")
 	assert.True(t, foundLib1, "should include library 1 job")
+	assert.False(t, foundLib2, "should not include library 2 job")
 }

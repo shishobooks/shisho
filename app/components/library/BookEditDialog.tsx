@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
+import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -50,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import { useGenresList } from "@/hooks/queries/genres";
 import { usePeopleList } from "@/hooks/queries/people";
+import { useSetBookReview } from "@/hooks/queries/review";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -64,9 +66,12 @@ import {
   AuthorRoleTranslator,
   AuthorRoleWriter,
   DataSourceManual,
+  FileRoleMain,
   FileTypeCBZ,
+  ReviewOverrideReviewed,
   type AuthorInput,
   type Book,
+  type ReviewOverride,
   type SeriesInput,
 } from "@/types";
 import { forTitle } from "@/utils/sortname";
@@ -136,6 +141,7 @@ export function BookEditDialog({
   const debouncedAuthorSearch = useDebounce(authorSearch, 200);
 
   const updateBookMutation = useUpdateBook();
+  const setBookReviewMutation = useSetBookReview();
 
   // Check if book has CBZ files (determines whether to show role selection)
   const hasCBZFiles = book.files?.some((f) => f.file_type === FileTypeCBZ);
@@ -180,6 +186,11 @@ export function BookEditDialog({
     { enabled: open && !!book.library_id },
   );
 
+  // Draft review override — toggling the panel updates this; the actual
+  // setBookReview mutation only fires on Save.
+  const [draftReviewOverride, setDraftReviewOverride] =
+    useState<ReviewOverride | null>(null);
+
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
     title: string;
@@ -190,6 +201,8 @@ export function BookEditDialog({
     series: SeriesEntry[];
     genres: string[];
     tags: string[];
+    /** null means "auto" — no explicit override on any main file. */
+    reviewOverride: ReviewOverride | null;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -228,6 +241,22 @@ export function BookEditDialog({
     const initialTags =
       book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [];
 
+    // Capture the actual override state (not the aggregate `reviewed`) so we
+    // can distinguish "auto-reviewed" from "explicitly reviewed". If every
+    // main file shares the same override value, use it; otherwise fall back
+    // to null ("auto" / mixed). This preserves user intent: toggling a book
+    // that's currently auto-reviewed actually persists the explicit override.
+    const mainFiles =
+      book.files?.filter((f) => f.file_role === FileRoleMain) ?? [];
+    let initialReviewOverride: ReviewOverride | null = null;
+    if (mainFiles.length > 0) {
+      const first = mainFiles[0].review_override ?? null;
+      const allMatch = mainFiles.every(
+        (f) => (f.review_override ?? null) === first,
+      );
+      if (allMatch) initialReviewOverride = first;
+    }
+
     setTitle(initialTitle);
     // Use semantic value for state (what we send to server)
     setSortTitle(semanticSortTitle);
@@ -240,6 +269,7 @@ export function BookEditDialog({
     setTags(initialTags);
     setTagSearch("");
     setAuthorSearch("");
+    setDraftReviewOverride(initialReviewOverride);
 
     // Store initial values for comparison (use effective sort title, not semantic)
     setInitialValues({
@@ -251,6 +281,7 @@ export function BookEditDialog({
       series: initialSeries,
       genres: [...initialGenres].sort(),
       tags: [...initialTags].sort(),
+      reviewOverride: initialReviewOverride,
     });
   }, [open, book]);
 
@@ -268,7 +299,8 @@ export function BookEditDialog({
       !equal(authors, initialValues.authors) ||
       !equal(seriesEntries, initialValues.series) ||
       !equal([...genres].sort(), initialValues.genres) ||
-      !equal([...tags].sort(), initialValues.tags)
+      !equal([...tags].sort(), initialValues.tags) ||
+      draftReviewOverride !== initialValues.reviewOverride
     );
   }, [
     title,
@@ -279,6 +311,7 @@ export function BookEditDialog({
     seriesEntries,
     genres,
     tags,
+    draftReviewOverride,
     initialValues,
   ]);
 
@@ -421,16 +454,29 @@ export function BookEditDialog({
       payload.tags = tags.filter((t) => t.trim());
     }
 
+    const reviewChanged =
+      draftReviewOverride !== (initialValues?.reviewOverride ?? null) &&
+      draftReviewOverride !== null;
+
     // Only submit if something changed
-    if (Object.keys(payload).length === 0) {
+    if (Object.keys(payload).length === 0 && !reviewChanged) {
       onOpenChange(false);
       return;
     }
 
-    await updateBookMutation.mutateAsync({
-      id: String(book.id),
-      payload,
-    });
+    if (Object.keys(payload).length > 0) {
+      await updateBookMutation.mutateAsync({
+        id: String(book.id),
+        payload,
+      });
+    }
+
+    if (reviewChanged) {
+      await setBookReviewMutation.mutateAsync({
+        bookId: book.id,
+        override: draftReviewOverride,
+      });
+    }
 
     // Reset initial values so hasChanges becomes false, then close via effect
     // Use effective sort title (not semantic) to match hasChanges comparison
@@ -443,6 +489,7 @@ export function BookEditDialog({
       series: [...seriesEntries],
       genres: [...genres].sort(),
       tags: [...tags].sort(),
+      reviewOverride: draftReviewOverride,
     });
     requestClose();
   };
@@ -939,6 +986,21 @@ export function BookEditDialog({
               values={tags}
             />
           </div>
+
+          {/* Review Panel — controlled (deferred to Save button).
+              When draftReviewOverride is null (auto), pass undefined so the
+              panel falls back to the file-derived aggregate state. */}
+          <ReviewPanel
+            book={book}
+            files={book.files ?? []}
+            isPending={setBookReviewMutation.isPending}
+            onChange={(override) => setDraftReviewOverride(override)}
+            toggleValue={
+              draftReviewOverride === null
+                ? undefined
+                : draftReviewOverride === ReviewOverrideReviewed
+            }
+          />
         </div>
 
         <DialogFooter>

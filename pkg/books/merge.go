@@ -466,6 +466,13 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		}
 	}
 
+	// Recompute reviewed state for all affected books — files moved between books
+	// may change completeness because the new book has different relations.
+	for sourceBookID := range sourceBookPaths {
+		svc.RecomputeReviewedForBook(ctx, sourceBookID)
+	}
+	svc.RecomputeReviewedForBook(ctx, targetBook.ID)
+
 	// Reload target book with all relations
 	result.TargetBook, err = svc.RetrieveBook(ctx, RetrieveBookOptions{
 		ID: &targetBook.ID,

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -612,4 +614,69 @@ func TestMoveFilesToBook_SetsPrimaryOnNewlyCreatedBook(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, updatedSourceBook.PrimaryFileID)
 	assert.Equal(t, sourceFile1.ID, *updatedSourceBook.PrimaryFileID)
+}
+
+// TestMoveFilesToBook_RecomputesReviewedForBothBooks verifies that after files
+// are moved, files.reviewed is recomputed for both the source and target books.
+func TestMoveFilesToBook_RecomputesReviewedForBothBooks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+
+	// Configure criteria: only "authors" required so we have a clear signal
+	appSettingsSvc := appsettings.NewService(db)
+	err := review.Save(ctx, appSettingsSvc, review.Criteria{
+		BookFields:  []string{review.FieldAuthors},
+		AudioFields: []string{},
+	})
+	require.NoError(t, err)
+
+	library := setupTestLibrary(t, db)
+
+	// Source book has an author → its file will be reviewed=true after move
+	sourceBook, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	person := &models.Person{Name: "Author One", LibraryID: library.ID}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	author := &models.Author{
+		BookID:    sourceBook.ID,
+		PersonID:  person.ID,
+		SortOrder: 1,
+		Role:      nil,
+	}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+
+	// Target book has no authors → its file will be reviewed=false after move
+	targetBook, targetFile := setupTestBookWithFile(t, db, library, "Target Book")
+
+	// Seed reviewed=true on sourceFile (simulate it was complete before the move)
+	reviewed := true
+	_, err = db.NewUpdate().Model((*models.File)(nil)).
+		Set("reviewed = ?", reviewed).
+		Where("id = ?", sourceFile.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	// Move the source file to the target book
+	svc := NewService(db).WithAppSettings(appSettingsSvc)
+	_, err = svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:      []int{sourceFile.ID},
+		TargetBookID: &targetBook.ID,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+
+	// After move: sourceFile is now on targetBook (no authors) → reviewed=false
+	var movedFile models.File
+	require.NoError(t, db.NewSelect().Model(&movedFile).Where("f.id = ?", sourceFile.ID).Scan(ctx))
+	require.NotNil(t, movedFile.Reviewed, "reviewed must be set after recompute for moved file")
+	assert.False(t, *movedFile.Reviewed, "moved file should be reviewed=false because target book has no authors")
+
+	// targetFile (original file of targetBook) also recomputed: no authors → false
+	var targetFileAfter models.File
+	require.NoError(t, db.NewSelect().Model(&targetFileAfter).Where("f.id = ?", targetFile.ID).Scan(ctx))
+	require.NotNil(t, targetFileAfter.Reviewed, "reviewed must be set for target book's original file after recompute")
+	assert.False(t, *targetFileAfter.Reviewed, "target book's original file should be reviewed=false because target book has no authors")
 }

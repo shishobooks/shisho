@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { LanguageCombobox } from "@/components/library/LanguageCombobox";
+import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +67,7 @@ import { useImprintsList } from "@/hooks/queries/imprints";
 import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
+import { useSetFileReview } from "@/hooks/queries/review";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
@@ -75,14 +77,19 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  ReviewOverrideReviewed,
+  type Book,
   type File,
   type FileRole,
+  type ReviewOverride,
 } from "@/types";
 import { formatIdentifierType } from "@/utils/format";
 import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
   file: File;
+  /** Parent book — used by ReviewPanel for book-level field checks */
+  book?: Book;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -109,6 +116,7 @@ const formatDateForInput = (dateString: string | undefined): string => {
 
 export function FileEditDialog({
   file,
+  book,
   open,
   onOpenChange,
 }: FileEditDialogProps) {
@@ -187,6 +195,7 @@ export function FileEditDialog({
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
   const setCoverPageMutation = useSetFileCoverPage();
+  const setFileReviewMutation = useSetFileReview();
 
   // Query for publishers in this library with server-side search
   const { data: publishersData, isLoading: isLoadingPublishers } =
@@ -283,6 +292,12 @@ export function FileEditDialog({
     };
   }, []);
 
+  // Draft review override — toggling the panel updates this; the actual
+  // setFileReview mutation only fires on Save.
+  // null means "auto" (no explicit override on the file).
+  const [draftReviewOverride, setDraftReviewOverride] =
+    useState<ReviewOverride | null>(null);
+
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
     narrators: string[];
@@ -296,6 +311,8 @@ export function FileEditDialog({
     coverPage: number | null;
     language: string;
     abridged: string;
+    /** null means "auto" — no explicit override on the file. */
+    reviewOverride: ReviewOverride | null;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -334,6 +351,12 @@ export function FileEditDialog({
     // for the reasoning.
     const initialAbridged = file.abridged === true ? "true" : "";
 
+    // Capture the actual override (not the aggregate `reviewed`) so the user
+    // can toggle a currently-auto-reviewed file and have that intent persist.
+    // null = "auto" (no explicit override).
+    const initialReviewOverride: ReviewOverride | null =
+      file.review_override ?? null;
+
     setNarrators(initialNarrators);
     setNarratorSearch("");
     setName(initialName);
@@ -353,6 +376,7 @@ export function FileEditDialog({
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
+    setDraftReviewOverride(initialReviewOverride);
 
     // Store initial values for comparison
     setInitialValues({
@@ -367,6 +391,7 @@ export function FileEditDialog({
       coverPage: file.cover_page ?? null,
       language: initialLanguage,
       abridged: initialAbridged,
+      reviewOverride: initialReviewOverride,
     });
   }, [open, file, updatePendingCoverPreview]);
 
@@ -386,7 +411,8 @@ export function FileEditDialog({
       abridged !== initialValues.abridged ||
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
-        pendingCoverPage !== initialValues.coverPage)
+        pendingCoverPage !== initialValues.coverPage) ||
+      draftReviewOverride !== initialValues.reviewOverride
     );
   }, [
     narrators,
@@ -401,6 +427,7 @@ export function FileEditDialog({
     abridged,
     pendingCoverFile,
     pendingCoverPage,
+    draftReviewOverride,
     initialValues,
   ]);
 
@@ -674,6 +701,20 @@ export function FileEditDialog({
       setPendingCoverPage(null);
     }
 
+    // Apply pending review override change. Only fire if the user toggled
+    // to an explicit value that differs from the file's saved override.
+    // draftReviewOverride === null means "auto" — never set by the user
+    // gesture, only by initial load when no override exists.
+    if (
+      draftReviewOverride !== null &&
+      draftReviewOverride !== (initialValues?.reviewOverride ?? null)
+    ) {
+      await setFileReviewMutation.mutateAsync({
+        fileId: file.id,
+        override: draftReviewOverride,
+      });
+    }
+
     // Reset initial values so hasChanges becomes false, then close via effect.
     // For coverPage, use pendingCoverPage if set, otherwise keep the current
     // initial value. For language/abridged, use the canonicalized values
@@ -698,6 +739,7 @@ export function FileEditDialog({
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
       language: canonicalLanguage,
       abridged: canonicalAbridged,
+      reviewOverride: draftReviewOverride,
     });
     requestClose();
   };
@@ -1415,6 +1457,23 @@ export function FileEditDialog({
                 </div>
               </div>
             </>
+          )}
+
+          {/* Review Panel — controlled (deferred to Save button).
+              When draftReviewOverride is null (auto), pass undefined so the
+              panel falls back to the file-derived `reviewed` state. */}
+          {(book ?? file.book) && (
+            <ReviewPanel
+              book={(book ?? file.book)!}
+              files={[file]}
+              isPending={setFileReviewMutation.isPending}
+              onChange={(override) => setDraftReviewOverride(override)}
+              toggleValue={
+                draftReviewOverride === null
+                  ? undefined
+                  : draftReviewOverride === ReviewOverrideReviewed
+              }
+            />
           )}
         </div>
 

@@ -61,6 +61,7 @@ const HomeContent = () => {
   const genreIdsParam = searchParams.get("genre_ids") ?? "";
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
   const languageParam = searchParams.get("language") ?? "";
+  const reviewedFilterParam = searchParams.get("reviewed_filter") ?? "";
   const sortParam = searchParams.get("sort") ?? "";
   const urlSort: SortLevel[] | null = sortParam
     ? parseSortSpec(sortParam)
@@ -320,6 +321,20 @@ const HomeContent = () => {
     });
   };
 
+  // Set reviewed filter
+  const setReviewedFilter = (value: string) => {
+    setSearchParams((prev) => {
+      const newParams = new URLSearchParams(prev);
+      if (value && value !== "all") {
+        newParams.set("reviewed_filter", value);
+      } else {
+        newParams.delete("reviewed_filter");
+      }
+      newParams.set("page", "1");
+      return newParams;
+    });
+  };
+
   const clearAllFilters = () => {
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev);
@@ -327,6 +342,7 @@ const HomeContent = () => {
       newParams.delete("genre_ids");
       newParams.delete("tag_ids");
       newParams.delete("language");
+      newParams.delete("reviewed_filter");
       newParams.set("page", "1");
       return newParams;
     });
@@ -396,7 +412,8 @@ const HomeContent = () => {
     selectedFileTypes.length > 0 ||
     selectedGenreIds.length > 0 ||
     selectedTagIds.length > 0 ||
-    Boolean(languageParam);
+    Boolean(languageParam) ||
+    Boolean(reviewedFilterParam && reviewedFilterParam !== "all");
 
   // Build query with search and file types
   const booksQueryParams: Parameters<typeof useBooks>[0] = {
@@ -431,6 +448,11 @@ const HomeContent = () => {
     booksQueryParams.language = languageParam;
   }
 
+  // Add reviewed filter if present
+  if (reviewedFilterParam && reviewedFilterParam !== "all") {
+    booksQueryParams.reviewed_filter = reviewedFilterParam;
+  }
+
   // Sort: serialize only the effective (possibly resolved-from-default) sort.
   // Always sending a sort query param makes server-side sort explicit and deterministic.
   const serializedSort = serializeSortSpec(effectiveSort);
@@ -450,6 +472,7 @@ const HomeContent = () => {
     genreIds: selectedGenreIds,
     tagIds: selectedTagIds,
     language: languageParam,
+    reviewedFilter: reviewedFilterParam,
     sort: sortParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
@@ -467,7 +490,8 @@ const HomeContent = () => {
           selectedFileTypes.length > 0 ||
           selectedGenreIds.length > 0 ||
           selectedTagIds.length > 0 ||
-          languageParam !== "",
+          languageParam !== "" ||
+          (reviewedFilterParam !== "" && reviewedFilterParam !== "all"),
       );
     }
   }, [
@@ -479,6 +503,7 @@ const HomeContent = () => {
     selectedGenreIds.length,
     selectedTagIds.length,
     languageParam,
+    reviewedFilterParam,
     sortParam,
   ]);
 
@@ -545,10 +570,12 @@ const HomeContent = () => {
             onClearAll={clearAllFilters}
             onGenreSearchChange={setGenreSearchInput}
             onLanguageChange={setLanguageFilter}
+            onReviewedFilterChange={setReviewedFilter}
             onTagSearchChange={setTagSearchInput}
             onToggleFileType={toggleFileType}
             onToggleGenre={toggleGenreFilter}
             onToggleTag={toggleTagFilter}
+            reviewedFilter={reviewedFilterParam}
             selectedFileTypes={selectedFileTypes}
             selectedGenreIds={selectedGenreIds}
             selectedTagIds={selectedTagIds}
@@ -592,9 +619,11 @@ const HomeContent = () => {
           languageParam={languageParam}
           onClearAll={clearAllFilters}
           onClearLanguage={() => setLanguageFilter("all")}
+          onClearReviewedFilter={() => setReviewedFilter("all")}
           onToggleFileType={toggleFileType}
           onToggleGenre={toggleGenreFilter}
           onToggleTag={toggleTagFilter}
+          reviewedFilter={reviewedFilterParam}
           selectedFileTypes={selectedFileTypes}
           selectedGenres={selectedGenres}
           selectedTags={selectedTags}
