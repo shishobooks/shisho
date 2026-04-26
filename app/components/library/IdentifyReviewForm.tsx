@@ -5,17 +5,29 @@ import {
   ChevronUp,
   ExternalLink,
   Loader2,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { EntityCombobox } from "@/components/common/EntityCombobox";
+import { IdentifierEditor } from "@/components/common/IdentifierEditor";
+import { SortableEntityList } from "@/components/common/SortableEntityList";
+import { SortNameInput } from "@/components/common/SortNameInput";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -23,15 +35,35 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getLanguageName } from "@/constants/languages";
+import { useGenresList } from "@/hooks/queries/genres";
+import { useImprintsList } from "@/hooks/queries/imprints";
+import { usePeopleList } from "@/hooks/queries/people";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
+import { usePublishersList } from "@/hooks/queries/publishers";
+import { useSeriesList } from "@/hooks/queries/series";
+import { useTagsList } from "@/hooks/queries/tags";
+import { useAutoMatchEntities } from "@/hooks/useAutoMatchEntities";
+import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
-import type { Book, File } from "@/types";
+import {
+  AuthorRoleColorist,
+  AuthorRoleCoverArtist,
+  AuthorRoleEditor,
+  AuthorRoleInker,
+  AuthorRoleLetterer,
+  AuthorRolePenciller,
+  AuthorRoleTranslator,
+  AuthorRoleWriter,
+  FileTypeCBZ,
+  type Book,
+  type File,
+} from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
-import { formatIdentifierType, formatMetadataFieldLabel } from "@/utils/format";
+import { formatMetadataFieldLabel } from "@/utils/format";
 import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -58,6 +90,95 @@ interface IdentifyReviewFormProps {
 interface AuthorEntry {
   name: string;
   role?: string;
+}
+
+interface NameOption {
+  name: string;
+}
+
+// Author role options for CBZ files
+const AUTHOR_ROLES = [
+  { value: AuthorRoleWriter, label: "Writer" },
+  { value: AuthorRolePenciller, label: "Penciller" },
+  { value: AuthorRoleInker, label: "Inker" },
+  { value: AuthorRoleColorist, label: "Colorist" },
+  { value: AuthorRoleLetterer, label: "Letterer" },
+  { value: AuthorRoleCoverArtist, label: "Cover Artist" },
+  { value: AuthorRoleEditor, label: "Editor" },
+  { value: AuthorRoleTranslator, label: "Translator" },
+] as const;
+
+// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
+// signature. Defined at module scope so they're stable references and the same
+// hooks run in the same order on every render. Each adapter maps the API list
+// shape to a `{ name }` shape that the combobox consumes.
+
+function usePeopleSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = usePeopleList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.people.map((p) => ({ name: p.name }));
+  return { data: adapted, isLoading };
+}
+
+function useSeriesSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = useSeriesList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.series.map((s) => ({ name: s.name }));
+  return { data: adapted, isLoading };
+}
+
+function usePublisherSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = usePublishersList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.publishers.map((p) => ({ name: p.name }));
+  return { data: adapted, isLoading };
+}
+
+function useImprintSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = useImprintsList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.imprints.map((i) => ({ name: i.name }));
+  return { data: adapted, isLoading };
 }
 
 // ---------------------------------------------------------------------------
@@ -322,147 +443,6 @@ function FieldWrapper({
   return content;
 }
 
-function TagInput({
-  tags,
-  onChange,
-  disabled,
-  placeholder,
-}: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  disabled?: boolean;
-  placeholder?: string;
-}) {
-  const [input, setInput] = useState("");
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && input.trim()) {
-      e.preventDefault();
-      if (!tags.includes(input.trim())) {
-        onChange([...tags, input.trim()]);
-      }
-      setInput("");
-    }
-    if (e.key === "Backspace" && !input && tags.length > 0) {
-      onChange(tags.slice(0, -1));
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-[36px]",
-        disabled && "opacity-50 cursor-not-allowed",
-      )}
-    >
-      {tags.map((tag, i) => (
-        <Badge
-          className="max-w-full gap-1 pr-1"
-          key={`${tag}-${i}`}
-          variant="secondary"
-        >
-          <span className="truncate" title={tag}>
-            {tag}
-          </span>
-          {!disabled && (
-            <button
-              className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
-              onClick={() => onChange(tags.filter((_, j) => j !== i))}
-              type="button"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </Badge>
-      ))}
-      {!disabled && (
-        <input
-          className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            tags.length === 0 ? (placeholder ?? "Type and press Enter") : ""
-          }
-          type="text"
-          value={input}
-        />
-      )}
-    </div>
-  );
-}
-
-function AuthorTagInput({
-  authors,
-  onChange,
-  disabled,
-  placeholder,
-}: {
-  authors: AuthorEntry[];
-  onChange: (authors: AuthorEntry[]) => void;
-  disabled?: boolean;
-  placeholder?: string;
-}) {
-  const [input, setInput] = useState("");
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && input.trim()) {
-      e.preventDefault();
-      onChange([...authors, { name: input.trim(), role: undefined }]);
-      setInput("");
-    }
-    if (e.key === "Backspace" && !input && authors.length > 0) {
-      onChange(authors.slice(0, -1));
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-[36px]",
-        disabled && "opacity-50 cursor-not-allowed",
-      )}
-    >
-      {authors.map((author, i) => {
-        const label = getAuthorRoleLabel(author.role);
-        return (
-          <Badge className="max-w-full gap-1 pr-1" key={i} variant="secondary">
-            <span
-              className="truncate"
-              title={label ? `${author.name} (${label})` : author.name}
-            >
-              {author.name}
-              {label && (
-                <span className="text-muted-foreground ml-1">({label})</span>
-              )}
-            </span>
-            {!disabled && (
-              <button
-                className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
-                onClick={() => onChange(authors.filter((_, j) => j !== i))}
-                type="button"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </Badge>
-        );
-      })}
-      {!disabled && (
-        <input
-          className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            authors.length === 0 ? (placeholder ?? "Type and press Enter") : ""
-          }
-          type="text"
-          value={input}
-        />
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -603,6 +583,77 @@ export function IdentifyReviewForm({
   const [identifiers, setIdentifiers] = useState<IdentifierEntry[]>(
     defaults.identifiers.value,
   );
+  // Sort title is intentionally not part of `defaults` — plugin results don't
+  // surface a sort title, so there's no diff to render. We wire it through
+  // SortNameInput which auto-generates from the title when in auto mode.
+  const [sortTitle, setSortTitle] = useState(book.sort_title || "");
+
+  // ---- Genre / tag option pools (server-side search) ----
+  const [genreSearch, setGenreSearch] = useState("");
+  const debouncedGenreSearch = useDebounce(genreSearch, 200);
+  const [tagSearch, setTagSearch] = useState("");
+  const debouncedTagSearch = useDebounce(tagSearch, 200);
+
+  const { data: genresData, isLoading: isLoadingGenres } = useGenresList(
+    {
+      library_id: book.library_id,
+      limit: 50,
+      search: debouncedGenreSearch || undefined,
+    },
+    { enabled: !!book.library_id },
+  );
+  const { data: tagsData, isLoading: isLoadingTags } = useTagsList(
+    {
+      library_id: book.library_id,
+      limit: 50,
+      search: debouncedTagSearch || undefined,
+    },
+    { enabled: !!book.library_id },
+  );
+
+  // ---- Auto-match incoming entity names against this library ----
+  const autoMatch = useAutoMatchEntities({
+    libraryId: book.library_id ?? 0,
+    enabled: !!book.library_id,
+    authors: (result.authors ?? []).map((a) => a.name),
+    narrators: result.narrators ?? [],
+    series: result.series ? [result.series] : [],
+    publisher: result.publisher,
+    imprint: result.imprint,
+    genres: result.genres ?? [],
+    tags: result.tags ?? [],
+  });
+
+  // ---- Identifier types for the editor (built-ins + plugin-defined) ----
+  const availableIdentifierTypes = useMemo(
+    () => [
+      { id: "isbn_10", label: "ISBN-10" },
+      { id: "isbn_13", label: "ISBN-13" },
+      { id: "asin", label: "ASIN" },
+      { id: "uuid", label: "UUID" },
+      { id: "goodreads", label: "Goodreads" },
+      { id: "google", label: "Google" },
+      { id: "other", label: "Other" },
+      ...(pluginIdentifierTypes
+        ?.filter(
+          (pt) =>
+            ![
+              "isbn_10",
+              "isbn_13",
+              "asin",
+              "uuid",
+              "goodreads",
+              "google",
+              "other",
+            ].includes(pt.id),
+        )
+        .map((pt) => ({ id: pt.id, label: pt.name, pattern: pt.pattern })) ??
+        []),
+    ],
+    [pluginIdentifierTypes],
+  );
+
+  const isCbz = file?.file_type === FileTypeCBZ;
 
   // Cover state — for page-based formats (CBZ, PDF) the cover is a page of
   // the file itself, so plugin cover *image* data (cover_url/cover_data) is
@@ -692,6 +743,7 @@ export function IdentifyReviewForm({
       language !== defaults.language.value ||
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
+      sortTitle !== (book.sort_title || "") ||
       coverSelection !== defaultCoverSelection
     );
   }, [
@@ -712,6 +764,8 @@ export function IdentifyReviewForm({
     language,
     abridged,
     identifiers,
+    sortTitle,
+    book.sort_title,
     coverSelection,
     defaults,
     defaultCoverSelection,
@@ -725,6 +779,7 @@ export function IdentifyReviewForm({
   const handleSubmit = async () => {
     const fields: Record<string, unknown> = {
       title,
+      ...(sortTitle.trim() && { sort_title: sortTitle.trim() }),
       subtitle,
       description,
       authors: authors.map((a) => ({ name: a.name, role: a.role })),
@@ -921,6 +976,18 @@ export function IdentifyReviewForm({
         )}
       </div>
 
+      {/* Sort Title */}
+      <div className="space-y-1.5">
+        <Label>Sort Title</Label>
+        <SortNameInput
+          nameValue={title}
+          onChange={setSortTitle}
+          sortValue={book.sort_title || ""}
+          source={book.sort_title_source}
+          type="title"
+        />
+      </div>
+
       {/* Subtitle */}
       <FieldWrapper
         currentValue={book.subtitle || undefined}
@@ -953,31 +1020,111 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setAuthors(currentAuthors)}
         status={defaults.authors.status}
       >
-        <AuthorTagInput
-          authors={authors}
-          disabled={isDisabled("authors")}
-          onChange={setAuthors}
-          placeholder="Add author..."
+        <SortableEntityList<AuthorEntry>
+          comboboxProps={{
+            getOptionKey: (p) => p.name,
+            getOptionLabel: (p) => p.name,
+            hook: function useAuthorOptions(q) {
+              return usePeopleSearch(book.library_id, true, q);
+            },
+            label: "Author",
+          }}
+          items={authors}
+          onAppend={(next) => {
+            const name = "__create" in next ? next.__create : next.name;
+            if (!name.trim()) return;
+            if (authors.some((a) => a.name === name)) return;
+            const role = isCbz ? AuthorRoleWriter : undefined;
+            setAuthors([...authors, { name, role }]);
+          }}
+          onRemove={(idx) => setAuthors(authors.filter((_, i) => i !== idx))}
+          onReorder={setAuthors}
+          pendingCreate={(a) => {
+            const m = autoMatch.matches.authors.find((x) => x.name === a.name);
+            return !!m && m.existing == null;
+          }}
+          renderExtras={
+            isCbz
+              ? (author, idx) => (
+                  <div className="w-36">
+                    <Select
+                      onValueChange={(value) => {
+                        const next = [...authors];
+                        next[idx] = {
+                          ...next[idx],
+                          role: value === "none" ? undefined : value,
+                        };
+                        setAuthors(next);
+                      }}
+                      value={author.role || "none"}
+                    >
+                      <SelectTrigger className="cursor-pointer">
+                        <SelectValue placeholder="Role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem className="cursor-pointer" value="none">
+                          No role
+                        </SelectItem>
+                        {AUTHOR_ROLES.map((role) => (
+                          <SelectItem
+                            className="cursor-pointer"
+                            key={role.value}
+                            value={role.value}
+                          >
+                            {role.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )
+              : undefined
+          }
         />
       </FieldWrapper>
 
-      {/* Narrators */}
-      <FieldWrapper
-        currentValue={
-          currentNarrators.length > 0 ? currentNarrators.join(", ") : undefined
-        }
-        disabled={isDisabled("narrators")}
-        field="narrators"
-        onUseCurrent={() => setNarrators(currentNarrators)}
-        status={defaults.narrators.status}
-      >
-        <TagInput
+      {/* Narrators (audiobooks only) */}
+      {isAudiobook && (
+        <FieldWrapper
+          currentValue={
+            currentNarrators.length > 0
+              ? currentNarrators.join(", ")
+              : undefined
+          }
           disabled={isDisabled("narrators")}
-          onChange={setNarrators}
-          placeholder="Add narrator..."
-          tags={narrators}
-        />
-      </FieldWrapper>
+          field="narrators"
+          onUseCurrent={() => setNarrators(currentNarrators)}
+          status={defaults.narrators.status}
+        >
+          <SortableEntityList<NameOption>
+            comboboxProps={{
+              getOptionKey: (p) => p.name,
+              getOptionLabel: (p) => p.name,
+              hook: function useNarratorOptions(q) {
+                return usePeopleSearch(book.library_id, true, q);
+              },
+              label: "Narrator",
+            }}
+            items={narrators.map((name) => ({ name }))}
+            onAppend={(next) => {
+              const name = "__create" in next ? next.__create : next.name;
+              if (!name.trim()) return;
+              if (narrators.includes(name)) return;
+              setNarrators([...narrators, name]);
+            }}
+            onRemove={(idx) =>
+              setNarrators(narrators.filter((_, i) => i !== idx))
+            }
+            onReorder={(next) => setNarrators(next.map((n) => n.name))}
+            pendingCreate={(n) => {
+              const m = autoMatch.matches.narrators.find(
+                (x) => x.name === n.name,
+              );
+              return !!m && m.existing == null;
+            }}
+          />
+        </FieldWrapper>
+      )}
 
       {/* Series */}
       <FieldWrapper
@@ -1009,14 +1156,28 @@ export function IdentifyReviewForm({
               : "unchanged"
         }
       >
-        <div className="flex gap-2">
-          <Input
-            className="flex-1"
-            disabled={isDisabled("series")}
-            onChange={(e) => setSeries(e.target.value)}
-            placeholder="Series name"
-            value={series}
-          />
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <EntityCombobox<NameOption>
+              getOptionKey={(s) => s.name}
+              getOptionLabel={(s) => s.name}
+              hook={function useSeriesOptions(q) {
+                return useSeriesSearch(book.library_id, true, q);
+              }}
+              label="Series"
+              onChange={(next) =>
+                setSeries("__create" in next ? next.__create : next.name)
+              }
+              pendingCreate={(() => {
+                if (!series) return false;
+                const m = autoMatch.matches.series.find(
+                  (x) => x.name === series,
+                );
+                return !!m && m.existing == null;
+              })()}
+              value={series ? { name: series } : null}
+            />
+          </div>
           <Input
             className="w-24"
             disabled={isDisabled("series")}
@@ -1038,11 +1199,17 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setGenres(currentGenres)}
         status={defaults.genres.status}
       >
-        <TagInput
-          disabled={isDisabled("genres")}
+        <MultiSelectCombobox
+          isLoading={isLoadingGenres}
+          label="Genre"
           onChange={setGenres}
-          placeholder="Add genre..."
-          tags={genres}
+          onSearch={setGenreSearch}
+          options={genresData?.genres.map((g) => g.name) ?? []}
+          placeholder="Add genres..."
+          removed={currentGenres.filter((g) => !genres.includes(g))}
+          searchValue={genreSearch}
+          status={(v) => (currentGenres.includes(v) ? "unchanged" : "new")}
+          values={genres}
         />
       </FieldWrapper>
 
@@ -1056,11 +1223,17 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setTags(currentTags)}
         status={defaults.tags.status}
       >
-        <TagInput
-          disabled={isDisabled("tags")}
+        <MultiSelectCombobox
+          isLoading={isLoadingTags}
+          label="Tag"
           onChange={setTags}
-          placeholder="Add tag..."
-          tags={tags}
+          onSearch={setTagSearch}
+          options={tagsData?.tags.map((t) => t.name) ?? []}
+          placeholder="Add tags..."
+          removed={currentTags.filter((t) => !tags.includes(t))}
+          searchValue={tagSearch}
+          status={(v) => (currentTags.includes(v) ? "unchanged" : "new")}
+          values={tags}
         />
       </FieldWrapper>
 
@@ -1106,10 +1279,22 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setPublisher(file?.publisher?.name ?? "")}
         status={defaults.publisher.status}
       >
-        <Input
-          disabled={isDisabled("publisher")}
-          onChange={(e) => setPublisher(e.target.value)}
-          value={publisher}
+        <EntityCombobox<NameOption>
+          getOptionKey={(p) => p.name}
+          getOptionLabel={(p) => p.name}
+          hook={function usePublisherOptions(q) {
+            return usePublisherSearch(book.library_id, true, q);
+          }}
+          label="Publisher"
+          onChange={(next) =>
+            setPublisher("__create" in next ? next.__create : next.name)
+          }
+          pendingCreate={(() => {
+            if (!publisher) return false;
+            const m = autoMatch.matches.publisher;
+            return !!m && m.name === publisher && m.existing == null;
+          })()}
+          value={publisher ? { name: publisher } : null}
         />
       </FieldWrapper>
 
@@ -1121,10 +1306,22 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setImprint(file?.imprint?.name ?? "")}
         status={defaults.imprint.status}
       >
-        <Input
-          disabled={isDisabled("imprint")}
-          onChange={(e) => setImprint(e.target.value)}
-          value={imprint}
+        <EntityCombobox<NameOption>
+          getOptionKey={(p) => p.name}
+          getOptionLabel={(p) => p.name}
+          hook={function useImprintOptions(q) {
+            return useImprintSearch(book.library_id, true, q);
+          }}
+          label="Imprint"
+          onChange={(next) =>
+            setImprint("__create" in next ? next.__create : next.name)
+          }
+          pendingCreate={(() => {
+            if (!imprint) return false;
+            const m = autoMatch.matches.imprint;
+            return !!m && m.name === imprint && m.existing == null;
+          })()}
+          value={imprint ? { name: imprint } : null}
         />
       </FieldWrapper>
 
@@ -1142,10 +1339,9 @@ export function IdentifyReviewForm({
         }
         status={defaults.releaseDate.status}
       >
-        <Input
-          disabled={isDisabled("releaseDate")}
-          onChange={(e) => setReleaseDate(e.target.value)}
-          placeholder="YYYY-MM-DD"
+        <DatePicker
+          onChange={setReleaseDate}
+          placeholder="Pick a date"
           value={releaseDate}
         />
       </FieldWrapper>
@@ -1262,17 +1458,25 @@ export function IdentifyReviewForm({
               }
             >
               {currentIdentifiers
-                .map(
-                  (id) =>
-                    `${formatIdentifierType(id.type, pluginIdentifierTypes)}: ${id.value}`,
-                )
+                .map((id) => {
+                  const label =
+                    availableIdentifierTypes.find((t) => t.id === id.type)
+                      ?.label ?? id.type;
+                  return `${label}: ${id.value}`;
+                })
                 .join(", ")}
             </CurrentBar>
           )}
-        <IdentifierTagInput
-          disabled={isDisabled("identifiers")}
-          identifierTypes={pluginIdentifierTypes}
+        <IdentifierEditor
+          identifierTypes={availableIdentifierTypes}
           onChange={setIdentifiers}
+          status={(row) =>
+            currentIdentifiers.some(
+              (c) => c.type === row.type && c.value === row.value,
+            )
+              ? "unchanged"
+              : "new"
+          }
           value={identifiers}
         />
       </div>
@@ -1306,56 +1510,6 @@ export function IdentifyReviewForm({
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Identifier tag input (key:value pairs)
-// ---------------------------------------------------------------------------
-
-function IdentifierTagInput({
-  value,
-  onChange,
-  disabled,
-  identifierTypes,
-}: {
-  value: IdentifierEntry[];
-  onChange: (ids: IdentifierEntry[]) => void;
-  disabled?: boolean;
-  identifierTypes?: Array<{ id: string; name: string }>;
-}) {
-  if (value.length === 0) {
-    return <p className="text-sm text-muted-foreground">No identifiers</p>;
-  }
-
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-1.5",
-        disabled && "opacity-50 cursor-not-allowed",
-      )}
-    >
-      {value.map((id, i) => (
-        <Badge
-          className="max-w-full gap-1 pr-1"
-          key={`${id.type}-${id.value}-${i}`}
-          variant="secondary"
-        >
-          <span className="truncate" title={`${id.type}:${id.value}`}>
-            {formatIdentifierType(id.type, identifierTypes)}: {id.value}
-          </span>
-          {!disabled && (
-            <button
-              className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
-              onClick={() => onChange(value.filter((_, j) => j !== i))}
-              type="button"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </Badge>
-      ))}
     </div>
   );
 }
