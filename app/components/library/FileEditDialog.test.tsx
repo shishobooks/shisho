@@ -375,7 +375,7 @@ describe("FileEditDialog", () => {
       await user.hover(asinOption);
       const tooltip = await screen.findByRole("tooltip");
       expect(tooltip).toHaveTextContent(
-        /this file already has an asin identifier\. remove it first/i,
+        /this already has an asin identifier\. remove it first/i,
       );
     });
 

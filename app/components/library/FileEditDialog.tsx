@@ -1,17 +1,10 @@
 import equal from "fast-deep-equal";
-import {
-  Check,
-  ChevronsUpDown,
-  GripVertical,
-  Image,
-  Loader2,
-  Plus,
-  Upload,
-  X,
-} from "lucide-react";
+import { Image, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
+import { EntityCombobox } from "@/components/common/EntityCombobox";
+import { IdentifierEditor } from "@/components/common/IdentifierEditor";
+import { SortableEntityList } from "@/components/common/SortableEntityList";
 import PagePicker from "@/components/files/PagePicker";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { LanguageCombobox } from "@/components/library/LanguageCombobox";
@@ -19,13 +12,6 @@ import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   DialogContent,
@@ -38,26 +24,12 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  SortableList,
-  type DragHandleProps,
-} from "@/components/ui/SortableList";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   useSetFileCoverPage,
   useUpdateFile,
@@ -68,7 +40,6 @@ import { usePeopleList } from "@/hooks/queries/people";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useSetFileReview } from "@/hooks/queries/review";
-import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
@@ -83,8 +54,6 @@ import {
   type FileRole,
   type ReviewOverride,
 } from "@/types";
-import { formatIdentifierType } from "@/utils/format";
-import { validateIdentifier } from "@/utils/identifiers";
 
 interface FileEditDialogProps {
   file: File;
@@ -94,14 +63,68 @@ interface FileEditDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Returns the correct indefinite article for an identifier type label.
-// UUID starts with the vowel letter U but the consonant sound "yoo", so it
-// takes "a" rather than "an". Fall back to a vowel-start regex for all other
-// types, including future plugin-defined types whose pronunciation is unknown.
-const articleFor = (typeId: string, label: string): string => {
-  if (typeId === "uuid") return "a";
-  return /^[aeiou]/i.test(label) ? "an" : "a";
-};
+interface NameOption {
+  name: string;
+}
+
+// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
+// signature. Defined at module scope so they're stable references and the same
+// hooks run in the same order on every render.
+//
+// Each adapter maps the API list-result shape to a `{ name }` shape that the
+// EntityCombobox / SortableEntityList renders. The combobox only needs `name`
+// to display each option; row-specific extras are filled in by `onAppend`.
+
+function usePeopleSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = usePeopleList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.people.map((p) => ({ name: p.name }));
+  return { data: adapted, isLoading };
+}
+
+function usePublisherSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = usePublishersList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.publishers.map((p) => ({ name: p.name }));
+  return { data: adapted, isLoading };
+}
+
+function useImprintSearch(
+  libraryId: number | undefined,
+  enabled: boolean,
+  query: string,
+): { data?: NameOption[]; isLoading: boolean } {
+  const { data, isLoading } = useImprintsList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.imprints.map((i) => ({ name: i.name }));
+  return { data: adapted, isLoading };
+}
 
 // Helper to format date to YYYY-MM-DD for input[type="date"]
 const formatDateForInput = (dateString: string | undefined): string => {
@@ -123,9 +146,6 @@ export function FileEditDialog({
   const [narrators, setNarrators] = useState<string[]>(
     file.narrators?.map((n) => n.person?.name || "") || [],
   );
-  const [narratorSearch, setNarratorSearch] = useState("");
-  const debouncedNarratorSearch = useDebounce(narratorSearch, 200);
-  const [narratorOpen, setNarratorOpen] = useState(false);
   const isPageBased = isPageBasedFileType(file.file_type);
   // Dialog-local cover cache key — bumped synchronously after cover mutations
   // (upload / set-cover-page) so the preview `<img>` refreshes immediately on
@@ -145,26 +165,13 @@ export function FileEditDialog({
   const [identifiers, setIdentifiers] = useState<
     Array<{ type: string; value: string }>
   >(file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || []);
-  const [newIdentifierType, setNewIdentifierType] = useState<string>("isbn_13");
-  const [newIdentifierValue, setNewIdentifierValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const presentIdentifierTypes = useMemo(
-    () => new Set(identifiers.map((id) => id.type)),
-    [identifiers],
-  );
 
   // New file metadata fields
   const [name, setName] = useState(file.name || "");
   const [url, setUrl] = useState(file.url || "");
   const [publisher, setPublisher] = useState(file.publisher?.name || "");
-  const [publisherOpen, setPublisherOpen] = useState(false);
-  const [publisherSearch, setPublisherSearch] = useState("");
-  const debouncedPublisherSearch = useDebounce(publisherSearch, 200);
   const [imprint, setImprint] = useState(file.imprint?.name || "");
-  const [imprintOpen, setImprintOpen] = useState(false);
-  const [imprintSearch, setImprintSearch] = useState("");
-  const debouncedImprintSearch = useDebounce(imprintSearch, 200);
   const [releaseDate, setReleaseDate] = useState(
     formatDateForInput(file.release_date),
   );
@@ -197,43 +204,13 @@ export function FileEditDialog({
   const setCoverPageMutation = useSetFileCoverPage();
   const setFileReviewMutation = useSetFileReview();
 
-  // Query for publishers in this library with server-side search
-  const { data: publishersData, isLoading: isLoadingPublishers } =
-    usePublishersList(
-      {
-        library_id: file.library_id,
-        limit: 50,
-        search: debouncedPublisherSearch || undefined,
-      },
-      { enabled: open },
-    );
-
-  // Query for imprints in this library with server-side search
-  const { data: imprintsData, isLoading: isLoadingImprints } = useImprintsList(
-    {
-      library_id: file.library_id,
-      limit: 50,
-      search: debouncedImprintSearch || undefined,
-    },
-    { enabled: open },
-  );
-
-  // Query for people in this library with server-side search (for narrators)
-  const { data: peopleData, isLoading: isLoadingPeople } = usePeopleList(
-    {
-      library_id: file.library_id,
-      limit: 50,
-      search: debouncedNarratorSearch || undefined,
-    },
-    { enabled: open },
-  );
-
   // Query for plugin-defined identifier types
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   // All identifier types available for selection, in display order.
   // Memoized so it can be a stable useEffect dependency without causing
-  // an infinite update loop.
+  // an infinite update loop. Plugin-defined types include their pattern so
+  // IdentifierEditor can use it for validation.
   const availableIdentifierTypes = useMemo(
     () => [
       { id: "isbn_10", label: "ISBN-10" },
@@ -256,23 +233,11 @@ export function FileEditDialog({
               "other",
             ].includes(pt.id),
         )
-        .map((pt) => ({ id: pt.id, label: pt.name })) ?? []),
+        .map((pt) => ({ id: pt.id, label: pt.name, pattern: pt.pattern })) ??
+        []),
     ],
     [pluginIdentifierTypes],
   );
-
-  // Auto-switch the selected identifier type away from one that is already
-  // present. This prevents the dropdown from showing a disabled type as the
-  // selected value when the dialog opens (or when identifiers change).
-  useEffect(() => {
-    if (!presentIdentifierTypes.has(newIdentifierType)) return;
-    const firstAvailable = availableIdentifierTypes.find(
-      (t) => !presentIdentifierTypes.has(t.id),
-    );
-    if (firstAvailable) {
-      setNewIdentifierType(firstAvailable.id);
-    }
-  }, [presentIdentifierTypes, newIdentifierType, availableIdentifierTypes]);
 
   // Helper to set preview URL and handle cleanup of old URL
   const updatePendingCoverPreview = useCallback((url: string | null) => {
@@ -358,17 +323,12 @@ export function FileEditDialog({
       file.review_override ?? null;
 
     setNarrators(initialNarrators);
-    setNarratorSearch("");
     setName(initialName);
     setUrl(initialUrl);
     setPublisher(initialPublisher);
-    setPublisherSearch("");
     setImprint(initialImprint);
-    setImprintSearch("");
     setReleaseDate(initialReleaseDate);
     setIdentifiers(initialIdentifiers);
-    setNewIdentifierType("isbn_13");
-    setNewIdentifierValue("");
     setFileRole(initialFileRole);
     setShowDowngradeConfirm(false);
     setLanguage(initialLanguage);
@@ -432,126 +392,6 @@ export function FileEditDialog({
   ]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
-
-  const handleSelectPublisher = (name: string) => {
-    setPublisher(name);
-    setPublisherOpen(false);
-    setPublisherSearch("");
-  };
-
-  const handleCreatePublisher = () => {
-    if (publisherSearch.trim()) {
-      setPublisher(publisherSearch.trim());
-    }
-    setPublisherOpen(false);
-    setPublisherSearch("");
-  };
-
-  const handleClearPublisher = () => {
-    setPublisher("");
-  };
-
-  const handleSelectImprint = (name: string) => {
-    setImprint(name);
-    setImprintOpen(false);
-    setImprintSearch("");
-  };
-
-  const handleCreateImprint = () => {
-    if (imprintSearch.trim()) {
-      setImprint(imprintSearch.trim());
-    }
-    setImprintOpen(false);
-    setImprintSearch("");
-  };
-
-  const handleClearImprint = () => {
-    setImprint("");
-  };
-
-  // Filter out already-selected narrators from the people list
-  const filteredPeople = useMemo(() => {
-    return peopleData?.people.filter((p) => !narrators.includes(p.name)) || [];
-  }, [peopleData?.people, narrators]);
-
-  // Show "create" option if search doesn't match existing people or already-selected narrators
-  const showCreateNarratorOption = useMemo(() => {
-    if (!narratorSearch.trim()) return false;
-    const searchLower = narratorSearch.trim().toLowerCase();
-    const matchesPeople = peopleData?.people.some(
-      (p) => p.name.toLowerCase() === searchLower,
-    );
-    const matchesSelected = narrators.some(
-      (n) => n.toLowerCase() === searchLower,
-    );
-    return !matchesPeople && !matchesSelected;
-  }, [narratorSearch, peopleData?.people, narrators]);
-
-  const handleSelectNarrator = (name: string) => {
-    if (!narrators.includes(name)) {
-      setNarrators([...narrators, name]);
-    }
-    setNarratorOpen(false);
-    setNarratorSearch("");
-  };
-
-  const handleCreateNarrator = () => {
-    if (narratorSearch.trim() && !narrators.includes(narratorSearch.trim())) {
-      setNarrators([...narrators, narratorSearch.trim()]);
-    }
-    setNarratorOpen(false);
-    setNarratorSearch("");
-  };
-
-  const handleRemoveNarrator = (index: number) => {
-    setNarrators(narrators.filter((_, i) => i !== index));
-  };
-
-  const handleAddIdentifier = () => {
-    if (presentIdentifierTypes.has(newIdentifierType)) return;
-    if (!newIdentifierValue.trim()) return;
-
-    const pluginType = pluginIdentifierTypes?.find(
-      (pt) => pt.id === newIdentifierType,
-    );
-    const validation = validateIdentifier(
-      newIdentifierType,
-      newIdentifierValue.trim(),
-      pluginType?.pattern ?? undefined,
-    );
-    if (!validation.valid) {
-      toast.error(validation.error);
-      return;
-    }
-
-    setIdentifiers([
-      ...identifiers,
-      { type: newIdentifierType, value: newIdentifierValue.trim() },
-    ]);
-    setNewIdentifierValue("");
-  };
-
-  // Filter publishers - show all from search, or current selection if set
-  const filteredPublishers = useMemo(() => {
-    return publishersData?.publishers || [];
-  }, [publishersData?.publishers]);
-
-  const showCreatePublisherOption =
-    publisherSearch.trim() &&
-    !filteredPublishers.find(
-      (p) => p.name.toLowerCase() === publisherSearch.toLowerCase(),
-    );
-
-  // Filter imprints - show all from search, or current selection if set
-  const filteredImprints = useMemo(() => {
-    return imprintsData?.imprints || [];
-  }, [imprintsData?.imprints]);
-
-  const showCreateImprintOption =
-    imprintSearch.trim() &&
-    !filteredImprints.find(
-      (i) => i.name.toLowerCase() === imprintSearch.toLowerCase(),
-    );
 
   const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -750,6 +590,7 @@ export function FileEditDialog({
     setCoverPageMutation.isPending;
 
   const isSupplement = file.file_role === FileRoleSupplement;
+  const isM4b = file.file_type === FileTypeM4B;
 
   // Check if file type can be a main file (only cbz, epub, m4b are supported)
   const canBeMainFile = [FileTypeCBZ, FileTypeEPUB, FileTypeM4B].includes(
@@ -984,7 +825,7 @@ export function FileEditDialog({
               )}
 
               {/* Narrators (only for M4B files) */}
-              {file.file_type === "m4b" && (
+              {isM4b && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Narrators</Label>
@@ -998,108 +839,28 @@ export function FileEditDialog({
                       </button>
                     )}
                   </div>
-                  <SortableList
-                    getItemId={(name, index) => `${name}-${index}`}
-                    items={narrators}
-                    onReorder={setNarrators}
-                    renderItem={(
-                      name: string,
-                      index: number,
-                      dragHandleProps: DragHandleProps,
-                    ) => (
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
-                          type="button"
-                          {...dragHandleProps.attributes}
-                          {...dragHandleProps.listeners}
-                        >
-                          <GripVertical className="h-4 w-4" />
-                        </button>
-                        <div className="flex-1">
-                          <Input disabled value={name} />
-                        </div>
-                        <Button
-                          onClick={() => handleRemoveNarrator(index)}
-                          size="icon"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                  <SortableEntityList<NameOption>
+                    comboboxProps={{
+                      getOptionKey: (p) => p.name,
+                      getOptionLabel: (p) => p.name,
+                      hook: function useNarratorOptions(q) {
+                        return usePeopleSearch(file.library_id, open, q);
+                      },
+                      label: "Narrator",
+                    }}
+                    items={narrators.map((n) => ({ name: n }))}
+                    onAppend={(next) => {
+                      const nextName =
+                        "__create" in next ? next.__create : next.name;
+                      if (!nextName.trim()) return;
+                      if (narrators.includes(nextName)) return;
+                      setNarrators([...narrators, nextName]);
+                    }}
+                    onRemove={(idx) =>
+                      setNarrators(narrators.filter((_, i) => i !== idx))
+                    }
+                    onReorder={(next) => setNarrators(next.map((n) => n.name))}
                   />
-                  {/* Narrator Combobox */}
-                  <Popover
-                    modal
-                    onOpenChange={setNarratorOpen}
-                    open={narratorOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        aria-expanded={narratorOpen}
-                        className="w-full justify-between"
-                        role="combobox"
-                        variant="outline"
-                      >
-                        Add narrator...
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-full p-0">
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          onValueChange={setNarratorSearch}
-                          placeholder="Search people..."
-                          value={narratorSearch}
-                        />
-                        <CommandList>
-                          {isLoadingPeople && (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              Loading people...
-                            </div>
-                          )}
-                          {!isLoadingPeople &&
-                            filteredPeople.length === 0 &&
-                            !showCreateNarratorOption && (
-                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                {!debouncedNarratorSearch
-                                  ? "No people in this library. Type to create one."
-                                  : "No matching people."}
-                              </div>
-                            )}
-                          {!isLoadingPeople && (
-                            <CommandGroup>
-                              {filteredPeople.map((p) => (
-                                <CommandItem
-                                  key={p.id}
-                                  onSelect={() => handleSelectNarrator(p.name)}
-                                  value={p.name}
-                                >
-                                  <Check className="mr-2 h-4 w-4 opacity-0 shrink-0" />
-                                  <span className="truncate" title={p.name}>
-                                    {p.name}
-                                  </span>
-                                </CommandItem>
-                              ))}
-                              {showCreateNarratorOption && (
-                                <CommandItem
-                                  onSelect={handleCreateNarrator}
-                                  value={`create-${narratorSearch}`}
-                                >
-                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
-                                  <span className="truncate">
-                                    Create "{narratorSearch}"
-                                  </span>
-                                </CommandItem>
-                              )}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
                 </div>
               )}
 
@@ -1159,7 +920,7 @@ export function FileEditDialog({
                       </span>
                       <button
                         className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={handleClearPublisher}
+                        onClick={() => setPublisher("")}
                         type="button"
                       >
                         <X className="h-3 w-3" />
@@ -1167,81 +928,21 @@ export function FileEditDialog({
                     </Badge>
                   </div>
                 ) : (
-                  <Popover
-                    modal
-                    onOpenChange={setPublisherOpen}
-                    open={publisherOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        aria-expanded={publisherOpen}
-                        className="w-full justify-between"
-                        role="combobox"
-                        variant="outline"
-                      >
-                        Select publisher...
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-full p-0">
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          onValueChange={setPublisherSearch}
-                          placeholder="Search publishers..."
-                          value={publisherSearch}
-                        />
-                        <CommandList>
-                          {isLoadingPublishers && (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              Loading publishers...
-                            </div>
-                          )}
-                          {!isLoadingPublishers &&
-                            filteredPublishers.length === 0 &&
-                            !showCreatePublisherOption && (
-                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                {!debouncedPublisherSearch
-                                  ? "No publishers. Type to create one."
-                                  : "No matching publishers."}
-                              </div>
-                            )}
-                          {!isLoadingPublishers && (
-                            <CommandGroup>
-                              {filteredPublishers.map((p) => (
-                                <CommandItem
-                                  key={p.id}
-                                  onSelect={() => handleSelectPublisher(p.name)}
-                                  value={p.name}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 shrink-0 ${
-                                      publisher === p.name
-                                        ? "opacity-100"
-                                        : "opacity-0"
-                                    }`}
-                                  />
-                                  <span className="truncate" title={p.name}>
-                                    {p.name}
-                                  </span>
-                                </CommandItem>
-                              ))}
-                              {showCreatePublisherOption && (
-                                <CommandItem
-                                  onSelect={handleCreatePublisher}
-                                  value={`create-${publisherSearch}`}
-                                >
-                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
-                                  <span className="truncate">
-                                    Create "{publisherSearch}"
-                                  </span>
-                                </CommandItem>
-                              )}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <EntityCombobox<NameOption>
+                    getOptionKey={(item) => item.name}
+                    getOptionLabel={(item) => item.name}
+                    hook={function usePublisherOptions(q) {
+                      return usePublisherSearch(file.library_id, open, q);
+                    }}
+                    label="Publisher"
+                    onChange={(next) => {
+                      const nextName =
+                        "__create" in next ? next.__create : next.name;
+                      setPublisher(nextName);
+                    }}
+                    placeholder="Select publisher..."
+                    value={null}
+                  />
                 )}
               </div>
 
@@ -1259,7 +960,7 @@ export function FileEditDialog({
                       </span>
                       <button
                         className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={handleClearImprint}
+                        onClick={() => setImprint("")}
                         type="button"
                       >
                         <X className="h-3 w-3" />
@@ -1267,81 +968,21 @@ export function FileEditDialog({
                     </Badge>
                   </div>
                 ) : (
-                  <Popover
-                    modal
-                    onOpenChange={setImprintOpen}
-                    open={imprintOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        aria-expanded={imprintOpen}
-                        className="w-full justify-between"
-                        role="combobox"
-                        variant="outline"
-                      >
-                        Select imprint...
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-full p-0">
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          onValueChange={setImprintSearch}
-                          placeholder="Search imprints..."
-                          value={imprintSearch}
-                        />
-                        <CommandList>
-                          {isLoadingImprints && (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              Loading imprints...
-                            </div>
-                          )}
-                          {!isLoadingImprints &&
-                            filteredImprints.length === 0 &&
-                            !showCreateImprintOption && (
-                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                {!debouncedImprintSearch
-                                  ? "No imprints. Type to create one."
-                                  : "No matching imprints."}
-                              </div>
-                            )}
-                          {!isLoadingImprints && (
-                            <CommandGroup>
-                              {filteredImprints.map((i) => (
-                                <CommandItem
-                                  key={i.id}
-                                  onSelect={() => handleSelectImprint(i.name)}
-                                  value={i.name}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 shrink-0 ${
-                                      imprint === i.name
-                                        ? "opacity-100"
-                                        : "opacity-0"
-                                    }`}
-                                  />
-                                  <span className="truncate" title={i.name}>
-                                    {i.name}
-                                  </span>
-                                </CommandItem>
-                              ))}
-                              {showCreateImprintOption && (
-                                <CommandItem
-                                  onSelect={handleCreateImprint}
-                                  value={`create-${imprintSearch}`}
-                                >
-                                  <Plus className="mr-2 h-4 w-4 shrink-0" />
-                                  <span className="truncate">
-                                    Create "{imprintSearch}"
-                                  </span>
-                                </CommandItem>
-                              )}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <EntityCombobox<NameOption>
+                    getOptionKey={(item) => item.name}
+                    getOptionLabel={(item) => item.name}
+                    hook={function useImprintOptions(q) {
+                      return useImprintSearch(file.library_id, open, q);
+                    }}
+                    label="Imprint"
+                    onChange={(next) => {
+                      const nextName =
+                        "__create" in next ? next.__create : next.name;
+                      setImprint(nextName);
+                    }}
+                    placeholder="Select imprint..."
+                    value={null}
+                  />
                 )}
               </div>
 
@@ -1356,106 +997,11 @@ export function FileEditDialog({
               </div>
 
               {/* Identifiers */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Identifiers</Label>
-                  {identifiers.length > 1 && (
-                    <button
-                      className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
-                      onClick={() => setIdentifiers([])}
-                      type="button"
-                    >
-                      Clear all
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {identifiers.map((id, idx) => (
-                    <Badge
-                      className="flex items-center gap-1 max-w-full"
-                      key={idx}
-                      variant="secondary"
-                    >
-                      <span className="text-xs">
-                        {formatIdentifierType(id.type, pluginIdentifierTypes)}
-                      </span>
-                      : {id.value}
-                      <button
-                        aria-label="Remove"
-                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={() => {
-                          setIdentifiers(
-                            identifiers.filter((_, i) => i !== idx),
-                          );
-                        }}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Select
-                    onValueChange={setNewIdentifierType}
-                    value={newIdentifierType}
-                  >
-                    <SelectTrigger
-                      aria-label="Identifier type"
-                      className="w-auto min-w-32 shrink-0 gap-2"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableIdentifierTypes.map(({ id, label }) => {
-                        const isPresent = presentIdentifierTypes.has(id);
-                        const article = articleFor(id, label);
-                        const item = (
-                          <SelectItem disabled={isPresent} key={id} value={id}>
-                            {label}
-                          </SelectItem>
-                        );
-                        if (!isPresent) return item;
-                        return (
-                          <Tooltip key={id}>
-                            <TooltipTrigger asChild>
-                              <span className="block">{item}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              This file already has {article} {label}{" "}
-                              identifier. Remove it first to add a different
-                              value.
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    className="flex-1"
-                    onChange={(e) => setNewIdentifierValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddIdentifier();
-                      }
-                    }}
-                    placeholder="Enter value..."
-                    value={newIdentifierValue}
-                  />
-                  <Button
-                    disabled={
-                      presentIdentifierTypes.size >=
-                      availableIdentifierTypes.length
-                    }
-                    onClick={handleAddIdentifier}
-                    type="button"
-                    variant="outline"
-                  >
-                    Add
-                  </Button>
-                </div>
-              </div>
+              <IdentifierEditor
+                identifierTypes={availableIdentifierTypes}
+                onChange={setIdentifiers}
+                value={identifiers}
+              />
             </>
           )}
 
