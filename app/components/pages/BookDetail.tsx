@@ -425,7 +425,6 @@ const FileRow = ({
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   disabled={isDeletingFile}
@@ -574,7 +573,6 @@ const FileRow = ({
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 disabled={isDeletingFile}
@@ -740,6 +738,7 @@ const BookDetail = () => {
   const setPrimaryFileMutation = useSetPrimaryFile();
   const setBookReviewMutation = useSetBookReview();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
   const [showBookRescanDialog, setShowBookRescanDialog] = useState(false);
   const [rescanFileId, setRescanFileId] = useState<number | null>(null);
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
@@ -1128,24 +1127,13 @@ const BookDetail = () => {
               <h1 className="text-2xl md:text-3xl font-semibold">
                 {book.title}
               </h1>
-              <div className="flex items-center gap-2 shrink-0">
-                <AddToListPopover
-                  bookId={book.id}
-                  trigger={
-                    <Button size="sm" title="Add to list" variant="outline">
-                      <List className="h-4 w-4 sm:mr-2" />
-                      <span className="hidden sm:inline">Add to list</span>
-                    </Button>
-                  }
-                />
-                <Button
-                  onClick={() => setEditDialogOpen(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Edit className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Edit</span>
-                </Button>
+              {/*
+                The relative wrapper exists so AddToListPopover can be opened
+                from the dropdown menu's "Add to list" item: its trigger is an
+                invisible absolute span that anchors the popover to the same
+                rectangle as the dropdown's "..." button.
+              */}
+              <div className="relative shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">
@@ -1156,6 +1144,20 @@ const BookDetail = () => {
                     align="end"
                     onCloseAutoFocus={(e) => e.preventDefault()}
                   >
+                    <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setTimeout(() => setAddToListOpen(true), 0);
+                      }}
+                    >
+                      <List className="h-4 w-4 mr-2" />
+                      Add to list
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       disabled={resyncBookMutation.isPending}
                       onClick={() => setShowBookRescanDialog(true)}
@@ -1176,7 +1178,6 @@ const BookDetail = () => {
                       <GitMerge className="h-4 w-4 mr-2" />
                       Merge into another book
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onClick={() => setShowDeleteDialog(true)}
@@ -1186,6 +1187,17 @@ const BookDetail = () => {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <AddToListPopover
+                  bookId={book.id}
+                  onOpenChange={setAddToListOpen}
+                  open={addToListOpen}
+                  trigger={
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 pointer-events-none"
+                    />
+                  }
+                />
               </div>
             </div>
             {book.sort_title && book.sort_title !== book.title && (
