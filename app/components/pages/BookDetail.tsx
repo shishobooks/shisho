@@ -1127,73 +1127,77 @@ const BookDetail = () => {
               <h1 className="text-2xl md:text-3xl font-semibold">
                 {book.title}
               </h1>
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="relative">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="outline">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      onCloseAutoFocus={(e) => e.preventDefault()}
+              {/*
+                The relative wrapper exists so AddToListPopover can be opened
+                from the dropdown menu's "Add to list" item: its trigger is an
+                invisible absolute span that anchors the popover to the same
+                rectangle as the dropdown's "..." button.
+              */}
+              <div className="relative shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setTimeout(() => setAddToListOpen(true), 0);
+                      }}
                     >
-                      <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setTimeout(() => setAddToListOpen(true), 0);
-                        }}
-                      >
-                        <List className="h-4 w-4 mr-2" />
-                        Add to list
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={resyncBookMutation.isPending}
-                        onClick={() => setShowBookRescanDialog(true)}
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Rescan book
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setShowIdentifyDialog(true)}
-                      >
-                        <Search className="h-4 w-4 mr-2" />
-                        Identify book
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => setShowMergeIntoDialog(true)}
-                      >
-                        <GitMerge className="h-4 w-4 mr-2" />
-                        Merge into another book
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => setShowDeleteDialog(true)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                        Delete book
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <AddToListPopover
-                    bookId={book.id}
-                    onOpenChange={setAddToListOpen}
-                    open={addToListOpen}
-                    trigger={
-                      <span
-                        aria-hidden
-                        className="absolute inset-0 pointer-events-none"
-                      />
-                    }
-                  />
-                </div>
+                      <List className="h-4 w-4 mr-2" />
+                      Add to list
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={resyncBookMutation.isPending}
+                      onClick={() => setShowBookRescanDialog(true)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Rescan book
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowIdentifyDialog(true)}
+                    >
+                      <Search className="h-4 w-4 mr-2" />
+                      Identify book
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowMergeIntoDialog(true)}
+                    >
+                      <GitMerge className="h-4 w-4 mr-2" />
+                      Merge into another book
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                      Delete book
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <AddToListPopover
+                  bookId={book.id}
+                  onOpenChange={setAddToListOpen}
+                  open={addToListOpen}
+                  trigger={
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 pointer-events-none"
+                    />
+                  }
+                />
               </div>
             </div>
             {book.sort_title && book.sort_title !== book.title && (

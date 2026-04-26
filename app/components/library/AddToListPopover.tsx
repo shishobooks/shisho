@@ -121,8 +121,12 @@ const AddToListPopover = ({
       <PopoverContent
         align="end"
         className="w-56 p-0"
-        onFocusOutside={(e) => e.preventDefault()}
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        // When opened from a closing dropdown menu, Radix's onItemLeave fires a
+        // focus event the popover would otherwise read as outside-focus and
+        // dismiss on. Suppress that only in the controlled (dropdown handoff)
+        // case so the standalone trigger keeps its normal focus semantics.
+        onFocusOutside={isControlled ? (e) => e.preventDefault() : undefined}
+        onOpenAutoFocus={isControlled ? (e) => e.preventDefault() : undefined}
       >
         <p className="text-xs font-medium text-muted-foreground px-3 py-2">
           Add to List
