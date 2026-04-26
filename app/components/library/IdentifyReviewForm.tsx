@@ -571,10 +571,12 @@ export function IdentifyReviewForm({
   // Mirror BookEditDialog's semantic: "" means auto-generate, a non-empty
   // string is a manual override. Only initialize with the stored value when
   // the source is Manual; otherwise the auto-derived current sort title
-  // would get pinned as if the user had typed it.
-  const [sortTitle, setSortTitle] = useState(
-    book.sort_title_source === DataSourceManual ? book.sort_title || "" : "",
-  );
+  // would get pinned as if the user had typed it. The same value is reused
+  // in `hasChanges` below so an auto-derived sort title doesn't show as
+  // dirty on mount.
+  const initialSortTitle =
+    book.sort_title_source === DataSourceManual ? book.sort_title || "" : "";
+  const [sortTitle, setSortTitle] = useState(initialSortTitle);
 
   // ---- Genre / tag option pools (server-side search) ----
   const [genreSearch, setGenreSearch] = useState("");
@@ -746,7 +748,7 @@ export function IdentifyReviewForm({
       language !== defaults.language.value ||
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
-      sortTitle !== (book.sort_title || "") ||
+      sortTitle !== initialSortTitle ||
       coverSelection !== defaultCoverSelection
     );
   }, [
@@ -768,7 +770,7 @@ export function IdentifyReviewForm({
     abridged,
     identifiers,
     sortTitle,
-    book.sort_title,
+    initialSortTitle,
     coverSelection,
     defaults,
     defaultCoverSelection,
