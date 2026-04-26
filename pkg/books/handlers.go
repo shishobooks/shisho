@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -1717,53 +1718,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Select the appropriate file based on the library's cover aspect ratio setting
-	coverFile := selectCoverFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
-		return errcodes.NotFound("Cover")
-	}
-
-	// Resolve the cover via the file's parent dir rather than book.Filepath —
-	// see fileCover for the rationale (synthetic organized-folder paths for
-	// root-level files break book.Filepath-based resolution).
-	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
-	return errors.WithStack(c.File(coverPath))
-}
-
-// selectCoverFile selects the appropriate file for cover display based on the library's
-// cover aspect ratio setting.
-func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
-	var bookFiles, audiobookFiles []*models.File
-	for _, f := range files {
-		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
-			continue
-		}
-		switch f.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
-			bookFiles = append(bookFiles, f)
-		case models.FileTypeM4B:
-			audiobookFiles = append(audiobookFiles, f)
-		}
-	}
-
-	switch coverAspectRatio {
-	case "audiobook", "audiobook_fallback_book":
-		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
-		}
-		if len(bookFiles) > 0 {
-			return bookFiles[0]
-		}
-	default: // "book", "book_fallback_audiobook"
-		if len(bookFiles) > 0 {
-			return bookFiles[0]
-		}
-		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
-		}
-	}
-	return nil
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio)
 }
 
 // downloadFile handles downloading a file with generated metadata embedded.

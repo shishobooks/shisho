@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -779,7 +780,7 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 	opdsBase := strings.TrimSuffix(baseURL, "/kepub")
 
 	// Cover image link - select appropriate file based on cover aspect ratio
-	coverFile := selectCoverFile(book.Files, coverAspectRatio)
+	coverFile := covers.SelectFile(book.Files, coverAspectRatio)
 	if coverFile != nil && coverFile.CoverImageFilename != nil && *coverFile.CoverImageFilename != "" {
 		ext := filepath.Ext(*coverFile.CoverImageFilename)
 		mimeType := CoverMimeType(ext)
@@ -814,41 +815,6 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 // supportsKepub returns true if the file type can be converted to KePub.
 func supportsKepub(fileType string) bool {
 	return fileType == models.FileTypeEPUB || fileType == models.FileTypeCBZ
-}
-
-// selectCoverFile selects the appropriate file for cover display based on the library's
-// cover aspect ratio setting.
-func selectCoverFile(files []*models.File, coverAspectRatio string) *models.File {
-	var bookFiles, audiobookFiles []*models.File
-	for _, f := range files {
-		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
-			continue
-		}
-		switch f.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
-			bookFiles = append(bookFiles, f)
-		case models.FileTypeM4B:
-			audiobookFiles = append(audiobookFiles, f)
-		}
-	}
-
-	switch coverAspectRatio {
-	case "audiobook", "audiobook_fallback_book":
-		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
-		}
-		if len(bookFiles) > 0 {
-			return bookFiles[0]
-		}
-	default: // "book", "book_fallback_audiobook"
-		if len(bookFiles) > 0 {
-			return bookFiles[0]
-		}
-		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
-		}
-	}
-	return nil
 }
 
 // addPaginationLinks adds pagination links to a feed.
