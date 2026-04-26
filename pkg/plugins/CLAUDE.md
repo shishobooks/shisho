@@ -114,7 +114,7 @@ shisho/goodreads-metadata/
 
 **Logical field groupings:**
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
-- `series` → controls both `series` (name) and `seriesNumber`
+- `series` → controls `series` (name), `seriesNumber`, AND `seriesNumberUnit`
 
 **`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
 
@@ -172,6 +172,7 @@ fileParser: {
       narrators: ["Narrator"],
       series: "Series Name",
       seriesNumber: 2.5,
+      seriesNumberUnit: "volume",               // "volume" | "chapter"; CBZ only
       genres: ["Fiction"],
       tags: ["epic"],
       description: "...",

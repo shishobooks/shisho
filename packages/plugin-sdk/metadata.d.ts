@@ -36,6 +36,8 @@ export interface ParsedMetadata {
   narrators?: string[];
   series?: string;
   seriesNumber?: number;
+  /** Whether the series number refers to a volume or a chapter. CBZ only. */
+  seriesNumberUnit?: "volume" | "chapter";
   genres?: string[];
   tags?: string[];
   description?: string;

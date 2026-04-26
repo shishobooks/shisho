@@ -326,3 +326,50 @@ func TestParseSearchResponse_CoverPage_Invalid(t *testing.T) {
 	require.NotNil(t, resp.Results[3].CoverPage, "0 is a valid coverPage")
 	assert.Equal(t, 0, *resp.Results[3].CoverPage)
 }
+
+func TestParseSearchResponse_SeriesNumberUnit(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	resultsJS := `({results:[{title:"X",series:"S",seriesNumber:5,seriesNumberUnit:"chapter"}]})`
+	val, err := vm.RunString(resultsJS)
+	require.NoError(t, err)
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+	assert.NotNil(t, resp.Results[0].SeriesNumberUnit)
+	assert.Equal(t, "chapter", *resp.Results[0].SeriesNumberUnit)
+}
+
+func TestParseSearchResponse_SeriesNumberUnitVolume(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	resultsJS := `({results:[{title:"X",series:"S",seriesNumber:3,seriesNumberUnit:"volume"}]})`
+	val, err := vm.RunString(resultsJS)
+	require.NoError(t, err)
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+	assert.NotNil(t, resp.Results[0].SeriesNumberUnit)
+	assert.Equal(t, "volume", *resp.Results[0].SeriesNumberUnit)
+}
+
+func TestParseSearchResponse_SeriesNumberUnitInvalid(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	resultsJS := `({results:[{title:"X",seriesNumber:5,seriesNumberUnit:"bogus"}]})`
+	val, err := vm.RunString(resultsJS)
+	require.NoError(t, err)
+	resp := parseSearchResponse(vm, val, "s", "p")
+	// Bogus unit is dropped (nil) rather than passed through.
+	require.Len(t, resp.Results, 1)
+	assert.Nil(t, resp.Results[0].SeriesNumberUnit)
+}
+
+func TestParseSearchResponse_SeriesNumberUnitAbsent(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	resultsJS := `({results:[{title:"X",seriesNumber:5}]})`
+	val, err := vm.RunString(resultsJS)
+	require.NoError(t, err)
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+	assert.Nil(t, resp.Results[0].SeriesNumberUnit)
+}

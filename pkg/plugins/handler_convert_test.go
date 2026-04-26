@@ -358,3 +358,51 @@ func TestConvertFieldsToMetadata_AbridgedMissing(t *testing.T) {
 
 	assert.Nil(t, md.Abridged)
 }
+
+func TestConvertFieldsToMetadata_SeriesNumberUnit(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"series_number_unit": "chapter",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.SeriesNumberUnit)
+	assert.Equal(t, "chapter", *md.SeriesNumberUnit)
+}
+
+func TestConvertFieldsToMetadata_SeriesNumberUnitVolume(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"series_number_unit": "volume",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.SeriesNumberUnit)
+	assert.Equal(t, "volume", *md.SeriesNumberUnit)
+}
+
+func TestConvertFieldsToMetadata_SeriesNumberUnitInvalid(t *testing.T) {
+	t.Parallel()
+	// Invalid values must be dropped (nil), not passed through
+	fields := map[string]any{
+		"series_number_unit": "bogus",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	assert.Nil(t, md.SeriesNumberUnit)
+}
+
+func TestConvertFieldsToMetadata_SeriesNumberUnitMissing(t *testing.T) {
+	t.Parallel()
+	// Absent key should result in nil
+	fields := map[string]any{
+		"series_number": float64(3),
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	assert.Nil(t, md.SeriesNumberUnit)
+}
