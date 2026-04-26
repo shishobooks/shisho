@@ -842,12 +842,12 @@ func (w *Worker) scanFileCore(
 		// Title (from metadata)
 		title := strings.TrimSpace(metadata.Title)
 		titleSource := metadata.SourceForField("title")
-		// Normalize volume indicators (e.g., "#007" -> "v7") for CBZ files only when
+		// Normalize series number indicators (e.g., "#007" -> "v007", "Ch.5" -> "c005") for CBZ files only when
 		// the title came from the file itself or its path. Plugin/sidecar/manual
 		// titles are user-curated and must not be rewritten
 		// (e.g., "Naruto v1" must not become "Naruto v001").
 		if models.GetDataSourcePriority(titleSource) >= models.DataSourceFileMetadataPriority {
-			if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, file.FileType); hasVolume {
+			if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, file.FileType); hasNumber {
 				title = normalizedTitle
 			}
 		}
@@ -2608,7 +2608,8 @@ func (w *Worker) discoverAndCreateSupplements(
 }
 
 // deriveInitialTitle determines the initial title for a new book from the filepath or metadata.
-// For CBZ files, volume indicators like "#007" are normalized to "v7", and parenthesized
+// For CBZ files, series number indicators like "#007" are normalized to "v007"
+// and chapter indicators like "Ch.5" are normalized to "c005"; parenthesized
 // metadata like "(2020) (Digital) (group)" is removed.
 func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) string {
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
@@ -2616,8 +2617,8 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	// If metadata has a title, use it
 	if metadata != nil {
 		if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
-			// Normalize volume indicators in metadata title
-			if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(trimmedTitle, fileType); hasVolume {
+			// Normalize series number indicators in metadata title
+			if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(trimmedTitle, fileType); hasNumber {
 				return normalizedTitle
 			}
 			return trimmedTitle
@@ -2649,8 +2650,8 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 
-	// Normalize volume indicators in filepath-based title
-	if normalizedTitle, hasVolume := fileutils.NormalizeVolumeInTitle(title, fileType); hasVolume {
+	// Normalize series number indicators in filepath-based title
+	if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, fileType); hasNumber {
 		return normalizedTitle
 	}
 
@@ -2759,9 +2760,9 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 	// Series fallback from title (e.g., "My Series v3" → series="My Series", number=3)
 	if metadata.Series == "" {
 		title := metadata.Title
-		if seriesName, volumeNumber, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
+		if seriesName, seriesNumber, _, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
 			metadata.Series = seriesName
-			metadata.SeriesNumber = volumeNumber
+			metadata.SeriesNumber = seriesNumber
 			setSource("series")
 		}
 	}

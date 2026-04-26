@@ -73,8 +73,8 @@ func generateCBZFileName(metadata *mediafile.ParsedMetadata, filename string) st
 }
 
 // cleanCBZFilename removes author brackets, parenthesized metadata, and extension from a CBZ filename,
-// then normalizes volume indicators (e.g., "v02" -> "v2").
-// Example: "[Author Name] Comic Title v01 (2020) (Digital).cbz" -> "Comic Title v1".
+// then normalizes series number indicators (e.g., "v02" -> "v002", "Ch.5" -> "c005").
+// Example: "[Author Name] Comic Title v01 (2020) (Digital).cbz" -> "Comic Title v001".
 func cleanCBZFilename(filename string) string {
 	// Remove extension
 	name := strings.TrimSuffix(filename, filepath.Ext(filename))
@@ -89,8 +89,8 @@ func cleanCBZFilename(filename string) string {
 	name = strings.TrimSpace(name)
 	name = multiSpaceRE.ReplaceAllString(name, " ")
 
-	// Normalize volume indicators (v02 -> v002)
-	if normalized, hasVolume := fileutils.NormalizeVolumeInTitle(name, models.FileTypeCBZ); hasVolume {
+	// Normalize series number indicators (v02 -> v002, Ch.5 -> c005)
+	if normalized, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(name, models.FileTypeCBZ); hasNumber {
 		return normalized
 	}
 

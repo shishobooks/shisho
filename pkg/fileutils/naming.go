@@ -12,11 +12,12 @@ import (
 
 // OrganizedNameOptions contains the data needed to generate organized file/folder names.
 type OrganizedNameOptions struct {
-	AuthorNames   []string // Author names as strings for file naming
-	NarratorNames []string // Narrator names for M4B file naming
-	Title         string
-	SeriesNumber  *float64
-	FileType      string // for determining volume number formatting
+	AuthorNames      []string // Author names as strings for file naming
+	NarratorNames    []string // Narrator names for M4B file naming
+	Title            string
+	SeriesNumber     *float64
+	SeriesNumberUnit *string // for CBZ: "volume" or "chapter"; nil treated as volume
+	FileType         string  // for determining number formatting
 }
 
 // GenerateOrganizedFolderName creates a standardized folder name: [Author] Title #Volume.
@@ -35,14 +36,16 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 		parts = append(parts, title)
 	}
 
-	// Add volume number only for CBZ files (manga/comic volumes)
-	// But only if the title doesn't already contain volume information
+	// Add series number only for CBZ files (manga/comic). But only if the title
+	// doesn't already encode a number.
 	if opts.SeriesNumber != nil && opts.FileType == models.FileTypeCBZ {
-		// Check if title already contains volume information
-		titleHasVolume := extractVolumeFromTitle(opts.Title) != nil
-		if !titleHasVolume {
-			volumeStr := formatVolumeNumber(*opts.SeriesNumber, opts.FileType)
-			parts = append(parts, volumeStr)
+		existingNum, _ := extractSeriesNumberFromTitle(opts.Title)
+		if existingNum == nil {
+			unit := ""
+			if opts.SeriesNumberUnit != nil {
+				unit = *opts.SeriesNumberUnit
+			}
+			parts = append(parts, formatSeriesNumber(*opts.SeriesNumber, unit, opts.FileType))
 		}
 	}
 
@@ -81,22 +84,25 @@ func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath strin
 	return baseName + ext
 }
 
-// formatVolumeNumber formats volume numbers appropriately based on file type.
-func formatVolumeNumber(volume float64, fileType string) string {
-	// For CBZ files, use v{number} format without zero-padding
+// formatSeriesNumber formats a CBZ series number with the appropriate unit prefix:
+// "v" for volume (and the empty-unit default), "c" for chapter. Non-CBZ files keep
+// the legacy "#N" form, which is currently unused since this helper is only invoked
+// for CBZ in GenerateOrganizedFolderName.
+func formatSeriesNumber(number float64, unit string, fileType string) string {
 	if fileType == models.FileTypeCBZ {
-		if volume == float64(int(volume)) {
-			return fmt.Sprintf("v%d", int(volume))
+		prefix := "v"
+		if unit == "chapter" {
+			prefix = "c"
 		}
-		return fmt.Sprintf("v%.1f", volume)
+		if number == float64(int(number)) {
+			return fmt.Sprintf("%s%d", prefix, int(number))
+		}
+		return fmt.Sprintf("%s%.1f", prefix, number)
 	}
-
-	// For other types, still use # format (though this shouldn't be called for non-CBZ)
-	if volume == float64(int(volume)) {
-		return fmt.Sprintf("#%d", int(volume))
+	if number == float64(int(number)) {
+		return fmt.Sprintf("#%d", int(number))
 	}
-
-	return fmt.Sprintf("#%.1f", volume)
+	return fmt.Sprintf("#%.1f", number)
 }
 
 // sanitizeForFilename removes or replaces characters that are not safe for filenames.
@@ -131,67 +137,88 @@ func IsOrganizedName(name string) bool {
 	// Remove extension for analysis
 	nameWithoutExt := strings.TrimSuffix(name, filepath.Ext(name))
 
-	// Basic pattern: starts with [Author] or contains volume indicators
+	// Basic pattern: starts with [Author] or contains series number indicators
 	authorPattern := regexp.MustCompile(`^\[.+\]`)
-	volumePattern := regexp.MustCompile(`(v\d+(?:\.\d+)?|#\d+(?:\.\d+)?)$`)
+	seriesNumberPattern := regexp.MustCompile(`([vc]\d+(?:\.\d+)?|#\d+(?:\.\d+)?)$`)
 
-	return authorPattern.MatchString(nameWithoutExt) || volumePattern.MatchString(nameWithoutExt)
+	return authorPattern.MatchString(nameWithoutExt) || seriesNumberPattern.MatchString(nameWithoutExt)
 }
 
-// NormalizeVolumeInTitle normalizes volume indicators in titles to the standard v{number} format.
-// Only applies to CBZ files. Returns the normalized title and whether a volume was found.
-func NormalizeVolumeInTitle(title string, fileType string) (string, bool) {
+// NormalizeSeriesNumberInTitle normalizes volume- or chapter-style number indicators
+// in CBZ titles. For volume indicators (v01, vol.5, volume 12, #001, bare trailing
+// number) the title becomes "Title v{NNN}". For chapter indicators (chapter 5,
+// Ch.5, c042) the title becomes "Title c{NNN}". Returns the normalized title,
+// the parsed unit ("volume" or "chapter", "" when no match), and whether a number
+// was found. Non-CBZ files are returned unchanged.
+func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string, bool) {
 	if fileType != models.FileTypeCBZ {
-		return title, false
+		return title, "", false
 	}
 
-	// Patterns to match various volume indicators
-	// Order matters: more specific patterns (with prefixes) should come before bare numbers
-	volumePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`),         // matches "#001", "#7", "#7.5"
-		regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`),         // matches "v12", "v7.5"
-		regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), // matches "vol12", "vol.12", "vol 12"
-		regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), // matches "volume12", "volume 12"
-		regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`),              // matches bare numbers like "Title 1", "Title 2"
+	// Pattern table: regex + unit. First match wins; explicit chapter patterns
+	// precede explicit volume patterns; ambiguous indicators (#, bare numbers)
+	// default to volume to preserve historical behavior.
+	patterns := []struct {
+		re   *regexp.Regexp
+		unit string
+	}{
+		{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), "chapter"},
+		{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), "chapter"},
+		{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), "chapter"},
+		{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), "volume"},
+		{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), "volume"},
+		{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), "volume"},
+		{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), "volume"},
+		{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), "volume"},
 	}
 
-	for _, pattern := range volumePatterns {
-		if matches := pattern.FindStringSubmatch(title); len(matches) >= 2 {
-			// Extract the base title without volume indicator
-			baseTitle := pattern.ReplaceAllString(title, "")
-			baseTitle = strings.TrimSpace(baseTitle)
-
-			// Parse the volume number
-			volumeStr := matches[1]
-			if volume, err := strconv.ParseFloat(volumeStr, 64); err == nil {
-				// Create normalized title with v{zero-padded number} format for lexicographic sorting
-				var normalizedTitle string
-				if volume == float64(int(volume)) {
-					normalizedTitle = fmt.Sprintf("%s v%03d", baseTitle, int(volume))
-				} else {
-					intPart := int(volume)
-					fracStr := strconv.FormatFloat(volume-float64(intPart), 'f', -1, 64)
-					// fracStr is like "0.5", strip the leading "0"
-					normalizedTitle = fmt.Sprintf("%s v%03d%s", baseTitle, intPart, fracStr[1:])
-				}
-				return strings.TrimSpace(normalizedTitle), true
-			}
+	for _, p := range patterns {
+		matches := p.re.FindStringSubmatch(title)
+		if len(matches) < 2 {
+			continue
 		}
+		baseTitle := strings.TrimSpace(p.re.ReplaceAllString(title, ""))
+		number, err := strconv.ParseFloat(matches[1], 64)
+		if err != nil {
+			continue
+		}
+		prefix := "v"
+		if p.unit == "chapter" {
+			prefix = "c"
+		}
+		var normalized string
+		if number == float64(int(number)) {
+			normalized = fmt.Sprintf("%s %s%03d", baseTitle, prefix, int(number))
+		} else {
+			intPart := int(number)
+			fracStr := strconv.FormatFloat(number-float64(intPart), 'f', -1, 64)
+			// fracStr is "0.5"; strip the leading "0".
+			normalized = fmt.Sprintf("%s %s%03d%s", baseTitle, prefix, intPart, fracStr[1:])
+		}
+		return strings.TrimSpace(normalized), p.unit, true
 	}
 
-	return title, false
+	return title, "", false
 }
 
-// extractVolumeFromTitle extracts the volume number from a normalized title.
-// Returns nil if no volume is found.
-func extractVolumeFromTitle(title string) *float64 {
-	volumePattern := regexp.MustCompile(`\s+v(\d+(?:\.\d+)?)\s*$`)
-	if matches := volumePattern.FindStringSubmatch(title); len(matches) >= 2 {
-		if volume, err := strconv.ParseFloat(matches[1], 64); err == nil {
-			return &volume
-		}
+// extractSeriesNumberFromTitle extracts a normalized series number suffix
+// ("v003" or "c042") from a title. Returns the number and unit, or (nil, "")
+// if no suffix is present.
+func extractSeriesNumberFromTitle(title string) (*float64, string) {
+	seriesNumberPattern := regexp.MustCompile(`\s+([vc])(\d+(?:\.\d+)?)\s*$`)
+	matches := seriesNumberPattern.FindStringSubmatch(title)
+	if len(matches) < 3 {
+		return nil, ""
 	}
-	return nil
+	number, err := strconv.ParseFloat(matches[2], 64)
+	if err != nil {
+		return nil, ""
+	}
+	unit := "volume"
+	if strings.EqualFold(matches[1], "c") {
+		unit = "chapter"
+	}
+	return &number, unit
 }
 
 // SplitNames splits a string of names by common delimiters (comma and semicolon),
@@ -214,30 +241,30 @@ func SplitNames(s string) []string {
 	return parts
 }
 
-// ExtractSeriesFromTitle extracts series name and volume number from a normalized title.
-// Only applies to CBZ files with volume indicators in the "v{number}" format.
-// Returns the base title (series name), volume number, and whether extraction succeeded.
-func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, volumeNumber *float64, ok bool) {
+// ExtractSeriesFromTitle extracts series name and number from a normalized CBZ title.
+// Returns the base title (series name), number, unit ("volume" or "chapter"), and
+// whether extraction succeeded. Only applies to CBZ files with normalized "v{N}"
+// or "c{N}" suffixes.
+func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, number *float64, unit string, ok bool) {
 	if fileType != models.FileTypeCBZ {
-		return "", nil, false
+		return "", nil, "", false
 	}
-
-	// Match normalized volume format: "Title v{number}"
-	volumePattern := regexp.MustCompile(`^(.+?)\s+v(\d+(?:\.\d+)?)\s*$`)
-	matches := volumePattern.FindStringSubmatch(title)
-	if len(matches) < 3 {
-		return "", nil, false
+	seriesNumberPattern := regexp.MustCompile(`^(.+?)\s+([vc])(\d+(?:\.\d+)?)\s*$`)
+	matches := seriesNumberPattern.FindStringSubmatch(title)
+	if len(matches) < 4 {
+		return "", nil, "", false
 	}
-
 	seriesName = strings.TrimSpace(matches[1])
 	if seriesName == "" {
-		return "", nil, false
+		return "", nil, "", false
 	}
-
-	volume, err := strconv.ParseFloat(matches[2], 64)
+	parsed, err := strconv.ParseFloat(matches[3], 64)
 	if err != nil {
-		return "", nil, false
+		return "", nil, "", false
 	}
-
-	return seriesName, &volume, true
+	parsedUnit := "volume"
+	if strings.EqualFold(matches[2], "c") {
+		parsedUnit = "chapter"
+	}
+	return seriesName, &parsed, parsedUnit, true
 }
