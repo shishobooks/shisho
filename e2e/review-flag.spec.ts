@@ -67,7 +67,9 @@ test.describe("Review flag", () => {
       waitUntil: "domcontentloaded",
     });
     // Wait for the gallery to resolve.
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
   }
 
   test("book with unreviewed file shows in Needs review filter and drops out when marked reviewed", async ({
@@ -92,7 +94,9 @@ test.describe("Review flag", () => {
       `/libraries/${testData.libraryId}?reviewed_filter=needs_review`,
       { waitUntil: "domcontentloaded" },
     );
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
 
     // The unreviewed book should appear in the filtered view.
     await expect(page.getByText("Unreviewed Book")).toBeVisible();
@@ -107,7 +111,9 @@ test.describe("Review flag", () => {
 
     // Reload the filtered view — the book should no longer appear.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Unreviewed Book")).not.toBeVisible();
   });
 
@@ -139,7 +145,9 @@ test.describe("Review flag", () => {
       `/libraries/${testData.libraryId}?reviewed_filter=needs_review`,
       { waitUntil: "domcontentloaded" },
     );
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Toggle Back Book")).not.toBeVisible();
 
     // Toggle back to unreviewed.
@@ -151,7 +159,9 @@ test.describe("Review flag", () => {
 
     // Reload — the book should now appear in the needs_review filter.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Toggle Back Book")).toBeVisible();
   });
 
@@ -182,14 +192,16 @@ test.describe("Review flag", () => {
       `/libraries/${testData.libraryId}?reviewed_filter=needs_review`,
       { waitUntil: "domcontentloaded" },
     );
-    await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Select", exact: true }),
+    ).toBeVisible();
 
     // Both books should appear.
     await expect(page.getByText("Bulk Book Alpha")).toBeVisible();
     await expect(page.getByText("Bulk Book Beta")).toBeVisible();
 
     // Enter selection mode.
-    await page.getByRole("button", { name: "Select" }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
 
     // Click both book cards to select them. In selection mode the card wrapper
     // has the click handler; pointer events on inner elements (title, link)

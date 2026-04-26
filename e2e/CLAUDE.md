@@ -173,6 +173,26 @@ await page.goto("/setup", { waitUntil: "domcontentloaded" });
 await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
 ```
 
+### 5. `getByRole(role, { name })` Matches Names as Substrings
+
+**Problem:** `getByRole(role, { name })` performs a case-insensitive substring match by default. If two elements with the same role have names where one is a prefix/substring of the other (e.g., a "Select" toolbar button and a "Select Library" dropdown trigger on the same page), the locator resolves to multiple elements and Playwright's strict mode fails it with `strict mode violation`.
+
+**Solution:** Pass `exact: true` whenever the visible name is — or could plausibly become — a substring of another element's name on the same page:
+
+```typescript
+// ❌ BAD: also matches "Select Library", "Select All", etc.
+await expect(page.getByRole("button", { name: "Select" })).toBeVisible();
+
+// ✅ GOOD: matches only the exact "Select" button
+await expect(
+  page.getByRole("button", { name: "Select", exact: true }),
+).toBeVisible();
+```
+
+For more flexibility (e.g., "starts with X" or a specific casing), pass a regex instead: `name: /^Select /` to allow any "Select …" name, or `name: /select/i` for explicit case-insensitive matching.
+
+This is especially insidious because the test passes until someone adds an unrelated button whose name happens to contain the same substring — the failure shows up in CI on a PR that didn't touch the test.
+
 ## Test File Structure
 
 ```typescript

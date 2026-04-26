@@ -73,6 +73,10 @@ outputs = ["app/types/generated/**/*.ts"]
 
 [tasks.lint]
 description = "Run Go linting"
+# Per-worktree cache so concurrent worktrees don't trip golangci-lint's
+# "parallel golangci-lint is running" lock against each other. Cold cache
+# costs ~30s extra on the first run in a fresh worktree; warm cache is ~3s.
+env = { GOLANGCI_LINT_CACHE = "{{config_root}}/tmp/golangci-lint-cache" }
 run = "golangci-lint run"
 
 [tasks."lint:js"]
@@ -108,6 +112,10 @@ run = "go test -race ./pkg/... -coverprofile coverage.out"
 description = "Run all JS tests"
 depends = ["tygo", "test:unit", "test:e2e"]
 
+[tasks."test:js:fast"]
+description = "Run JS tests with chromium e2e only (firefox runs in CI)"
+depends = ["tygo", "test:unit", "e2e:chromium"]
+
 [tasks."test:unit"]
 description = "Run JS unit tests"
 run = "pnpm test:unit"
@@ -138,16 +146,31 @@ depends = ["lint", "lint:js", "test", "test:js"]
 description = "Run all checks, suppress output on success"
 depends = ["tygo"]
 run = '''
+# Serialize concurrent check:quiet runs from different worktrees on the
+# same host with flock — both runs together still finish faster than a
+# single run, but with much less CPU contention so the host stays
+# responsive. Falls through gracefully if flock isn't installed.
+lockfile="/tmp/shisho-check-quiet.lock"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$lockfile"
+  if ! flock -n 9; then
+    echo "Another mise check:quiet is running on this host — waiting for it to finish..."
+    flock 9
+  fi
+else
+  echo "flock not found — running without host-wide lock (install with 'brew install flock' on macOS)"
+fi
+echo "Running checks..."
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
-for step in lint test test:js lint:js; do
+for step in lint test test:js:fast lint:js; do
   echo 1 >"$tmpdir/$step.rc"
   touch "$tmpdir/$step.out"
   ( mise "$step" >"$tmpdir/$step.out" 2>&1; echo $? >"$tmpdir/$step.rc" ) &
 done
 wait
 failed=0
-for step in lint test test:js lint:js; do
+for step in lint test test:js:fast lint:js; do
   rc=$(cat "$tmpdir/$step.rc" 2>/dev/null || echo 1)
   if [ "$rc" -eq 0 ]; then
     printf '  \033[32mPASS\033[0m  %s\n' "$step"

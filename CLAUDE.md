@@ -116,12 +116,13 @@ file.CoverImageFilename = &filename
 - `mise lint` - Run Go linting with golangci-lint
 - `mise lint:js` - Run all JS/TS linting (ESLint, Prettier, TypeScript) in parallel
 - `mise check` - Run all validation checks in parallel (tests, Go lint, JS lint)
-- `mise check:quiet` - Same as check but suppresses output on success, only shows failures
+- `mise check:quiet` - Same as check but quieter, skips Firefox e2e (which still runs in CI), and serializes concurrent runs across worktrees via `flock`. Prefer this over `mise check` locally.
 
 ### Testing
 - `mise test` - Run all Go tests with coverage
 - `mise test:race` - Run all Go tests with race detection and coverage (local; CI runs the same `-race` tests but sharded across parallel jobs in `.github/workflows/ci.yml`)
 - `mise test:js` - Run all JS tests (unit + E2E) in parallel
+- `mise test:js:fast` - Run JS tests with chromium e2e only (Firefox runs in CI); used by `mise check:quiet`
 - `mise test:unit` - Run JS unit tests only
 - `mise test:e2e` - Run E2E tests (Chromium + Firefox) in parallel
 
@@ -165,8 +166,13 @@ For detailed architecture information, see:
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
-- Always run `mise check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `mise check` only when you need full verbose output for debugging.
-- **Don't run checks multiple times** — `mise check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
+- **While iterating, run only the targeted subset of checks relevant to what you changed.** `mise check:quiet` fans out four heavy parallel pipelines that peg CPU; running it between every iteration is wasteful when you only touched one stack. Subset cheat sheet:
+  - Go-only edits → `mise lint test`
+  - Frontend-only edits → `mise lint:js test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Both → run both
+  - Migrations → also `mise db:rollback && mise db:migrate`
+  - E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
+- **Run the full `mise check:quiet` once when the feature/fix is done, before pushing or opening a PR.** Concurrent runs from different worktrees serialize automatically via `flock` (install with `brew install flock` on macOS; built in on Linux), so you don't need to coordinate with other agents — just kick it off and it'll wait its turn if another is in flight. Avoid plain `mise check` — its parallel verbose output is hard to follow and tempts you to re-run it.
 - **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
