@@ -313,3 +313,163 @@ func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	assert.Equal(t, "New Target Name", readBooksFTSSeriesNames(ctx, t, db, book.ID),
 		"books_fts.series_names must reflect the target series name after a merge")
 }
+
+// TestDeleteSeries_HardDeletesRowAndFTS pins the post-soft-delete behavior:
+// after DeleteSeries the row is gone from `series` (not just flagged with
+// deleted_at), the join rows are gone, and DeleteFromSeriesIndex purges the
+// FTS row. Catches accidental reintroduction of the soft_delete tag.
+func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
+	t.Parallel()
+
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	s := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Test Series",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Test Series",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(s).Exec(ctx)
+	require.NoError(t, err)
+
+	bs := &models.BookSeries{BookID: book.ID, SeriesID: s.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(bs).Exec(ctx)
+	require.NoError(t, err)
+
+	// Index the series in FTS so we can assert it's purged after deletion.
+	searchSvc := search.NewService(db)
+	require.NoError(t, searchSvc.IndexSeries(ctx, s))
+
+	// Sanity: FTS row exists before deletion. series_fts is a virtual FTS5
+	// table, so use a raw query (Bun model queries don't work against it).
+	var pre int
+	require.NoError(t, db.NewRaw("SELECT count(*) FROM series_fts WHERE series_id = ?", s.ID).
+		Scan(ctx, &pre))
+	require.Equal(t, 1, pre, "series_fts should have a row before deletion")
+
+	// Delete via the service. The service does NOT touch FTS — the handler
+	// does. We invoke DeleteFromSeriesIndex explicitly to mirror the handler.
+	svc := NewService(db)
+	_, err = svc.DeleteSeries(ctx, s.ID)
+	require.NoError(t, err)
+	require.NoError(t, searchSvc.DeleteFromSeriesIndex(ctx, s.ID))
+
+	// 1. The row is gone from `series` (not just flagged). This is the
+	//    assertion that fails on the pre-change tree.
+	count, err := db.NewSelect().Model((*models.Series)(nil)).
+		Where("id = ?", s.ID).
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "series row must be hard-deleted, not soft-deleted")
+
+	// 2. book_series rows for the deleted series are gone (CASCADE).
+	bsCount, err := db.NewSelect().Model((*models.BookSeries)(nil)).
+		Where("series_id = ?", s.ID).
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, bsCount, "book_series rows must be removed")
+
+	// 3. FTS row is gone.
+	var post int
+	require.NoError(t, db.NewRaw("SELECT count(*) FROM series_fts WHERE series_id = ?", s.ID).
+		Scan(ctx, &post))
+	assert.Equal(t, 0, post, "series_fts row must be removed after DeleteFromSeriesIndex")
+}
+
+// TestCleanupOrphanedSeries_ReturnsDeletedIDs pins the requirement that
+// CleanupOrphanedSeries returns the IDs of deleted series so callers can keep
+// series_fts in sync. Without this, orphan-series cleanup silently leaves
+// stale FTS rows that surface in search results pointing at non-existent
+// series.
+func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
+	t.Parallel()
+
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Series with a book — must NOT be cleaned up.
+	keep := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Kept Series",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Kept Series",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(keep).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	bs := &models.BookSeries{BookID: book.ID, SeriesID: keep.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(bs).Exec(ctx)
+	require.NoError(t, err)
+
+	// Orphan series with no book — must be cleaned up.
+	orphan := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Orphan Series",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Orphan Series",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(orphan).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	deletedIDs, err := svc.CleanupOrphanedSeries(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{orphan.ID}, deletedIDs,
+		"CleanupOrphanedSeries must return the IDs of deleted series so callers can purge FTS")
+
+	// Orphan row is gone.
+	count, err := db.NewSelect().Model((*models.Series)(nil)).
+		Where("id = ?", orphan.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "orphan series row should be deleted")
+
+	// Kept series remains.
+	count, err = db.NewSelect().Model((*models.Series)(nil)).
+		Where("id = ?", keep.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "series with books must not be cleaned up")
+}

@@ -241,12 +241,6 @@ func (h *handler) update(c echo.Context) error {
 		oldSeriesIDs = append(oldSeriesIDs, bs.SeriesID)
 	}
 
-	// Track old author person IDs for FTS re-indexing
-	oldPersonIDs := make([]int, 0)
-	for _, author := range book.Authors {
-		oldPersonIDs = append(oldPersonIDs, author.PersonID)
-	}
-
 	// Update title
 	if params.Title != nil && *params.Title != book.Title {
 		oldTitle := book.Title
@@ -482,9 +476,15 @@ func (h *handler) update(c echo.Context) error {
 		book.GenreSource = &genreSource
 		opts.Columns = append(opts.Columns, "genre_source")
 
-		// Cleanup orphaned genres after deletion
-		if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		// Cleanup orphaned genres after deletion and purge their FTS rows.
+		orphanedGenreIDs, err := h.genreService.CleanupOrphanedGenres(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
+		}
+		for _, id := range orphanedGenreIDs {
+			if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
+				log.Warn("failed to remove orphaned genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
+			}
 		}
 
 		// Re-index old genres (some may have been deleted/orphaned)
@@ -550,9 +550,15 @@ func (h *handler) update(c echo.Context) error {
 		book.TagSource = &tagSource
 		opts.Columns = append(opts.Columns, "tag_source")
 
-		// Cleanup orphaned tags after deletion
-		if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+		// Cleanup orphaned tags after deletion and purge their FTS rows.
+		orphanedTagIDs, err := h.tagService.CleanupOrphanedTags(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+		}
+		for _, id := range orphanedTagIDs {
+			if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
+				log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
+			}
 		}
 
 		// Re-index old tags (some may have been deleted/orphaned)
@@ -662,27 +668,10 @@ func (h *handler) update(c echo.Context) error {
 
 	// Cleanup orphaned records
 	if authorsChanged {
-		// Get list of orphaned people before deleting them (for FTS cleanup)
-		orphanedPersonIDs := make([]int, 0)
-		for _, personID := range oldPersonIDs {
-			// Check if this old person is still associated with any books
-			isOrphaned := true
-			for _, author := range book.Authors {
-				if author.PersonID == personID {
-					isOrphaned = false
-					break
-				}
-			}
-			if isOrphaned {
-				orphanedPersonIDs = append(orphanedPersonIDs, personID)
-			}
-		}
-
-		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+		orphanedPersonIDs, err := h.personService.CleanupOrphanedPeople(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
 		}
-
-		// Remove orphaned people from FTS index
 		for _, personID := range orphanedPersonIDs {
 			if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
 				log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
@@ -690,8 +679,14 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 	if seriesChanged {
-		if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+		orphanedSeriesIDs, err := h.bookService.CleanupOrphanedSeries(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned series", logger.Data{"error": err.Error()})
+		}
+		for _, seriesID := range orphanedSeriesIDs {
+			if err := h.searchService.DeleteFromSeriesIndex(ctx, seriesID); err != nil {
+				log.Warn("failed to remove orphaned series from search index", logger.Data{"series_id": seriesID, "error": err.Error()})
+			}
 		}
 	}
 
@@ -909,12 +904,6 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		file.FileRole = newRole
 		opts.Columns = append(opts.Columns, "file_role")
-	}
-
-	// Track old narrator person IDs for FTS re-indexing
-	oldNarratorPersonIDs := make([]int, 0)
-	for _, narrator := range file.Narrators {
-		oldNarratorPersonIDs = append(oldNarratorPersonIDs, narrator.PersonID)
 	}
 
 	// narratorNames tracks the authoritative narrator list for this file —
@@ -1238,27 +1227,10 @@ func (h *handler) updateFile(c echo.Context) error {
 
 	// Cleanup orphaned people
 	if narratorsChanged {
-		// Get list of orphaned people before deleting them (for FTS cleanup)
-		orphanedPersonIDs := make([]int, 0)
-		for _, personID := range oldNarratorPersonIDs {
-			// Check if this old person is still associated with any files as narrator
-			isOrphaned := true
-			for _, narrator := range file.Narrators {
-				if narrator.PersonID == personID {
-					isOrphaned = false
-					break
-				}
-			}
-			if isOrphaned {
-				orphanedPersonIDs = append(orphanedPersonIDs, personID)
-			}
-		}
-
-		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+		orphanedPersonIDs, err := h.personService.CleanupOrphanedPeople(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
 		}
-
-		// Remove orphaned people from FTS index
 		for _, personID := range orphanedPersonIDs {
 			if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
 				log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
@@ -2499,17 +2471,41 @@ func (h *handler) deleteBook(c echo.Context) error {
 	}
 
 	// Clean up orphaned entities
-	if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+	orphanedPersonIDs, err := h.personService.CleanupOrphanedPeople(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+	for _, personID := range orphanedPersonIDs {
+		if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
+			log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
+		}
+	}
+	orphanedSeriesIDs, err := h.bookService.CleanupOrphanedSeries(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned series", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+	for _, seriesID := range orphanedSeriesIDs {
+		if err := h.searchService.DeleteFromSeriesIndex(ctx, seriesID); err != nil {
+			log.Warn("failed to remove orphaned series from search index", logger.Data{"series_id": seriesID, "error": err.Error()})
+		}
+	}
+	orphanedGenreIDs, err := h.genreService.CleanupOrphanedGenres(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+	for _, genreID := range orphanedGenreIDs {
+		if err := h.searchService.DeleteFromGenreIndex(ctx, genreID); err != nil {
+			log.Warn("failed to remove orphaned genre from search index", logger.Data{"genre_id": genreID, "error": err.Error()})
+		}
+	}
+	orphanedTagIDs, err := h.tagService.CleanupOrphanedTags(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+	}
+	for _, tagID := range orphanedTagIDs {
+		if err := h.searchService.DeleteFromTagIndex(ctx, tagID); err != nil {
+			log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err.Error()})
+		}
 	}
 
 	return c.JSON(http.StatusOK, DeleteBookResponse{
@@ -2570,17 +2566,41 @@ func (h *handler) deleteFile(c echo.Context) error {
 		if err := h.searchService.DeleteFromBookIndex(ctx, result.BookID); err != nil {
 			log.Warn("failed to remove book from search index", logger.Data{"error": err, "bookID": result.BookID})
 		}
-		if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+		orphanedPersonIDs, err := h.personService.CleanupOrphanedPeople(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned people", logger.Data{"error": err})
 		}
-		if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+		for _, personID := range orphanedPersonIDs {
+			if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
+				log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err})
+			}
+		}
+		orphanedSeriesIDs, err := h.bookService.CleanupOrphanedSeries(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned series", logger.Data{"error": err})
 		}
-		if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+		for _, seriesID := range orphanedSeriesIDs {
+			if err := h.searchService.DeleteFromSeriesIndex(ctx, seriesID); err != nil {
+				log.Warn("failed to remove orphaned series from search index", logger.Data{"series_id": seriesID, "error": err})
+			}
+		}
+		orphanedGenreIDs, err := h.genreService.CleanupOrphanedGenres(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err})
 		}
-		if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+		for _, genreID := range orphanedGenreIDs {
+			if err := h.searchService.DeleteFromGenreIndex(ctx, genreID); err != nil {
+				log.Warn("failed to remove orphaned genre from search index", logger.Data{"genre_id": genreID, "error": err})
+			}
+		}
+		orphanedTagIDs, err := h.tagService.CleanupOrphanedTags(ctx)
+		if err != nil {
 			log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err})
+		}
+		for _, tagID := range orphanedTagIDs {
+			if err := h.searchService.DeleteFromTagIndex(ctx, tagID); err != nil {
+				log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err})
+			}
 		}
 	}
 
@@ -2657,17 +2677,41 @@ func (h *handler) deleteBooks(c echo.Context) error {
 			log.Warn("failed to remove book from search index", logger.Data{"error": err.Error(), "book_id": bookID})
 		}
 	}
-	if _, err := h.personService.CleanupOrphanedPeople(ctx); err != nil {
+	orphanedPersonIDs, err := h.personService.CleanupOrphanedPeople(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned people", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.bookService.CleanupOrphanedSeries(ctx); err != nil {
+	for _, personID := range orphanedPersonIDs {
+		if err := h.searchService.DeleteFromPersonIndex(ctx, personID); err != nil {
+			log.Warn("failed to remove orphaned person from search index", logger.Data{"person_id": personID, "error": err.Error()})
+		}
+	}
+	orphanedSeriesIDs, err := h.bookService.CleanupOrphanedSeries(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned series", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.genreService.CleanupOrphanedGenres(ctx); err != nil {
+	for _, seriesID := range orphanedSeriesIDs {
+		if err := h.searchService.DeleteFromSeriesIndex(ctx, seriesID); err != nil {
+			log.Warn("failed to remove orphaned series from search index", logger.Data{"series_id": seriesID, "error": err.Error()})
+		}
+	}
+	orphanedGenreIDs, err := h.genreService.CleanupOrphanedGenres(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned genres", logger.Data{"error": err.Error()})
 	}
-	if _, err := h.tagService.CleanupOrphanedTags(ctx); err != nil {
+	for _, genreID := range orphanedGenreIDs {
+		if err := h.searchService.DeleteFromGenreIndex(ctx, genreID); err != nil {
+			log.Warn("failed to remove orphaned genre from search index", logger.Data{"genre_id": genreID, "error": err.Error()})
+		}
+	}
+	orphanedTagIDs, err := h.tagService.CleanupOrphanedTags(ctx)
+	if err != nil {
 		log.Warn("failed to cleanup orphaned tags", logger.Data{"error": err.Error()})
+	}
+	for _, tagID := range orphanedTagIDs {
+		if err := h.searchService.DeleteFromTagIndex(ctx, tagID); err != nil {
+			log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err.Error()})
+		}
 	}
 
 	return c.JSON(http.StatusOK, DeleteBooksResponse{

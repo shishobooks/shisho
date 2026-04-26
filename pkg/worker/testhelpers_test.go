@@ -91,6 +91,7 @@ func newTestContext(t *testing.T) *testContext {
 	seriesService := series.NewService(db)
 	genreService := genres.NewService(db)
 	tagService := tags.NewService(db)
+	searchService := search.NewService(db)
 	publisherService := publishers.NewService(db)
 	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
@@ -113,6 +114,7 @@ func newTestContext(t *testing.T) *testContext {
 		seriesService:      seriesService,
 		genreService:       genreService,
 		tagService:         tagService,
+		searchService:      searchService,
 		publisherService:   publisherService,
 		imprintService:     imprintService,
 		fingerprintService: fingerprintService,
@@ -134,6 +136,7 @@ func newTestContext(t *testing.T) *testContext {
 		jobLogService:      jobLogService,
 		personService:      personService,
 		seriesService:      seriesService,
+		searchService:      searchService,
 		fingerprintService: fingerprintService,
 	}
 

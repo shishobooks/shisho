@@ -276,17 +276,22 @@ func (svc *Service) MergeGenres(ctx context.Context, targetID, sourceID int) err
 	})
 }
 
-// CleanupOrphanedGenres deletes genres with no book associations.
-func (svc *Service) CleanupOrphanedGenres(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedGenres deletes genres with no book associations and returns
+// the IDs of deleted genres. Callers must pass the returned IDs to
+// searchService.DeleteFromGenreIndex to keep genres_fts in sync — genres_fts
+// is a virtual FTS5 table not tied to genres via foreign keys, so it is not
+// cleaned up automatically.
+func (svc *Service) CleanupOrphanedGenres(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Genre)(nil)).
 		Where("id NOT IN (SELECT DISTINCT genre_id FROM book_genres)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.

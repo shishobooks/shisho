@@ -1360,18 +1360,21 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	return series, nil
 }
 
-// CleanupOrphanedSeries soft-deletes series with no books.
+// CleanupOrphanedSeries deletes series with no books and returns the IDs of
+// deleted series. Callers must pass the returned IDs to
+// searchService.DeleteFromSeriesIndex to keep series_fts in sync.
 // This is duplicated from series service to avoid import cycles.
-func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+func (svc *Service) CleanupOrphanedSeries(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Series)(nil)).
 		Where("id NOT IN (SELECT DISTINCT series_id FROM book_series)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
 
 // RetrieveSeriesByID retrieves a series by its ID.
