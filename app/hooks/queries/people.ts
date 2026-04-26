@@ -10,6 +10,7 @@ import type { Book, File, Person } from "@/types";
 import type { UpdatePersonPayload } from "@/types/generated/people";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
   ListPeople = "ListPeople",
@@ -142,6 +143,10 @@ export const useUpdatePerson = () => {
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Person name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };
@@ -169,6 +174,10 @@ export const useMergePerson = () => {
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Person name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };
@@ -185,6 +194,10 @@ export const useDeletePerson = () => {
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Person name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };

@@ -96,6 +96,11 @@ export const useUpdateBook = () => {
       queryClient.invalidateQueries({ queryKey: [SeriesQueryKey.ListSeries] });
       queryClient.invalidateQueries({ queryKey: [GenresQueryKey.ListGenres] });
       queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
+      // Title, subtitle, authors, and series_names all feed books_fts —
+      // invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };
@@ -129,6 +134,10 @@ export const useUpdateFile = () => {
       });
       queryClient.invalidateQueries({
         queryKey: [ImprintsQueryKey.ListImprints],
+      });
+      // Filenames and narrators both feed books_fts — invalidate search.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
       });
     },
   });
@@ -230,6 +239,10 @@ export const useMergeBooks = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Source book disappears, target book absorbs files — books_fts changes.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };

@@ -276,17 +276,22 @@ func (svc *Service) MergeTags(ctx context.Context, targetID, sourceID int) error
 	})
 }
 
-// CleanupOrphanedTags deletes tags with no book associations.
-func (svc *Service) CleanupOrphanedTags(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedTags deletes tags with no book associations and returns the
+// IDs of deleted tags. Callers must pass the returned IDs to
+// searchService.DeleteFromTagIndex to keep tags_fts in sync — tags_fts is a
+// virtual FTS5 table not tied to tags via foreign keys, so it is not cleaned
+// up automatically.
+func (svc *Service) CleanupOrphanedTags(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Tag)(nil)).
 		Where("id NOT IN (SELECT DISTINCT tag_id FROM book_tags)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.

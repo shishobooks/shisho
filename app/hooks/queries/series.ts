@@ -13,6 +13,7 @@ import type {
 } from "@/types/generated/series";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
   ListSeries = "ListSeries",
@@ -114,6 +115,10 @@ export const useUpdateSeries = () => {
       // Invalidate book queries since they display series info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Series name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };
@@ -145,6 +150,10 @@ export const useMergeSeries = () => {
       // Invalidate book queries since they display series info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Series name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };
@@ -161,6 +170,10 @@ export const useDeleteSeries = () => {
       // Invalidate book queries since they display series info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      // Series name shows up in search — invalidate global search results.
+      queryClient.invalidateQueries({
+        queryKey: [SearchQueryKey.GlobalSearch],
+      });
     },
   });
 };

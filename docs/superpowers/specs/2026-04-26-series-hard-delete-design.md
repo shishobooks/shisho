@@ -22,7 +22,8 @@ A precedent for ripping out unused soft-delete plumbing already exists: `2026042
 
 - Touching the `users.is_active` "deactivation" toggle in `pkg/users/service.go`. That's a different mechanism (a boolean flag, not a `deleted_at` timestamp), it's actively used, and removing it would require user-facing UX changes.
 - Deduplicating the two copies of `CleanupOrphanedSeries` (`pkg/series/service.go` and `pkg/books/service.go`). The duplication exists to avoid an import cycle; resolving it is a separate refactor.
-- Fixing the analogous "FTS not cleaned up" bug for genres, tags, or other entities with their own FTS indexes. The same problem may exist there (`CleanupOrphanedGenres` / `CleanupOrphanedTags` are called without paired FTS purges in `pkg/books/handlers.go`). Out of scope for this branch; worth a follow-up.
+- Frontend `GlobalSearch` cache invalidation on entity mutations was added in this same branch (in scope after smoke testing surfaced "deleted series still in search until refresh"). Series, person, and book mutation hooks now invalidate `[GlobalSearch]` so search results refresh without a manual reload.
+- The analogous backend "FTS not cleaned up" bug exists for genres and tags. Pulled into scope alongside series after the smoke test exposed the pattern: `CleanupOrphanedGenres` and `CleanupOrphanedTags` now also return deleted IDs, and all callers in `pkg/books/handlers.go` and `pkg/worker/worker.go` pair the call with the corresponding `searchService.DeleteFromGenreIndex` / `DeleteFromTagIndex`.
 - Adding any new restore mechanism. There was no working one before; we're not building one.
 - Frontend, OPDS, eReader, plugin SDK, sidecar, or `website/docs/` changes. Verified during exploration that none of these reference soft-delete.
 
