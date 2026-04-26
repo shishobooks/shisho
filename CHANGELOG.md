@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-04-25
+
+### Features
+- Per-file Reviewed flag with admin-configurable criteria (#156)
+- Remove back button from reader UI (#155)
+- Enforce file identifier type-uniqueness across the stack (#153)
+- Per-user gallery cover size (#152)
+- Cache successful Basic Auth results to speed up OPDS (#150)
+
+### Bug Fixes
+- Encode non-ASCII filenames in Content-Disposition per RFC 5987 (#151)
+
+### Testing
+- Pin mold dive requirement for slice-of-struct payloads (#154)
+
+
 ## [0.0.38] - 2026-04-24
 
 ### Features
