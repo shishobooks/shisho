@@ -3495,7 +3495,8 @@ func filterMetadataFields(
 	// Create a copy to avoid mutating the original
 	result := *md
 
-	// Handle "series" grouping - both "series" and "seriesNumber" control the series fields
+	// Handle "series" grouping - "series", "seriesNumber", and "seriesNumberUnit"
+	// are all part of the same logical field group.
 	seriesAllowed := isFieldAllowed("series") || isFieldAllowed("seriesNumber")
 	seriesDeclared := declared["series"] || declared["seriesNumber"]
 	if !seriesDeclared {
@@ -3509,6 +3510,12 @@ func filterMetadataFields(
 			logWarn("enricher returned undeclared field", logger.Data{
 				"plugin": pluginID,
 				"field":  "seriesNumber",
+			})
+		}
+		if result.SeriesNumberUnit != nil {
+			logWarn("enricher returned undeclared field", logger.Data{
+				"plugin": pluginID,
+				"field":  "seriesNumberUnit",
 			})
 		}
 	}

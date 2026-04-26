@@ -611,6 +611,7 @@ export interface PluginSearchResult {
   subtitle?: string;
   series?: string;
   series_number?: number;
+  series_number_unit?: string;
   genres?: string[];
   tags?: string[];
   narrators?: string[];

@@ -145,35 +145,38 @@ func IsOrganizedName(name string) bool {
 	return authorPattern.MatchString(nameWithoutExt) || seriesNumberPattern.MatchString(nameWithoutExt)
 }
 
-// NormalizeSeriesNumberInTitle normalizes volume- or chapter-style number indicators
-// in CBZ titles. For volume indicators (v01, vol.5, volume 12, #001, bare trailing
-// number) the title becomes "Title v{NNN}". For chapter indicators (chapter 5,
-// Ch.5, c042) the title becomes "Title c{NNN}". Returns the normalized title,
-// the parsed unit (models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter, "" when no match), and whether a number
-// was found. Non-CBZ files are returned unchanged.
+// seriesNumberPatterns is the regex pattern table used by NormalizeSeriesNumberInTitle.
+// Each entry pairs a compiled regexp with the unit it implies. First match wins;
+// explicit chapter patterns precede explicit volume patterns; ambiguous indicators
+// (#, bare numbers) default to volume to preserve historical behavior.
+var seriesNumberPatterns = []struct {
+	re   *regexp.Regexp
+	unit string
+}{
+	{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+}
+
+// NormalizeSeriesNumberInTitle normalizes volume- or chapter-style number
+// indicators in CBZ titles. For volume indicators (v01, vol.5, volume 12,
+// #001, bare trailing number) the title becomes "Title v{NNN}". For chapter
+// indicators (chapter 5, Ch.5, c042) the title becomes "Title c{NNN}".
+// Returns the normalized title, the parsed unit
+// (models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter, "" when
+// no match), and whether a number was found. Non-CBZ files are returned
+// unchanged.
 func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string, bool) {
 	if fileType != models.FileTypeCBZ {
 		return title, "", false
 	}
 
-	// Pattern table: regex + unit. First match wins; explicit chapter patterns
-	// precede explicit volume patterns; ambiguous indicators (#, bare numbers)
-	// default to volume to preserve historical behavior.
-	patterns := []struct {
-		re   *regexp.Regexp
-		unit string
-	}{
-		{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-		{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-		{regexp.MustCompile(`(?i)\s*c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-		{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-		{regexp.MustCompile(`(?i)\s*v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-		{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-		{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-		{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	}
-
-	for _, p := range patterns {
+	for _, p := range seriesNumberPatterns {
 		matches := p.re.FindStringSubmatch(title)
 		if len(matches) < 2 {
 			continue
