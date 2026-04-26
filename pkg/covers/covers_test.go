@@ -1,10 +1,17 @@
 package covers
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSelectFile(t *testing.T) {
@@ -118,4 +125,48 @@ func TestSelectFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServeBookCover_NotFoundWhenNoCover(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	files := []*models.File{
+		{ID: 1, FileType: models.FileTypeEPUB, CoverImageFilename: nil},
+	}
+
+	err := ServeBookCover(c, files, "book")
+	require.Error(t, err)
+	var ecErr *errcodes.Error
+	require.ErrorAs(t, err, &ecErr)
+	assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
+}
+
+func TestServeBookCover_ServesCoverFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bookPath := filepath.Join(dir, "book.epub")
+	require.NoError(t, os.WriteFile(bookPath, []byte("epub-bytes"), 0o644))
+	coverName := "book.epub.cover.jpg"
+	coverBytes := []byte("\xff\xd8\xff\xe0jpeg-bytes")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, coverName), coverBytes, 0o644))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	files := []*models.File{
+		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
+	}
+
+	require.NoError(t, ServeBookCover(c, files, "book"))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, coverBytes, rec.Body.Bytes())
 }
