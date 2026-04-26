@@ -346,16 +346,14 @@ const FilterButton = forwardRef<
     "hasActiveFilters"
   >
 >(({ hasActiveFilters, ...props }, ref) => (
-  <Button
-    aria-label="Filters"
-    ref={ref}
-    size="icon"
-    variant="outline"
-    {...props}
-  >
-    <ListFilter className={cn("h-4 w-4", hasActiveFilters && "text-primary")} />
+  <Button ref={ref} size="sm" variant="outline" {...props}>
+    <ListFilter className="h-4 w-4" />
+    Filter
     {hasActiveFilters && (
-      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
+      <span
+        aria-label="Filters are active"
+        className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background"
+      />
     )}
   </Button>
 ));
