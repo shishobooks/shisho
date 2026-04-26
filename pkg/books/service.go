@@ -1360,7 +1360,7 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	return series, nil
 }
 
-// CleanupOrphanedSeries soft-deletes series with no books.
+// CleanupOrphanedSeries deletes series with no books.
 // This is duplicated from series service to avoid import cycles.
 func (svc *Service) CleanupOrphanedSeries(ctx context.Context) (int, error) {
 	result, err := svc.db.NewDelete().
