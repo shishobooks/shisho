@@ -6,6 +6,12 @@ import {
 } from "@tanstack/react-query";
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
+import { QueryKey as GenresQueryKey } from "@/hooks/queries/genres";
+import { QueryKey as ImprintsQueryKey } from "@/hooks/queries/imprints";
+import { QueryKey as PeopleQueryKey } from "@/hooks/queries/people";
+import { QueryKey as PublishersQueryKey } from "@/hooks/queries/publishers";
+import { QueryKey as SeriesQueryKey } from "@/hooks/queries/series";
+import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
   Plugin,
@@ -689,12 +695,34 @@ export const usePluginApply = () => {
       return API.request("POST", "/plugins/apply", payload);
     },
     onSuccess: async () => {
+      // Apply accepts entity name strings; the server creates new persons,
+      // series, publishers, imprints, genres, or tags as needed. Invalidate
+      // those caches so newly-created entities show up in admin pages and
+      // combobox results.
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: [BooksQueryKey.ListBooks],
         }),
         queryClient.invalidateQueries({
           queryKey: [BooksQueryKey.RetrieveBook],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [PeopleQueryKey.ListPeople],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [SeriesQueryKey.ListSeries],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [PublishersQueryKey.ListPublishers],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [ImprintsQueryKey.ListImprints],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [GenresQueryKey.ListGenres],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [TagsQueryKey.ListTags],
         }),
       ]);
     },

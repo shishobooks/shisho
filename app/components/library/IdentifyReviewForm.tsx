@@ -5,6 +5,7 @@ import {
   ChevronUp,
   ExternalLink,
   Loader2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -779,7 +780,10 @@ export function IdentifyReviewForm({
   const handleSubmit = async () => {
     const fields: Record<string, unknown> = {
       title,
-      ...(sortTitle.trim() && { sort_title: sortTitle.trim() }),
+      // Always include sort_title so clearing it (toggling SortNameInput back
+      // to auto-generate) is persisted. Trimmed, but empty string is sent as
+      // a meaningful "clear" signal — same convention BookEditDialog uses.
+      sort_title: sortTitle.trim(),
       subtitle,
       description,
       authors: authors.map((a) => ({ name: a.name, role: a.role })),
@@ -1186,6 +1190,21 @@ export function IdentifyReviewForm({
             type="number"
             value={seriesNumber}
           />
+          {series && !isDisabled("series") && (
+            <Button
+              aria-label="Clear series"
+              className="cursor-pointer shrink-0"
+              onClick={() => {
+                setSeries("");
+                setSeriesNumber("");
+              }}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </FieldWrapper>
 
@@ -1279,23 +1298,39 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setPublisher(file?.publisher?.name ?? "")}
         status={defaults.publisher.status}
       >
-        <EntityCombobox<NameOption>
-          getOptionKey={(p) => p.name}
-          getOptionLabel={(p) => p.name}
-          hook={function usePublisherOptions(q) {
-            return usePublisherSearch(book.library_id, true, q);
-          }}
-          label="Publisher"
-          onChange={(next) =>
-            setPublisher("__create" in next ? next.__create : next.name)
-          }
-          pendingCreate={(() => {
-            if (!publisher) return false;
-            const m = autoMatch.matches.publisher;
-            return !!m && m.name === publisher && m.existing == null;
-          })()}
-          value={publisher ? { name: publisher } : null}
-        />
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <EntityCombobox<NameOption>
+              getOptionKey={(p) => p.name}
+              getOptionLabel={(p) => p.name}
+              hook={function usePublisherOptions(q) {
+                return usePublisherSearch(book.library_id, true, q);
+              }}
+              label="Publisher"
+              onChange={(next) =>
+                setPublisher("__create" in next ? next.__create : next.name)
+              }
+              pendingCreate={(() => {
+                if (!publisher) return false;
+                const m = autoMatch.matches.publisher;
+                return !!m && m.name === publisher && m.existing == null;
+              })()}
+              value={publisher ? { name: publisher } : null}
+            />
+          </div>
+          {publisher && !isDisabled("publisher") && (
+            <Button
+              aria-label="Clear publisher"
+              className="cursor-pointer shrink-0"
+              onClick={() => setPublisher("")}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </FieldWrapper>
 
       {/* Imprint */}
@@ -1306,23 +1341,39 @@ export function IdentifyReviewForm({
         onUseCurrent={() => setImprint(file?.imprint?.name ?? "")}
         status={defaults.imprint.status}
       >
-        <EntityCombobox<NameOption>
-          getOptionKey={(p) => p.name}
-          getOptionLabel={(p) => p.name}
-          hook={function useImprintOptions(q) {
-            return useImprintSearch(book.library_id, true, q);
-          }}
-          label="Imprint"
-          onChange={(next) =>
-            setImprint("__create" in next ? next.__create : next.name)
-          }
-          pendingCreate={(() => {
-            if (!imprint) return false;
-            const m = autoMatch.matches.imprint;
-            return !!m && m.name === imprint && m.existing == null;
-          })()}
-          value={imprint ? { name: imprint } : null}
-        />
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <EntityCombobox<NameOption>
+              getOptionKey={(p) => p.name}
+              getOptionLabel={(p) => p.name}
+              hook={function useImprintOptions(q) {
+                return useImprintSearch(book.library_id, true, q);
+              }}
+              label="Imprint"
+              onChange={(next) =>
+                setImprint("__create" in next ? next.__create : next.name)
+              }
+              pendingCreate={(() => {
+                if (!imprint) return false;
+                const m = autoMatch.matches.imprint;
+                return !!m && m.name === imprint && m.existing == null;
+              })()}
+              value={imprint ? { name: imprint } : null}
+            />
+          </div>
+          {imprint && !isDisabled("imprint") && (
+            <Button
+              aria-label="Clear imprint"
+              className="cursor-pointer shrink-0"
+              onClick={() => setImprint("")}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </FieldWrapper>
 
       {/* Release Date */}
