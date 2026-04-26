@@ -374,7 +374,7 @@ func (h *handler) merge(c echo.Context) error {
 	}
 
 	// Merge source series into target (this) series
-	err = h.seriesService.MergeSeries(ctx, id, params.SourceID)
+	movedBookIDs, err := h.seriesService.MergeSeries(ctx, id, params.SourceID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -384,6 +384,20 @@ func (h *handler) merge(c echo.Context) error {
 	// Remove the merged (source) series from FTS index
 	if err := h.searchService.DeleteFromSeriesIndex(ctx, params.SourceID); err != nil {
 		log.Warn("failed to remove merged series from search index", logger.Data{"series_id": params.SourceID, "error": err.Error()})
+	}
+
+	// Books that moved from source to target carry the source series name in
+	// their books_fts row; re-index them so the target series name is what
+	// shows up in search.
+	for _, bookID := range movedBookIDs {
+		book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+		if err != nil {
+			log.Warn("failed to retrieve book for FTS reindex after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
+			continue
+		}
+		if err := h.searchService.IndexBook(ctx, book); err != nil {
+			log.Warn("failed to update book search index after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
 	}
 
 	// Re-index the target series since it now has more books
@@ -426,15 +440,26 @@ func (h *handler) deleteSeries(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	log := logger.FromContext(ctx)
+
 	// Removing the join rows can flip the books' Reviewed completeness state
-	// (e.g. when `series` is a required field) so each affected book needs a
-	// fresh recompute.
+	// (e.g. when `series` is a required field) and stales their books_fts
+	// rows, which still reference the deleted series name. Recompute review
+	// state and re-index each affected book.
 	for _, bookID := range affectedBookIDs {
 		h.bookService.RecomputeReviewedForBook(ctx, bookID)
+
+		book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+		if err != nil {
+			log.Warn("failed to retrieve book for FTS reindex after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
+			continue
+		}
+		if err := h.searchService.IndexBook(ctx, book); err != nil {
+			log.Warn("failed to update book search index after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
 	}
 
-	// Remove from FTS index
-	log := logger.FromContext(ctx)
+	// Remove the deleted series itself from the series FTS index.
 	if err := h.searchService.DeleteFromSeriesIndex(ctx, id); err != nil {
 		log.Warn("failed to remove series from search index", logger.Data{"series_id": id, "error": err.Error()})
 	}

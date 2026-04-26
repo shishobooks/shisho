@@ -280,11 +280,23 @@ func (svc *Service) RestoreSeries(ctx context.Context, seriesID int) error {
 	return nil
 }
 
-// MergeSeries merges sourceSeries into targetSeries (moves all books, soft-deletes source).
-func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) error {
-	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+// MergeSeries merges sourceSeries into targetSeries (moves all books,
+// soft-deletes source). Returns the IDs of books whose join rows moved so
+// the caller can recompute search indexes that bake in the series name.
+func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]int, error) {
+	var movedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().
+			Model((*models.BookSeries)(nil)).
+			ColumnExpr("DISTINCT bs.book_id").
+			Where("bs.series_id = ?", sourceID).
+			Scan(ctx, &movedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Update all book_series entries from source series to target series
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.BookSeries)(nil)).
 			Set("series_id = ?", targetID).
 			Where("series_id = ?", sourceID).
@@ -300,6 +312,10 @@ func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) err
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return movedBookIDs, nil
 }
 
 // CleanupOrphanedSeries soft-deletes series with no books.
