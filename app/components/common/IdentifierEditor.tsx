@@ -191,8 +191,8 @@ export function IdentifierEditor({
                     <span className="block">{item}</span>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {label} is already added — remove it first to add a
-                    different value.
+                    {label} is already added. Remove it first to add a different
+                    value.
                   </TooltipContent>
                 </Tooltip>
               );
