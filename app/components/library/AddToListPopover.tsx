@@ -24,10 +24,23 @@ import type { CreateListPayload } from "@/types";
 interface AddToListPopoverProps {
   bookId: number;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
-  const [open, setOpen] = useState(false);
+const AddToListPopover = ({
+  bookId,
+  trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: AddToListPopoverProps) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (!isControlled) setInternalOpen(value);
+    controlledOnOpenChange?.(value);
+  };
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [mutatingListId, setMutatingListId] = useState<number | null>(null);
@@ -105,7 +118,12 @@ const AddToListPopover = ({ bookId, trigger }: AddToListPopoverProps) => {
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-0">
+      <PopoverContent
+        align="end"
+        className="w-56 p-0"
+        onFocusOutside={(e) => e.preventDefault()}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <p className="text-xs font-medium text-muted-foreground px-3 py-2">
           Add to List
         </p>

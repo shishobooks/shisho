@@ -425,7 +425,6 @@ const FileRow = ({
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   disabled={isDeletingFile}
@@ -574,7 +573,6 @@ const FileRow = ({
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 disabled={isDeletingFile}
@@ -740,6 +738,7 @@ const BookDetail = () => {
   const setPrimaryFileMutation = useSetPrimaryFile();
   const setBookReviewMutation = useSetBookReview();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
   const [showBookRescanDialog, setShowBookRescanDialog] = useState(false);
   const [rescanFileId, setRescanFileId] = useState<number | null>(null);
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
@@ -1129,63 +1128,72 @@ const BookDetail = () => {
                 {book.title}
               </h1>
               <div className="flex items-center gap-2 shrink-0">
-                <AddToListPopover
-                  bookId={book.id}
-                  trigger={
-                    <Button size="sm" title="Add to list" variant="outline">
-                      <List className="h-4 w-4 sm:mr-2" />
-                      <span className="hidden sm:inline">Add to list</span>
-                    </Button>
-                  }
-                />
-                <Button
-                  onClick={() => setEditDialogOpen(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Edit className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Edit</span>
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                  >
-                    <DropdownMenuItem
-                      disabled={resyncBookMutation.isPending}
-                      onClick={() => setShowBookRescanDialog(true)}
+                <div className="relative">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
                     >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Rescan book
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setShowIdentifyDialog(true)}
-                    >
-                      <Search className="h-4 w-4 mr-2" />
-                      Identify book
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setShowMergeIntoDialog(true)}
-                    >
-                      <GitMerge className="h-4 w-4 mr-2" />
-                      Merge into another book
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setShowDeleteDialog(true)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                      Delete book
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setTimeout(() => setAddToListOpen(true), 0);
+                        }}
+                      >
+                        <List className="h-4 w-4 mr-2" />
+                        Add to list
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={resyncBookMutation.isPending}
+                        onClick={() => setShowBookRescanDialog(true)}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Rescan book
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setShowIdentifyDialog(true)}
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Identify book
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setShowMergeIntoDialog(true)}
+                      >
+                        <GitMerge className="h-4 w-4 mr-2" />
+                        Merge into another book
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                        Delete book
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <AddToListPopover
+                    bookId={book.id}
+                    onOpenChange={setAddToListOpen}
+                    open={addToListOpen}
+                    trigger={
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 pointer-events-none"
+                      />
+                    }
+                  />
+                </div>
               </div>
             </div>
             {book.sort_title && book.sort_title !== book.title && (
