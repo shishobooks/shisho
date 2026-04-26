@@ -3,6 +3,7 @@
 package covers
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/labstack/echo/v4"
@@ -52,7 +53,7 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 // ServeBookCover selects the cover file from `files` using the library's
 // preferred aspect ratio and serves it via c.File. Callers must perform any
 // auth and library-access checks before calling. Returns errcodes.NotFound
-// when no suitable cover exists.
+// when no suitable cover exists or the cover image is missing on disk.
 //
 // The cover is resolved via the file's parent directory rather than the book's
 // filepath because book.Filepath can be a synthetic organized-folder path that
@@ -64,6 +65,16 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio strin
 	}
 
 	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
+	// Stat first so a cover file deleted from disk surfaces as a typed 404
+	// (matching the no-filename branch above) instead of bubbling up as
+	// echo.HTTPError's generic "Not Found" from c.File.
+	if _, err := os.Stat(coverPath); err != nil {
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Cover")
+		}
+		return errors.WithStack(err)
+	}
+
 	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return errors.WithStack(c.File(coverPath))
 }

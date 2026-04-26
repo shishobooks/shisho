@@ -170,3 +170,29 @@ func TestServeBookCover_ServesCoverFile(t *testing.T) {
 	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
 	assert.Equal(t, coverBytes, rec.Body.Bytes())
 }
+
+func TestServeBookCover_NotFoundWhenCoverFileMissingOnDisk(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bookPath := filepath.Join(dir, "book.epub")
+	require.NoError(t, os.WriteFile(bookPath, []byte("epub-bytes"), 0o644))
+	// CoverImageFilename is set, but the cover file itself isn't on disk —
+	// e.g. it was deleted out from under the DB. Should 404, not 500.
+	coverName := "book.epub.cover.jpg"
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	files := []*models.File{
+		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
+	}
+
+	err := ServeBookCover(c, files, "book")
+	require.Error(t, err)
+	var ecErr *errcodes.Error
+	require.ErrorAs(t, err, &ecErr)
+	assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
+}
