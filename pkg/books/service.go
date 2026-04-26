@@ -862,17 +862,20 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		}
 	}
 
-	// Get series number from first BookSeries entry (if any)
+	// Get series number and unit from first BookSeries entry (if any)
 	var seriesNumber *float64
+	var seriesNumberUnit *string
 	if len(book.BookSeries) > 0 {
 		seriesNumber = book.BookSeries[0].SeriesNumber
+		seriesNumberUnit = book.BookSeries[0].SeriesNumberUnit
 	}
 
 	// Create organized name options from current book metadata
 	organizeOpts := fileutils.OrganizedNameOptions{
-		AuthorNames:  authorNames,
-		Title:        book.Title,
-		SeriesNumber: seriesNumber,
+		AuthorNames:      authorNames,
+		Title:            book.Title,
+		SeriesNumber:     seriesNumber,
+		SeriesNumberUnit: seriesNumberUnit,
 	}
 
 	// Track path updates for database
