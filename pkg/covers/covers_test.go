@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -287,7 +288,8 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	require.Equal(t, http.StatusOK, rec1.Code)
 	etagEPUB := rec1.Header().Get("ETag")
 	require.NotEmpty(t, etagEPUB)
-	assert.Contains(t, etagEPUB, fmt.Sprintf("%d-", 11))
+	assert.True(t, strings.HasPrefix(etagEPUB, `"11-`),
+		"ETag should encode the EPUB file ID (11) in <id-mtime> format, got %q", etagEPUB)
 
 	// Aspect ratio "audiobook" → M4B cover should be served. Client revalidates
 	// with the EPUB ETag — must NOT 304, because the served file is different
@@ -302,7 +304,8 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	etagM4B := rec2.Header().Get("ETag")
 	assert.NotEmpty(t, etagM4B)
 	assert.NotEqual(t, etagEPUB, etagM4B, "ETag must change when the selected file changes")
-	assert.Contains(t, etagM4B, fmt.Sprintf("%d-", 22))
+	assert.True(t, strings.HasPrefix(etagM4B, `"22-`),
+		"ETag should encode the M4B file ID (22) in <id-mtime> format, got %q", etagM4B)
 	assert.Equal(t, []byte("m4b-cover"), rec2.Body.Bytes())
 }
 
