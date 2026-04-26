@@ -286,6 +286,7 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	c1 := e.NewContext(req1, rec1)
 	require.NoError(t, ServeBookCover(c1, files, "book"))
 	require.Equal(t, http.StatusOK, rec1.Code)
+	assert.Equal(t, []byte("epub-cover"), rec1.Body.Bytes())
 	etagEPUB := rec1.Header().Get("ETag")
 	require.NotEmpty(t, etagEPUB)
 	assert.True(t, strings.HasPrefix(etagEPUB, `"11-`),
