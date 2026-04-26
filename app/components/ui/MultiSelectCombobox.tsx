@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Undo2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/libraries/utils";
+
+type ChipStatus = "new" | "changed" | "unchanged";
 
 interface MultiSelectComboboxProps {
   values: string[];
@@ -25,6 +28,8 @@ interface MultiSelectComboboxProps {
   placeholder?: string;
   isLoading?: boolean;
   label: string;
+  status?: (value: string) => ChipStatus | undefined;
+  removed?: string[];
 }
 
 export function MultiSelectCombobox({
@@ -36,6 +41,8 @@ export function MultiSelectCombobox({
   placeholder = "Search...",
   isLoading = false,
   label,
+  status,
+  removed,
 }: MultiSelectComboboxProps) {
   const [open, setOpen] = useState(false);
 
@@ -78,22 +85,40 @@ export function MultiSelectCombobox({
       {/* Selected values as badges */}
       {values.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {values.map((value) => (
-            <Badge
-              className="flex items-center gap-1"
-              key={value}
-              variant="secondary"
-            >
-              {value}
-              <button
-                className="ml-1 cursor-pointer hover:text-destructive"
-                onClick={() => handleRemove(value)}
-                type="button"
+          {values.map((value) => {
+            const s = status?.(value);
+            return (
+              <div
+                className="flex items-center gap-1"
+                data-testid="ms-chip"
+                key={value}
               >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
+                <Badge className="flex items-center gap-1" variant="secondary">
+                  {value}
+                  <button
+                    className="ml-1 cursor-pointer hover:text-destructive"
+                    onClick={() => handleRemove(value)}
+                    type="button"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+                {s && (
+                  <Badge
+                    className={cn(
+                      "ml-1",
+                      s === "new" && "bg-green-600",
+                      s === "changed" && "bg-amber-600",
+                      s === "unchanged" && "bg-muted text-muted-foreground",
+                    )}
+                    data-testid="ms-status-badge"
+                  >
+                    {s}
+                  </Badge>
+                )}
+              </div>
+            );
+          })}
           {values.length > 1 && (
             <button
               className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
@@ -103,6 +128,29 @@ export function MultiSelectCombobox({
               Clear all
             </button>
           )}
+        </div>
+      )}
+
+      {/* Removed values shown as strikethrough chips with undo */}
+      {removed && removed.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {removed.map((value) => (
+            <Badge
+              className="line-through text-muted-foreground flex items-center gap-1 max-w-full"
+              key={`removed-${value}`}
+              variant="outline"
+            >
+              {value}
+              <button
+                aria-label={`Restore ${value}`}
+                className="ml-1 cursor-pointer hover:text-foreground"
+                onClick={() => onChange([...values, value])}
+                type="button"
+              >
+                <Undo2 className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
         </div>
       )}
 
