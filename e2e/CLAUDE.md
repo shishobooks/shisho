@@ -189,7 +189,7 @@ await expect(
 ).toBeVisible();
 ```
 
-For more flexibility (e.g., "starts with X" or a specific casing), pass a regex instead: `name: /^Select$/`.
+For more flexibility (e.g., "starts with X" or a specific casing), pass a regex instead: `name: /^Select /` to allow any "Select …" name, or `name: /select/i` for explicit case-insensitive matching.
 
 This is especially insidious because the test passes until someone adds an unrelated button whose name happens to contain the same substring — the failure shows up in CI on a PR that didn't touch the test.
 

@@ -116,12 +116,13 @@ file.CoverImageFilename = &filename
 - `mise lint` - Run Go linting with golangci-lint
 - `mise lint:js` - Run all JS/TS linting (ESLint, Prettier, TypeScript) in parallel
 - `mise check` - Run all validation checks in parallel (tests, Go lint, JS lint)
-- `mise check:quiet` - Same as check but quieter, skips Firefox e2e (runs in CI), and serializes concurrent runs across worktrees via `flock`. Prefer this over `mise check` locally.
+- `mise check:quiet` - Same as check but quieter, skips Firefox e2e (which still runs in CI), and serializes concurrent runs across worktrees via `flock`. Prefer this over `mise check` locally.
 
 ### Testing
 - `mise test` - Run all Go tests with coverage
 - `mise test:race` - Run all Go tests with race detection and coverage (local; CI runs the same `-race` tests but sharded across parallel jobs in `.github/workflows/ci.yml`)
 - `mise test:js` - Run all JS tests (unit + E2E) in parallel
+- `mise test:js:fast` - Run JS tests with chromium e2e only (Firefox runs in CI); used by `mise check:quiet`
 - `mise test:unit` - Run JS unit tests only
 - `mise test:e2e` - Run E2E tests (Chromium + Firefox) in parallel
 
