@@ -155,7 +155,7 @@ func TestExtractSeriesNumberFromTitle(t *testing.T) {
 				assert.Nil(t, gotNum)
 			} else {
 				assert.NotNil(t, gotNum)
-				assert.Equal(t, *tt.wantNum, *gotNum)
+				assert.InEpsilon(t, *tt.wantNum, *gotNum, 0.0001)
 			}
 			assert.Equal(t, tt.wantUnit, gotUnit)
 		})
@@ -189,7 +189,7 @@ func TestExtractSeriesFromTitle(t *testing.T) {
 				assert.Nil(t, gotNum)
 			} else {
 				assert.NotNil(t, gotNum)
-				assert.Equal(t, *tt.wantNum, *gotNum)
+				assert.InEpsilon(t, *tt.wantNum, *gotNum, 0.0001)
 			}
 		})
 	}
