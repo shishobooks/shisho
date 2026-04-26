@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -39,11 +39,13 @@ export function SortNameInput({
   // The displayed value depends on mode
   const displayValue = isAuto ? generatedValue : manualValue;
 
-  // Update manual value when sortValue prop changes (dialog reopened)
-  useEffect(() => {
-    setManualValue(sortValue);
-    setIsAuto(source !== DataSourceManual);
-  }, [sortValue, source]);
+  // Initialization happens once via useState above. The component is
+  // intentionally uncontrolled after mount — re-syncing from props on every
+  // change (the previous useEffect) clobbered in-progress user edits any
+  // time a parent re-rendered with a stale `sortValue` (e.g. mid-edit query
+  // refetch). Dialogs that need to reset for a different entity should
+  // unmount/remount the input (FormDialog already does this on close+reopen)
+  // or pass a `key` to force a remount.
 
   const handleCheckboxChange = (checked: boolean) => {
     setIsAuto(checked);

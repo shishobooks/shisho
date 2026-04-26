@@ -1,5 +1,5 @@
 import { GripVertical, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import {
   EntityCombobox,
@@ -31,6 +31,13 @@ interface SortableEntityListProps<T extends object> {
   getItemId?: (item: T, index: number) => string;
 }
 
+// Module-level monotonic counter for assigning stable client-side ids to
+// list rows. Mirrors the `_editKey` pattern used by chapter editing
+// (`pkg/files/FileChaptersTab.tsx`) — index- or label-based ids would
+// change after a reorder/remove and confuse dnd-kit's drag tracking.
+let rowKeyCounter = 0;
+const nextRowKey = () => `row-${++rowKeyCounter}`;
+
 export function SortableEntityList<T extends object>({
   items,
   onReorder,
@@ -42,10 +49,20 @@ export function SortableEntityList<T extends object>({
   pendingCreate,
   getItemId,
 }: SortableEntityListProps<T>) {
-  const itemId = (item: T, index: number) =>
-    getItemId
-      ? getItemId(item, index)
-      : `${comboboxProps.getOptionLabel(item)}-${index}`;
+  // WeakMap from item reference to its stable row key. Items survive
+  // reorder/remove because the parent reuses references; new items get a
+  // fresh key when first seen. Cleared automatically when items are dropped.
+  const rowKeysRef = useRef<WeakMap<T, string>>(new WeakMap());
+
+  const itemId = (item: T, index: number): string => {
+    if (getItemId) return getItemId(item, index);
+    let key = rowKeysRef.current.get(item);
+    if (!key) {
+      key = nextRowKey();
+      rowKeysRef.current.set(item, key);
+    }
+    return key;
+  };
 
   const excludeAlreadyChosen = (candidate: T) =>
     items.some(

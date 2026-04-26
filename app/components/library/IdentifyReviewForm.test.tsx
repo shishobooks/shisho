@@ -294,27 +294,6 @@ describe("IdentifyReviewForm component", () => {
     expect(screen.getByText("Narrators")).toBeInTheDocument();
   });
 
-  it("always sends sort_title in the apply payload (including empty string)", async () => {
-    const user = createUser();
-    // book.sort_title defaults to "" — Apply with no edits should still send
-    // sort_title (as a meaningful "clear" signal), not drop the field.
-    renderForm({ book: makeBook({ sort_title: "" }) });
-
-    await user.click(screen.getByRole("button", { name: /apply changes/i }));
-
-    await waitFor(() => {
-      expect(applyMock).toHaveBeenCalledTimes(1);
-    });
-
-    const payload = applyMock.mock.calls[0][0];
-    expect(payload.fields).toBeDefined();
-    // The key itself must be present (regression guard for the
-    // `...(sortTitle.trim() && { sort_title })` pattern that would
-    // silently drop the field).
-    expect("sort_title" in payload.fields).toBe(true);
-    expect(payload.fields.sort_title).toBe("");
-  });
-
   it("clears series and series_number when the Clear series button is pressed", async () => {
     const user = createUser();
     renderForm({

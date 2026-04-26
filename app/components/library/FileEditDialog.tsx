@@ -909,81 +909,71 @@ export function FileEditDialog({
               {/* Publisher */}
               <div className="space-y-2">
                 <Label>Publisher</Label>
-                {publisher ? (
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      className="flex items-center gap-1 max-w-full"
-                      variant="secondary"
-                    >
-                      <span className="truncate" title={publisher}>
-                        {publisher}
-                      </span>
-                      <button
-                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={() => setPublisher("")}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <EntityCombobox<NameOption>
+                      getOptionKey={(item) => item.name}
+                      getOptionLabel={(item) => item.name}
+                      hook={function usePublisherOptions(q) {
+                        return usePublisherSearch(file.library_id, open, q);
+                      }}
+                      label="Publisher"
+                      onChange={(next) => {
+                        const nextName =
+                          "__create" in next ? next.__create : next.name;
+                        setPublisher(nextName);
+                      }}
+                      value={publisher ? { name: publisher } : null}
+                    />
                   </div>
-                ) : (
-                  <EntityCombobox<NameOption>
-                    getOptionKey={(item) => item.name}
-                    getOptionLabel={(item) => item.name}
-                    hook={function usePublisherOptions(q) {
-                      return usePublisherSearch(file.library_id, open, q);
-                    }}
-                    label="Publisher"
-                    onChange={(next) => {
-                      const nextName =
-                        "__create" in next ? next.__create : next.name;
-                      setPublisher(nextName);
-                    }}
-                    placeholder="Select publisher..."
-                    value={null}
-                  />
-                )}
+                  {publisher && (
+                    <Button
+                      aria-label="Clear publisher"
+                      className="cursor-pointer shrink-0"
+                      onClick={() => setPublisher("")}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Imprint */}
               <div className="space-y-2">
                 <Label>Imprint</Label>
-                {imprint ? (
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      className="flex items-center gap-1 max-w-full"
-                      variant="secondary"
-                    >
-                      <span className="truncate" title={imprint}>
-                        {imprint}
-                      </span>
-                      <button
-                        className="ml-1 cursor-pointer hover:text-destructive shrink-0"
-                        onClick={() => setImprint("")}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <EntityCombobox<NameOption>
+                      getOptionKey={(item) => item.name}
+                      getOptionLabel={(item) => item.name}
+                      hook={function useImprintOptions(q) {
+                        return useImprintSearch(file.library_id, open, q);
+                      }}
+                      label="Imprint"
+                      onChange={(next) => {
+                        const nextName =
+                          "__create" in next ? next.__create : next.name;
+                        setImprint(nextName);
+                      }}
+                      value={imprint ? { name: imprint } : null}
+                    />
                   </div>
-                ) : (
-                  <EntityCombobox<NameOption>
-                    getOptionKey={(item) => item.name}
-                    getOptionLabel={(item) => item.name}
-                    hook={function useImprintOptions(q) {
-                      return useImprintSearch(file.library_id, open, q);
-                    }}
-                    label="Imprint"
-                    onChange={(next) => {
-                      const nextName =
-                        "__create" in next ? next.__create : next.name;
-                      setImprint(nextName);
-                    }}
-                    placeholder="Select imprint..."
-                    value={null}
-                  />
-                )}
+                  {imprint && (
+                    <Button
+                      aria-label="Clear imprint"
+                      className="cursor-pointer shrink-0"
+                      onClick={() => setImprint("")}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Release Date */}

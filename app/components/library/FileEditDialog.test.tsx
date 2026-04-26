@@ -374,9 +374,7 @@ describe("FileEditDialog", () => {
       // Hover surfaces the explanatory tooltip.
       await user.hover(asinOption);
       const tooltip = await screen.findByRole("tooltip");
-      expect(tooltip).toHaveTextContent(
-        /this already has an asin identifier\. remove it first/i,
-      );
+      expect(tooltip).toHaveTextContent(/asin is already added/i);
     });
 
     it("auto-switches the default type away from one that is already present", async () => {

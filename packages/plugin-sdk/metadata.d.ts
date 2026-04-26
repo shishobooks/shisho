@@ -31,17 +31,6 @@ export interface ParsedChapter {
 /** Full metadata object returned by file parsers and metadata enrichers. */
 export interface ParsedMetadata {
   title?: string;
-  /**
-   * When set, overrides the auto-generated sort title derived from `title`.
-   *
-   * Currently honored only when results flow through the manual identify-and-
-   * apply UI (i.e. `metadataEnricher.search` results that the user reviews
-   * and applies). The library scan pipeline ignores this field on file-parser
-   * results and always derives the sort title from `title` instead. Returning
-   * `sortTitle` from a `fileParser.parse` hook will be silently dropped on
-   * scan; in those cases, prefer encoding sort information into `title`.
-   */
-  sortTitle?: string;
   subtitle?: string;
   authors?: ParsedAuthor[];
   narrators?: string[];

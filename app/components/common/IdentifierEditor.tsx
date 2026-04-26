@@ -45,12 +45,6 @@ interface IdentifierEditorProps {
   status?: (row: IdentifierRow) => IdentifierStatus | undefined;
 }
 
-function articleFor(label: string): string {
-  if (!label) return "a";
-  const first = label.trim().charAt(0).toLowerCase();
-  return ["a", "e", "i", "o", "u"].includes(first) ? "an" : "a";
-}
-
 export function IdentifierEditor({
   value,
   onChange,
@@ -185,7 +179,6 @@ export function IdentifierEditor({
           <SelectContent>
             {identifierTypes.map(({ id, label }) => {
               const isPresent = presentTypes.has(id);
-              const article = articleFor(label);
               const item = (
                 <SelectItem disabled={isPresent} key={id} value={id}>
                   {label}
@@ -198,8 +191,8 @@ export function IdentifierEditor({
                     <span className="block">{item}</span>
                   </TooltipTrigger>
                   <TooltipContent>
-                    This already has {article} {label} identifier. Remove it
-                    first to add a different value.
+                    {label} is already added — remove it first to add a
+                    different value.
                   </TooltipContent>
                 </Tooltip>
               );

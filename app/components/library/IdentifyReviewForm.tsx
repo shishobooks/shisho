@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { EntityCombobox } from "@/components/common/EntityCombobox";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
 import { SortableEntityList } from "@/components/common/SortableEntityList";
-import { SortNameInput } from "@/components/common/SortNameInput";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
@@ -50,13 +49,7 @@ import { useTagsList } from "@/hooks/queries/tags";
 import { useAutoMatchEntities } from "@/hooks/useAutoMatchEntities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
-import {
-  AuthorRoleWriter,
-  DataSourceManual,
-  FileTypeCBZ,
-  type Book,
-  type File,
-} from "@/types";
+import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatMetadataFieldLabel } from "@/utils/format";
 import { getPrimaryFileType } from "@/utils/primaryFile";
@@ -565,18 +558,6 @@ export function IdentifyReviewForm({
   const [identifiers, setIdentifiers] = useState<IdentifierEntry[]>(
     defaults.identifiers.value,
   );
-  // Sort title is intentionally not part of `defaults` — plugin results don't
-  // surface a sort title, so there's no diff to render. We wire it through
-  // SortNameInput which auto-generates from the title when in auto mode.
-  // Mirror BookEditDialog's semantic: "" means auto-generate, a non-empty
-  // string is a manual override. Only initialize with the stored value when
-  // the source is Manual; otherwise the auto-derived current sort title
-  // would get pinned as if the user had typed it. The same value is reused
-  // in `hasChanges` below so an auto-derived sort title doesn't show as
-  // dirty on mount.
-  const initialSortTitle =
-    book.sort_title_source === DataSourceManual ? book.sort_title || "" : "";
-  const [sortTitle, setSortTitle] = useState(initialSortTitle);
 
   // ---- Genre / tag option pools (server-side search) ----
   const [genreSearch, setGenreSearch] = useState("");
@@ -748,7 +729,6 @@ export function IdentifyReviewForm({
       language !== defaults.language.value ||
       abridged !== defaults.abridged.value ||
       !equal(identifiers, defaults.identifiers.value) ||
-      sortTitle !== initialSortTitle ||
       coverSelection !== defaultCoverSelection
     );
   }, [
@@ -769,8 +749,6 @@ export function IdentifyReviewForm({
     language,
     abridged,
     identifiers,
-    sortTitle,
-    initialSortTitle,
     coverSelection,
     defaults,
     defaultCoverSelection,
@@ -784,10 +762,6 @@ export function IdentifyReviewForm({
   const handleSubmit = async () => {
     const fields: Record<string, unknown> = {
       title,
-      // Always include sort_title so clearing it (toggling SortNameInput back
-      // to auto-generate) is persisted. Trimmed, but empty string is sent as
-      // a meaningful "clear" signal — same convention BookEditDialog uses.
-      sort_title: sortTitle.trim(),
       subtitle,
       description,
       authors: authors.map((a) => ({ name: a.name, role: a.role })),
@@ -982,18 +956,6 @@ export function IdentifyReviewForm({
             title={title}
           />
         )}
-      </div>
-
-      {/* Sort Title */}
-      <div className="space-y-1.5">
-        <Label>Sort Title</Label>
-        <SortNameInput
-          nameValue={title}
-          onChange={setSortTitle}
-          sortValue={book.sort_title || ""}
-          source={book.sort_title_source}
-          type="title"
-        />
       </div>
 
       {/* Subtitle */}

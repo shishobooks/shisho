@@ -64,7 +64,7 @@ export function EntityCombobox<T extends object>({
 
   const triggerLabel =
     value == null
-      ? (placeholder ?? `Add ${label.toLowerCase()}...`)
+      ? (placeholder ?? `Add ${label.toLowerCase()}`)
       : "__create" in value
         ? value.__create
         : getOptionLabel(value);
