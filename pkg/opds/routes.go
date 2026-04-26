@@ -66,8 +66,12 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	v1Kepub.GET("/:types/libraries/:libraryID/search", h.librarySearchKepub)
 	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
 
-	// File downloads (version-agnostic, shared across OPDS versions)
-	// Also requires Basic Auth
+	// File downloads (version-agnostic, shared across OPDS versions).
+	// Also requires Basic Auth. HEAD is registered alongside GET so OPDS
+	// clients (e.g., KOReader's "Use server filenames" mode) can read the
+	// Content-Disposition filename without fetching the body.
 	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth)
+	e.HEAD("/opds/download/:id", h.download, authMiddleware.BasicAuth)
 	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
+	e.HEAD("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
 }
