@@ -121,7 +121,7 @@ Multiple creators per role are comma-separated:
 3. Use first image file alphabetically
 
 **Series Number Fallback:**
-If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, or ` 7` at end of filename.
+If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, `c7`, `ch.7`, ` 7` at end of filename. Volume indicators (`v`, `#`, bare numbers) set the unit to `volume`; chapter indicators (`c`, `ch.`, `chapter`) set it to `chapter`.
 
 **Data Source:** All extracted metadata tagged with `models.DataSourceCBZMetadata`
 
@@ -264,7 +264,7 @@ When a library has file organization enabled, chapter-numbered files are renamed
 - MIME type: `application/zip`
 
 **CBZ-Specific Processing:**
-- Volume indicator removal from title during normalization
+- Volume/chapter indicator removal from title during normalization
 - Series inference from title if not in metadata or sidecar
 - Cover page index tracked in `metadata.CoverPage`
 

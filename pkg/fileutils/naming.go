@@ -20,7 +20,8 @@ type OrganizedNameOptions struct {
 	FileType         string  // for determining number formatting
 }
 
-// GenerateOrganizedFolderName creates a standardized folder name: [Author] Title #Volume.
+// GenerateOrganizedFolderName creates a standardized folder name: [Author] Title <number>.
+// For CBZ files, the number is formatted as "v{N}" for volumes or "c{N}" for chapters.
 func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 	var parts []string
 
@@ -65,7 +66,7 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath string) string {
 	ext := filepath.Ext(originalFilepath)
 
-	// For organized files in folders, we don't include volume numbers or author names
+	// For organized files in folders, we don't include series numbers or author names
 	// in the filename since the folder already contains this information.
 	// This prevents duplication like: "[Author] Book/[Author] Book.epub"
 	// Instead we get: "[Author] Book/Book.epub"

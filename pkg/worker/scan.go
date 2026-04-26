@@ -63,7 +63,11 @@ func generateCBZFileName(metadata *mediafile.ParsedMetadata, filename string) st
 	// Strategy 2: Use Series + Number if available (inferred name)
 	if metadata.Series != "" {
 		if metadata.SeriesNumber != nil {
-			return metadata.Series + " v" + formatSeriesNumber(*metadata.SeriesNumber)
+			prefix := "v"
+			if metadata.SeriesNumberUnit != nil && *metadata.SeriesNumberUnit == models.SeriesNumberUnitChapter {
+				prefix = "c"
+			}
+			return metadata.Series + " " + prefix + formatSeriesNumber(*metadata.SeriesNumber)
 		}
 		return metadata.Series
 	}

@@ -394,6 +394,21 @@ func (h *handler) update(c echo.Context) error {
 			if oldSeriesNum != newSeriesNum {
 				shouldOrganizeFiles = true
 			}
+
+			// Compare old and new series number units
+			var oldUnit *string
+			if len(book.BookSeries) > 0 {
+				oldUnit = book.BookSeries[0].SeriesNumberUnit
+			}
+			var newUnit *string
+			if len(params.Series) > 0 {
+				newUnit = params.Series[0].SeriesNumberUnit
+			}
+			if (oldUnit == nil) != (newUnit == nil) {
+				shouldOrganizeFiles = true
+			} else if oldUnit != nil && newUnit != nil && *oldUnit != *newUnit {
+				shouldOrganizeFiles = true
+			}
 		}
 
 		// Delete existing series associations
