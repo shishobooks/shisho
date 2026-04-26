@@ -61,6 +61,7 @@ type Config struct {
 
 	// Supplement discovery settings
 	SupplementExcludePatterns []string `koanf:"supplement_exclude_patterns" json:"supplement_exclude_patterns"`
+	PDFSupplementFilenames    []string `koanf:"pdf_supplement_filenames" json:"pdf_supplement_filenames"`
 
 	// Authentication settings
 	JWTSecret           string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
@@ -108,8 +109,14 @@ func defaults() *Config {
 		LibraryMonitorEnabled:         true,
 		LibraryMonitorDelaySeconds:    60,
 		SupplementExcludePatterns:     []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
-		SessionDurationDays:           30,
-		JWTSecret:                     "", // Must be set via config or env var
+		PDFSupplementFilenames: []string{
+			"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+			"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+			"appendix", "map", "maps", "insert", "guide", "reference",
+			"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+		},
+		SessionDurationDays: 30,
+		JWTSecret:           "", // Must be set via config or env var
 	}
 }
 
@@ -182,6 +189,12 @@ func NewForTest() *Config {
 	cfg.CacheDir = "" // Must be set by test
 	cfg.DownloadCacheMaxSizeGB = 1
 	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
+	cfg.PDFSupplementFilenames = []string{
+		"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+		"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+		"appendix", "map", "maps", "insert", "guide", "reference",
+		"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+	}
 	cfg.JWTSecret = "test-secret-key-for-testing-only"
 	return cfg
 }
