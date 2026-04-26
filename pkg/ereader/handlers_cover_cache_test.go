@@ -116,11 +116,16 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
-	assert.NotEmpty(t, rec.Header().Get("Last-Modified"))
+	assert.NotEmpty(t, rec.Header().Get("ETag"))
+	// Last-Modified is intentionally NOT emitted: the served file's identity
+	// can change (hybrid book + aspect-ratio change, file removed) without any
+	// change to the new cover's mtime, so mtime-based revalidation could
+	// return stale 304s. ETag bakes the file ID into the validator.
+	assert.Empty(t, rec.Header().Get("Last-Modified"))
 	assert.NotEmpty(t, rec.Body.Bytes())
 }
 
-func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
+func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t)
@@ -203,7 +208,7 @@ func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 
 	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
 
-	// First GET.
+	// First GET to capture the ETag.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req1 = req1.WithContext(apiKeyCtx)
 	rec1 := httptest.NewRecorder()
@@ -211,13 +216,13 @@ func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	c1.SetParamNames("bookId")
 	c1.SetParamValues(strconv.Itoa(book.ID))
 	require.NoError(t, h.Cover(c1))
-	lastModified := rec1.Header().Get("Last-Modified")
-	require.NotEmpty(t, lastModified)
+	etag := rec1.Header().Get("ETag")
+	require.NotEmpty(t, etag)
 
-	// Second GET with If-Modified-Since.
+	// Revalidate with If-None-Match.
 	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req2 = req2.WithContext(apiKeyCtx)
-	req2.Header.Set("If-Modified-Since", lastModified)
+	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
 	c2.SetParamNames("bookId")
@@ -225,6 +230,7 @@ func TestCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	require.NoError(t, h.Cover(c2))
 
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
+	assert.Equal(t, etag, rec2.Header().Get("ETag"))
 	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
 	assert.Empty(t, rec2.Body.Bytes())
 }
