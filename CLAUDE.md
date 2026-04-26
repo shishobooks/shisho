@@ -165,8 +165,13 @@ For detailed architecture information, see:
 - Database is SQLite file at `tmp/data.sqlite`
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
-- Always run `mise check:quiet` before committing — it suppresses output on success and only shows output for failing steps, printing a one-line pass/fail summary. Use `mise check` only when you need full verbose output for debugging.
-- **Don't run checks multiple times** — `mise check:quiet` gives a clear pass/fail summary in ~6 lines. Run it once.
+- **While iterating, run only the targeted subset of checks relevant to what you changed.** Don't run the full `mise check:quiet` between iterations — it fans out 4 heavy parallel pipelines and pegs CPU; when several agents do this concurrently across worktrees the host becomes unusable. Subset cheat sheet:
+  - Go-only edits → `mise lint test`
+  - Frontend-only edits → `mise lint:js test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Both → run both
+  - Migrations → also `mise db:rollback && mise db:migrate`
+  - E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
+- **Run the full `mise check:quiet` exactly once, as the final pre-commit / pre-push check, and only when no other in-flight work is mid-iteration on this host.** Before invoking it, look for a parallel `mise check:quiet`, `golangci-lint`, or heavy build running from another worktree or agent — `pgrep -fl 'golangci-lint|mise check'` is enough. If one is running, wait for it to finish before starting yours. The `lint` task uses a per-worktree golangci-lint cache (`tmp/golangci-lint-cache`) so two worktrees can lint without contention, but `mise check:quiet` itself is still CPU-heavy. Avoid plain `mise check` — its parallel verbose output is hard to follow and tempts you to re-run it.
 - **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
