@@ -116,7 +116,7 @@ file.CoverImageFilename = &filename
 - `mise lint` - Run Go linting with golangci-lint
 - `mise lint:js` - Run all JS/TS linting (ESLint, Prettier, TypeScript) in parallel
 - `mise check` - Run all validation checks in parallel (tests, Go lint, JS lint)
-- `mise check:quiet` - Same as check but suppresses output on success, only shows failures
+- `mise check:quiet` - Same as check but quieter, skips Firefox e2e (runs in CI), and serializes concurrent runs across worktrees via `flock`. Prefer this over `mise check` locally.
 
 ### Testing
 - `mise test` - Run all Go tests with coverage
