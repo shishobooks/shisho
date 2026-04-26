@@ -1,6 +1,7 @@
 package opds
 
 import (
+	"net/http"
 	"path/filepath"
 
 	"github.com/labstack/echo/v4"
@@ -59,8 +60,11 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	v1Kepub.GET("/:types/libraries/:libraryID/search", h.librarySearchKepub)
 	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
 
-	// File downloads (version-agnostic, shared across OPDS versions)
-	// Also requires Basic Auth
-	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth)
-	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
+	// File downloads (version-agnostic, shared across OPDS versions).
+	// Also requires Basic Auth. HEAD is registered alongside GET so OPDS
+	// clients (e.g., KOReader's "Use server filenames" mode) can read the
+	// Content-Disposition filename without fetching the body.
+	downloadMethods := []string{http.MethodGet, http.MethodHead}
+	e.Match(downloadMethods, "/opds/download/:id", h.download, authMiddleware.BasicAuth)
+	e.Match(downloadMethods, "/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
 }
