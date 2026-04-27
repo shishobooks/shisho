@@ -155,6 +155,43 @@ func looksLikePDFSupplement(filename string, names []string) bool {
 	return false
 }
 
+// hasNonPDFMainSibling returns true if dir (recursive) contains at least one
+// file with a non-PDF main-eligible extension. Main-eligible means EPUB / CBZ /
+// M4B or any extension in pluginExts (which comes from
+// pluginManager.RegisteredFileExtensions() — keys are extensions without the
+// leading dot, lowercase). pluginExts may be nil.
+func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, error) {
+	found := false
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+		if ext == "pdf" {
+			return nil
+		}
+		switch ext {
+		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypeM4B:
+			found = true
+			return filepath.SkipAll
+		}
+		if pluginExts != nil {
+			if _, ok := pluginExts[ext]; ok {
+				found = true
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
 // matchesExcludePattern checks if filename matches any exclude pattern.
 func matchesExcludePattern(filename string, patterns []string) bool {
 	for _, pattern := range patterns {

@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShouldUpdateScalar(t *testing.T) {
@@ -729,4 +732,101 @@ func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 	newKeysWithAddition := parsedIdentifierKeys(parsedWithAddition)
 	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
 	assert.True(t, got, "rescan must still detect a real addition even when the existing entries have cosmetic variants")
+}
+
+func TestHasNonPDFMainSibling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("epub sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "book.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("cbz sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "comic.cbz"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("m4b sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "audio.m4b"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("pdf-only directory has no sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "another.pdf"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("unrelated extension is not a sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "notes.txt"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("plugin-registered extension is a sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "book.azw3"))
+
+		// Plugin extensions are stored without leading dot, lowercase.
+		pluginExts := map[string]struct{}{"azw3": {}}
+		got, err := hasNonPDFMainSibling(dir, pluginExts)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("recursive sibling in subdirectory", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		sub := filepath.Join(dir, "extras")
+		require.NoError(t, os.MkdirAll(sub, 0o755))
+		writeFile(t, filepath.Join(sub, "book.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("missing directory returns error", func(t *testing.T) {
+		t.Parallel()
+		_, err := hasNonPDFMainSibling(filepath.Join(t.TempDir(), "does-not-exist"), nil)
+		assert.Error(t, err)
+	})
+}
+
+// writeFile creates an empty file at path, failing the test on error.
+func writeFile(t *testing.T, path string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, []byte{}, 0o644))
 }
