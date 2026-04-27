@@ -167,6 +167,36 @@ supplement_exclude_patterns:
   - "Thumbs.db"
   - "desktop.ini"
 
+# PDF basenames (case-insensitive, no extension) that should be auto-classified
+# as supplements when discovered next to a main EPUB / CBZ / M4B file. A PDF
+# alone in a directory always imports as a main file regardless of name.
+# Set to [] to disable. Substring matches are NOT applied — exact basename only.
+# Env: PDF_SUPPLEMENT_FILENAMES (comma-separated)
+# Default: see list below
+pdf_supplement_filenames:
+  - "supplement"
+  - "supplemental"
+  - "bonus"
+  - "bonus material"
+  - "bonus content"
+  - "companion"
+  - "notes"
+  - "liner notes"
+  - "errata"
+  - "booklet"
+  - "digital booklet"
+  - "appendix"
+  - "map"
+  - "maps"
+  - "insert"
+  - "guide"
+  - "reference"
+  - "cheat sheet"
+  - "cheatsheet"
+  - "cribsheet"
+  - "pamphlet"
+  - "extras"
+
 # =============================================================================
 # AUTHENTICATION SETTINGS
 # =============================================================================
