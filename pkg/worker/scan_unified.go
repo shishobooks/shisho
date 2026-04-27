@@ -2396,8 +2396,10 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	// uses basename-prefix matching, handled separately).
 	classifyAsSupplement := false
 	if fileType == models.FileTypePDF && !isRootLevelFile && looksLikePDFSupplement(filepath.Base(path), w.config.PDFSupplementFilenames) {
-		// Reuse-existing-book check: if a book row already lives at this
-		// bookPath, there's by definition another file (or there will be).
+		// Reuse-existing-book optimization: if a book row already lives at
+		// this bookPath, another file in this directory was already imported.
+		// scanFileCreateNew only runs for files not yet in the DB, so the
+		// existing book guarantees a sibling without re-walking the disk.
 		if existingBook != nil {
 			classifyAsSupplement = true
 		} else {
