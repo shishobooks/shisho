@@ -95,6 +95,34 @@ See [Cache Management](./cache-management.md) for how to inspect and clear these
 | Setting | Env Variable | Default | Description |
 |---------|-------------|---------|-------------|
 | `supplement_exclude_patterns` | `SUPPLEMENT_EXCLUDE_PATTERNS` | `[".*", ".DS_Store", "Thumbs.db", "desktop.ini"]` | Glob patterns to exclude from [supplement file](./supplement-files) discovery. Env var accepts comma-separated values |
+| `pdf_supplement_filenames` | `PDF_SUPPLEMENT_FILENAMES` | See default list below | PDF basenames (case-insensitive, exact match, no extension) that get classified as [supplements](./supplement-files#pdf-auto-classification) on scan when a sibling EPUB/CBZ/M4B exists in the same directory. A PDF alone in a directory always imports as main. Substring matches are NOT applied. Set to `[]` to disable. Env var accepts comma-separated values |
+
+#### Default `pdf_supplement_filenames`
+
+```
+supplement
+supplemental
+bonus
+bonus material
+bonus content
+companion
+notes
+liner notes
+errata
+booklet
+digital booklet
+appendix
+map
+maps
+insert
+guide
+reference
+cheat sheet
+cheatsheet
+cribsheet
+pamphlet
+extras
+```
 
 ### Docker / Caddy
 
