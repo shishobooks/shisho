@@ -138,11 +138,12 @@ func looksLikePDFSupplement(filename string, names []string) bool {
 	if len(names) == 0 {
 		return false
 	}
-	ext := strings.ToLower(filepath.Ext(filename))
-	if ext != ".pdf" {
+	filename = filepath.Base(filename)
+	rawExt := filepath.Ext(filename)
+	if strings.ToLower(rawExt) != ".pdf" {
 		return false
 	}
-	basename := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename))))
+	basename := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(filename, rawExt)))
 	if basename == "" {
 		return false
 	}

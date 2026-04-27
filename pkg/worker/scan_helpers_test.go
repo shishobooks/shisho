@@ -673,6 +673,7 @@ func TestLooksLikePDFSupplement(t *testing.T) {
 		{name: "nil names list disables matching", filename: "supplement.pdf", names: nil, want: false},
 		{name: "custom list overrides default", filename: "extra.pdf", names: []string{"extra"}, want: true},
 		{name: "no extension does not match", filename: "supplement", names: defaultNames, want: false},
+		{name: "trims whitespace in names list entry", filename: "supplement.pdf", names: []string{"  supplement  "}, want: true},
 	}
 
 	for _, tt := range tests {
