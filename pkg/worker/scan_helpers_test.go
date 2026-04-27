@@ -881,3 +881,18 @@ func TestPartitionSupplementPDFsLast_EmptyNames(t *testing.T) {
 	got := partitionSupplementPDFsLast(input, nil)
 	assert.Equal(t, input, got)
 }
+
+func TestPartitionSupplementPDFsLast_DoesNotMutateInput(t *testing.T) {
+	t.Parallel()
+
+	input := []string{
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/bonus.pdf",
+	}
+	original := append([]string(nil), input...)
+
+	_ = partitionSupplementPDFsLast(input, []string{"supplement", "bonus"})
+
+	assert.Equal(t, original, input, "input slice must not be mutated by partition")
+}
