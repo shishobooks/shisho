@@ -205,6 +205,11 @@ const AdminSettings = () => {
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}
             />
+            <ConfigRow
+              description="PDF basenames auto-classified as supplements when a sibling main file exists in the same directory"
+              label="PDF Supplement Filenames"
+              value={config.pdf_supplement_filenames.join(", ")}
+            />
           </div>
         </div>
 

@@ -159,7 +159,9 @@ func looksLikePDFSupplement(filename string, names []string) bool {
 // file with a non-PDF main-eligible extension. Main-eligible means EPUB / CBZ /
 // M4B or any extension in pluginExts (which comes from
 // pluginManager.RegisteredFileExtensions() — keys are extensions without the
-// leading dot, lowercase). pluginExts may be nil.
+// leading dot, lowercase). pluginExts may be nil. Hidden subdirectories
+// (e.g. .git, .calibre, .stversions) are skipped so a stray ebook inside an
+// app-state directory doesn't accidentally qualify as a sibling.
 func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, error) {
 	found := false
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -167,6 +169,13 @@ func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, err
 			return walkErr
 		}
 		if d.IsDir() {
+			// Skip hidden directories so stray files inside app-state dirs
+			// (.git, .calibre, .stversions, etc.) don't qualify as siblings.
+			// The walk root itself may have a leading dot in odd setups, so
+			// only skip when we're not at the root.
+			if path != dir && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))

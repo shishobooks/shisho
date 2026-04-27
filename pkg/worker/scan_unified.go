@@ -2392,8 +2392,9 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 
 	// Decide whether this new file should be a supplement based on filename
 	// pattern + on-disk siblings. Only applies to PDFs in directory-based
-	// books — root-level PDFs always stay main (root-level supplement linking
-	// uses basename-prefix matching, handled separately).
+	// books — root-level PDFs always stay main here. Root-level supplement
+	// linking is handled later in the function via discoverRootLevelSupplements
+	// (basename-prefix matching against the main file).
 	classifyAsSupplement := false
 	if fileType == models.FileTypePDF && !isRootLevelFile && looksLikePDFSupplement(filepath.Base(path), w.config.PDFSupplementFilenames) {
 		// Reuse-existing-book optimization: if a book row already lives at
@@ -2453,7 +2454,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	}
 
 	// Create file record
-	logInfo("creating file", logger.Data{"path": path, "filesize": size, "supplement": classifyAsSupplement})
+	logInfo("creating file", logger.Data{"path": path, "filesize": size, "is_supplement": classifyAsSupplement})
 	fileRole := models.FileRoleMain
 	if classifyAsSupplement {
 		fileRole = models.FileRoleSupplement

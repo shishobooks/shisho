@@ -831,6 +831,19 @@ func TestHasNonPDFMainSibling(t *testing.T) {
 		_, err := hasNonPDFMainSibling(filepath.Join(t.TempDir(), "does-not-exist"), nil)
 		assert.Error(t, err)
 	})
+
+	t.Run("ignores files in hidden subdirectories", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		hidden := filepath.Join(dir, ".calibre")
+		require.NoError(t, os.MkdirAll(hidden, 0o755))
+		writeFile(t, filepath.Join(hidden, "leftover.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got, "files inside hidden subdirectories must not count as siblings")
+	})
 }
 
 // writeFile creates an empty file at path, failing the test on error.
