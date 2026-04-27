@@ -818,6 +818,14 @@ func TestHasNonPDFMainSibling(t *testing.T) {
 		assert.True(t, got)
 	})
 
+	t.Run("empty directory has no sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
 	t.Run("missing directory returns error", func(t *testing.T) {
 		t.Parallel()
 		_, err := hasNonPDFMainSibling(filepath.Join(t.TempDir(), "does-not-exist"), nil)

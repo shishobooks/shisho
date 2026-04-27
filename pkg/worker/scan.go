@@ -170,7 +170,7 @@ func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, err
 			return nil
 		}
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
-		if ext == "pdf" {
+		if ext == models.FileTypePDF {
 			return nil
 		}
 		switch ext {
