@@ -645,6 +645,45 @@ func TestShouldApplySidecarRelationship(t *testing.T) {
 	}
 }
 
+func TestLooksLikePDFSupplement(t *testing.T) {
+	t.Parallel()
+
+	defaultNames := []string{
+		"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+		"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+		"appendix", "map", "maps", "insert", "guide", "reference",
+		"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+	}
+
+	tests := []struct {
+		name     string
+		filename string
+		names    []string
+		want     bool
+	}{
+		{name: "exact match lowercase", filename: "supplement.pdf", names: defaultNames, want: true},
+		{name: "exact match uppercase ext", filename: "Supplement.PDF", names: defaultNames, want: true},
+		{name: "all caps basename", filename: "BONUS MATERIAL.pdf", names: defaultNames, want: true},
+		{name: "trims surrounding whitespace", filename: "  supplement  .pdf", names: defaultNames, want: true},
+		{name: "multi-word entry matches", filename: "liner notes.pdf", names: defaultNames, want: true},
+		{name: "non-pdf extension does not match", filename: "supplement.txt", names: defaultNames, want: false},
+		{name: "substring does not match", filename: "my book - supplement.pdf", names: defaultNames, want: false},
+		{name: "unrelated name does not match", filename: "Companion Guide.pdf", names: defaultNames, want: false},
+		{name: "empty names list disables matching", filename: "supplement.pdf", names: []string{}, want: false},
+		{name: "nil names list disables matching", filename: "supplement.pdf", names: nil, want: false},
+		{name: "custom list overrides default", filename: "extra.pdf", names: []string{"extra"}, want: true},
+		{name: "no extension does not match", filename: "supplement", names: defaultNames, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := looksLikePDFSupplement(tt.filename, tt.names)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestIdentifierDiff_StableAcrossRescans locks in the fix for a regression
 // where each rescan of a book with hyphenated/prefixed/mixed-case identifiers
 // would thrash delete+insert because the stored (normalized) value and the

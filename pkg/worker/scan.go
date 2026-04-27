@@ -131,6 +131,29 @@ func isShishoSpecialFile(filename string) bool {
 	return false
 }
 
+// looksLikePDFSupplement returns true if filename has a .pdf extension and its
+// basename (without extension, trimmed, lowercased) is an exact case-insensitive
+// match for any entry in names. Returns false when names is empty/nil.
+func looksLikePDFSupplement(filename string, names []string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != ".pdf" {
+		return false
+	}
+	basename := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename))))
+	if basename == "" {
+		return false
+	}
+	for _, name := range names {
+		if strings.ToLower(strings.TrimSpace(name)) == basename {
+			return true
+		}
+	}
+	return false
+}
+
 // matchesExcludePattern checks if filename matches any exclude pattern.
 func matchesExcludePattern(filename string, patterns []string) bool {
 	for _, pattern := range patterns {
