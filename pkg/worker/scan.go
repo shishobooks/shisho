@@ -192,6 +192,26 @@ func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, err
 	return found, nil
 }
 
+// partitionSupplementPDFsLast returns paths reordered so that PDFs whose
+// basename matches the supplement name list appear after every other path.
+// Order within each partition is preserved (stable). The input slice is not
+// mutated. When names is empty/nil, the input is returned unchanged.
+func partitionSupplementPDFsLast(paths []string, names []string) []string {
+	if len(names) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	var deferred []string
+	for _, p := range paths {
+		if looksLikePDFSupplement(filepath.Base(p), names) {
+			deferred = append(deferred, p)
+			continue
+		}
+		out = append(out, p)
+	}
+	return append(out, deferred...)
+}
+
 // matchesExcludePattern checks if filename matches any exclude pattern.
 func matchesExcludePattern(filename string, patterns []string) bool {
 	for _, pattern := range patterns {
@@ -425,6 +445,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 				return errors.WithStack(err)
 			}
 		}
+
+		// Defer supplement-named PDFs so non-supplement files in the same
+		// directory get processed first by the parallel worker pool. This
+		// makes the supplement classification ordering-independent in the
+		// common case where a sibling main file exists, even though the
+		// on-disk sibling check in scanFileCreateNew is the actual
+		// correctness mechanism.
+		filesToScan = partitionSupplementPDFsLast(filesToScan, w.config.PDFSupplementFilenames)
 
 		// Run input converters on discovered files
 		if w.pluginManager != nil {

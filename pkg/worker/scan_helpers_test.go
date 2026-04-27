@@ -838,3 +838,46 @@ func writeFile(t *testing.T, path string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(path, []byte{}, 0o644))
 }
+
+func TestPartitionSupplementPDFsLast(t *testing.T) {
+	t.Parallel()
+
+	names := []string{"supplement", "bonus"}
+
+	// Mixed input — supplement-named PDFs interleaved with other files.
+	input := []string{
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/bonus.pdf",
+		"/lib/Other/audio.m4b",
+		"/lib/Other/notes.txt",
+	}
+
+	got := partitionSupplementPDFsLast(input, names)
+
+	// Non-supplement files must come first, in their original order.
+	expected := []string{
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/audio.m4b",
+		"/lib/Other/notes.txt",
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/Other/bonus.pdf",
+	}
+	assert.Equal(t, expected, got)
+}
+
+func TestPartitionSupplementPDFsLast_StableForNoMatches(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"a.epub", "b.epub", "c.cbz"}
+	got := partitionSupplementPDFsLast(input, []string{"supplement"})
+	assert.Equal(t, input, got)
+}
+
+func TestPartitionSupplementPDFsLast_EmptyNames(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"supplement.pdf", "book.epub"}
+	got := partitionSupplementPDFsLast(input, nil)
+	assert.Equal(t, input, got)
+}
