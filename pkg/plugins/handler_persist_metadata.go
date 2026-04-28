@@ -16,6 +16,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
+// equalIntSets reports whether two int-keyed sets contain the same keys.
+func equalIntSets(a, b map[int]struct{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
 // Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
@@ -37,12 +50,15 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" {
+		titleChanged := book.Title != title
 		book.Title = title
 		book.TitleSource = pluginSource
 		book.SortTitle = sortname.ForTitle(title)
 		book.SortTitleSource = pluginSource
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
-		seriesAggregateMayBeStale = true
+		if titleChanged {
+			seriesAggregateMayBeStale = true
+		}
 
 		// Mirror the identified title onto the target main file's Name so
 		// file organization and downloads reflect it. Supplements keep their
@@ -82,7 +98,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Authors
 	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
-		seriesAggregateMayBeStale = true
 		// Capture the personIDs already attached as authors so we can skip
 		// re-indexing them when the apply re-attaches the same person.
 		// persons_fts has no aggregate columns, so re-indexing an unchanged
@@ -96,6 +111,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete authors")
 		}
+		newAuthorPersonIDs := make(map[int]struct{}, len(md.Authors))
 		for i, pa := range md.Authors {
 			if pa.Name == "" {
 				continue
@@ -105,6 +121,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to find/create person", logger.Data{"name": pa.Name, "error": pErr.Error()})
 				continue
 			}
+			newAuthorPersonIDs[person.ID] = struct{}{}
 			var role *string
 			if pa.Role != "" {
 				role = &pa.Role
@@ -124,6 +141,12 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 					}
 				}
 			}
+		}
+		// Treat authors as changed when the new set differs from the old
+		// set in either direction. Same set ⇒ no series_fts.book_authors
+		// drift, no need to mark the aggregate stale.
+		if !equalIntSets(oldAuthorPersonIDs, newAuthorPersonIDs) {
+			seriesAggregateMayBeStale = true
 		}
 		book.AuthorSource = pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {

@@ -740,6 +740,41 @@ func TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges(t *testing.T) {
 	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series whose membership did not change must still be re-indexed when book.title changed, otherwise series_fts.book_titles goes stale")
 }
 
+// TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied verifies that
+// re-applying the same title (alongside an unchanged series) does not
+// trigger an IndexSeries call. The previous over-trigger keyed off "title
+// block ran" rather than "title actually changed", causing one extra
+// series_fts DELETE+INSERT per identical-title apply.
+func TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Same Title")
+	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
+	book.BookSeries = []*models.BookSeries{{
+		BookID:   book.ID,
+		SeriesID: existingSeries.ID,
+		Series:   existingSeries,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Title:  "Same Title",
+		Series: "Same Series",
+	}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose aggregate inputs (title) did not actually change must NOT be re-indexed")
+}
+
 // TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor verifies that an
 // author who was already attached to the book before the apply is not
 // re-indexed when the same author is re-applied. persons_fts has no
