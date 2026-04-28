@@ -21,12 +21,12 @@ jobs:
       - run: mise lint
 
   test:
-    name: Go Test (${{ matrix.shard }}/12)
+    name: Go Test (${{ matrix.shard }}/10)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       TZ: America/Chicago
       CI: "true"
@@ -51,7 +51,7 @@ jobs:
         run: |
           go run ./tools/gotestsplit run \
             -junit-dir=.gotest-timings \
-            -total=12 -index=$((SHARD - 1)) \
+            -total=10 -index=$((SHARD - 1)) \
             ./pkg/... -- -race
       - name: Upload shard JUnit
         if: always()
