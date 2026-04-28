@@ -1229,23 +1229,31 @@ const BookDetail = () => {
                     <div className="flex flex-wrap gap-2">
                       {book.authors.map((author) => {
                         const roleLabel = getAuthorRoleLabel(author.role);
-                        return (
+                        const badge = (
+                          <Badge
+                            className={cn(
+                              author.person &&
+                                "cursor-pointer hover:bg-secondary/80",
+                            )}
+                            variant="secondary"
+                          >
+                            {author.person?.name ?? "Unknown"}
+                            {hasCBZFiles && roleLabel && (
+                              <span className="text-muted-foreground ml-1">
+                                ({roleLabel})
+                              </span>
+                            )}
+                          </Badge>
+                        );
+                        return author.person ? (
                           <Link
                             key={author.id}
                             to={`/libraries/${libraryId}/people/${author.person_id}`}
                           >
-                            <Badge
-                              className="cursor-pointer hover:bg-secondary/80"
-                              variant="secondary"
-                            >
-                              {author.person?.name ?? "Unknown"}
-                              {hasCBZFiles && roleLabel && (
-                                <span className="text-muted-foreground ml-1">
-                                  ({roleLabel})
-                                </span>
-                              )}
-                            </Badge>
+                            {badge}
                           </Link>
+                        ) : (
+                          <span key={author.id}>{badge}</span>
                         );
                       })}
                     </div>

@@ -410,10 +410,9 @@ const BookItem = ({
           if (uniqueAuthors.length === 0) return null;
 
           return (
-            <div className="mt-1 text-xs line-clamp-2 text-neutral-500 dark:text-neutral-500">
+            <div className="mt-1 text-xs line-clamp-2 text-neutral-500">
               {uniqueAuthors.map((a, i) => (
-                <span key={a.name}>
-                  {i > 0 && ", "}
+                <span key={a.personId}>
                   {a.hasPerson ? (
                     <Link
                       className={cn(
@@ -427,6 +426,7 @@ const BookItem = ({
                   ) : (
                     a.name
                   )}
+                  {i < uniqueAuthors.length - 1 && ", "}
                 </span>
               ))}
             </div>
