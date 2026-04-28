@@ -184,9 +184,7 @@ func countBasedSplit(pkgs []Package, n int) [][]Item {
 	type pair struct{ pkg, test string }
 	var all []pair
 	for _, p := range pkgs {
-		tests := append([]string(nil), p.Tests...)
-		sort.Strings(tests)
-		for _, t := range tests {
+		for _, t := range p.Tests {
 			all = append(all, pair{p.Path, t})
 		}
 	}

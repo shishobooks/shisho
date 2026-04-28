@@ -10,8 +10,8 @@ using `-run` regexes.
 
 ```
 gotestsplit simulate -junit-dir=.gotest-timings [-min=2] [-max=10]
-gotestsplit plan -junit-dir=.gotest-timings -total=5 -index=0 ./pkg/...
-gotestsplit run -junit-dir=.gotest-timings -total=5 -index=0 ./pkg/... -- -race
+gotestsplit plan -junit-dir=.gotest-timings -total=8 -index=0 ./pkg/...
+gotestsplit run -junit-dir=.gotest-timings -total=8 -index=0 ./pkg/... -- -race
 ```
 
 See `docs/superpowers/specs/2026-04-27-gotestsplit-design.md` for design rationale.

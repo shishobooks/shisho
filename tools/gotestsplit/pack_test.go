@@ -203,11 +203,21 @@ func TestPack_NoHistoryAtAll_FallsBackToCountBased(t *testing.T) {
 			t.Errorf("shard %d: got %d tests, want 2 (count-based split)", i, count)
 		}
 	}
-	// All 6 tests accounted for.
+	// All 6 tests accounted for. Whole-pkg items have Tests=nil, so look up
+	// the test count from the original pkgs slice.
 	totalTests := 0
 	for _, s := range shards {
 		for _, it := range s {
-			totalTests += len(it.Tests)
+			if len(it.Tests) > 0 {
+				totalTests += len(it.Tests)
+			} else {
+				for _, p := range pkgs {
+					if p.Path == it.Pkg {
+						totalTests += len(p.Tests)
+						break
+					}
+				}
+			}
 		}
 	}
 	if totalTests != 6 {
@@ -225,5 +235,43 @@ func TestPack_NoHistory_WholePackagesEmittedAsBatch(t *testing.T) {
 	}
 	if shards[0][0].Tests != nil {
 		t.Errorf("expected Tests=nil for whole-pkg item, got %v", shards[0][0].Tests)
+	}
+}
+
+func TestPack_NoHistory_PartialFragmentNotEmittedAsWhole(t *testing.T) {
+	t.Parallel()
+	// 2 packages of 3 tests each, into 2 shards. Each shard gets 3 of the 6 tests.
+	// Pkg "a"'s 3 tests all land on shard 0 (alphabetic sort). Pkg "b"'s 3 tests
+	// all land on shard 1. So both shards should emit ONE whole-pkg item each.
+	pkgs := []Package{
+		{Path: "a", Tests: []string{"T1", "T2", "T3"}},
+		{Path: "b", Tests: []string{"T4", "T5", "T6"}},
+	}
+	shards := Pack(History{}, pkgs, 2)
+	for i, s := range shards {
+		if len(s) != 1 {
+			t.Errorf("shard %d: got %d items, want 1", i, len(s))
+			continue
+		}
+		if s[0].Tests != nil {
+			t.Errorf("shard %d: expected whole-pkg item, got Tests=%v", i, s[0].Tests)
+		}
+	}
+}
+
+func TestPack_NoHistory_PartialFragmentRetainsTests(t *testing.T) {
+	t.Parallel()
+	// 1 package of 4 tests, 2 shards. Each shard gets 2 of 4 tests → fragments.
+	// Both shards should emit Items with Tests populated (NOT nil).
+	pkgs := []Package{{Path: "p", Tests: []string{"T1", "T2", "T3", "T4"}}}
+	shards := Pack(History{}, pkgs, 2)
+	for i, s := range shards {
+		if len(s) != 1 {
+			t.Errorf("shard %d: got %d items, want 1", i, len(s))
+			continue
+		}
+		if s[0].Tests == nil || len(s[0].Tests) != 2 {
+			t.Errorf("shard %d: expected fragment with 2 tests, got Tests=%v", i, s[0].Tests)
+		}
 	}
 }

@@ -37,7 +37,11 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .gotest-timings
-          key: gotest-timings-${{ github.ref }}-${{ github.sha }}-${{ matrix.shard }}
+          # Same key for all shards: gotestsplit needs all shards to see the same
+          # history input, otherwise their Pack outputs diverge and tests could be
+          # missed or duplicated. Concurrent saves race; GHA preserves whichever
+          # shard's save finishes first.
+          key: gotest-timings-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
             gotest-timings-${{ github.ref }}-
             gotest-timings-refs/heads/master-
