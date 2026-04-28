@@ -84,6 +84,7 @@ import {
 } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { getCoverFileType } from "@/utils/coverSelection";
 import {
   formatDate,
   formatDateTime,
@@ -95,36 +96,6 @@ import {
 import { getIdentifierUrl } from "@/utils/identifiers";
 import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
-
-// Determines which file type would provide the cover based on library preference.
-// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
-// Used for placeholder variant selection when there's no cover image.
-// Supplements are excluded — they don't represent the book.
-const getCoverFileType = (
-  files: File[] | undefined,
-  coverAspectRatio: string,
-): "book" | "audiobook" => {
-  if (!files || files.length === 0) return "book";
-
-  const mainFiles = files.filter((f) => f.file_role !== "supplement");
-  const hasBookFiles = mainFiles.some(
-    (f) =>
-      f.file_type === "epub" || f.file_type === "cbz" || f.file_type === "pdf",
-  );
-  const hasAudiobookFiles = mainFiles.some((f) => f.file_type === "m4b");
-
-  switch (coverAspectRatio) {
-    case "audiobook":
-    case "audiobook_fallback_book":
-      if (hasAudiobookFiles) return "audiobook";
-      if (hasBookFiles) return "book";
-      break;
-    default: // "book", "book_fallback_audiobook"
-      if (hasBookFiles) return "book";
-      if (hasAudiobookFiles) return "audiobook";
-  }
-  return "book";
-};
 
 interface DownloadError {
   fileId: number;
