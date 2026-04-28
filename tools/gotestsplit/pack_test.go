@@ -120,6 +120,38 @@ func TestPack_SmartChunking_HotPackage(t *testing.T) {
 	}
 }
 
+func TestPack_UnknownTest_UsesPackageMedian(t *testing.T) {
+	t.Parallel()
+	// Package has 3 tests with history (10, 20, 30 → median 20) and 1 unknown.
+	// The unknown should be estimated at 20s.
+	pkgs := []Package{{Path: "p", Tests: []string{"TA", "TB", "TC", "TUnknown"}}}
+	hist := History{"p": {"TA": 10, "TB": 20, "TC": 30}}
+	shards := Pack(hist, pkgs, 1)
+	var sum float64
+	for _, it := range shards[0] {
+		sum += it.Duration
+	}
+	want := 10.0 + 20 + 30 + 20 // 80
+	if sum != want {
+		t.Errorf("got total %v, want %v", sum, want)
+	}
+}
+
+func TestPack_UnknownPackage_Uses30sPerTest(t *testing.T) {
+	t.Parallel()
+	// Package has 4 tests, no history at all → 4 * 30 = 120.
+	pkgs := []Package{{Path: "p", Tests: []string{"T1", "T2", "T3", "T4"}}}
+	hist := History{} // empty
+	shards := Pack(hist, pkgs, 1)
+	var sum float64
+	for _, it := range shards[0] {
+		sum += it.Duration
+	}
+	if sum != 120 {
+		t.Errorf("got total %v, want 120", sum)
+	}
+}
+
 func TestPack_SmartChunking_TestsAssignedDeterministically(t *testing.T) {
 	t.Parallel()
 	hot := Package{Path: "hot", Tests: []string{"TA", "TB", "TC", "TD"}}

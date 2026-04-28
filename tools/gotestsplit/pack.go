@@ -31,17 +31,39 @@ func Pack(hist History, pkgs []Package, n int) [][]Item {
 	return lpt(items, n)
 }
 
+const unknownPackageFallbackPerTest = 30.0
+
+// estimateDuration returns the best guess for one test's wallclock:
+//   - exact JUnit value if known
+//   - else the median of other known tests in this package
+//   - else unknownPackageFallbackPerTest seconds
+func estimateDuration(hist History, pkg, test string) float64 {
+	if d, ok := hist[pkg][test]; ok {
+		return d
+	}
+	pkgHist := hist[pkg]
+	if len(pkgHist) > 0 {
+		ds := make([]float64, 0, len(pkgHist))
+		for _, d := range pkgHist {
+			ds = append(ds, d)
+		}
+		sort.Float64s(ds)
+		return ds[len(ds)/2] // median (lower of two for even count — fine)
+	}
+	return unknownPackageFallbackPerTest
+}
+
 // buildItems turns each Package into one or more Items. Hot packages (wallclock
 // > ideal*0.8) are split into K chunks via test-level LPT so that no single
 // item dominates a shard. Packages with ≤1 test are always kept whole.
 func buildItems(hist History, pkgs []Package, n int) []Item {
-	// First pass: compute each package's known wallclock and the global total.
+	// First pass: compute each package's estimated wallclock and the global total.
 	pkgWall := make(map[string]float64, len(pkgs))
 	var total float64
 	for _, p := range pkgs {
 		var sum float64
 		for _, t := range p.Tests {
-			sum += hist[p.Path][t]
+			sum += estimateDuration(hist, p.Path, t)
 		}
 		pkgWall[p.Path] = sum
 		total += sum
@@ -68,21 +90,21 @@ func buildItems(hist History, pkgs []Package, n int) []Item {
 		if k > len(p.Tests) {
 			k = len(p.Tests)
 		}
-		items = append(items, chunkPackage(p, hist[p.Path], k)...)
+		items = append(items, chunkPackage(p, hist, k)...)
 	}
 	return items
 }
 
 // chunkPackage assigns p.Tests to k chunks via LPT, returning k Items each
 // with a non-nil Tests slice for targeted `go test -run` execution.
-func chunkPackage(p Package, durations map[string]float64, k int) []Item {
+func chunkPackage(p Package, hist History, k int) []Item {
 	type tt struct {
 		name     string
 		duration float64
 	}
 	tests := make([]tt, len(p.Tests))
 	for i, name := range p.Tests {
-		tests[i] = tt{name, durations[name]}
+		tests[i] = tt{name, estimateDuration(hist, p.Path, name)}
 	}
 	sort.Slice(tests, func(i, j int) bool {
 		if tests[i].duration != tests[j].duration {
