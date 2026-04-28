@@ -100,13 +100,15 @@ git push
 
 For N=10 vs N=12 in 2026-04 the picture was:
 
-| N | First-pass slowest | Second-pass slowest |
-|---|---|---|
-| 8 | (skipped — was the starting state) | 8:23 |
-| 10 | 9:19 (contaminated by N=8 cache) | 8:15 |
-| 12 | 9:04 (contaminated by N=10 cache) | 6:39 |
+| N | First-pass slowest | Second-pass slowest | Re-run |
+|---|---|---|---|
+| 8 | (skipped — was the starting state) | 8:23 | — |
+| 10 | 9:19 (contaminated by N=8 cache) | 8:15 | — |
+| 12 | 9:04 (contaminated by N=10 cache) | 6:39 | 8:39 |
 
-N=12 was the clear winner; N=10 barely beat N=8 due to bin-packing unluck.
+A third N=12 run on the same cache produced a slowest of 8:39 — i.e., **CI runner variance is ~2 minutes on the slowest shard**. A single "clean" measurement can be a lucky outlier. To be confident, take 3+ samples per N and use the median; otherwise treat differences smaller than ~2 minutes as noise.
+
+In 2026-04, N=12 was settled on as the best cost/value balance: typical slowest ~7:30–8:30 with ~2 min headroom against the 10-minute target. N=8 is similarly capable today; the extra 4 shards of N=12 buy ~1 minute of margin against test growth at ~13 CI-minutes of extra spend.
 
 ### Step 6: Pick the N and update CI
 
