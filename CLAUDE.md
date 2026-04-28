@@ -40,6 +40,7 @@ Project-specific conventions are documented in `CLAUDE.md` files within each sub
 | `pkg/events/CLAUDE.md` | SSE: event broker, streaming handler, event types |
 | `website/CLAUDE.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/CLAUDE.md` | E2E testing: Playwright, per-browser isolation, fixtures |
+| `tools/gotestsplit/CLAUDE.md` | Timing-aware Go test sharding: cache strategy, picking shard count, recalibration playbook |
 
 ## Utility Skills
 
