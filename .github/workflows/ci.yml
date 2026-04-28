@@ -67,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gotest-timings-shard-${{ matrix.shard }}
-          path: .gotest-timings/
+          path: .gotest-timings/*.xml
           retention-days: 1
           if-no-files-found: warn
 
