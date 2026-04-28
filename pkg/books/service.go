@@ -890,13 +890,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	isDirectoryBased := filepath.Dir(files[0].Filepath) == book.Filepath
 
 	// Check if this is a root-level book (files directly in a library path, not yet organized into folders)
-	isRootLevelBook := false
-	for _, libraryPath := range library.LibraryPaths {
-		if filepath.Dir(files[0].Filepath) == libraryPath.Filepath {
-			isRootLevelBook = true
-			break
-		}
-	}
+	isRootLevelBook := isFileAtLibraryRoot(files[0].Filepath, library.LibraryPaths)
 
 	if isDirectoryBased {
 		// For directory-based books, rename the folder and update all file paths
@@ -977,9 +971,12 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// folder rather than renaming it in place. RenameOrganizedFile
 			// only operates within the file's own directory, so without this
 			// branch the file (and its sidecar/cover) would be left at the
-			// library root.
+			// library root. Pass book.Filepath explicitly so the destination
+			// matches the rest of the book's files even when the per-file
+			// opts (file.Name override, CBZ + series number, etc.) would
+			// otherwise generate a different folder name.
 			if isFileAtLibraryRoot(file.Filepath, library.LibraryPaths) {
-				result, organizeErr := fileutils.OrganizeRootLevelFile(file.Filepath, organizeOpts)
+				result, organizeErr := fileutils.MoveFileIntoOrganizedFolder(file.Filepath, book.Filepath, organizeOpts)
 				if organizeErr != nil {
 					log.Error("failed to promote root-level file into book folder", logger.Data{
 						"file_id": file.ID,

@@ -37,20 +37,30 @@ type OrganizeFileResult struct {
 	CoversError   error
 }
 
-// OrganizeRootLevelFile creates a folder and moves a root-level file into it.
+// OrganizeRootLevelFile creates a folder (derived from opts) and moves a
+// root-level file into it. Use this when the destination folder should be
+// computed from the file's metadata. To move a file into an already-known
+// folder (e.g. joining an existing directory-backed book), use
+// MoveFileIntoOrganizedFolder.
 func OrganizeRootLevelFile(originalPath string, opts OrganizedNameOptions) (*OrganizeFileResult, error) {
+	baseDir := filepath.Dir(originalPath)
+	folderName := GenerateOrganizedFolderName(opts)
+	targetFolder := filepath.Join(baseDir, folderName)
+	return MoveFileIntoOrganizedFolder(originalPath, targetFolder, opts)
+}
+
+// MoveFileIntoOrganizedFolder moves a file (and its associated covers and
+// file sidecar) into the given target folder, computing the destination
+// filename from opts. The target folder is created if missing. After a
+// successful move the source directory is cleaned up if empty. Use this when
+// the destination folder is already known (e.g. promoting a root-level file
+// into an existing book folder), so the caller doesn't have to re-derive the
+// folder from opts and risk landing in a different folder than intended.
+func MoveFileIntoOrganizedFolder(originalPath, targetFolder string, opts OrganizedNameOptions) (*OrganizeFileResult, error) {
 	result := &OrganizeFileResult{
 		OriginalPath: originalPath,
 	}
 
-	// Get the directory containing the original file
-	baseDir := filepath.Dir(originalPath)
-
-	// Generate the organized folder name
-	folderName := GenerateOrganizedFolderName(opts)
-	targetFolder := filepath.Join(baseDir, folderName)
-
-	// Generate the organized filename
 	filename := GenerateOrganizedFileName(opts, originalPath)
 	targetPath := filepath.Join(targetFolder, filename)
 
@@ -58,9 +68,7 @@ func OrganizeRootLevelFile(originalPath string, opts OrganizedNameOptions) (*Org
 
 	// Check if target folder already exists
 	if _, err := os.Stat(targetFolder); os.IsNotExist(err) {
-		// Create the target folder
-		err := os.MkdirAll(targetFolder, 0755)
-		if err != nil {
+		if err := os.MkdirAll(targetFolder, 0755); err != nil {
 			return result, errors.WithStack(err)
 		}
 		result.FolderCreated = true
@@ -74,8 +82,7 @@ func OrganizeRootLevelFile(originalPath string, opts OrganizedNameOptions) (*Org
 	}
 
 	// Move the file
-	err := moveFile(originalPath, targetPath)
-	if err != nil {
+	if err := moveFile(originalPath, targetPath); err != nil {
 		// If we created the folder and the move failed, try to clean up
 		if result.FolderCreated {
 			os.RemoveAll(targetFolder)

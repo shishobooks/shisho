@@ -442,12 +442,20 @@ func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *te
 	// The EPUB stays put.
 	assert.FileExists(t, epubPath, "existing organized epub should remain in place")
 
-	// DB filepath for the m4b reflects the new location.
+	// DB filepath for the m4b reflects the new location, and
+	// CoverImageFilename remains filename-only (the project's "stores
+	// filename, not full path" invariant — see CLAUDE.md).
 	reloadedFiles, err := svc.ListFiles(ctx, ListFilesOptions{BookID: &book.ID})
 	require.NoError(t, err)
+	var foundM4b bool
 	for _, f := range reloadedFiles {
 		if f.FileType == models.FileTypeM4B {
+			foundM4b = true
 			assert.Equal(t, expectedM4bPath, f.Filepath, "m4b filepath in DB should reflect new location")
+			require.NotNil(t, f.CoverImageFilename, "m4b cover_image_filename should be set")
+			assert.Equal(t, "Wind and Truth.m4b.cover.jpg", *f.CoverImageFilename,
+				"cover_image_filename must remain filename-only after promotion")
 		}
 	}
+	assert.True(t, foundM4b, "expected to find the m4b file in the DB")
 }
