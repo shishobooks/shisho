@@ -46,7 +46,10 @@ const Setup = () => {
     INITIAL_VALUES.confirmPassword,
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [isDevLoading, setIsDevLoading] = useState(false);
   const [changesSaved, setChangesSaved] = useState(false);
+
+  const isDevelopment = import.meta.env.DEV;
 
   // Track whether user has unsaved changes by comparing against initial values
   const hasUnsavedChanges = useMemo(() => {
@@ -112,6 +115,30 @@ const Setup = () => {
       toast.error(msg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCreateDevAdmin = async () => {
+    setIsDevLoading(true);
+    try {
+      const userData = await API.request<SetupResponse>("POST", "/auth/setup", {
+        username: "admin",
+        email: null,
+        password: "adminadmin",
+      });
+
+      toast.success("Dev admin account created (admin / adminadmin)");
+      setAuthUser(userData);
+      setChangesSaved(true);
+      requestNavigate("/");
+    } catch (error) {
+      let msg = "Setup failed. Please try again.";
+      if (error instanceof Error) {
+        msg = error.message;
+      }
+      toast.error(msg);
+    } finally {
+      setIsDevLoading(false);
     }
   };
 
@@ -208,6 +235,25 @@ const Setup = () => {
               "Create Admin Account"
             )}
           </Button>
+
+          {isDevelopment && (
+            <Button
+              className="w-full"
+              disabled={isDevLoading}
+              onClick={handleCreateDevAdmin}
+              type="button"
+              variant="outline"
+            >
+              {isDevLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating dev admin...
+                </>
+              ) : (
+                "Create dev admin (admin / adminadmin)"
+              )}
+            </Button>
+          )}
         </form>
       </div>
 
