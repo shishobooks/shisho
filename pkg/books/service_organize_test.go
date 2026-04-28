@@ -320,3 +320,134 @@ func TestOrganizeBookFiles_DirectoryBased_WritesFreshSidecarAfterFolderRename(t 
 	require.NoError(t, err)
 	assert.Equal(t, newBookFolder, reloaded.Filepath)
 }
+
+// TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder pins
+// the bug where a second file (e.g. an M4B) dropped at the library root for a
+// book whose first file is already organized into a folder is left at the
+// root by organizeBookFiles. The function previously decided the layout
+// strategy from files[0] alone — finding it inside book.Filepath made it pick
+// the directory-based branch, which only renames each file in its own
+// directory and never moves the root-level file into the book folder. Its
+// sidecar and cover were similarly left at the root because
+// renameAssociatedFiles operates in the file's own directory.
+func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := setupTestDB(t)
+	svc := NewService(db)
+
+	libDir := t.TempDir()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	libraryPath := &models.LibraryPath{LibraryID: library.ID, Filepath: libDir}
+	_, err = db.NewInsert().Model(libraryPath).Exec(ctx)
+	require.NoError(t, err)
+
+	// Existing organized EPUB inside the book folder.
+	bookFolder := filepath.Join(libDir, "[Test Author] Wind and Truth")
+	require.NoError(t, os.MkdirAll(bookFolder, 0755))
+	epubPath := filepath.Join(bookFolder, "Wind and Truth.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
+
+	// Newly-dropped M4B at the library root, plus its cover and file sidecar
+	// (created by the scanner in the file's own directory).
+	m4bPath := filepath.Join(libDir, "Wind and Truth.m4b")
+	require.NoError(t, os.WriteFile(m4bPath, []byte("m4b"), 0644))
+	rootCoverPath := m4bPath + ".cover.jpg"
+	require.NoError(t, os.WriteFile(rootCoverPath, []byte("cover"), 0644))
+	rootFileSidecarPath := m4bPath + ".metadata.json"
+	require.NoError(t, os.WriteFile(rootFileSidecarPath, []byte("{}"), 0644))
+
+	person := &models.Person{
+		LibraryID: library.ID,
+		Name:      "Test Author",
+		SortName:  "Author, Test",
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Wind and Truth",
+		TitleSource:     models.DataSourceFileMetadata,
+		SortTitle:       "Wind and Truth",
+		SortTitleSource: models.DataSourceFileMetadata,
+		AuthorSource:    models.DataSourceFileMetadata,
+		Filepath:        bookFolder,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	author := &models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}
+	_, err = db.NewInsert().Model(author).Exec(ctx)
+	require.NoError(t, err)
+
+	// Insert EPUB first so it sorts ahead by created_at — this reproduces the
+	// real-world ordering where the existing organized file is files[0] and
+	// the new root-level file is files[1].
+	coverFilenameEpub := "Wind and Truth.epub.cover.jpg"
+	epubFile := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           epubPath,
+		FilesizeBytes:      4,
+		CoverImageFilename: &coverFilenameEpub,
+	}
+	_, err = db.NewInsert().Model(epubFile).Exec(ctx)
+	require.NoError(t, err)
+
+	coverFilenameM4b := "Wind and Truth.m4b.cover.jpg"
+	m4bFile := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeM4B,
+		FileRole:           models.FileRoleMain,
+		Filepath:           m4bPath,
+		FilesizeBytes:      3,
+		CoverImageFilename: &coverFilenameM4b,
+	}
+	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
+	require.NoError(t, err)
+
+	loadedBook, err := svc.RetrieveBook(ctx, RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.OrganizeBookFiles(ctx, loadedBook))
+
+	// The M4B + its cover + its file sidecar must all land inside the book
+	// folder, alongside the existing EPUB.
+	expectedM4bPath := filepath.Join(bookFolder, "Wind and Truth.m4b")
+	expectedCoverPath := expectedM4bPath + ".cover.jpg"
+	expectedFileSidecarPath := expectedM4bPath + ".metadata.json"
+
+	assert.FileExists(t, expectedM4bPath, "m4b should be moved into the book folder")
+	assert.FileExists(t, expectedCoverPath, "m4b cover should be moved into the book folder")
+	assert.FileExists(t, expectedFileSidecarPath, "m4b file sidecar should be moved into the book folder")
+
+	// Nothing should remain at the root.
+	assert.NoFileExists(t, m4bPath, "m4b should not remain at library root")
+	assert.NoFileExists(t, rootCoverPath, "m4b cover should not remain at library root")
+	assert.NoFileExists(t, rootFileSidecarPath, "m4b file sidecar should not remain at library root")
+
+	// The EPUB stays put.
+	assert.FileExists(t, epubPath, "existing organized epub should remain in place")
+
+	// DB filepath for the m4b reflects the new location.
+	reloadedFiles, err := svc.ListFiles(ctx, ListFilesOptions{BookID: &book.ID})
+	require.NoError(t, err)
+	for _, f := range reloadedFiles {
+		if f.FileType == models.FileTypeM4B {
+			assert.Equal(t, expectedM4bPath, f.Filepath, "m4b filepath in DB should reflect new location")
+		}
+	}
+}
