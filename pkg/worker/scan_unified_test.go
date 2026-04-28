@@ -1710,6 +1710,78 @@ func TestScanFileCore_UpdatesSearchIndex(t *testing.T) {
 	assert.Equal(t, 1, count, "book should be indexed with new title in FTS table")
 }
 
+// TestScanFileCore_Resync_IndexesNewRelations is a regression test for the
+// bug where a per-file resync (isResync=true) created series/persons/genres/
+// tags rows from extracted metadata but left their FTS tables empty, so the
+// new entities were invisible in search-driven dropdowns until the next full
+// library scan triggered RebuildAllIndexes. The fix re-indexes the book's
+// loaded relations alongside the existing IndexBook call.
+func TestScanFileCore_Resync_IndexesNewRelations(t *testing.T) {
+	t.Parallel()
+	tc := newTestContextWithSearchService(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	metadata := &mediafile.ParsedMetadata{
+		Authors:    []mediafile.ParsedAuthor{{Name: "Resync Author", Role: "writer"}},
+		Narrators:  []string{"Resync Narrator"},
+		Series:     "Resync Series",
+		Genres:     []string{"Resync Genre"},
+		Tags:       []string{"Resync Tag"},
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+
+	// isResync=true mirrors POST /files/:id/resync and the monitor's per-file
+	// scanInternal(FileID) flow.
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	// Each entity must have an FTS row matching its name. Without the fix the
+	// rows exist in their primary tables but not in *_fts, so the dropdowns
+	// driven by the FTS-backed list endpoints can't surface them.
+	type ftsCheck struct {
+		table  string
+		column string
+		match  string
+	}
+	for _, c := range []ftsCheck{
+		{"series_fts", "name", "Resync Series"},
+		{"persons_fts", "name", "Resync Author"},
+		{"persons_fts", "name", "Resync Narrator"},
+		{"genres_fts", "name", "Resync Genre"},
+		{"tags_fts", "name", "Resync Tag"},
+	} {
+		var count int
+		err := tc.db.NewSelect().
+			TableExpr(c.table).
+			ColumnExpr("COUNT(*)").
+			Where(c.column+" = ?", c.match).
+			Scan(tc.ctx, &count)
+		require.NoError(t, err, "query %s for %q", c.table, c.match)
+		assert.Equal(t, 1, count, "%s must contain a row for %q after resync, otherwise the entity is invisible to search-driven dropdowns", c.table, c.match)
+	}
+}
+
 // =============================================================================
 // scanFileByID integration tests
 // =============================================================================

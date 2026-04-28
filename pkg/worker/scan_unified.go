@@ -2227,10 +2227,20 @@ func (w *Worker) scanFileCore(
 	// Only update search index for individual resyncs. For full library scans,
 	// RebuildAllIndexes is called at the end of ProcessScanJob, making individual
 	// IndexBook calls redundant and wasteful.
+	//
+	// Series/persons/genres/tags created via FindOrCreate* during this resync
+	// must also be indexed: their FTS tables (series_fts, persons_fts, etc.)
+	// have no triggers, so a row exists in the primary table but is invisible
+	// to the FTS-backed list/search endpoints until something explicitly
+	// indexes it. Existing rows get re-indexed too — Index* methods are
+	// idempotent (delete + reinsert), and that also refreshes
+	// series_fts.book_titles / book_authors so they reflect the just-attached
+	// book.
 	if isResync && w.searchService != nil {
 		if err := w.searchService.IndexBook(ctx, book); err != nil {
 			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 		}
+		w.indexBookRelations(ctx, book, logWarn)
 	}
 
 	// ==========================================================================
@@ -4134,4 +4144,77 @@ func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float
 		return w.config.EnrichmentConfidenceThreshold
 	}
 	return 0.85
+}
+
+// indexBookRelations refreshes the FTS rows for every entity attached to
+// book — series, authors, narrators, genres, tags. It is required by any
+// flow that may create or re-attach those entities outside of a full
+// ProcessScanJob (which rebuilds all FTS tables at the end). Without this,
+// a row exists in the primary table but the corresponding *_fts table has
+// no entry, so the entity is invisible to the FTS-backed list/search
+// endpoints that drive the dropdowns in the UI.
+//
+// Safe to call on existing entities: each Index* method deletes the
+// existing FTS row before reinserting, which also refreshes derived fields
+// like series_fts.book_titles / book_authors so they reflect the
+// just-attached book.
+//
+// Caller must pass a book loaded with Authors.Person, BookSeries.Series,
+// BookGenres.Genre, BookTags.Tag, and Files.Narrators.Person — i.e. the
+// shape returned by books.Service.RetrieveBook.
+func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, logWarn func(msg string, data logger.Data)) {
+	if w.searchService == nil || book == nil {
+		return
+	}
+	seenSeries := map[int]bool{}
+	for _, bs := range book.BookSeries {
+		if bs.Series == nil || seenSeries[bs.Series.ID] {
+			continue
+		}
+		seenSeries[bs.Series.ID] = true
+		if err := w.searchService.IndexSeries(ctx, bs.Series); err != nil {
+			logWarn("failed to update search index for series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
+		}
+	}
+	seenPersons := map[int]bool{}
+	for _, a := range book.Authors {
+		if a.Person == nil || seenPersons[a.Person.ID] {
+			continue
+		}
+		seenPersons[a.Person.ID] = true
+		if err := w.searchService.IndexPerson(ctx, a.Person); err != nil {
+			logWarn("failed to update search index for author", logger.Data{"person_id": a.Person.ID, "error": err.Error()})
+		}
+	}
+	for _, f := range book.Files {
+		for _, n := range f.Narrators {
+			if n.Person == nil || seenPersons[n.Person.ID] {
+				continue
+			}
+			seenPersons[n.Person.ID] = true
+			if err := w.searchService.IndexPerson(ctx, n.Person); err != nil {
+				logWarn("failed to update search index for narrator", logger.Data{"person_id": n.Person.ID, "error": err.Error()})
+			}
+		}
+	}
+	seenGenres := map[int]bool{}
+	for _, bg := range book.BookGenres {
+		if bg.Genre == nil || seenGenres[bg.Genre.ID] {
+			continue
+		}
+		seenGenres[bg.Genre.ID] = true
+		if err := w.searchService.IndexGenre(ctx, bg.Genre); err != nil {
+			logWarn("failed to update search index for genre", logger.Data{"genre_id": bg.Genre.ID, "error": err.Error()})
+		}
+	}
+	seenTags := map[int]bool{}
+	for _, bt := range book.BookTags {
+		if bt.Tag == nil || seenTags[bt.Tag.ID] {
+			continue
+		}
+		seenTags[bt.Tag.ID] = true
+		if err := w.searchService.IndexTag(ctx, bt.Tag); err != nil {
+			logWarn("failed to update search index for tag", logger.Data{"tag_id": bt.Tag.ID, "error": err.Error()})
+		}
+	}
 }

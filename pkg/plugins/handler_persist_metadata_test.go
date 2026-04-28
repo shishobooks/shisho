@@ -501,3 +501,134 @@ func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
 	require.NotNil(t, file.CoverImageFilename)
 	assert.Equal(t, "book.epub.cover.jpg", *file.CoverImageFilename)
 }
+
+// stubSearchIndexer records calls to each Index* method so tests can assert
+// that persistMetadata keeps the FTS index in sync with newly-created or
+// re-associated entities. Without these calls, an entity created during the
+// identify-apply flow exists in its table but has no FTS row, so it is
+// invisible to search-driven dropdowns (e.g. the series combobox in the
+// IdentifyReviewForm).
+type stubSearchIndexer struct {
+	indexedBookIDs   []int
+	indexedSeriesIDs []int
+	indexedPersonIDs []int
+	indexedGenreIDs  []int
+	indexedTagIDs    []int
+}
+
+func (s *stubSearchIndexer) IndexBook(_ context.Context, b *models.Book) error {
+	s.indexedBookIDs = append(s.indexedBookIDs, b.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexSeries(_ context.Context, sr *models.Series) error {
+	s.indexedSeriesIDs = append(s.indexedSeriesIDs, sr.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexPerson(_ context.Context, p *models.Person) error {
+	s.indexedPersonIDs = append(s.indexedPersonIDs, p.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexGenre(_ context.Context, g *models.Genre) error {
+	s.indexedGenreIDs = append(s.indexedGenreIDs, g.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexTag(_ context.Context, tag *models.Tag) error {
+	s.indexedTagIDs = append(s.indexedTagIDs, tag.ID)
+	return nil
+}
+
+// stubPersonFinderForPersist returns a person with a sequential ID for each
+// FindOrCreatePerson call so tests can assert on the indexed person IDs.
+type stubPersonFinderForPersist struct {
+	nextID int
+}
+
+func (s *stubPersonFinderForPersist) FindOrCreatePerson(_ context.Context, name string, libraryID int) (*models.Person, error) {
+	s.nextID++
+	return &models.Person{ID: s.nextID, LibraryID: libraryID, Name: name}, nil
+}
+
+// stubGenreFinderForPersist returns a genre with a sequential ID for each call.
+type stubGenreFinderForPersist struct {
+	nextID int
+}
+
+func (s *stubGenreFinderForPersist) FindOrCreateGenre(_ context.Context, name string, libraryID int) (*models.Genre, error) {
+	s.nextID++
+	return &models.Genre{ID: s.nextID, LibraryID: libraryID, Name: name}, nil
+}
+
+// stubTagFinderForPersist returns a tag with a sequential ID for each call.
+type stubTagFinderForPersist struct {
+	nextID int
+}
+
+func (s *stubTagFinderForPersist) FindOrCreateTag(_ context.Context, name string, libraryID int) (*models.Tag, error) {
+	s.nextID++
+	return &models.Tag{ID: s.nextID, LibraryID: libraryID, Name: name}, nil
+}
+
+// TestPersistMetadata_IndexesNewSeries is a regression test for the bug where
+// a series created via the identify-apply flow ("Create 'Series'" option in
+// the IdentifyReviewForm combobox) never received a series_fts row, so it
+// was invisible to subsequent series search dropdowns even though the row
+// existed in the series table. The fix calls IndexSeries after CreateBookSeries
+// to keep the FTS index in sync.
+func TestPersistMetadata_IndexesNewSeries(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{Series: "My New Series"}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series created via identify-apply must be added to series_fts so it shows up in series search dropdowns")
+}
+
+// TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags is a regression
+// test for the same FTS-sync gap on the other entities created during the
+// identify-apply flow. Persons, genres, and tags all use FTS for their list
+// search endpoints (persons_fts, genres_fts, tags_fts), so newly-created rows
+// must also be indexed to be findable in their respective dropdowns.
+func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			personFinder:  &stubPersonFinderForPersist{},
+			genreFinder:   &stubGenreFinderForPersist{},
+			tagFinder:     &stubTagFinderForPersist{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Authors:   []mediafile.ParsedAuthor{{Name: "New Author", Role: "writer"}},
+		Narrators: []string{"New Narrator"},
+		Genres:    []string{"New Genre"},
+		Tags:      []string{"New Tag"},
+	}
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.Len(t, indexer.indexedPersonIDs, 2, "both new author and new narrator must be added to persons_fts")
+	assert.Len(t, indexer.indexedGenreIDs, 1, "new genre must be added to genres_fts")
+	assert.Len(t, indexer.indexedTagIDs, 1, "new tag must be added to tags_fts")
+}

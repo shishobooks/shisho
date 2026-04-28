@@ -651,8 +651,17 @@ func (m *Monitor) processPendingEvents() {
 		}
 	}
 
-	// Update search indexes for affected books only.
+	// Update search indexes for affected books and the entities they
+	// reference (series, authors, narrators, genres, tags). Without the
+	// per-relation indexing, an entity created by a FilePath-mode scan
+	// during this batch (which uses isResync=false and skips per-book
+	// indexing) has a row in its primary table but no FTS row, leaving it
+	// invisible to the search-driven dropdowns until a full library scan
+	// triggers RebuildAllIndexes. See indexBookRelations for details.
 	if m.worker.searchService != nil {
+		logWarn := func(msg string, data logger.Data) {
+			m.log.Warn(msg, data)
+		}
 		for bookID := range affectedBookIDs {
 			book, err := m.worker.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 			if err != nil {
@@ -663,6 +672,7 @@ func (m *Monitor) processPendingEvents() {
 			if err := m.worker.searchService.IndexBook(ctx, book); err != nil {
 				m.log.Warn("failed to index book", logger.Data{"book_id": bookID, "error": err.Error()})
 			}
+			m.worker.indexBookRelations(ctx, book, logWarn)
 		}
 	}
 }

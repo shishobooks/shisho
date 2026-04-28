@@ -98,6 +98,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create author", logger.Data{"error": err.Error()})
 			}
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+					log.Warn("failed to update search index for author", logger.Data{"person_id": person.ID, "error": err.Error()})
+				}
+			}
 		}
 		book.AuthorSource = pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {
@@ -122,6 +127,13 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 			}
+			// Index after CreateBookSeries so series_fts.book_titles /
+			// book_authors reflect the just-attached book.
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
+					log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
+				}
+			}
 		}
 	}
 
@@ -144,6 +156,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				GenreID: genre.ID,
 			}); err != nil {
 				log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
+			}
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexGenre(ctx, genre); err != nil {
+					log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+				}
 			}
 		}
 		book.GenreSource = &pluginSource
@@ -172,6 +189,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
 			}
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexTag(ctx, tag); err != nil {
+					log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+				}
+			}
 		}
 		book.TagSource = &pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"tag_source"}); err != nil {
@@ -199,6 +221,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				SortOrder: i + 1,
 			}); err != nil {
 				log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
+			}
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+					log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
+				}
 			}
 		}
 		targetFile.NarratorSource = &pluginSource
