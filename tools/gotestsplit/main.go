@@ -51,10 +51,7 @@ Usage:
   gotestsplit -total=N -index=I <pkg>... [-- go-test-args]   # shortcut for "run"`)
 }
 
-// Stubs — implemented in simulate.go, plan.go, run.go.
-func cmdSimulate(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
-	return fmt.Errorf("simulate: not implemented")
-}
+// Stubs — implemented in plan.go, run.go.
 func cmdPlan(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
 	return fmt.Errorf("plan: not implemented")
 }
