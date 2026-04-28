@@ -412,7 +412,7 @@ const BookItem = ({
           return (
             <div className="mt-1 text-xs line-clamp-2 text-neutral-500 dark:text-neutral-500">
               {uniqueAuthors.map((a, i) => (
-                <span key={`${a.name}-${i}`}>
+                <span key={a.name}>
                   {i > 0 && ", "}
                   {a.hasPerson ? (
                     <Link
