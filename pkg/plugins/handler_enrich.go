@@ -135,20 +135,13 @@ func (h *handler) searchMetadata(c echo.Context) error {
 		searchCtx["identifiers"] = ids
 	}
 
-	// Select the target file — use the explicitly requested file if provided,
-	// otherwise fall back to the first file on the book.
-	var targetFile *models.File
-	if payload.FileID != nil {
-		for _, f := range book.Files {
-			if f.ID == *payload.FileID {
-				targetFile = f
-				break
-			}
-		}
-	}
-	if targetFile == nil && len(book.Files) > 0 {
-		targetFile = book.Files[0]
-	}
+	// Select the target file. resolveTargetFile prefers an explicitly pinned
+	// FileID, otherwise falls back to the first FileRoleMain — supplements
+	// never represent the book, so feeding their hints to enrichers (or
+	// scoping the read-only sandbox to a supplement's path) would mislead
+	// enrichment for books like an M4B + supplement-PDF where the supplement
+	// could land first in book.Files.
+	targetFile := resolveTargetFile(book.Files, payload.FileID)
 
 	// Add file hints from the target file (non-modifiable context)
 	var fileType string

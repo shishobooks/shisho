@@ -54,27 +54,12 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Resolve target file. When the caller doesn't pin a specific FileID,
-	// fall back to the first MAIN file — supplements never represent the
-	// book, so applying enriched book-level metadata to a supplement
-	// (whose Name is e.g. "Supplement.pdf") would be wrong.
-	var targetFile *models.File
-	if payload.FileID != nil {
-		for i := range book.Files {
-			if book.Files[i].ID == *payload.FileID {
-				targetFile = book.Files[i]
-				break
-			}
-		}
-		if targetFile == nil {
-			return errcodes.NotFound("File")
-		}
-	} else {
-		for i := range book.Files {
-			if book.Files[i].FileRole == models.FileRoleMain {
-				targetFile = book.Files[i]
-				break
-			}
-		}
+	// resolveTargetFile falls back to the first FileRoleMain — supplements
+	// never represent the book, so applying enriched book-level metadata
+	// to a supplement (whose Name is e.g. "Supplement.pdf") would be wrong.
+	targetFile := resolveTargetFile(book.Files, payload.FileID)
+	if payload.FileID != nil && targetFile == nil {
+		return errcodes.NotFound("File")
 	}
 
 	// Convert fields map to ParsedMetadata
