@@ -238,7 +238,7 @@ func TestPack_NoHistory_WholePackagesEmittedAsBatch(t *testing.T) {
 	}
 }
 
-func TestPack_NoHistory_PartialFragmentNotEmittedAsWhole(t *testing.T) {
+func TestPack_NoHistory_FullPkgOnOneShard_EmitsWholePkgItem(t *testing.T) {
 	t.Parallel()
 	// 2 packages of 3 tests each, into 2 shards. Each shard gets 3 of the 6 tests.
 	// Pkg "a"'s 3 tests all land on shard 0 (alphabetic sort). Pkg "b"'s 3 tests
