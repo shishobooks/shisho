@@ -225,7 +225,11 @@ const Setup = () => {
             />
           </div>
 
-          <Button className="w-full" disabled={isLoading} type="submit">
+          <Button
+            className="w-full"
+            disabled={isLoading || isDevLoading}
+            type="submit"
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -239,7 +243,7 @@ const Setup = () => {
           {isDevelopment && (
             <Button
               className="w-full"
-              disabled={isDevLoading}
+              disabled={isLoading || isDevLoading}
               onClick={handleCreateDevAdmin}
               type="button"
               variant="outline"
