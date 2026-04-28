@@ -816,7 +816,12 @@ func (w *Worker) scanFileCore(
 	// skip churn for entities whose attachment to this book didn't change.
 	// Holds Series pointers (not just IDs) so detached series can be
 	// re-indexed for aggregate freshness without an extra DB round-trip.
-	oldRels := snapshotBookRelations(book, file)
+	// Skipped for non-resync scans (full ProcessScanJob), where the
+	// snapshot is never consumed — RebuildAllIndexes runs at the end.
+	var oldRels bookRelationsSnapshot
+	if isResync {
+		oldRels = snapshotBookRelations(book, file)
+	}
 
 	sidecarSource := models.DataSourceSidecar
 
@@ -2246,7 +2251,13 @@ func (w *Worker) scanFileCore(
 		if err := w.searchService.IndexBook(ctx, book); err != nil {
 			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 		}
-		w.indexBookRelations(ctx, book, oldRels, logWarn)
+		// bookTitleChanged / authorsChanged feed into the helper's
+		// series-aggregate-staleness check: when either changed, the
+		// still-attached series must be re-indexed so series_fts.book_titles
+		// / book_authors reflect the new values.
+		w.indexBookRelations(ctx, book, oldRels, indexRelationsHints{
+			bookTitleOrAuthorsChanged: bookTitleChanged || authorsChanged,
+		}, logWarn)
 	}
 
 	// ==========================================================================
@@ -4217,6 +4228,19 @@ func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSn
 	return snap
 }
 
+// indexRelationsHints carries signals from the surrounding scan/apply about
+// which book-level fields changed, so indexBookRelations can refresh
+// derived FTS columns even when the relation membership itself didn't
+// change. Currently the only consumer is series_fts, which aggregates
+// book.title and author names into its book_titles / book_authors columns.
+type indexRelationsHints struct {
+	// bookTitleOrAuthorsChanged should be set when book.title or any
+	// author on this book changed during the surrounding scan/apply.
+	// When true, attached series get re-indexed even if their membership
+	// didn't change, so series_fts aggregates stay fresh.
+	bookTitleOrAuthorsChanged bool
+}
+
 // indexBookRelations refreshes the FTS rows for entities whose attachment
 // to book changed during the surrounding scan/apply, given the pre-mutation
 // snapshot. It is required by any flow that may create or re-attach those
@@ -4230,6 +4254,9 @@ func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSn
 //     existing series attached to this book for the first time).
 //   - Series detached from this book — series_fts has aggregate columns
 //     (book_titles, book_authors) that must stop listing this book.
+//   - Series whose membership didn't change but whose aggregate columns
+//     went stale because book.title / authors changed during this scan
+//     (signaled via hints.bookTitleOrAuthorsChanged).
 //   - Persons / genres / tags newly attached to this book — those tables
 //     have no aggregate columns, so unchanged or detached entities skip
 //     the DELETE+INSERT churn against persons_fts / genres_fts / tags_fts.
@@ -4237,19 +4264,30 @@ func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSn
 // Caller must pass book loaded with Authors.Person, BookSeries.Series,
 // BookGenres.Genre, BookTags.Tag, and Files.Narrators.Person — i.e. the
 // shape returned by books.Service.RetrieveBook.
-func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldRels bookRelationsSnapshot, logWarn func(msg string, data logger.Data)) {
+//
+// oldRels.seriesByID holds the *models.Series pointers captured before
+// the mutation; IndexSeries reads the entity's Name/Description/LibraryID
+// off those pointers, so callers must not mutate Series fields between
+// snapshotting and re-indexing. nil maps in oldRels are safe — Go map
+// reads on a nil map return the zero value, so an empty
+// bookRelationsSnapshot{} is treated as "nothing was previously attached"
+// and every loaded relation looks newly-attached.
+func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldRels bookRelationsSnapshot, hints indexRelationsHints, logWarn func(msg string, data logger.Data)) {
 	if w.searchService == nil || book == nil {
 		return
 	}
 	// Series: re-index newly-attached, plus detached old ones for
-	// aggregate-column freshness.
+	// aggregate-column freshness, plus still-attached ones whose
+	// aggregate columns may have been invalidated by book.title /
+	// authors changes during this scan.
 	newSeriesIDs := map[int]bool{}
 	for _, bs := range book.BookSeries {
 		if bs.Series == nil || newSeriesIDs[bs.Series.ID] {
 			continue
 		}
 		newSeriesIDs[bs.Series.ID] = true
-		if _, alreadyAttached := oldRels.seriesByID[bs.Series.ID]; alreadyAttached {
+		_, alreadyAttached := oldRels.seriesByID[bs.Series.ID]
+		if alreadyAttached && !hints.bookTitleOrAuthorsChanged {
 			continue
 		}
 		if err := w.searchService.IndexSeries(ctx, bs.Series); err != nil {

@@ -704,6 +704,42 @@ func TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged(t *testing.T) {
 	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment to this book did not change must NOT be re-indexed (avoids series_fts churn)")
 }
 
+// TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges verifies that a
+// series whose attachment to this book did not change is still re-indexed
+// when book.title changes during the apply — series_fts has aggregate
+// columns (book_titles, book_authors) that would otherwise go stale.
+// Without this branch, searching for a book by its new title within a
+// series search would still surface the old title.
+func TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Old Title")
+	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
+	book.BookSeries = []*models.BookSeries{{
+		BookID:   book.ID,
+		SeriesID: existingSeries.ID,
+		Series:   existingSeries,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Title:  "New Title",
+		Series: "Same Series",
+	}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series whose membership did not change must still be re-indexed when book.title changed, otherwise series_fts.book_titles goes stale")
+}
+
 // TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor verifies that an
 // author who was already attached to the book before the apply is not
 // re-indexed when the same author is re-applied. persons_fts has no

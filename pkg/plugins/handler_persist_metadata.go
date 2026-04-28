@@ -27,6 +27,13 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// can all contribute, then flush once at the end.
 	var fileColumns []string
 
+	// Track whether changes ran that would affect series_fts aggregate
+	// columns (book_titles / book_authors). When they did, the series
+	// block re-indexes the attached series even if its attachment to this
+	// book didn't change — otherwise the aggregate columns would go stale
+	// until something else triggered IndexSeries.
+	seriesAggregateMayBeStale := false
+
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" {
@@ -35,6 +42,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		book.SortTitle = sortname.ForTitle(title)
 		book.SortTitleSource = pluginSource
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
+		seriesAggregateMayBeStale = true
 
 		// Mirror the identified title onto the target main file's Name so
 		// file organization and downloads reflect it. Supplements keep their
@@ -74,6 +82,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Authors
 	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
+		seriesAggregateMayBeStale = true
 		// Capture the personIDs already attached as authors so we can skip
 		// re-indexing them when the apply re-attaches the same person.
 		// persons_fts has no aggregate columns, so re-indexing an unchanged
@@ -150,15 +159,19 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 			}
-			// Re-index series whose attachment to this book actually changed:
-			// the new series (if it wasn't already attached, covering both
-			// newly-created series and freshly-attached existing series), and
-			// every old series that's no longer attached. Series whose
-			// attachment didn't change skip the DELETE+INSERT churn against
-			// series_fts. Index after CreateBookSeries so book_titles /
-			// book_authors reflect the just-attached book.
+			// Re-index series whose attachment to this book actually
+			// changed: the new series (if it wasn't already attached,
+			// covering both newly-created series and freshly-attached
+			// existing series), and every old series that's no longer
+			// attached. Additionally re-index the still-attached series
+			// when book.title or book.authors changed during this apply
+			// — series_fts.book_titles / book_authors are aggregate
+			// columns that would otherwise go stale. Index after
+			// CreateBookSeries so the aggregate reflects the just-
+			// attached book.
 			if h.enrich.searchIndexer != nil {
-				if _, stillAttached := oldSeries[seriesRecord.ID]; !stillAttached {
+				_, stillAttached := oldSeries[seriesRecord.ID]
+				if !stillAttached || seriesAggregateMayBeStale {
 					if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
 						log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
 					}

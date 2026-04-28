@@ -661,8 +661,9 @@ func (m *Monitor) processPendingEvents() {
 		}
 	}
 
-	// Update search indexes for affected books. There are three cases:
-	//   1. Book was deleted — remove its books_fts row.
+	// Update search indexes for affected books. There are four cases:
+	//   1. Book was deleted (RetrieveBook returns NotFound) — remove its
+	//      books_fts row.
 	//   2. Book is newly created (FilePath-mode event, FileCreated=true) —
 	//      scanFileCore was called with isResync=false so per-book indexing
 	//      was deferred. Index the book and all its relations now. Empty
@@ -672,6 +673,9 @@ func (m *Monitor) processPendingEvents() {
 	//      scanFileCore already ran with isResync=true and indexed
 	//      conditionally via its own snapshot. Skip to avoid a full
 	//      re-index that would undo the conditional savings.
+	//   4. Book had a file move detected (tryDetectMove) — only
+	//      file.Filepath changed, no books_fts column or relation has
+	//      changed. Falls into case 3's skip branch by default.
 	if m.worker.searchService != nil {
 		logWarn := func(msg string, data logger.Data) {
 			m.log.Warn(msg, data)
@@ -679,16 +683,27 @@ func (m *Monitor) processPendingEvents() {
 		for bookID := range affectedBookIDs {
 			book, err := m.worker.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 			if err != nil {
+				// Case 1: book was deleted during the batch. Drop its
+				// books_fts row; orphan cleanup handles series_fts /
+				// persons_fts / etc.
 				_ = m.worker.searchService.DeleteFromBookIndex(ctx, bookID)
 				continue
 			}
 			if _, newlyCreated := newlyCreatedBookIDs[bookID]; !newlyCreated {
+				// Cases 3 + 4: scanFileCore's per-event indexing
+				// already ran (or no FTS change was needed at all for
+				// move detection).
 				continue
 			}
+			// Case 2: catch up indexing for a newly-created book.
 			if err := m.worker.searchService.IndexBook(ctx, book); err != nil {
 				m.log.Warn("failed to index book", logger.Data{"book_id": bookID, "error": err.Error()})
 			}
-			m.worker.indexBookRelations(ctx, book, bookRelationsSnapshot{}, logWarn)
+			// Empty snapshot means every loaded relation looks
+			// newly-attached and gets indexed. No aggregate-staleness
+			// hint needed — there were no pre-batch values to go
+			// stale against.
+			m.worker.indexBookRelations(ctx, book, bookRelationsSnapshot{}, indexRelationsHints{}, logWarn)
 		}
 	}
 }

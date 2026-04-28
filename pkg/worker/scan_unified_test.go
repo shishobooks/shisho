@@ -1782,6 +1782,144 @@ func TestScanFileCore_Resync_IndexesNewRelations(t *testing.T) {
 	}
 }
 
+// TestScanFileCore_Resync_SkipsSeriesIndexWhenAttachmentUnchanged verifies
+// that a resync which leaves the same series attached and doesn't change
+// book.title or authors does NOT trigger an IndexSeries call. The check
+// uses an in-place UPDATE of series_fts.book_titles to a sentinel string;
+// if scanFileCore had re-indexed the series, IndexSeries would have
+// rewritten book_titles to the actual book title and clobbered the
+// sentinel.
+func TestScanFileCore_Resync_SkipsSeriesIndexWhenAttachmentUnchanged(t *testing.T) {
+	t.Parallel()
+	tc := newTestContextWithSearchService(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Stable Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Stable Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	stableSeries, err := tc.seriesService.FindOrCreateSeries(tc.ctx, "Stable Series", 1, models.DataSourceFilepath)
+	require.NoError(t, err)
+	num := 1.0
+	require.NoError(t, tc.bookService.CreateBookSeries(tc.ctx, &models.BookSeries{
+		BookID:       book.ID,
+		SeriesID:     stableSeries.ID,
+		SeriesNumber: &num,
+		SortOrder:    1,
+	}))
+	require.NoError(t, tc.worker.searchService.IndexSeries(tc.ctx, stableSeries))
+
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	// Stamp a sentinel into series_fts.book_titles. If IndexSeries fires
+	// during the resync, it will overwrite this value via DELETE+INSERT.
+	const sentinel = "__churn_sentinel__"
+	_, err = tc.db.NewRaw("UPDATE series_fts SET book_titles = ? WHERE series_id = ?", sentinel, stableSeries.ID).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	// Resync with metadata that does not change the book's title, authors,
+	// or series — same series, same priority source.
+	metadata := &mediafile.ParsedMetadata{
+		Series:     "Stable Series",
+		DataSource: models.DataSourceFilepath,
+	}
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	var postBookTitles string
+	require.NoError(t, tc.db.NewRaw("SELECT book_titles FROM series_fts WHERE series_id = ?", stableSeries.ID).
+		Scan(tc.ctx, &postBookTitles))
+	assert.Equal(t, sentinel, postBookTitles, "series whose attachment did not change AND whose aggregate inputs did not change must NOT be re-indexed (avoids series_fts churn)")
+}
+
+// TestScanFileCore_Resync_ReindexesDetachedOldSeries verifies that when a
+// resync moves a book from one series to another, the now-detached old
+// series gets its series_fts row refreshed. Without this, the old series'
+// book_titles / book_authors aggregate columns would continue to list
+// this book until the next full library scan triggered RebuildAllIndexes.
+func TestScanFileCore_Resync_ReindexesDetachedOldSeries(t *testing.T) {
+	t.Parallel()
+	tc := newTestContextWithSearchService(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     libraryPath,
+		Title:        "Detach Test Book",
+		TitleSource:  models.DataSourceFilepath,
+		SortTitle:    "Detach Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+
+	oldSeries, err := tc.seriesService.FindOrCreateSeries(tc.ctx, "Old Series", 1, models.DataSourceFilepath)
+	require.NoError(t, err)
+	oldNumber := 1.0
+	require.NoError(t, tc.bookService.CreateBookSeries(tc.ctx, &models.BookSeries{
+		BookID:       book.ID,
+		SeriesID:     oldSeries.ID,
+		SeriesNumber: &oldNumber,
+		SortOrder:    1,
+	}))
+	// Seed series_fts so we can detect the post-resync refresh.
+	require.NoError(t, tc.worker.searchService.IndexSeries(tc.ctx, oldSeries))
+
+	// Reload book with the series relation populated, matching the shape
+	// scanFileCore expects.
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     1,
+		BookID:        book.ID,
+		Filepath:      filepath.Join(libraryPath, "test.epub"),
+		FileType:      models.FileTypeEPUB,
+		FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	// Verify the seeded FTS row aggregates this book's title before resync.
+	var preBookTitles string
+	require.NoError(t, tc.db.NewRaw("SELECT book_titles FROM series_fts WHERE series_id = ?", oldSeries.ID).
+		Scan(tc.ctx, &preBookTitles))
+	require.Contains(t, preBookTitles, "Detach Test Book", "seeded series_fts must include this book's title before resync")
+
+	// Resync with metadata pointing at a different series.
+	metadata := &mediafile.ParsedMetadata{
+		Series:     "New Series",
+		DataSource: models.DataSourceEPUBMetadata,
+	}
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	// Old series' aggregate must no longer mention this book — the helper
+	// re-indexed it after the detach.
+	var postBookTitles string
+	require.NoError(t, tc.db.NewRaw("SELECT book_titles FROM series_fts WHERE series_id = ?", oldSeries.ID).
+		Scan(tc.ctx, &postBookTitles))
+	assert.NotContains(t, postBookTitles, "Detach Test Book", "detached old series' series_fts.book_titles must be refreshed to drop the moved book")
+}
+
 // =============================================================================
 // scanFileByID integration tests
 // =============================================================================
