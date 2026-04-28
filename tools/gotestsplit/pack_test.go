@@ -75,3 +75,72 @@ func TestPack_PackageOnly_Skewed(t *testing.T) {
 		t.Errorf("loads = %v, want [100, 120]", loads)
 	}
 }
+
+func TestPack_SmartChunking_HotPackage(t *testing.T) {
+	t.Parallel()
+	// One hot package: 10 tests × 50s = 500s wallclock.
+	// Plus 4 small packages of 50s each. Total = 700, ideal = 140, threshold = 112.
+	// Hot pkg 500 > 112 → K = ceil(500/112) = 5 chunks of 100s each.
+	// 5 chunks of 100 + 4 small of 50, into 5 shards via LPT:
+	//   each shard gets one 100-chunk (=500), some get a 50.
+	// Expected slowest = 150s, fastest = 100s.
+	hot := Package{Path: "hot", Tests: nil}
+	hist := History{"hot": {}}
+	for i := 0; i < 10; i++ {
+		name := "TestHot" + string(rune('A'+i))
+		hot.Tests = append(hot.Tests, name)
+		hist["hot"][name] = 50
+	}
+	pkgs := []Package{hot}
+	for i := 0; i < 4; i++ {
+		name := "small" + string(rune('A'+i))
+		pkgs = append(pkgs, Package{Path: name, Tests: []string{"T"}})
+		hist[name] = map[string]float64{"T": 50}
+	}
+	shards := Pack(hist, pkgs, 5)
+	loads := shardLoads(shards)
+	// 5 shards, total=700, fairness check: max ≤ 1.2 * ideal
+	if loads[len(loads)-1] > 168 { // 1.2 * 140
+		t.Errorf("max shard load %v exceeds 1.2x ideal (168); loads=%v", loads[len(loads)-1], loads)
+	}
+	// Confirm hot pkg actually got chunked: count items mentioning hot
+	hotItems := 0
+	for _, s := range shards {
+		for _, it := range s {
+			if it.Pkg == "hot" {
+				hotItems++
+				if len(it.Tests) == 0 {
+					t.Errorf("hot pkg item has no Tests — should be chunked, got whole-pkg item")
+				}
+			}
+		}
+	}
+	if hotItems < 2 {
+		t.Errorf("hot pkg should be chunked into ≥2 items, got %d", hotItems)
+	}
+}
+
+func TestPack_SmartChunking_TestsAssignedDeterministically(t *testing.T) {
+	t.Parallel()
+	hot := Package{Path: "hot", Tests: []string{"TA", "TB", "TC", "TD"}}
+	hist := History{"hot": {"TA": 40, "TB": 30, "TC": 20, "TD": 10}}
+	pkgs := []Package{hot, {Path: "x", Tests: []string{"T"}}}
+	hist["x"] = map[string]float64{"T": 10}
+
+	a := Pack(hist, pkgs, 2)
+	b := Pack(hist, pkgs, 2)
+	// Same input → identical assignment ordering.
+	if len(a) != len(b) {
+		t.Fatalf("nondeterministic: %d vs %d shards", len(a), len(b))
+	}
+	for i := range a {
+		if len(a[i]) != len(b[i]) {
+			t.Errorf("shard %d sizes differ: %d vs %d", i, len(a[i]), len(b[i]))
+		}
+		for j := range a[i] {
+			if a[i][j].Pkg != b[i][j].Pkg {
+				t.Errorf("shard %d item %d: pkg differs", i, j)
+			}
+		}
+	}
+}
