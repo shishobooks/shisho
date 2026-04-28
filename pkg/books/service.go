@@ -890,13 +890,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	isDirectoryBased := filepath.Dir(files[0].Filepath) == book.Filepath
 
 	// Check if this is a root-level book (files directly in a library path, not yet organized into folders)
-	isRootLevelBook := false
-	for _, libraryPath := range library.LibraryPaths {
-		if filepath.Dir(files[0].Filepath) == libraryPath.Filepath {
-			isRootLevelBook = true
-			break
-		}
-	}
+	isRootLevelBook := isFileAtLibraryRoot(files[0].Filepath, library.LibraryPaths)
 
 	if isDirectoryBased {
 		// For directory-based books, rename the folder and update all file paths
@@ -970,6 +964,41 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				if n.Person != nil {
 					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
 				}
+			}
+
+			// If this file sits at a library root (e.g. user dropped a second
+			// file for an already-organized book), promote it into the book
+			// folder rather than renaming it in place. RenameOrganizedFile
+			// only operates within the file's own directory, so without this
+			// branch the file (and its sidecar/cover) would be left at the
+			// library root. Pass book.Filepath explicitly so the destination
+			// matches the rest of the book's files even when the per-file
+			// opts (file.Name override, CBZ + series number, etc.) would
+			// otherwise generate a different folder name.
+			if isFileAtLibraryRoot(file.Filepath, library.LibraryPaths) {
+				result, organizeErr := fileutils.MoveFileIntoOrganizedFolder(file.Filepath, book.Filepath, organizeOpts)
+				if organizeErr != nil {
+					log.Error("failed to promote root-level file into book folder", logger.Data{
+						"file_id": file.ID,
+						"path":    file.Filepath,
+						"error":   organizeErr.Error(),
+					})
+					continue
+				}
+				if result.Moved {
+					log.Info("promoted root-level file into book folder", logger.Data{
+						"file_id":  file.ID,
+						"old_path": result.OriginalPath,
+						"new_path": result.NewPath,
+					})
+					pathUpdates = append(pathUpdates, struct {
+						fileID         int
+						oldPath        string
+						newPath        string
+						coverImagePath *string
+					}{file.ID, result.OriginalPath, result.NewPath, file.CoverImageFilename})
+				}
+				continue
 			}
 
 			// Rename the file to the organized name
@@ -1173,6 +1202,19 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 	}
 
 	return nil
+}
+
+// isFileAtLibraryRoot reports whether the file's parent directory is one of
+// the library's configured root paths — i.e. the file was dropped at the
+// library root rather than living inside an organized book folder.
+func isFileAtLibraryRoot(filePath string, libraryPaths []*models.LibraryPath) bool {
+	dir := filepath.Dir(filePath)
+	for _, lp := range libraryPaths {
+		if dir == lp.Filepath {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanUpStaleRootLevelBookFolder removes the synthetic book folder that
