@@ -53,23 +53,16 @@ jobs:
             -junit-dir=.gotest-timings \
             -total=8 -index=$((SHARD - 1)) \
             ./pkg/... -- -race
-      - name: Diagnostic — list .gotest-timings
-        if: always()
-        run: |
-          echo "=== pwd ==="
-          pwd
-          echo "=== ls .gotest-timings ==="
-          ls -la .gotest-timings/ 2>&1 || echo "(dir does not exist)"
-          echo "=== file count ==="
-          find .gotest-timings -type f 2>/dev/null | wc -l || true
       - name: Upload shard JUnit
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gotest-timings-shard-${{ matrix.shard }}
-          path: .gotest-timings/*.xml
+          path: .gotest-timings/
           retention-days: 1
-          if-no-files-found: warn
+          # The dir starts with a dot; without this flag upload-artifact treats
+          # the whole tree as hidden and silently uploads nothing.
+          include-hidden-files: true
 
   consolidate-test-timings:
     name: Consolidate test timings
