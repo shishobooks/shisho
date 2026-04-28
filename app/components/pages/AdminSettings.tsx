@@ -27,9 +27,11 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
 
   return (
     <div className="flex flex-col py-3 border-b border-border last:border-b-0">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-normal sm:text-right">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
+        <span className="text-sm font-medium text-foreground sm:whitespace-nowrap sm:shrink-0">
+          {label}
+        </span>
+        <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-words sm:text-right min-w-0">
           {displayValue}
         </span>
       </div>
@@ -191,6 +193,20 @@ const AdminSettings = () => {
               value={`${config.download_cache_max_size_gb} GB`}
             />
             <ConfigRow
+              description="File patterns excluded from supplement discovery"
+              label="Supplement Exclude Patterns"
+              value={config.supplement_exclude_patterns.join(", ")}
+            />
+          </div>
+        </div>
+
+        {/* PDF Settings */}
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">
+            PDF
+          </h2>
+          <div className="space-y-0">
+            <ConfigRow
               description="Resolution for rendering PDF pages in the viewer"
               label="PDF Render DPI"
               value={`${config.pdf_render_dpi} DPI`}
@@ -199,11 +215,6 @@ const AdminSettings = () => {
               description="JPEG quality for rendered PDF pages"
               label="PDF Render Quality"
               value={`${config.pdf_render_quality}`}
-            />
-            <ConfigRow
-              description="File patterns excluded from supplement discovery"
-              label="Supplement Exclude Patterns"
-              value={config.supplement_exclude_patterns.join(", ")}
             />
             <ConfigRow
               description="PDF basenames auto-classified as supplements when a sibling main file exists in the same directory"
