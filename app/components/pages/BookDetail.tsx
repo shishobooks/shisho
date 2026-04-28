@@ -99,17 +99,19 @@ import { formatSeriesNumber } from "@/utils/seriesNumber";
 // Determines which file type would provide the cover based on library preference.
 // This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
 // Used for placeholder variant selection when there's no cover image.
+// Supplements are excluded — they don't represent the book.
 const getCoverFileType = (
   files: File[] | undefined,
   coverAspectRatio: string,
 ): "book" | "audiobook" => {
   if (!files || files.length === 0) return "book";
 
-  const hasBookFiles = files.some(
+  const mainFiles = files.filter((f) => f.file_role !== "supplement");
+  const hasBookFiles = mainFiles.some(
     (f) =>
       f.file_type === "epub" || f.file_type === "cbz" || f.file_type === "pdf",
   );
-  const hasAudiobookFiles = files.some((f) => f.file_type === "m4b");
+  const hasAudiobookFiles = mainFiles.some((f) => f.file_type === "m4b");
 
   switch (coverAspectRatio) {
     case "audiobook":
