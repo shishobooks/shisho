@@ -35,7 +35,7 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
           <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
-      <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-words sm:text-right min-w-0">
+      <span className="text-xs sm:text-sm text-muted-foreground font-mono break-words sm:text-right min-w-0">
         {displayValue}
       </span>
     </div>
