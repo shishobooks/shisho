@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="github.com/example/foo" tests="1">
+    <testcase classname="foo" name="TestAlpha" time="4.000"/>
+  </testsuite>
+</testsuites>

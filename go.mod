@@ -17,6 +17,7 @@ require (
 	github.com/gorilla/schema v1.4.1
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/klippa-app/go-pdfium v1.19.2
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0

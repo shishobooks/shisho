@@ -21,24 +21,66 @@ jobs:
       - run: mise lint
 
   test:
-    name: Go Test (${{ matrix.shard }}/5)
+    name: Go Test (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       TZ: America/Chicago
       CI: "true"
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v4
-      - name: Install gotesplit
-        run: curl -sfL https://raw.githubusercontent.com/Songmu/gotesplit/main/install.sh | sh -s -- -b /usr/local/bin v0.4.0
+      - name: Restore test timing cache
+        # Restore-only — saving is consolidated across shards in the
+        # consolidate-test-timings job below. If we used actions/cache here,
+        # all 8 shards would race to save, and only one shard's JUnit data
+        # would survive — defeating timing-aware bin-packing.
+        uses: actions/cache/restore@v5
+        with:
+          path: .gotest-timings
+          key: gotest-timings-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            gotest-timings-${{ github.ref }}-
+            gotest-timings-refs/heads/master-
       - name: Run tests
         env:
           SHARD: ${{ matrix.shard }}
-        run: gotesplit -total=5 -index=$((SHARD - 1)) ./pkg/... -- -race
+        run: |
+          go run ./tools/gotestsplit run \
+            -junit-dir=.gotest-timings \
+            -total=8 -index=$((SHARD - 1)) \
+            ./pkg/... -- -race
+      - name: Upload shard JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotest-timings-shard-${{ matrix.shard }}
+          path: .gotest-timings/
+          retention-days: 1
+          # The dir starts with a dot; without this flag upload-artifact treats
+          # the whole tree as hidden and silently uploads nothing.
+          include-hidden-files: true
+
+  consolidate-test-timings:
+    name: Consolidate test timings
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all shard JUnit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: .gotest-timings
+          pattern: gotest-timings-shard-*
+          merge-multiple: true
+      - name: Save consolidated cache
+        uses: actions/cache/save@v5
+        with:
+          path: .gotest-timings
+          key: gotest-timings-${{ github.ref }}-${{ github.sha }}
 
   lint-js:
     name: JS Lint
