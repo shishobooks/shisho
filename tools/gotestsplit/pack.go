@@ -27,6 +27,18 @@ func Pack(hist History, pkgs []Package, n int) [][]Item {
 	if n <= 0 {
 		return nil
 	}
+	// If we have zero historical data anywhere, fall back to count-based splitting
+	// (gotesplit's classic behavior). This is the first-run / fresh-cache case.
+	allEmpty := true
+	for _, m := range hist {
+		if len(m) > 0 {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
+		return countBasedSplit(pkgs, n)
+	}
 	items := buildItems(hist, pkgs, n)
 	return lpt(items, n)
 }
@@ -152,6 +164,59 @@ func lpt(items []Item, n int) [][]Item {
 		top.load += it.Duration
 		shards[top.idx] = append(shards[top.idx], it)
 		heap.Push(h, top)
+	}
+	return shards
+}
+
+// countBasedSplit divides tests into N equal-count shards (gotesplit's classic
+// algorithm). Tests are sorted by (pkg, name) for determinism, then split into
+// N consecutive chunks. Consecutive same-pkg tests within a chunk are grouped
+// into one Item. Used when hist is entirely empty (first run / fresh cache).
+func countBasedSplit(pkgs []Package, n int) [][]Item {
+	type pair struct{ pkg, test string }
+	var all []pair
+	for _, p := range pkgs {
+		tests := append([]string(nil), p.Tests...)
+		sort.Strings(tests)
+		for _, t := range tests {
+			all = append(all, pair{p.Path, t})
+		}
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].pkg != all[j].pkg {
+			return all[i].pkg < all[j].pkg
+		}
+		return all[i].test < all[j].test
+	})
+
+	shards := make([][]Item, n)
+	per := len(all) / n
+	mod := len(all) % n
+	offset := func(i int) int {
+		o := per * i
+		if i < mod {
+			o += i
+		} else {
+			o += mod
+		}
+		return o
+	}
+	for i := 0; i < n; i++ {
+		slice := all[offset(i):offset(i+1)]
+		// Group consecutive same-pkg tests into one Item per (shard, pkg).
+		var cur Item
+		for _, pr := range slice {
+			if cur.Pkg != pr.pkg {
+				if cur.Pkg != "" {
+					shards[i] = append(shards[i], cur)
+				}
+				cur = Item{Pkg: pr.pkg}
+			}
+			cur.Tests = append(cur.Tests, pr.test)
+		}
+		if cur.Pkg != "" {
+			shards[i] = append(shards[i], cur)
+		}
 	}
 	return shards
 }

@@ -139,16 +139,23 @@ func TestPack_UnknownTest_UsesPackageMedian(t *testing.T) {
 
 func TestPack_UnknownPackage_Uses30sPerTest(t *testing.T) {
 	t.Parallel()
-	// Package has 4 tests, no history at all → 4 * 30 = 120.
-	pkgs := []Package{{Path: "p", Tests: []string{"T1", "T2", "T3", "T4"}}}
-	hist := History{} // empty
-	shards := Pack(hist, pkgs, 1)
-	var sum float64
-	for _, it := range shards[0] {
-		sum += it.Duration
+	// Package "p" has no history but another package does. When history is
+	// non-empty overall (allEmpty=false), estimateDuration falls back to
+	// unknownPackageFallbackPerTest (30s) per test → 4 * 30 = 120.
+	pkgs := []Package{
+		{Path: "p", Tests: []string{"T1", "T2", "T3", "T4"}},
+		{Path: "known", Tests: []string{"TK"}},
 	}
-	if sum != 120 {
-		t.Errorf("got total %v, want 120", sum)
+	hist := History{"known": {"TK": 10}} // non-empty history, but "p" is absent
+	shards := Pack(hist, pkgs, 1)
+	var pDuration float64
+	for _, it := range shards[0] {
+		if it.Pkg == "p" {
+			pDuration += it.Duration
+		}
+	}
+	if pDuration != 120 {
+		t.Errorf("got p duration %v, want 120", pDuration)
 	}
 }
 
@@ -174,5 +181,38 @@ func TestPack_SmartChunking_TestsAssignedDeterministically(t *testing.T) {
 				t.Errorf("shard %d item %d: pkg differs", i, j)
 			}
 		}
+	}
+}
+
+func TestPack_NoHistoryAtAll_FallsBackToCountBased(t *testing.T) {
+	t.Parallel()
+	// 6 tests across 2 packages, no history → count-based split into 3 shards = 2 each.
+	pkgs := []Package{
+		{Path: "a", Tests: []string{"T1", "T2", "T3"}},
+		{Path: "b", Tests: []string{"T4", "T5", "T6"}},
+	}
+	shards := Pack(History{}, pkgs, 3)
+	if len(shards) != 3 {
+		t.Fatalf("got %d shards, want 3", len(shards))
+	}
+	// Exact count-based behavior: each shard gets exactly 2 tests.
+	for i, s := range shards {
+		count := 0
+		for _, it := range s {
+			count += len(it.Tests)
+		}
+		if count != 2 {
+			t.Errorf("shard %d: got %d tests, want 2 (count-based split)", i, count)
+		}
+	}
+	// All 6 tests accounted for.
+	totalTests := 0
+	for _, s := range shards {
+		for _, it := range s {
+			totalTests += len(it.Tests)
+		}
+	}
+	if totalTests != 6 {
+		t.Errorf("count fallback dropped tests: got %d, want 6", totalTests)
 	}
 }
