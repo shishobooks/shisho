@@ -60,7 +60,7 @@ func estimateDuration(hist History, pkg, test string) float64 {
 			ds = append(ds, d)
 		}
 		sort.Float64s(ds)
-		return ds[len(ds)/2] // median (lower of two for even count — fine)
+		return ds[len(ds)/2] // median (upper of two for even count — fine)
 	}
 	return unknownPackageFallbackPerTest
 }
@@ -148,7 +148,7 @@ func chunkPackage(p Package, hist History, k int) []Item {
 // lpt is Longest-Processing-Time-first greedy: sort items desc by duration,
 // place each into the currently-shortest shard.
 func lpt(items []Item, n int) [][]Item {
-	sort.Slice(items, func(i, j int) bool {
+	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Duration != items[j].Duration {
 			return items[i].Duration > items[j].Duration
 		}
@@ -171,8 +171,16 @@ func lpt(items []Item, n int) [][]Item {
 // countBasedSplit divides tests into N equal-count shards (gotesplit's classic
 // algorithm). Tests are sorted by (pkg, name) for determinism, then split into
 // N consecutive chunks. Consecutive same-pkg tests within a chunk are grouped
-// into one Item. Used when hist is entirely empty (first run / fresh cache).
+// into one Item. If an Item covers all tests in a package, Tests is set to nil
+// so run.go batches it as a whole-package invocation instead of a -run regex.
+// Used when hist is entirely empty (first run / fresh cache).
 func countBasedSplit(pkgs []Package, n int) [][]Item {
+	// Build total-test-count map so we can detect whole-package items below.
+	pkgTestCount := make(map[string]int, len(pkgs))
+	for _, p := range pkgs {
+		pkgTestCount[p.Path] = len(p.Tests)
+	}
+
 	type pair struct{ pkg, test string }
 	var all []pair
 	for _, p := range pkgs {
@@ -208,6 +216,10 @@ func countBasedSplit(pkgs []Package, n int) [][]Item {
 		for _, pr := range slice {
 			if cur.Pkg != pr.pkg {
 				if cur.Pkg != "" {
+					// Emit whole-pkg item when this shard owns every test in the pkg.
+					if len(cur.Tests) == pkgTestCount[cur.Pkg] {
+						cur.Tests = nil
+					}
 					shards[i] = append(shards[i], cur)
 				}
 				cur = Item{Pkg: pr.pkg}
@@ -215,6 +227,10 @@ func countBasedSplit(pkgs []Package, n int) [][]Item {
 			cur.Tests = append(cur.Tests, pr.test)
 		}
 		if cur.Pkg != "" {
+			// Emit whole-pkg item when this shard owns every test in the pkg.
+			if len(cur.Tests) == pkgTestCount[cur.Pkg] {
+				cur.Tests = nil
+			}
 			shards[i] = append(shards[i], cur)
 		}
 	}
@@ -235,9 +251,9 @@ func (h shardHeap) Less(i, j int) bool {
 	}
 	return h[i].idx < h[j].idx // tie-break for determinism
 }
-func (h shardHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
-func (h *shardHeap) Push(x interface{}) { *h = append(*h, x.(*shardEntry)) }
-func (h *shardHeap) Pop() interface{} {
+func (h shardHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h *shardHeap) Push(x any)   { *h = append(*h, x.(*shardEntry)) }
+func (h *shardHeap) Pop() any {
 	old := *h
 	x := old[len(old)-1]
 	*h = old[:len(old)-1]

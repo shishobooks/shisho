@@ -38,6 +38,11 @@ func cmdSimulate(_ context.Context, argv []string, stdout, stderr io.Writer) err
 		return fmt.Errorf("%w in %s", errNoJUnitData, *junitDir)
 	}
 	pkgs := packagesFromHistory(hist)
+	// NOTE: This projection sums per-test durations from JUnit history. Tests within
+	// a package run in parallel via t.Parallel(), so actual CI shard wallclock is
+	// often substantially less than the projected value here. Use this output for
+	// relative comparisons across N (the curve flattens out where adding shards
+	// stops helping), not as an absolute prediction.
 	fmt.Fprintf(stdout, "%-5s  %-13s  %s\n", "N", "slowest", "cost")
 	for n := *minN; n <= *maxN; n++ {
 		shards := Pack(hist, pkgs, n)

@@ -20,10 +20,8 @@ func shardLoads(shards [][]Item) []float64 {
 
 func TestPack_PackageOnly_LPT(t *testing.T) {
 	t.Parallel()
-	// Five packages, durations 100, 50, 40, 30, 10. Total=230, ideal=115.
-	// Nothing exceeds ideal*0.8=92 except the 100s package — but with K=ceil(100/92)=2
-	// it'd split. To keep this test about LPT only, set ideal*0.8 high enough by
-	// using packages that all fit. We'll test chunking in the next task.
+	// Five packages, all 50s, into 5 shards → all loads = 50s.
+	// Tests LPT only (no chunking): total=250, ideal=50, threshold=40; all pkgs fit.
 	pkgs := []Package{
 		{Path: "pkg/a", Tests: []string{"TA"}},
 		{Path: "pkg/b", Tests: []string{"TB"}},
@@ -214,5 +212,18 @@ func TestPack_NoHistoryAtAll_FallsBackToCountBased(t *testing.T) {
 	}
 	if totalTests != 6 {
 		t.Errorf("count fallback dropped tests: got %d, want 6", totalTests)
+	}
+}
+
+func TestPack_NoHistory_WholePackagesEmittedAsBatch(t *testing.T) {
+	t.Parallel()
+	// Single package, all tests on one shard → should emit a whole-pkg Item (Tests=nil).
+	pkgs := []Package{{Path: "p", Tests: []string{"T1", "T2"}}}
+	shards := Pack(History{}, pkgs, 1)
+	if len(shards[0]) != 1 {
+		t.Fatalf("got %d items, want 1", len(shards[0]))
+	}
+	if shards[0][0].Tests != nil {
+		t.Errorf("expected Tests=nil for whole-pkg item, got %v", shards[0][0].Tests)
 	}
 }
