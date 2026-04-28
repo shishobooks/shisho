@@ -542,6 +542,15 @@ func (m *Monitor) processPendingEvents() {
 	// targets; the corresponding REMOVE events for their old paths must be
 	// skipped so we don't delete the row we just updated.
 	movedFileIDs := make(map[int]struct{})
+	// newlyCreatedBookIDs tracks books whose underlying file was scanned
+	// via FilePath mode (FileCreated=true) during this batch. Those events
+	// run scanFileCore with isResync=false, which intentionally skips
+	// per-book FTS indexing — the post-batch loop must catch them up. For
+	// books that were updated via FileID mode (resync), scanFileCore
+	// already performed conditional per-relation indexing, so the
+	// post-batch loop skips them to avoid undoing that conditional
+	// optimization with a full re-index.
+	newlyCreatedBookIDs := make(map[int]struct{})
 
 	applyResult := func(result *ScanResult) {
 		if result == nil {
@@ -552,6 +561,7 @@ func (m *Monitor) processPendingEvents() {
 		}
 		if result.FileCreated && result.Book != nil {
 			booksToOrganize[result.Book.ID] = struct{}{}
+			newlyCreatedBookIDs[result.Book.ID] = struct{}{}
 		}
 		// Track all affected books for targeted search indexing.
 		if result.Book != nil {
@@ -651,13 +661,17 @@ func (m *Monitor) processPendingEvents() {
 		}
 	}
 
-	// Update search indexes for affected books and the entities they
-	// reference (series, authors, narrators, genres, tags). Without the
-	// per-relation indexing, an entity created by a FilePath-mode scan
-	// during this batch (which uses isResync=false and skips per-book
-	// indexing) has a row in its primary table but no FTS row, leaving it
-	// invisible to the search-driven dropdowns until a full library scan
-	// triggers RebuildAllIndexes. See indexBookRelations for details.
+	// Update search indexes for affected books. There are three cases:
+	//   1. Book was deleted — remove its books_fts row.
+	//   2. Book is newly created (FilePath-mode event, FileCreated=true) —
+	//      scanFileCore was called with isResync=false so per-book indexing
+	//      was deferred. Index the book and all its relations now. Empty
+	//      snapshot is correct because the book had no relations before
+	//      this batch, so every loaded relation is "newly attached".
+	//   3. Book was updated via a FileID-mode event (resync) —
+	//      scanFileCore already ran with isResync=true and indexed
+	//      conditionally via its own snapshot. Skip to avoid a full
+	//      re-index that would undo the conditional savings.
 	if m.worker.searchService != nil {
 		logWarn := func(msg string, data logger.Data) {
 			m.log.Warn(msg, data)
@@ -665,14 +679,16 @@ func (m *Monitor) processPendingEvents() {
 		for bookID := range affectedBookIDs {
 			book, err := m.worker.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 			if err != nil {
-				// Book was deleted — remove from index.
 				_ = m.worker.searchService.DeleteFromBookIndex(ctx, bookID)
+				continue
+			}
+			if _, newlyCreated := newlyCreatedBookIDs[bookID]; !newlyCreated {
 				continue
 			}
 			if err := m.worker.searchService.IndexBook(ctx, book); err != nil {
 				m.log.Warn("failed to index book", logger.Data{"book_id": bookID, "error": err.Error()})
 			}
-			m.worker.indexBookRelations(ctx, book, logWarn)
+			m.worker.indexBookRelations(ctx, book, bookRelationsSnapshot{}, logWarn)
 		}
 	}
 }

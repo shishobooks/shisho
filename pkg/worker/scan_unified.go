@@ -812,6 +812,12 @@ func (w *Worker) scanFileCore(
 		return &ScanResult{File: file, Book: book}, nil
 	}
 
+	// Capture pre-update relation IDs so the post-update FTS reindex can
+	// skip churn for entities whose attachment to this book didn't change.
+	// Holds Series pointers (not just IDs) so detached series can be
+	// re-indexed for aggregate freshness without an extra DB round-trip.
+	oldRels := snapshotBookRelations(book, file)
+
 	sidecarSource := models.DataSourceSidecar
 
 	// Read sidecar files if they exist (higher priority than file metadata)
@@ -2240,7 +2246,7 @@ func (w *Worker) scanFileCore(
 		if err := w.searchService.IndexBook(ctx, book); err != nil {
 			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
 		}
-		w.indexBookRelations(ctx, book, logWarn)
+		w.indexBookRelations(ctx, book, oldRels, logWarn)
 	}
 
 	// ==========================================================================
@@ -4146,45 +4152,131 @@ func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float
 	return 0.85
 }
 
-// indexBookRelations refreshes the FTS rows for every entity attached to
-// book — series, authors, narrators, genres, tags. It is required by any
-// flow that may create or re-attach those entities outside of a full
-// ProcessScanJob (which rebuilds all FTS tables at the end). Without this,
-// a row exists in the primary table but the corresponding *_fts table has
-// no entry, so the entity is invisible to the FTS-backed list/search
-// endpoints that drive the dropdowns in the UI.
+// bookRelationsSnapshot captures the entity IDs already attached to a book
+// before a scan/apply mutates them, so indexBookRelations can skip churn for
+// entities whose attachment to this book did not change.
 //
-// Safe to call on existing entities: each Index* method deletes the
-// existing FTS row before reinserting, which also refreshes derived fields
-// like series_fts.book_titles / book_authors so they reflect the
-// just-attached book.
+// seriesByID holds the *models.Series pointers (not just IDs) so a series
+// that gets detached can be re-indexed for aggregate freshness without an
+// extra DB round-trip.
+type bookRelationsSnapshot struct {
+	seriesByID        map[int]*models.Series
+	authorPersonIDs   map[int]struct{}
+	narratorPersonIDs map[int]struct{}
+	genreIDs          map[int]struct{}
+	tagIDs            map[int]struct{}
+}
+
+// snapshotBookRelations captures which series, persons (as authors and
+// narrators), genres, and tags are attached to book + file BEFORE any
+// pending mutation. Pass the result to indexBookRelations after the
+// mutation completes so it can compute the symmetric difference and skip
+// re-indexing entities whose attachment didn't change.
 //
-// Caller must pass a book loaded with Authors.Person, BookSeries.Series,
+// Caller must pass models loaded with Authors.Person, BookSeries.Series,
+// BookGenres.Genre, BookTags.Tag, and (for file) Narrators.Person — i.e.
+// the shape returned by books.Service.RetrieveBook.
+func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSnapshot {
+	snap := bookRelationsSnapshot{
+		seriesByID:        map[int]*models.Series{},
+		authorPersonIDs:   map[int]struct{}{},
+		narratorPersonIDs: map[int]struct{}{},
+		genreIDs:          map[int]struct{}{},
+		tagIDs:            map[int]struct{}{},
+	}
+	if book == nil {
+		return snap
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil {
+			snap.seriesByID[bs.Series.ID] = bs.Series
+		}
+	}
+	for _, a := range book.Authors {
+		if a.Person != nil {
+			snap.authorPersonIDs[a.Person.ID] = struct{}{}
+		}
+	}
+	for _, bg := range book.BookGenres {
+		if bg.Genre != nil {
+			snap.genreIDs[bg.Genre.ID] = struct{}{}
+		}
+	}
+	for _, bt := range book.BookTags {
+		if bt.Tag != nil {
+			snap.tagIDs[bt.Tag.ID] = struct{}{}
+		}
+	}
+	if file != nil {
+		for _, n := range file.Narrators {
+			if n.Person != nil {
+				snap.narratorPersonIDs[n.Person.ID] = struct{}{}
+			}
+		}
+	}
+	return snap
+}
+
+// indexBookRelations refreshes the FTS rows for entities whose attachment
+// to book changed during the surrounding scan/apply, given the pre-mutation
+// snapshot. It is required by any flow that may create or re-attach those
+// entities outside of a full ProcessScanJob (which rebuilds all FTS tables
+// at the end). Without this, a row exists in the primary table but the
+// corresponding *_fts table has no entry, so the entity is invisible to
+// the FTS-backed list/search endpoints that drive the dropdowns in the UI.
+//
+// What gets re-indexed:
+//   - Series newly attached to this book (covers newly-created series and
+//     existing series attached to this book for the first time).
+//   - Series detached from this book — series_fts has aggregate columns
+//     (book_titles, book_authors) that must stop listing this book.
+//   - Persons / genres / tags newly attached to this book — those tables
+//     have no aggregate columns, so unchanged or detached entities skip
+//     the DELETE+INSERT churn against persons_fts / genres_fts / tags_fts.
+//
+// Caller must pass book loaded with Authors.Person, BookSeries.Series,
 // BookGenres.Genre, BookTags.Tag, and Files.Narrators.Person — i.e. the
 // shape returned by books.Service.RetrieveBook.
-func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, logWarn func(msg string, data logger.Data)) {
+func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldRels bookRelationsSnapshot, logWarn func(msg string, data logger.Data)) {
 	if w.searchService == nil || book == nil {
 		return
 	}
-	seenSeries := map[int]bool{}
+	// Series: re-index newly-attached, plus detached old ones for
+	// aggregate-column freshness.
+	newSeriesIDs := map[int]bool{}
 	for _, bs := range book.BookSeries {
-		if bs.Series == nil || seenSeries[bs.Series.ID] {
+		if bs.Series == nil || newSeriesIDs[bs.Series.ID] {
 			continue
 		}
-		seenSeries[bs.Series.ID] = true
+		newSeriesIDs[bs.Series.ID] = true
+		if _, alreadyAttached := oldRels.seriesByID[bs.Series.ID]; alreadyAttached {
+			continue
+		}
 		if err := w.searchService.IndexSeries(ctx, bs.Series); err != nil {
 			logWarn("failed to update search index for series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
 		}
 	}
-	// seenPersons spans both authors and narrators — the same person may
-	// appear in both relations on a single book and only needs one
-	// IndexPerson call.
+	for oldID, oldSer := range oldRels.seriesByID {
+		if newSeriesIDs[oldID] {
+			continue
+		}
+		if err := w.searchService.IndexSeries(ctx, oldSer); err != nil {
+			logWarn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
+		}
+	}
+
+	// Persons (authors + narrators): re-index only newly-attached.
+	// seenPersons spans both relations because a person may appear in both
+	// on a single book and only needs one IndexPerson call.
 	seenPersons := map[int]bool{}
 	for _, a := range book.Authors {
 		if a.Person == nil || seenPersons[a.Person.ID] {
 			continue
 		}
 		seenPersons[a.Person.ID] = true
+		if _, wasAuthor := oldRels.authorPersonIDs[a.Person.ID]; wasAuthor {
+			continue
+		}
 		if err := w.searchService.IndexPerson(ctx, a.Person); err != nil {
 			logWarn("failed to update search index for author", logger.Data{"person_id": a.Person.ID, "error": err.Error()})
 		}
@@ -4195,17 +4287,25 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, logW
 				continue
 			}
 			seenPersons[n.Person.ID] = true
+			if _, wasNarrator := oldRels.narratorPersonIDs[n.Person.ID]; wasNarrator {
+				continue
+			}
 			if err := w.searchService.IndexPerson(ctx, n.Person); err != nil {
 				logWarn("failed to update search index for narrator", logger.Data{"person_id": n.Person.ID, "error": err.Error()})
 			}
 		}
 	}
+
+	// Genres / tags: re-index only newly-attached.
 	seenGenres := map[int]bool{}
 	for _, bg := range book.BookGenres {
 		if bg.Genre == nil || seenGenres[bg.Genre.ID] {
 			continue
 		}
 		seenGenres[bg.Genre.ID] = true
+		if _, alreadyAttached := oldRels.genreIDs[bg.Genre.ID]; alreadyAttached {
+			continue
+		}
 		if err := w.searchService.IndexGenre(ctx, bg.Genre); err != nil {
 			logWarn("failed to update search index for genre", logger.Data{"genre_id": bg.Genre.ID, "error": err.Error()})
 		}
@@ -4216,6 +4316,9 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, logW
 			continue
 		}
 		seenTags[bt.Tag.ID] = true
+		if _, alreadyAttached := oldRels.tagIDs[bt.Tag.ID]; alreadyAttached {
+			continue
+		}
 		if err := w.searchService.IndexTag(ctx, bt.Tag); err != nil {
 			logWarn("failed to update search index for tag", logger.Data{"tag_id": bt.Tag.ID, "error": err.Error()})
 		}

@@ -74,6 +74,16 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Authors
 	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
+		// Capture the personIDs already attached as authors so we can skip
+		// re-indexing them when the apply re-attaches the same person.
+		// persons_fts has no aggregate columns, so re-indexing an unchanged
+		// person is pure DELETE+INSERT churn.
+		oldAuthorPersonIDs := make(map[int]struct{}, len(book.Authors))
+		for _, a := range book.Authors {
+			if a.Person != nil {
+				oldAuthorPersonIDs[a.Person.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete authors")
 		}
@@ -99,8 +109,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to create author", logger.Data{"error": err.Error()})
 			}
 			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
-					log.Warn("failed to update search index for author", logger.Data{"person_id": person.ID, "error": err.Error()})
+				if _, alreadyAttached := oldAuthorPersonIDs[person.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+						log.Warn("failed to update search index for author", logger.Data{"person_id": person.ID, "error": err.Error()})
+					}
 				}
 			}
 		}
@@ -112,6 +124,17 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Series
 	if md.Series != "" {
+		// Capture old series before delete so we can re-index any that get
+		// detached — their series_fts.book_titles / book_authors aggregate
+		// columns must stop listing this book. Holding the *models.Series
+		// pointers from book.BookSeries lets us re-index without an extra
+		// DB round-trip.
+		oldSeries := make(map[int]*models.Series, len(book.BookSeries))
+		for _, bs := range book.BookSeries {
+			if bs.Series != nil {
+				oldSeries[bs.Series.ID] = bs.Series
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete series")
 		}
@@ -127,11 +150,26 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 			}
-			// Index after CreateBookSeries so series_fts.book_titles /
+			// Re-index series whose attachment to this book actually changed:
+			// the new series (if it wasn't already attached, covering both
+			// newly-created series and freshly-attached existing series), and
+			// every old series that's no longer attached. Series whose
+			// attachment didn't change skip the DELETE+INSERT churn against
+			// series_fts. Index after CreateBookSeries so book_titles /
 			// book_authors reflect the just-attached book.
 			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
-					log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
+				if _, stillAttached := oldSeries[seriesRecord.ID]; !stillAttached {
+					if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
+						log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
+					}
+				}
+				for oldID, oldSer := range oldSeries {
+					if oldID == seriesRecord.ID {
+						continue
+					}
+					if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
+						log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
+					}
 				}
 			}
 		}
@@ -139,6 +177,15 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Genres
 	if len(md.Genres) > 0 && h.enrich.genreFinder != nil {
+		// Same churn rationale as authors: genres_fts has no aggregate
+		// columns, so re-indexing a genre whose attachment to this book
+		// didn't change is wasted work.
+		oldGenreIDs := make(map[int]struct{}, len(book.BookGenres))
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				oldGenreIDs[bg.Genre.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete genres")
 		}
@@ -158,8 +205,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
 			}
 			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexGenre(ctx, genre); err != nil {
-					log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+				if _, alreadyAttached := oldGenreIDs[genre.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexGenre(ctx, genre); err != nil {
+						log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+					}
 				}
 			}
 		}
@@ -171,6 +220,12 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Tags
 	if len(md.Tags) > 0 && h.enrich.tagFinder != nil {
+		oldTagIDs := make(map[int]struct{}, len(book.BookTags))
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				oldTagIDs[bt.Tag.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete tags")
 		}
@@ -190,8 +245,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
 			}
 			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexTag(ctx, tag); err != nil {
-					log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+				if _, alreadyAttached := oldTagIDs[tag.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexTag(ctx, tag); err != nil {
+						log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+					}
 				}
 			}
 		}
@@ -203,6 +260,12 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
+		oldNarratorPersonIDs := make(map[int]struct{}, len(targetFile.Narrators))
+		for _, n := range targetFile.Narrators {
+			if n.Person != nil {
+				oldNarratorPersonIDs[n.Person.ID] = struct{}{}
+			}
+		}
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete narrators")
 		}
@@ -223,8 +286,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
 			}
 			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
-					log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
+				if _, alreadyAttached := oldNarratorPersonIDs[person.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+						log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
+					}
 				}
 			}
 		}

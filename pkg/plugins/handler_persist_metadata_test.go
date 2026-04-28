@@ -632,3 +632,110 @@ func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 	assert.Len(t, indexer.indexedGenreIDs, 1, "new genre must be added to genres_fts")
 	assert.Len(t, indexer.indexedTagIDs, 1, "new tag must be added to tags_fts")
 }
+
+// TestPersistMetadata_ReindexesDetachedOldSeries verifies that when an apply
+// replaces a book's series, the previously-attached series gets re-indexed
+// so its series_fts.book_titles / book_authors aggregate columns stop
+// listing this book. Without this, searching by the moved book's title or
+// author would still surface the old series.
+func TestPersistMetadata_ReindexesDetachedOldSeries(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	// Pre-attach the book to an existing series (ID 99). When apply runs
+	// with a different series, the stub FindOrCreateSeries returns ID 1,
+	// so series 99 becomes detached and must be re-indexed for aggregate
+	// freshness.
+	oldSeries := &models.Series{ID: 99, LibraryID: book.LibraryID, Name: "Old Series"}
+	book.BookSeries = []*models.BookSeries{{
+		BookID:   book.ID,
+		SeriesID: oldSeries.ID,
+		Series:   oldSeries,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{Series: "New Series"}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.Contains(t, indexer.indexedSeriesIDs, 1, "newly-attached series (id 1 from stub) must be indexed")
+	assert.Contains(t, indexer.indexedSeriesIDs, 99, "detached old series (id 99) must be re-indexed so its book_titles aggregate stops listing this book")
+}
+
+// TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged verifies that
+// re-applying the same series to a book does not trigger an unnecessary
+// IndexSeries call. The new series ID matches the existing attachment, so
+// neither the membership nor the aggregate columns change — re-indexing
+// would be pure DELETE+INSERT churn against series_fts.
+func TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	// Pre-attach the book to series ID 1 — same ID the stub returns for
+	// every FindOrCreateSeries call.
+	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
+	book.BookSeries = []*models.BookSeries{{
+		BookID:   book.ID,
+		SeriesID: existingSeries.ID,
+		Series:   existingSeries,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{Series: "Same Series"}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment to this book did not change must NOT be re-indexed (avoids series_fts churn)")
+}
+
+// TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor verifies that an
+// author who was already attached to the book before the apply is not
+// re-indexed when the same author is re-applied. persons_fts has no
+// aggregate columns, so re-indexing an unchanged person is pure churn.
+func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	// Pre-attach an existing author with ID 1 (matches what the stub
+	// person finder returns for the first call).
+	existingPerson := &models.Person{ID: 1, LibraryID: book.LibraryID, Name: "Existing Author"}
+	book.Authors = []*models.Author{{
+		BookID:   book.ID,
+		PersonID: existingPerson.ID,
+		Person:   existingPerson,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			personFinder:  &stubPersonFinderForPersist{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Authors: []mediafile.ParsedAuthor{{Name: "Existing Author", Role: "writer"}},
+	}
+	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.NotContains(t, indexer.indexedPersonIDs, 1, "author whose attachment did not change must NOT be re-indexed (avoids persons_fts churn)")
+}
