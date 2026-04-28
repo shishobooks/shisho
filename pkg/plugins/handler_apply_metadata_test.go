@@ -320,6 +320,49 @@ func TestApplyMetadata_DoesNotUpdateSupplementFileName(t *testing.T) {
 	assert.Equal(t, "Supplement.pdf", *file.Name, "supplement Name must not be overwritten with book title")
 }
 
+func TestApplyMetadata_FallbackTargetsMainFile_NotSupplement(t *testing.T) {
+	t.Parallel()
+
+	// Book with a supplement first in book.Files (the order callers might
+	// see post-classification when a supplement was scanned/created earlier
+	// in the slice). With no FileID in the payload, applyMetadata must
+	// target the main file, not the supplement.
+	book := newApplyTestBook(t, "Old Title")
+	supplement := &models.File{
+		ID:        7,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "Supplement.pdf"),
+		FileType:  models.FileTypePDF,
+		FileRole:  models.FileRoleSupplement,
+	}
+	main := &models.File{
+		ID:        8,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "main.epub"),
+		FileType:  models.FileTypeEPUB,
+		FileRole:  models.FileRoleMain,
+	}
+	book.Files = []*models.File{supplement, main}
+
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	// The main file's Name should be set to the new title; the supplement's
+	// should remain untouched (persistMetadata also guards this, but only
+	// gets the chance because we picked the right targetFile).
+	require.NotNil(t, main.Name, "main file Name should be set when applyMetadata falls back to main")
+	assert.Equal(t, "New Title", *main.Name)
+	assert.Nil(t, supplement.Name, "supplement Name must not be touched when applyMetadata falls back to main")
+}
+
 func TestApplyMetadata_PreservesVolumeNotation_CBZ(t *testing.T) {
 	t.Parallel()
 

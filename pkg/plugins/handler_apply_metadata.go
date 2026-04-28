@@ -53,7 +53,10 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errcodes.Forbidden("You don't have access to this library")
 	}
 
-	// Resolve target file
+	// Resolve target file. When the caller doesn't pin a specific FileID,
+	// fall back to the first MAIN file — supplements never represent the
+	// book, so applying enriched book-level metadata to a supplement
+	// (whose Name is e.g. "Supplement.pdf") would be wrong.
 	var targetFile *models.File
 	if payload.FileID != nil {
 		for i := range book.Files {
@@ -65,8 +68,13 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		if targetFile == nil {
 			return errcodes.NotFound("File")
 		}
-	} else if len(book.Files) > 0 {
-		targetFile = book.Files[0]
+	} else {
+		for i := range book.Files {
+			if book.Files[i].FileRole == models.FileRoleMain {
+				targetFile = book.Files[i]
+				break
+			}
+		}
 	}
 
 	// Convert fields map to ParsedMetadata

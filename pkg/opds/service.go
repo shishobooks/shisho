@@ -739,16 +739,22 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 	// are file-level in our model. Prefer the primary file (the book's
 	// canonical reading copy), falling back to the first file with a
 	// non-empty value for each field.
+	// Supplements don't represent the book — exclude them from the
+	// priority chain so a stray supplement-level Language or Publisher
+	// can't leak into the OPDS entry's book-level metadata.
 	filesInPriorityOrder := make([]*models.File, 0, len(book.Files))
 	if book.PrimaryFileID != nil {
 		for _, file := range book.Files {
-			if file.ID == *book.PrimaryFileID {
+			if file.ID == *book.PrimaryFileID && file.FileRole != models.FileRoleSupplement {
 				filesInPriorityOrder = append(filesInPriorityOrder, file)
 				break
 			}
 		}
 	}
 	for _, file := range book.Files {
+		if file.FileRole == models.FileRoleSupplement {
+			continue
+		}
 		if book.PrimaryFileID != nil && file.ID == *book.PrimaryFileID {
 			continue
 		}
