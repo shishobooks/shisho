@@ -391,12 +391,20 @@ const BookItem = ({
 
           // Dedupe by name, keeping the first person_id for linking
           const seen = new Set<string>();
-          const uniqueAuthors: { name: string; personId: number }[] = [];
+          const uniqueAuthors: {
+            name: string;
+            personId: number;
+            hasPerson: boolean;
+          }[] = [];
           for (const a of displayAuthors) {
             const name = a.person?.name ?? "Unknown";
             if (seen.has(name)) continue;
             seen.add(name);
-            uniqueAuthors.push({ name, personId: a.person_id });
+            uniqueAuthors.push({
+              name,
+              personId: a.person_id,
+              hasPerson: !!a.person,
+            });
           }
 
           if (uniqueAuthors.length === 0) return null;
@@ -406,21 +414,18 @@ const BookItem = ({
               {uniqueAuthors.map((a, i) => (
                 <span key={`${a.name}-${i}`}>
                   {i > 0 && ", "}
-                  {a.name === "Unknown" ? (
-                    a.name
-                  ) : (
+                  {a.hasPerson ? (
                     <Link
                       className={cn(
                         "hover:underline hover:text-foreground",
                         isSelectionMode && "pointer-events-none",
                       )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
                       to={`/libraries/${libraryId}/people/${a.personId}`}
                     >
                       {a.name}
                     </Link>
+                  ) : (
+                    a.name
                   )}
                 </span>
               ))}
