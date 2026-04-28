@@ -775,6 +775,51 @@ func TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied(t *testing.T) {
 	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose aggregate inputs (title) did not actually change must NOT be re-indexed")
 }
 
+// TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied verifies
+// that re-applying the same author set (alongside an unchanged series)
+// does not trigger an IndexSeries call. The previous over-trigger keyed
+// off "authors block ran" rather than "author set actually changed",
+// causing one extra series_fts DELETE+INSERT per identical-authors apply.
+func TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied(t *testing.T) {
+	t.Parallel()
+
+	book, _ := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	// Pre-attach the book to a series (ID 1, matching the stub
+	// FindOrCreateSeries return) and an author (ID 1, matching the stub
+	// person finder's first return).
+	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
+	book.BookSeries = []*models.BookSeries{{
+		BookID:   book.ID,
+		SeriesID: existingSeries.ID,
+		Series:   existingSeries,
+	}}
+	existingPerson := &models.Person{ID: 1, LibraryID: book.LibraryID, Name: "Same Author"}
+	book.Authors = []*models.Author{{
+		BookID:   book.ID,
+		PersonID: existingPerson.ID,
+		Person:   existingPerson,
+	}}
+
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			personFinder:  &stubPersonFinderForPersist{},
+			searchIndexer: indexer,
+		},
+	}
+
+	md := &mediafile.ParsedMetadata{
+		Authors: []mediafile.ParsedAuthor{{Name: "Same Author", Role: "writer"}},
+		Series:  "Same Series",
+	}
+	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", testLogger())
+	require.NoError(t, err)
+
+	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose author-set aggregate input did not actually change must NOT be re-indexed")
+}
+
 // TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor verifies that an
 // author who was already attached to the book before the apply is not
 // re-indexed when the same author is re-applied. persons_fts has no

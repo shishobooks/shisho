@@ -142,9 +142,8 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				}
 			}
 		}
-		// Treat authors as changed when the new set differs from the old
-		// set in either direction. Same set ⇒ no series_fts.book_authors
-		// drift, no need to mark the aggregate stale.
+		// Same author set ⇒ no series_fts.book_authors drift, no need to
+		// mark the aggregate stale.
 		if !equalIntSets(oldAuthorPersonIDs, newAuthorPersonIDs) {
 			seriesAggregateMayBeStale = true
 		}
