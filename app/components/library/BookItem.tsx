@@ -389,16 +389,46 @@ const BookItem = ({
               )
             : book.authors;
 
-          // Get unique author names
-          const uniqueNames = [
-            ...new Set(displayAuthors.map((a) => a.person?.name ?? "Unknown")),
-          ];
+          // Dedupe by name, keeping the first person_id for linking
+          const seen = new Set<string>();
+          const uniqueAuthors: {
+            name: string;
+            personId: number;
+            hasPerson: boolean;
+          }[] = [];
+          for (const a of displayAuthors) {
+            const name = a.person?.name ?? "Unknown";
+            if (seen.has(name)) continue;
+            seen.add(name);
+            uniqueAuthors.push({
+              name,
+              personId: a.person_id,
+              hasPerson: !!a.person,
+            });
+          }
 
-          if (uniqueNames.length === 0) return null;
+          if (uniqueAuthors.length === 0) return null;
 
           return (
-            <div className="mt-1 text-xs line-clamp-2 text-neutral-500 dark:text-neutral-500">
-              {uniqueNames.join(", ")}
+            <div className="mt-1 text-xs line-clamp-2 text-neutral-500">
+              {uniqueAuthors.map((a, i) => (
+                <span key={a.personId}>
+                  {a.hasPerson ? (
+                    <Link
+                      className={cn(
+                        "hover:underline hover:text-foreground",
+                        isSelectionMode && "pointer-events-none",
+                      )}
+                      to={`/libraries/${libraryId}/people/${a.personId}`}
+                    >
+                      {a.name}
+                    </Link>
+                  ) : (
+                    a.name
+                  )}
+                  {i < uniqueAuthors.length - 1 && ", "}
+                </span>
+              ))}
             </div>
           );
         })()}
