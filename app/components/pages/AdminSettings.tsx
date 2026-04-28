@@ -26,18 +26,18 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
     typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
 
   return (
-    <div className="flex flex-col py-3 border-b border-border last:border-b-0">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
-        <span className="text-sm font-medium text-foreground sm:whitespace-nowrap sm:shrink-0">
+    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4 py-3 border-b border-border last:border-b-0">
+      <div className="flex flex-col gap-1 sm:shrink-0">
+        <span className="text-sm font-medium text-foreground sm:whitespace-nowrap">
           {label}
         </span>
-        <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-words sm:text-right min-w-0">
-          {displayValue}
-        </span>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
       </div>
-      {description && (
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
-      )}
+      <span className="text-xs sm:text-sm text-muted-foreground font-mono break-all sm:break-words sm:text-right min-w-0">
+        {displayValue}
+      </span>
     </div>
   );
 };
