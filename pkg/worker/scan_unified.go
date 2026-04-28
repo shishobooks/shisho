@@ -4176,6 +4176,9 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, logW
 			logWarn("failed to update search index for series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
 		}
 	}
+	// seenPersons spans both authors and narrators — the same person may
+	// appear in both relations on a single book and only needs one
+	// IndexPerson call.
 	seenPersons := map[int]bool{}
 	for _, a := range book.Authors {
 		if a.Person == nil || seenPersons[a.Person.ID] {
