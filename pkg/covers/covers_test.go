@@ -27,6 +27,11 @@ func TestSelectFile(t *testing.T) {
 		}
 		return &models.File{ID: id, FileType: fileType, CoverImageFilename: ptr}
 	}
+	supplementWithCover := func(id int, fileType, cover string) *models.File {
+		f := withCover(id, fileType, cover)
+		f.FileRole = models.FileRoleSupplement
+		return f
+	}
 
 	epub := withCover(1, models.FileTypeEPUB, "epub.cover.jpg")
 	cbz := withCover(2, models.FileTypeCBZ, "cbz.cover.jpg")
@@ -34,6 +39,8 @@ func TestSelectFile(t *testing.T) {
 	m4b := withCover(4, models.FileTypeM4B, "m4b.cover.jpg")
 	bookNoCover := withCover(5, models.FileTypeEPUB, "")
 	audioNoCover := withCover(6, models.FileTypeM4B, "")
+	pdfSupplement := supplementWithCover(7, models.FileTypePDF, "supp.cover.jpg")
+	epubSupplement := supplementWithCover(8, models.FileTypeEPUB, "supp.cover.jpg")
 
 	tests := []struct {
 		name           string
@@ -112,6 +119,30 @@ func TestSelectFile(t *testing.T) {
 			files:          []*models.File{m4b, epub},
 			aspectRatio:    "weird",
 			expectedFileID: epub.ID,
+		},
+		{
+			name:           "skips PDF supplement when M4B main has cover",
+			files:          []*models.File{pdfSupplement, m4b},
+			aspectRatio:    "book",
+			expectedFileID: m4b.ID,
+		},
+		{
+			name:           "skips EPUB supplement when M4B main has cover",
+			files:          []*models.File{epubSupplement, m4b},
+			aspectRatio:    "book",
+			expectedFileID: m4b.ID,
+		},
+		{
+			name:           "skips supplement even when no main has cover",
+			files:          []*models.File{pdfSupplement, bookNoCover},
+			aspectRatio:    "book",
+			expectedFileID: 0,
+		},
+		{
+			name:           "supplement also skipped in audiobook mode",
+			files:          []*models.File{pdfSupplement, m4b},
+			aspectRatio:    "audiobook",
+			expectedFileID: m4b.ID,
 		},
 	}
 
