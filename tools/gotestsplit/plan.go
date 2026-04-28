@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+)
+
+var (
+	errPlanFlagsInvalid  = errors.New("plan requires -junit-dir, -total>0, 0<=-index<-total")
+	errPlanNeedsPackages = errors.New("plan requires at least one package pattern")
 )
 
 func cmdPlan(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
@@ -19,7 +25,7 @@ func cmdPlan(ctx context.Context, argv []string, stdout, stderr io.Writer) error
 		return err
 	}
 	if *junitDir == "" || *total <= 0 || *index < 0 || *index >= *total {
-		return fmt.Errorf("plan requires -junit-dir, -total>0, 0<=-index<-total")
+		return errPlanFlagsInvalid
 	}
 	pkgPatterns := fs.Args()
 
@@ -32,7 +38,7 @@ func cmdPlan(ctx context.Context, argv []string, stdout, stderr io.Writer) error
 		pkgs = packagesFromHistory(hist)
 	} else {
 		if len(pkgPatterns) == 0 {
-			return fmt.Errorf("plan requires at least one package pattern")
+			return errPlanNeedsPackages
 		}
 		pkgs, err = DiscoverPackages(ctx, pkgPatterns, nil)
 		if err != nil {

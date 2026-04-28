@@ -18,6 +18,11 @@ import (
 	parser "github.com/jstemmer/go-junit-report/v2/parser/gotest"
 )
 
+var (
+	errRunFlagsInvalid  = errors.New("run requires -junit-dir, -total>0, 0<=-index<-total")
+	errRunNeedsPackages = errors.New("run requires at least one package pattern")
+)
+
 func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -28,7 +33,7 @@ func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error 
 		return err
 	}
 	if *junitDir == "" || *total <= 0 || *index < 0 || *index >= *total {
-		return fmt.Errorf("run requires -junit-dir, -total>0, 0<=-index<-total")
+		return errRunFlagsInvalid
 	}
 
 	args := fs.Args()
@@ -41,7 +46,7 @@ func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error 
 		pkgs = append(pkgs, a)
 	}
 	if len(pkgs) == 0 {
-		return fmt.Errorf("run requires at least one package pattern")
+		return errRunNeedsPackages
 	}
 
 	if err := os.MkdirAll(*junitDir, 0o755); err != nil {

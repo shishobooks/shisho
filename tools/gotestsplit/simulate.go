@@ -2,37 +2,44 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"sort"
 )
 
-func cmdSimulate(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
+var (
+	errJUnitDirRequired = errors.New("-junit-dir is required")
+	errInvalidRange     = errors.New("invalid range")
+	errNoJUnitData      = errors.New("no JUnit data found")
+)
+
+func cmdSimulate(_ context.Context, argv []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("simulate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	junitDir := fs.String("junit-dir", "", "directory of JUnit XML files from prior runs (required)")
-	min := fs.Int("min", 2, "minimum N to project")
-	max := fs.Int("max", 10, "maximum N to project")
+	minN := fs.Int("min", 2, "minimum N to project")
+	maxN := fs.Int("max", 10, "maximum N to project")
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
 	if *junitDir == "" {
-		return fmt.Errorf("-junit-dir is required")
+		return errJUnitDirRequired
 	}
-	if *min < 1 || *max < *min {
-		return fmt.Errorf("invalid range: min=%d max=%d", *min, *max)
+	if *minN < 1 || *maxN < *minN {
+		return fmt.Errorf("%w: min=%d max=%d", errInvalidRange, *minN, *maxN)
 	}
 	hist, err := ReadHistory(*junitDir)
 	if err != nil {
 		return err
 	}
 	if len(hist) == 0 {
-		return fmt.Errorf("no JUnit data found in %s", *junitDir)
+		return fmt.Errorf("%w in %s", errNoJUnitData, *junitDir)
 	}
 	pkgs := packagesFromHistory(hist)
 	fmt.Fprintf(stdout, "%-5s  %-13s  %s\n", "N", "slowest", "cost")
-	for n := *min; n <= *max; n++ {
+	for n := *minN; n <= *maxN; n++ {
 		shards := Pack(hist, pkgs, n)
 		var slowest float64
 		for _, s := range shards {

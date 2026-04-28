@@ -132,15 +132,15 @@ func chunkPackage(p Package, hist History, k int) []Item {
 	}
 	for _, t := range tests {
 		// Find shortest chunk (small k → linear scan is fine).
-		min := 0
+		minIdx := 0
 		for i := 1; i < k; i++ {
-			if loads[i] < loads[min] {
-				min = i
+			if loads[i] < loads[minIdx] {
+				minIdx = i
 			}
 		}
-		chunks[min].Tests = append(chunks[min].Tests, t.name)
-		chunks[min].Duration += t.duration
-		loads[min] += t.duration
+		chunks[minIdx].Tests = append(chunks[minIdx].Tests, t.name)
+		chunks[minIdx].Duration += t.duration
+		loads[minIdx] += t.duration
 	}
 	return chunks
 }
