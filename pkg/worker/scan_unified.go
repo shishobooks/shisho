@@ -2390,41 +2390,81 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		// by applyFilepathFallbacks above. scanFileCore will create the DB records.
 	}
 
+	// Decide whether this new file should be a supplement based on filename
+	// pattern + on-disk siblings. Only applies to PDFs in directory-based
+	// books — root-level PDFs always stay main here. Root-level supplement
+	// linking is handled later in the function via discoverRootLevelSupplements
+	// (basename-prefix matching against the main file).
+	classifyAsSupplement := false
+	if fileType == models.FileTypePDF && !isRootLevelFile && looksLikePDFSupplement(filepath.Base(path), w.config.PDFSupplementFilenames) {
+		// Reuse-existing-book optimization: if a book row already lives at
+		// this bookPath, another file in this directory was already imported.
+		// scanFileCreateNew only runs for files not yet in the DB, so the
+		// existing book guarantees a sibling without re-walking the disk.
+		if existingBook != nil {
+			classifyAsSupplement = true
+		} else {
+			// On-disk sibling check: look for any non-PDF main-eligible file
+			// in the book directory. This is what makes the rule
+			// ordering-independent when both files arrive in the same scan.
+			var pluginExts map[string]struct{}
+			if w.pluginManager != nil {
+				pluginExts = w.pluginManager.RegisteredFileExtensions()
+			}
+			hasSibling, sibErr := hasNonPDFMainSibling(bookPath, pluginExts)
+			if sibErr != nil {
+				logWarn("failed to check for sibling main file", logger.Data{"error": sibErr.Error(), "dir": bookPath})
+			} else if hasSibling {
+				classifyAsSupplement = true
+			}
+		}
+	}
+
 	// Handle cover extraction. extractAndSaveCover also adopts a cover file
 	// that already sits next to the source file on disk, so we always call
 	// it — even when the parser returned no cover data for the source.
+	// Skipped for files we're about to create as supplements, matching the
+	// supplement-discovery code path further down (supplements don't get
+	// scanned-cover extraction).
 	var coverImagePath *string
 	var coverMimeType *string
 	var coverSource *string
 	var coverPage *int
 
-	coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata, opts.JobLog)
-	if err != nil {
-		logWarn("failed to extract cover", logger.Data{"error": err.Error()})
-	} else if coverFilename != "" {
-		coverImagePath = &coverFilename
-		if extractedMimeType != "" {
-			coverMimeType = &extractedMimeType
+	if !classifyAsSupplement {
+		coverFilename, extractedMimeType, wasPreExisting, err := w.extractAndSaveCover(ctx, path, bookPath, isRootLevelFile, metadata, opts.JobLog)
+		if err != nil {
+			logWarn("failed to extract cover", logger.Data{"error": err.Error()})
+		} else if coverFilename != "" {
+			coverImagePath = &coverFilename
+			if extractedMimeType != "" {
+				coverMimeType = &extractedMimeType
+			}
+			if wasPreExisting {
+				existingCoverSource := models.DataSourceExistingCover
+				coverSource = &existingCoverSource
+			} else {
+				cs := metadata.SourceForField("cover")
+				coverSource = &cs
+			}
 		}
-		if wasPreExisting {
-			existingCoverSource := models.DataSourceExistingCover
-			coverSource = &existingCoverSource
-		} else {
-			cs := metadata.SourceForField("cover")
-			coverSource = &cs
+		if metadata != nil && metadata.CoverPage != nil {
+			coverPage = metadata.CoverPage
 		}
-	}
-	if metadata != nil && metadata.CoverPage != nil {
-		coverPage = metadata.CoverPage
 	}
 
 	// Create file record
-	logInfo("creating file", logger.Data{"path": path, "filesize": size})
+	logInfo("creating file", logger.Data{"path": path, "filesize": size, "is_supplement": classifyAsSupplement})
+	fileRole := models.FileRoleMain
+	if classifyAsSupplement {
+		fileRole = models.FileRoleSupplement
+	}
 	file := &models.File{
 		LibraryID:          opts.LibraryID,
 		BookID:             book.ID,
 		Filepath:           path,
 		FileType:           fileType,
+		FileRole:           fileRole,
 		FilesizeBytes:      size,
 		FileModifiedAt:     &modTime,
 		CoverImageFilename: coverImagePath,

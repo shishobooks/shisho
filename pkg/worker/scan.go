@@ -131,6 +131,96 @@ func isShishoSpecialFile(filename string) bool {
 	return false
 }
 
+// looksLikePDFSupplement returns true if filename has a .pdf extension and its
+// basename (without extension, trimmed, lowercased) is an exact case-insensitive
+// match for any entry in names. Returns false when names is empty/nil.
+func looksLikePDFSupplement(filename string, names []string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	filename = filepath.Base(filename)
+	rawExt := filepath.Ext(filename)
+	if strings.ToLower(rawExt) != ".pdf" {
+		return false
+	}
+	basename := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(filename, rawExt)))
+	if basename == "" {
+		return false
+	}
+	for _, name := range names {
+		if strings.ToLower(strings.TrimSpace(name)) == basename {
+			return true
+		}
+	}
+	return false
+}
+
+// hasNonPDFMainSibling returns true if dir (recursive) contains at least one
+// file with a non-PDF main-eligible extension. Main-eligible means EPUB / CBZ /
+// M4B or any extension in pluginExts (which comes from
+// pluginManager.RegisteredFileExtensions() — keys are extensions without the
+// leading dot, lowercase). pluginExts may be nil. Hidden subdirectories
+// (e.g. .git, .calibre, .stversions) are skipped so a stray ebook inside an
+// app-state directory doesn't accidentally qualify as a sibling.
+func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, error) {
+	found := false
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			// Skip hidden directories so stray files inside app-state dirs
+			// (.git, .calibre, .stversions, etc.) don't qualify as siblings.
+			// The walk root itself may have a leading dot in odd setups, so
+			// only skip when we're not at the root.
+			if path != dir && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+		if ext == models.FileTypePDF {
+			return nil
+		}
+		switch ext {
+		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypeM4B:
+			found = true
+			return filepath.SkipAll
+		}
+		if pluginExts != nil {
+			if _, ok := pluginExts[ext]; ok {
+				found = true
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
+// partitionSupplementPDFsLast returns paths reordered so that PDFs whose
+// basename matches the supplement name list appear after every other path.
+// Order within each partition is preserved (stable). The input slice is not
+// mutated. When names is empty/nil, the input is returned unchanged.
+func partitionSupplementPDFsLast(paths []string, names []string) []string {
+	if len(names) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	var deferred []string
+	for _, p := range paths {
+		if looksLikePDFSupplement(filepath.Base(p), names) {
+			deferred = append(deferred, p)
+			continue
+		}
+		out = append(out, p)
+	}
+	return append(out, deferred...)
+}
+
 // matchesExcludePattern checks if filename matches any exclude pattern.
 func matchesExcludePattern(filename string, patterns []string) bool {
 	for _, pattern := range patterns {
@@ -364,6 +454,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 				return errors.WithStack(err)
 			}
 		}
+
+		// Defer supplement-named PDFs so non-supplement files in the same
+		// directory get processed first by the parallel worker pool. This
+		// makes the supplement classification ordering-independent in the
+		// common case where a sibling main file exists, even though the
+		// on-disk sibling check in scanFileCreateNew is the actual
+		// correctness mechanism.
+		filesToScan = partitionSupplementPDFsLast(filesToScan, w.config.PDFSupplementFilenames)
 
 		// Run input converters on discovered files
 		if w.pluginManager != nil {

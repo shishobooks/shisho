@@ -19,10 +19,14 @@ import (
 // SelectFile picks the file whose cover should represent a book based on the
 // library's preferred cover aspect ratio. It always falls back across types
 // when the preferred kind has no covers — a book-only library still gets a
-// cover for an audiobook-only book, and vice versa.
+// cover for an audiobook-only book, and vice versa. Supplements are excluded
+// from selection regardless of cover state — they don't represent the book.
 func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
+		if f.FileRole == models.FileRoleSupplement {
+			continue
+		}
 		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}

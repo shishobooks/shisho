@@ -91,6 +91,25 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 			expectedLanguage:  "",
 			expectedPublisher: "",
 		},
+		{
+			// Supplements are not the book — their language/publisher
+			// shouldn't populate the OPDS entry. Practical case: a PDF
+			// supplement carries no Language/Publisher today, but a future
+			// parser path could leak supplement metadata into the book entry.
+			name: "ignores supplement files when filling book metadata",
+			files: []*models.File{
+				{ID: 1, FileType: models.FileTypeM4B}, // main, no metadata
+				{
+					ID:        2,
+					FileType:  models.FileTypePDF,
+					FileRole:  models.FileRoleSupplement,
+					Language:  &english,
+					Publisher: &models.Publisher{Name: "Supplement Co"},
+				},
+			},
+			expectedLanguage:  "",
+			expectedPublisher: "",
+		},
 	}
 
 	svc := &Service{}

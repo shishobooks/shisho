@@ -285,3 +285,176 @@ func TestProcessScanJob_ScannableSupplementNotRescannedAsMain(t *testing.T) {
 	assert.True(t, os.IsNotExist(err),
 		"rescan should not extract a cover for an existing supplement PDF (cover file at %s)", coverPath)
 }
+
+// TestProcessScanJob_PDFNamedSupplementBecomesSupplement covers the core
+// scenario: a PDF named "Supplement.pdf" alongside a main EPUB in the same
+// directory must be classified as a supplement.
+func TestProcessScanJob_PDFNamedSupplementBecomesSupplement(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] My Book")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "My Book",
+		Authors: []string{"Author"},
+	})
+	testgen.GeneratePDF(t, bookDir, "Supplement.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	booksList := tc.listBooks()
+	require.Len(t, booksList, 1, "EPUB and supplement PDF should belong to one book")
+
+	files := tc.listFiles()
+	require.Len(t, files, 2)
+
+	var mainCount, suppCount int
+	for _, f := range files {
+		switch f.FileRole {
+		case models.FileRoleMain:
+			mainCount++
+			assert.Equal(t, "epub", f.FileType, "main file should be the EPUB")
+		case models.FileRoleSupplement:
+			suppCount++
+			assert.Equal(t, "pdf", f.FileType, "supplement should be the PDF")
+			assert.Equal(t, "Supplement.pdf", filepath.Base(f.Filepath))
+		}
+	}
+	assert.Equal(t, 1, mainCount)
+	assert.Equal(t, 1, suppCount)
+}
+
+// TestProcessScanJob_PDFAloneInDirStaysMain confirms the safety rule:
+// a directory containing only a supplement-named PDF must still import as
+// a main file so the book isn't silently dropped.
+func TestProcessScanJob_PDFAloneInDirStaysMain(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] PDF Only Book")
+	testgen.GeneratePDF(t, bookDir, "Supplement.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	require.Len(t, tc.listBooks(), 1)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	assert.Equal(t, models.FileRoleMain, files[0].FileRole, "lone supplement-named PDF should be main")
+	assert.Equal(t, "pdf", files[0].FileType)
+}
+
+// TestProcessScanJob_PDFCaseInsensitiveMatch confirms basename matching
+// ignores case for both the filename and the configured names.
+func TestProcessScanJob_PDFCaseInsensitiveMatch(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Casing Test")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{Title: "Casing Test"})
+	testgen.GeneratePDF(t, bookDir, "BONUS.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	require.Len(t, tc.listBooks(), 1)
+	files := tc.listFiles()
+	require.Len(t, files, 2)
+
+	for _, f := range files {
+		if f.FileType == "pdf" {
+			assert.Equal(t, models.FileRoleSupplement, f.FileRole)
+		}
+	}
+}
+
+// TestProcessScanJob_PDFSubstringDoesNotMatch confirms substring matches do
+// NOT trigger supplement classification — only exact basename matches.
+func TestProcessScanJob_PDFSubstringDoesNotMatch(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Substring Test")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{Title: "Substring Test"})
+	testgen.GeneratePDF(t, bookDir, "My Book - Supplement.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	// PDF basename "My Book - Supplement" is NOT an exact match for any list
+	// entry, so it stays main. Two main files end up on the same book (the
+	// existing scan flow merges files with the same bookPath into one book).
+	require.Len(t, tc.listBooks(), 1)
+	files := tc.listFiles()
+	require.Len(t, files, 2)
+	for _, f := range files {
+		assert.Equal(t, models.FileRoleMain, f.FileRole, "substring match should not classify as supplement")
+	}
+}
+
+// TestProcessScanJob_PDFEmptyConfigDisablesFeature confirms setting
+// PDFSupplementFilenames to an empty slice disables the auto-classification.
+func TestProcessScanJob_PDFEmptyConfigDisablesFeature(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	tc.worker.config.PDFSupplementFilenames = nil
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Disabled Test")
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{Title: "Disabled Test"})
+	testgen.GeneratePDF(t, bookDir, "Supplement.pdf", testgen.PDFOptions{})
+
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 2)
+	for _, f := range files {
+		assert.Equal(t, models.FileRoleMain, f.FileRole, "feature should be disabled when config is empty")
+	}
+}
+
+// TestProcessScanJob_PDFExistingMainNotReclassified confirms an existing
+// PDF main file whose name happens to match the supplement list is NOT
+// reclassified on rescan. The rule only applies at file creation.
+func TestProcessScanJob_PDFExistingMainNotReclassified(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// First scan: only the PDF exists, so it imports as main.
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Rescan Test")
+	testgen.GeneratePDF(t, bookDir, "Supplement.pdf", testgen.PDFOptions{})
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.Equal(t, models.FileRoleMain, files[0].FileRole)
+	mainID := files[0].ID
+
+	// Add an EPUB sibling and rescan.
+	testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{Title: "Rescan Test"})
+	require.NoError(t, tc.runScan())
+
+	afterFiles := tc.listFiles()
+	require.Len(t, afterFiles, 2)
+
+	for _, f := range afterFiles {
+		if f.ID == mainID {
+			assert.Equal(t, models.FileRoleMain, f.FileRole, "existing main PDF must not be reclassified on rescan")
+		}
+	}
+}

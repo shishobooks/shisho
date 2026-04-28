@@ -100,6 +100,12 @@ func newTestContext(t *testing.T) *testContext {
 	cfg := &config.Config{
 		WorkerProcesses:           1,
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
+		PDFSupplementFilenames: []string{
+			"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+			"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+			"appendix", "map", "maps", "insert", "guide", "reference",
+			"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+		},
 	}
 	w := &Worker{
 		config:             cfg,
@@ -316,6 +322,12 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	cfg := &config.Config{
 		WorkerProcesses:           1,
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
+		PDFSupplementFilenames: []string{
+			"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+			"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+			"appendix", "map", "maps", "insert", "guide", "reference",
+			"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+		},
 	}
 	w := &Worker{
 		config:             cfg,

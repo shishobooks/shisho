@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShouldUpdateScalar(t *testing.T) {
@@ -645,6 +648,46 @@ func TestShouldApplySidecarRelationship(t *testing.T) {
 	}
 }
 
+func TestLooksLikePDFSupplement(t *testing.T) {
+	t.Parallel()
+
+	defaultNames := []string{
+		"supplement", "supplemental", "bonus", "bonus material", "bonus content",
+		"companion", "notes", "liner notes", "errata", "booklet", "digital booklet",
+		"appendix", "map", "maps", "insert", "guide", "reference",
+		"cheat sheet", "cheatsheet", "cribsheet", "pamphlet", "extras",
+	}
+
+	tests := []struct {
+		name     string
+		filename string
+		names    []string
+		want     bool
+	}{
+		{name: "exact match lowercase", filename: "supplement.pdf", names: defaultNames, want: true},
+		{name: "exact match uppercase ext", filename: "Supplement.PDF", names: defaultNames, want: true},
+		{name: "all caps basename", filename: "BONUS MATERIAL.pdf", names: defaultNames, want: true},
+		{name: "trims surrounding whitespace", filename: "  supplement  .pdf", names: defaultNames, want: true},
+		{name: "multi-word entry matches", filename: "liner notes.pdf", names: defaultNames, want: true},
+		{name: "non-pdf extension does not match", filename: "supplement.txt", names: defaultNames, want: false},
+		{name: "substring does not match", filename: "my book - supplement.pdf", names: defaultNames, want: false},
+		{name: "unrelated name does not match", filename: "Companion Guide.pdf", names: defaultNames, want: false},
+		{name: "empty names list disables matching", filename: "supplement.pdf", names: []string{}, want: false},
+		{name: "nil names list disables matching", filename: "supplement.pdf", names: nil, want: false},
+		{name: "custom list overrides default", filename: "extra.pdf", names: []string{"extra"}, want: true},
+		{name: "no extension does not match", filename: "supplement", names: defaultNames, want: false},
+		{name: "trims whitespace in names list entry", filename: "supplement.pdf", names: []string{"  supplement  "}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := looksLikePDFSupplement(tt.filename, tt.names)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestIdentifierDiff_StableAcrossRescans locks in the fix for a regression
 // where each rescan of a book with hyphenated/prefixed/mixed-case identifiers
 // would thrash delete+insert because the stored (normalized) value and the
@@ -689,4 +732,180 @@ func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 	newKeysWithAddition := parsedIdentifierKeys(parsedWithAddition)
 	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
 	assert.True(t, got, "rescan must still detect a real addition even when the existing entries have cosmetic variants")
+}
+
+func TestHasNonPDFMainSibling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("epub sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "book.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("cbz sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "comic.cbz"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("m4b sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "audio.m4b"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("pdf-only directory has no sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "another.pdf"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("unrelated extension is not a sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "notes.txt"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("plugin-registered extension is a sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		writeFile(t, filepath.Join(dir, "book.azw3"))
+
+		// Plugin extensions are stored without leading dot, lowercase.
+		pluginExts := map[string]struct{}{"azw3": {}}
+		got, err := hasNonPDFMainSibling(dir, pluginExts)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("recursive sibling in subdirectory", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		sub := filepath.Join(dir, "extras")
+		require.NoError(t, os.MkdirAll(sub, 0o755))
+		writeFile(t, filepath.Join(sub, "book.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("empty directory has no sibling", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("missing directory returns error", func(t *testing.T) {
+		t.Parallel()
+		_, err := hasNonPDFMainSibling(filepath.Join(t.TempDir(), "does-not-exist"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("ignores files in hidden subdirectories", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "supplement.pdf"))
+		hidden := filepath.Join(dir, ".calibre")
+		require.NoError(t, os.MkdirAll(hidden, 0o755))
+		writeFile(t, filepath.Join(hidden, "leftover.epub"))
+
+		got, err := hasNonPDFMainSibling(dir, nil)
+		require.NoError(t, err)
+		assert.False(t, got, "files inside hidden subdirectories must not count as siblings")
+	})
+}
+
+// writeFile creates an empty file at path, failing the test on error.
+func writeFile(t *testing.T, path string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, []byte{}, 0o644))
+}
+
+func TestPartitionSupplementPDFsLast(t *testing.T) {
+	t.Parallel()
+
+	names := []string{"supplement", "bonus"}
+
+	// Mixed input — supplement-named PDFs interleaved with other files.
+	input := []string{
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/bonus.pdf",
+		"/lib/Other/audio.m4b",
+		"/lib/Other/notes.txt",
+	}
+
+	got := partitionSupplementPDFsLast(input, names)
+
+	// Non-supplement files must come first, in their original order.
+	expected := []string{
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/audio.m4b",
+		"/lib/Other/notes.txt",
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/Other/bonus.pdf",
+	}
+	assert.Equal(t, expected, got)
+}
+
+func TestPartitionSupplementPDFsLast_StableForNoMatches(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"a.epub", "b.epub", "c.cbz"}
+	got := partitionSupplementPDFsLast(input, []string{"supplement"})
+	assert.Equal(t, input, got)
+}
+
+func TestPartitionSupplementPDFsLast_EmptyNames(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"supplement.pdf", "book.epub"}
+	got := partitionSupplementPDFsLast(input, nil)
+	assert.Equal(t, input, got)
+}
+
+func TestPartitionSupplementPDFsLast_DoesNotMutateInput(t *testing.T) {
+	t.Parallel()
+
+	input := []string{
+		"/lib/[Author] Book/supplement.pdf",
+		"/lib/[Author] Book/book.epub",
+		"/lib/Other/bonus.pdf",
+	}
+	original := append([]string(nil), input...)
+
+	_ = partitionSupplementPDFsLast(input, []string{"supplement", "bonus"})
+
+	assert.Equal(t, original, input, "input slice must not be mutated by partition")
 }

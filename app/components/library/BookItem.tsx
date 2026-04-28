@@ -48,6 +48,7 @@ import {
 } from "@/types";
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { getPrimaryFileType } from "@/utils/primaryFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -64,63 +65,6 @@ interface BookItemProps {
   cacheKey?: number;
   gallerySize?: GallerySize;
 }
-
-// Selects the file that would be used for the cover based on cover_aspect_ratio setting
-// This mirrors the backend's selectCoverFile logic (requires cover_image_filename)
-const selectCoverFile = (
-  files: File[] | undefined,
-  coverAspectRatio: string,
-): File | null => {
-  if (!files) return null;
-
-  const bookFiles = files.filter(
-    (f) =>
-      (f.file_type === "epub" || f.file_type === "cbz") &&
-      f.cover_image_filename,
-  );
-  const audiobookFiles = files.filter(
-    (f) => f.file_type === "m4b" && f.cover_image_filename,
-  );
-
-  switch (coverAspectRatio) {
-    case "audiobook":
-    case "audiobook_fallback_book":
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
-      if (bookFiles.length > 0) return bookFiles[0];
-      break;
-    default: // "book", "book_fallback_audiobook"
-      if (bookFiles.length > 0) return bookFiles[0];
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
-  }
-  return null;
-};
-
-// Determines which file type would provide the cover based on library preference.
-// This mirrors the backend's selectCoverFile priority logic but doesn't require cover_image_filename.
-// Used for placeholder variant selection when there's no cover image.
-const getCoverFileType = (
-  files: File[] | undefined,
-  coverAspectRatio: string,
-): "book" | "audiobook" => {
-  if (!files || files.length === 0) return "book";
-
-  const hasBookFiles = files.some(
-    (f) => f.file_type === "epub" || f.file_type === "cbz",
-  );
-  const hasAudiobookFiles = files.some((f) => f.file_type === "m4b");
-
-  switch (coverAspectRatio) {
-    case "audiobook":
-    case "audiobook_fallback_book":
-      if (hasAudiobookFiles) return "audiobook";
-      if (hasBookFiles) return "book";
-      break;
-    default: // "book", "book_fallback_audiobook"
-      if (hasBookFiles) return "book";
-      if (hasAudiobookFiles) return "audiobook";
-  }
-  return "book";
-};
 
 const getAspectRatioClass = (
   coverAspectRatio: string,

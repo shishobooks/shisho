@@ -67,6 +67,23 @@ supplement_exclude_patterns:
 
 The `.*` pattern matches all hidden files (files starting with a dot). You can add additional patterns using glob syntax (e.g., `*.tmp`, `backup-*`).
 
+## PDF Auto-Classification
+
+Companion PDFs that share a directory with a main book file are sometimes named generically (`Supplement.pdf`, `Bonus Material.pdf`, etc.). To avoid manually demoting these every scan, Shisho automatically classifies a PDF as a supplement when:
+
+1. Its basename matches an entry in `pdf_supplement_filenames` (case-insensitive, exact match — substrings do not match), AND
+2. A sibling main file (`.epub`, `.cbz`, `.m4b`, or a [plugin-registered](./plugins/overview) file extension) exists in the same directory tree.
+
+A PDF alone in its directory always imports as a main file regardless of name, so books are never silently dropped.
+
+```
+[Author] My Book/
+├── My Book.epub          ← main file
+└── Supplement.pdf        ← classified as supplement (matches default list)
+```
+
+The check runs only at file creation. Existing main-file PDFs whose names happen to match the list are not retroactively reclassified. To change which names trigger classification, see the [`pdf_supplement_filenames` setting](./configuration#supplement-discovery).
+
 ## Working with Supplements
 
 Supplements appear on the book detail page alongside the main files. You can:

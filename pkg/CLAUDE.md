@@ -52,6 +52,12 @@ Each domain (books, jobs, libraries, chapters) has:
 - Preload via `ListAllFilesForLibrary`, not `ListFilesForLibrary` (which is still main-only, used for orphan cleanup).
 - `scanFileByPath` early-returns with `&ScanResult{File: existing}` when the cached file has `FileRole == FileRoleSupplement` — supplements have no metadata to rescan.
 
+### Auto-Classification of Supplement-Named PDFs
+
+`scanFileCreateNew` (in `pkg/worker/scan_unified.go`) inspects new PDF files for the auto-supplement rule before creating the file row: when a PDF's basename matches `config.PDFSupplementFilenames` AND a sibling main file (EPUB / CBZ / M4B / plugin-registered extension) exists on disk OR a book row already exists at the same `bookPath`, it's created with `FileRole=Supplement` and **cover extraction is skipped** (matching the existing supplement-discovery path that creates supplements without covers).
+
+When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if !classifyAsSupplement { ... }` guard. Rescans don't re-run this rule — existing main-file PDFs whose names match the list keep their role.
+
 ### File Types
 
 - To learn more about all the file types that we support, refer to:
