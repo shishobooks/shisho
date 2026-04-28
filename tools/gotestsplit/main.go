@@ -50,8 +50,3 @@ Usage:
   gotestsplit run -junit-dir=<dir> -total=N -index=I <pkg>... [-- go-test-args]
   gotestsplit -total=N -index=I <pkg>... [-- go-test-args]   # shortcut for "run"`)
 }
-
-// Stub — implemented in run.go.
-func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
-	return fmt.Errorf("run: not implemented")
-}
