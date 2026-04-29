@@ -16,6 +16,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
 
+// equalIntSets reports whether two int-keyed sets contain the same keys.
+func equalIntSets(a, b map[int]struct{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
 // Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
@@ -27,14 +40,25 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// can all contribute, then flush once at the end.
 	var fileColumns []string
 
+	// Track whether changes ran that would affect series_fts aggregate
+	// columns (book_titles / book_authors). When they did, the series
+	// block re-indexes the attached series even if its attachment to this
+	// book didn't change — otherwise the aggregate columns would go stale
+	// until something else triggered IndexSeries.
+	seriesAggregateMayBeStale := false
+
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" {
+		titleChanged := book.Title != title
 		book.Title = title
 		book.TitleSource = pluginSource
 		book.SortTitle = sortname.ForTitle(title)
 		book.SortTitleSource = pluginSource
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
+		if titleChanged {
+			seriesAggregateMayBeStale = true
+		}
 
 		// Mirror the identified title onto the target main file's Name so
 		// file organization and downloads reflect it. Supplements keep their
@@ -74,9 +98,20 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Authors
 	if len(md.Authors) > 0 && h.enrich.personFinder != nil {
+		// Capture the personIDs already attached as authors so we can skip
+		// re-indexing them when the apply re-attaches the same person.
+		// persons_fts has no aggregate columns, so re-indexing an unchanged
+		// person is pure DELETE+INSERT churn.
+		oldAuthorPersonIDs := make(map[int]struct{}, len(book.Authors))
+		for _, a := range book.Authors {
+			if a.Person != nil {
+				oldAuthorPersonIDs[a.Person.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete authors")
 		}
+		newAuthorPersonIDs := make(map[int]struct{}, len(md.Authors))
 		for i, pa := range md.Authors {
 			if pa.Name == "" {
 				continue
@@ -86,6 +121,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to find/create person", logger.Data{"name": pa.Name, "error": pErr.Error()})
 				continue
 			}
+			newAuthorPersonIDs[person.ID] = struct{}{}
 			var role *string
 			if pa.Role != "" {
 				role = &pa.Role
@@ -98,6 +134,18 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create author", logger.Data{"error": err.Error()})
 			}
+			if h.enrich.searchIndexer != nil {
+				if _, alreadyAttached := oldAuthorPersonIDs[person.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+						log.Warn("failed to update search index for author", logger.Data{"person_id": person.ID, "error": err.Error()})
+					}
+				}
+			}
+		}
+		// Same author set ⇒ no series_fts.book_authors drift, no need to
+		// mark the aggregate stale.
+		if !equalIntSets(oldAuthorPersonIDs, newAuthorPersonIDs) {
+			seriesAggregateMayBeStale = true
 		}
 		book.AuthorSource = pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {
@@ -107,6 +155,17 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Series
 	if md.Series != "" {
+		// Capture old series before delete so we can re-index any that get
+		// detached — their series_fts.book_titles / book_authors aggregate
+		// columns must stop listing this book. Holding the *models.Series
+		// pointers from book.BookSeries lets us re-index without an extra
+		// DB round-trip.
+		oldSeries := make(map[int]*models.Series, len(book.BookSeries))
+		for _, bs := range book.BookSeries {
+			if bs.Series != nil {
+				oldSeries[bs.Series.ID] = bs.Series
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete series")
 		}
@@ -122,11 +181,46 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 			}
+			// Re-index series whose attachment to this book actually
+			// changed: the new series (if it wasn't already attached,
+			// covering both newly-created series and freshly-attached
+			// existing series), and every old series that's no longer
+			// attached. Additionally re-index the still-attached series
+			// when book.title or book.authors changed during this apply
+			// — series_fts.book_titles / book_authors are aggregate
+			// columns that would otherwise go stale. Index after
+			// CreateBookSeries so the aggregate reflects the just-
+			// attached book.
+			if h.enrich.searchIndexer != nil {
+				_, stillAttached := oldSeries[seriesRecord.ID]
+				if !stillAttached || seriesAggregateMayBeStale {
+					if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
+						log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
+					}
+				}
+				for oldID, oldSer := range oldSeries {
+					if oldID == seriesRecord.ID {
+						continue
+					}
+					if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
+						log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
+					}
+				}
+			}
 		}
 	}
 
 	// Genres
 	if len(md.Genres) > 0 && h.enrich.genreFinder != nil {
+		// Same churn rationale as authors: genres_fts has no aggregate
+		// columns, so re-indexing a genre whose attachment to this book
+		// didn't change is wasted work.
+		oldGenreIDs := make(map[int]struct{}, len(book.BookGenres))
+		for _, bg := range book.BookGenres {
+			if bg.Genre != nil {
+				oldGenreIDs[bg.Genre.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete genres")
 		}
@@ -145,6 +239,13 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
 			}
+			if h.enrich.searchIndexer != nil {
+				if _, alreadyAttached := oldGenreIDs[genre.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexGenre(ctx, genre); err != nil {
+						log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+					}
+				}
+			}
 		}
 		book.GenreSource = &pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"genre_source"}); err != nil {
@@ -154,6 +255,12 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Tags
 	if len(md.Tags) > 0 && h.enrich.tagFinder != nil {
+		oldTagIDs := make(map[int]struct{}, len(book.BookTags))
+		for _, bt := range book.BookTags {
+			if bt.Tag != nil {
+				oldTagIDs[bt.Tag.ID] = struct{}{}
+			}
+		}
 		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete tags")
 		}
@@ -172,6 +279,13 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			}); err != nil {
 				log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
 			}
+			if h.enrich.searchIndexer != nil {
+				if _, alreadyAttached := oldTagIDs[tag.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexTag(ctx, tag); err != nil {
+						log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+					}
+				}
+			}
 		}
 		book.TagSource = &pluginSource
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"tag_source"}); err != nil {
@@ -181,6 +295,12 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Narrators (file-level, applied to target file)
 	if len(md.Narrators) > 0 && targetFile != nil && h.enrich.personFinder != nil {
+		oldNarratorPersonIDs := make(map[int]struct{}, len(targetFile.Narrators))
+		for _, n := range targetFile.Narrators {
+			if n.Person != nil {
+				oldNarratorPersonIDs[n.Person.ID] = struct{}{}
+			}
+		}
 		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
 			return errors.Wrap(err, "failed to delete narrators")
 		}
@@ -199,6 +319,13 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				SortOrder: i + 1,
 			}); err != nil {
 				log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
+			}
+			if h.enrich.searchIndexer != nil {
+				if _, alreadyAttached := oldNarratorPersonIDs[person.ID]; !alreadyAttached {
+					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
+						log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
+					}
+				}
 			}
 		}
 		targetFile.NarratorSource = &pluginSource

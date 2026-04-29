@@ -152,6 +152,54 @@ func TestMonitor_CreateOnlyBatch_NoSyncHashing(t *testing.T) {
 	assert.Len(t, pending, 1, "expected one pending hash generation job after create-only batch")
 }
 
+// TestMonitor_ProcessPendingEvents_IndexesNewRelations is a regression test
+// for the bug where a batch processed by the filesystem monitor created
+// series/persons rows from extracted file metadata but left their FTS
+// tables empty. The monitor's post-batch IndexBook loop only updated
+// books_fts; a full ProcessScanJob (which would have run RebuildAllIndexes)
+// is not triggered by monitor events, so the new entities stayed invisible
+// to series/people search dropdowns. The fix re-indexes each affected
+// book's loaded relations alongside IndexBook.
+func TestMonitor_ProcessPendingEvents_IndexesNewRelations(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	bookDir := testgen.CreateSubDir(t, libDir, "Author - Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Monitored Book",
+		Authors: []string{"Monitored Author"},
+		Series:  "Monitored Series",
+	})
+
+	m, libID := newTestMonitorWithWorker(tc, libDir)
+
+	injectMonitorEvent(m, epubPath, fsnotify.Create, libID, false)
+	m.processPendingEvents()
+
+	require.Len(t, tc.listFiles(), 1, "monitor should have created a file row")
+
+	type ftsCheck struct {
+		table string
+		match string
+	}
+	for _, c := range []ftsCheck{
+		{"series_fts", "Monitored Series"},
+		{"persons_fts", "Monitored Author"},
+	} {
+		var count int
+		err := tc.db.NewSelect().
+			TableExpr(c.table).
+			ColumnExpr("COUNT(*)").
+			Where("name = ?", c.match).
+			Scan(tc.ctx, &count)
+		require.NoError(t, err, "query %s for %q", c.table, c.match)
+		assert.Equal(t, 1, count, "%s must contain a row for %q after monitor batch, otherwise the entity is invisible to search-driven dropdowns", c.table, c.match)
+	}
+}
+
 // TestMonitor_PathStillExists_TreatAsCopy verifies that when a batch contains
 // a REMOVE and CREATE for different paths but both paths still exist on disk
 // (i.e. the "old" path was not actually removed — it's a copy), the monitor

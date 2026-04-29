@@ -78,9 +78,18 @@ type imprintFinder interface {
 	FindOrCreateImprint(ctx context.Context, name string, libraryID int) (*models.Imprint, error)
 }
 
-// searchIndexer updates the search index after metadata changes.
+// searchIndexer updates the search index after metadata changes. Each entity
+// type has its own FTS table (books_fts, series_fts, persons_fts, genres_fts,
+// tags_fts), and rows in those tables are populated only by explicit Index*
+// calls — they are NOT maintained by triggers on the underlying table. Any
+// entity created via the apply path must therefore be re-indexed here, or it
+// will be invisible to the search-driven dropdowns in the UI.
 type searchIndexer interface {
 	IndexBook(ctx context.Context, book *models.Book) error
+	IndexSeries(ctx context.Context, series *models.Series) error
+	IndexPerson(ctx context.Context, person *models.Person) error
+	IndexGenre(ctx context.Context, genre *models.Genre) error
+	IndexTag(ctx context.Context, tag *models.Tag) error
 }
 
 // pageExtractor renders a page from a page-based file (CBZ/PDF) and writes
