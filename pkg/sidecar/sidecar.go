@@ -242,6 +242,18 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 		}
 	}
 
+	for _, bg := range book.BookGenres {
+		if bg.Genre != nil {
+			s.Genres = append(s.Genres, bg.Genre.Name)
+		}
+	}
+
+	for _, bt := range book.BookTags {
+		if bt.Tag != nil {
+			s.Tags = append(s.Tags, bt.Tag.Name)
+		}
+	}
+
 	return s
 }
 

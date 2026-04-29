@@ -348,11 +348,12 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 
 ## File Retrieval and Relations
 
-**CRITICAL**: When calling `WriteFileSidecarFromModel()` or `ComputeFingerprint()`, the file MUST have all relations loaded:
+**CRITICAL**: When calling `WriteFileSidecarFromModel()`, `WriteBookSidecarFromModel()`, or `ComputeFingerprint()`, the model MUST have all relations loaded:
 
 | Function | Required Relations |
 |----------|-------------------|
 | `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Imprint, Chapters |
+| `WriteBookSidecarFromModel()` | Authors.Person, BookSeries.Series, BookGenres.Genre, BookTags.Tag |
 | `ComputeFingerprint()` | Narrators, Identifiers |
 
 **Use the right retrieval method:**
