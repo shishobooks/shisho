@@ -730,6 +730,7 @@ function ResultCoverThumbnail({
     (previewPageCount == null || coverPage < previewPageCount);
   if (
     !coverUrl &&
+    !imgError &&
     coverPageInRange &&
     previewFileId &&
     (previewFileType === "cbz" || previewFileType === "pdf")
