@@ -1190,6 +1190,12 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
+			// Genres are an unordered set; canonicalize both sides
+			// alphabetically so the order-sensitive comparison treats
+			// permutations as equal and avoids spurious updates.
+			sort.Strings(metadata.Genres)
+			sort.Strings(existingGenreNames)
+
 			genreSource := metadata.SourceForField("genres")
 			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
 				logInfo("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
@@ -1234,6 +1240,12 @@ func (w *Worker) scanFileCore(
 					existingGenreNames = append(existingGenreNames, bg.Genre.Name)
 				}
 			}
+
+			// Sidecar genres are written sorted by BookSidecarFromModel; sort
+			// the existing names too so the order-sensitive comparison sees
+			// identical slices when nothing has changed.
+			sort.Strings(bookSidecarData.Genres)
+			sort.Strings(existingGenreNames)
 
 			if shouldApplySidecarRelationship(bookSidecarData.Genres, existingGenreNames, existingGenreSource, forceRefresh) {
 				logInfo("updating genres from sidecar", logger.Data{"new_count": len(bookSidecarData.Genres), "old_count": len(book.BookGenres)})
@@ -1280,6 +1292,11 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
+			// Tags are an unordered set; canonicalize both sides
+			// alphabetically so the order-sensitive comparison is stable.
+			sort.Strings(metadata.Tags)
+			sort.Strings(existingTagNames)
+
 			tagSource := metadata.SourceForField("tags")
 			if shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
 				logInfo("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
@@ -1324,6 +1341,11 @@ func (w *Worker) scanFileCore(
 					existingTagNames = append(existingTagNames, bt.Tag.Name)
 				}
 			}
+
+			// Sidecar tags are written sorted; sort the existing names too so
+			// the order-sensitive comparison is stable.
+			sort.Strings(bookSidecarData.Tags)
+			sort.Strings(existingTagNames)
 
 			if shouldApplySidecarRelationship(bookSidecarData.Tags, existingTagNames, existingTagSource, forceRefresh) {
 				logInfo("updating tags from sidecar", logger.Data{"new_count": len(bookSidecarData.Tags), "old_count": len(book.BookTags)})

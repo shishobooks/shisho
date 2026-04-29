@@ -495,6 +495,57 @@ func TestWriteBookSidecarFromModel(t *testing.T) {
 	assert.Equal(t, "Jane Smith", readBack.Authors[0].Name)
 }
 
+func TestBookSidecarFromModel_GenresAndTagsSortedAlphabetically(t *testing.T) {
+	t.Parallel()
+	book := &models.Book{
+		Title: "Genres & Tags Book",
+		// Intentionally unsorted input — sidecar must canonicalize to
+		// alphabetical order so reads/writes round-trip stably.
+		BookGenres: []*models.BookGenre{
+			{Genre: &models.Genre{Name: "Fantasy"}},
+			{Genre: &models.Genre{Name: "Adventure"}},
+			{Genre: nil}, // missing relation must be skipped
+			{Genre: &models.Genre{Name: "Mystery"}},
+		},
+		BookTags: []*models.BookTag{
+			{Tag: &models.Tag{Name: "re-read"}},
+			{Tag: &models.Tag{Name: "favorite"}},
+			{Tag: nil},
+			{Tag: &models.Tag{Name: "abandoned"}},
+		},
+	}
+
+	s := BookSidecarFromModel(book)
+	require.NotNil(t, s)
+	assert.Equal(t, []string{"Adventure", "Fantasy", "Mystery"}, s.Genres)
+	assert.Equal(t, []string{"abandoned", "favorite", "re-read"}, s.Tags)
+}
+
+func TestWriteBookSidecarFromModel_RoundTripGenresAndTags(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	bookPath := filepath.Join(tmpDir, "round-trip.epub")
+
+	book := &models.Book{
+		Filepath: bookPath,
+		Title:    "Round Trip Book",
+		BookGenres: []*models.BookGenre{
+			{Genre: &models.Genre{Name: "Sci-Fi"}},
+		},
+		BookTags: []*models.BookTag{
+			{Tag: &models.Tag{Name: "queued"}},
+		},
+	}
+
+	require.NoError(t, WriteBookSidecarFromModel(book))
+
+	readBack, err := ReadBookSidecar(bookPath)
+	require.NoError(t, err)
+	require.NotNil(t, readBack)
+	assert.Equal(t, []string{"Sci-Fi"}, readBack.Genres)
+	assert.Equal(t, []string{"queued"}, readBack.Tags)
+}
+
 // Regression: scanFileCreateNew writes a synthetic organized-folder path
 // into book.Filepath for root-level files regardless of OrganizeFileStructure.
 // When OrganizeFileStructure=false, that synthetic directory never exists on

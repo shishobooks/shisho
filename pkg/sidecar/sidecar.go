@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -241,6 +242,24 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 			})
 		}
 	}
+
+	// Genres and tags are sets without an explicit sort order on the join
+	// rows, so canonicalize to alphabetical order. This keeps sidecar diffs
+	// stable across writes and lets the scanner round-trip compare against
+	// existing names without spurious "update from sidecar" thrash.
+	for _, bg := range book.BookGenres {
+		if bg.Genre != nil {
+			s.Genres = append(s.Genres, bg.Genre.Name)
+		}
+	}
+	sort.Strings(s.Genres)
+
+	for _, bt := range book.BookTags {
+		if bt.Tag != nil {
+			s.Tags = append(s.Tags, bt.Tag.Name)
+		}
+	}
+	sort.Strings(s.Tags)
 
 	return s
 }
