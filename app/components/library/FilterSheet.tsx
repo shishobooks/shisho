@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  ChevronsUpDown,
   Eye,
   File,
   Languages,
@@ -8,8 +9,12 @@ import {
   SquareCheckBig,
   Tags,
 } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 
+import {
+  FilterChip,
+  type FilterChipKind,
+} from "@/components/library/FilterChip";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -30,6 +35,11 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -57,6 +67,7 @@ interface FilterSheetProps {
   fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
   selectedGenreIds: number[];
+  selectedGenres: Genre[];
   genres: Genre[];
   genresLoading: boolean;
   genresError: boolean;
@@ -64,6 +75,7 @@ interface FilterSheetProps {
   onGenreSearchChange: (value: string) => void;
   onToggleGenre: (genreId: number) => void;
   selectedTagIds: number[];
+  selectedTags: Tag[];
   tags: Tag[];
   tagsLoading: boolean;
   tagsError: boolean;
@@ -108,11 +120,124 @@ const SectionHeader = ({
   </div>
 );
 
+interface FilterComboboxOption {
+  id: number;
+  name: string;
+  book_count: number;
+}
+
+const FilterCombobox = ({
+  chipKind,
+  selected,
+  options,
+  loading,
+  error,
+  errorText,
+  searchInput,
+  onSearchChange,
+  onToggle,
+  triggerLabel,
+  searchPlaceholder,
+  emptyText,
+}: {
+  chipKind: FilterChipKind;
+  selected: FilterComboboxOption[];
+  options: FilterComboboxOption[];
+  loading: boolean;
+  error: boolean;
+  errorText: string;
+  searchInput: string;
+  onSearchChange: (value: string) => void;
+  onToggle: (id: number) => void;
+  triggerLabel: string;
+  searchPlaceholder: string;
+  emptyText: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const selectedIds = new Set(selected.map((s) => s.id));
+
+  return (
+    <div className="space-y-2">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((item) => (
+            <FilterChip
+              key={item.id}
+              kind={chipKind}
+              label={item.name}
+              onRemove={() => onToggle(item.id)}
+            />
+          ))}
+        </div>
+      )}
+      <Popover modal onOpenChange={setOpen} open={open}>
+        <PopoverTrigger asChild>
+          <Button
+            aria-expanded={open}
+            className="w-full justify-between font-normal text-muted-foreground"
+            role="combobox"
+            variant="outline"
+          >
+            {triggerLabel}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[var(--radix-popover-trigger-width)] p-0"
+        >
+          <Command shouldFilter={false}>
+            <CommandInput
+              onValueChange={onSearchChange}
+              placeholder={searchPlaceholder}
+              value={searchInput}
+            />
+            <CommandList>
+              {loading ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  Loading...
+                </div>
+              ) : error ? (
+                <div className="py-6 text-center text-sm text-destructive">
+                  {errorText}
+                </div>
+              ) : options.length === 0 ? (
+                <CommandEmpty>{emptyText}</CommandEmpty>
+              ) : (
+                <CommandGroup>
+                  {options.map((opt) => (
+                    <CommandItem
+                      key={opt.id}
+                      onSelect={() => onToggle(opt.id)}
+                      value={opt.name}
+                    >
+                      {selectedIds.has(opt.id) ? (
+                        <SquareCheckBig className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Square className="mr-2 h-4 w-4" />
+                      )}
+                      {opt.name}
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {opt.book_count}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+};
+
 const FilterContent = ({
   selectedFileTypes,
   fileTypeOptions,
   onToggleFileType,
   selectedGenreIds,
+  selectedGenres,
   genres,
   genresLoading,
   genresError,
@@ -120,6 +245,7 @@ const FilterContent = ({
   onGenreSearchChange,
   onToggleGenre,
   selectedTagIds,
+  selectedTags,
   tags,
   tagsLoading,
   tagsError,
@@ -178,46 +304,20 @@ const FilterContent = ({
         icon={<Bookmark className="h-3 w-3" />}
         label="Genres"
       />
-      <Command shouldFilter={false}>
-        <CommandInput
-          onValueChange={onGenreSearchChange}
-          placeholder="Search genres..."
-          value={genreSearchInput}
-        />
-        <CommandList>
-          {genresLoading ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Loading...
-            </div>
-          ) : genresError ? (
-            <div className="py-6 text-center text-sm text-destructive">
-              Error loading genres
-            </div>
-          ) : genres.length === 0 ? (
-            <CommandEmpty>No genres found.</CommandEmpty>
-          ) : (
-            <CommandGroup>
-              {genres.map((genre: Genre) => (
-                <CommandItem
-                  key={genre.id}
-                  onSelect={() => onToggleGenre(genre.id)}
-                  value={genre.name}
-                >
-                  {selectedGenreIds.includes(genre.id) ? (
-                    <SquareCheckBig className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Square className="mr-2 h-4 w-4" />
-                  )}
-                  {genre.name}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {genre.book_count}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-        </CommandList>
-      </Command>
+      <FilterCombobox
+        chipKind="genre"
+        emptyText="No genres found."
+        error={genresError}
+        errorText="Error loading genres"
+        loading={genresLoading}
+        onSearchChange={onGenreSearchChange}
+        onToggle={onToggleGenre}
+        options={genres}
+        searchInput={genreSearchInput}
+        searchPlaceholder="Search genres..."
+        selected={selectedGenres}
+        triggerLabel="Add genres..."
+      />
     </div>
 
     {/* Tags */}
@@ -232,46 +332,20 @@ const FilterContent = ({
         icon={<Tags className="h-3 w-3" />}
         label="Tags"
       />
-      <Command shouldFilter={false}>
-        <CommandInput
-          onValueChange={onTagSearchChange}
-          placeholder="Search tags..."
-          value={tagSearchInput}
-        />
-        <CommandList>
-          {tagsLoading ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Loading...
-            </div>
-          ) : tagsError ? (
-            <div className="py-6 text-center text-sm text-destructive">
-              Error loading tags
-            </div>
-          ) : tags.length === 0 ? (
-            <CommandEmpty>No tags found.</CommandEmpty>
-          ) : (
-            <CommandGroup>
-              {tags.map((tag: Tag) => (
-                <CommandItem
-                  key={tag.id}
-                  onSelect={() => onToggleTag(tag.id)}
-                  value={tag.name}
-                >
-                  {selectedTagIds.includes(tag.id) ? (
-                    <SquareCheckBig className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Square className="mr-2 h-4 w-4" />
-                  )}
-                  {tag.name}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {tag.book_count}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-        </CommandList>
-      </Command>
+      <FilterCombobox
+        chipKind="tag"
+        emptyText="No tags found."
+        error={tagsError}
+        errorText="Error loading tags"
+        loading={tagsLoading}
+        onSearchChange={onTagSearchChange}
+        onToggle={onToggleTag}
+        options={tags}
+        searchInput={tagSearchInput}
+        searchPlaceholder="Search tags..."
+        selected={selectedTags}
+        triggerLabel="Add tags..."
+      />
     </div>
 
     {/* Language */}
