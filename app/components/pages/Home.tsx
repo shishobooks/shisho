@@ -578,7 +578,9 @@ const HomeContent = () => {
             reviewedFilter={reviewedFilterParam}
             selectedFileTypes={selectedFileTypes}
             selectedGenreIds={selectedGenreIds}
+            selectedGenres={selectedGenres}
             selectedTagIds={selectedTagIds}
+            selectedTags={selectedTags}
             tagSearchInput={tagSearchInput}
             tags={tags}
             tagsError={tagsQuery.isError}
