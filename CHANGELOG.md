@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-04-28
+
+### Features
+- Convert filter sheet genre/tags to combobox with shared chip (#175)
+- Auto-classify supplement-named PDFs on scan (#168)
+- Make author names clickable in gallery cards (#169)
+- Add dev-only quick admin button on setup page (#170)
+- Add Filter label to filter button (#167)
+
+### Bug Fixes
+- Hide identify cover picker when plugin cover_url is broken or still loading (#176)
+- Write genres and tags to book sidecar (#174)
+- Index series/persons/genres/tags after identify-apply, resync, and monitor batches (#173)
+- Promote root-level files into book folder during organize (#171)
+
+### CI/CD
+- Timing-aware Go test sharding (gotestsplit + 12 shards) (#172)
+
+
 ## [0.0.40] - 2026-04-26
 
 ### Features
