@@ -11,10 +11,7 @@ import {
 } from "lucide-react";
 import { forwardRef, useState } from "react";
 
-import {
-  FilterChip,
-  type FilterChipKind,
-} from "@/components/library/FilterChip";
+import { FilterChip } from "@/components/library/FilterChip";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -140,7 +137,7 @@ const FilterCombobox = ({
   searchPlaceholder,
   emptyText,
 }: {
-  chipKind: FilterChipKind;
+  chipKind: "genre" | "tag";
   selected: FilterComboboxOption[];
   options: FilterComboboxOption[];
   loading: boolean;

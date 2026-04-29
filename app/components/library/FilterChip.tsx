@@ -44,15 +44,17 @@ export const FilterChip = ({ kind, label, onRemove }: FilterChipProps) => {
   const { icon, color } = KIND_CONFIG[kind];
   return (
     <Badge
+      asChild
       className="cursor-pointer gap-1.5 max-w-full"
-      onClick={onRemove}
       variant="secondary"
     >
-      <span className={color}>{icon}</span>
-      <span className="truncate" title={label}>
-        {label}
-      </span>
-      <X className="h-3 w-3 text-muted-foreground shrink-0" />
+      <button aria-label={`Remove ${label}`} onClick={onRemove} type="button">
+        <span className={color}>{icon}</span>
+        <span className="truncate" title={label}>
+          {label}
+        </span>
+        <X className="h-3 w-3 text-muted-foreground shrink-0" />
+      </button>
     </Badge>
   );
 };
