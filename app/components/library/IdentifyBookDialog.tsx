@@ -416,53 +416,14 @@ export function IdentifyBookDialog({
                     >
                       <div className="flex gap-3">
                         {/* Cover thumbnail */}
-                        {(() => {
-                          const thumbClass = cn(
-                            "w-16 object-cover rounded shrink-0 bg-muted",
-                            isAudiobook ? "h-16" : "h-24",
-                          );
-                          if (result.cover_url) {
-                            return (
-                              <img
-                                alt=""
-                                className={thumbClass}
-                                src={result.cover_url}
-                              />
-                            );
-                          }
-                          const previewFileId =
-                            selectedFileId ?? selectedFile?.id;
-                          const previewPageCount = selectedFile?.page_count;
-                          const coverPageInRange =
-                            result.cover_page != null &&
-                            result.cover_page >= 0 &&
-                            (previewPageCount == null ||
-                              result.cover_page < previewPageCount);
-                          if (
-                            coverPageInRange &&
-                            previewFileId &&
-                            (selectedFileType === "cbz" ||
-                              selectedFileType === "pdf")
-                          ) {
-                            return (
-                              <img
-                                alt=""
-                                className={thumbClass}
-                                src={`/api/books/files/${previewFileId}/page/${result.cover_page}`}
-                              />
-                            );
-                          }
-                          return (
-                            <div
-                              className={cn(
-                                "w-16 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs",
-                                isAudiobook ? "h-16" : "h-24",
-                              )}
-                            >
-                              No cover
-                            </div>
-                          );
-                        })()}
+                        <ResultCoverThumbnail
+                          coverPage={result.cover_page}
+                          coverUrl={result.cover_url}
+                          isAudiobook={isAudiobook}
+                          previewFileId={selectedFileId ?? selectedFile?.id}
+                          previewFileType={selectedFileType}
+                          previewPageCount={selectedFile?.page_count}
+                        />
 
                         {/* Details */}
                         <div className="flex-1 min-w-0">
@@ -711,4 +672,76 @@ export function IdentifyBookDialog({
       </DialogContent>
     </FormDialog>
   );
+}
+
+/** Cover thumbnail for a single search result. Falls back to a "No cover"
+ * placeholder when the plugin's cover_url 404s/errors instead of rendering a
+ * broken-image icon. */
+function ResultCoverThumbnail({
+  coverUrl,
+  coverPage,
+  isAudiobook,
+  previewFileId,
+  previewFileType,
+  previewPageCount,
+}: {
+  coverUrl?: string;
+  coverPage?: number | null;
+  isAudiobook: boolean;
+  previewFileId?: number;
+  previewFileType?: string;
+  previewPageCount?: number | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  // Reset on URL change so a previous broken result doesn't latch the
+  // placeholder when results swap in.
+  useEffect(() => {
+    setImgError(false);
+  }, [coverUrl, coverPage, previewFileId]);
+
+  const thumbClass = cn(
+    "w-16 object-cover rounded shrink-0 bg-muted",
+    isAudiobook ? "h-16" : "h-24",
+  );
+  const placeholder = (
+    <div
+      className={cn(
+        "w-16 rounded shrink-0 bg-muted flex items-center justify-center text-muted-foreground text-xs",
+        isAudiobook ? "h-16" : "h-24",
+      )}
+    >
+      No cover
+    </div>
+  );
+
+  if (coverUrl && !imgError) {
+    return (
+      <img
+        alt=""
+        className={thumbClass}
+        onError={() => setImgError(true)}
+        src={coverUrl}
+      />
+    );
+  }
+  const coverPageInRange =
+    coverPage != null &&
+    coverPage >= 0 &&
+    (previewPageCount == null || coverPage < previewPageCount);
+  if (
+    !coverUrl &&
+    coverPageInRange &&
+    previewFileId &&
+    (previewFileType === "cbz" || previewFileType === "pdf")
+  ) {
+    return (
+      <img
+        alt=""
+        className={thumbClass}
+        onError={() => setImgError(true)}
+        src={`/api/books/files/${previewFileId}/page/${coverPage}`}
+      />
+    );
+  }
+  return placeholder;
 }
