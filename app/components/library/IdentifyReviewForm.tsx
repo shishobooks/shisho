@@ -161,22 +161,37 @@ function useImprintSearch(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Load natural dimensions of an image URL. */
+/** Load natural dimensions of an image URL.
+ *
+ * `dims` is non-null only on successful load (null while loading and on
+ * error). `settled` flips to true once the load attempt finishes (success or
+ * error), or immediately when there's no URL to load. Callers gate the cover
+ * picker on BOTH covers being settled so `defaultCoverSelection` is computed
+ * once and the selection ring doesn't flip after the picker mounts. */
 function useImageDimensions(src: string | undefined) {
-  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const [state, setState] = useState<{
+    dims: { w: number; h: number } | null;
+    settled: boolean;
+  }>(() => ({ dims: null, settled: !src }));
 
   useEffect(() => {
     if (!src) {
-      setDims(null);
+      setState({ dims: null, settled: true });
       return;
     }
+    setState({ dims: null, settled: false });
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
-      if (!cancelled) setDims({ w: img.naturalWidth, h: img.naturalHeight });
+      if (!cancelled) {
+        setState({
+          dims: { w: img.naturalWidth, h: img.naturalHeight },
+          settled: true,
+        });
+      }
     };
     img.onerror = () => {
-      if (!cancelled) setDims(null);
+      if (!cancelled) setState({ dims: null, settled: true });
     };
     img.src = src;
     return () => {
@@ -184,7 +199,7 @@ function useImageDimensions(src: string | undefined) {
     };
   }, [src]);
 
-  return dims;
+  return state;
 }
 
 /** Determine field status and default value for a scalar field. */
@@ -667,7 +682,6 @@ export function IdentifyReviewForm({
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`
     : undefined;
-  const hasCoverChoice = !!newCoverPreviewUrl;
   const currentCoverPage = file?.cover_page ?? null;
   // For page-based files with a plugin-supplied cover_page, compare by page
   // number instead of pixel resolution — the cover is a page of the file
@@ -675,12 +689,29 @@ export function IdentifyReviewForm({
   const isPageBasedCoverChoice = isFilePageBased && newCoverPage != null;
   // Dimensions only matter for the resolution-based comparison on non-page
   // formats. Skip the image preload entirely for page-based choices.
-  const currentCoverDims = useImageDimensions(
+  const currentCover = useImageDimensions(
     isPageBasedCoverChoice ? undefined : currentCoverUrl,
   );
-  const newCoverDims = useImageDimensions(
+  const newCover = useImageDimensions(
     isPageBasedCoverChoice ? undefined : newCoverPreviewUrl,
   );
+  const currentCoverDims = currentCover.dims;
+  const newCoverDims = newCover.dims;
+  // For URL-based covers, wait until BOTH load attempts have settled before
+  // showing the picker. Two reasons:
+  //  - The new cover must have loaded successfully (newCoverDims non-null), so
+  //    a broken plugin cover_url never renders or gets auto-selected — Apply
+  //    would otherwise POST the broken URL to the backend.
+  //  - The current cover load must be finished too, so the resolution-based
+  //    `preferCurrentCover` comparison is final at first render. Without this
+  //    gate, when `newCoverDims` lands first the picker mounts with the ring
+  //    on "new", then `currentCoverDims` arrives and flips the default to
+  //    "current", swapping the ring visibly.
+  // Page-based covers (CBZ/PDF cover_page) skip the dims preload, so gate
+  // them on the URL alone — the page endpoint is built locally.
+  const hasCoverChoice = isPageBasedCoverChoice
+    ? !!newCoverPreviewUrl
+    : !!newCoverDims && currentCover.settled;
   // Same page → unchanged (prefer current); different page → prefer new.
   // Requires `currentCoverUrl` so we don't default to a "Current" thumbnail
   // that isn't rendered (the current button is guarded by `currentCoverUrl`).
@@ -693,21 +724,22 @@ export function IdentifyReviewForm({
       currentCoverDims.w * currentCoverDims.h >=
         newCoverDims.w * newCoverDims.h;
   // The selection we'd land on if the user didn't touch anything. Used by
-  // useState init, the auto-select effect, and `hasChanges` — keeping it in
-  // one place avoids the three sites drifting.
+  // the derived `coverSelection` and `hasChanges` — keeping it in one place
+  // avoids drift.
   const defaultCoverSelection: "current" | "new" =
     hasCoverChoice && !isDisabled("cover") && !preferCurrentCover
       ? "new"
       : "current";
-  const [coverSelection, setCoverSelection] = useState<"current" | "new">(
-    defaultCoverSelection,
-  );
-  const [coverUserTouched, setCoverUserTouched] = useState(false);
-  useEffect(() => {
-    if (!coverUserTouched) {
-      setCoverSelection(defaultCoverSelection);
-    }
-  }, [defaultCoverSelection, coverUserTouched]);
+  // Derive `coverSelection` instead of mirroring `defaultCoverSelection` into
+  // state via an effect — that approach mounted the picker with stale state
+  // ("current" from initial render) and only flipped to the real default on
+  // the next tick, which the user saw as the selection ring switching after
+  // the covers popped in.
+  const [userCoverSelection, setUserCoverSelection] = useState<
+    "current" | "new" | null
+  >(null);
+  const coverSelection: "current" | "new" =
+    userCoverSelection ?? defaultCoverSelection;
 
   // ---- Unsaved changes tracking ----
   const hasChanges = useMemo(() => {
@@ -861,8 +893,7 @@ export function IdentifyReviewForm({
                 )}
                 disabled={isDisabled("cover")}
                 onClick={() => {
-                  setCoverSelection("current");
-                  setCoverUserTouched(true);
+                  setUserCoverSelection("current");
                 }}
                 type="button"
               >
@@ -890,8 +921,7 @@ export function IdentifyReviewForm({
               )}
               disabled={isDisabled("cover")}
               onClick={() => {
-                setCoverSelection("new");
-                setCoverUserTouched(true);
+                setUserCoverSelection("new");
               }}
               type="button"
             >

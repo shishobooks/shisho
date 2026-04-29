@@ -319,6 +319,65 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.fields.series_number).toBeUndefined();
   });
 
+  it("does not auto-select a broken plugin cover_url as the default cover", async () => {
+    // Simulate every Image() load failing — mirrors plugins returning a
+    // cover_url that 404s (e.g. a goodreads `nophoto` placeholder URL or a
+    // dead CDN link). With the bug, the form would default coverSelection to
+    // "new" and POST cover_url to the apply endpoint anyway.
+    const OriginalImage = globalThis.Image;
+    class FailingImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 0;
+      naturalHeight = 0;
+      _src = "";
+      get src() {
+        return this._src;
+      }
+      set src(v: string) {
+        this._src = v;
+        Promise.resolve().then(() => this.onerror?.());
+      }
+    }
+    // @ts-expect-error - jsdom Image stub
+    globalThis.Image = FailingImage;
+
+    try {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          files: [
+            makeFile({
+              file_type: FileTypeEPUB,
+              cover_image_filename: "book.cover.jpg",
+            }),
+          ],
+        }),
+        result: makeResult({
+          cover_url: "https://example.com/broken-cover.jpg",
+        }),
+      });
+
+      // Wait for the useImageDimensions effects to fire onerror and unmount
+      // the cover swap UI.
+      await waitFor(() => {
+        expect(screen.queryByAltText("New cover")).toBeNull();
+      });
+
+      await user.click(screen.getByRole("button", { name: /apply changes/i }));
+
+      await waitFor(() => {
+        expect(applyMock).toHaveBeenCalledTimes(1);
+      });
+
+      const payload = applyMock.mock.calls[0][0];
+      expect(payload.fields.cover_url).toBeUndefined();
+      expect(payload.fields.cover_page).toBeUndefined();
+    } finally {
+      globalThis.Image = OriginalImage;
+    }
+  });
+
   it("renders the publisher combobox with the pendingCreate dashed border for unmatched names", async () => {
     renderForm({
       result: makeResult({ publisher: "Brand New Publisher" }),
