@@ -406,3 +406,48 @@ func TestConvertFieldsToMetadata_SeriesNumberUnitMissing(t *testing.T) {
 
 	assert.Nil(t, md.SeriesNumberUnit)
 }
+
+func TestConvertFieldsToOverrides_NilWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	got := convertFieldsToOverrides(map[string]any{
+		"title": "Some Title",
+	})
+	require.Nil(t, got, "absence of file_name must yield nil overrides so callers can skip the explicit-write path")
+}
+
+func TestConvertFieldsToOverrides_NilWhenEmptyString(t *testing.T) {
+	t.Parallel()
+
+	got := convertFieldsToOverrides(map[string]any{
+		"file_name":        "",
+		"file_name_source": "",
+	})
+	require.Nil(t, got, "empty strings must be treated as absent — no overrides")
+}
+
+func TestConvertFieldsToOverrides_FileNameOnly(t *testing.T) {
+	t.Parallel()
+
+	got := convertFieldsToOverrides(map[string]any{
+		"file_name": "Harry Potter (Full-Cast Edition)",
+	})
+	require.NotNil(t, got)
+	require.NotNil(t, got.FileName)
+	assert.Equal(t, "Harry Potter (Full-Cast Edition)", *got.FileName)
+	assert.Nil(t, got.FileNameSource, "no source given — caller defaults to plugin source")
+}
+
+func TestConvertFieldsToOverrides_BothFields(t *testing.T) {
+	t.Parallel()
+
+	got := convertFieldsToOverrides(map[string]any{
+		"file_name":        "Custom Name",
+		"file_name_source": "manual",
+	})
+	require.NotNil(t, got)
+	require.NotNil(t, got.FileName)
+	assert.Equal(t, "Custom Name", *got.FileName)
+	require.NotNil(t, got.FileNameSource)
+	assert.Equal(t, "manual", *got.FileNameSource)
+}
