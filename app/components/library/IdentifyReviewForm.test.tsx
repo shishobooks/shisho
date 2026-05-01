@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterAll,
@@ -42,16 +42,11 @@ describe("resolveIdentifiers (incoming wins on type conflict)", () => {
 // Component-level tests
 // ---------------------------------------------------------------------------
 
-// Vite normally injects __APP_VERSION__; provide a stub so any code that
-// touches it under jsdom doesn't blow up.
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
   globalThis.__APP_VERSION__ = "test";
 });
 
-// Mock the apply mutation so we can inspect the payload without a real
-// network. usePluginIdentifierTypes returns the same shape the component
-// expects.
 const applyMock = vi.fn();
 vi.mock("@/hooks/queries/plugins", async () => {
   const actual = await vi.importActual<
@@ -67,9 +62,6 @@ vi.mock("@/hooks/queries/plugins", async () => {
   };
 });
 
-// Stub every entity-list hook with empty results. Spread the real module so
-// helper exports the auto-match hook depends on (QueryKey enums, types) keep
-// working.
 vi.mock("@/hooks/queries/people", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/queries/people")>(
     "@/hooks/queries/people",
@@ -143,8 +135,6 @@ vi.mock("@/hooks/queries/tags", async () => {
   };
 });
 
-// useAutoMatchEntities calls API.request directly via useQueries. Returning
-// empty lists means any incoming entity name is treated as pending creation.
 vi.mock("@/libraries/api", async () => {
   const actual =
     await vi.importActual<typeof import("@/libraries/api")>("@/libraries/api");
@@ -164,8 +154,6 @@ vi.mock("@/libraries/api", async () => {
   };
 });
 
-// Suppress Radix-internal act() warnings — same workaround used by
-// FileEditDialog.test.tsx.
 const originalConsoleError = console.error;
 beforeAll(() => {
   console.error = (...args: unknown[]) => {
@@ -182,8 +170,6 @@ afterAll(() => {
   console.error = originalConsoleError;
 });
 
-// Match FileEditDialog's userEvent setup so chained interactions don't stall
-// under fake timers.
 const createUser = () =>
   userEvent.setup({
     advanceTimers: vi.advanceTimersByTime,
@@ -264,6 +250,11 @@ function renderForm(
   return { ...view, onClose, onBack };
 }
 
+/** Helper to find the apply button regardless of count text. */
+function getApplyButton() {
+  return screen.getByRole("button", { name: /^Apply (\d+ )?changes?$/i });
+}
+
 describe("IdentifyReviewForm component", () => {
   beforeEach(() => {
     applyMock.mockReset();
@@ -276,8 +267,6 @@ describe("IdentifyReviewForm component", () => {
       result: makeResult({ narrators: ["Some Narrator"] }),
     });
 
-    // Even when the plugin proposes narrators, the field must stay hidden for
-    // formats that don't carry narrator metadata.
     expect(screen.queryByText("Narrators")).toBeNull();
   });
 
@@ -300,14 +289,12 @@ describe("IdentifyReviewForm component", () => {
       result: makeResult({ series: "Some Series", series_number: 1 }),
     });
 
-    // The clear button is rendered next to the series combobox when a value
-    // is set. Confirm it picked up the incoming series first.
     const clearButton = await screen.findByRole("button", {
       name: /clear series/i,
     });
     await user.click(clearButton);
 
-    await user.click(screen.getByRole("button", { name: /apply changes/i }));
+    await user.click(getApplyButton());
 
     await waitFor(() => {
       expect(applyMock).toHaveBeenCalledTimes(1);
@@ -315,15 +302,10 @@ describe("IdentifyReviewForm component", () => {
 
     const payload = applyMock.mock.calls[0][0];
     expect(payload.fields.series).toBe("");
-    // series_number is omitted when the input is empty (parseFloat fallback).
     expect(payload.fields.series_number).toBeUndefined();
   });
 
   it("does not auto-select a broken plugin cover_url as the default cover", async () => {
-    // Simulate every Image() load failing — mirrors plugins returning a
-    // cover_url that 404s (e.g. a goodreads `nophoto` placeholder URL or a
-    // dead CDN link). With the bug, the form would default coverSelection to
-    // "new" and POST cover_url to the apply endpoint anyway.
     const OriginalImage = globalThis.Image;
     class FailingImage {
       onload: (() => void) | null = null;
@@ -358,13 +340,11 @@ describe("IdentifyReviewForm component", () => {
         }),
       });
 
-      // Wait for the useImageDimensions effects to fire onerror and unmount
-      // the cover swap UI.
       await waitFor(() => {
         expect(screen.queryByAltText("New cover")).toBeNull();
       });
 
-      await user.click(screen.getByRole("button", { name: /apply changes/i }));
+      await user.click(getApplyButton());
 
       await waitFor(() => {
         expect(applyMock).toHaveBeenCalledTimes(1);
@@ -383,15 +363,212 @@ describe("IdentifyReviewForm component", () => {
       result: makeResult({ publisher: "Brand New Publisher" }),
     });
 
-    // EntityCombobox renders the value as the trigger label inside a span,
-    // so the button has no accessible name attribute we can target with
-    // getByRole. Find the button by its visible text content instead, then
-    // walk up to the actual <button role="combobox"> wrapper.
     await waitFor(() => {
       const label = screen.getByText("Brand New Publisher");
       const trigger = label.closest('button[role="combobox"]');
       expect(trigger).not.toBeNull();
       expect(trigger?.className).toContain("border-dashed");
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // New per-field decisions tests
+  // -------------------------------------------------------------------------
+
+  it("omits unchecked fields from the apply payload", async () => {
+    const user = createUser();
+    renderForm({
+      // Single-file book → primary, so book-changed defaults ON.
+      book: makeBook({
+        title: "Old Title",
+        // Authors are also "changed" because the result proposes a new author.
+      }),
+      result: makeResult({
+        title: "New Title",
+        authors: [{ name: "New Author" }],
+      }),
+    });
+
+    // Title checkbox should be checked by default (book-changed on primary).
+    const titleCheckbox = screen.getByRole("checkbox", {
+      name: /apply title/i,
+    });
+    expect(titleCheckbox).toHaveAttribute("data-state", "checked");
+
+    // Uncheck title.
+    await user.click(titleCheckbox);
+    expect(titleCheckbox).toHaveAttribute("data-state", "unchecked");
+
+    // Apply.
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    const payload = applyMock.mock.calls[0][0];
+    expect(payload.fields.title).toBeUndefined();
+    // Authors stays checked → still in the payload.
+    expect(payload.fields.authors).toEqual([{ name: "New Author" }]);
+  });
+
+  it("defaults book-changed fields OFF on a non-primary file", async () => {
+    const user = createUser();
+    // Two main files, primary is the OTHER one.
+    const file1 = makeFile({ id: 1, filepath: "/test/book1.epub" });
+    const file2 = makeFile({ id: 2, filepath: "/test/book2.epub" });
+    renderForm({
+      book: makeBook({
+        title: "Old Title",
+        primary_file_id: 1,
+        files: [file1, file2],
+      }),
+      fileId: 2, // identifying the non-primary file
+      result: makeResult({ title: "New Title" }),
+    });
+
+    // Book section is collapsed by default when nothing is selected; expand
+    // it so the title checkbox becomes visible.
+    await user.click(
+      screen.getByRole("button", { name: /toggle book section/i }),
+    );
+
+    const titleCheckbox = screen.getByRole("checkbox", {
+      name: /apply title/i,
+    });
+    expect(titleCheckbox).toHaveAttribute("data-state", "unchecked");
+  });
+
+  it("defaults book-changed fields ON when identifying the primary file", () => {
+    const file1 = makeFile({ id: 1, filepath: "/test/book1.epub" });
+    const file2 = makeFile({ id: 2, filepath: "/test/book2.epub" });
+    renderForm({
+      book: makeBook({
+        title: "Old Title",
+        primary_file_id: 1,
+        files: [file1, file2],
+      }),
+      fileId: 1,
+      result: makeResult({ title: "New Title" }),
+    });
+
+    const titleCheckbox = screen.getByRole("checkbox", {
+      name: /apply title/i,
+    });
+    expect(titleCheckbox).toHaveAttribute("data-state", "checked");
+  });
+
+  it("defaults file-level fields ON regardless of primary status", () => {
+    const file1 = makeFile({ id: 1 });
+    const file2 = makeFile({
+      id: 2,
+      filepath: "/test/book2.epub",
+      release_date: "2020-01-01T00:00:00Z",
+    });
+    renderForm({
+      book: makeBook({ primary_file_id: 1, files: [file1, file2] }),
+      fileId: 2, // non-primary
+      result: makeResult({ release_date: "2024-06-15" }),
+    });
+
+    const releaseDateCheckbox = screen.getByRole("checkbox", {
+      name: /apply release date/i,
+    });
+    expect(releaseDateCheckbox).toHaveAttribute("data-state", "checked");
+  });
+
+  it("section-level checkbox toggles all child rows", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({ title: "Old Title" }),
+      result: makeResult({
+        title: "New Title",
+        authors: [{ name: "New Author" }],
+        genres: ["Fantasy"],
+      }),
+    });
+
+    const sectionCheckbox = screen.getByRole("checkbox", {
+      name: /apply all book fields/i,
+    });
+    // Title/authors/genres default ON, but other book fields (subtitle,
+    // series, tags, description) are unchanged → off. Aggregate is
+    // indeterminate. Clicking indeterminate sets all to true.
+    expect(sectionCheckbox).toHaveAttribute("data-state", "indeterminate");
+    await user.click(sectionCheckbox);
+    expect(sectionCheckbox).toHaveAttribute("data-state", "checked");
+    expect(
+      screen.getByRole("checkbox", { name: /apply subtitle/i }),
+    ).toHaveAttribute("data-state", "checked");
+
+    // Clicking again sets all to false.
+    await user.click(sectionCheckbox);
+    expect(
+      screen.getByRole("checkbox", { name: /apply title/i }),
+    ).toHaveAttribute("data-state", "unchecked");
+    expect(
+      screen.getByRole("checkbox", { name: /apply authors/i }),
+    ).toHaveAttribute("data-state", "unchecked");
+    expect(
+      screen.getByRole("checkbox", { name: /apply genres/i }),
+    ).toHaveAttribute("data-state", "unchecked");
+  });
+
+  it("emits file_name and file_name_source when Name is checked", async () => {
+    const user = createUser();
+    renderForm({
+      result: makeResult({ title: "Plugin Title" }),
+    });
+
+    // Name field defaults ON (file-level) and value defaults to plugin's title.
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    const payload = applyMock.mock.calls[0][0];
+    expect(payload.file_name).toBe("Plugin Title");
+    expect(payload.file_name_source).toBe("plugin");
+  });
+
+  it("marks file_name_source as user when the Name field is edited", async () => {
+    const user = createUser();
+    renderForm({
+      result: makeResult({ title: "Plugin Title" }),
+    });
+
+    // Find the Name input. It's the only input under the row labeled "Name".
+    const nameLabel = screen.getByText("Name");
+    const nameRow = nameLabel.closest("div.grid");
+    expect(nameRow).not.toBeNull();
+    const nameInput = within(nameRow as HTMLElement).getByDisplayValue(
+      "Plugin Title",
+    );
+    await user.clear(nameInput);
+    await user.type(nameInput, "Edition Suffix");
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    const payload = applyMock.mock.calls[0][0];
+    expect(payload.file_name).toBe("Edition Suffix");
+    expect(payload.file_name_source).toBe("user");
+  });
+
+  it("Restore suggestions resets the form", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({ title: "Old Title" }),
+      result: makeResult({ title: "New Title" }),
+    });
+
+    // Uncheck title
+    const titleCheckbox = screen.getByRole("checkbox", {
+      name: /apply title/i,
+    });
+    await user.click(titleCheckbox);
+    expect(titleCheckbox).toHaveAttribute("data-state", "unchecked");
+
+    // Click Restore
+    await user.click(
+      screen.getByRole("button", { name: /restore suggestions/i }),
+    );
+
+    expect(titleCheckbox).toHaveAttribute("data-state", "checked");
   });
 });
