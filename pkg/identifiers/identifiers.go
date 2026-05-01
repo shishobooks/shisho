@@ -27,32 +27,33 @@ var (
 )
 
 // DetectType determines the identifier type from a value and optional scheme.
-// If scheme is provided, it takes precedence. Otherwise, pattern matching is used.
+// If the scheme is recognized, it takes precedence. Unknown or empty schemes
+// fall through to value-based pattern matching so we still pick up identifiers
+// emitted with vendor-specific scheme names (e.g. Calibre's "MOBI-ASIN", or
+// arbitrary publisher tags) when the value itself is unambiguous.
 func DetectType(value, scheme string) Type {
 	value = strings.TrimSpace(value)
 	scheme = strings.ToUpper(strings.TrimSpace(scheme))
 
-	// Check explicit scheme first
+	// Calibre and KindleGen emit ASINs under several scheme names: "ASIN",
+	// "MOBI-ASIN", and "AMAZON"/"AMAZON_<COUNTRY>" for storefront-scoped IDs.
+	// All carry the same B0XXXXXXXX format.
+	if scheme == "ASIN" || scheme == "MOBI-ASIN" || scheme == "AMAZON" || strings.HasPrefix(scheme, "AMAZON_") {
+		return TypeASIN
+	}
+
 	switch scheme {
 	case "ISBN":
 		return detectISBNType(value)
-	case "ASIN":
-		return TypeASIN
 	case "GOODREADS":
 		return TypeGoodreads
 	case "GOOGLE":
 		return TypeGoogle
 	case "UUID":
 		return TypeUUID
-	case "":
-		// No scheme, use pattern matching
-		break
-	default:
-		// Unknown scheme
-		return TypeUnknown
 	}
 
-	// Pattern matching on value
+	// Empty or unrecognized scheme: fall through to value-based pattern matching.
 	normalized := NormalizeISBN(value)
 	if len(normalized) == 13 && ValidateISBN13(normalized) {
 		return TypeISBN13

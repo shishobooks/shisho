@@ -23,6 +23,15 @@ func TestDetectType(t *testing.T) {
 		{"isbn13 hyphens with scheme", "978-0-316-76948-8", "ISBN", TypeISBN13},
 		// ASIN with scheme
 		{"asin with scheme", "B08N5WRWNW", "ASIN", TypeASIN},
+		// Calibre-style MOBI-ASIN scheme (used by KindleGen output and many converted EPUBs)
+		{"mobi-asin scheme", "B002MQYOFW", "MOBI-ASIN", TypeASIN},
+		// Amazon storefront schemes used by Calibre (amazon, amazon_de, amazon_uk, ...)
+		{"amazon scheme", "B08N5WRWNW", "AMAZON", TypeASIN},
+		{"amazon_de scheme", "B08N5WRWNW", "AMAZON_DE", TypeASIN},
+		// Unknown scheme but ASIN-shaped value should still be detected via pattern fallback
+		{"unknown scheme asin value", "B002MQYOFW", "SOMETHING-WEIRD", TypeASIN},
+		// Unknown scheme but valid ISBN-13 value should still be detected
+		{"unknown scheme isbn13 value", "9780316769488", "VENDOR-X", TypeISBN13},
 		// Goodreads with scheme
 		{"goodreads with scheme", "12345678", "GOODREADS", TypeGoodreads},
 		// Google with scheme
