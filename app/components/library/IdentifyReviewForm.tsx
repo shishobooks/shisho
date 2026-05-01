@@ -862,8 +862,9 @@ export function IdentifyReviewForm({
       );
     }
     hasCoverChoiceRef.current = hasCoverChoice;
-    // isDisabled depends on disabledFieldsRaw which is stable across renders
-    // for a given plugin result; intentionally omitted to avoid re-running.
+    // isDisabled is recreated each render; the closure captures its current
+    // value at effect commit, which is what we want. Intentionally omitted
+    // from deps to avoid re-running on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCoverChoice, fieldStatus.cover, isPrimaryFile, userCoverSelection]);
 
@@ -1549,10 +1550,9 @@ export function IdentifyReviewForm({
                         onClick={() => {
                           setUserCoverSelection("new");
                           // Picking "Use new" should apply the cover. Sync
-                          // the row checkbox to match.
-                          if (!isDisabled("cover")) {
-                            setDecision("cover", true);
-                          }
+                          // the row checkbox to match. setDecision is a
+                          // no-op when isDisabled, so no extra guard needed.
+                          setDecision("cover", true);
                         }}
                         type="button"
                       >
