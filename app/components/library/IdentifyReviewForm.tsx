@@ -360,8 +360,11 @@ function nameRowStatus(name: string, current: string[]): FieldStatus {
 }
 
 function findFile(book: Book, fileId?: number): File | undefined {
-  if (!fileId) return book.files?.[0];
-  return book.files?.find((f) => f.id === fileId);
+  if (fileId) return book.files?.find((f) => f.id === fileId);
+  // Fall back to the first MAIN file rather than the first file overall, so
+  // a book whose first file is a supplement doesn't surface supplement
+  // metadata (Name, narrators, identifiers) into the identify dialog.
+  return book.files?.find((f) => f.file_role === "main") ?? book.files?.[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -484,15 +487,19 @@ export function IdentifyReviewForm({
   };
 
   // The "primary file" gate for book-level changed-field defaults. A book
-  // with no explicit primary_file_id and a single file is treated as
+  // with no explicit primary_file_id and a single MAIN file is treated as
   // primary; this avoids surprising "nothing applies" defaults on freshly
-  // scanned single-file books.
+  // scanned single-file books. Supplements never count toward this — a
+  // book with one main + one supplement is still effectively single-main.
   const isPrimaryFile = useMemo(() => {
+    const mainCount = (book.files ?? []).filter(
+      (f) => f.file_role === "main",
+    ).length;
     if (book.primary_file_id == null) {
-      return (book.files?.length ?? 0) <= 1;
+      return mainCount <= 1;
     }
     return file?.id === book.primary_file_id;
-  }, [book.primary_file_id, book.files?.length, file?.id]);
+  }, [book.primary_file_id, book.files, file?.id]);
 
   // ---- Extract current values ----
   const currentAuthors: AuthorEntry[] = useMemo(
@@ -870,23 +877,33 @@ export function IdentifyReviewForm({
     [bookApplicableKeys, fileApplicableKeys],
   );
 
-  const bookSelectedCount = bookApplicableKeys.filter(
-    (k) => decisions[k],
-  ).length;
-  const fileSelectedCount = fileApplicableKeys.filter(
-    (k) => decisions[k],
-  ).length;
+  // A field "effectively applies" iff its checkbox is checked AND the apply
+  // would actually write something. The Cover row is the only special case:
+  // a checked Cover with "Keep current" selected is a no-op (submit only
+  // writes when coverSelection === "new"), so we exclude it from the
+  // selected count and section/global aggregations to avoid an inflated
+  // "Apply N changes" or "Updated N fields" toast.
+  const isEffectivelyApplied = (k: FieldKey): boolean => {
+    if (!decisions[k]) return false;
+    if (k === "cover" && coverSelection !== "new") return false;
+    return true;
+  };
+
+  const bookSelectedCount =
+    bookApplicableKeys.filter(isEffectivelyApplied).length;
+  const fileSelectedCount =
+    fileApplicableKeys.filter(isEffectivelyApplied).length;
   const totalSelected = bookSelectedCount + fileSelectedCount;
   const totalApplicable = allApplicableKeys.length;
 
   const bookCheckboxState = aggregateDecisions(
-    bookApplicableKeys.map((k) => decisions[k]),
+    bookApplicableKeys.map(isEffectivelyApplied),
   );
   const fileCheckboxState = aggregateDecisions(
-    fileApplicableKeys.map((k) => decisions[k]),
+    fileApplicableKeys.map(isEffectivelyApplied),
   );
   const globalCheckboxState = aggregateDecisions(
-    allApplicableKeys.map((k) => decisions[k]),
+    allApplicableKeys.map(isEffectivelyApplied),
   );
 
   // ---- Section collapse state (initial: collapsed iff selected count is 0) ----
@@ -1215,7 +1232,16 @@ export function IdentifyReviewForm({
                     onAppend={(next) => {
                       const n = "__create" in next ? next.__create : next.name;
                       if (!n.trim()) return;
-                      if (authors.some((a) => a.name === n)) return;
+                      // Case-insensitive duplicate check matches the
+                      // authorRowStatus / nameRowStatus comparisons elsewhere
+                      // in this form.
+                      if (
+                        authors.some(
+                          (a) => a.name.toLowerCase() === n.toLowerCase(),
+                        )
+                      ) {
+                        return;
+                      }
                       const role = isCbz ? AuthorRoleWriter : undefined;
                       setAuthors([...authors, { name: n, role }]);
                     }}
