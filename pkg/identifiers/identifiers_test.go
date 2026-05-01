@@ -23,8 +23,10 @@ func TestDetectType(t *testing.T) {
 		{"isbn13 hyphens with scheme", "978-0-316-76948-8", "ISBN", TypeISBN13},
 		// ASIN with scheme
 		{"asin with scheme", "B08N5WRWNW", "ASIN", TypeASIN},
-		// Calibre-style MOBI-ASIN scheme (used by KindleGen output and many converted EPUBs)
+		// Calibre-style MOBI-ASIN scheme, typically on EPUBs converted from MOBI/AZW3
 		{"mobi-asin scheme", "B002MQYOFW", "MOBI-ASIN", TypeASIN},
+		// Scheme matching is case-insensitive (lowercased input still resolves)
+		{"mobi-asin lowercase scheme", "B002MQYOFW", "mobi-asin", TypeASIN},
 		// Amazon storefront schemes used by Calibre (amazon, amazon_de, amazon_uk, ...)
 		{"amazon scheme", "B08N5WRWNW", "AMAZON", TypeASIN},
 		{"amazon_de scheme", "B08N5WRWNW", "AMAZON_DE", TypeASIN},
