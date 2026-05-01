@@ -1,8 +1,37 @@
+import type { Book, File } from "@/types";
+
 export type FieldStatus = "unchanged" | "changed" | "new";
 
 export interface IdentifierEntry {
   type: string;
   value: string;
+}
+
+/** Choose which file to identify when the dialog opens.
+ *
+ * Decision order, leveraging the existing `file.reviewed` flag computed by
+ * `pkg/books/review` against per-library required fields:
+ *
+ * 1. If some main files are reviewed and others aren't, prefer a non-reviewed
+ *    one (`reviewed !== true` covers both `false` and `undefined`).
+ * 2. Otherwise prefer the book's primary file if set.
+ * 3. Otherwise the first main file.
+ *
+ * Returns `undefined` when there are no main files. */
+export function pickInitialFile(book: Book): File | undefined {
+  const mains = (book.files ?? []).filter((f) => f.file_role === "main");
+  if (mains.length === 0) return undefined;
+  const hasReviewed = mains.some((f) => f.reviewed === true);
+  const hasNonReviewed = mains.some((f) => f.reviewed !== true);
+  if (hasReviewed && hasNonReviewed) {
+    const nonReviewed = mains.find((f) => f.reviewed !== true);
+    if (nonReviewed) return nonReviewed;
+  }
+  if (book.primary_file_id != null) {
+    const primary = mains.find((f) => f.id === book.primary_file_id);
+    if (primary) return primary;
+  }
+  return mains[0];
 }
 
 export interface SkippedPlugin {

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { Book, File } from "@/types";
+
 import {
   computeIdentifyEmptyState,
+  pickInitialFile,
   resolveIdentifiers,
 } from "./identify-utils";
 
@@ -226,5 +229,69 @@ describe("resolveIdentifiers", () => {
     const result = resolveIdentifiers(current, incoming);
     expect(result.status).toBe("unchanged");
     expect(result.value).toEqual(current);
+  });
+});
+
+describe("pickInitialFile", () => {
+  function file(id: number, opts: Partial<File> = {}): File {
+    return {
+      id,
+      file_role: "main",
+      ...opts,
+    } as File;
+  }
+
+  it("returns undefined when there are no main files", () => {
+    const result = pickInitialFile({
+      files: [file(1, { file_role: "supplement" })],
+      primary_file_id: undefined,
+    } as unknown as Book);
+    expect(result).toBeUndefined();
+  });
+
+  it("prefers a non-reviewed file when some are reviewed", () => {
+    const files = [
+      file(1, { reviewed: true }),
+      file(2, { reviewed: false }),
+      file(3, { reviewed: true }),
+    ];
+    expect(
+      pickInitialFile({ files, primary_file_id: 1 } as unknown as Book)?.id,
+    ).toBe(2);
+  });
+
+  it("treats reviewed=undefined as non-reviewed", () => {
+    const files = [
+      file(1, { reviewed: true }),
+      file(2),
+    ];
+    expect(
+      pickInitialFile({ files, primary_file_id: 1 } as unknown as Book)?.id,
+    ).toBe(2);
+  });
+
+  it("prefers primary when all reviewed equal", () => {
+    const files = [file(1), file(2), file(3)];
+    expect(
+      pickInitialFile({ files, primary_file_id: 2 } as unknown as Book)?.id,
+    ).toBe(2);
+  });
+
+  it("falls back to first when primary not set", () => {
+    const files = [
+      file(10, { reviewed: true }),
+      file(20, { reviewed: true }),
+    ];
+    expect(
+      pickInitialFile({ files, primary_file_id: undefined } as unknown as Book)
+        ?.id,
+    ).toBe(10);
+  });
+
+  it("falls back to first when primary id does not match any main file", () => {
+    const files = [file(1), file(2)];
+    expect(
+      pickInitialFile({ files, primary_file_id: 99 } as unknown as Book)?.id,
+    ).toBe(1);
   });
 });
