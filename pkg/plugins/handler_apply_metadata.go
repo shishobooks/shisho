@@ -76,7 +76,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)
-	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, log); err != nil {
+	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, nil, log); err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
 

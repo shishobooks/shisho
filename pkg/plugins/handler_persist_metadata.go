@@ -32,7 +32,7 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
 // Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
-func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, log logger.Logger) error {
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *applyOverrides, log logger.Logger) error {
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 
@@ -58,16 +58,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
 		if titleChanged {
 			seriesAggregateMayBeStale = true
-		}
-
-		// Mirror the identified title onto the target main file's Name so
-		// file organization and downloads reflect it. Supplements keep their
-		// own filename-based label.
-		if targetFile != nil && targetFile.FileRole == models.FileRoleMain {
-			titleCopy := title
-			targetFile.Name = &titleCopy
-			targetFile.NameSource = &pluginSource
-			fileColumns = append(fileColumns, "name", "name_source")
 		}
 	}
 
@@ -364,6 +354,24 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		targetFile.URL = &url
 		targetFile.URLSource = &pluginSource
 		fileColumns = append(fileColumns, "url", "url_source")
+	}
+
+	// Name (file-level, applied to target file). Only written when the
+	// caller explicitly opted in via overrides.FileName — replaces the
+	// pre-Phase-1 behavior that silently mirrored book.Title onto
+	// file.Name on every identify and clobbered user-set edition names.
+	if overrides != nil && overrides.FileName != nil && targetFile != nil {
+		nameCopy := *overrides.FileName
+		targetFile.Name = &nameCopy
+
+		nameSource := pluginSource
+		if overrides.FileNameSource != nil {
+			nameSource = *overrides.FileNameSource
+		}
+		nameSourceCopy := nameSource
+		targetFile.NameSource = &nameSourceCopy
+
+		fileColumns = append(fileColumns, "name", "name_source")
 	}
 
 	// Release date (file-level, applied to target file)
