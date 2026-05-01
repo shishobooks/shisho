@@ -48,11 +48,13 @@ Every field starts with one of three states:
 
 Default checkbox values:
 
-- **File-level fields, any state**: default ON.
+- **File-level fields, any state**: default ON. (Includes `file.Name` — same rule as everything else file-scoped. The user has the row visible and can uncheck if they want to keep a custom name like an edition suffix.)
 - **Book-level `new` fields**: default ON (no overwrite — there's nothing to lose).
 - **Book-level `changed` fields, primary file**: default ON (primary is the canonical file; identifying it should propagate to the book).
 - **Book-level `changed` fields, non-primary file**: default OFF (the "second-identify" case — don't overwrite shared book metadata from a non-canonical source).
 - **Unchanged fields**: default OFF.
+
+**Why book vs file scope drives defaults, not source attribution**: book-level scope rules use the file's primary status because book metadata is shared across all files of a book; non-primary identify shouldn't write through. File-level scope (including `file.Name`) doesn't have that sharing concern — each file has its own copy — so the user-friendly default is to apply the plugin's value and let the user uncheck or edit if they prefer otherwise.
 
 The `Restore suggestions` button (footer left) reverts every checkbox and field value to these defaults. Useful when a user has flipped many boxes and wants a clean slate without navigating away.
 
@@ -61,7 +63,7 @@ The `Restore suggestions` button (footer left) reverts every checkbox and field 
 Two sections: **Book** and **File**. Each is collapsible.
 
 - **Book section** ("applies to all files"): Title, Subtitle, Authors, Series, Genres, Tags, Description.
-- **File section** (file metadata shown inline in banner — see below): Cover, Narrators, Publisher, Imprint, Language, Release date, Identifiers, Abridged.
+- **File section** (file metadata shown inline in banner — see below): Cover, Name, Narrators, Publisher, Imprint, Language, Release date, Identifiers, Abridged.
 
 ### Section banner
 
@@ -115,6 +117,9 @@ Where `[checkbox]` is the per-field apply toggle. Status badge: `Changed` (prima
 
 - **Title**: plain text input. If the title contains a colon, show an "Extract subtitle" button inline with the "Currently:" reference (right-aligned, same baseline). Clicking it removes everything after the colon from the title and writes that text into the Subtitle field. Mirrors `BookEditDialog.tsx:526` behavior — reuse the same component.
 - **Subtitle**: plain text input.
+- **Name** (file.Name): plain text input. The proposed value defaults to the plugin's proposed title (plugins don't model `file.Name` separately). Standard file-level default-ON rule. Below the input, on the same baseline as "Currently:", a "Copy from book title" button appears whenever the Title field's current input value differs from the Name field's current input value — clicking it pastes Title into Name. Mirrors "Extract subtitle" under Title; same component family. Apply writes `file.NameSource = "plugin"` when the saved value matches the plugin's proposal, `"user"` when the user edited it.
+
+  This replaces the existing bug where `persistMetadata` always copied book title into `file.Name`. With Name surfaced as a real per-field decision, edition-specific names like "Harry Potter and the Sorcerer's Stone (Full-Cast Edition)" are preserved by the user simply unchecking the row, and the "Copy from book title" button gives a quick way to re-sync after editing Title.
 - **Authors**: composite list — drag handle + name + role dropdown + remove. Roles: Author / Translator / Editor / No role. Add row is a combobox-style typeahead (see below). Order is preserved.
 - **Narrators**: composite list — drag handle + name + remove. No role. Add row is a combobox typeahead.
 - **Series**: composite list — drag handle + name + number input (tabular-nums, ~50px wide) + unit dropdown (— / Volume / Chapter) + remove. Add row is a combobox typeahead.
@@ -232,15 +237,138 @@ Identify is one of several places these patterns surface. The implementation mus
 - **Permission gating** — identify currently sits behind plugin permissions; spec inherits that.
 - **Filter "Changed/All" toggle in selectbar** — count reflects total changes regardless of filter; filter only changes which rows render.
 
-## Implementation order (suggested)
+## Phases
 
-1. Backend: fix the `file.Name` clobber bug. `persistMetadata` no longer copies the new title into `file.Name`. Identify does not surface `file.Name` as a form field — users edit it via `FileEditDialog`. This eliminates the case where identifying a non-primary file's audiobook erases an edition-specific filename like "Harry Potter and the Sorcerer's Stone (Full-Cast Edition)".
-2. Frontend: shared primitives — checkbox with `mixed` state, combobox typeahead component, composite-row primitive, sticky-section-banner primitive.
-3. Port primitives into `BookEditDialog` / `FileEditDialog` first (cohesion). Verify no regressions.
-4. Build the new `IdentifyReviewForm` against the new primitives.
-5. Light visual refresh of the search step.
-6. Plain-text date input swap site-wide.
-7. End-to-end tests covering: first identify, second identify on primary, second identify on non-primary, restore suggestions, multi-file flow.
+This work is split into four phases. Each phase produces working,
+testable software that can ship on its own. Each phase will get its
+own implementation plan written via `superpowers:writing-plans`.
+
+### Phase 1 · Backend `file.Name` clobber fix
+
+**Goal:** Stop `persistMetadata` from silently overwriting
+`file.Name` with book.Title. The fix is forward-compatible — old
+frontend continues to work, new frontend (Phase 2) adds an explicit
+Name field.
+
+**Scope:**
+- `pkg/plugins/handler_persist_metadata.go`: remove the unconditional
+  copy of `title → file.Name`. Only write `file.Name` when the apply
+  payload explicitly includes it.
+- `pkg/plugins/handler_apply_metadata.go`: accept an explicit
+  `file.Name` (and `file.NameSource`) in the request payload.
+- Backend tests: verify silent overwrites no longer happen on a
+  non-primary file identify; verify explicit `file.Name` in the
+  payload still applies correctly with the right `NameSource`.
+
+**Ships independently:** Yes. Eliminates the regression even before
+any UI work. Old frontend stops corrupting `file.Name`.
+
+**Size:** Small (~1 day).
+
+**Depends on:** Nothing.
+
+---
+
+### Phase 2 · New identify dialog + shared primitives
+
+**Goal:** Implement the redesigned identify review dialog described
+in this spec. Builds the shared frontend primitives that Phase 3 will
+adopt elsewhere.
+
+**Scope:**
+- Shared primitives in `app/components/ui/` (or equivalent):
+  - **MixedCheckbox** — three-state (`false` / `true` / `mixed`),
+    with the hover-only-when-unchecked rule from the spec.
+  - **ComboboxTypeahead** — combobox-shaped input with caret, opens a
+    popover with `IN YOUR LIBRARY` matches (with `N books` usage
+    counts) + separator + `Create new {type} "..."` affordance.
+    Up/Down navigate, Enter commits, Esc closes. Used for genres,
+    tags, and as the inner input for composite rows.
+  - **CompositeRow** primitive — drag handle + name + slot for extras
+    (role select, number+unit, etc.) + remove. Add row uses
+    ComboboxTypeahead.
+  - **StickySection** — collapsible scope-section banner with
+    chevron, label, hint/file-meta slot, "X of Y selected" count, and
+    section-level MixedCheckbox. Manages collapse state and sticky
+    positioning.
+  - **DialogFrame** components — head with back arrow + title +
+    source pill, scrollable body, sticky footer with summary +
+    actions.
+- New `IdentifyReviewForm` using the primitives:
+  - Two-section layout (Book / File) with smart-default checkbox
+    state, Restore suggestions button, sticky select-all and section
+    banners, expandable Description "Currently:", Cover row with
+    file-type-aware button, Title with Extract subtitle, Name with
+    Copy from book title.
+  - Default file selection on dialog open uses `file.reviewed`
+    (prefer non-reviewed, then primary, then first).
+- Light visual refresh of the search step (step 1) using the new
+  `DialogFrame` so the two steps look unified. No structural change
+  to the result-picker grid.
+- Identify-apply payload updates: per-field decision flags for
+  applying or skipping each field; explicit `file.Name` and
+  `file.NameSource`; explicit `book.Source` markers for fields where
+  the user manually edited the value before applying.
+- Component tests for each new primitive; integration test for the
+  full dialog covering: first identify, second identify on primary,
+  second identify on non-primary, Restore suggestions, multi-file
+  default file selection.
+
+**Ships independently:** Yes. Edit dialogs continue using their
+existing implementations until Phase 3.
+
+**Size:** Large (~1–2 weeks).
+
+**Depends on:** Phase 1 (backend payload acceptance for explicit
+`file.Name`).
+
+---
+
+### Phase 3 · Port primitives into edit dialogs
+
+**Goal:** Cohesion. `BookEditDialog`, `FileEditDialog`, and the
+metadata-entity edit forms (Genres, Tags, People, Series) adopt the
+primitives built in Phase 2.
+
+**Scope:**
+- Replace existing `EntityCombobox` / `MultiSelectCombobox` /
+  `IdentifierEditor` add-affordances with `ComboboxTypeahead`.
+- Replace existing `SortableEntityList` with the shared
+  `CompositeRow`, or refactor `SortableEntityList`'s internals to
+  use it.
+- Update any other site-wide chip/composite-list usages (filter
+  pickers, etc.) to match.
+- Verify visual and behavioral parity — no functional regressions.
+
+**Ships independently:** Yes. Behavior stays the same; only the
+internals consolidate around shared primitives.
+
+**Size:** Medium (~3–5 days).
+
+**Depends on:** Phase 2 (primitives must exist).
+
+---
+
+### Phase 4 · Plain-text date input site-wide
+
+**Goal:** Replace `<DatePicker>` with a plain text input wherever
+release dates, publish dates, or other "could be old" dates appear.
+
+**Scope:**
+- `FileEditDialog.tsx`: swap `<DatePicker>` for plain text input on
+  release date.
+- Any other places that use `<DatePicker>` for old-date scenarios
+  (search/filter pickers if applicable).
+- Validation: keep whatever loose-format-allowed validation exists
+  today (or remove the calendar-required validator).
+- Update component tests.
+
+**Ships independently:** Yes. Could ship before, alongside, or after
+any other phase.
+
+**Size:** Small–medium (~1–2 days).
+
+**Depends on:** Nothing.
 
 ## Reference
 
