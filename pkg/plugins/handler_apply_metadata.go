@@ -69,9 +69,12 @@ func (h *handler) applyMetadata(c echo.Context) error {
 
 	// Build apply-path overrides from explicit top-level payload fields.
 	// Empty strings count as absent so callers don't accidentally write
-	// blank values into file.Name / file.NameSource.
+	// blank values into file.Name / file.NameSource. The gate is on
+	// FileName specifically — file_name_source on its own is a no-op
+	// (there's nothing to source) and would be wasted state if it
+	// triggered the persist-side write block.
 	var overrides *applyOverrides
-	if (payload.FileName != nil && *payload.FileName != "") || (payload.FileNameSource != nil && *payload.FileNameSource != "") {
+	if payload.FileName != nil && *payload.FileName != "" {
 		overrides = &applyOverrides{
 			FileName:       payload.FileName,
 			FileNameSource: payload.FileNameSource,

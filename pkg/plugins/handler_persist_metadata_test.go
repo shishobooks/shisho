@@ -855,3 +855,56 @@ func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
 
 	assert.NotContains(t, indexer.indexedPersonIDs, 1, "author whose attachment did not change must NOT be re-indexed (avoids persons_fts churn)")
 }
+
+// TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent locks in
+// the boundary invariant that an `applyOverrides` with an empty FileName does
+// not write through to file.Name, even when paired with a non-empty
+// FileNameSource. The applyMetadata wire layer already guards on
+// `payload.FileName != ""`, but persistMetadata is also reachable from
+// future internal callers (or hand-built test payloads), so the same shape
+// must be defended at the function boundary.
+func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	libraryDir := t.TempDir()
+	filePath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0600))
+
+	originalName := "Original Custom Name"
+	originalSource := "manual"
+	file := &models.File{
+		ID:         1,
+		BookID:     1,
+		Filepath:   filePath,
+		FileType:   models.FileTypeEPUB,
+		Name:       &originalName,
+		NameSource: &originalSource,
+	}
+	book := &models.Book{
+		ID:        1,
+		LibraryID: 1,
+		Filepath:  libraryDir,
+		Files:     []*models.File{file},
+	}
+
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore: &stubBookStoreForPersist{book: book},
+		},
+	}
+
+	emptyName := ""
+	manualSource := "manual"
+	overrides := &applyOverrides{
+		FileName:       &emptyName,
+		FileNameSource: &manualSource,
+	}
+
+	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "Original Custom Name", *file.Name, "file.Name must NOT be blanked by an empty-string FileName override")
+	require.NotNil(t, file.NameSource)
+	assert.Equal(t, "manual", *file.NameSource, "file.NameSource must NOT be replaced when FileName is empty (the override is treated as absent)")
+}

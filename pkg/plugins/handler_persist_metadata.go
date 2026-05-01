@@ -360,7 +360,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// caller explicitly opted in via overrides.FileName — replaces the
 	// pre-Phase-1 behavior that silently mirrored book.Title onto
 	// file.Name on every identify and clobbered user-set edition names.
-	if overrides != nil && overrides.FileName != nil && targetFile != nil {
+	// Empty-string FileName is treated as absent so a malformed payload
+	// can't blank out file.Name.
+	if overrides != nil && overrides.FileName != nil && *overrides.FileName != "" && targetFile != nil {
 		nameCopy := *overrides.FileName
 		targetFile.Name = &nameCopy
 
