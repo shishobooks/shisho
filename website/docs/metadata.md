@@ -103,7 +103,22 @@ Shisho automatically generates sort names from display names (e.g., "J.R.R. Tolk
 
 ### Identify Review
 
-When you identify a book against a metadata plugin, the review screen lets you edit every field — authors, narrators, series, publisher, imprint, genres, tags, identifiers — using the same combobox inputs as the regular edit forms, with autocomplete against your existing library entities. Names that already exist in your library show as plain chips; names that don't yet exist render with a dashed-outline indicator and will be created automatically when you apply the changes. Identifiers can be added, edited, and removed inline; release date uses a calendar picker. Per-field "New" / "Changed" / "Unchanged" badges show how the incoming match compares to what you already have.
+When you identify a book against a metadata plugin, the review screen splits the proposed metadata into two sections — **Book** (title, subtitle, authors, series, genres, tags, description) and **File** (cover, name, narrators, publisher, imprint, language, release date, URL, identifiers, abridged). Each row carries a checkbox: only the checked fields are written when you click Apply.
+
+**Smart defaults at open time** decide which boxes start checked, so most identifies are one click:
+
+- **File-level fields** default ON whenever there's something to apply. Each file owns its own copy, so applying the plugin's value can't trample shared metadata.
+- **Book-level _new_ fields** (the book has no value, plugin proposes one) default ON.
+- **Book-level _changed_ fields** (book and plugin disagree) default ON only when you're identifying the book's primary file. On a non-primary file (a "second-identify" against a different edition), they default OFF — the canonical book metadata stays put unless you opt in.
+- **Unchanged fields** (book and plugin already match) default OFF.
+
+A Book / File section banner sits sticky above each section with its own select-all checkbox and a live "X of Y selected" count. The global **Apply all** at the top of the body toggles every checkbox in the dialog.
+
+The **Name** row corresponds to `file.Name` — the file-level title used for downloads and on-disk organization. Its proposed value defaults to the plugin's title, but you can edit it (e.g. "Harry Potter and the Sorcerer's Stone (Full-Cast Edition)") and the user-edited value is preserved. A "Copy from book title" button under the Name input quickly resyncs to whatever you've typed into Title above.
+
+When you've flipped many boxes and want to start over, **Restore suggestions** in the footer reverts every checkbox and edited value back to the smart defaults without leaving the dialog.
+
+Within each row, names that already exist in your library show as plain chips; names that don't yet exist render with a dashed-outline indicator and will be created automatically when you apply. Identifiers can be added, edited, and removed inline. Per-field "New" / "Changed" badges show how the incoming match compares to what you already have, and "Currently:" shows the existing value beside the input for easy reference.
 
 ## How Metadata Is Extracted
 
