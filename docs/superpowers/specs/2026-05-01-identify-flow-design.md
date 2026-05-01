@@ -243,7 +243,7 @@ This work is split into four phases. Each phase produces working,
 testable software that can ship on its own. Each phase will get its
 own implementation plan written via `superpowers:writing-plans`.
 
-### Phase 1 · Backend `file.Name` clobber fix
+### Phase 1 · Backend `file.Name` clobber fix ✅ shipped
 
 **Goal:** Stop `persistMetadata` from silently overwriting
 `file.Name` with book.Title. The fix is forward-compatible — old
