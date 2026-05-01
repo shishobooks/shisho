@@ -1,0 +1,2794 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Identify · Mockup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ============================================================
+         Tokens — Shisho dark mode
+         ============================================================ */
+      :root {
+        --radius: 0.625rem;
+        --radius-sm: 0.375rem;
+        --radius-lg: 0.875rem;
+
+        --bg: oklch(0.18 0 0);
+        --bg-elevated: oklch(0.205 0 0);
+        --card: oklch(0.22 0 0);
+        --card-2: oklch(0.245 0 0);
+        --fg: oklch(0.985 0 0);
+        --fg-2: oklch(0.92 0 0);
+        --fg-soft: oklch(0.85 0 0);
+        --muted: oklch(0.25 0 0);
+        --muted-fg: oklch(0.708 0 0);
+        --muted-fg-2: oklch(0.55 0 0);
+        --border: oklch(1 0 0 / 0.08);
+        --border-strong: oklch(1 0 0 / 0.14);
+        --input: oklch(1 0 0 / 0.06);
+        --input-focus: oklch(1 0 0 / 0.1);
+        --primary: oklch(0.8 0.15 280);
+        --primary-soft: oklch(0.8 0.15 280 / 0.16);
+        --primary-fg: oklch(0.16 0.02 280);
+        --success: oklch(0.78 0.16 152);
+        --success-soft: oklch(0.78 0.16 152 / 0.14);
+        --warning: oklch(0.82 0.13 90);
+        --danger: oklch(0.7 0.18 22);
+        --danger-soft: oklch(0.7 0.18 22 / 0.14);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          "Geist", "Noto Sans", ui-sans-serif, system-ui, -apple-system,
+          sans-serif;
+        font-feature-settings: "ss01", "cv11";
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        min-height: 100vh;
+        background-image:
+          radial-gradient(
+            ellipse 70% 35% at 50% -10%,
+            oklch(0.8 0.15 280 / 0.05),
+            transparent 70%
+          );
+      }
+
+      .stage {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 56px 24px 80px;
+      }
+
+      .panel__head {
+        margin-bottom: 28px;
+      }
+      .panel__eyebrow {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted-fg-2);
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .panel__title {
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        line-height: 1.15;
+        margin: 0 0 8px;
+      }
+      .panel__desc {
+        font-size: 14px;
+        color: var(--muted-fg);
+        line-height: 1.55;
+        max-width: 60ch;
+        margin: 0;
+      }
+
+      /* ============================================================
+         Dialog frame
+         ============================================================ */
+      .dialog-frame {
+        position: relative;
+        width: 100%;
+        max-width: 768px;
+        margin: 0 auto;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow:
+          0 1px 0 oklch(1 0 0 / 0.04) inset,
+          0 32px 80px -32px oklch(0 0 0 / 0.7);
+      }
+      .dialog-frame__head {
+        padding: 16px 22px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(
+          180deg,
+          oklch(0.245 0 0),
+          oklch(0.225 0 0)
+        );
+      }
+      .dialog-frame__heading {
+        flex: 1;
+        min-width: 0;
+      }
+      .dialog-frame__title {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.005em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dialog-frame__sub {
+        margin-top: 2px;
+        font-size: 11.5px;
+        color: var(--muted-fg);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dialog-frame__sub .dot {
+        opacity: 0.5;
+      }
+      .dialog-frame__source {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        background: var(--primary-soft);
+        border: 1px solid oklch(0.8 0.15 280 / 0.3);
+        color: var(--primary);
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        flex-shrink: 0;
+      }
+      .dialog-frame__source__pulse {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--primary);
+        box-shadow: 0 0 8px var(--primary);
+      }
+      .dialog-frame__back {
+        all: unset;
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        border-radius: 5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted-fg);
+        flex-shrink: 0;
+        transition:
+          background 120ms,
+          color 120ms;
+      }
+      .dialog-frame__back:hover {
+        background: oklch(1 0 0 / 0.06);
+        color: var(--fg);
+      }
+      .dialog-frame__back svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .dialog-frame__body {
+        max-height: 70vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: oklch(1 0 0 / 0.18) transparent;
+      }
+      .dialog-frame__body::-webkit-scrollbar {
+        width: 8px;
+      }
+      .dialog-frame__body::-webkit-scrollbar-thumb {
+        background: oklch(1 0 0 / 0.14);
+        border-radius: 4px;
+      }
+      .dialog-frame__body::-webkit-scrollbar-thumb:hover {
+        background: oklch(1 0 0 / 0.22);
+      }
+
+      /* ============================================================
+         File switcher (which file are we identifying)
+         FIX: nowrap, proper alignment, smaller & tighter
+         ============================================================ */
+      .file-switcher {
+        padding: 10px 22px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: oklch(0.205 0 0);
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .file-switcher__label {
+        color: var(--muted-fg);
+        flex-shrink: 0;
+      }
+      /* On the review step, the file switcher is read-only — it just
+         shows which file is being identified. The dropdown lives only on
+         the search step (where switching files re-runs the search). */
+      .file-switcher__pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        background: var(--card-2);
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      /* File-type label inside the pill — no border (avoids the
+         "double-card" look). Uppercase, slightly muted, with a thin
+         vertical separator between it and the file name. */
+      .file-switcher__pill__icon {
+        display: inline-flex;
+        align-items: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted-fg);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        flex-shrink: 0;
+        line-height: 1;
+        padding-right: 8px;
+        margin-right: 2px;
+        border-right: 1px solid var(--border);
+      }
+      .file-switcher__pill__name {
+        white-space: nowrap;
+      }
+      .file-switcher__pill__caret {
+        opacity: 0.5;
+        flex-shrink: 0;
+      }
+      .file-switcher__hint {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted-fg-2);
+        white-space: nowrap;
+      }
+
+      /* ============================================================
+         Select-all bar — sticky at top of scroll body.
+         ============================================================ */
+      .selectbar {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding: 10px 22px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: oklch(0.2 0 0);
+        border-bottom: 1px solid var(--border);
+        font-size: 12.5px;
+      }
+      .selectbar__label {
+        font-weight: 500;
+        color: var(--fg-2);
+      }
+      .selectbar__count {
+        color: var(--muted-fg);
+      }
+      .selectbar__count strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .selectbar__spacer {
+        flex: 1;
+      }
+      .selectbar__filter {
+        display: flex;
+        gap: 4px;
+        padding: 2px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+      }
+      .selectbar__filter__btn {
+        all: unset;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 4px 9px;
+        border-radius: 5px;
+        color: var(--muted-fg);
+      }
+      .selectbar__filter__btn[aria-pressed="true"] {
+        background: var(--card-2);
+        color: var(--fg);
+      }
+
+      /* ============================================================
+         Section — collapsible. Banner is the toggle.
+         Chevron sits in the same column as field-row checkboxes (24px),
+         so the section label aligns with field labels at column 2.
+         ============================================================ */
+      .section[data-state="collapsed"] .section-rows {
+        display: none;
+      }
+      .section[data-state="collapsed"] .section-banner {
+        border-bottom: 1px solid var(--border);
+      }
+      .section-banner {
+        position: sticky;
+        top: 49px; /* selectbar height: 28px content + 10px*2 padding + 1px border */
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) auto auto;
+        column-gap: 14px;
+        align-items: center;
+        padding: 13px 22px;
+        background: oklch(0.205 0 0);
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        user-select: none;
+        transition: background 120ms;
+      }
+      .section-banner:hover {
+        background: oklch(0.225 0 0);
+      }
+      .section-banner__chevron {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted-fg);
+        transition: transform 200ms ease;
+      }
+      .section[data-state="collapsed"] .section-banner__chevron {
+        transform: rotate(-90deg);
+      }
+      .section-banner__chevron svg {
+        width: 11px;
+        height: 11px;
+      }
+      .section-banner__inner {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 0;
+      }
+      .section-banner__label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--fg-2);
+      }
+      .section-banner__hint {
+        font-size: 11.5px;
+        color: var(--muted-fg);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .section-banner__file-meta {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--muted-fg);
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .section-banner__file-type {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--muted-fg);
+        text-transform: uppercase;
+      }
+      .section-banner__file-name {
+        color: var(--fg-soft);
+        font-weight: 500;
+      }
+      .section-banner__sep {
+        opacity: 0.45;
+      }
+      .section-banner__count {
+        font-size: 11.5px;
+        color: var(--muted-fg);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .section-banner__count strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+
+      /* ============================================================
+         Field row
+         ============================================================ */
+      .row {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        column-gap: 14px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border);
+        align-items: start;
+      }
+      .row:last-child {
+        border-bottom: none;
+      }
+      .row[data-state="unchanged"] {
+        opacity: 0.55;
+      }
+      .row[data-state="unchanged"]:hover {
+        opacity: 1;
+      }
+      .row--hero {
+        padding: 22px;
+        background: linear-gradient(
+          180deg,
+          oklch(0.225 0 0),
+          oklch(0.215 0 0)
+        );
+      }
+
+      .check {
+        all: unset;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+        border: 1.5px solid var(--border-strong);
+        border-radius: 5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: oklch(1 0 0 / 0.02);
+        transition:
+          background 120ms,
+          border-color 120ms,
+          box-shadow 120ms;
+      }
+      /* Only the unchecked-empty state gets the soft "you can click me" hover. */
+      .check:hover:not([disabled]):not([aria-checked="true"]):not([aria-checked="mixed"]) {
+        border-color: oklch(1 0 0 / 0.32);
+        background: oklch(1 0 0 / 0.05);
+      }
+      .check[aria-checked="true"],
+      .check[aria-checked="mixed"] {
+        background: var(--primary);
+        border-color: var(--primary);
+      }
+      .check[aria-checked="true"]:hover:not([disabled]),
+      .check[aria-checked="mixed"]:hover:not([disabled]) {
+        background: oklch(0.85 0.15 280);
+        border-color: oklch(0.85 0.15 280);
+      }
+      .check[aria-checked="true"]::after {
+        content: "";
+        width: 4.5px;
+        height: 9px;
+        border: solid var(--primary-fg);
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg) translate(-1px, -1px);
+      }
+      /* Indeterminate / mixed state — horizontal bar, used by section
+         and global "select all" toggles when some-but-not-all rows checked. */
+      .check[aria-checked="mixed"]::after {
+        content: "";
+        width: 9px;
+        height: 2px;
+        background: var(--primary-fg);
+        border: 0;
+        border-radius: 1px;
+        transform: none;
+      }
+      .check[disabled] {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+
+      .row__body {
+        min-width: 0;
+      }
+      .row__head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 20px;
+        margin-bottom: 9px;
+      }
+      .row__label {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.4;
+        letter-spacing: 0.005em;
+      }
+      /* small scope tag (used on hero cover row only since cover sits above sections) */
+      .row__scope {
+        display: inline-flex;
+        align-items: center;
+        height: 18px;
+        padding: 0 7px;
+        border-radius: 4px;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted-fg);
+        border: 1px solid var(--border);
+        margin-left: auto;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 18px;
+        padding: 0 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        line-height: 1;
+      }
+      .badge--changed {
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+      .badge--new {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+      .badge--unchanged {
+        background: oklch(1 0 0 / 0.05);
+        color: var(--muted-fg);
+      }
+
+      /* ============================================================
+         Inputs
+         ============================================================ */
+      .input,
+      .textarea,
+      .select {
+        all: unset;
+        box-sizing: border-box;
+        display: block;
+        width: 100%;
+        background: var(--input);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 9px 12px;
+        font: inherit;
+        font-size: 13.5px;
+        color: var(--fg);
+        line-height: 1.4;
+        transition:
+          background 120ms,
+          border-color 120ms,
+          box-shadow 120ms;
+      }
+      .input:focus-visible,
+      .textarea:focus-visible,
+      .select:focus-visible {
+        background: var(--input-focus);
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px oklch(0.8 0.15 280 / 0.2);
+      }
+      .textarea {
+        min-height: 88px;
+        resize: vertical;
+        line-height: 1.55;
+      }
+      .select {
+        cursor: pointer;
+        padding-right: 30px;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%23aaa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 12px;
+      }
+      .input--id {
+        font-family: ui-monospace, "SF Mono", monospace;
+        font-size: 12.5px;
+      }
+
+      /* combobox style — single value */
+      .combobox {
+        display: flex;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .combobox__main {
+        flex: 1;
+        position: relative;
+      }
+      .combobox__main .input {
+        padding-right: 32px;
+      }
+      .combobox__caret {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted-fg);
+        pointer-events: none;
+      }
+      .combobox__clear {
+        all: unset;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted-fg);
+        background: var(--input);
+        transition:
+          background 120ms,
+          color 120ms;
+      }
+      .combobox__clear:hover {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      /* currently / reference */
+      .currently {
+        margin-top: 7px;
+        font-size: 12px;
+        color: var(--muted-fg);
+        line-height: 1.5;
+      }
+      .currently__label {
+        color: var(--muted-fg-2);
+        font-weight: 500;
+      }
+      .currently__value {
+        color: var(--fg-soft);
+      }
+      .currently--collapsed .currently__value {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        max-height: 3em;
+      }
+      .currently--expanded .currently__value {
+        display: block;
+      }
+      .currently__toggle {
+        all: unset;
+        cursor: pointer;
+        font-size: 11.5px;
+        color: var(--primary);
+        font-weight: 500;
+        margin-top: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .currently__toggle:hover {
+        text-decoration: underline;
+      }
+      .currently__toggle svg {
+        width: 10px;
+        height: 10px;
+        transition: transform 120ms;
+      }
+      .currently--expanded .currently__toggle svg {
+        transform: rotate(180deg);
+      }
+
+      /* ============================================================
+         Chips + inline add input (FIX: type-Enter to commit)
+         ============================================================ */
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        padding: 0 4px 0 10px;
+        gap: 4px;
+        background: var(--card-2);
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--fg);
+        line-height: 1;
+      }
+      .chip--id {
+        font-family: ui-monospace, "SF Mono", monospace;
+        font-size: 11.5px;
+      }
+      .chip__type {
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 10px;
+        font-weight: 700;
+        font-family: "Geist", sans-serif;
+        color: var(--primary);
+        margin-right: 6px;
+      }
+      .chip__x {
+        all: unset;
+        cursor: pointer;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted-fg);
+        line-height: 1;
+        transition:
+          background 120ms,
+          color 120ms;
+      }
+      .chip__x:hover {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+      .chip__x svg {
+        width: 10px;
+        height: 10px;
+      }
+
+      /* The inline ADD input — combobox-shaped, with a caret to suggest
+         a typeahead dropdown. Type → suggestions appear → Enter to commit. */
+      .chip-combobox {
+        position: relative;
+        display: inline-flex;
+        align-items: stretch;
+        min-width: 140px;
+      }
+      .chip-input {
+        all: unset;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        width: 100%;
+        height: 28px;
+        padding: 0 28px 0 12px;
+        background: oklch(1 0 0 / 0.03);
+        border: 1px dashed oklch(1 0 0 / 0.16);
+        border-radius: 999px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--fg);
+        line-height: 1;
+        cursor: text;
+        transition:
+          background 120ms,
+          border-color 120ms,
+          box-shadow 120ms;
+      }
+      .chip-input::placeholder {
+        color: var(--muted-fg);
+      }
+      .chip-input:focus,
+      .chip-input:focus-visible {
+        background: var(--input-focus);
+        border-style: solid;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px oklch(0.8 0.15 280 / 0.2);
+      }
+      .chip-combobox__caret {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted-fg);
+        pointer-events: none;
+      }
+      .chip-combobox__caret svg {
+        width: 10px;
+        height: 10px;
+      }
+
+      /* Open typeahead popover — shown on one demo input below.
+         z-index is high enough to clear sticky section banners (z:2)
+         and the sticky select-all bar (z:3). */
+      .typeahead {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        min-width: 240px;
+        background: var(--card-2);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        box-shadow: 0 12px 28px -8px oklch(0 0 0 / 0.6);
+        padding: 4px;
+        z-index: 50;
+        animation: typeahead-in 120ms ease-out;
+      }
+      @keyframes typeahead-in {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .typeahead__group-label {
+        padding: 6px 10px 4px;
+        font-size: 9.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted-fg-2);
+      }
+      .typeahead__item {
+        all: unset;
+        cursor: pointer;
+        display: flex;
+        width: 100%;
+        box-sizing: border-box;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 5px;
+        font-size: 12.5px;
+        color: var(--fg);
+      }
+      .typeahead__item:hover,
+      .typeahead__item--active {
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+      .typeahead__item__meta {
+        margin-left: auto;
+        font-size: 10.5px;
+        color: var(--muted-fg-2);
+      }
+      .typeahead__item--create {
+        color: var(--muted-fg);
+        font-style: italic;
+      }
+      .typeahead__item--create strong {
+        color: var(--fg);
+        font-style: normal;
+        font-weight: 500;
+      }
+      .typeahead__sep {
+        height: 1px;
+        background: var(--border);
+        margin: 4px 0;
+      }
+
+      /* ============================================================
+         Composite list rows + composite ADD row (FIX: Enter to commit)
+         For authors / narrators / series.
+         ============================================================ */
+      .composite-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .composite-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px 6px 10px;
+        background: var(--card-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .composite-row__handle {
+        color: var(--muted-fg-2);
+        cursor: grab;
+        flex-shrink: 0;
+        line-height: 1;
+        user-select: none;
+        display: inline-flex;
+      }
+      .composite-row__handle svg {
+        width: 12px;
+        height: 12px;
+      }
+      .composite-row__name {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 500;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .composite-row__select {
+        all: unset;
+        cursor: pointer;
+        padding: 5px 22px 5px 10px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--fg-2);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%23aaa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+        background-size: 10px;
+        flex-shrink: 0;
+      }
+      .composite-row__select--narrow {
+        width: 96px;
+      }
+      .composite-row__select--unit {
+        width: 92px;
+      }
+      .composite-row__num {
+        all: unset;
+        box-sizing: border-box;
+        width: 50px;
+        padding: 5px 6px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 12px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .composite-row__remove {
+        all: unset;
+        cursor: pointer;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted-fg);
+        flex-shrink: 0;
+        transition:
+          background 120ms,
+          color 120ms;
+      }
+      .composite-row__remove:hover {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+      .composite-row__remove svg {
+        width: 11px;
+        height: 11px;
+      }
+
+      /* The composite ADD row — same shape as a normal composite row,
+         but with a dashed border, typeable input, and combobox caret. */
+      .composite-row--add {
+        position: relative;
+        background: oklch(1 0 0 / 0.02);
+        border-style: dashed;
+        border-color: oklch(1 0 0 / 0.16);
+        padding: 0;
+        transition:
+          background 120ms,
+          border-color 120ms,
+          box-shadow 120ms;
+      }
+      .composite-row--add:focus-within {
+        background: var(--input-focus);
+        border-style: solid;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px oklch(0.8 0.15 280 / 0.2);
+      }
+      .composite-row__input {
+        all: unset;
+        box-sizing: border-box;
+        flex: 1;
+        padding: 8px 36px 8px 12px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--fg);
+        cursor: text;
+        min-width: 0;
+      }
+      .composite-row__input::placeholder {
+        color: var(--muted-fg);
+      }
+      .composite-row__caret {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted-fg);
+        pointer-events: none;
+      }
+      .composite-row__caret svg {
+        width: 11px;
+        height: 11px;
+      }
+
+      /* Identifier ADD row — special: type select + value input + Add button.
+         Enter on value commits (per spec). */
+      .id-add-row {
+        margin-top: 8px;
+        display: flex;
+        align-items: stretch;
+        gap: 6px;
+        padding: 4px;
+        background: oklch(1 0 0 / 0.02);
+        border: 1px dashed oklch(1 0 0 / 0.16);
+        border-radius: 8px;
+        transition:
+          background 120ms,
+          border-color 120ms,
+          box-shadow 120ms;
+      }
+      .id-add-row:focus-within {
+        background: var(--input-focus);
+        border-style: solid;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px oklch(0.8 0.15 280 / 0.2);
+      }
+      .id-add-row__select {
+        all: unset;
+        cursor: pointer;
+        padding: 4px 22px 4px 10px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--primary);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%23aaa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+        background-size: 10px;
+        flex-shrink: 0;
+      }
+      .id-add-row__input {
+        all: unset;
+        flex: 1;
+        padding: 5px 10px;
+        font: inherit;
+        font-size: 12.5px;
+        color: var(--fg);
+        font-family: ui-monospace, "SF Mono", monospace;
+        min-width: 0;
+        cursor: text;
+      }
+      .id-add-row__input::placeholder {
+        color: var(--muted-fg);
+        font-family: "Geist", sans-serif;
+      }
+      .id-add-row__hint {
+        font-size: 10.5px;
+        color: var(--muted-fg-2);
+        padding-right: 8px;
+        align-self: center;
+        white-space: nowrap;
+      }
+
+      /* ============================================================
+         Cover field
+         ============================================================ */
+      .covers {
+        display: flex;
+        gap: 14px;
+        align-items: flex-end;
+      }
+      .cover-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: center;
+      }
+      .cover-card__img {
+        width: 100px;
+        aspect-ratio: 2 / 3;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        background-size: cover;
+        background-position: center;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 6px 14px -4px oklch(0 0 0 / 0.55);
+      }
+      .cover-card__img--current {
+        background:
+          linear-gradient(170deg, #1d2f4a 0%, #0c1322 70%),
+          radial-gradient(circle at 50% 80%, #b9892f, transparent 40%);
+        background-blend-mode: screen;
+      }
+      .cover-card__img--new {
+        background:
+          linear-gradient(165deg, #2c4564 0%, #0d1325 60%),
+          radial-gradient(circle at 50% 35%, #d6953a, transparent 50%),
+          radial-gradient(circle at 30% 80%, #5d8fbf, transparent 30%);
+        background-blend-mode: screen;
+      }
+      .cover-card__img.is-selected {
+        border-color: var(--primary);
+        box-shadow:
+          0 0 0 1px var(--primary),
+          0 12px 24px -8px oklch(0.8 0.15 280 / 0.35);
+      }
+      .cover-card__cap {
+        font-size: 11px;
+        color: var(--muted-fg);
+        text-align: center;
+      }
+      .cover-card__cap__bold {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      .cover-arrow {
+        margin-bottom: 28px;
+        color: var(--muted-fg-2);
+      }
+      .covers__action {
+        margin-left: auto;
+        margin-bottom: 14px;
+        align-self: flex-end;
+      }
+      .btn--soft {
+        all: unset;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 7px 12px;
+        border-radius: 7px;
+        border: 1px solid var(--border-strong);
+        background: oklch(1 0 0 / 0.03);
+        color: var(--fg-2);
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition:
+          background 120ms,
+          color 120ms,
+          border-color 120ms;
+      }
+      .btn--soft:hover {
+        background: oklch(1 0 0 / 0.07);
+        color: var(--fg);
+        border-color: oklch(1 0 0 / 0.22);
+      }
+      .btn--soft svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* row layout that keeps "Currently:" left and an inline action
+         (e.g. "Extract subtitle") right on the same baseline. */
+      .row__after-input {
+        margin-top: 7px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .row__after-input .currently {
+        margin-top: 0;
+        flex: 1;
+        min-width: 0;
+      }
+      .link-btn {
+        all: unset;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--primary);
+        padding: 3px 6px;
+        border-radius: 4px;
+        transition:
+          background 120ms,
+          color 120ms;
+      }
+      .link-btn:hover {
+        background: var(--primary-soft);
+      }
+      .link-btn svg {
+        width: 11px;
+        height: 11px;
+      }
+
+      /* checkbox row for "Abridged" */
+      .check-with-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--fg-2);
+      }
+      /* When the outer row checkbox is unchecked, the inner field control
+         (e.g. Abridged toggle) is non-interactive. */
+      .row[data-row-toggle] .check[data-row-toggle-inner] {
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .row[data-row-toggle][data-row-applied="true"] .check[data-row-toggle-inner] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .row[data-row-toggle] .check-with-label {
+        color: var(--muted-fg);
+      }
+      .row[data-row-toggle][data-row-applied="true"] .check-with-label {
+        color: var(--fg-2);
+      }
+
+      /* ============================================================
+         Footer
+         ============================================================ */
+      .dialog-frame__foot {
+        padding: 14px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        background: oklch(0.205 0 0);
+        border-top: 1px solid var(--border);
+      }
+      .dialog-frame__foot__reset {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      .dialog-frame__foot__reset svg {
+        width: 12px;
+        height: 12px;
+      }
+      .dialog-frame__foot__summary {
+        font-size: 12.5px;
+        color: var(--muted-fg);
+      }
+      .dialog-frame__foot__summary strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .dialog-frame__foot__actions {
+        display: flex;
+        gap: 8px;
+      }
+      .btn {
+        all: unset;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        color: var(--fg);
+        line-height: 1;
+        transition:
+          background 120ms,
+          border-color 120ms;
+      }
+      .btn:hover {
+        background: oklch(1 0 0 / 0.04);
+      }
+      .btn--primary {
+        background: var(--primary);
+        color: var(--primary-fg);
+        border-color: var(--primary);
+        font-weight: 600;
+      }
+      .btn--primary:hover {
+        background: oklch(0.85 0.15 280);
+      }
+      .btn--ghost {
+        border-color: transparent;
+        color: var(--muted-fg);
+      }
+      .btn--ghost:hover {
+        color: var(--fg);
+      }
+
+      /* ============================================================
+         Spec checklist (under the dialog)
+         ============================================================ */
+      .speclist {
+        max-width: 768px;
+        margin: 28px auto 0;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 20px;
+      }
+      .speclist__head {
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--primary);
+        margin-bottom: 12px;
+      }
+      .speclist__intro {
+        font-size: 13px;
+        color: var(--muted-fg);
+        margin: 0 0 14px;
+        line-height: 1.55;
+      }
+      .speclist ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .speclist li {
+        font-size: 12.5px;
+        color: var(--fg-soft);
+        line-height: 1.55;
+        padding: 6px 0 6px 22px;
+        position: relative;
+      }
+      .speclist li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 11px;
+        width: 12px;
+        height: 12px;
+        border: 1.5px solid var(--primary);
+        border-radius: 3px;
+        background: var(--primary-soft);
+      }
+      .speclist li::after {
+        content: "";
+        position: absolute;
+        left: 4px;
+        top: 13px;
+        width: 3px;
+        height: 6px;
+        border: solid var(--primary);
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
+      }
+      .speclist strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .speclist code,
+      .speclist kbd {
+        font-family: ui-monospace, "SF Mono", monospace;
+        font-size: 11.5px;
+        background: oklch(1 0 0 / 0.06);
+        padding: 1px 5px;
+        border-radius: 3px;
+        color: var(--fg);
+      }
+      .speclist__section {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
+      .speclist__section:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .speclist__section__head {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--fg-2);
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <header class="panel__head">
+        <div class="panel__eyebrow">Identify · iteration 12</div>
+        <h1 class="panel__title">file.Name as a real field</h1>
+        <p class="panel__desc">
+          Name is now a normal File-section row with the standard
+          file-level default-ON rule (no special NameSource logic). The
+          "Copy from book title" button below the Name input mirrors
+          "Extract subtitle" — it shows whenever Title and Name differ
+          and copies Title into Name on click. The original clobber bug
+          is solved by exposing Name as a per-field opt-in decision
+          rather than by smart defaults.
+        </p>
+      </header>
+
+      <div class="dialog-frame">
+        <!-- HEAD -->
+        <div class="dialog-frame__head">
+          <button class="dialog-frame__back" aria-label="Back to search">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path
+                d="M7.5 2L3.5 6l4 4"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <div class="dialog-frame__heading">
+            <h2 class="dialog-frame__title">
+              Identify Harry Potter and the Sorcerer's Stone
+            </h2>
+            <div class="dialog-frame__sub">
+              <span>2 files</span>
+              <span class="dot">·</span>
+              <span>13 changes proposed</span>
+            </div>
+          </div>
+          <span class="dialog-frame__source">
+            <span class="dialog-frame__source__pulse" aria-hidden="true"></span>
+            Audible
+          </span>
+        </div>
+
+        <!-- BODY -->
+        <div class="dialog-frame__body">
+          <!-- Select-all (mixed: book section unchecked, file section all checked) -->
+          <div class="selectbar">
+            <button class="check" aria-checked="mixed"></button>
+            <span class="selectbar__label">Apply all changes</span>
+            <span class="selectbar__count">
+              <strong>7</strong> of 13 selected
+            </span>
+            <span class="selectbar__spacer"></span>
+            <div class="selectbar__filter" role="tablist">
+              <button class="selectbar__filter__btn" aria-pressed="true">
+                Changed
+              </button>
+              <button class="selectbar__filter__btn">All</button>
+            </div>
+          </div>
+
+          <!-- ============= BOOK SECTION ============= -->
+          <!-- Demo: collapsed by default for "second identify on non-primary
+               file". Subtitle is the only book change selected, since it's
+               new (no value to overwrite); other book changes default off. -->
+          <section class="section" data-state="collapsed">
+            <div class="section-banner" data-section-banner>
+              <span class="section-banner__chevron" aria-hidden="true">
+                <svg viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M3 4.5l3 3 3-3"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </span>
+              <span class="section-banner__inner">
+                <span class="section-banner__label">Book</span>
+                <span class="section-banner__hint">applies to all files</span>
+              </span>
+              <span class="section-banner__count">
+                <strong>1</strong> of 7 selected
+              </span>
+              <button class="check" aria-checked="mixed" data-section-check></button>
+            </div>
+            <div class="section-rows">
+
+          <!-- TITLE — book-level Changed: default OFF on non-primary.
+               Colon in title triggers the Extract subtitle button below. -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Title</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <input
+                class="input"
+                value="Harry Potter and the Sorcerer's Stone: Anniversary Audiobook"
+              />
+              <div class="row__after-input">
+                <div class="currently">
+                  <span class="currently__label">Currently:</span>
+                  <span class="currently__value">Harry Potter 1</span>
+                </div>
+                <button class="link-btn">
+                  <svg viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M6 2v4l-2-2M6 2l2 2M2 6v3a1 1 0 001 1h6a1 1 0 001-1V6"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  Extract subtitle
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBTITLE — book-level New (no current value): default ON
+               since there's nothing to overwrite. -->
+          <div class="row" data-state="new">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Subtitle</span>
+                <span class="badge badge--new">New</span>
+              </div>
+              <input
+                class="input"
+                value="A Pottermore Original Audiobook"
+              />
+            </div>
+          </div>
+
+          <!-- AUTHORS — book-level Changed: default OFF -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Authors</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="composite-list">
+                <div class="composite-row">
+                  <span class="composite-row__handle" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <circle cx="4" cy="3" r="1" fill="currentColor" />
+                      <circle cx="4" cy="6" r="1" fill="currentColor" />
+                      <circle cx="4" cy="9" r="1" fill="currentColor" />
+                      <circle cx="8" cy="3" r="1" fill="currentColor" />
+                      <circle cx="8" cy="6" r="1" fill="currentColor" />
+                      <circle cx="8" cy="9" r="1" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <span class="composite-row__name">J. K. Rowling</span>
+                  <select class="composite-row__select composite-row__select--narrow">
+                    <option>Author</option>
+                    <option>Translator</option>
+                    <option>Editor</option>
+                    <option>No role</option>
+                  </select>
+                  <button class="composite-row__remove" aria-label="remove">
+                    <svg viewBox="0 0 11 11" fill="none">
+                      <path
+                        d="M1 1l9 9M10 1l-9 9"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <div class="composite-row composite-row--add">
+                  <input
+                    class="composite-row__input"
+                    type="text"
+                    value="ste"
+                    placeholder="Add author"
+                  />
+                  <span class="composite-row__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </span>
+                  <!-- Open typeahead demo: shows existing-entity matches +
+                       a "create new" affordance. Real component pulls
+                       suggestions from the library. -->
+                  <div class="typeahead" role="listbox">
+                    <div class="typeahead__group-label">In your library</div>
+                    <button class="typeahead__item typeahead__item--active">
+                      Stephen Fry
+                      <span class="typeahead__item__meta">12 books</span>
+                    </button>
+                    <button class="typeahead__item">
+                      Stephen King
+                      <span class="typeahead__item__meta">3 books</span>
+                    </button>
+                    <div class="typeahead__sep"></div>
+                    <button class="typeahead__item typeahead__item--create">
+                      Create new author <strong>"ste"</strong>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">JK Rowling (Author), Stephen Fry (Author)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SERIES — book-level Changed: default OFF -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Series</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="composite-list">
+                <div class="composite-row">
+                  <span class="composite-row__handle" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <circle cx="4" cy="3" r="1" fill="currentColor" />
+                      <circle cx="4" cy="6" r="1" fill="currentColor" />
+                      <circle cx="4" cy="9" r="1" fill="currentColor" />
+                      <circle cx="8" cy="3" r="1" fill="currentColor" />
+                      <circle cx="8" cy="6" r="1" fill="currentColor" />
+                      <circle cx="8" cy="9" r="1" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <span class="composite-row__name"
+                    >Harry Potter (Full-Cast Editions)</span
+                  >
+                  <input class="composite-row__num" value="1" />
+                  <select class="composite-row__select composite-row__select--unit">
+                    <option>—</option>
+                    <option selected>Volume</option>
+                    <option>Chapter</option>
+                  </select>
+                  <button class="composite-row__remove" aria-label="remove">
+                    <svg viewBox="0 0 11 11" fill="none">
+                      <path
+                        d="M1 1l9 9M10 1l-9 9"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <div class="composite-row composite-row--add">
+                  <input
+                    class="composite-row__input"
+                    type="text"
+                    placeholder="Add series"
+                  />
+                  <span class="composite-row__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">Harry Potter · 1 (Volume)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- GENRES — book-level Changed: default OFF -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Genres</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="chips">
+                <span class="chip">Children's Audiobooks
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path
+                        d="M1 1l8 8M9 1l-8 8"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button></span>
+                <span class="chip-combobox">
+                  <input
+                    class="chip-input"
+                    placeholder="Add genre"
+                    data-chip-input
+                  />
+                  <span class="chip-combobox__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </span>
+                </span>
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">Young Adult, Fantasy, Fiction</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAGS — book-level Changed: default OFF -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Tags</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="chips">
+                <span class="chip">Growing Up & Facts of Life
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip">Social & Life Skills
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip">Literature & Fiction
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip">Family Life
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip">Science Fiction & Fantasy
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip">Fantasy & Magic
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button></span>
+                <span class="chip-combobox">
+                  <input
+                    class="chip-input"
+                    placeholder="Add tag"
+                    data-chip-input
+                  />
+                  <span class="chip-combobox__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </span>
+                </span>
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">Magic, Adventure, Audiobook, Middle Grade, Harry Potter, Childrens, Classics</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- DESCRIPTION — book-level Changed: default OFF (with expandable currently) -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Description</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <textarea class="textarea">Immerse yourself in the stories like never before; wear headphones for the best experience.
+
+The beloved stories as you've never experienced them. Get ready to be transported to the world of Harry Potter in a captivating production that features hundreds of unique voices and immersive sound design that brings the wizarding world vividly to life in Dolby Atmos.</textarea>
+              <div class="currently currently--collapsed" data-currently>
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value"
+                  >"Turning the envelope over, his hand trembling, Harry saw a purple wax seal bearing a coat of arms; a lion, an eagle, a badger and a snake surrounding a large letter 'H'." Harry Potter has never been the star of a Quidditch team, scoring points while riding a broom far above the ground. He isn't a member of one of the four houses at Hogwarts. He's not even a wizard — yet. So begins one of the most beloved stories in modern fantasy literature: a tale of a boy, a school, and a sorcerer's stone.</span>
+                <button class="currently__toggle" data-currently-toggle>
+                  <span data-currently-toggle-label>Show full</span>
+                  <svg viewBox="0 0 10 10" fill="none">
+                    <path
+                      d="M2 4l3 3 3-3"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+            </div>
+          </section>
+
+          <!-- ============= FILE SECTION ============= -->
+          <!-- File metadata (type, name, duration, bitrate, pages, etc.)
+               is shown inline in this banner. The exact metadata fields
+               vary by file_type — m4b shows duration + bitrate, epub/cbz/
+               pdf shows page count, etc. -->
+          <section class="section" data-state="expanded">
+            <div class="section-banner" data-section-banner>
+              <span class="section-banner__chevron" aria-hidden="true">
+                <svg viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M3 4.5l3 3 3-3"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </span>
+              <span class="section-banner__inner">
+                <span class="section-banner__label">File</span>
+                <span class="section-banner__file-meta">
+                  <span class="section-banner__file-type">M4B</span>
+                  <span class="section-banner__sep">·</span>
+                  <span class="section-banner__file-name">Full-Cast</span>
+                  <span class="section-banner__sep">·</span>
+                  <span>8h 17m</span>
+                  <span class="section-banner__sep">·</span>
+                  <span>192 kbps</span>
+                </span>
+              </span>
+              <span class="section-banner__count">
+                <strong>6</strong> of 6 selected
+              </span>
+              <button class="check" aria-checked="true" data-section-check></button>
+            </div>
+            <div class="section-rows">
+
+          <!-- COVER — same layout for all file types. The trailing
+               button changes label/action based on file_type:
+                 m4b/epub  → "Upload cover" (file picker)
+                 cbz/pdf   → "Select page" (PagePicker dialog)
+               Caption next to the thumbnail shows resolution for image
+               covers and "Page N" for page-based covers. -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Cover</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="covers">
+                <div class="cover-card">
+                  <div class="cover-card__img cover-card__img--current"></div>
+                  <span class="cover-card__cap">Current</span>
+                </div>
+                <span class="cover-arrow" aria-hidden="true">→</span>
+                <div class="cover-card">
+                  <div
+                    class="cover-card__img cover-card__img--new is-selected"
+                  ></div>
+                  <span class="cover-card__cap">
+                    <span class="cover-card__cap__bold">New</span> · 1280×1920
+                  </span>
+                </div>
+                <div class="covers__action">
+                  <button class="btn btn--soft">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M2 8v1.5A.5.5 0 002.5 10h7a.5.5 0 00.5-.5V8M6 1.5v6M6 1.5L4 3.5M6 1.5l2 2"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    Upload cover
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- NAME — file.Name. Standard file-level default ON. The
+               "Copy from book title" button below shows when book.Title
+               and file.Name differ (typically after the user edits one
+               or extracts a subtitle); clicking it pastes the current
+               book.Title into the Name input. Mirrors the
+               "Extract subtitle" affordance under Title. -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Name</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <input
+                class="input"
+                value="Harry Potter and the Sorcerer's Stone"
+              />
+              <div class="row__after-input">
+                <div class="currently">
+                  <span class="currently__label">Currently:</span>
+                  <span class="currently__value">Full-Cast</span>
+                </div>
+                <button class="link-btn">
+                  <svg viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M3 3.5h-.5A.5.5 0 002 4v6a.5.5 0 00.5.5h5A.5.5 0 008 10V4a.5.5 0 00-.5-.5H7m-1.5-1H4a.5.5 0 00-.5.5v.5h3V2.5a.5.5 0 00-.5-.5z"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  Copy from book title
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- NARRATORS -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Narrators</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="composite-list">
+                <div class="composite-row">
+                  <span class="composite-row__handle" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <circle cx="4" cy="3" r="1" fill="currentColor" />
+                      <circle cx="4" cy="6" r="1" fill="currentColor" />
+                      <circle cx="4" cy="9" r="1" fill="currentColor" />
+                      <circle cx="8" cy="3" r="1" fill="currentColor" />
+                      <circle cx="8" cy="6" r="1" fill="currentColor" />
+                      <circle cx="8" cy="9" r="1" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <span class="composite-row__name">Jim Dale</span>
+                  <button class="composite-row__remove" aria-label="remove">
+                    <svg viewBox="0 0 11 11" fill="none">
+                      <path
+                        d="M1 1l9 9M10 1l-9 9"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <div class="composite-row composite-row--add">
+                  <input
+                    class="composite-row__input"
+                    type="text"
+                    placeholder="Add narrator"
+                  />
+                  <span class="composite-row__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">Stephen Fry</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- PUBLISHER -->
+          <div class="row" data-state="new">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Publisher</span>
+                <span class="badge badge--new">New</span>
+              </div>
+              <div class="combobox">
+                <div class="combobox__main">
+                  <input
+                    class="input"
+                    value="Pottermore Publishing and Audible Studios"
+                  />
+                  <span class="combobox__caret" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" width="12" height="12" fill="none">
+                      <path
+                        d="M3 4.5l3 3 3-3"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </div>
+                <button class="combobox__clear" aria-label="clear">
+                  <svg viewBox="0 0 12 12" width="12" height="12" fill="none">
+                    <path
+                      d="M2 2l8 8M10 2l-8 8"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- IMPRINT (unchanged — no incoming value, but checkbox + input
+               stay enabled so user can edit and apply manually). -->
+          <div class="row" data-state="unchanged">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Imprint</span>
+              </div>
+              <div class="combobox">
+                <div class="combobox__main">
+                  <input class="input" value="" placeholder="—" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LANGUAGE (unchanged — checkbox + input enabled). -->
+          <div class="row" data-state="unchanged">
+            <button class="check" aria-checked="false"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Language</span>
+              </div>
+              <div class="combobox">
+                <div class="combobox__main">
+                  <input class="input" value="English" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RELEASE DATE — plain text input, NOT date picker -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Release date</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <input
+                class="input"
+                type="text"
+                value="2015-11-20"
+                placeholder="YYYY-MM-DD"
+              />
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">1997-06-26</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- IDENTIFIERS — type-select + value-input + Enter to add -->
+          <div class="row" data-state="changed">
+            <button class="check" aria-checked="true"></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Identifiers</span>
+                <span class="badge badge--changed">Changed</span>
+              </div>
+              <div class="chips">
+                <span class="chip chip--id">
+                  <span class="chip__type">ASIN</span>B017WIJBNK
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                </span>
+                <span class="chip chip--id">
+                  <span class="chip__type">ISBN</span>9781781100486
+                  <button class="chip__x" aria-label="remove">
+                    <svg viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                </span>
+              </div>
+              <div class="id-add-row">
+                <select class="id-add-row__select">
+                  <option>ASIN</option>
+                  <option>ISBN</option>
+                  <option>Audible ID</option>
+                  <option>Goodreads</option>
+                </select>
+                <input
+                  class="id-add-row__input"
+                  type="text"
+                  placeholder="Identifier value"
+                />
+              </div>
+              <div class="currently">
+                <span class="currently__label">Currently:</span>
+                <span class="currently__value">ISBN 0747532699</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ABRIDGED (unchanged) — outer row checkbox is enabled so user
+               can opt in to apply. Inner Abridged toggle is disabled
+               until the outer checkbox is checked. -->
+          <div class="row" data-state="unchanged" data-row-toggle>
+            <button class="check" aria-checked="false" data-row-toggle-outer></button>
+            <div class="row__body">
+              <div class="row__head">
+                <span class="row__label">Abridged</span>
+              </div>
+              <label class="check-with-label">
+                <span class="check" aria-checked="false" data-row-toggle-inner></span>
+                This is an abridged edition
+              </label>
+            </div>
+          </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="dialog-frame__foot">
+          <button class="btn btn--ghost dialog-frame__foot__reset">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path
+                d="M2 6a4 4 0 107-2.83M9 2v2.5H6.5"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Restore suggestions
+          </button>
+          <span class="dialog-frame__foot__summary">
+            <strong>1 book change</strong> · <strong>6 file changes</strong> selected
+          </span>
+          <div class="dialog-frame__foot__actions">
+            <button class="btn btn--ghost">Cancel</button>
+            <button class="btn btn--primary">Apply 7 changes</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           Spec — comprehensive checklist. The implementation must hit
+           every item below; if a detail isn't here, flag it before
+           building.
+           ============================================================ -->
+      <div class="speclist">
+        <div class="speclist__head">Spec — locked decisions</div>
+        <p class="speclist__intro">
+          The combobox-style entity inputs, sticky scope sections, and
+          per-field checkbox model are meaningful changes to Shisho's
+          interaction patterns. They must ship cohesively across identify
+          AND the edit dialogs (<code>BookEditDialog</code>,
+          <code>FileEditDialog</code>, metadata-entity edit forms). If
+          something in the mockup isn't captured below, raise it before
+          implementation — what's not codified will drift.
+        </p>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Decision model</div>
+          <ul>
+            <li>
+              <strong>Per-field checkbox</strong> on every row. Checked =
+              this field's proposed value will be written on Apply. Unchecked
+              = skipped.
+            </li>
+            <li>
+              <strong>Section-level select-all</strong> on each section
+              banner. Toggles every checkbox in the section.
+            </li>
+            <li>
+              <strong>Global "Apply all"</strong> at the top toggles every
+              checkbox in the dialog.
+            </li>
+            <li>
+              <strong>Three checkbox states</strong>: <code>false</code>,
+              <code>true</code>, <code>mixed</code>. Mixed = filled
+              background with a horizontal bar (not a check). Mixed appears
+              on section and global toggles when some-but-not-all child
+              rows are checked. Clicking a mixed checkbox sets it to
+              <code>false</code> (matches browser indeterminate behavior).
+            </li>
+            <li>
+              Hover affordance only on <em>unchecked</em> boxes; checked
+              and mixed boxes get a brighter primary on hover, never a
+              "looks unchecked" treatment.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Smart defaults</div>
+          <ul>
+            <li>
+              <strong>Field state classes</strong>: <code>changed</code>
+              (current value differs from proposed), <code>new</code> (no
+              current value, proposed value provided),
+              <code>unchanged</code> (current and proposed match — no
+              checkbox toggle by default but user can still manually
+              opt in to apply).
+            </li>
+            <li>
+              <strong>Default ON</strong>: file-level changes (always);
+              book-level <em>new</em> fields (always — nothing to
+              overwrite); book-level <em>changed</em> fields when
+              identifying the primary file.
+            </li>
+            <li>
+              <strong>Default OFF</strong>: book-level <em>changed</em>
+              fields when identifying a non-primary file (the
+              "second-identify" case — don't overwrite shared book
+              metadata from a non-canonical source).
+            </li>
+            <li>
+              <strong>Section default-collapsed iff selected count = 0.</strong>
+              Not "always collapse on second-identify." This means if a
+              second file's metadata source contributes a brand-new field
+              the first file didn't have (e.g., a Subtitle), the field
+              defaults ON, the count becomes 1, and the section stays
+              expanded. Common case for second-identify is still
+              "all-zero, collapsed" since most book fields will be Changed,
+              not New.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Section organization</div>
+          <ul>
+            <li>
+              Two sections: <strong>Book</strong> ("applies to all files")
+              and <strong>File</strong> ("applies to <em>file.Name</em>
+              only"). Cover is in the File section.
+            </li>
+            <li>
+              Sections are collapsible. Click anywhere on the banner to
+              toggle (except the section's own checkbox, which stops
+              propagation).
+            </li>
+            <li>
+              Banner: chevron (rotates -90° when collapsed) +
+              <code>BOOK</code> label + hint text + "<em>X</em> of
+              <em>Y</em> selected" count + section-level checkbox. The
+              count is always visible, including when collapsed.
+            </li>
+            <li>
+              Banner alignment: chevron sits in the same column as
+              field-row checkboxes, so the section label aligns with
+              field labels (60px from left).
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Sticky headers</div>
+          <ul>
+            <li>
+              Dialog frame head + file switcher: outside the scroll body
+              entirely (always visible).
+            </li>
+            <li>
+              <strong>Select-all bar</strong>:
+              <code>position: sticky; top: 0; z-index: 3</code> within the
+              scroll body.
+            </li>
+            <li>
+              <strong>Section banners</strong>:
+              <code>position: sticky; top: 49px; z-index: 2</code> (offset
+              by selectbar height). When you scroll into a section's rows,
+              its banner pins below the selectbar; scrolling past the
+              section lets the next banner take over the same slot.
+            </li>
+            <li>
+              All sticky elements have solid backgrounds so content
+              scrolling underneath is occluded cleanly.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Multi-value entity inputs (combobox typeahead)</div>
+          <ul>
+            <li>
+              Replaces today's <code>[+ Add tag]</code> buttons. Pill- or
+              row-shaped editable input with a caret on the right.
+            </li>
+            <li>
+              Click or focus opens a dropdown popover. Type to filter.
+            </li>
+            <li>
+              Dropdown groups: <code>IN YOUR LIBRARY</code> (matching
+              existing entities, with usage counts e.g. "12 books") +
+              separator + <code>Create new author "ste"</code>
+              create-novel affordance.
+            </li>
+            <li>
+              Up/Down arrows navigate; <kbd>Enter</kbd> commits highlighted
+              suggestion (or the create-new option if no match is
+              highlighted); <kbd>Esc</kbd> closes.
+            </li>
+            <li>
+              On commit, suggestion becomes a chip/composite row above the
+              input; the input clears and stays focused so the user can
+              type the next entry.
+            </li>
+            <li>
+              No "↵ to add" hint label needed — the caret + dropdown carry
+              the affordance.
+            </li>
+            <li>
+              Applies to: Authors, Narrators, Series, Genres, Tags.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Composite rows (entities with extra fields)</div>
+          <ul>
+            <li>
+              <strong>Authors</strong>: drag handle + name + role
+              dropdown + remove. Roles: Author / Translator / Editor / No
+              role (and any role added in a CBZ context per existing edit
+              dialog).
+            </li>
+            <li>
+              <strong>Narrators</strong>: drag handle + name + remove. No
+              role.
+            </li>
+            <li>
+              <strong>Series</strong>: drag handle + name + number input
+              (3-digit width, tabular-nums) + unit dropdown (— / Volume /
+              Chapter) + remove.
+            </li>
+            <li>
+              <strong>Identifiers</strong>: chips render
+              <code>[TYPE] value</code> with TYPE uppercase in primary
+              color. Add row is horizontal: type-select (only available
+              types listed) + value input + <kbd>Enter</kbd> commits.
+              Add row uses monospace for the value field.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Per-field rules</div>
+          <ul>
+            <li>
+              <strong>Title</strong>: plain text input. If the title
+              contains a colon (<code>:</code>), show an "Extract subtitle"
+              button below the input on the right. Clicking it removes
+              everything after the colon from the title and writes that
+              text into the Subtitle field. Mirrors existing
+              <code>BookEditDialog.tsx:526</code> behavior.
+            </li>
+            <li>
+              <strong>Subtitle</strong>: plain text input.
+            </li>
+            <li>
+              <strong>Description</strong>: <code>&lt;textarea&gt;</code>,
+              min-height ~88px, vertical resize. The "Currently:" reference
+              is line-clamped to 2 lines by default with a "Show full"
+              toggle that expands to the full original; "Show less"
+              collapses back. No markdown, no rich text.
+            </li>
+            <li>
+              <strong>Cover</strong>: side-by-side comparison of current
+              vs new thumbnails — same layout for every file type. The
+              caption under each thumbnail shows resolution
+              (<code>1280×1920</code>) for image covers (M4B/EPUB) or
+              <code>Page N</code> for page-based covers (CBZ/PDF). A
+              trailing button switches label and action by file type:
+              "Upload cover" (M4B/EPUB) opens a file picker; "Select page"
+              (CBZ/PDF) opens the existing <code>PagePicker</code> dialog.
+              New is selected by default with a primary ring. Lives in
+              the File section.
+            </li>
+            <li>
+              <strong>Publisher / Imprint / Language</strong>: combobox
+              single-value with caret + dedicated clear button.
+            </li>
+            <li>
+              <strong>Imprint / Language when Unchanged</strong>: input
+              <em>and</em> checkbox stay enabled even with no incoming
+              value, so user can manually fill and apply.
+            </li>
+            <li>
+              <strong>Release date</strong>: <em>plain text input</em>,
+              never a date picker. Placeholder
+              <code>YYYY-MM-DD</code>. Supports old, partial, or unknown
+              dates. The current
+              <code>&lt;DatePicker&gt;</code> in BookEditDialog/FileEditDialog
+              must also be swapped for plain text.
+            </li>
+            <li>
+              <strong>Abridged</strong>: checkbox-with-label.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Two-step flow & navigation</div>
+          <ul>
+            <li>
+              <strong>Step 1: search</strong>. User selects which file is
+              being identified (file switcher with dropdown), enters a
+              query, gets plugin results, picks one. Search step gets a
+              light visual refresh — same dialog frame, back arrow, source
+              pill, file switcher — but no structural changes to its
+              result-picker grid.
+            </li>
+            <li>
+              <strong>Step 2: review</strong>. The form we've designed.
+              File switcher here is read-only (just shows which file is
+              being identified). Switching files happens on the search
+              step.
+            </li>
+            <li>
+              <strong>Default file selection on dialog open</strong>
+              uses the existing <code>file.reviewed</code> flag (computed
+              by <code>review.IsComplete(book, file, criteria)</code>
+              against per-library required fields, with optional
+              <code>ReviewOverride</code>):
+              <ol>
+                <li>If some files are reviewed and some aren't, pick a
+                  non-reviewed file (<code>reviewed != true</code> —
+                  covers both <code>false</code> and <code>NULL</code>).</li>
+                <li>If all files share the same reviewed status, prefer
+                  the primary file if set.</li>
+                <li>Otherwise pick the first file. Order doesn't matter
+                  much in this case.</li>
+              </ol>
+              No new model fields needed. This builds on the review
+              system already in <code>pkg/books/review/</code>.
+            </li>
+            <li>
+              <strong>Identify does not directly set reviewed</strong>.
+              After Apply, the existing recompute pipeline runs
+              (<code>RecomputeReviewedForBook</code> /
+              <code>RecomputeReviewedForFile</code>); if the applied
+              changes brought the file to completeness, it becomes
+              reviewed automatically. Users with an explicit
+              <code>ReviewOverride</code> keep their override.
+            </li>
+            <li>
+              <strong>NameSource / source attribution on apply</strong>:
+              fields whose values come from the plugin's proposed result
+              are saved with their respective <code>*Source</code>
+              column set to <code>"plugin"</code>. Fields whose values
+              were manually edited by the user in the review form before
+              Apply are saved with source <code>"user"</code>. This
+              matters for subsequent scanner re-identify — user edits
+              must survive a re-scan, plugin-set values can be
+              overwritten by a re-scan that finds better data.
+            </li>
+            <li>
+              <strong>Back navigation (review → search)</strong>: search
+              state (query, results, selected result) is preserved.
+              Review state <em>resets</em> on every forward navigation —
+              going back and forward is an intentional way to reset
+              changes. This matches today's behavior.
+            </li>
+            <li>
+              <strong>Restore suggestions button</strong> in the
+              review-step footer (left side, ghost variant) reverts all
+              checkboxes and field values to the plugin's suggested
+              state — the smart defaults the form opened with.
+              Effectively "undo all my edits to this form." Label is
+              "Restore suggestions" (not "Reset"), since that conveys
+              <em>which</em> defaults — the search result's suggestions —
+              rather than something ambiguous like the book's pre-identify
+              values. Distinct from Cancel (which discards and closes).
+            </li>
+            <li>
+              <strong>Apply behavior</strong>: button shows an inline
+              loading state ("Applying…" with spinner) while the request
+              is pending. On success, dialog closes and a toast confirms
+              ("Updated 6 fields"). On error, the dialog stays open with
+              an inline error banner so the user can retry without losing
+              their checkbox state. File reorganization is an
+              implementation detail and not surfaced in the toast.
+            </li>
+            <li>
+              <strong>Multi-file post-apply</strong>: dialog just closes.
+              No special "identify the other file?" prompt — user
+              re-opens identify from the book detail page when they want
+              to identify additional files.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Dialog frame</div>
+          <ul>
+            <li>
+              Width: <code>max-w-3xl</code> (768px), one step wider than
+              the existing edit dialog because each row carries
+              current-vs-proposed.
+            </li>
+            <li>
+              <strong>Head</strong>: back arrow (top-left, 24px button,
+              12px chevron-left icon) + title + subtitle (file count + N
+              changes proposed) + source pill (right). No close X — back
+              arrow returns to the search step.
+            </li>
+            <li>
+              <strong>File switcher</strong>: lives <em>only on the
+              search step</em>, between head and scroll body. Pill shows
+              file type (uppercase, no border, separated from filename
+              by a thin vertical rule) + <code>file.Name</code> (no file
+              extension) + dropdown caret. Switching files re-runs the
+              search.
+            </li>
+            <li>
+              <strong>File context on the review step</strong>: there is
+              no separate file-switcher row. The currently-identified
+              file's metadata is shown inline in the
+              <em>FILE section banner</em> alongside its label and count
+              ("FILE · M4B · Full-Cast · 8h 17m · 192 kbps"). The
+              specific metadata fields adapt to <code>file_type</code> —
+              audiobooks show duration + bitrate, ebooks/comics/PDFs show
+              page count, etc.
+            </li>
+            <li>
+              <strong>Body</strong>:
+              <code>max-height: 70vh; overflow-y: auto</code>. Sticky
+              selectbar + sticky section banners as defined above.
+            </li>
+            <li>
+              <strong>Foot</strong>: Reset button (ghost, left side) +
+              counts split by section ("<strong>1 book change</strong> ·
+              <strong>5 file changes</strong> selected") in the middle +
+              Cancel/Apply on the right. Primary action "Apply N changes"
+              with N = total selected.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Cohesion — across the whole app</div>
+          <p style="font-size:12.5px;color:var(--muted-fg);line-height:1.55;margin:0 0 10px;">
+            Identify is one of several places these patterns surface. The
+            implementation must avoid one-off treatments here — every
+            foundational change adopted in this dialog also lands wherever
+            it appears in Shisho.
+          </p>
+          <ul>
+            <li>
+              <strong>Combobox typeahead</strong> replaces existing
+              <code>EntityCombobox</code> /
+              <code>MultiSelectCombobox</code> /
+              <code>IdentifierEditor</code> add affordances <em>site-wide</em>:
+              <code>BookEditDialog</code>, <code>FileEditDialog</code>,
+              metadata-entity edit forms (Genres, Tags, People, Series),
+              filter pickers, and any other place chips/composite lists
+              are entered.
+            </li>
+            <li>
+              <strong>Composite rows</strong> (authors+role,
+              series+number+unit) share the
+              <code>SortableEntityList</code> component used by the edit
+              dialogs. Don't build a parallel implementation.
+            </li>
+            <li>
+              <strong>Plain-text date input</strong> replaces
+              <code>&lt;DatePicker&gt;</code> wherever release dates,
+              publish dates, or other "could be old" dates appear —
+              including <code>FileEditDialog</code>, library scan filters,
+              series metadata, etc.
+            </li>
+            <li>
+              <strong>Title's "Extract subtitle" button</strong> is the
+              same component used today in <code>BookEditDialog</code>;
+              reused as-is.
+            </li>
+            <li>
+              <strong>Visual tokens</strong> (radius, border alpha,
+              primary, success, mixed-state checkbox style, status badges,
+              chip styling, etc.) come from <code>app/index.css</code> and
+              shared component CSS. If a token changes here, it changes
+              everywhere it's used; no in-file overrides.
+            </li>
+            <li>
+              <strong>Checkbox states</strong> (false / true / mixed) and
+              their hover behavior are a global change — every
+              <code>Checkbox</code> usage in the app must support the
+              indeterminate state and never show the "looks unchecked on
+              hover" bug for checked or mixed boxes.
+            </li>
+            <li>
+              <strong>Outer-controls-inner pattern</strong> for fields
+              like Abridged (apply-checkbox controls whether the
+              field-checkbox is interactive) is reusable; if other forms
+              gain a similar "apply this field" gate, they inherit the
+              same disabled-until-applied behavior.
+            </li>
+          </ul>
+        </div>
+
+        <div class="speclist__section">
+          <div class="speclist__section__head">Visual specifics</div>
+          <ul>
+            <li>
+              Surface stack (darkest → lightest): body
+              <code>oklch(0.18)</code> → dialog card
+              <code>oklch(0.22)</code> → row container
+              <code>oklch(0.22)</code> → selectbar
+              <code>oklch(0.20)</code> → section banner
+              <code>oklch(0.205)</code>.
+            </li>
+            <li>
+              Status badge palette: <strong>Changed</strong> = primary
+              soft; <strong>New</strong> = success soft. Unchanged rows
+              get no badge.
+            </li>
+            <li>
+              Chips: 28px tall, 999px radius, always-visible × on each
+              chip (no hover-to-show). × hover state =
+              danger-soft background.
+            </li>
+            <li>
+              Checkboxes: 18×18, 5px radius. Primary fill when checked or
+              mixed. Indeterminate visual = horizontal bar in primary-fg.
+            </li>
+            <li>
+              Faint top-of-page radial gradient
+              (<code>oklch(0.8 0.15 280 / 0.05)</code>) for atmosphere; no
+              other glow effects.
+            </li>
+            <li>
+              <strong>Icons</strong>: every icon in the implementation
+              uses <code>lucide-react</code> — chevron-down, chevron-left,
+              x, plus, upload, refresh-ccw, and so on. The mockup uses
+              inline SVGs for portability, but production code does not
+              ship one-off SVG paths. Match icon sizes to the surrounding
+              type (12–16px is the typical range here).
+            </li>
+          </ul>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // toggle checkbox (treat mixed → true on click)
+      document.querySelectorAll(".check").forEach((c) => {
+        if (c.disabled) return;
+        c.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const cur = c.getAttribute("aria-checked");
+          c.setAttribute("aria-checked", cur === "true" ? "false" : "true");
+        });
+      });
+
+      // section collapse: clicking the banner (anywhere except the
+      // section's check) toggles expanded/collapsed.
+      document.querySelectorAll("[data-section-banner]").forEach((banner) => {
+        banner.addEventListener("click", (e) => {
+          if (e.target.closest("[data-section-check]")) return;
+          const section = banner.closest(".section");
+          const next =
+            section.dataset.state === "collapsed" ? "expanded" : "collapsed";
+          section.dataset.state = next;
+        });
+      });
+
+      // Inner field control is disabled until outer row checkbox is checked.
+      document
+        .querySelectorAll("[data-row-toggle-outer]")
+        .forEach((outer) => {
+          outer.addEventListener("click", () => {
+            const row = outer.closest("[data-row-toggle]");
+            requestAnimationFrame(() => {
+              row.dataset.rowApplied =
+                outer.getAttribute("aria-checked") === "true"
+                  ? "true"
+                  : "false";
+            });
+          });
+        });
+
+      // expand/collapse "Currently:" for description
+      document
+        .querySelectorAll("[data-currently-toggle]")
+        .forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const root = btn.closest("[data-currently]");
+            const isExpanded =
+              root.classList.contains("currently--expanded");
+            root.classList.toggle("currently--expanded", !isExpanded);
+            root.classList.toggle("currently--collapsed", isExpanded);
+            const label = btn.querySelector("[data-currently-toggle-label]");
+            if (label)
+              label.textContent = isExpanded ? "Show full" : "Show less";
+          });
+        });
+
+      // chip-input: Enter commits a chip
+      document.querySelectorAll("[data-chip-input]").forEach((input) => {
+        input.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== ",") return;
+          const value = input.value.trim();
+          if (!value) return;
+          e.preventDefault();
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.innerHTML = `${value}<button class="chip__x" aria-label="remove"><svg viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`;
+          input.parentNode.insertBefore(chip, input);
+          chip.querySelector(".chip__x").addEventListener("click", () => {
+            chip.remove();
+          });
+          input.value = "";
+          input.focus();
+        });
+      });
+
+      // composite-row__input: Enter commits
+      document
+        .querySelectorAll(".composite-row--add .composite-row__input")
+        .forEach((input) => {
+          input.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            const value = input.value.trim();
+            if (!value) return;
+            e.preventDefault();
+            // demo: just clear; in real impl this would create a real composite row above
+            input.value = "";
+          });
+        });
+    </script>
+  </body>
+</html>

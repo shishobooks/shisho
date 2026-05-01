@@ -135,3 +135,37 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 
 	return md
 }
+
+// applyOverrides carries apply-path-only signals that don't belong on
+// mediafile.ParsedMetadata (which is part of the public plugin SDK
+// contract). These come exclusively from the identify apply payload —
+// plugins do not model them.
+type applyOverrides struct {
+	// FileName is the value to write to file.Name. Nil = no change.
+	// Empty string is treated as nil (treat absent or "" as no-op so
+	// callers don't need to special-case empty inputs).
+	FileName *string
+	// FileNameSource is the value to write to file.NameSource. Nil
+	// means "default to the plugin source for this apply call".
+	FileNameSource *string
+}
+
+// convertFieldsToOverrides extracts apply-path-only signals from the
+// untyped fields map. Returns nil when no overrides are present, so
+// callers can cheaply skip the explicit-write code path.
+func convertFieldsToOverrides(fields map[string]any) *applyOverrides {
+	var out *applyOverrides
+	if v, ok := fields["file_name"].(string); ok && v != "" {
+		if out == nil {
+			out = &applyOverrides{}
+		}
+		out.FileName = &v
+	}
+	if v, ok := fields["file_name_source"].(string); ok && v != "" {
+		if out == nil {
+			out = &applyOverrides{}
+		}
+		out.FileNameSource = &v
+	}
+	return out
+}
