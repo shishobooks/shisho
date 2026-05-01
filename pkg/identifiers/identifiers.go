@@ -35,9 +35,10 @@ func DetectType(value, scheme string) Type {
 	value = strings.TrimSpace(value)
 	scheme = strings.ToUpper(strings.TrimSpace(scheme))
 
-	// Calibre and KindleGen emit ASINs under several scheme names: "ASIN",
-	// "MOBI-ASIN", and "AMAZON"/"AMAZON_<COUNTRY>" for storefront-scoped IDs.
-	// All carry the same B0XXXXXXXX format.
+	// Calibre emits ASINs under several scheme names: "ASIN", "MOBI-ASIN"
+	// (typically on EPUBs converted from MOBI/AZW3), and "AMAZON" /
+	// "AMAZON_<COUNTRY>" for storefront-scoped IDs. All carry the same
+	// B0XXXXXXXX format.
 	if scheme == "ASIN" || scheme == "MOBI-ASIN" || scheme == "AMAZON" || strings.HasPrefix(scheme, "AMAZON_") {
 		return TypeASIN
 	}
