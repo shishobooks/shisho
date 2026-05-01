@@ -365,7 +365,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		targetFile.Name = &nameCopy
 
 		nameSource := pluginSource
-		if overrides.FileNameSource != nil {
+		// Empty-string source is treated as absent so a malformed payload
+		// like {"file_name": "x", "file_name_source": ""} doesn't write
+		// an empty string into file.NameSource. Same shape as the
+		// Language block above.
+		if overrides.FileNameSource != nil && *overrides.FileNameSource != "" {
 			nameSource = *overrides.FileNameSource
 		}
 		nameSourceCopy := nameSource

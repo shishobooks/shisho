@@ -308,25 +308,80 @@ func TestApplyMetadata_DoesNotAutoSyncMainFileName_WhenOnlyTitleSent(t *testing.
 	assert.Nil(t, file.NameSource, "file.NameSource must NOT be set when no explicit file_name was sent")
 }
 
-func TestApplyMetadata_DoesNotUpdateSupplementFileName(t *testing.T) {
+// TestApplyMetadata_ExplicitFileName_AppliesToSupplement verifies the post-
+// Phase-1 invariant that the explicit-payload path is role-agnostic: when a
+// caller pins file_id at a supplement and ships file_name, the supplement's
+// Name updates per the payload. Previously persistMetadata gated the file.Name
+// write on FileRoleMain; now the gate is at the wire layer (frontend opts in
+// per file by sending file_name only when the user checked the Name row), so
+// the persist layer trusts the explicit signal regardless of role.
+//
+// This replaces an earlier tautological test that asserted "supplement.Name
+// is not overwritten by a title-only payload" — which is now true for every
+// file role and isn't load-bearing.
+func TestApplyMetadata_ExplicitFileName_AppliesToSupplement(t *testing.T) {
 	t.Parallel()
 
-	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypePDF)
-	file.FileRole = models.FileRoleSupplement
+	book := newApplyTestBook(t, "Book Title")
+	main := &models.File{
+		ID:        1,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "main.epub"),
+		FileType:  models.FileTypeEPUB,
+		FileRole:  models.FileRoleMain,
+	}
+	supplementID := 2
+	supplement := &models.File{
+		ID:        supplementID,
+		BookID:    book.ID,
+		LibraryID: book.LibraryID,
+		Filepath:  filepath.Join(book.Filepath, "Supplement.pdf"),
+		FileType:  models.FileTypePDF,
+		FileRole:  models.FileRoleSupplement,
+	}
 	originalName := "Supplement.pdf"
-	file.Name = &originalName
+	supplement.Name = &originalName
+	book.Files = []*models.File{main, supplement}
 
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	h := newApplyTestHandler(store)
-	c := newApplyEchoContext(t, map[string]any{"title": "New Title"})
 
-	err := h.applyMetadata(c)
+	// Build a payload that pins file_id at the supplement and explicitly
+	// sets file_name. newApplyEchoContextWithFileName doesn't carry file_id,
+	// so build the request inline.
+	payload := applyPayload{
+		BookID:      book.ID,
+		FileID:      &supplementID,
+		Fields:      map[string]any{},
+		FileName:    func() *string { s := "Cribsheet (Updated)"; return &s }(),
+		PluginScope: "test",
+		PluginID:    "enricher",
+	}
+	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	require.NotNil(t, file.Name)
-	assert.Equal(t, "Supplement.pdf", *file.Name, "supplement Name must not be overwritten with book title")
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &models.User{
+		ID:            1,
+		LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}},
+	})
+
+	err = h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, supplement.Name)
+	assert.Equal(t, "Cribsheet (Updated)", *supplement.Name,
+		"explicit file_name targeting a supplement should write through (Phase 1 removes the role gate at the persist layer)")
+	require.NotNil(t, supplement.NameSource)
+	assert.Equal(t, "plugin:test/enricher", *supplement.NameSource)
+	assert.Nil(t, main.Name, "main file must not be touched when file_id pins the supplement")
 }
 
 func TestApplyMetadata_FallbackTargetsMainFile_NotSupplement(t *testing.T) {
