@@ -8,7 +8,7 @@ import {
   RefreshCcw,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EntityCombobox } from "@/components/common/EntityCombobox";
@@ -837,6 +837,36 @@ export function IdentifyReviewForm({
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
 
+  // The cover image dimensions load asynchronously, so `hasCoverChoice` and
+  // therefore `fieldStatus.cover` can flip from "unchanged" to "new"/"changed"
+  // after the dialog has already mounted. The initial `decisions.cover` was
+  // computed against the pre-load state (false), leaving the user with an
+  // unchecked cover row that should have defaulted ON. When the cover row
+  // becomes available and the user hasn't explicitly chosen yet, sync the
+  // decision to match the smart default.
+  const hasCoverChoiceRef = useRef(hasCoverChoice);
+  useEffect(() => {
+    if (
+      !hasCoverChoiceRef.current &&
+      hasCoverChoice &&
+      !isDisabled("cover") &&
+      userCoverSelection === null
+    ) {
+      const desired = defaultDecision({
+        scope: "file",
+        status: fieldStatus.cover,
+        isPrimaryFile,
+      });
+      setDecisions((prev) =>
+        prev.cover === desired ? prev : { ...prev, cover: desired },
+      );
+    }
+    hasCoverChoiceRef.current = hasCoverChoice;
+    // isDisabled depends on disabledFieldsRaw which is stable across renders
+    // for a given plugin result; intentionally omitted to avoid re-running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCoverChoice, fieldStatus.cover, isPrimaryFile, userCoverSelection]);
+
   const setDecision = (k: FieldKey, v: boolean) => {
     if (isDisabled(k)) return;
     setDecisions((prev) => ({ ...prev, [k]: v }));
@@ -1484,7 +1514,13 @@ export function IdentifyReviewForm({
                               "cursor-not-allowed opacity-60",
                           )}
                           disabled={isDisabled("cover")}
-                          onClick={() => setUserCoverSelection("current")}
+                          onClick={() => {
+                            setUserCoverSelection("current");
+                            // Picking "Keep current" means no apply. Sync the
+                            // row checkbox so its visual state matches the
+                            // (no-op) effective state.
+                            setDecision("cover", false);
+                          }}
                           type="button"
                         >
                           <img
@@ -1510,7 +1546,14 @@ export function IdentifyReviewForm({
                             "cursor-not-allowed opacity-60",
                         )}
                         disabled={isDisabled("cover")}
-                        onClick={() => setUserCoverSelection("new")}
+                        onClick={() => {
+                          setUserCoverSelection("new");
+                          // Picking "Use new" should apply the cover. Sync
+                          // the row checkbox to match.
+                          if (!isDisabled("cover")) {
+                            setDecision("cover", true);
+                          }
+                        }}
                         type="button"
                       >
                         <img
@@ -1594,7 +1637,16 @@ export function IdentifyReviewForm({
                         const n =
                           "__create" in next ? next.__create : next.name;
                         if (!n.trim()) return;
-                        if (narrators.includes(n)) return;
+                        // Case-insensitive duplicate check matches the
+                        // nameRowStatus comparison and the parallel author
+                        // dedupe above.
+                        if (
+                          narrators.some(
+                            (x) => x.toLowerCase() === n.toLowerCase(),
+                          )
+                        ) {
+                          return;
+                        }
                         setNarrators([...narrators, n]);
                       }}
                       onRemove={(idx) =>
