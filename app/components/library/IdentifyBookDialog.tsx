@@ -33,7 +33,7 @@ import {
 import { getIdentifierUrl } from "@/utils/identifiers";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
-import { computeIdentifyEmptyState } from "./identify-utils";
+import { computeIdentifyEmptyState, pickInitialFile } from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
 
 interface IdentifyBookDialogProps {
@@ -75,7 +75,7 @@ export function IdentifyBookDialog({
 
   const selectedFile = selectedFileId
     ? mainFiles.find((f) => f.id === selectedFileId)
-    : mainFiles[0];
+    : pickInitialFile(book);
   const isAudiobook = selectedFile?.file_type === "m4b";
 
   // Pre-fill form and auto-search when dialog opens
@@ -86,10 +86,13 @@ export function IdentifyBookDialog({
       hasSearchedRef.current = false;
       queryUserTouched.current = false;
 
-      const initialQuery = book.title;
+      const initialFile = pickInitialFile(book);
+      const initialQuery = initialFile?.name?.trim() || book.title;
       const initialAuthor = book.authors?.[0]?.person?.name ?? "";
-      const initialFileId = mainFiles.length > 1 ? mainFiles[0].id : undefined;
-      const initialFile = mainFiles[0];
+      // Only thread an explicit fileId through search when the book has more
+      // than one main file — single-file books leave fileId undefined so the
+      // backend uses the primary file (matches prior behavior).
+      const initialFileId = mainFiles.length > 1 ? initialFile?.id : undefined;
       const initialIds = (initialFile?.identifiers ?? []).map((id) => ({
         type: id.type,
         value: id.value,
