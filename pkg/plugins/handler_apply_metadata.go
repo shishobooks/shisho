@@ -12,11 +12,13 @@ import (
 )
 
 type applyPayload struct {
-	BookID      int            `json:"book_id" validate:"required"`
-	FileID      *int           `json:"file_id"`
-	Fields      map[string]any `json:"fields" validate:"required"`
-	PluginScope string         `json:"plugin_scope" validate:"required"`
-	PluginID    string         `json:"plugin_id" validate:"required"`
+	BookID         int            `json:"book_id" validate:"required"`
+	FileID         *int           `json:"file_id"`
+	Fields         map[string]any `json:"fields" validate:"required"`
+	FileName       *string        `json:"file_name"`
+	FileNameSource *string        `json:"file_name_source"`
+	PluginScope    string         `json:"plugin_scope" validate:"required"`
+	PluginID       string         `json:"plugin_id" validate:"required"`
 }
 
 func (h *handler) applyMetadata(c echo.Context) error {
@@ -65,6 +67,17 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Convert fields map to ParsedMetadata
 	md := convertFieldsToMetadata(payload.Fields)
 
+	// Build apply-path overrides from explicit top-level payload fields.
+	// Empty strings count as absent so callers don't accidentally write
+	// blank values into file.Name / file.NameSource.
+	var overrides *applyOverrides
+	if (payload.FileName != nil && *payload.FileName != "") || (payload.FileNameSource != nil && *payload.FileNameSource != "") {
+		overrides = &applyOverrides{
+			FileName:       payload.FileName,
+			FileNameSource: payload.FileNameSource,
+		}
+	}
+
 	// Download cover if cover_url set
 	if md.CoverURL != "" {
 		manifest := rt.Manifest()
@@ -76,7 +89,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)
-	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, nil, log); err != nil {
+	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log); err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
 
