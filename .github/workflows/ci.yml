@@ -65,11 +65,12 @@ jobs:
           name: gotest-timings-shard-${{ matrix.shard }}
           # Upload ONLY the files this shard wrote, not the entire restored
           # cache directory. Each shard writes junit-${SHARD_INDEX}-*.xml; the
-          # rest of the dir is stale leftovers from the cache restore that
-          # other shards will write fresh versions of. If we upload everything,
-          # the consolidator's merge-multiple sees 12 versions of every file
-          # and the "winner" is whichever artifact downloads last — so stale
-          # data can silently overwrite fresh data in the saved cache.
+          # rest of the dir is the previous run's junit files (untouched by
+          # this shard, since it only ran its own slice). If we upload
+          # everything, the consolidator's merge-multiple sees 12 versions of
+          # every filename and the "winner" is whichever artifact downloads
+          # last — so old data can silently overwrite fresh data in the
+          # saved cache.
           path: .gotest-timings/junit-${{ env.SHARD_INDEX }}-*.xml
           retention-days: 1
           # The path is under a dot-prefixed dir; without this flag
