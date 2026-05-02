@@ -653,7 +653,7 @@ export function IdentifyReviewForm({
   // `"user"` otherwise.
   const initialName = result.title?.trim() ?? "";
   const [name, setName] = useState(initialName);
-  const nameStatus: FieldStatus = useMemo(() => {
+  const initialNameStatus: FieldStatus = useMemo(() => {
     const cur = (file?.name ?? "").trim();
     if (!cur && initialName) return "new";
     if (cur && !initialName) return "unchanged";
@@ -791,8 +791,8 @@ export function IdentifyReviewForm({
   const coverSelection: "current" | "new" =
     userCoverSelection ?? defaultCoverSelection;
 
-  // ---- Field statuses (per-key) ----
-  const fieldStatus: Record<FieldKey, FieldStatus> = useMemo(() => {
+  // ---- Initial field statuses (plugin vs saved — for default decisions) ----
+  const initialFieldStatus: Record<FieldKey, FieldStatus> = useMemo(() => {
     const seriesStatus: FieldStatus =
       defaults.series.status === "changed" ||
       defaults.seriesNumber.status === "changed" ||
@@ -820,7 +820,7 @@ export function IdentifyReviewForm({
       tags: defaults.tags.status,
       description: defaults.description.status,
       cover: coverStatus,
-      name: nameStatus,
+      name: initialNameStatus,
       narrators: defaults.narrators.status,
       publisher: defaults.publisher.status,
       imprint: defaults.imprint.status,
@@ -835,7 +835,144 @@ export function IdentifyReviewForm({
     hasCoverChoice,
     preferCurrentCover,
     currentCoverUrl,
-    nameStatus,
+    initialNameStatus,
+  ]);
+
+  // ---- Live field statuses (form state vs saved — updates as user edits) ----
+  const fieldStatus: Record<FieldKey, FieldStatus> = useMemo(() => {
+    const scalarStatus = (
+      saved: string | undefined | null,
+      current: string,
+    ): FieldStatus => {
+      const s = saved?.trim() ?? "";
+      const c = current.trim();
+      if (!s && c) return "new";
+      if (s && !c) return "unchanged";
+      if (s === c) return "unchanged";
+      return "changed";
+    };
+
+    const seriesSaved = currentSeries.trim();
+    const seriesNumSaved = currentSeriesNumber.trim();
+    const seriesUnitSaved = currentSeriesNumberUnit.trim();
+    const seriesChanged =
+      series.trim() !== seriesSaved ||
+      seriesNumber.trim() !== seriesNumSaved ||
+      seriesNumberUnit.trim() !== seriesUnitSaved;
+    const seriesIsNew =
+      !seriesSaved &&
+      !seriesNumSaved &&
+      !seriesUnitSaved &&
+      (series.trim() || seriesNumber.trim() || seriesNumberUnit.trim());
+    const seriesStatus: FieldStatus = seriesChanged
+      ? seriesIsNew
+        ? "new"
+        : "changed"
+      : "unchanged";
+
+    const arrayStatus = (saved: string[], current: string[]): FieldStatus => {
+      if (saved.length === 0 && current.length > 0) return "new";
+      if (saved.length > 0 && current.length === 0) return "unchanged";
+      const s = [...saved].sort();
+      const c = [...current].sort();
+      if (s.length === c.length && s.every((v, i) => v === c[i]))
+        return "unchanged";
+      return "changed";
+    };
+
+    const authorsStatus = (): FieldStatus => {
+      if (currentAuthors.length === 0 && authors.length > 0) return "new";
+      if (currentAuthors.length > 0 && authors.length === 0) return "unchanged";
+      const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
+      const s = currentAuthors.map(key).sort();
+      const c = authors.map(key).sort();
+      if (s.length === c.length && s.every((v, i) => v === c[i]))
+        return "unchanged";
+      return "changed";
+    };
+
+    const abridgedStatus = (): FieldStatus => {
+      const saved = file?.abridged ?? null;
+      if (saved === null && abridged !== null) return "new";
+      if (saved !== null && abridged === null) return "unchanged";
+      if (saved === abridged) return "unchanged";
+      return "changed";
+    };
+
+    const identifiersStatus = (): FieldStatus => {
+      if (currentIdentifiers.length === 0 && identifiers.length > 0)
+        return "new";
+      if (currentIdentifiers.length > 0 && identifiers.length === 0)
+        return "unchanged";
+      const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
+      const s = currentIdentifiers.map(key).sort();
+      const c = identifiers.map(key).sort();
+      if (s.length === c.length && s.every((v, i) => v === c[i]))
+        return "unchanged";
+      return "changed";
+    };
+
+    const coverStatus: FieldStatus =
+      hasCoverChoice && coverSelection === "new"
+        ? currentCoverUrl
+          ? "changed"
+          : "new"
+        : "unchanged";
+
+    return {
+      title: scalarStatus(book.title, title),
+      subtitle: scalarStatus(book.subtitle, subtitle),
+      authors: authorsStatus(),
+      series: seriesStatus,
+      genres: arrayStatus(currentGenres, genres),
+      tags: arrayStatus(currentTags, tags),
+      description: scalarStatus(book.description, description),
+      cover: coverStatus,
+      name: scalarStatus(file?.name, name),
+      narrators: arrayStatus(currentNarrators, narrators),
+      publisher: scalarStatus(file?.publisher?.name, publisher),
+      imprint: scalarStatus(file?.imprint?.name, imprint),
+      language: scalarStatus(file?.language, language),
+      release_date: scalarStatus(
+        file?.release_date ? file.release_date.split("T")[0] : undefined,
+        releaseDate,
+      ),
+      url: scalarStatus(file?.url, url),
+      identifiers: identifiersStatus(),
+      abridged: abridgedStatus(),
+    };
+  }, [
+    book,
+    file,
+    title,
+    subtitle,
+    description,
+    authors,
+    narrators,
+    series,
+    seriesNumber,
+    seriesNumberUnit,
+    genres,
+    tags,
+    publisher,
+    imprint,
+    releaseDate,
+    url,
+    language,
+    abridged,
+    identifiers,
+    name,
+    currentAuthors,
+    currentNarrators,
+    currentSeries,
+    currentSeriesNumber,
+    currentSeriesNumberUnit,
+    currentGenres,
+    currentTags,
+    currentIdentifiers,
+    hasCoverChoice,
+    coverSelection,
+    currentCoverUrl,
   ]);
 
   // ---- Decision state ----
@@ -848,13 +985,13 @@ export function IdentifyReviewForm({
       }
       out[k] = defaultDecision({
         scope: fieldScope(k),
-        status: fieldStatus[k],
+        status: initialFieldStatus[k],
         isPrimaryFile,
       });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fieldStatus, isPrimaryFile]);
+  }, [initialFieldStatus, isPrimaryFile]);
 
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
@@ -876,7 +1013,7 @@ export function IdentifyReviewForm({
     ) {
       const desired = defaultDecision({
         scope: "file",
-        status: fieldStatus.cover,
+        status: initialFieldStatus.cover,
         isPrimaryFile,
       });
       setDecisions((prev) =>
@@ -888,7 +1025,12 @@ export function IdentifyReviewForm({
     // value at effect commit, which is what we want. Intentionally omitted
     // from deps to avoid re-running on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCoverChoice, fieldStatus.cover, isPrimaryFile, userCoverSelection]);
+  }, [
+    hasCoverChoice,
+    initialFieldStatus.cover,
+    isPrimaryFile,
+    userCoverSelection,
+  ]);
 
   const setDecision = (k: FieldKey, v: boolean) => {
     if (isDisabled(k)) return;
@@ -930,33 +1072,38 @@ export function IdentifyReviewForm({
     [bookApplicableKeys, fileApplicableKeys],
   );
 
-  // A field "effectively applies" iff its checkbox is checked AND the apply
-  // would actually write something. The Cover row is the only special case:
-  // a checked Cover with "Keep current" selected is a no-op (submit only
-  // writes when coverSelection === "new"), so we exclude it from the
-  // selected count and section/global aggregations to avoid an inflated
-  // "Apply N changes" or "Updated N fields" toast.
-  const isEffectivelyApplied = (k: FieldKey): boolean => {
-    if (!decisions[k]) return false;
-    if (k === "cover" && coverSelection !== "new") return false;
-    return true;
-  };
+  const bookVisibleKeys = useMemo(
+    () =>
+      filterMode === "all"
+        ? bookApplicableKeys
+        : bookApplicableKeys.filter((k) => fieldStatus[k] !== "unchanged"),
+    [filterMode, bookApplicableKeys, fieldStatus],
+  );
+  const fileVisibleKeys = useMemo(
+    () =>
+      filterMode === "all"
+        ? fileApplicableKeys
+        : fileApplicableKeys.filter((k) => fieldStatus[k] !== "unchanged"),
+    [filterMode, fileApplicableKeys, fieldStatus],
+  );
+  const allVisibleKeys: FieldKey[] = useMemo(
+    () => [...bookVisibleKeys, ...fileVisibleKeys],
+    [bookVisibleKeys, fileVisibleKeys],
+  );
 
-  const bookSelectedCount =
-    bookApplicableKeys.filter(isEffectivelyApplied).length;
-  const fileSelectedCount =
-    fileApplicableKeys.filter(isEffectivelyApplied).length;
+  const bookSelectedCount = bookVisibleKeys.filter((k) => decisions[k]).length;
+  const fileSelectedCount = fileVisibleKeys.filter((k) => decisions[k]).length;
   const totalSelected = bookSelectedCount + fileSelectedCount;
-  const totalApplicable = allApplicableKeys.length;
+  const totalApplicable = allVisibleKeys.length;
 
   const bookCheckboxState = aggregateDecisions(
-    bookApplicableKeys.map(isEffectivelyApplied),
+    bookVisibleKeys.map((k) => decisions[k]),
   );
   const fileCheckboxState = aggregateDecisions(
-    fileApplicableKeys.map(isEffectivelyApplied),
+    fileVisibleKeys.map((k) => decisions[k]),
   );
   const globalCheckboxState = aggregateDecisions(
-    allApplicableKeys.map(isEffectivelyApplied),
+    allVisibleKeys.map((k) => decisions[k]),
   );
 
   // ---- Section collapse state (initial: collapsed iff selected count is 0) ----
@@ -1143,6 +1290,7 @@ export function IdentifyReviewForm({
         onExtract={(t, s) => {
           setTitle(t);
           setSubtitle(s);
+          if (!decisions.subtitle) setDecision("subtitle", true);
         }}
         title={title}
       />
@@ -1215,7 +1363,7 @@ export function IdentifyReviewForm({
           aria-label="Apply all"
           checked={globalCheckboxState}
           onCheckedChange={(v) =>
-            setSectionDecisions(allApplicableKeys, v === true)
+            setSectionDecisions(allVisibleKeys, v === true)
           }
         />
         <span className="text-xs font-medium">Apply all</span>
@@ -1257,17 +1405,17 @@ export function IdentifyReviewForm({
           bar is outside the scroll container. */}
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         {/* Book section */}
-        {bookApplicableKeys.length > 0 && (
+        {bookVisibleKeys.length > 0 && (
           <>
             <IdentifySectionBanner
               checkboxState={bookCheckboxState}
               collapsed={bookCollapsed}
               hint="applies to all files"
               label="BOOK"
-              onCheckedChange={(v) => setSectionDecisions(BOOK_FIELDS, v)}
+              onCheckedChange={(v) => setSectionDecisions(bookVisibleKeys, v)}
               onToggleCollapse={() => setBookCollapsed((c) => !c)}
               selectedCount={bookSelectedCount}
-              totalCount={bookApplicableKeys.length}
+              totalCount={bookVisibleKeys.length}
             />
             {!bookCollapsed && (
               <div>
@@ -1558,17 +1706,17 @@ export function IdentifyReviewForm({
         )}
 
         {/* File section */}
-        {fileApplicableKeys.length > 0 && (
+        {fileVisibleKeys.length > 0 && (
           <>
             <IdentifySectionBanner
               checkboxState={fileCheckboxState}
               collapsed={fileCollapsed}
               hint={fileSectionHint}
               label="FILE"
-              onCheckedChange={(v) => setSectionDecisions(FILE_FIELDS, v)}
+              onCheckedChange={(v) => setSectionDecisions(fileVisibleKeys, v)}
               onToggleCollapse={() => setFileCollapsed((c) => !c)}
               selectedCount={fileSelectedCount}
-              totalCount={fileApplicableKeys.length}
+              totalCount={fileVisibleKeys.length}
             />
             {!fileCollapsed && (
               <div>
