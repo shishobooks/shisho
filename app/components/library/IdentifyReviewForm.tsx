@@ -42,9 +42,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getLanguageName } from "@/constants/languages";
-import { useGenresList } from "@/hooks/queries/genres";
-import { useImprintsList } from "@/hooks/queries/imprints";
-import { usePeopleList } from "@/hooks/queries/people";
+import {
+  useGenreSearch,
+  useImprintSearch,
+  usePeopleSearch,
+  usePublisherSearch,
+  useSeriesSearch,
+  useTagSearch,
+  type NameOption,
+} from "@/hooks/queries/entity-search";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
@@ -52,10 +58,6 @@ import {
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
-import { usePublishersList } from "@/hooks/queries/publishers";
-import { useSeriesList } from "@/hooks/queries/series";
-import { useTagsList } from "@/hooks/queries/tags";
-import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
@@ -92,10 +94,6 @@ interface IdentifyReviewFormProps {
 interface AuthorEntry {
   name: string;
   role?: string;
-}
-
-interface NameOption {
-  name: string;
 }
 
 type BookFieldKey =
@@ -165,78 +163,6 @@ const PLUGIN_FIELD_ALIASES: Record<FieldKey, string[]> = {
 
 function fieldScope(k: FieldKey): FieldScope {
   return (BOOK_FIELDS as string[]).includes(k) ? "book" : "file";
-}
-
-// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
-// signature. Defined at module scope so they're stable references and the same
-// hooks run in the same order on every render.
-
-function usePeopleSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.people.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function useSeriesSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = useSeriesList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.series.map((s) => ({ name: s.name }));
-  return { data: adapted, isLoading };
-}
-
-function usePublisherSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePublishersList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.publishers.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function useImprintSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = useImprintsList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.imprints.map((i) => ({ name: i.name }));
-  return { data: adapted, isLoading };
 }
 
 // ---------------------------------------------------------------------------
@@ -650,29 +576,6 @@ export function IdentifyReviewForm({
     if (cur === initialName) return "unchanged";
     return "changed";
   }, [file?.name, initialName]);
-
-  // ---- Genre / tag option pools (server-side search) ----
-  const [genreSearch, setGenreSearch] = useState("");
-  const debouncedGenreSearch = useDebounce(genreSearch, 200);
-  const [tagSearch, setTagSearch] = useState("");
-  const debouncedTagSearch = useDebounce(tagSearch, 200);
-
-  const { data: genresData, isLoading: isLoadingGenres } = useGenresList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedGenreSearch || undefined,
-    },
-    { enabled: !!book.library_id },
-  );
-  const { data: tagsData, isLoading: isLoadingTags } = useTagsList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedTagSearch || undefined,
-    },
-    { enabled: !!book.library_id },
-  );
 
   // ---- Identifier types ----
   const availableIdentifierTypes = useMemo(
@@ -1604,13 +1507,12 @@ export function IdentifyReviewForm({
                   status={fieldStatus.genres}
                 >
                   <MultiSelectCombobox
-                    isLoading={isLoadingGenres}
+                    hook={function useGenreOptions(q) {
+                      return useGenreSearch(book.library_id, true, q);
+                    }}
                     label="Genre"
                     onChange={setGenres}
-                    onSearch={setGenreSearch}
-                    options={genresData?.genres.map((g) => g.name) ?? []}
                     placeholder="Add genres..."
-                    searchValue={genreSearch}
                     values={genres}
                   />
                 </FieldRow>
@@ -1628,13 +1530,12 @@ export function IdentifyReviewForm({
                   status={fieldStatus.tags}
                 >
                   <MultiSelectCombobox
-                    isLoading={isLoadingTags}
+                    hook={function useTagOptions(q) {
+                      return useTagSearch(book.library_id, true, q);
+                    }}
                     label="Tag"
                     onChange={setTags}
-                    onSearch={setTagSearch}
-                    options={tagsData?.tags.map((t) => t.name) ?? []}
                     placeholder="Add tags..."
-                    searchValue={tagSearch}
                     values={tags}
                   />
                 </FieldRow>

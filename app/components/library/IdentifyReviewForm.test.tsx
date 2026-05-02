@@ -63,78 +63,14 @@ vi.mock("@/hooks/queries/plugins", async () => {
   };
 });
 
-vi.mock("@/hooks/queries/people", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/people")>(
-    "@/hooks/queries/people",
-  );
-  return {
-    ...actual,
-    usePeopleList: () => ({
-      data: { people: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/series", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/series")>(
-    "@/hooks/queries/series",
-  );
-  return {
-    ...actual,
-    useSeriesList: () => ({
-      data: { series: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/publishers", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/hooks/queries/publishers")
-  >("@/hooks/queries/publishers");
-  return {
-    ...actual,
-    usePublishersList: () => ({
-      data: { publishers: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/imprints", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/hooks/queries/imprints")
-  >("@/hooks/queries/imprints");
-  return {
-    ...actual,
-    useImprintsList: () => ({
-      data: { imprints: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/genres", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/genres")>(
-    "@/hooks/queries/genres",
-  );
-  return {
-    ...actual,
-    useGenresList: () => ({
-      data: { genres: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/tags", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/tags")>(
-    "@/hooks/queries/tags",
-  );
-  return {
-    ...actual,
-    useTagsList: () => ({
-      data: { tags: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
+vi.mock("@/hooks/queries/entity-search", () => ({
+  usePeopleSearch: () => ({ data: [], isLoading: false }),
+  useSeriesSearch: () => ({ data: [], isLoading: false }),
+  usePublisherSearch: () => ({ data: [], isLoading: false }),
+  useImprintSearch: () => ({ data: [], isLoading: false }),
+  useGenreSearch: () => ({ data: [], isLoading: false }),
+  useTagSearch: () => ({ data: [], isLoading: false }),
+}));
 
 vi.mock("@/libraries/api", async () => {
   const actual =
