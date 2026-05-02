@@ -1,8 +1,37 @@
+import type { Book, File } from "@/types";
+
 export type FieldStatus = "unchanged" | "changed" | "new";
 
 export interface IdentifierEntry {
   type: string;
   value: string;
+}
+
+/** Choose which file to identify when the dialog opens.
+ *
+ * Decision order, leveraging the existing `file.reviewed` flag computed by
+ * `pkg/books/review` against per-library required fields:
+ *
+ * 1. If some main files are reviewed and others aren't, prefer a non-reviewed
+ *    one (`reviewed !== true` covers both `false` and `undefined`).
+ * 2. Otherwise prefer the book's primary file if set.
+ * 3. Otherwise the first main file.
+ *
+ * Returns `undefined` when there are no main files. */
+export function pickInitialFile(book: Book): File | undefined {
+  const mains = (book.files ?? []).filter((f) => f.file_role === "main");
+  if (mains.length === 0) return undefined;
+  const hasReviewed = mains.some((f) => f.reviewed === true);
+  const hasNonReviewed = mains.some((f) => f.reviewed !== true);
+  if (hasReviewed && hasNonReviewed) {
+    const nonReviewed = mains.find((f) => f.reviewed !== true);
+    if (nonReviewed) return nonReviewed;
+  }
+  if (book.primary_file_id != null) {
+    const primary = mains.find((f) => f.id === book.primary_file_id);
+    if (primary) return primary;
+  }
+  return mains[0];
 }
 
 export interface SkippedPlugin {
@@ -95,26 +124,13 @@ export function resolveIdentifiers(
     return { value: current, status: "unchanged" };
   }
 
-  // Merge: keep current's order; for each current entry, replace value with
-  // incoming's value if the type matches. Append new types from incoming
-  // (in incoming order) at the end.
-  const incomingMap = new Map(dedupedIncoming.map((id) => [id.type, id.value]));
-  let changed = false;
-  const merged: IdentifierEntry[] = current.map((id) => {
-    const incomingValue = incomingMap.get(id.type);
-    if (incomingValue !== undefined && incomingValue !== id.value) {
-      changed = true;
-      return { type: id.type, value: incomingValue };
-    }
-    return id;
-  });
-  const currentTypes = new Set(current.map((id) => id.type));
-  for (const entry of dedupedIncoming) {
-    if (!currentTypes.has(entry.type)) {
-      merged.push(entry);
-      changed = true;
-    }
-  }
+  // Overwrite: use incoming identifiers directly (replacing current).
+  const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
+  const currentSet = new Set(current.map(key));
+  const incomingSet = new Set(dedupedIncoming.map(key));
+  const same =
+    currentSet.size === incomingSet.size &&
+    [...currentSet].every((k) => incomingSet.has(k));
 
-  return { value: merged, status: changed ? "changed" : "unchanged" };
+  return { value: dedupedIncoming, status: same ? "unchanged" : "changed" };
 }

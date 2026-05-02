@@ -679,10 +679,17 @@ export const usePluginSearch = () => {
   });
 };
 
-interface PluginApplyPayload {
+export interface PluginApplyPayload {
   book_id: number;
   file_id?: number;
   fields: Record<string, unknown>;
+  /** Optional override for `file.Name`. Phase 1 backend treats an empty
+   * string as absent; only set when the user explicitly opts the Name
+   * field into the apply payload. */
+  file_name?: string;
+  /** Source attribution for `file.Name`. `"plugin"` when the saved value
+   * matches the plugin's proposal, `"user"` when the user edited it. */
+  file_name_source?: "plugin" | "user";
   plugin_scope: string;
   plugin_id: string;
 }

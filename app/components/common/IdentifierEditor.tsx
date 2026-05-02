@@ -16,7 +16,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/libraries/utils";
 import { validateIdentifier } from "@/utils/identifiers";
 
 export interface IdentifierRow {
@@ -40,16 +39,14 @@ interface IdentifierEditorProps {
   value: IdentifierRow[];
   onChange: (next: IdentifierRow[]) => void;
   identifierTypes: IdentifierTypeOption[];
-  /** Optional resolver returning a per-row status badge value. When omitted,
-   * no badges are rendered. */
-  status?: (row: IdentifierRow) => IdentifierStatus | undefined;
+  hideHeader?: boolean;
 }
 
 export function IdentifierEditor({
   value,
   onChange,
   identifierTypes,
-  status,
+  hideHeader,
 }: IdentifierEditorProps) {
   const presentTypes = useMemo(
     () => new Set(value.map((row) => row.type)),
@@ -111,23 +108,24 @@ export function IdentifierEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium leading-none">Identifiers</span>
-        {value.length > 1 && (
-          <button
-            className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
-            onClick={handleClearAll}
-            type="button"
-          >
-            Clear all
-          </button>
-        )}
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium leading-none">Identifiers</span>
+          {value.length > 1 && (
+            <button
+              className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+              onClick={handleClearAll}
+              type="button"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
       {value.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="flex flex-wrap items-center gap-2">
           {value.map((row, idx) => {
             const label = labelFor(row.type);
-            const rowStatus = status?.(row);
             return (
               <Badge
                 className="flex items-center gap-1 max-w-full"
@@ -137,24 +135,6 @@ export function IdentifierEditor({
               >
                 <span className="text-xs">{label}</span>:{" "}
                 <span>{row.value}</span>
-                {rowStatus && (
-                  <span
-                    className={cn(
-                      "ml-1 inline-flex items-center rounded px-1 text-[10px]",
-                      rowStatus === "new" &&
-                        "text-emerald-700 dark:text-emerald-400",
-                      rowStatus === "changed" && "text-primary",
-                      rowStatus === "unchanged" && "text-muted-foreground",
-                    )}
-                    data-testid="identifier-status-badge"
-                  >
-                    {rowStatus === "new"
-                      ? "New"
-                      : rowStatus === "changed"
-                        ? "Changed"
-                        : "Unchanged"}
-                  </span>
-                )}
                 <button
                   aria-label={`Remove ${label}`}
                   className="ml-1 cursor-pointer hover:text-destructive shrink-0"
@@ -166,6 +146,15 @@ export function IdentifierEditor({
               </Badge>
             );
           })}
+          {hideHeader && value.length > 1 && (
+            <button
+              className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+              onClick={handleClearAll}
+              type="button"
+            >
+              Clear all
+            </button>
+          )}
         </div>
       )}
       <div className="flex gap-2">

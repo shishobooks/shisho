@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -54,7 +55,8 @@ func ReadHistory(dir string) (History, error) {
 	sort.Strings(paths)
 	for _, p := range paths {
 		if err := mergeFile(h, p); err != nil {
-			return nil, err
+			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Base(p), err)
+			continue
 		}
 	}
 	return h, nil

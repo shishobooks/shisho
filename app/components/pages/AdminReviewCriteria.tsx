@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -54,7 +55,7 @@ const RecomputeDialog = ({
       }}
       open={open}
     >
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Recompute review state?</DialogTitle>
           <DialogDescription asChild>
@@ -72,26 +73,33 @@ const RecomputeDialog = ({
             </div>
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center space-x-2 py-2">
-          <Checkbox
-            checked={clearOverrides}
-            id="clear-overrides"
-            onCheckedChange={(checked) =>
-              onClearOverridesChange(checked as boolean)
-            }
-          />
-          <Label
-            className="text-sm font-normal cursor-pointer"
-            htmlFor="clear-overrides"
-          >
-            Also clear manual overrides
-          </Label>
-        </div>
+        <DialogBody>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              checked={clearOverrides}
+              id="clear-overrides"
+              onCheckedChange={(checked) =>
+                onClearOverridesChange(checked as boolean)
+              }
+            />
+            <Label
+              className="text-sm font-normal cursor-pointer"
+              htmlFor="clear-overrides"
+            >
+              Also clear manual overrides
+            </Label>
+          </div>
+        </DialogBody>
         <DialogFooter>
-          <Button disabled={isPending} onClick={onCancel} variant="outline">
+          <Button
+            disabled={isPending}
+            onClick={onCancel}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button disabled={isPending} onClick={onConfirm}>
+          <Button disabled={isPending} onClick={onConfirm} size="sm">
             {isPending ? "Saving..." : "Confirm"}
           </Button>
         </DialogFooter>

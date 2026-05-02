@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -396,17 +397,20 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Delete confirmation dialog for chapters with children */}
         <Dialog onOpenChange={setDeleteDialogOpen} open={deleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader className="pr-8">
+          <DialogContent className="max-w-md">
+            <DialogHeader>
               <DialogTitle>Delete Chapter</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
               <DialogDescription>
                 Delete "{chapter.title}" and its {descendantCount} chapter
                 {descendantCount === 1 ? "" : "s"}?
               </DialogDescription>
-            </DialogHeader>
+            </DialogBody>
             <DialogFooter>
               <Button
                 onClick={() => setDeleteDialogOpen(false)}
+                size="sm"
                 variant="outline"
               >
                 Cancel
@@ -416,6 +420,7 @@ const ChapterRow = (props: ChapterRowProps) => {
                   setDeleteDialogOpen(false);
                   props.onDelete?.();
                 }}
+                size="sm"
                 variant="destructive"
               >
                 Delete

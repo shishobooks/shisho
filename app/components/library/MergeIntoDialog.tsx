@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -75,7 +76,7 @@ export function MergeIntoDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-5 w-5 shrink-0" />
@@ -87,7 +88,7 @@ export function MergeIntoDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <DialogBody className="space-y-4">
           <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div className="text-sm">
@@ -109,19 +110,24 @@ export function MergeIntoDialog({
               selectedBookId={selectedTargetId}
             />
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
           <Button
             disabled={!selectedTargetId || mergeBooksMutation.isPending}
             onClick={handleMerge}
+            size="sm"
             variant="destructive"
           >
             {mergeBooksMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Merge
           </Button>

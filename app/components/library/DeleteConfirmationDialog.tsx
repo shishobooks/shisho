@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -168,7 +169,7 @@ export function DeleteConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 min-w-0">
+        <DialogBody className="space-y-4 min-w-0">
           {/* Warning banner */}
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3 text-sm text-destructive break-words">
             This action cannot be undone. Files will be permanently deleted from
@@ -203,12 +204,13 @@ export function DeleteConfirmationDialog({
               )}
             </div>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
             disabled={isPending}
             onClick={() => onOpenChange(false)}
+            size="sm"
             variant="outline"
           >
             Cancel
@@ -216,9 +218,10 @@ export function DeleteConfirmationDialog({
           <Button
             disabled={isPending}
             onClick={onConfirm}
+            size="sm"
             variant="destructive"
           >
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Delete
           </Button>
         </DialogFooter>

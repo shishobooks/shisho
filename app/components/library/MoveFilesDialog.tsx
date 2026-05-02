@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -85,7 +86,7 @@ export function MoveFilesDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Move Files</DialogTitle>
           <DialogDescription>
@@ -94,7 +95,7 @@ export function MoveFilesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <DialogBody className="space-y-4">
           {willDeleteBook ? (
             <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
@@ -124,19 +125,24 @@ export function MoveFilesDialog({
               showCreateNew
             />
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
           <Button
             disabled={moveFilesMutation.isPending}
             onClick={handleMove}
+            size="sm"
             variant={willDeleteBook ? "destructive" : "default"}
           >
             {moveFilesMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Move Files
           </Button>

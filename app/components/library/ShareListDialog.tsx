@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -153,7 +154,7 @@ export function ShareListDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <DialogBody className="space-y-6">
           {/* Add New Share Section */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Add User</h3>
@@ -288,7 +289,7 @@ export function ShareListDialog({
             <Info className="h-4 w-4 mt-0.5 shrink-0" />
             <p>Users will only see books in libraries they have access to.</p>
           </div>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

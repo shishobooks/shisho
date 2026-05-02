@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -33,7 +34,7 @@ import {
 import { getIdentifierUrl } from "@/utils/identifiers";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
-import { computeIdentifyEmptyState } from "./identify-utils";
+import { computeIdentifyEmptyState, pickInitialFile } from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
 
 interface IdentifyBookDialogProps {
@@ -75,7 +76,7 @@ export function IdentifyBookDialog({
 
   const selectedFile = selectedFileId
     ? mainFiles.find((f) => f.id === selectedFileId)
-    : mainFiles[0];
+    : pickInitialFile(book);
   const isAudiobook = selectedFile?.file_type === "m4b";
 
   // Pre-fill form and auto-search when dialog opens
@@ -86,10 +87,13 @@ export function IdentifyBookDialog({
       hasSearchedRef.current = false;
       queryUserTouched.current = false;
 
-      const initialQuery = book.title;
+      const initialFile = pickInitialFile(book);
+      const initialQuery = initialFile?.name?.trim() || book.title;
       const initialAuthor = book.authors?.[0]?.person?.name ?? "";
-      const initialFileId = mainFiles.length > 1 ? mainFiles[0].id : undefined;
-      const initialFile = mainFiles[0];
+      // Only thread an explicit fileId through search when the book has more
+      // than one main file — single-file books leave fileId undefined so the
+      // backend uses the primary file (matches prior behavior).
+      const initialFileId = mainFiles.length > 1 ? initialFile?.id : undefined;
       const initialIds = (initialFile?.identifiers ?? []).map((id) => ({
         type: id.type,
         value: id.value,
@@ -180,97 +184,103 @@ export function IdentifyBookDialog({
       onOpenChange={onOpenChange}
       open={open}
     >
-      <DialogContent className="max-w-2xl overflow-x-hidden [&>*]:min-w-0">
-        <DialogHeader className="pr-8">
-          <DialogTitle>Identify Book</DialogTitle>
-          <DialogDescription>
-            Search for this book across metadata providers and apply the correct
-            match.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* File selector — visible in both search and review steps */}
-        {hasMultipleFiles && (
-          <div className="space-y-2">
-            <div>
-              <Label>Apply to file</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                File-specific metadata (identifiers, cover, narrators,
-                publisher, etc.) will be applied to the selected file.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              {mainFiles.map((file) => (
-                <button
-                  className={cn(
-                    "w-full text-left rounded-md border p-2.5 cursor-pointer transition-colors",
-                    "hover:bg-muted/50",
-                    selectedFileId === file.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border",
-                  )}
-                  key={file.id}
-                  onClick={() => {
-                    setSelectedFileId(file.id);
-                    // Update identifiers to the selected file's identifiers
-                    const fileIds = (file.identifiers ?? []).map((id) => ({
-                      type: id.type,
-                      value: id.value,
-                    }));
-                    setIdentifiers(fileIds);
-                    if (!queryUserTouched.current) {
-                      const fileTitle = file.name || getFilename(file.filepath);
-                      setQuery(fileTitle);
-                      setSelectedResult(null);
-                      searchMutation.reset();
-                      searchMutation.mutate({
-                        query: fileTitle,
-                        bookId: book.id,
-                        fileId: file.id,
-                        author: author.trim() || undefined,
-                        identifiers: fileIds.length > 0 ? fileIds : undefined,
-                      });
-                    }
-                  }}
-                  type="button"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge className="shrink-0 text-xs" variant="outline">
-                      {file.file_type.toUpperCase()}
-                    </Badge>
-                    <span className="text-sm truncate min-w-0">
-                      {file.name || getFilename(file.filepath)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-x-2 mt-1 text-xs text-muted-foreground">
-                    <span>{formatFileSize(file.filesize_bytes)}</span>
-                    {file.audiobook_duration_seconds != null && (
-                      <>
-                        <span className="text-muted-foreground/50">·</span>
-                        <span>
-                          {formatDuration(file.audiobook_duration_seconds)}
-                        </span>
-                      </>
-                    )}
-                    {file.page_count != null && (
-                      <>
-                        <span className="text-muted-foreground/50">·</span>
-                        <span>
-                          {file.page_count} page
-                          {file.page_count !== 1 ? "s" : ""}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+      <DialogContent className="max-w-3xl overflow-x-hidden [&>*]:min-w-0">
+        {step === "search" && (
+          <DialogHeader>
+            <DialogTitle>Identify Book</DialogTitle>
+            <DialogDescription>
+              Search for this book across metadata providers and apply the
+              correct match.
+            </DialogDescription>
+          </DialogHeader>
         )}
 
-        {/* Step 1: Search */}
         {step === "search" && (
-          <>
+          <DialogBody className="space-y-4">
+            {/* File selector — only shown on the search step. The review step
+                scopes to the file already chosen here, so re-presenting the
+                picker would be misleading; switching files always means
+                re-running the search. */}
+            {hasMultipleFiles && (
+              <div className="space-y-2">
+                <div>
+                  <Label>Apply to file</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    File-specific metadata (identifiers, cover, narrators,
+                    publisher, etc.) will be applied to the selected file.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  {mainFiles.map((file) => (
+                    <button
+                      className={cn(
+                        "w-full text-left rounded-md border p-2.5 cursor-pointer transition-colors",
+                        "hover:bg-muted/50",
+                        selectedFileId === file.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border",
+                      )}
+                      key={file.id}
+                      onClick={() => {
+                        setSelectedFileId(file.id);
+                        // Update identifiers to the selected file's identifiers
+                        const fileIds = (file.identifiers ?? []).map((id) => ({
+                          type: id.type,
+                          value: id.value,
+                        }));
+                        setIdentifiers(fileIds);
+                        if (!queryUserTouched.current) {
+                          const fileTitle =
+                            file.name || getFilename(file.filepath);
+                          setQuery(fileTitle);
+                          setSelectedResult(null);
+                          searchMutation.reset();
+                          searchMutation.mutate({
+                            query: fileTitle,
+                            bookId: book.id,
+                            fileId: file.id,
+                            author: author.trim() || undefined,
+                            identifiers:
+                              fileIds.length > 0 ? fileIds : undefined,
+                          });
+                        }
+                      }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge className="shrink-0 text-xs" variant="outline">
+                          {file.file_type.toUpperCase()}
+                        </Badge>
+                        <span className="text-sm truncate min-w-0">
+                          {file.name || getFilename(file.filepath)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-x-2 mt-1 text-xs text-muted-foreground">
+                        <span>{formatFileSize(file.filesize_bytes)}</span>
+                        {file.audiobook_duration_seconds != null && (
+                          <>
+                            <span className="text-muted-foreground/50">·</span>
+                            <span>
+                              {formatDuration(file.audiobook_duration_seconds)}
+                            </span>
+                          </>
+                        )}
+                        {file.page_count != null && (
+                          <>
+                            <span className="text-muted-foreground/50">·</span>
+                            <span>
+                              {file.page_count} page
+                              {file.page_count !== 1 ? "s" : ""}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Search bar */}
             <div className="flex gap-2">
               <Input
@@ -646,13 +656,19 @@ export function IdentifyBookDialog({
                 </div>
               )}
             </div>
+          </DialogBody>
+        )}
 
-            <DialogFooter>
-              <Button onClick={() => onOpenChange(false)} variant="outline">
-                Cancel
-              </Button>
-            </DialogFooter>
-          </>
+        {step === "search" && (
+          <DialogFooter>
+            <Button
+              onClick={() => onOpenChange(false)}
+              size="sm"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
         )}
 
         {/* Step 2: Review */}

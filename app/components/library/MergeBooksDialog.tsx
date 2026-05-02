@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -142,28 +143,32 @@ export function MergeBooksDialog({
         </DialogHeader>
 
         {isLoadingBooks && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <DialogBody>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          </DialogBody>
         )}
 
         {bookQueryError && (
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-destructive">
-                Failed to load books
-              </p>
-              <p className="text-muted-foreground mt-1">
-                {bookQueryError.message || "An error occurred"}
-              </p>
+          <DialogBody>
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-destructive">
+                  Failed to load books
+                </p>
+                <p className="text-muted-foreground mt-1">
+                  {bookQueryError.message || "An error occurred"}
+                </p>
+              </div>
             </div>
-          </div>
+          </DialogBody>
         )}
 
         {!isLoadingBooks && !bookQueryError && step === "select" && (
           <>
-            <div className="space-y-4">
+            <DialogBody className="space-y-4">
               <div className="space-y-2">
                 <Label>Select target book</Label>
                 <p className="text-sm text-muted-foreground">
@@ -221,15 +226,20 @@ export function MergeBooksDialog({
                   })}
                 </RadioGroup>
               </ScrollArea>
-            </div>
+            </DialogBody>
 
             <DialogFooter>
-              <Button onClick={() => onOpenChange(false)} variant="outline">
+              <Button
+                onClick={() => onOpenChange(false)}
+                size="sm"
+                variant="outline"
+              >
                 Cancel
               </Button>
               <Button
                 disabled={!selectedTargetId}
                 onClick={handleProceedToConfirm}
+                size="sm"
               >
                 Continue
               </Button>
@@ -242,7 +252,7 @@ export function MergeBooksDialog({
           step === "confirm" &&
           targetBook && (
             <>
-              <div className="space-y-4">
+              <DialogBody className="space-y-4">
                 {/* Warning banner */}
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
@@ -307,12 +317,13 @@ export function MergeBooksDialog({
                     <span className="font-medium">{filesToMove}</span>
                   </div>
                 </div>
-              </div>
+              </DialogBody>
 
               <DialogFooter>
                 <Button
                   disabled={mergeBooksMutation.isPending}
                   onClick={handleBack}
+                  size="sm"
                   variant="outline"
                 >
                   Back
@@ -320,10 +331,11 @@ export function MergeBooksDialog({
                 <Button
                   disabled={mergeBooksMutation.isPending}
                   onClick={handleMerge}
+                  size="sm"
                   variant="destructive"
                 >
                   {mergeBooksMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   )}
                   Merge {booksToDelete.length} Book
                   {booksToDelete.length !== 1 ? "s" : ""}

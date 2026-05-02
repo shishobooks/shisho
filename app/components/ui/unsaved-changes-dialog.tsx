@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -26,19 +27,21 @@ export function UnsavedChangesDialog({
 }: UnsavedChangesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onStay()}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Unsaved Changes</DialogTitle>
-          <DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <DialogDescription className="text-sm">
             You have unsaved changes. Are you sure you want to leave? Your
             changes will be lost.
           </DialogDescription>
-        </DialogHeader>
+        </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onStay}>
+          <Button variant="outline" onClick={onStay} size="sm">
             Stay
           </Button>
-          <Button variant="destructive" onClick={onDiscard}>
+          <Button variant="destructive" onClick={onDiscard} size="sm">
             Discard Changes
           </Button>
         </DialogFooter>

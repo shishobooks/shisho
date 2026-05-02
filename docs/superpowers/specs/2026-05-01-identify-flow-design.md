@@ -269,7 +269,16 @@ any UI work. Old frontend stops corrupting `file.Name`.
 
 ---
 
-### Phase 2 · New identify dialog + shared primitives
+### Phase 2 · New identify dialog + shared primitives ✅ shipped
+
+**Shipped:** Per-field checkbox opt-in with smart defaults (book vs file
+scope; primary vs non-primary file), Book/File sticky section banners
+with select-all + indeterminate state, `file.Name` surfaced as a real
+per-field decision with `"Copy from book title"` and source attribution
+(`plugin` vs `user`), Restore suggestions, file selection on dialog open
+prefers a non-reviewed file before primary. Plain-text date input,
+ComboboxTypeahead unification, and edit-dialog porting are deferred to
+Phases 3 / 4.
 
 **Goal:** Implement the redesigned identify review dialog described
 in this spec. Builds the shared frontend primitives that Phase 3 will

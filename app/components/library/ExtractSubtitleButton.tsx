@@ -1,3 +1,6 @@
+import { Scissors } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { extractSubtitleFromTitle } from "@/utils/extractSubtitle";
 
 interface Props {
@@ -9,14 +12,15 @@ export function ExtractSubtitleButton({ title, onExtract }: Props) {
   const split = extractSubtitleFromTitle(title);
   if (!split) return null;
   return (
-    <div className="flex justify-end">
-      <button
-        className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-        onClick={() => onExtract(split.title, split.subtitle)}
-        type="button"
-      >
-        Extract subtitle
-      </button>
-    </div>
+    <Button
+      className="h-6 px-2 text-xs"
+      onClick={() => onExtract(split.title, split.subtitle)}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <Scissors className="h-3 w-3" />
+      Extract subtitle
+    </Button>
   );
 }

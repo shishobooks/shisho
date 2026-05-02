@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -26,23 +27,25 @@ export const AdvancedPluginsDialog = ({
         <DialogHeader>
           <DialogTitle>Advanced plugin settings</DialogTitle>
         </DialogHeader>
-        <Tabs
-          className="flex flex-col overflow-hidden"
-          defaultValue={defaultSection}
-        >
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="order">Order</TabsTrigger>
-            <TabsTrigger value="repositories">Repositories</TabsTrigger>
-          </TabsList>
-          <div className="overflow-auto">
-            <TabsContent className="mt-4" value="order">
-              <AdvancedOrderSection />
-            </TabsContent>
-            <TabsContent className="mt-4" value="repositories">
-              <AdvancedRepositoriesSection />
-            </TabsContent>
-          </div>
-        </Tabs>
+        <DialogBody className="flex flex-1 flex-col overflow-hidden">
+          <Tabs
+            className="flex flex-col overflow-hidden"
+            defaultValue={defaultSection}
+          >
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="order">Order</TabsTrigger>
+              <TabsTrigger value="repositories">Repositories</TabsTrigger>
+            </TabsList>
+            <div className="overflow-auto">
+              <TabsContent className="mt-4" value="order">
+                <AdvancedOrderSection />
+              </TabsContent>
+              <TabsContent className="mt-4" value="repositories">
+                <AdvancedRepositoriesSection />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

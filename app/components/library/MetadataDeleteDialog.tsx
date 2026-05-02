@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -46,6 +47,8 @@ export function MetadataDeleteDialog({
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
             <span className="truncate">Delete {ENTITY_LABELS[entityType]}</span>
           </DialogTitle>
+        </DialogHeader>
+        <DialogBody>
           <DialogDescription>
             Are you sure you want to delete{" "}
             <span className="font-medium break-all" title={entityName}>
@@ -53,14 +56,23 @@ export function MetadataDeleteDialog({
             </span>
             ? This action cannot be undone.
           </DialogDescription>
-        </DialogHeader>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button disabled={isPending} onClick={onDelete} variant="destructive">
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button
+            disabled={isPending}
+            onClick={onDelete}
+            size="sm"
+            variant="destructive"
+          >
+            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Delete
           </Button>
         </DialogFooter>

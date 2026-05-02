@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -330,7 +331,7 @@ function CreateEReaderKeyDialog({
             Give this device a name so you can identify it later.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <DialogBody>
           <div className="space-y-2">
             <Label htmlFor="ereader-name">Device Name</Label>
             <Input
@@ -343,11 +344,12 @@ function CreateEReaderKeyDialog({
               value={name}
             />
           </div>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             disabled={createApiKey.isPending || addPermission.isPending}
             onClick={handleCreate}
+            size="sm"
           >
             {createApiKey.isPending || addPermission.isPending
               ? "Adding..."
@@ -462,9 +464,9 @@ function EReaderSetupDialog({
           </DialogDescription>
         </DialogHeader>
         {generateShortUrl.isPending ? (
-          <div className="py-4">Generating URL...</div>
+          <DialogBody>Generating URL...</DialogBody>
         ) : shortUrl ? (
-          <div className="space-y-4 py-4">
+          <DialogBody className="space-y-4">
             <div className="flex gap-2">
               <Input
                 className="font-mono"
@@ -479,10 +481,14 @@ function EReaderSetupDialog({
               This URL expires in 30 minutes. After opening it on your eReader,
               bookmark the page to access your library anytime.
             </p>
-          </div>
+          </DialogBody>
         ) : null}
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Close
           </Button>
         </DialogFooter>
@@ -581,7 +587,7 @@ function CreateKoboKeyDialog({
             Give this Kobo a name so you can identify it later.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <DialogBody>
           <div className="space-y-2">
             <Label htmlFor="kobo-name">Device Name</Label>
             <Input
@@ -594,11 +600,12 @@ function CreateKoboKeyDialog({
               value={name}
             />
           </div>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             disabled={createApiKey.isPending || addPermission.isPending}
             onClick={handleCreate}
+            size="sm"
           >
             {createApiKey.isPending || addPermission.isPending
               ? "Adding..."
@@ -728,7 +735,7 @@ function KoboSetupDialog({
             Configure your Kobo device to sync books wirelessly from Shisho.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <DialogBody className="space-y-4">
           {/* Scope Selection */}
           <div className="space-y-3">
             <Label>Sync Scope</Label>
@@ -857,9 +864,13 @@ function KoboSetupDialog({
               {clearKoboSync.isPending ? "Resetting..." : "Reset"}
             </Button>
           </div>
-        </div>
+        </DialogBody>
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Close
           </Button>
         </DialogFooter>

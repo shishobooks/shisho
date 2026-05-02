@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -607,7 +608,7 @@ export function FileEditDialog({
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-xl overflow-x-hidden">
+      <DialogContent className="max-w-3xl overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Edit File</DialogTitle>
           <DialogDescription>
@@ -616,7 +617,7 @@ export function FileEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4 min-w-0">
+        <DialogBody className="space-y-6 min-w-0">
           {/* File Info */}
           <div className="space-y-2">
             <Label>File</Label>
@@ -1019,14 +1020,18 @@ export function FileEditDialog({
               }
             />
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button disabled={isLoading} onClick={handleSubmit}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button disabled={isLoading} onClick={handleSubmit} size="sm">
+            {isLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Save Changes
           </Button>
         </DialogFooter>
