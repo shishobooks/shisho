@@ -75,6 +75,7 @@ func TestRun_SeparateJunitOut(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
 	}
+	// Cannot t.Parallel() — uses t.Chdir.
 
 	readDir := t.TempDir()
 	writeDir := t.TempDir()

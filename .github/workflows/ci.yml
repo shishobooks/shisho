@@ -61,7 +61,9 @@ jobs:
           name: gotest-timings-shard-${{ matrix.shard }}
           path: .gotest-timings-fresh/
           retention-days: 1
+          # Dot-prefixed dir; without this flag upload-artifact uploads zero files.
           include-hidden-files: true
+          # Catch go test crashing before any junit is written.
           if-no-files-found: error
 
   consolidate-test-timings:
