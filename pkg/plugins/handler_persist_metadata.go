@@ -187,10 +187,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
 			} else {
 				if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
-					BookID:       book.ID,
-					SeriesID:     seriesRecord.ID,
-					SeriesNumber: md.SeriesNumber,
-					SortOrder:    1,
+					BookID:           book.ID,
+					SeriesID:         seriesRecord.ID,
+					SeriesNumber:     md.SeriesNumber,
+					SeriesNumberUnit: md.SeriesNumberUnit,
+					SortOrder:        1,
 				}); err != nil {
 					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 				}
