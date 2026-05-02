@@ -95,10 +95,6 @@ describe("useUninstallPlugin", () => {
 });
 
 describe("useUpdatePlugin", () => {
-  // A failed enable still mutates server state (the plugin row gets
-  // Malfunctioned + load_error persisted), so the detail page needs the
-  // installed-plugins query refetched on error too — otherwise the error
-  // alert doesn't appear until the user reloads.
   // The config endpoint returns an empty schema while the plugin runtime is
   // unloaded (i.e. while disabled). Enabling the plugin loads the runtime and
   // the schema becomes available, so the cached PluginConfig must be
@@ -187,6 +183,10 @@ describe("useUpdatePlugin", () => {
     ).toBe(false);
   });
 
+  // A failed enable still mutates server state (the plugin row gets
+  // Malfunctioned + load_error persisted), so the detail page needs the
+  // installed-plugins query refetched on error too — otherwise the error
+  // alert doesn't appear until the user reloads.
   it("invalidates PluginsInstalled when the mutation fails", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

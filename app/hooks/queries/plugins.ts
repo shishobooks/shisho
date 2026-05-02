@@ -305,16 +305,23 @@ export const useUpdatePlugin = () => {
     mutationFn: ({ scope, id, payload }) => {
       return API.request("PATCH", `/plugins/installed/${scope}/${id}`, payload);
     },
-    // Refetch on both success and failure: a failed enable still mutates
-    // server state (Malfunctioned status + load_error get persisted), which
-    // the detail page needs to render the error alert without a manual reload.
-    // Also refetch PluginConfig — the config endpoint returns an empty schema
-    // while the runtime is unloaded, so toggling enabled (or saving config)
-    // must reload the form's schema/values. The first time a plugin is
-    // enabled, LoadPlugin also registers identifier types and appends the
-    // plugin to each hook's order (global + per-library fallback), so those
-    // caches need to refetch too.
-    onSettled: () => {
+    // A failed enable still mutates server state (Malfunctioned status +
+    // load_error get persisted), so the detail page needs PluginsInstalled
+    // refetched on error too — otherwise the error alert doesn't appear
+    // until manual reload.
+    onError: () => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginsInstalled],
+      });
+    },
+    // PluginConfig: the config endpoint returns an empty schema while the
+    // runtime is unloaded, so toggling enabled (or saving config) must
+    // reload the form's schema/values. The first time a plugin is enabled,
+    // LoadPlugin also registers identifier types and appends the plugin to
+    // each hook's order (global + per-library fallback), so those caches
+    // need to refetch too. None of these change on a failed enable, so
+    // they're scoped to onSuccess.
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
       });
