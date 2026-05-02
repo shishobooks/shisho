@@ -485,6 +485,10 @@ describe("IdentifyReviewForm component", () => {
       }),
     });
 
+    // The default "Changed" filter hides unchanged rows, so flip to "All"
+    // first to make every book-section checkbox visible.
+    await user.click(screen.getByRole("button", { name: /^all$/i }));
+
     const sectionCheckbox = screen.getByRole("checkbox", {
       name: /apply all book fields/i,
     });
@@ -548,6 +552,52 @@ describe("IdentifyReviewForm component", () => {
     const payload = applyMock.mock.calls[0][0];
     expect(payload.file_name).toBe("Edition Suffix");
     expect(payload.file_name_source).toBe("user");
+  });
+
+  it("hides unchanged rows in the default Changed filter, shows them in All", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({ title: "Old Title", subtitle: "" }),
+      result: makeResult({ title: "New Title" }),
+    });
+
+    // Subtitle is unchanged (book has none, result has none) — should be
+    // hidden under the default "Changed" filter.
+    expect(
+      screen.queryByRole("checkbox", { name: /apply subtitle/i }),
+    ).toBeNull();
+
+    // Title is changed — visible.
+    expect(
+      screen.getByRole("checkbox", { name: /apply title/i }),
+    ).toBeInTheDocument();
+
+    // Switch to "All" — subtitle row becomes visible.
+    await user.click(screen.getByRole("button", { name: /^all$/i }));
+    expect(
+      screen.getByRole("checkbox", { name: /apply subtitle/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("disables row inputs when the apply checkbox is unchecked", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({ title: "Old Title" }),
+      result: makeResult({ title: "New Title" }),
+    });
+
+    // Find the Title row's input-disabled wrapper. The label "Title" is
+    // unique to the book Title row.
+    const titleLabel = screen.getByText("Title", { selector: "label" });
+    const titleRow = titleLabel.closest("div.grid");
+    expect(titleRow).not.toBeNull();
+    const wrapper = titleRow!.querySelector("[aria-disabled]");
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveAttribute("aria-disabled", "false");
+
+    // Uncheck the row checkbox — the wrapper flips to aria-disabled=true.
+    await user.click(screen.getByRole("checkbox", { name: /apply title/i }));
+    expect(wrapper).toHaveAttribute("aria-disabled", "true");
   });
 
   it("Restore suggestions resets the form", async () => {

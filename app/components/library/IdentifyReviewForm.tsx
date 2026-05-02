@@ -42,6 +42,7 @@ import { usePeopleList } from "@/hooks/queries/people";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
+  usePluginsInstalled,
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
@@ -377,6 +378,7 @@ function FieldRow({
   decision,
   onDecisionChange,
   disabled,
+  hidden,
   currentValue,
   inlineAction,
   hero,
@@ -387,18 +389,21 @@ function FieldRow({
   decision: boolean;
   onDecisionChange: (v: boolean) => void;
   disabled?: boolean;
+  /** When true the row renders nothing (used by the Changed/All filter
+   * to suppress unchanged rows in "Changed" mode). */
+  hidden?: boolean;
   currentValue?: React.ReactNode;
   inlineAction?: React.ReactNode;
   hero?: boolean;
   children: React.ReactNode;
 }) {
+  if (hidden) return null;
   const effectiveStatus: FieldStatus = disabled ? "unchanged" : status;
   return (
     <div
       className={cn(
         "grid grid-cols-[24px_minmax(0,1fr)] gap-3.5 border-b px-5 py-4 last:border-b-0",
-        effectiveStatus === "unchanged" &&
-          "opacity-60 transition-opacity hover:opacity-100",
+        effectiveStatus === "unchanged" && "opacity-60",
         disabled && "opacity-50",
         hero && "bg-muted/20",
       )}
@@ -419,13 +424,24 @@ function FieldRow({
             <div className="ml-auto">{inlineAction}</div>
           )}
         </div>
-        {children}
+        {/* Block interaction with the inputs when the row's apply checkbox
+            is unchecked. The checkbox itself stays interactive (it lives
+            outside this wrapper) so the user can still re-enable the row.
+            The label, status badge, and "Currently:" reference stay
+            readable. */}
+        <div
+          aria-disabled={!decision || disabled}
+          className={cn(
+            "space-y-2",
+            (!decision || disabled) && "pointer-events-none opacity-50",
+          )}
+        >
+          {children}
+        </div>
         {currentValue != null && effectiveStatus !== "unchanged" && (
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-muted-foreground">
-              Currently:
-            </span>{" "}
-            <span className="text-foreground/80">{currentValue}</span>
+          <p className="text-xs text-muted-foreground/70">
+            <span className="font-medium">Currently:</span>{" "}
+            <span className="text-foreground/60">{currentValue}</span>
           </p>
         )}
       </div>
@@ -436,9 +452,9 @@ function FieldRow({
 function CollapsibleCurrentText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <p className="text-xs text-muted-foreground">
-      <span className="font-medium text-muted-foreground">Currently:</span>{" "}
-      <span className={cn("text-foreground/80", !expanded && "line-clamp-2")}>
+    <p className="text-xs text-muted-foreground/70">
+      <span className="font-medium">Currently:</span>{" "}
+      <span className={cn("text-foreground/60", !expanded && "line-clamp-2")}>
         {text}
       </span>
       <button
@@ -485,6 +501,22 @@ export function IdentifyReviewForm({
     const aliases = PLUGIN_FIELD_ALIASES[field];
     return aliases.some((alias) => disabledFieldsRaw.has(alias));
   };
+
+  // Plugin display name for the source pill in the header. Falls back to
+  // the plugin id when the installed list hasn't loaded yet or doesn't
+  // match (e.g. the plugin was uninstalled mid-flow).
+  const { data: installedPlugins } = usePluginsInstalled();
+  const pluginDisplayName = useMemo(() => {
+    const match = installedPlugins?.find(
+      (p) => p.scope === result.plugin_scope && p.id === result.plugin_id,
+    );
+    return match?.name ?? result.plugin_id;
+  }, [installedPlugins, result.plugin_scope, result.plugin_id]);
+
+  // "Changed" / "All" filter. Default "Changed" so unchanged rows stay
+  // out of the way; the count above reflects the total either way (per
+  // spec — filter only changes which rows render).
+  const [filterMode, setFilterMode] = useState<"changed" | "all">("changed");
 
   // The "primary file" gate for book-level changed-field defaults. A book
   // with no explicit primary_file_id and a single MAIN file is treated as
@@ -1139,27 +1171,52 @@ export function IdentifyReviewForm({
       </Button>
     ) : null;
 
+  // Header subtitle bits
+  const mainFileCount = (book.files ?? []).filter(
+    (f) => f.file_role === "main",
+  ).length;
+  const proposedChangesCount = allApplicableKeys.filter(
+    (k) => fieldStatus[k] !== "unchanged",
+  ).length;
+
+  // "Changed" / "All" filter: only changes which rows render. Disabled
+  // rows are treated as unchanged for this purpose.
+  const isRowVisible = (k: FieldKey) => {
+    if (filterMode === "all") return true;
+    if (isDisabled(k)) return false;
+    return fieldStatus[k] !== "unchanged";
+  };
+
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b px-5 py-3">
+      {/* Header — distinct elevated band that frames the dialog. Mirrors
+          the mockup's dialog-frame__head style. */}
+      <div className="flex items-center gap-3 border-b bg-muted/40 px-5 py-3">
         <Button
           aria-label="Back"
           className="shrink-0"
           onClick={onBack}
-          size="sm"
+          size="icon"
           type="button"
           variant="ghost"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold">Review changes</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold">
+            Identify {book.title}
+          </h3>
           <p className="truncate text-xs text-muted-foreground">
-            {totalSelected} of {totalApplicable} field
-            {totalApplicable === 1 ? "" : "s"} selected
+            {mainFileCount} file{mainFileCount === 1 ? "" : "s"} ·{" "}
+            {proposedChangesCount} change
+            {proposedChangesCount === 1 ? "" : "s"} proposed
           </p>
         </div>
+        {/* Source pill */}
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-1 text-[11px] font-semibold text-primary">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
+          {pluginDisplayName}
+        </span>
       </div>
 
       {/* Scroll body */}
@@ -1174,12 +1231,42 @@ export function IdentifyReviewForm({
             }
           />
           <span className="text-xs font-medium">Apply all</span>
-          <span className="ml-auto whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
+          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
             <span className="font-semibold text-foreground">
               {totalSelected}
             </span>{" "}
             of {totalApplicable} selected
           </span>
+          {/* Changed / All filter — only changes which rows render; the
+              count above always reflects the totals. */}
+          <div className="ml-auto flex items-center gap-1 rounded-md bg-background p-0.5">
+            <button
+              aria-pressed={filterMode === "changed"}
+              className={cn(
+                "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+                filterMode === "changed"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setFilterMode("changed")}
+              type="button"
+            >
+              Changed
+            </button>
+            <button
+              aria-pressed={filterMode === "all"}
+              className={cn(
+                "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+                filterMode === "all"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setFilterMode("all")}
+              type="button"
+            >
+              All
+            </button>
+          </div>
         </div>
 
         {/* Book section */}
@@ -1204,6 +1291,7 @@ export function IdentifyReviewForm({
                   decision={decisions.title}
                   disabled={isDisabled("title")}
                   hero
+                  hidden={!isRowVisible("title")}
                   inlineAction={titleInlineAction}
                   label={formatMetadataFieldLabel("title")}
                   onDecisionChange={(v) => setDecision("title", v)}
@@ -1221,6 +1309,7 @@ export function IdentifyReviewForm({
                   currentValue={book.subtitle || undefined}
                   decision={decisions.subtitle}
                   disabled={isDisabled("subtitle")}
+                  hidden={!isRowVisible("subtitle")}
                   label={formatMetadataFieldLabel("subtitle")}
                   onDecisionChange={(v) => setDecision("subtitle", v)}
                   status={fieldStatus.subtitle}
@@ -1246,6 +1335,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.authors}
                   disabled={isDisabled("authors")}
+                  hidden={!isRowVisible("authors")}
                   label={formatMetadataFieldLabel("authors")}
                   onDecisionChange={(v) => setDecision("authors", v)}
                   status={fieldStatus.authors}
@@ -1343,6 +1433,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.series}
                   disabled={isDisabled("series")}
+                  hidden={!isRowVisible("series")}
                   label={formatMetadataFieldLabel("series")}
                   onDecisionChange={(v) => setDecision("series", v)}
                   status={fieldStatus.series}
@@ -1407,6 +1498,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.genres}
                   disabled={isDisabled("genres")}
+                  hidden={!isRowVisible("genres")}
                   label={formatMetadataFieldLabel("genres")}
                   onDecisionChange={(v) => setDecision("genres", v)}
                   status={fieldStatus.genres}
@@ -1434,6 +1526,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.tags}
                   disabled={isDisabled("tags")}
+                  hidden={!isRowVisible("tags")}
                   label={formatMetadataFieldLabel("tags")}
                   onDecisionChange={(v) => setDecision("tags", v)}
                   status={fieldStatus.tags}
@@ -1458,6 +1551,7 @@ export function IdentifyReviewForm({
                 <FieldRow
                   decision={decisions.description}
                   disabled={isDisabled("description")}
+                  hidden={!isRowVisible("description")}
                   label={formatMetadataFieldLabel("description")}
                   onDecisionChange={(v) => setDecision("description", v)}
                   status={fieldStatus.description}
@@ -1499,6 +1593,7 @@ export function IdentifyReviewForm({
                   <FieldRow
                     decision={decisions.cover}
                     disabled={isDisabled("cover")}
+                    hidden={!isRowVisible("cover")}
                     label={formatMetadataFieldLabel("cover")}
                     onDecisionChange={(v) => setDecision("cover", v)}
                     status={fieldStatus.cover}
@@ -1597,6 +1692,7 @@ export function IdentifyReviewForm({
                   currentValue={file?.name || undefined}
                   decision={decisions.name}
                   disabled={isDisabled("name")}
+                  hidden={!isRowVisible("name")}
                   inlineAction={nameInlineAction}
                   label="Name"
                   onDecisionChange={(v) => setDecision("name", v)}
@@ -1619,6 +1715,7 @@ export function IdentifyReviewForm({
                     }
                     decision={decisions.narrators}
                     disabled={isDisabled("narrators")}
+                    hidden={!isRowVisible("narrators")}
                     label={formatMetadataFieldLabel("narrators")}
                     onDecisionChange={(v) => setDecision("narrators", v)}
                     status={fieldStatus.narrators}
@@ -1671,6 +1768,7 @@ export function IdentifyReviewForm({
                   currentValue={file?.publisher?.name || undefined}
                   decision={decisions.publisher}
                   disabled={isDisabled("publisher")}
+                  hidden={!isRowVisible("publisher")}
                   label={formatMetadataFieldLabel("publisher")}
                   onDecisionChange={(v) => setDecision("publisher", v)}
                   status={fieldStatus.publisher}
@@ -1721,6 +1819,7 @@ export function IdentifyReviewForm({
                   currentValue={file?.imprint?.name || undefined}
                   decision={decisions.imprint}
                   disabled={isDisabled("imprint")}
+                  hidden={!isRowVisible("imprint")}
                   label={formatMetadataFieldLabel("imprint")}
                   onDecisionChange={(v) => setDecision("imprint", v)}
                   status={fieldStatus.imprint}
@@ -1777,6 +1876,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.language}
                   disabled={isDisabled("language")}
+                  hidden={!isRowVisible("language")}
                   label={formatMetadataFieldLabel("language")}
                   onDecisionChange={(v) => setDecision("language", v)}
                   status={fieldStatus.language}
@@ -1798,6 +1898,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.release_date}
                   disabled={isDisabled("release_date")}
+                  hidden={!isRowVisible("release_date")}
                   label={formatMetadataFieldLabel("releaseDate")}
                   onDecisionChange={(v) => setDecision("release_date", v)}
                   status={fieldStatus.release_date}
@@ -1814,6 +1915,7 @@ export function IdentifyReviewForm({
                   currentValue={file?.url || undefined}
                   decision={decisions.url}
                   disabled={isDisabled("url")}
+                  hidden={!isRowVisible("url")}
                   label={formatMetadataFieldLabel("url")}
                   onDecisionChange={(v) => setDecision("url", v)}
                   status={fieldStatus.url}
@@ -1866,6 +1968,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.identifiers}
                   disabled={isDisabled("identifiers")}
+                  hidden={!isRowVisible("identifiers")}
                   label={formatMetadataFieldLabel("identifiers")}
                   onDecisionChange={(v) => setDecision("identifiers", v)}
                   status={fieldStatus.identifiers}
@@ -1895,6 +1998,7 @@ export function IdentifyReviewForm({
                   }
                   decision={decisions.abridged}
                   disabled={isDisabled("abridged")}
+                  hidden={!isRowVisible("abridged")}
                   label={formatMetadataFieldLabel("abridged")}
                   onDecisionChange={(v) => setDecision("abridged", v)}
                   status={fieldStatus.abridged}
@@ -1941,8 +2045,8 @@ export function IdentifyReviewForm({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between border-t px-5 py-3">
+      {/* Footer — distinct elevated band that mirrors the header. */}
+      <div className="flex items-center justify-between gap-3 border-t bg-muted/40 px-5 py-3">
         <Button
           className="text-xs"
           onClick={restoreSuggestions}

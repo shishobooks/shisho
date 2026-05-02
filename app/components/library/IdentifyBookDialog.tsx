@@ -183,17 +183,31 @@ export function IdentifyBookDialog({
       onOpenChange={onOpenChange}
       open={open}
     >
-      <DialogContent className="max-w-2xl overflow-x-hidden [&>*]:min-w-0">
-        <DialogHeader className="pr-8">
-          <DialogTitle>Identify Book</DialogTitle>
-          <DialogDescription>
-            Search for this book across metadata providers and apply the correct
-            match.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        className={cn(
+          "overflow-x-hidden [&>*]:min-w-0",
+          // Phase 2 spec: review step is one step wider than the search
+          // step (each row carries current-vs-proposed). The form provides
+          // its own header/footer chrome, so the dialog gets no padding
+          // and full width for it.
+          step === "review" ? "max-w-3xl gap-0 p-0" : "max-w-2xl",
+        )}
+      >
+        {step === "search" && (
+          <DialogHeader className="pr-8">
+            <DialogTitle>Identify Book</DialogTitle>
+            <DialogDescription>
+              Search for this book across metadata providers and apply the
+              correct match.
+            </DialogDescription>
+          </DialogHeader>
+        )}
 
-        {/* File selector — visible in both search and review steps */}
-        {hasMultipleFiles && (
+        {/* File selector — only shown on the search step. The review step
+            scopes to the file already chosen here, so re-presenting the
+            picker would be misleading; switching files always means
+            re-running the search. */}
+        {step === "search" && hasMultipleFiles && (
           <div className="space-y-2">
             <div>
               <Label>Apply to file</Label>

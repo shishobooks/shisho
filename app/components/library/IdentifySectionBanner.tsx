@@ -42,7 +42,7 @@ export function IdentifySectionBanner({
         aria-controls={`identify-section-${label.toLowerCase()}`}
         aria-expanded={!collapsed}
         aria-label={`Toggle ${label} section`}
-        className="-m-1 flex flex-1 cursor-pointer items-center gap-3 rounded p-1 text-left hover:bg-foreground/5"
+        className="-m-1 flex flex-1 cursor-pointer items-center gap-3 rounded p-1 text-left"
         onClick={onToggleCollapse}
         type="button"
       >
