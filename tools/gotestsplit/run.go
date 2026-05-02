@@ -26,7 +26,8 @@ var (
 func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	junitDir := fs.String("junit-dir", "", "directory to read prior JUnit XML from and write new XML to (required)")
+	junitDir := fs.String("junit-dir", "", "directory to read prior JUnit XML from (required)")
+	junitOut := fs.String("junit-out", "", "directory to write fresh JUnit XML to (defaults to -junit-dir)")
 	total := fs.Int("total", 0, "total number of shards (required)")
 	index := fs.Int("index", 0, "zero-based shard index")
 	if err := fs.Parse(argv); err != nil {
@@ -34,6 +35,9 @@ func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error 
 	}
 	if *junitDir == "" || *total <= 0 || *index < 0 || *index >= *total {
 		return errRunFlagsInvalid
+	}
+	if *junitOut == "" {
+		*junitOut = *junitDir
 	}
 
 	args := fs.Args()
@@ -51,6 +55,11 @@ func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error 
 
 	if err := os.MkdirAll(*junitDir, 0o755); err != nil {
 		return err
+	}
+	if *junitOut != *junitDir {
+		if err := os.MkdirAll(*junitOut, 0o755); err != nil {
+			return err
+		}
 	}
 	hist, err := ReadHistory(*junitDir)
 	if err != nil {
@@ -89,7 +98,7 @@ func cmdRun(ctx context.Context, argv []string, stdout, stderr io.Writer) error 
 			*index+1, *total, seq, strings.Join(goArgs, " "))
 		report, runErr := goTest(ctx, goArgs, stdout, stderr)
 		if report != nil {
-			path := filepath.Join(*junitDir,
+			path := filepath.Join(*junitOut,
 				fmt.Sprintf("junit-%d-%d.xml", *index, seq))
 			if werr := writeJUnit(path, *report); werr != nil {
 				fmt.Fprintf(stderr, "gotestsplit: failed to write %s: %v\n", path, werr)

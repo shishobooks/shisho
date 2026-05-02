@@ -9,30 +9,26 @@ Bin-packs Go tests across N CI shards by **measured per-test wallclock**, not te
 Subcommands:
 - `simulate -junit-dir=DIR [-min=N] [-max=N]` — read JUnit history, project per-shard wallclock and CI cost across a range of N. Used for picking shard count.
 - `plan -junit-dir=DIR -total=N -index=I [-detail] PKG...` — print the assignment for one shard. Useful for debugging "why is shard 3 slow?".
-- `run -junit-dir=DIR -total=N -index=I PKG... [-- go-test-args]` — plan + exec `go test` per chunk + emit JUnit XML for next run.
+- `run -junit-dir=DIR [-junit-out=DIR] -total=N -index=I PKG... [-- go-test-args]` — plan + exec `go test` per chunk + emit JUnit XML. `-junit-dir` is the read-only history input; `-junit-out` (defaults to `-junit-dir`) is where fresh XML is written.
 
 ## Architecture cheatsheet
 
 - `pack.go` — pure `Pack(history, packages, N) [][]Item` function. Used by all three subcommands so simulate/plan/run agree. Smart-chunks any package whose wallclock estimate exceeds `ideal * 0.8` where `ideal = total / N`. Within a chunked package, tests are LPT-distributed by per-test duration.
 - `junit.go` — reads a directory of JUnit XML files into `History` (`map[pkg]map[test]float64`). Top-level tests only; subtests skipped (`-run` regex targets parents).
 - `discover.go` — wraps `go test -list .` to enumerate top-level tests per package.
-- `run.go` — execs `go test` per Item: whole-package items batched into one invocation, chunks each get their own `-run` regex invocation. Streams output and parses it via `go-junit-report/v2` to write `junit-{shard}-{seq}.xml`.
+- `run.go` — execs `go test` per Item: whole-package items batched into one invocation, chunks each get their own `-run` regex invocation. Streams output and parses it via `go-junit-report/v2` to write `junit-{shard}-{seq}.xml` into `-junit-out` (separate from the `-junit-dir` read path).
 
 ## Cache strategy in CI
 
 `.github/workflows/ci.yml`'s `test` job uses **restore-only** cache (`actions/cache/restore@v5`) with a key shared across all shards (`gotest-timings-${{ github.ref }}-${{ github.sha }}`).
 
-After tests, each shard uploads **only the junit files it wrote this run** (`.gotest-timings/junit-${SHARD_INDEX}-*.xml`) as a per-shard artifact (`gotest-timings-shard-N`). A separate `consolidate-test-timings` job (`needs: test`, `if: always()`) restores the previous cache, downloads all shard artifacts on top of it, and saves a single `actions/cache/save@v5` entry.
+After tests, each shard uploads the contents of its `-junit-out` directory (`.gotest-timings-fresh/`) as a per-shard artifact (`gotest-timings-shard-N`). Because `-junit-out` is separate from `-junit-dir`, only fresh files exist there — no filtering needed. A separate `consolidate-test-timings` job (`needs: test`, `if: always()`) restores the previous cache, downloads all shard artifacts on top of it, and saves a single `actions/cache/save@v5` entry.
 
 Three non-obvious requirements:
 
-1. **`include-hidden-files: true` on `actions/upload-artifact`** — `.gotest-timings/` starts with a dot; without this flag the action silently uploads zero files.
+1. **`include-hidden-files: true` on `actions/upload-artifact`** — `.gotest-timings-fresh/` starts with a dot; without this flag the action silently uploads zero files.
 2. **All shards must restore from the same cache** — each shard runs `Pack` independently. If shards see different histories, their plans diverge and tests can be missed or duplicated. The shared cache key + post-job consolidator together guarantee a single coherent input on the next run.
-3. **Uploads must be filtered to the shard's own filename prefix** — the upload path is `.gotest-timings/junit-${SHARD_INDEX}-*.xml`, never `.gotest-timings/`.
-
-   Why: each shard restores the full cache before testing, so its `.gotest-timings/` contains the previous run's `junit-*-*.xml` files for *every* shard plus the fresh files this shard just wrote. If the upload includes those previous-run files, the consolidator's `download-artifact` step (with `merge-multiple: true`) sees N versions of every filename and the "winner" per filename is whichever artifact downloads last — non-deterministic, so old data can silently overwrite fresh data in the saved cache. Filtering to the owned prefix gives the consolidator N disjoint sets of files.
-
-   The consolidator additionally restores the previous cache before downloading artifacts, so a shard that fails before writing any junit doesn't get its history dropped from the cache permanently.
+3. **Read and write directories must be separate** — `-junit-dir` (read) is the restored cache containing history from all shards; `-junit-out` (write) is a clean directory that only contains this run's fresh files. This separation means the upload step can grab the entire output directory without risk of re-uploading stale data from other shards. The consolidator additionally restores the previous cache before downloading artifacts, so a shard that fails before writing any junit doesn't get its history dropped from the cache permanently.
 
 If the cache is empty (cache miss), `Pack` falls back to count-based equal-count splitting (gotesplit's classic behavior) so first runs on a fresh branch behave like upstream gotesplit.
 

@@ -48,6 +48,6 @@ func printUsage(w io.Writer) {
 Usage:
   gotestsplit simulate -junit-dir=<dir> [-min=N] [-max=N]
   gotestsplit plan -junit-dir=<dir> -total=N -index=I [-detail] <pkg>...
-  gotestsplit run -junit-dir=<dir> -total=N -index=I <pkg>... [-- go-test-args]
-  gotestsplit -total=N -index=I <pkg>... [-- go-test-args]   # shortcut for "run"`)
+  gotestsplit run -junit-dir=<dir> [-junit-out=<dir>] -total=N -index=I <pkg>... [-- go-test-args]
+  gotestsplit [-junit-out=<dir>] -total=N -index=I <pkg>... [-- go-test-args]   # shortcut for "run"`)
 }

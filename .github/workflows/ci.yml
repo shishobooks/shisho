@@ -45,42 +45,25 @@ jobs:
           restore-keys: |
             gotest-timings-${{ github.ref }}-
             gotest-timings-refs/heads/master-
-      - name: Compute shard index
-        # Export the zero-based shard index so the upload step can glob just
-        # this shard's fresh junit files. Done in its own step because env vars
-        # written via $GITHUB_ENV are only visible to subsequent steps.
+      - name: Run tests
         env:
           SHARD: ${{ matrix.shard }}
-        run: echo "SHARD_INDEX=$((SHARD - 1))" >> $GITHUB_ENV
-      - name: Run tests
         run: |
           go run ./tools/gotestsplit run \
             -junit-dir=.gotest-timings \
-            -total=12 -index=$SHARD_INDEX \
+            -junit-out=.gotest-timings-fresh \
+            -total=12 -index=$((SHARD - 1)) \
             ./pkg/... -- -race
       - name: Upload shard JUnit
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: gotest-timings-shard-${{ matrix.shard }}
-          # Upload ONLY the files this shard wrote, not the entire restored
-          # cache directory. Each shard writes junit-${SHARD_INDEX}-*.xml; the
-          # rest of the dir is the previous run's junit files (untouched by
-          # this shard, since it only ran its own slice). If we upload
-          # everything, the consolidator's merge-multiple sees N versions of
-          # every filename and the "winner" is whichever artifact downloads
-          # last — so old data can silently overwrite fresh data in the
-          # saved cache.
-          # SHARD_INDEX is set via $GITHUB_ENV in the "Compute shard index"
-          # step above, then read here through the env expression context.
-          path: .gotest-timings/junit-${{ env.SHARD_INDEX }}-*.xml
+          path: .gotest-timings-fresh/
           retention-days: 1
-          # The path is under a dot-prefixed dir; without this flag
-          # upload-artifact treats the whole tree as hidden and uploads zero
-          # files.
+          # Dot-prefixed dir; without this flag upload-artifact uploads zero files.
           include-hidden-files: true
-          # If `go test` failed before any junit was written this catches it
-          # loudly, instead of silently shrinking the cache on the next run.
+          # Catch go test crashing before any junit is written.
           if-no-files-found: error
 
   consolidate-test-timings:
