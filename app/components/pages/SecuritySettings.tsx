@@ -587,7 +587,7 @@ function CreateKoboKeyDialog({
             Give this Kobo a name so you can identify it later.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <DialogBody>
           <div className="space-y-2">
             <Label htmlFor="kobo-name">Device Name</Label>
             <Input
@@ -600,7 +600,7 @@ function CreateKoboKeyDialog({
               value={name}
             />
           </div>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             disabled={createApiKey.isPending || addPermission.isPending}
@@ -735,7 +735,7 @@ function KoboSetupDialog({
             Configure your Kobo device to sync books wirelessly from Shisho.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <DialogBody className="space-y-4">
           {/* Scope Selection */}
           <div className="space-y-3">
             <Label>Sync Scope</Label>
@@ -864,7 +864,7 @@ function KoboSetupDialog({
               {clearKoboSync.isPending ? "Resetting..." : "Reset"}
             </Button>
           </div>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             onClick={() => onOpenChange(false)}
