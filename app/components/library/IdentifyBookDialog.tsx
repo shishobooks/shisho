@@ -184,7 +184,7 @@ export function IdentifyBookDialog({
       onOpenChange={onOpenChange}
       open={open}
     >
-      <DialogContent className="overflow-x-hidden [&>*]:min-w-0">
+      <DialogContent className="max-w-3xl overflow-x-hidden [&>*]:min-w-0">
         {step === "search" && (
           <DialogHeader>
             <DialogTitle>Identify Book</DialogTitle>

@@ -1401,7 +1401,7 @@ export function IdentifyReviewForm({
               totalCount={bookVisibleKeys.length}
             />
             {!bookCollapsed && (
-              <div>
+              <div id="identify-section-book">
                 {/* Title */}
                 <FieldRow
                   currentValue={book.title || undefined}
@@ -1678,7 +1678,7 @@ export function IdentifyReviewForm({
               totalCount={fileVisibleKeys.length}
             />
             {!fileCollapsed && (
-              <div>
+              <div id="identify-section-file">
                 {/* Cover */}
                 {hasCoverChoice && (
                   <FieldRow
@@ -2062,7 +2062,7 @@ export function IdentifyReviewForm({
                   <div
                     className={cn(
                       "flex items-center gap-2",
-                      !decisions.abridged && "pointer-events-none opacity-50",
+                      !decisions.abridged && "pointer-events-none",
                     )}
                   >
                     <Tooltip>
