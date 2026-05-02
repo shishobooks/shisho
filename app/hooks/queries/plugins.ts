@@ -308,9 +308,40 @@ export const useUpdatePlugin = () => {
     // Refetch on both success and failure: a failed enable still mutates
     // server state (Malfunctioned status + load_error get persisted), which
     // the detail page needs to render the error alert without a manual reload.
+    // Also refetch PluginConfig — the config endpoint returns an empty schema
+    // while the runtime is unloaded, so toggling enabled (or saving config)
+    // must reload the form's schema/values. The first time a plugin is
+    // enabled, LoadPlugin also registers identifier types and appends the
+    // plugin to each hook's order (global + per-library fallback), so those
+    // caches need to refetch too.
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginConfig],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginIdentifierTypes],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginOrder],
+      });
+      // Library-scoped orders (LibraryPluginsTab) are keyed under
+      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
+      // only those — the shared "libraries" prefix is used by other hooks
+      // too (books, settings) and blanket-invalidating it would trigger
+      // unrelated refetches on every enable/disable.
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === "libraries" &&
+            key[2] === "plugins" &&
+            key[3] === "order"
+          );
+        },
       });
     },
   });

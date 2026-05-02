@@ -99,6 +99,94 @@ describe("useUpdatePlugin", () => {
   // Malfunctioned + load_error persisted), so the detail page needs the
   // installed-plugins query refetched on error too — otherwise the error
   // alert doesn't appear until the user reloads.
+  // The config endpoint returns an empty schema while the plugin runtime is
+  // unloaded (i.e. while disabled). Enabling the plugin loads the runtime and
+  // the schema becomes available, so the cached PluginConfig must be
+  // invalidated — otherwise the config form stays empty until manual reload.
+  it("invalidates PluginConfig on success so the config form refetches after enable/disable", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData([QueryKey.PluginConfig, "shisho", "test"], {
+      schema: {},
+      values: {},
+      declaredFields: [],
+      fieldSettings: {},
+      confidence_threshold: null,
+    });
+
+    const { result } = renderHook(() => useUpdatePlugin(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "test",
+        payload: { enabled: true },
+        scope: "shisho",
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.PluginConfig, "shisho", "test"])
+          ?.isInvalidated,
+      ).toBe(true);
+    });
+  });
+
+  // LoadPlugin (called when transitioning to enabled) registers the plugin's
+  // identifier types and appends the plugin to each hook's order. The first
+  // time a plugin is enabled the identifier dropdowns and the hook-order
+  // pages must refetch to pick those up.
+  it("invalidates PluginIdentifierTypes and plugin orders (global and library-scoped) on success", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData([QueryKey.PluginIdentifierTypes], []);
+    client.setQueryData([QueryKey.PluginOrder, "metadataEnricher"], []);
+    client.setQueryData(
+      ["libraries", "lib-1", "plugins", "order", "metadataEnricher"],
+      { customized: false, plugins: [] },
+    );
+    // Sanity guard — the unrelated library-prefixed query must NOT be swept up.
+    client.setQueryData(["libraries", "lib-1", "books"], []);
+
+    const { result } = renderHook(() => useUpdatePlugin(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "test",
+        payload: { enabled: true },
+        scope: "shisho",
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.PluginIdentifierTypes])?.isInvalidated,
+      ).toBe(true);
+    });
+    expect(
+      client.getQueryState([QueryKey.PluginOrder, "metadataEnricher"])
+        ?.isInvalidated,
+    ).toBe(true);
+    expect(
+      client.getQueryState([
+        "libraries",
+        "lib-1",
+        "plugins",
+        "order",
+        "metadataEnricher",
+      ])?.isInvalidated,
+    ).toBe(true);
+    expect(
+      client.getQueryState(["libraries", "lib-1", "books"])?.isInvalidated,
+    ).toBe(false);
+  });
+
   it("invalidates PluginsInstalled when the mutation fails", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
