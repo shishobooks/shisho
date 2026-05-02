@@ -608,7 +608,7 @@ export function FileEditDialog({
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="overflow-x-hidden">
+      <DialogContent className="max-w-3xl overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Edit File</DialogTitle>
           <DialogDescription>

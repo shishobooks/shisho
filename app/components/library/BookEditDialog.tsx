@@ -474,7 +474,7 @@ export function BookEditDialog({
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit Book</DialogTitle>
           <DialogDescription>
