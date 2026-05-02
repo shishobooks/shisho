@@ -54,21 +54,7 @@ export function useAuthorSearch(
   enabled: boolean,
   query: string,
 ): { data?: (AuthorInput & PersonOption)[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.people.map((p: PersonWithCounts) => ({
-    name: p.name,
-    id: p.id,
-    authored_book_count: p.authored_book_count,
-    narrated_file_count: p.narrated_file_count,
-  }));
-  return { data: adapted, isLoading };
+  return usePeopleSearch(libraryId, enabled, query);
 }
 
 export function useSeriesSearch(

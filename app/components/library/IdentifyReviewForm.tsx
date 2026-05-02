@@ -1517,10 +1517,7 @@ export function IdentifyReviewForm({
                           className="w-24"
                           onChange={(e) => {
                             const updated = [...seriesEntries];
-                            updated[idx] = {
-                              ...updated[idx],
-                              number: e.target.value,
-                            };
+                            updated[idx].number = e.target.value;
                             setSeriesEntries(updated);
                           }}
                           placeholder="#"
@@ -1531,13 +1528,10 @@ export function IdentifyReviewForm({
                           <Select
                             onValueChange={(value) => {
                               const updated = [...seriesEntries];
-                              updated[idx] = {
-                                ...updated[idx],
-                                unit:
-                                  value === "unspecified"
-                                    ? ""
-                                    : (value as "volume" | "chapter"),
-                              };
+                              updated[idx].unit =
+                                value === "unspecified"
+                                  ? ""
+                                  : (value as "volume" | "chapter");
                               setSeriesEntries(updated);
                             }}
                             value={
