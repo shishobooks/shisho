@@ -40,7 +40,7 @@ export const CapabilitiesWarning = ({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="overflow-x-hidden">
+      <DialogContent className="max-w-lg overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Install {plugin.name}?</DialogTitle>
           <DialogDescription>

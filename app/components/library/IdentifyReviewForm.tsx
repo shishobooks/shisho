@@ -19,7 +19,12 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import {
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
@@ -436,7 +441,7 @@ function CollapsibleCurrentText({ text }: { text: string }) {
         {text}
       </span>
       <button
-        className="inline-flex items-center gap-1 text-primary hover:underline"
+        className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
         onClick={() => setExpanded(!expanded)}
         type="button"
       >
@@ -949,6 +954,8 @@ export function IdentifyReviewForm({
       });
     }
     return out;
+    // isDisabled is stable for the component's lifetime (closes over
+    // disabledFieldsRaw which is derived from result.disabled_fields).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFieldStatus, isPrimaryFile]);
 
@@ -1050,10 +1057,14 @@ export function IdentifyReviewForm({
     [bookVisibleKeys, fileVisibleKeys],
   );
 
-  const bookSelectedCount = bookVisibleKeys.filter((k) => decisions[k]).length;
-  const fileSelectedCount = fileVisibleKeys.filter((k) => decisions[k]).length;
+  const bookSelectedCount = bookApplicableKeys.filter(
+    (k) => decisions[k],
+  ).length;
+  const fileSelectedCount = fileApplicableKeys.filter(
+    (k) => decisions[k],
+  ).length;
   const totalSelected = bookSelectedCount + fileSelectedCount;
-  const totalApplicable = allVisibleKeys.length;
+  const totalApplicable = allApplicableKeys.length;
 
   const bookCheckboxState = aggregateDecisions(
     bookVisibleKeys.map((k) => decisions[k]),
@@ -1288,6 +1299,10 @@ export function IdentifyReviewForm({
   return (
     <>
       <DialogHeader className="flex-row items-center gap-3 pl-10">
+        <DialogTitle className="sr-only">Identify {book.title}</DialogTitle>
+        <DialogDescription className="sr-only">
+          Review and apply metadata from {pluginDisplayName}
+        </DialogDescription>
         {/* Back button mirrors the close button's positioning (absolute, same
             offset and styling) so they appear symmetric across the header. */}
         <button
@@ -1299,7 +1314,7 @@ export function IdentifyReviewForm({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold">
+          <h3 aria-hidden className="truncate text-sm font-semibold">
             Identify {book.title}
           </h3>
           <p className="truncate text-xs text-muted-foreground">

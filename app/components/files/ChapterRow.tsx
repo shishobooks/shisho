@@ -397,7 +397,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Delete confirmation dialog for chapters with children */}
         <Dialog onOpenChange={setDeleteDialogOpen} open={deleteDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Delete Chapter</DialogTitle>
             </DialogHeader>

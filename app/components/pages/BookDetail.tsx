@@ -1524,7 +1524,7 @@ const BookDetail = () => {
         }}
         open={!!downloadError}
       >
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Download Failed</DialogTitle>
           </DialogHeader>

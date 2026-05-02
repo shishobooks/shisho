@@ -55,7 +55,7 @@ const RecomputeDialog = ({
       }}
       open={open}
     >
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Recompute review state?</DialogTitle>
           <DialogDescription asChild>

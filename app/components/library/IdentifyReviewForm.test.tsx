@@ -11,6 +11,7 @@ import {
   vi,
 } from "vitest";
 
+import { Dialog } from "@/components/ui/dialog";
 import type { PluginSearchResult } from "@/hooks/queries/plugins";
 import {
   DataSourceManual,
@@ -238,13 +239,15 @@ function renderForm(
   const onBack = vi.fn();
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <IdentifyReviewForm
-        book={opts.book ?? makeBook()}
-        fileId={opts.fileId}
-        onBack={onBack}
-        onClose={onClose}
-        result={opts.result ?? makeResult()}
-      />
+      <Dialog open>
+        <IdentifyReviewForm
+          book={opts.book ?? makeBook()}
+          fileId={opts.fileId}
+          onBack={onBack}
+          onClose={onClose}
+          result={opts.result ?? makeResult()}
+        />
+      </Dialog>
     </QueryClientProvider>,
   );
   return { ...view, onClose, onBack };

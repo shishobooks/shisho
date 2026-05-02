@@ -118,7 +118,7 @@ The **Name** row corresponds to `file.Name` — the file-level title used for do
 
 When you've flipped many boxes and want to start over, **Restore suggestions** in the footer reverts every checkbox and edited value back to the smart defaults without leaving the dialog.
 
-Within each row, names that already exist in your library show as plain chips; names that don't yet exist render with a dashed-outline indicator and will be created automatically when you apply. Identifiers can be added, edited, and removed inline. Per-field "New" / "Changed" badges show how the incoming match compares to what you already have, and "Currently:" shows the existing value beside the input for easy reference.
+Within each row, names that already exist in your library show as plain chips; new names that don't yet exist will be created automatically when you apply. Identifiers can be added, edited, and removed inline. Per-field "New" / "Changed" badges show how the incoming match compares to what you already have, and "Currently:" shows the existing value beside the input for easy reference.
 
 ## How Metadata Is Extracted
 

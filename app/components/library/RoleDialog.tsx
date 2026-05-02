@@ -173,7 +173,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
         onOpenChange={onOpenChange}
         open={open}
       >
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {isEditMode ? "Edit Role" : "Create Role"}
