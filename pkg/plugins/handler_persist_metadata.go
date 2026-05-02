@@ -143,13 +143,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Series
-	if md.Series != "" {
-		// Capture old series before delete so we can re-index any that get
-		// detached — their series_fts.book_titles / book_authors aggregate
-		// columns must stop listing this book. Holding the *models.Series
-		// pointers from book.BookSeries lets us re-index without an extra
-		// DB round-trip.
+	// Series — multi-entry path (identify form) takes precedence over scalar (plugins).
+	multiSeries := overrides != nil && overrides.SeriesEntries != nil
+	if multiSeries || md.Series != "" {
 		oldSeries := make(map[int]*models.Series, len(book.BookSeries))
 		for _, bs := range book.BookSeries {
 			if bs.Series != nil {
@@ -159,42 +155,68 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
 			return errors.Wrap(err, "failed to delete series")
 		}
-		seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
-		if sErr != nil {
-			log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
-		} else {
-			if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
-				BookID:       book.ID,
-				SeriesID:     seriesRecord.ID,
-				SeriesNumber: md.SeriesNumber,
-				SortOrder:    1,
-			}); err != nil {
-				log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+
+		newSeriesIDs := make(map[int]struct{})
+
+		if multiSeries {
+			for i, entry := range *overrides.SeriesEntries {
+				seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, entry.Name, book.LibraryID, pluginSource)
+				if sErr != nil {
+					log.Warn("failed to find/create series", logger.Data{"name": entry.Name, "error": sErr.Error()})
+					continue
+				}
+				bs := &models.BookSeries{
+					BookID:    book.ID,
+					SeriesID:  seriesRecord.ID,
+					SortOrder: i + 1,
+				}
+				if entry.Number != nil {
+					bs.SeriesNumber = entry.Number
+				}
+				if entry.SeriesNumberUnit != nil {
+					bs.SeriesNumberUnit = entry.SeriesNumberUnit
+				}
+				if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
+					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+				}
+				newSeriesIDs[seriesRecord.ID] = struct{}{}
 			}
-			// Re-index series whose attachment to this book actually
-			// changed: the new series (if it wasn't already attached,
-			// covering both newly-created series and freshly-attached
-			// existing series), and every old series that's no longer
-			// attached. Additionally re-index the still-attached series
-			// when book.title or book.authors changed during this apply
-			// — series_fts.book_titles / book_authors are aggregate
-			// columns that would otherwise go stale. Index after
-			// CreateBookSeries so the aggregate reflects the just-
-			// attached book.
-			if h.enrich.searchIndexer != nil {
-				_, stillAttached := oldSeries[seriesRecord.ID]
+		} else {
+			seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
+			if sErr != nil {
+				log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
+			} else {
+				if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
+					BookID:       book.ID,
+					SeriesID:     seriesRecord.ID,
+					SeriesNumber: md.SeriesNumber,
+					SortOrder:    1,
+				}); err != nil {
+					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
+				}
+				newSeriesIDs[seriesRecord.ID] = struct{}{}
+			}
+		}
+
+		if h.enrich.searchIndexer != nil {
+			for id := range newSeriesIDs {
+				_, stillAttached := oldSeries[id]
 				if !stillAttached || seriesAggregateMayBeStale {
-					if err := h.enrich.searchIndexer.IndexSeries(ctx, seriesRecord); err != nil {
-						log.Warn("failed to update search index for series", logger.Data{"series_id": seriesRecord.ID, "error": err.Error()})
+					rec, ok := oldSeries[id]
+					if !ok {
+						rec = &models.Series{ID: id}
+					}
+					if err := h.enrich.searchIndexer.IndexSeries(ctx, rec); err != nil {
+						log.Warn("failed to update search index for series", logger.Data{"series_id": id, "error": err.Error()})
 					}
 				}
-				for oldID, oldSer := range oldSeries {
-					if oldID == seriesRecord.ID {
-						continue
-					}
-					if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
-						log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
-					}
+			}
+			for oldID, oldSer := range oldSeries {
+				if _, kept := newSeriesIDs[oldID]; kept {
+					continue
+				}
+				if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
+					log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
 				}
 			}
 		}

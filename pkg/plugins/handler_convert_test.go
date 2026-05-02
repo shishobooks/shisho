@@ -407,6 +407,93 @@ func TestConvertFieldsToMetadata_SeriesNumberUnitMissing(t *testing.T) {
 	assert.Nil(t, md.SeriesNumberUnit)
 }
 
+func TestExtractSeriesEntries_NilWhenAbsent(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{"title": "Book"})
+	assert.Nil(t, got, "absent series key must yield nil")
+}
+
+func TestExtractSeriesEntries_NilWhenString(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{"series": "My Series"})
+	assert.Nil(t, got, "scalar string must yield nil — handled by convertFieldsToMetadata")
+}
+
+func TestExtractSeriesEntries_EmptyArray(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{"series": []any{}})
+	require.NotNil(t, got, "empty array must return non-nil pointer (meaning clear all)")
+	assert.Empty(t, *got)
+}
+
+func TestExtractSeriesEntries_SingleEntry(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{
+			map[string]any{"name": "Naruto", "number": 3.0, "series_number_unit": "volume"},
+		},
+	})
+	require.NotNil(t, got)
+	require.Len(t, *got, 1)
+	assert.Equal(t, "Naruto", (*got)[0].Name)
+	require.NotNil(t, (*got)[0].Number)
+	assert.InDelta(t, 3.0, *(*got)[0].Number, 0.001)
+	require.NotNil(t, (*got)[0].SeriesNumberUnit)
+	assert.Equal(t, "volume", *(*got)[0].SeriesNumberUnit)
+}
+
+func TestExtractSeriesEntries_MultipleEntries(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{
+			map[string]any{"name": "Series A", "number": 1.0},
+			map[string]any{"name": "Series B"},
+		},
+	})
+	require.NotNil(t, got)
+	require.Len(t, *got, 2)
+	assert.Equal(t, "Series A", (*got)[0].Name)
+	assert.Equal(t, "Series B", (*got)[1].Name)
+	assert.Nil(t, (*got)[1].Number)
+	assert.Nil(t, (*got)[1].SeriesNumberUnit)
+}
+
+func TestExtractSeriesEntries_SkipsEmptyNames(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{
+			map[string]any{"name": ""},
+			map[string]any{"name": "Valid"},
+		},
+	})
+	require.NotNil(t, got)
+	require.Len(t, *got, 1)
+	assert.Equal(t, "Valid", (*got)[0].Name)
+}
+
+func TestExtractSeriesEntries_InvalidUnit(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{
+			map[string]any{"name": "S", "series_number_unit": "bogus"},
+		},
+	})
+	require.NotNil(t, got)
+	require.Len(t, *got, 1)
+	assert.Nil(t, (*got)[0].SeriesNumberUnit, "invalid unit must be dropped")
+}
+
+func TestConvertFieldsToMetadata_SeriesArrayDoesNotSetScalar(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"series": []any{
+			map[string]any{"name": "My Series"},
+		},
+	}
+	md := convertFieldsToMetadata(fields)
+	assert.Empty(t, md.Series, "array format must not populate the scalar Series field")
+}
+
 func TestConvertFieldsToOverrides_NilWhenAbsent(t *testing.T) {
 	t.Parallel()
 

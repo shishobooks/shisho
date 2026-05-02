@@ -222,16 +222,16 @@ describe("IdentifyReviewForm component", () => {
     expect(screen.getByText("Narrators")).toBeInTheDocument();
   });
 
-  it("clears series and series_number when the Clear series button is pressed", async () => {
+  it("clears series when the Remove button is pressed on the series row", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ series: "Some Series", series_number: 1 }),
     });
 
-    const clearButton = await screen.findByRole("button", {
-      name: /clear series/i,
+    const removeButton = await screen.findByRole("button", {
+      name: /remove some series/i,
     });
-    await user.click(clearButton);
+    await user.click(removeButton);
 
     await user.click(getApplyButton());
 
@@ -240,8 +240,7 @@ describe("IdentifyReviewForm component", () => {
     });
 
     const payload = applyMock.mock.calls[0][0];
-    expect(payload.fields.series).toBe("");
-    expect(payload.fields.series_number).toBeUndefined();
+    expect(payload.fields.series).toEqual([]);
   });
 
   it("does not auto-select a broken plugin cover_url as the default cover", async () => {

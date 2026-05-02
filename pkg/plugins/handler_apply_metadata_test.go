@@ -225,6 +225,27 @@ func TestApplyMetadata_OrganizesFiles_WhenSeriesChanges(t *testing.T) {
 	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when series changes")
 }
 
+func TestApplyMetadata_OrganizesFiles_WhenMultiSeriesArraySent(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"series": []any{
+			map[string]any{"name": "Series A", "number": 1.0},
+			map[string]any{"name": "Series B", "number": 2.0, "series_number_unit": "volume"},
+		},
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when multi-series array is sent")
+}
+
 func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	t.Parallel()
 

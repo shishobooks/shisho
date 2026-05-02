@@ -136,6 +136,15 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	return md
 }
 
+// SeriesEntry represents a single series association in the multi-series
+// apply payload. Used by the identify form which supports multiple series
+// per book, unlike the plugin SDK which models a single series.
+type SeriesEntry struct {
+	Name             string
+	Number           *float64
+	SeriesNumberUnit *string
+}
+
 // applyOverrides carries apply-path-only signals that don't belong on
 // mediafile.ParsedMetadata (which is part of the public plugin SDK
 // contract). These come exclusively from the identify apply payload —
@@ -148,6 +157,10 @@ type applyOverrides struct {
 	// FileNameSource is the value to write to file.NameSource. Nil
 	// means "default to the plugin source for this apply call".
 	FileNameSource *string
+	// SeriesEntries, when non-nil, replaces the book's series associations
+	// with the provided list. An empty slice clears all series. Nil means
+	// "don't touch series" (the identify form's series checkbox was off).
+	SeriesEntries *[]SeriesEntry
 }
 
 // convertFieldsToOverrides extracts apply-path-only signals from the
@@ -168,4 +181,42 @@ func convertFieldsToOverrides(fields map[string]any) *applyOverrides {
 		out.FileNameSource = &v
 	}
 	return out
+}
+
+// extractSeriesEntries checks whether fields["series"] is an array of
+// objects (the multi-series format sent by the identify form). Returns
+// nil when the key is absent or is a string (handled by convertFieldsToMetadata).
+// Returns a non-nil pointer to an empty slice when the key is an empty array
+// (meaning "clear all series").
+func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
+	v, ok := fields["series"]
+	if !ok {
+		return nil
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil // scalar string — handled by convertFieldsToMetadata
+	}
+	entries := make([]SeriesEntry, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := m["name"].(string)
+		if name == "" {
+			continue
+		}
+		entry := SeriesEntry{Name: name}
+		if num, ok := m["number"].(float64); ok {
+			entry.Number = &num
+		}
+		if unit, ok := m["series_number_unit"].(string); ok {
+			if unit == models.SeriesNumberUnitVolume || unit == models.SeriesNumberUnitChapter {
+				entry.SeriesNumberUnit = &unit
+			}
+		}
+		entries = append(entries, entry)
+	}
+	return &entries
 }
