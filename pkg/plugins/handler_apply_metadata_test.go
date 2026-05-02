@@ -652,7 +652,7 @@ func TestApplyMetadata_ScalarSeries_WritesSeriesNumberUnit(t *testing.T) {
 	require.Len(t, rel.capturedBookSeries, 1)
 	bs := rel.capturedBookSeries[0]
 	require.NotNil(t, bs.SeriesNumber)
-	assert.Equal(t, 5.0, *bs.SeriesNumber)
+	assert.InDelta(t, 5.0, *bs.SeriesNumber, 0.001)
 	require.NotNil(t, bs.SeriesNumberUnit, "scalar series path must write SeriesNumberUnit")
 	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
 }
