@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MultiSelectCombobox } from "./MultiSelectCombobox";
 
 describe("MultiSelectCombobox", () => {
-  it("renders chip status badges when status prop provided", () => {
+  it("renders chips without status badges", () => {
     render(
       <MultiSelectCombobox
         isLoading={false}
@@ -14,34 +14,16 @@ describe("MultiSelectCombobox", () => {
         onSearch={vi.fn()}
         options={[]}
         searchValue=""
-        status={(v) => (v === "Sci-Fi" ? "new" : "unchanged")}
         values={["Sci-Fi", "Fantasy"]}
       />,
     );
 
-    const sci = screen.getByText("Sci-Fi").closest("[data-testid='ms-chip']");
-    expect(
-      sci?.querySelector("[data-testid='ms-status-badge']"),
-    ).toHaveTextContent(/new/i);
-  });
-
-  it("renders no status badges when status prop omitted (existing behavior)", () => {
-    render(
-      <MultiSelectCombobox
-        isLoading={false}
-        label="Genre"
-        onChange={vi.fn()}
-        onSearch={vi.fn()}
-        options={[]}
-        searchValue=""
-        values={["Sci-Fi"]}
-      />,
-    );
-
+    expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
+    expect(screen.getByText("Fantasy")).toBeInTheDocument();
     expect(screen.queryByTestId("ms-status-badge")).not.toBeInTheDocument();
   });
 
-  it("renders removed entries as strikethrough with undo, restoring on click", async () => {
+  it("removes a chip when X is clicked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();
 
@@ -52,15 +34,12 @@ describe("MultiSelectCombobox", () => {
         onChange={onChange}
         onSearch={vi.fn()}
         options={[]}
-        removed={["Horror"]}
         searchValue=""
-        values={["Sci-Fi"]}
+        values={["Sci-Fi", "Fantasy"]}
       />,
     );
 
-    const horror = screen.getByText("Horror");
-    expect(horror.className).toMatch(/line-through/);
-    await user.click(screen.getByLabelText(/Restore Horror/i));
-    expect(onChange).toHaveBeenCalledWith(["Sci-Fi", "Horror"]);
+    await user.click(screen.getByLabelText(/Remove Sci-Fi/i));
+    expect(onChange).toHaveBeenCalledWith(["Fantasy"]);
   });
 });

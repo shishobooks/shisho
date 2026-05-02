@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -113,12 +113,11 @@ describe("IdentifierEditor", () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it("renders per-row status badge when status resolver provided", () => {
+  it("renders chips without status badges", () => {
     render(
       <IdentifierEditor
         identifierTypes={TYPES}
         onChange={vi.fn()}
-        status={(row) => (row.type === "isbn_13" ? "new" : "unchanged")}
         value={[
           { type: "isbn_13", value: "9780306406157" },
           { type: "asin", value: "B0BHRJYNHV" },
@@ -126,11 +125,9 @@ describe("IdentifierEditor", () => {
       />,
     );
 
-    const isbnRow = screen
-      .getByText("9780306406157")
-      .closest("[data-testid='identifier-row']");
+    expect(screen.getByText("9780306406157")).toBeInTheDocument();
     expect(
-      within(isbnRow as HTMLElement).getByTestId("identifier-status-badge"),
-    ).toHaveTextContent(/new/i);
+      screen.queryByTestId("identifier-status-badge"),
+    ).not.toBeInTheDocument();
   });
 });

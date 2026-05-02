@@ -445,13 +445,18 @@ function FieldRow({
 function CollapsibleCurrentText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <p className="text-xs text-muted-foreground/70">
-      <span className="font-medium">Currently:</span>{" "}
-      <span className={cn("text-foreground/60", !expanded && "line-clamp-2")}>
+    <div className="text-xs text-muted-foreground/70 space-y-1">
+      <p className="font-medium">Currently:</p>
+      <span
+        className={cn(
+          "block text-foreground/60 whitespace-pre-line",
+          !expanded && "line-clamp-2",
+        )}
+      >
         {text}
       </span>
       <button
-        className="ml-1 inline-flex items-center gap-1 text-primary hover:underline"
+        className="inline-flex items-center gap-1 text-primary hover:underline"
         onClick={() => setExpanded(!expanded)}
         type="button"
       >
@@ -465,7 +470,7 @@ function CollapsibleCurrentText({ text }: { text: string }) {
           </>
         )}
       </button>
-    </p>
+    </div>
   );
 }
 
@@ -1643,11 +1648,7 @@ export function IdentifyReviewForm({
                     onSearch={setGenreSearch}
                     options={genresData?.genres.map((g) => g.name) ?? []}
                     placeholder="Add genres..."
-                    removed={currentGenres.filter((g) => !genres.includes(g))}
                     searchValue={genreSearch}
-                    status={(v) =>
-                      currentGenres.includes(v) ? "unchanged" : "new"
-                    }
                     values={genres}
                   />
                 </FieldRow>
@@ -1671,11 +1672,7 @@ export function IdentifyReviewForm({
                     onSearch={setTagSearch}
                     options={tagsData?.tags.map((t) => t.name) ?? []}
                     placeholder="Add tags..."
-                    removed={currentTags.filter((t) => !tags.includes(t))}
                     searchValue={tagSearch}
-                    status={(v) =>
-                      currentTags.includes(v) ? "unchanged" : "new"
-                    }
                     values={tags}
                   />
                 </FieldRow>
@@ -1744,10 +1741,6 @@ export function IdentifyReviewForm({
                           disabled={isDisabled("cover")}
                           onClick={() => {
                             setUserCoverSelection("current");
-                            // Picking "Keep current" means no apply. Sync the
-                            // row checkbox so its visual state matches the
-                            // (no-op) effective state.
-                            setDecision("cover", false);
                           }}
                           type="button"
                         >
@@ -2106,15 +2099,9 @@ export function IdentifyReviewForm({
                   status={fieldStatus.identifiers}
                 >
                   <IdentifierEditor
+                    hideHeader
                     identifierTypes={availableIdentifierTypes}
                     onChange={setIdentifiers}
-                    status={(row) =>
-                      currentIdentifiers.some(
-                        (c) => c.type === row.type && c.value === row.value,
-                      )
-                        ? "unchanged"
-                        : "new"
-                    }
                     value={identifiers}
                   />
                 </FieldRow>

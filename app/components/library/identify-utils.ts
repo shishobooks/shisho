@@ -124,26 +124,13 @@ export function resolveIdentifiers(
     return { value: current, status: "unchanged" };
   }
 
-  // Merge: keep current's order; for each current entry, replace value with
-  // incoming's value if the type matches. Append new types from incoming
-  // (in incoming order) at the end.
-  const incomingMap = new Map(dedupedIncoming.map((id) => [id.type, id.value]));
-  let changed = false;
-  const merged: IdentifierEntry[] = current.map((id) => {
-    const incomingValue = incomingMap.get(id.type);
-    if (incomingValue !== undefined && incomingValue !== id.value) {
-      changed = true;
-      return { type: id.type, value: incomingValue };
-    }
-    return id;
-  });
-  const currentTypes = new Set(current.map((id) => id.type));
-  for (const entry of dedupedIncoming) {
-    if (!currentTypes.has(entry.type)) {
-      merged.push(entry);
-      changed = true;
-    }
-  }
+  // Overwrite: use incoming identifiers directly (replacing current).
+  const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
+  const currentSet = new Set(current.map(key));
+  const incomingSet = new Set(dedupedIncoming.map(key));
+  const same =
+    currentSet.size === incomingSet.size &&
+    [...currentSet].every((k) => incomingSet.has(k));
 
-  return { value: merged, status: changed ? "changed" : "unchanged" };
+  return { value: dedupedIncoming, status: same ? "unchanged" : "changed" };
 }

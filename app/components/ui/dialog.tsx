@@ -146,7 +146,7 @@ const DialogHeader = ({
   return (
     <div
       className={cn(
-        "relative flex shrink-0 flex-col border-b bg-muted/40 px-5 py-3 pr-10 text-left",
+        "relative flex shrink-0 flex-col border-b bg-muted px-5 py-4 pr-10 text-left",
         className,
       )}
       {...props}
@@ -188,7 +188,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex shrink-0 flex-col-reverse gap-2 border-t bg-muted/40 px-5 py-3 sm:flex-row sm:justify-end",
+      "flex shrink-0 flex-col-reverse gap-2 border-t bg-muted px-5 py-4 sm:flex-row sm:justify-end",
       className,
     )}
     {...props}
