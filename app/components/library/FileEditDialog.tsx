@@ -36,10 +36,13 @@ import {
   useUpdateFile,
   useUploadFileCover,
 } from "@/hooks/queries/books";
-import { useImprintsList } from "@/hooks/queries/imprints";
-import { usePeopleList } from "@/hooks/queries/people";
+import {
+  useImprintSearch,
+  usePeopleSearch,
+  usePublisherSearch,
+  type NameOption,
+} from "@/hooks/queries/entity-search";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
-import { usePublishersList } from "@/hooks/queries/publishers";
 import { useSetFileReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
@@ -62,69 +65,6 @@ interface FileEditDialogProps {
   book?: Book;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-interface NameOption {
-  name: string;
-}
-
-// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
-// signature. Defined at module scope so they're stable references and the same
-// hooks run in the same order on every render.
-//
-// Each adapter maps the API list-result shape to a `{ name }` shape that the
-// EntityCombobox / SortableEntityList renders. The combobox only needs `name`
-// to display each option; row-specific extras are filled in by `onAppend`.
-
-function usePeopleSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.people.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function usePublisherSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePublishersList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.publishers.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function useImprintSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = useImprintsList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.imprints.map((i) => ({ name: i.name }));
-  return { data: adapted, isLoading };
 }
 
 // Helper to format date to YYYY-MM-DD for input[type="date"]
