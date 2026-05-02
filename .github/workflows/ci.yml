@@ -36,7 +36,7 @@ jobs:
       - name: Restore test timing cache
         # Restore-only — saving is consolidated across shards in the
         # consolidate-test-timings job below. If we used actions/cache here,
-        # all 8 shards would race to save, and only one shard's JUnit data
+        # all shards would race to save, and only one shard's JUnit data
         # would survive — defeating timing-aware bin-packing.
         uses: actions/cache/restore@v5
         with:
@@ -45,24 +45,40 @@ jobs:
           restore-keys: |
             gotest-timings-${{ github.ref }}-
             gotest-timings-refs/heads/master-
-      - name: Run tests
+      - name: Compute shard index
+        # Export the zero-based shard index so the upload step can glob just
+        # this shard's fresh junit files. Done in its own step because env vars
+        # written via $GITHUB_ENV are only visible to subsequent steps.
         env:
           SHARD: ${{ matrix.shard }}
+        run: echo "SHARD_INDEX=$((SHARD - 1))" >> $GITHUB_ENV
+      - name: Run tests
         run: |
           go run ./tools/gotestsplit run \
             -junit-dir=.gotest-timings \
-            -total=12 -index=$((SHARD - 1)) \
+            -total=12 -index=$SHARD_INDEX \
             ./pkg/... -- -race
       - name: Upload shard JUnit
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: gotest-timings-shard-${{ matrix.shard }}
-          path: .gotest-timings/
+          # Upload ONLY the files this shard wrote, not the entire restored
+          # cache directory. Each shard writes junit-${SHARD_INDEX}-*.xml; the
+          # rest of the dir is stale leftovers from the cache restore that
+          # other shards will write fresh versions of. If we upload everything,
+          # the consolidator's merge-multiple sees 12 versions of every file
+          # and the "winner" is whichever artifact downloads last — so stale
+          # data can silently overwrite fresh data in the saved cache.
+          path: .gotest-timings/junit-${{ env.SHARD_INDEX }}-*.xml
           retention-days: 1
-          # The dir starts with a dot; without this flag upload-artifact treats
-          # the whole tree as hidden and silently uploads nothing.
+          # The path is under a dot-prefixed dir; without this flag
+          # upload-artifact treats the whole tree as hidden and uploads zero
+          # files.
           include-hidden-files: true
+          # If `go test` failed before any junit was written this catches it
+          # loudly, instead of silently shrinking the cache on the next run.
+          if-no-files-found: error
 
   consolidate-test-timings:
     name: Consolidate test timings
@@ -70,12 +86,30 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Restore previous test timing cache
+        # Belt-and-suspenders alongside the fresh-only uploads above: if a
+        # shard fails before writing any junit (or upload-artifact fails),
+        # we still preserve that shard's prior history rather than dropping
+        # it from the cache permanently.
+        uses: actions/cache/restore@v5
+        with:
+          path: .gotest-timings
+          key: gotest-timings-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            gotest-timings-${{ github.ref }}-
+            gotest-timings-refs/heads/master-
       - name: Download all shard JUnit artifacts
         uses: actions/download-artifact@v8
         with:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
+      - name: Report cache size
+        # Visibility check — a sudden drop in file count means the merge-race
+        # bug or the fresh-only upload assumption regressed.
+        run: |
+          echo "junit files: $(find .gotest-timings -name 'junit-*.xml' | wc -l)"
+          du -sh .gotest-timings || true
       - name: Save consolidated cache
         uses: actions/cache/save@v5
         with:

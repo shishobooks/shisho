@@ -22,12 +22,13 @@ Subcommands:
 
 `.github/workflows/ci.yml`'s `test` job uses **restore-only** cache (`actions/cache/restore@v5`) with a key shared across all shards (`gotest-timings-${{ github.ref }}-${{ github.sha }}`).
 
-After tests, each shard uploads its `.gotest-timings/` as a per-shard artifact (`gotest-timings-shard-N`). A separate `consolidate-test-timings` job (`needs: test`, `if: always()`) downloads all shard artifacts, merges them, and saves a single `actions/cache/save@v5` entry.
+After tests, each shard uploads **only the junit files it wrote this run** (`.gotest-timings/junit-${SHARD_INDEX}-*.xml`) as a per-shard artifact (`gotest-timings-shard-N`). A separate `consolidate-test-timings` job (`needs: test`, `if: always()`) restores the previous cache, downloads all shard artifacts on top of it, and saves a single `actions/cache/save@v5` entry.
 
-Two non-obvious requirements:
+Three non-obvious requirements:
 
-1. **`include-hidden-files: true` on `actions/upload-artifact@v4`** — `.gotest-timings/` starts with a dot; without this flag the action silently uploads zero files.
+1. **`include-hidden-files: true` on `actions/upload-artifact`** — `.gotest-timings/` starts with a dot; without this flag the action silently uploads zero files.
 2. **All shards must restore from the same cache** — each shard runs `Pack` independently. If shards see different histories, their plans diverge and tests can be missed or duplicated. The shared cache key + post-job consolidator together guarantee a single coherent input on the next run.
+3. **Uploads must be filtered to the shard's own filename prefix** — the upload path is `.gotest-timings/junit-${SHARD_INDEX}-*.xml`, never `.gotest-timings/`. Each shard restores the full cache before testing, so its `.gotest-timings/` contains 11 stale `junit-*-*.xml` files from other shards plus its own fresh ones. If the upload includes those stale files, the consolidator's `download-artifact` step (with `merge-multiple: true`) sees 12 versions of every file and the "winner" per filename is whichever artifact downloads last — non-deterministic, so stale data can silently overwrite fresh data in the saved cache. Filtering to the owned prefix gives the consolidator 12 disjoint sets of files. The consolidator additionally restores the previous cache before downloading artifacts, so a shard that fails before writing any junit doesn't get its history dropped from the cache permanently.
 
 If the cache is empty (cache miss), `Pack` falls back to count-based equal-count splitting (gotesplit's classic behavior) so first runs on a fresh branch behave like upstream gotesplit.
 
@@ -125,6 +126,7 @@ Commit + push. The first run after the change is the contaminated one (Pack uses
 - **`gh run view <run-id>` returns "still in progress" until the entire workflow completes** — for partial logs of an in-progress run, view individual jobs via the GHA web UI.
 - **`actions/cache/restore@v5` and `actions/cache/save@v5` are separate actions** from `actions/cache@v5`; we use the split form so only the consolidator saves. Don't replace with the unified form — concurrent saves race and only one shard's data wins.
 - **`gh pr checks` shows checks for the latest commit on the PR**, so monitors that scope by PR (not run-id) will break if a new commit is pushed mid-monitor. Scope monitors to a specific `RUN_ID` (`gh run view $RUN_ID --json jobs`).
+- **The cache is never pruned** — `junit-N-K.xml` files outlive the run that wrote them, so when shard count or chunk count drops, leftover files persist. `ReadHistory` merges them by lexical order with later wins, which is mostly harmless (durations drift, packing is stable) but means the cache grows unboundedly and can carry stale (pkg, test) entries for tests that have been renamed or removed. Live with it until cache size or stale data causes pain; the planned mitigation is a `prune` step in the consolidator.
 
 ## Pull-out plan (future)
 
