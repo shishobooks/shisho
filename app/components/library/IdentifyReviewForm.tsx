@@ -50,6 +50,8 @@ import {
   useSeriesSearch,
   useTagSearch,
   type NameOption,
+  type NameWithBookCount,
+  type NameWithFileCount,
 } from "@/hooks/queries/entity-search";
 import {
   usePluginApply,
@@ -1363,6 +1365,14 @@ export function IdentifyReviewForm({
                     comboboxProps={{
                       getOptionKey: (p) => p.name,
                       getOptionLabel: (p) => p.name,
+                      getOptionDescription: (p) => {
+                        const c = (
+                          p as AuthorEntry & { authored_book_count?: number }
+                        ).authored_book_count;
+                        return c != null
+                          ? `${c} ${c === 1 ? "book" : "books"}`
+                          : undefined;
+                      },
                       hook: function useAuthorOptions(q) {
                         return usePeopleSearch(book.library_id, true, q);
                       },
@@ -1452,6 +1462,12 @@ export function IdentifyReviewForm({
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <EntityCombobox<NameOption>
+                        getOptionDescription={(s) => {
+                          const c = (s as NameWithBookCount).book_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "book" : "books"}`
+                            : undefined;
+                        }}
                         getOptionKey={(s) => s.name}
                         getOptionLabel={(s) => s.name}
                         hook={function useSeriesOptions(q) {
@@ -1506,7 +1522,12 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("genres", v)}
                   status={fieldStatus.genres}
                 >
-                  <MultiSelectCombobox
+                  <MultiSelectCombobox<NameWithBookCount>
+                    getOptionCount={(g) => g.book_count}
+                    getOptionDescription={(g) =>
+                      `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
+                    }
+                    getOptionLabel={(g) => g.name}
                     hook={function useGenreOptions(q) {
                       return useGenreSearch(book.library_id, true, q);
                     }}
@@ -1529,7 +1550,12 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("tags", v)}
                   status={fieldStatus.tags}
                 >
-                  <MultiSelectCombobox
+                  <MultiSelectCombobox<NameWithBookCount>
+                    getOptionCount={(t) => t.book_count}
+                    getOptionDescription={(t) =>
+                      `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
+                    }
+                    getOptionLabel={(t) => t.name}
                     hook={function useTagOptions(q) {
                       return useTagSearch(book.library_id, true, q);
                     }}
@@ -1712,6 +1738,14 @@ export function IdentifyReviewForm({
                       comboboxProps={{
                         getOptionKey: (p) => p.name,
                         getOptionLabel: (p) => p.name,
+                        getOptionDescription: (p) => {
+                          const c = (
+                            p as NameOption & { narrated_file_count?: number }
+                          ).narrated_file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        },
                         hook: function useNarratorOptions(q) {
                           return usePeopleSearch(book.library_id, true, q);
                         },
@@ -1756,6 +1790,12 @@ export function IdentifyReviewForm({
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <EntityCombobox<NameOption>
+                        getOptionDescription={(p) => {
+                          const c = (p as NameWithFileCount).file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        }}
                         getOptionKey={(p) => p.name}
                         getOptionLabel={(p) => p.name}
                         hook={function usePublisherOptions(q) {
@@ -1798,6 +1838,12 @@ export function IdentifyReviewForm({
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <EntityCombobox<NameOption>
+                        getOptionDescription={(p) => {
+                          const c = (p as NameWithFileCount).file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        }}
                         getOptionKey={(p) => p.name}
                         getOptionLabel={(p) => p.name}
                         hook={function useImprintOptions(q) {

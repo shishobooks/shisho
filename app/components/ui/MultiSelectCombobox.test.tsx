@@ -12,6 +12,7 @@ describe("MultiSelectCombobox", () => {
   it("renders chips for selected values", () => {
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook([])}
         label="Genre"
         onChange={vi.fn()}
@@ -29,6 +30,7 @@ describe("MultiSelectCombobox", () => {
 
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook([])}
         label="Genre"
         onChange={onChange}
@@ -45,6 +47,7 @@ describe("MultiSelectCombobox", () => {
 
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook(["Fantasy", "Horror"])}
         label="Genre"
         onChange={vi.fn()}
@@ -62,6 +65,7 @@ describe("MultiSelectCombobox", () => {
 
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook(["Fantasy", "Horror"])}
         label="Genre"
         onChange={onChange}
@@ -79,6 +83,7 @@ describe("MultiSelectCombobox", () => {
 
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook(["Fantasy", "Horror"])}
         label="Genre"
         onChange={vi.fn()}
@@ -98,6 +103,7 @@ describe("MultiSelectCombobox", () => {
 
     render(
       <MultiSelectCombobox
+        getOptionLabel={(s) => s}
         hook={makeHook([])}
         label="Genre"
         onChange={vi.fn()}

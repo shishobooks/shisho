@@ -33,6 +33,7 @@ import {
   useGenreSearch,
   useSeriesSearch,
   useTagSearch,
+  type NameWithBookCount,
 } from "@/hooks/queries/entity-search";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
@@ -476,6 +477,14 @@ export function BookEditDialog({
                 getOptionKey: (p) =>
                   (p as AuthorInput & { id?: number }).id ?? p.name,
                 getOptionLabel: (p) => p.name,
+                getOptionDescription: (p) => {
+                  const c = (
+                    p as AuthorInput & { authored_book_count?: number }
+                  ).authored_book_count;
+                  return c != null
+                    ? `${c} ${c === 1 ? "book" : "books"}`
+                    : undefined;
+                },
                 hook: function useAuthorOptions(q) {
                   return useAuthorSearch(book.library_id, open, q);
                 },
@@ -541,9 +550,14 @@ export function BookEditDialog({
               comboboxProps={{
                 getOptionKey: (s) => s.name,
                 getOptionLabel: (s) => s.name,
+                getOptionDescription: (s) => {
+                  const c = (s as SeriesEntry & { book_count?: number })
+                    .book_count;
+                  return c != null
+                    ? `${c} ${c === 1 ? "book" : "books"}`
+                    : undefined;
+                },
                 hook: function useSeriesOptions(q) {
-                  // useSeriesSearch returns NameOption[]; the combobox only
-                  // needs `name` for display. `onAppend` fills in number/unit.
                   const result = useSeriesSearch(book.library_id, open, q);
                   return result as {
                     data?: SeriesEntry[];
@@ -597,7 +611,12 @@ export function BookEditDialog({
           {/* Genres */}
           <div className="space-y-2">
             <Label>Genres</Label>
-            <MultiSelectCombobox
+            <MultiSelectCombobox<NameWithBookCount>
+              getOptionCount={(g) => g.book_count}
+              getOptionDescription={(g) =>
+                `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
+              }
+              getOptionLabel={(g) => g.name}
               hook={function useGenreOptions(q) {
                 return useGenreSearch(book.library_id, open, q);
               }}
@@ -611,7 +630,12 @@ export function BookEditDialog({
           {/* Tags */}
           <div className="space-y-2">
             <Label>Tags</Label>
-            <MultiSelectCombobox
+            <MultiSelectCombobox<NameWithBookCount>
+              getOptionCount={(t) => t.book_count}
+              getOptionDescription={(t) =>
+                `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
+              }
+              getOptionLabel={(t) => t.name}
               hook={function useTagOptions(q) {
                 return useTagSearch(book.library_id, open, q);
               }}

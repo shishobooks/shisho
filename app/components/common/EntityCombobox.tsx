@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -30,6 +30,7 @@ export interface EntityComboboxProps<T extends object> {
   onChange: (next: T | { __create: string }) => void;
   getOptionLabel: (item: T) => string;
   getOptionKey?: (item: T) => string | number;
+  getOptionDescription?: (item: T) => string | undefined;
   canCreate?: boolean;
   exclude?: (item: T) => boolean;
   status?: EntityStatus;
@@ -43,6 +44,7 @@ export function EntityCombobox<T extends object>({
   onChange,
   getOptionLabel,
   getOptionKey,
+  getOptionDescription,
   canCreate = true,
   exclude,
   status,
@@ -124,8 +126,12 @@ export function EntityCombobox<T extends object>({
                         }}
                         value={getOptionLabel(item)}
                       >
-                        <Check className="mr-2 h-4 w-4 shrink-0 opacity-0" />
                         <span className="truncate">{getOptionLabel(item)}</span>
+                        {getOptionDescription?.(item) && (
+                          <span className="ml-auto pl-2 text-xs text-muted-foreground shrink-0">
+                            {getOptionDescription(item)}
+                          </span>
+                        )}
                       </CommandItem>
                     );
                   })}
