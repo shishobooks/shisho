@@ -123,13 +123,14 @@ func hasFlag(opts []string, name string) bool {
 }
 
 // goTest runs `go <args>` and returns a parsed JUnit report alongside the run
-// error. Stdout/stderr stream to the supplied writers and are also captured for
-// the JUnit parser.
+// error. Only stdout is captured for the JUnit parser (go test -v structured
+// output). Stderr is streamed through but not parsed — mixing both into a
+// single bytes.Buffer caused data races that corrupted JUnit XML.
 func goTest(ctx context.Context, args []string, stdout, stderr io.Writer) (*gtr.Report, error) {
 	cmd := exec.CommandContext(ctx, "go", args...)
 	var buf bytes.Buffer
 	cmd.Stdout = io.MultiWriter(stdout, &buf)
-	cmd.Stderr = io.MultiWriter(stderr, &buf)
+	cmd.Stderr = stderr
 	runErr := cmd.Run()
 	report, parseErr := parser.NewParser().Parse(&buf)
 	if parseErr != nil {
@@ -140,18 +141,18 @@ func goTest(ctx context.Context, args []string, stdout, stderr io.Writer) (*gtr.
 
 func writeJUnit(path string, report gtr.Report) error {
 	suites := junit.CreateFromReport(report, "")
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.WriteString(xml.Header); err != nil {
-		return err
-	}
-	enc := xml.NewEncoder(f)
+
+	// Encode into a buffer first so a partial file is never left on disk
+	// (which would corrupt the cached timing data for subsequent CI runs).
+	var buf bytes.Buffer
+	buf.WriteString(xml.Header)
+	enc := xml.NewEncoder(&buf)
 	enc.Indent("", "\t")
 	if err := enc.Encode(suites); err != nil {
 		return err
 	}
-	return enc.Flush()
+	if err := enc.Flush(); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
