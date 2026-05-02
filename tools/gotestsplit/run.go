@@ -154,5 +154,5 @@ func writeJUnit(path string, report gtr.Report) error {
 	if err := enc.Flush(); err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return os.WriteFile(path, buf.Bytes(), 0o600)
 }
