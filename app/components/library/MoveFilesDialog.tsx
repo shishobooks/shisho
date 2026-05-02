@@ -86,7 +86,7 @@ export function MoveFilesDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Move Files</DialogTitle>
           <DialogDescription>

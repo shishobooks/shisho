@@ -32,7 +32,7 @@ export const PluginManifestDialog = ({
           `overflow-x-hidden`) is deliberate here: the header must stay
           sticky while the JSON body scrolls in both axes. The inner
           container owns the scroll via its own max-h + overflow-auto. */}
-      <DialogContent className="max-h-[85vh] overflow-hidden">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {name ? `${name} manifest` : "Plugin manifest"}
