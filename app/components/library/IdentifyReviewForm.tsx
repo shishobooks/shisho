@@ -19,7 +19,6 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
 import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,7 +50,6 @@ import {
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useTagsList } from "@/hooks/queries/tags";
-import { useAutoMatchEntities } from "@/hooks/useAutoMatchEntities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
@@ -342,24 +340,6 @@ function resolveAuthors(
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
-}
-
-function authorRowStatus(
-  author: AuthorEntry,
-  current: AuthorEntry[],
-): FieldStatus {
-  const match = current.find(
-    (c) => c.name.toLowerCase() === author.name.toLowerCase(),
-  );
-  if (!match) return "new";
-  if ((match.role ?? "") !== (author.role ?? "")) return "changed";
-  return "unchanged";
-}
-
-function nameRowStatus(name: string, current: string[]): FieldStatus {
-  return current.some((c) => c.toLowerCase() === name.toLowerCase())
-    ? "unchanged"
-    : "new";
 }
 
 function findFile(book: Book, fileId?: number): File | undefined {
@@ -688,32 +668,6 @@ export function IdentifyReviewForm({
     },
     { enabled: !!book.library_id },
   );
-
-  // ---- Auto-match incoming entity names against this library ----
-  const autoMatchInput = useMemo(
-    () => ({
-      libraryId: book.library_id ?? 0,
-      enabled: !!book.library_id,
-      authors: (result.authors ?? []).map((a) => a.name),
-      narrators: result.narrators ?? [],
-      series: result.series ? [result.series] : [],
-      publisher: result.publisher,
-      imprint: result.imprint,
-      genres: result.genres ?? [],
-      tags: result.tags ?? [],
-    }),
-    [
-      book.library_id,
-      result.authors,
-      result.narrators,
-      result.series,
-      result.publisher,
-      result.imprint,
-      result.genres,
-      result.tags,
-    ],
-  );
-  const autoMatch = useAutoMatchEntities(autoMatchInput);
 
   // ---- Identifier types ----
   const availableIdentifierTypes = useMemo(
@@ -1491,9 +1445,7 @@ export function IdentifyReviewForm({
                     onAppend={(next) => {
                       const n = "__create" in next ? next.__create : next.name;
                       if (!n.trim()) return;
-                      // Case-insensitive duplicate check matches the
-                      // authorRowStatus / nameRowStatus comparisons elsewhere
-                      // in this form.
+                      // Case-insensitive duplicate check.
                       if (
                         authors.some(
                           (a) => a.name.toLowerCase() === n.toLowerCase(),
@@ -1508,12 +1460,6 @@ export function IdentifyReviewForm({
                       setAuthors(authors.filter((_, i) => i !== idx))
                     }
                     onReorder={setAuthors}
-                    pendingCreate={(a) => {
-                      const m = autoMatch.matches.authors.find(
-                        (x) => x.name.toLowerCase() === a.name.toLowerCase(),
-                      );
-                      return !!m && m.existing == null;
-                    }}
                     renderExtras={
                       isCbz
                         ? (author, idx) => (
@@ -1554,7 +1500,7 @@ export function IdentifyReviewForm({
                           )
                         : undefined
                     }
-                    status={(a) => authorRowStatus(a, currentAuthors)}
+                    status={undefined}
                   />
                 </FieldRow>
 
@@ -1590,14 +1536,6 @@ export function IdentifyReviewForm({
                             "__create" in next ? next.__create : next.name,
                           )
                         }
-                        pendingCreate={(() => {
-                          if (!series) return false;
-                          const m = autoMatch.matches.series.find(
-                            (x) =>
-                              x.name.toLowerCase() === series.toLowerCase(),
-                          );
-                          return !!m && m.existing == null;
-                        })()}
                         value={series ? { name: series } : null}
                       />
                     </div>
@@ -1859,9 +1797,7 @@ export function IdentifyReviewForm({
                         const n =
                           "__create" in next ? next.__create : next.name;
                         if (!n.trim()) return;
-                        // Case-insensitive duplicate check matches the
-                        // nameRowStatus comparison and the parallel author
-                        // dedupe above.
+                        // Case-insensitive duplicate check.
                         if (
                           narrators.some(
                             (x) => x.toLowerCase() === n.toLowerCase(),
@@ -1877,13 +1813,7 @@ export function IdentifyReviewForm({
                       onReorder={(next) =>
                         setNarrators(next.map((n) => n.name))
                       }
-                      pendingCreate={(n) => {
-                        const m = autoMatch.matches.narrators.find(
-                          (x) => x.name.toLowerCase() === n.name.toLowerCase(),
-                        );
-                        return !!m && m.existing == null;
-                      }}
-                      status={(n) => nameRowStatus(n.name, currentNarrators)}
+                      status={undefined}
                     />
                   </FieldRow>
                 )}
@@ -1912,15 +1842,6 @@ export function IdentifyReviewForm({
                             "__create" in next ? next.__create : next.name,
                           )
                         }
-                        pendingCreate={(() => {
-                          if (!publisher) return false;
-                          const m = autoMatch.matches.publisher;
-                          return (
-                            !!m &&
-                            m.name.toLowerCase() === publisher.toLowerCase() &&
-                            m.existing == null
-                          );
-                        })()}
                         value={publisher ? { name: publisher } : null}
                       />
                     </div>
@@ -1963,15 +1884,6 @@ export function IdentifyReviewForm({
                             "__create" in next ? next.__create : next.name,
                           )
                         }
-                        pendingCreate={(() => {
-                          if (!imprint) return false;
-                          const m = autoMatch.matches.imprint;
-                          return (
-                            !!m &&
-                            m.name.toLowerCase() === imprint.toLowerCase() &&
-                            m.existing == null
-                          );
-                        })()}
                         value={imprint ? { name: imprint } : null}
                       />
                     </div>
@@ -2028,9 +1940,10 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("release_date", v)}
                   status={fieldStatus.release_date}
                 >
-                  <DatePicker
-                    onChange={setReleaseDate}
-                    placeholder="Pick a date"
+                  <Input
+                    disabled={isDisabled("release_date")}
+                    onChange={(e) => setReleaseDate(e.target.value)}
+                    placeholder="YYYY-MM-DD"
                     value={releaseDate}
                   />
                 </FieldRow>

@@ -14,7 +14,6 @@ import {
   SortableList,
   type DragHandleProps,
 } from "@/components/ui/SortableList";
-import { cn } from "@/libraries/utils";
 
 interface SortableEntityListProps<T extends object> {
   items: T[];
@@ -27,7 +26,6 @@ interface SortableEntityListProps<T extends object> {
   >;
   renderExtras?: (item: T, index: number) => ReactNode;
   status?: (item: T, index: number) => EntityStatus | undefined;
-  pendingCreate?: (item: T) => boolean;
   getItemId?: (item: T, index: number) => string;
 }
 
@@ -46,7 +44,6 @@ export function SortableEntityList<T extends object>({
   comboboxProps,
   renderExtras,
   status,
-  pendingCreate,
   getItemId,
 }: SortableEntityListProps<T>) {
   // WeakMap from item reference to its stable row key. Items survive
@@ -79,7 +76,6 @@ export function SortableEntityList<T extends object>({
         onReorder={onReorder}
         renderItem={(item: T, index: number, drag: DragHandleProps) => {
           const rowStatus = status ? status(item, index) : undefined;
-          const isPending = pendingCreate ? pendingCreate(item) : false;
           const label = comboboxProps.getOptionLabel(item);
 
           return (
@@ -94,10 +90,7 @@ export function SortableEntityList<T extends object>({
                 <GripVertical className="h-4 w-4" />
               </button>
               <div
-                className={cn(
-                  "flex-1 truncate rounded-md border px-3 py-2",
-                  isPending && "border-dashed",
-                )}
+                className="flex-1 truncate rounded-md border px-3 py-2 text-sm"
                 title={label}
               >
                 {label}

@@ -358,19 +358,6 @@ describe("IdentifyReviewForm component", () => {
     }
   });
 
-  it("renders the publisher combobox with the pendingCreate dashed border for unmatched names", async () => {
-    renderForm({
-      result: makeResult({ publisher: "Brand New Publisher" }),
-    });
-
-    await waitFor(() => {
-      const label = screen.getByText("Brand New Publisher");
-      const trigger = label.closest('button[role="combobox"]');
-      expect(trigger).not.toBeNull();
-      expect(trigger?.className).toContain("border-dashed");
-    });
-  });
-
   // -------------------------------------------------------------------------
   // New per-field decisions tests
   // -------------------------------------------------------------------------
@@ -536,7 +523,9 @@ describe("IdentifyReviewForm component", () => {
       result: makeResult({ title: "Plugin Title" }),
     });
 
-    // Find the Name input. It's the only input under the row labeled "Name".
+    // Switch to "All" filter so the row stays visible when temporarily empty.
+    await user.click(screen.getByText("All"));
+
     const nameLabel = screen.getByText("Name");
     const nameRow = nameLabel.closest("div.grid");
     expect(nameRow).not.toBeNull();

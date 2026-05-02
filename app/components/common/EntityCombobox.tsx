@@ -19,7 +19,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useDebounce } from "@/hooks/useDebounce";
-import { cn } from "@/libraries/utils";
 
 export type { EntityStatus };
 
@@ -33,7 +32,6 @@ export interface EntityComboboxProps<T extends object> {
   canCreate?: boolean;
   exclude?: (item: T) => boolean;
   status?: EntityStatus;
-  pendingCreate?: boolean;
   placeholder?: string;
 }
 
@@ -47,7 +45,6 @@ export function EntityCombobox<T extends object>({
   canCreate = true,
   exclude,
   status,
-  pendingCreate,
   placeholder,
 }: EntityComboboxProps<T>) {
   const [open, setOpen] = useState(false);
@@ -81,10 +78,7 @@ export function EntityCombobox<T extends object>({
         <PopoverTrigger asChild>
           <Button
             aria-expanded={open}
-            className={cn(
-              "w-full justify-between cursor-pointer",
-              pendingCreate && "border-dashed",
-            )}
+            className="w-full justify-between cursor-pointer"
             role="combobox"
             variant="outline"
           >
