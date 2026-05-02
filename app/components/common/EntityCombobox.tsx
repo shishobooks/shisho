@@ -12,6 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -106,8 +107,8 @@ export function EntityCombobox<T extends object>({
                     : `No ${label.toLowerCase()} available.${canCreate ? " Type to create one." : ""}`}
                 </div>
               )}
-              {!isLoading && (
-                <CommandGroup>
+              {!isLoading && filtered.length > 0 && (
+                <CommandGroup heading="In your library">
                   {filtered.map((item) => {
                     const key = getOptionKey
                       ? getOptionKey(item)
@@ -128,7 +129,12 @@ export function EntityCombobox<T extends object>({
                       </CommandItem>
                     );
                   })}
-                  {showCreate && (
+                </CommandGroup>
+              )}
+              {!isLoading && showCreate && (
+                <>
+                  {filtered.length > 0 && <CommandSeparator />}
+                  <CommandGroup>
                     <CommandItem
                       className="cursor-pointer"
                       onSelect={() => {
@@ -139,10 +145,12 @@ export function EntityCombobox<T extends object>({
                       value={`create-${trimmed}`}
                     >
                       <Plus className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">Create "{trimmed}"</span>
+                      <span className="truncate">
+                        Create new {label.toLowerCase()} &quot;{trimmed}&quot;
+                      </span>
                     </CommandItem>
-                  )}
-                </CommandGroup>
+                  </CommandGroup>
+                </>
               )}
             </CommandList>
           </Command>

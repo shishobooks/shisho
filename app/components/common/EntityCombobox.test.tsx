@@ -35,6 +35,24 @@ describe("EntityCombobox", () => {
     expect(onChange).toHaveBeenCalledWith({ id: 1, name: "Tor Books" });
   });
 
+  it("shows 'In your library' heading when options are present", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const hook = makeHook([{ id: 1, name: "Tor Books" }]);
+
+    render(
+      <EntityCombobox<Person>
+        getOptionLabel={(p) => p.name}
+        hook={hook}
+        label="Publisher"
+        onChange={vi.fn()}
+        value={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByText("In your library")).toBeInTheDocument();
+  });
+
   it("offers Create when typed value has no match and emits __create payload", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();
@@ -55,7 +73,7 @@ describe("EntityCombobox", () => {
       screen.getByPlaceholderText(/Search publisher/i),
       "Penguin",
     );
-    await user.click(screen.getByText(/Create "Penguin"/));
+    await user.click(screen.getByText(/Create new publisher "Penguin"/));
 
     expect(onChange).toHaveBeenCalledWith({ __create: "Penguin" });
   });
@@ -101,7 +119,7 @@ describe("EntityCombobox", () => {
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText(/Search person/i), "X");
 
-    expect(screen.queryByText(/Create "X"/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Create new person "X"/)).not.toBeInTheDocument();
   });
 
   it("renders status badge when status prop set", () => {
