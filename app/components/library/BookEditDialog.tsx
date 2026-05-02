@@ -236,7 +236,7 @@ export function BookEditDialog({
 
   const handleAuthorRoleChange = (index: number, role: string | undefined) => {
     const updated = [...authors];
-    updated[index] = { ...updated[index], role };
+    updated[index].role = role;
     setAuthors(updated);
   };
 
@@ -269,7 +269,7 @@ export function BookEditDialog({
     unit: "" | "volume" | "chapter",
   ) => {
     const updated = [...seriesEntries];
-    updated[index] = { ...updated[index], unit };
+    updated[index].unit = unit;
     setSeriesEntries(updated);
   };
 

@@ -156,7 +156,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			return errors.Wrap(err, "failed to delete series")
 		}
 
-		newSeriesIDs := make(map[int]struct{})
+		newSeries := make(map[int]*models.Series)
 
 		if multiSeries {
 			for i, entry := range *overrides.SeriesEntries {
@@ -179,7 +179,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
 					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 				}
-				newSeriesIDs[seriesRecord.ID] = struct{}{}
+				newSeries[seriesRecord.ID] = seriesRecord
 			}
 		} else {
 			seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
@@ -194,25 +194,21 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				}); err != nil {
 					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
 				}
-				newSeriesIDs[seriesRecord.ID] = struct{}{}
+				newSeries[seriesRecord.ID] = seriesRecord
 			}
 		}
 
 		if h.enrich.searchIndexer != nil {
-			for id := range newSeriesIDs {
+			for id, rec := range newSeries {
 				_, stillAttached := oldSeries[id]
 				if !stillAttached || seriesAggregateMayBeStale {
-					rec, ok := oldSeries[id]
-					if !ok {
-						rec = &models.Series{ID: id}
-					}
 					if err := h.enrich.searchIndexer.IndexSeries(ctx, rec); err != nil {
 						log.Warn("failed to update search index for series", logger.Data{"series_id": id, "error": err.Error()})
 					}
 				}
 			}
 			for oldID, oldSer := range oldSeries {
-				if _, kept := newSeriesIDs[oldID]; kept {
+				if _, kept := newSeries[oldID]; kept {
 					continue
 				}
 				if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
