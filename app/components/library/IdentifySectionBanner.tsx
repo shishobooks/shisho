@@ -34,7 +34,7 @@ export function IdentifySectionBanner({
   return (
     <div
       className={cn(
-        "sticky z-[2] flex items-center gap-3 border-b bg-muted/40 px-5 py-2.5",
+        "sticky -top-px z-[2] flex items-center gap-3 border-b bg-muted px-5 py-2.5",
         className,
       )}
     >

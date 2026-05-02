@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Copy,
   ExternalLink,
   Loader2,
   RefreshCcw,
@@ -382,7 +383,6 @@ function FieldRow({
   hidden,
   currentValue,
   inlineAction,
-  hero,
   children,
 }: {
   label: string;
@@ -395,7 +395,6 @@ function FieldRow({
   hidden?: boolean;
   currentValue?: React.ReactNode;
   inlineAction?: React.ReactNode;
-  hero?: boolean;
   children: React.ReactNode;
 }) {
   if (hidden) return null;
@@ -404,9 +403,8 @@ function FieldRow({
     <div
       className={cn(
         "grid grid-cols-[24px_minmax(0,1fr)] gap-3.5 border-b px-5 py-4 last:border-b-0",
-        effectiveStatus === "unchanged" && "opacity-60",
         disabled && "opacity-50",
-        hero && "bg-muted/20",
+        !decision && !disabled && "opacity-60",
       )}
     >
       <div className="pt-0.5">
@@ -418,23 +416,17 @@ function FieldRow({
         />
       </div>
       <div className="min-w-0 space-y-2">
-        <div className="flex items-center gap-2">
+        <div className="flex h-6 items-center gap-2">
           <Label className="text-sm font-semibold">{label}</Label>
           <StatusBadge status={effectiveStatus} />
-          {inlineAction != null && (
-            <div className="ml-auto">{inlineAction}</div>
-          )}
+          <div className="ml-auto shrink-0">{inlineAction}</div>
         </div>
-        {/* Block interaction with the inputs when the row's apply checkbox
-            is unchecked. The checkbox itself stays interactive (it lives
-            outside this wrapper) so the user can still re-enable the row.
-            The label, status badge, and "Currently:" reference stay
-            readable. */}
         <div
           aria-disabled={!decision || disabled}
           className={cn(
             "space-y-2",
-            (!decision || disabled) && "pointer-events-none opacity-50",
+            (!decision || disabled) && "pointer-events-none",
+            disabled && "opacity-50",
           )}
         >
           {children}
@@ -514,9 +506,6 @@ export function IdentifyReviewForm({
     return match?.name ?? result.plugin_id;
   }, [installedPlugins, result.plugin_scope, result.plugin_id]);
 
-  // "Changed" / "All" filter. Default "Changed" so unchanged rows stay
-  // out of the way; the count above reflects the total either way (per
-  // spec — filter only changes which rows render).
   const [filterMode, setFilterMode] = useState<"changed" | "all">("changed");
 
   // The "primary file" gate for book-level changed-field defaults. A book
@@ -1168,6 +1157,7 @@ export function IdentifyReviewForm({
         type="button"
         variant="ghost"
       >
+        <Copy className="h-3 w-3" />
         Copy from book title
       </Button>
     ) : null;
@@ -1218,64 +1208,59 @@ export function IdentifyReviewForm({
         </span>
       </DialogHeader>
 
-      {/* Scroll body — identify-specific custom layout (sticky filter bars,
-          section banners). Uses the same flex-1 / min-h-0 / overflow-y-auto
-          pattern as DialogBody but with its own padding model. */}
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
-        {/* Sticky select-all bar */}
-        <div className="sticky top-0 z-[3] flex items-center gap-3.5 border-b bg-background/95 px-5 py-2.5 backdrop-blur">
-          <Checkbox
-            aria-label="Apply all"
-            checked={globalCheckboxState}
-            onCheckedChange={(v) =>
-              setSectionDecisions(allApplicableKeys, v === true)
-            }
-          />
-          <span className="text-xs font-medium">Apply all</span>
-          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
-            <span className="font-semibold text-foreground">
-              {totalSelected}
-            </span>{" "}
-            of {totalApplicable} selected
-          </span>
-          {/* Changed / All filter — only changes which rows render; the
-              count above always reflects the totals. */}
-          <div className="ml-auto flex items-center gap-1 rounded-md bg-background p-0.5">
-            <button
-              aria-pressed={filterMode === "changed"}
-              className={cn(
-                "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
-                filterMode === "changed"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setFilterMode("changed")}
-              type="button"
-            >
-              Changed
-            </button>
-            <button
-              aria-pressed={filterMode === "all"}
-              className={cn(
-                "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
-                filterMode === "all"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setFilterMode("all")}
-              type="button"
-            >
-              All
-            </button>
-          </div>
+      {/* Select-all bar — sits outside the scroll body so there is no gap
+          between the dialog header and this bar. */}
+      <div className="flex shrink-0 items-center gap-3.5 border-b bg-muted px-5 py-2.5">
+        <Checkbox
+          aria-label="Apply all"
+          checked={globalCheckboxState}
+          onCheckedChange={(v) =>
+            setSectionDecisions(allApplicableKeys, v === true)
+          }
+        />
+        <span className="text-xs font-medium">Apply all</span>
+        <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
+          <span className="font-semibold text-foreground">{totalSelected}</span>{" "}
+          of {totalApplicable} selected
+        </span>
+        <div className="ml-auto flex items-center gap-1 rounded-md bg-background p-0.5">
+          <button
+            aria-pressed={filterMode === "changed"}
+            className={cn(
+              "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+              filterMode === "changed"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setFilterMode("changed")}
+            type="button"
+          >
+            Changed
+          </button>
+          <button
+            aria-pressed={filterMode === "all"}
+            className={cn(
+              "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+              filterMode === "all"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setFilterMode("all")}
+            type="button"
+          >
+            All
+          </button>
         </div>
+      </div>
 
+      {/* Scroll body — section banners stick to top-0 since the select-all
+          bar is outside the scroll container. */}
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         {/* Book section */}
         {bookApplicableKeys.length > 0 && (
           <>
             <IdentifySectionBanner
               checkboxState={bookCheckboxState}
-              className="top-[41px]"
               collapsed={bookCollapsed}
               hint="applies to all files"
               label="BOOK"
@@ -1291,7 +1276,6 @@ export function IdentifyReviewForm({
                   currentValue={book.title || undefined}
                   decision={decisions.title}
                   disabled={isDisabled("title")}
-                  hero
                   hidden={!isRowVisible("title")}
                   inlineAction={titleInlineAction}
                   label={formatMetadataFieldLabel("title")}
@@ -1578,7 +1562,6 @@ export function IdentifyReviewForm({
           <>
             <IdentifySectionBanner
               checkboxState={fileCheckboxState}
-              className="top-[41px]"
               collapsed={fileCollapsed}
               hint={fileSectionHint}
               label="FILE"
