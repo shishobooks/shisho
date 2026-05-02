@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -172,7 +173,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
         onOpenChange={onOpenChange}
         open={open}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {isEditMode ? "Edit Role" : "Create Role"}
@@ -187,7 +188,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
+          <DialogBody className="space-y-6">
             {/* Role Name */}
             <div className="space-y-2">
               <Label htmlFor="role-name">Name</Label>
@@ -213,31 +214,33 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
                 permissions={permissions}
               />
             </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter>
             {isEditMode && !isSystem && (
               <Button
                 className="mr-auto"
                 disabled={isPending}
                 onClick={() => setDeleteConfirmOpen(true)}
+                size="sm"
                 variant="destructive"
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
                 Delete Role
               </Button>
             )}
             <Button
               disabled={isPending}
               onClick={() => onOpenChange(false)}
+              size="sm"
               variant="outline"
             >
               Cancel
             </Button>
-            <Button disabled={isPending} onClick={handleSave}>
+            <Button disabled={isPending} onClick={handleSave} size="sm">
               {isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   {isEditMode ? "Saving..." : "Creating..."}
                 </>
               ) : isEditMode ? (

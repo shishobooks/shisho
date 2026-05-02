@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -234,7 +235,7 @@ const DirectoryPickerDialog = ({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Select Directories</DialogTitle>
           <DialogDescription>
@@ -242,145 +243,153 @@ const DirectoryPickerDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Breadcrumb navigation */}
-        <div className="flex items-center gap-1 text-sm flex-wrap">
-          {pathSegments.map((segment, index) => (
-            <div className="flex items-center" key={segment.path}>
-              {index > 0 && (
-                <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />
-              )}
-              <button
-                className="hover:text-primary hover:underline transition-colors px-1 py-0.5 rounded cursor-pointer"
-                onClick={() => handleNavigate(segment.path)}
-                type="button"
-              >
-                {segment.name}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* Search and show hidden toggle */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search..."
-              ref={searchInputRef}
-              value={search}
-            />
+        <DialogBody className="flex flex-col gap-4 flex-1 min-h-0">
+          {/* Breadcrumb navigation */}
+          <div className="flex items-center gap-1 text-sm flex-wrap">
+            {pathSegments.map((segment, index) => (
+              <div className="flex items-center" key={segment.path}>
+                {index > 0 && (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />
+                )}
+                <button
+                  className="hover:text-primary hover:underline transition-colors px-1 py-0.5 rounded cursor-pointer"
+                  onClick={() => handleNavigate(segment.path)}
+                  type="button"
+                >
+                  {segment.name}
+                </button>
+              </div>
+            ))}
           </div>
-          <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
-            <Checkbox
-              checked={showHidden}
-              onCheckedChange={handleShowHiddenChange}
-            />
-            Show hidden files
-          </label>
-        </div>
 
-        {/* Directory listing */}
-        <div className="h-[400px] border rounded-md overflow-y-auto">
-          {browseQuery.isError ? (
-            <div className="flex items-center justify-center h-full py-12 text-destructive">
-              {browseQuery.error?.message || "Failed to load directory"}
+          {/* Search and show hidden toggle */}
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search..."
+                ref={searchInputRef}
+                value={search}
+              />
             </div>
-          ) : accumulatedEntries.length === 0 ? (
-            // While accumulatedEntries is empty during any fetch (initial
-            // load, navigation, search, or hidden-toggle), show a spinner
-            // instead of "No entries found". `isLoading` is false when
-            // placeholder data is active, so use `isFetching` to cover the
-            // placeholder transition too.
-            browseQuery.isFetching ? (
-              <div className="flex items-center justify-center h-full py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
+              <Checkbox
+                checked={showHidden}
+                onCheckedChange={handleShowHiddenChange}
+              />
+              Show hidden files
+            </label>
+          </div>
+
+          {/* Directory listing */}
+          <div className="h-[400px] border rounded-md overflow-y-auto">
+            {browseQuery.isError ? (
+              <div className="flex items-center justify-center h-full py-12 text-destructive">
+                {browseQuery.error?.message || "Failed to load directory"}
               </div>
+            ) : accumulatedEntries.length === 0 ? (
+              // While accumulatedEntries is empty during any fetch (initial
+              // load, navigation, search, or hidden-toggle), show a spinner
+              // instead of "No entries found". `isLoading` is false when
+              // placeholder data is active, so use `isFetching` to cover the
+              // placeholder transition too.
+              browseQuery.isFetching ? (
+                <div className="flex items-center justify-center h-full py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
+                  No entries found
+                </div>
+              )
             ) : (
-              <div className="flex items-center justify-center h-full py-12 text-muted-foreground">
-                No entries found
-              </div>
-            )
-          ) : (
-            <div className="p-2">
-              {/* Directories */}
-              {directories.map((entry) => (
-                <div
-                  className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted cursor-pointer group"
-                  key={entry.path}
-                  onClick={() => handleEntryClick(entry)}
-                >
-                  <Checkbox
-                    checked={selectedPaths.has(entry.path)}
-                    onCheckedChange={() => handleToggleSelect(entry.path)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  {selectedPaths.has(entry.path) ? (
-                    <FolderOpen className="h-5 w-5 text-primary" />
-                  ) : (
-                    <Folder className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
-                  )}
-                  <span className="flex-1 truncate">{entry.name}</span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
-                </div>
-              ))}
-
-              {/* Files (visually muted, not selectable) */}
-              {files.map((entry) => (
-                <div
-                  className="flex items-center gap-3 px-3 py-2 rounded-md opacity-50"
-                  key={entry.path}
-                >
-                  <div className="w-4" /> {/* Spacer for checkbox alignment */}
-                  <File className="h-5 w-5 text-muted-foreground" />
-                  <span className="flex-1 truncate">{entry.name}</span>
-                </div>
-              ))}
-
-              {/* Load more */}
-              {hasMore && (
-                <div className="mt-2 pt-2 border-t">
-                  <Button
-                    className="w-full"
-                    disabled={browseQuery.isFetching}
-                    onClick={handleLoadMore}
-                    variant="ghost"
+              <div className="p-2">
+                {/* Directories */}
+                {directories.map((entry) => (
+                  <div
+                    className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted cursor-pointer group"
+                    key={entry.path}
+                    onClick={() => handleEntryClick(entry)}
                   >
-                    {browseQuery.isFetching && offset > 0 ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
+                    <Checkbox
+                      checked={selectedPaths.has(entry.path)}
+                      onCheckedChange={() => handleToggleSelect(entry.path)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {selectedPaths.has(entry.path) ? (
+                      <FolderOpen className="h-5 w-5 text-primary" />
                     ) : (
-                      `Load more (${remaining} remaining)`
+                      <Folder className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                     )}
-                  </Button>
-                </div>
-              )}
+                    <span className="flex-1 truncate">{entry.name}</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                  </div>
+                ))}
+
+                {/* Files (visually muted, not selectable) */}
+                {files.map((entry) => (
+                  <div
+                    className="flex items-center gap-3 px-3 py-2 rounded-md opacity-50"
+                    key={entry.path}
+                  >
+                    <div className="w-4" />{" "}
+                    {/* Spacer for checkbox alignment */}
+                    <File className="h-5 w-5 text-muted-foreground" />
+                    <span className="flex-1 truncate">{entry.name}</span>
+                  </div>
+                ))}
+
+                {/* Load more */}
+                {hasMore && (
+                  <div className="mt-2 pt-2 border-t">
+                    <Button
+                      className="w-full"
+                      disabled={browseQuery.isFetching}
+                      onClick={handleLoadMore}
+                      variant="ghost"
+                    >
+                      {browseQuery.isFetching && offset > 0 ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        `Load more (${remaining} remaining)`
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Selected paths summary */}
+          {selectedPaths.size > 0 && (
+            <div className="text-sm text-muted-foreground truncate">
+              Selected: {Array.from(selectedPaths).join(", ")}
             </div>
           )}
-        </div>
-
-        {/* Selected paths summary */}
-        {selectedPaths.size > 0 && (
-          <div className="text-sm text-muted-foreground truncate">
-            Selected: {Array.from(selectedPaths).join(", ")}
-          </div>
-        )}
+        </DialogBody>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button onClick={handleSelectCurrentDirectory} variant="outline">
+          <Button
+            onClick={handleSelectCurrentDirectory}
+            size="sm"
+            variant="outline"
+          >
             Select current directory
           </Button>
           <div className="flex-1" />
-          <Button onClick={() => onOpenChange(false)} variant="ghost">
+          <Button onClick={() => onOpenChange(false)} size="sm" variant="ghost">
             Cancel
           </Button>
           <Button
             disabled={selectedPaths.size === 0}
             onClick={handleConfirmSelection}
+            size="sm"
           >
             Select{" "}
             {selectedPaths.size > 0

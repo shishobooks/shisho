@@ -45,6 +45,14 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
+// DialogContent renders a hidden DialogPrimitive.Close and exposes its ref via
+// this context. DialogHeader's visible close button forwards clicks to that
+// hidden close button. This keeps DialogHeader renderable outside a Dialog
+// (e.g. in unit tests) — the context will be null and the visible button is
+// simply omitted instead of throwing from Radix's internal context check.
+const DialogCloseRefContext =
+  React.createContext<React.RefObject<HTMLButtonElement | null> | null>(null);
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -74,75 +82,113 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
 >(({ className, children, mobileSheet = false, ...props }, ref) => {
-  // When inside a FormDialog, use direct close to bypass the unsaved changes warning.
-  // The X button is an explicit close action, so it shouldn't trigger the warning.
-  const formDialogContext = React.useContext(FormDialogContext);
-
+  const closeRef = React.useRef<HTMLButtonElement>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          // Base styles
-          "fixed z-50 grid w-full gap-4 border bg-background p-6 shadow-lg duration-200",
+          // Base styles — flex column so Header/Footer stay sticky and only the
+          // Body scrolls. Content's overflow-hidden + each child's shrink behavior
+          // means there's no overscroll on the Header/Footer.
+          "fixed z-50 flex w-full flex-col overflow-hidden border bg-background shadow-lg duration-200",
           // Animation base
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           // Mobile sheet variant
           mobileSheet
             ? // Mobile: slide up from bottom, desktop: centered modal
-              "inset-x-0 bottom-0 rounded-t-lg max-h-[90vh] overflow-y-auto data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:max-w-lg sm:max-h-[85vh] sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95"
+              "inset-x-0 bottom-0 rounded-t-lg max-h-[90vh] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:max-w-3xl sm:max-h-[85vh] sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95"
             : // Default: centered modal
-              "left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] max-w-lg max-h-[90vh] overflow-y-auto data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+              "left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] max-w-3xl max-h-[90vh] data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
           className,
         )}
         {...props}
       >
-        {children}
-        {formDialogContext ? (
-          // Inside FormDialog: use direct close button to bypass unsaved changes warning
-          <button
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground cursor-pointer"
-            onClick={formDialogContext.closeDirectly}
-            type="button"
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </button>
-        ) : (
-          // Regular dialog: use Radix's built-in close
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground cursor-pointer">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
+        <DialogCloseRefContext.Provider value={closeRef}>
+          {children}
+        </DialogCloseRefContext.Provider>
+        {/* Hidden close target — the visible X lives in DialogHeader and forwards
+            clicks here so Radix's close behavior runs without DialogHeader needing
+            to consume Radix's internal context. */}
+        <DialogPrimitive.Close
+          aria-hidden
+          className="hidden"
+          ref={closeRef}
+          tabIndex={-1}
+        />
       </DialogPrimitive.Content>
     </DialogPortal>
   );
 });
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
+// Header is a distinct elevated band that frames the dialog. The close button
+// is rendered as a child so it can vertically center inside the band regardless
+// of how many lines the header content takes.
 const DialogHeader = ({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => {
+  // FormDialog bypasses the unsaved-changes warning when closed via the X.
+  const formDialogContext = React.useContext(FormDialogContext);
+  // Forward clicks to DialogContent's hidden DialogPrimitive.Close. Null when
+  // DialogHeader is rendered outside a Dialog (tests render the form bare).
+  const closeRef = React.useContext(DialogCloseRefContext);
+
+  const handleClose = formDialogContext
+    ? formDialogContext.closeDirectly
+    : closeRef
+      ? () => closeRef.current?.click()
+      : null;
+
+  return (
+    <div
+      className={cn(
+        "relative flex shrink-0 flex-col border-b bg-muted/40 px-5 py-3 pr-10 text-left",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      {handleClose && (
+        <button
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none cursor-pointer"
+          onClick={handleClose}
+          type="button"
+        >
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </button>
+      )}
+    </div>
+  );
+};
+DialogHeader.displayName = "DialogHeader";
+
+// Body is the padded content slot between header and footer. flex-1 + min-h-0
+// lets it absorb leftover height in DialogContent's flex column and scroll
+// internally while the banded header/footer stay pinned.
+const DialogBody = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn(
-      "flex flex-col space-y-1.5 text-center sm:text-left",
-      className,
-    )}
+    className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}
     {...props}
   />
 );
-DialogHeader.displayName = "DialogHeader";
+DialogBody.displayName = "DialogBody";
 
+// Footer mirrors the header's elevated band styling.
 const DialogFooter = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      "flex shrink-0 flex-col-reverse gap-2 border-t bg-muted/40 px-5 py-3 sm:flex-row sm:justify-end",
       className,
     )}
     {...props}
@@ -156,10 +202,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight",
-      className,
-    )}
+    className={cn("text-sm font-semibold tracking-tight", className)}
     {...props}
   />
 ));
@@ -171,7 +214,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
+    className={cn("text-xs text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -185,6 +228,7 @@ export {
   DialogClose,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogFooter,
   DialogTitle,
   DialogDescription,

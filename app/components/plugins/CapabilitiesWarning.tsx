@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -40,7 +41,7 @@ export const CapabilitiesWarning = ({
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="overflow-x-hidden">
-        <DialogHeader className="pr-8">
+        <DialogHeader>
           <DialogTitle>Install {plugin.name}?</DialogTitle>
           <DialogDescription>
             {rows.length > 0
@@ -49,39 +50,42 @@ export const CapabilitiesWarning = ({
           </DialogDescription>
         </DialogHeader>
 
-        {rows.length > 0 && (
-          <div className="space-y-2">
-            {rows.map((def) => (
-              <CapabilityRow
-                description={def.description}
-                detail={
-                  latestVersion?.capabilities
-                    ? def.detail(latestVersion.capabilities)
-                    : undefined
-                }
-                icon={def.icon}
-                key={def.key}
-                label={def.label}
-              />
-            ))}
-          </div>
-        )}
+        <DialogBody className="space-y-4">
+          {rows.length > 0 && (
+            <div className="space-y-2">
+              {rows.map((def) => (
+                <CapabilityRow
+                  description={def.description}
+                  detail={
+                    latestVersion?.capabilities
+                      ? def.detail(latestVersion.capabilities)
+                      : undefined
+                  }
+                  icon={def.icon}
+                  key={def.key}
+                  label={def.label}
+                />
+              ))}
+            </div>
+          )}
 
-        {latestVersion && (
-          <div className="text-xs text-muted-foreground">
-            Version: {latestVersion.version}
-          </div>
-        )}
+          {latestVersion && (
+            <div className="text-xs text-muted-foreground">
+              Version: {latestVersion.version}
+            </div>
+          )}
+        </DialogBody>
 
         <DialogFooter>
           <Button
             disabled={isPending}
             onClick={() => onOpenChange(false)}
+            size="sm"
             variant="outline"
           >
             Cancel
           </Button>
-          <Button disabled={isPending} onClick={onConfirm}>
+          <Button disabled={isPending} onClick={onConfirm} size="sm">
             {isPending ? "Installing..." : "Install Plugin"}
           </Button>
         </DialogFooter>

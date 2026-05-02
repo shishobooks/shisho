@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -422,37 +423,39 @@ const FetchChaptersDialog = ({
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-lg overflow-x-hidden">
-        <DialogHeader className="pr-8">
+        <DialogHeader>
           <DialogTitle>Fetch chapters from Audible</DialogTitle>
           <DialogDescription>
             Look up chapter titles and timestamps using an Audible ASIN.
           </DialogDescription>
         </DialogHeader>
 
-        {stage === "entry" && (
-          <EntryStage
-            asinInput={asinInput}
-            onAsinChange={setAsinInput}
-            onFetch={handleFetch}
-          />
-        )}
+        <DialogBody>
+          {stage === "entry" && (
+            <EntryStage
+              asinInput={asinInput}
+              onAsinChange={setAsinInput}
+              onFetch={handleFetch}
+            />
+          )}
 
-        {stage === "loading" && <LoadingStage />}
+          {stage === "loading" && <LoadingStage />}
 
-        {stage === "error" && (
-          <ErrorStage code={query.error?.code} onRetry={handleRetry} />
-        )}
+          {stage === "error" && (
+            <ErrorStage code={query.error?.code} onRetry={handleRetry} />
+          )}
 
-        {stage === "result" && query.data && (
-          <ResultStage
-            data={query.data}
-            editedChapters={editedChapters}
-            fileDurationMs={fileDurationMs}
-            hasChanges={hasChanges}
-            onApply={onApply}
-            onClose={handleClose}
-          />
-        )}
+          {stage === "result" && query.data && (
+            <ResultStage
+              data={query.data}
+              editedChapters={editedChapters}
+              fileDurationMs={fileDurationMs}
+              hasChanges={hasChanges}
+              onApply={onApply}
+              onClose={handleClose}
+            />
+          )}
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

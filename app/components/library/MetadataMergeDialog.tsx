@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/command";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -100,7 +101,7 @@ export function MetadataMergeDialog({
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent className="max-w-xl overflow-x-hidden">
-        <DialogHeader className="pr-8">
+        <DialogHeader>
           <DialogTitle title={`Merge into "${targetName}"`}>
             Merge into "{targetName}"
           </DialogTitle>
@@ -110,7 +111,7 @@ export function MetadataMergeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
+        <DialogBody>
           <Popover modal onOpenChange={setComboboxOpen} open={comboboxOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -186,18 +187,23 @@ export function MetadataMergeDialog({
               {selectedEntity.name}".
             </p>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => handleOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => handleOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
           <Button
             disabled={isPending || !selectedId}
             onClick={handleMerge}
+            size="sm"
             variant="destructive"
           >
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Merge
           </Button>
         </DialogFooter>

@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -1526,15 +1527,22 @@ const BookDetail = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Download Failed</DialogTitle>
-            <DialogDescription>{downloadError?.message}</DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button onClick={() => setDownloadError(null)} variant="outline">
+          <DialogBody>
+            <DialogDescription>{downloadError?.message}</DialogDescription>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              onClick={() => setDownloadError(null)}
+              size="sm"
+              variant="outline"
+            >
               Cancel
             </Button>
             {downloadError && (
               <Button
                 onClick={() => handleDownloadOriginal(downloadError.fileId)}
+                size="sm"
               >
                 Download Original
               </Button>

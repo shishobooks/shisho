@@ -8,6 +8,7 @@ import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButto
 import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Button } from "@/components/ui/button";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -473,7 +474,7 @@ export function BookEditDialog({
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Book</DialogTitle>
           <DialogDescription>
@@ -482,7 +483,7 @@ export function BookEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <DialogBody className="space-y-6">
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
@@ -712,18 +713,23 @@ export function BookEditDialog({
                 : draftReviewOverride === ReviewOverrideReviewed
             }
           />
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
           <Button
             disabled={updateBookMutation.isPending}
             onClick={handleSubmit}
+            size="sm"
           >
             {updateBookMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Save Changes
           </Button>

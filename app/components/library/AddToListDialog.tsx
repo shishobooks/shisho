@@ -6,6 +6,7 @@ import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -187,7 +188,7 @@ export const AddToListDialog = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -285,18 +286,23 @@ export const AddToListDialog = ({
                 Create New List
               </Button>
             )}
-          </div>
+          </DialogBody>
 
           <DialogFooter>
-            <Button onClick={() => onOpenChange(false)} variant="ghost">
+            <Button
+              onClick={() => onOpenChange(false)}
+              size="sm"
+              variant="ghost"
+            >
               Cancel
             </Button>
             <Button
               disabled={!hasChanges || updateBookListsMutation.isPending}
               onClick={handleSave}
+              size="sm"
             >
               {updateBookListsMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               )}
               Save Changes
             </Button>

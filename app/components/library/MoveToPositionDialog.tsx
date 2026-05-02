@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -67,7 +68,7 @@ export const MoveToPositionDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="position">Position (1-{totalBooks})</Label>
             <Input
@@ -79,15 +80,19 @@ export const MoveToPositionDialog = ({
               value={position}
             />
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="ghost">
+          <Button onClick={() => onOpenChange(false)} size="sm" variant="ghost">
             Cancel
           </Button>
-          <Button disabled={moveBookMutation.isPending} onClick={handleMove}>
+          <Button
+            disabled={moveBookMutation.isPending}
+            onClick={handleMove}
+            size="sm"
+          >
             {moveBookMutation.isPending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             )}
             Move
           </Button>

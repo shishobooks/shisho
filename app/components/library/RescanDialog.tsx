@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -63,7 +64,7 @@ export function RescanDialog({
       open={open}
     >
       <DialogContent className="max-w-md">
-        <DialogHeader className="pr-8">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 shrink-0" />
             <span>Rescan {entityType}</span>
@@ -73,38 +74,41 @@ export function RescanDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <RadioGroup
-          className="gap-3"
-          onValueChange={(value) => setSelectedMode(value as RescanMode)}
-          value={selectedMode}
-        >
-          {modes.map((mode) => (
-            <Label
-              className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[[data-state=checked]]:border-primary"
-              htmlFor={`rescan-${entityType}-${mode.value}`}
-              key={mode.value}
-            >
-              <RadioGroupItem
-                className="mt-0.5"
-                id={`rescan-${entityType}-${mode.value}`}
-                value={mode.value}
-              />
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium leading-none">
-                  {mode.label}
+        <DialogBody>
+          <RadioGroup
+            className="gap-3"
+            onValueChange={(value) => setSelectedMode(value as RescanMode)}
+            value={selectedMode}
+          >
+            {modes.map((mode) => (
+              <Label
+                className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[[data-state=checked]]:border-primary"
+                htmlFor={`rescan-${entityType}-${mode.value}`}
+                key={mode.value}
+              >
+                <RadioGroupItem
+                  className="mt-0.5"
+                  id={`rescan-${entityType}-${mode.value}`}
+                  value={mode.value}
+                />
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium leading-none">
+                    {mode.label}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-normal">
+                    {mode.description}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground font-normal">
-                  {mode.description}
-                </div>
-              </div>
-            </Label>
-          ))}
-        </RadioGroup>
+              </Label>
+            ))}
+          </RadioGroup>
+        </DialogBody>
 
         <DialogFooter>
           <Button
             disabled={isPending}
             onClick={() => onOpenChange(false)}
+            size="sm"
             variant="outline"
           >
             Cancel
@@ -115,8 +119,9 @@ export function RescanDialog({
               onOpenChange(false);
               onConfirm(selectedMode);
             }}
+            size="sm"
           >
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Rescan
           </Button>
         </DialogFooter>

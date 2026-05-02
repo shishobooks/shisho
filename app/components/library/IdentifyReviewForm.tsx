@@ -19,6 +19,7 @@ import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButto
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
+import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
@@ -1188,20 +1189,18 @@ export function IdentifyReviewForm({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header — distinct elevated band that frames the dialog. Mirrors
-          the mockup's dialog-frame__head style. */}
-      <div className="flex items-center gap-3 border-b bg-muted/40 px-5 py-3">
-        <Button
+    <>
+      <DialogHeader className="flex-row items-center gap-3 pl-10">
+        {/* Back button mirrors the close button's positioning (absolute, same
+            offset and styling) so they appear symmetric across the header. */}
+        <button
           aria-label="Back"
-          className="shrink-0"
+          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
           onClick={onBack}
-          size="icon"
           type="button"
-          variant="ghost"
         >
           <ArrowLeft className="h-4 w-4" />
-        </Button>
+        </button>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold">
             Identify {book.title}
@@ -1217,10 +1216,12 @@ export function IdentifyReviewForm({
           <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
           {pluginDisplayName}
         </span>
-      </div>
+      </DialogHeader>
 
-      {/* Scroll body */}
-      <div className="relative flex-1 overflow-y-auto">
+      {/* Scroll body — identify-specific custom layout (sticky filter bars,
+          section banners). Uses the same flex-1 / min-h-0 / overflow-y-auto
+          pattern as DialogBody but with its own padding model. */}
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         {/* Sticky select-all bar */}
         <div className="sticky top-0 z-[3] flex items-center gap-3.5 border-b bg-background/95 px-5 py-2.5 backdrop-blur">
           <Checkbox
@@ -2045,8 +2046,7 @@ export function IdentifyReviewForm({
         )}
       </div>
 
-      {/* Footer — distinct elevated band that mirrors the header. */}
-      <div className="flex items-center justify-between gap-3 border-t bg-muted/40 px-5 py-3">
+      <DialogFooter className="flex-row items-center justify-between gap-3 sm:justify-between">
         <Button
           className="text-xs"
           onClick={restoreSuggestions}
@@ -2073,6 +2073,7 @@ export function IdentifyReviewForm({
           <Button
             disabled={applyMutation.isPending}
             onClick={onClose}
+            size="sm"
             type="button"
             variant="outline"
           >
@@ -2081,11 +2082,12 @@ export function IdentifyReviewForm({
           <Button
             disabled={applyMutation.isPending || totalSelected === 0}
             onClick={handleSubmit}
+            size="sm"
             type="button"
           >
             {applyMutation.isPending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                 Applying…
               </>
             ) : totalSelected === 0 ? (
@@ -2095,7 +2097,7 @@ export function IdentifyReviewForm({
             )}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogFooter>
+    </>
   );
 }

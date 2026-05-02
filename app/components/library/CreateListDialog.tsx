@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -142,7 +143,7 @@ export function CreateListDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="list-name">Name</Label>
             <Input
@@ -181,14 +182,22 @@ export function CreateListDialog({
               </p>
             </div>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            size="sm"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button disabled={isPending || !canSave} onClick={handleSubmit}>
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button
+            disabled={isPending || !canSave}
+            onClick={handleSubmit}
+            size="sm"
+          >
+            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             {isEditMode ? "Save" : "Create"}
           </Button>
         </DialogFooter>

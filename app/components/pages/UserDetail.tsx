@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -448,7 +449,7 @@ const UserDetail = () => {
                 : "Enter a new password for this user."}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <DialogBody className="space-y-4">
             {isSelf && (
               <div className="space-y-2">
                 <Label htmlFor="current-password">Current Password</Label>
@@ -498,10 +499,11 @@ const UserDetail = () => {
                 </Label>
               </div>
             )}
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button
               onClick={() => setPasswordDialogOpen(false)}
+              size="sm"
               variant="outline"
             >
               Cancel
@@ -509,10 +511,11 @@ const UserDetail = () => {
             <Button
               disabled={resetPasswordMutation.isPending}
               onClick={handleResetPassword}
+              size="sm"
             >
               {resetPasswordMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   Resetting...
                 </>
               ) : (
@@ -531,14 +534,17 @@ const UserDetail = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Deactivate User</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
             <DialogDescription>
               Are you sure you want to deactivate this user? They will no longer
               be able to log in.
             </DialogDescription>
-          </DialogHeader>
+          </DialogBody>
           <DialogFooter>
             <Button
               onClick={() => setDeactivateDialogOpen(false)}
+              size="sm"
               variant="outline"
             >
               Cancel
@@ -546,11 +552,12 @@ const UserDetail = () => {
             <Button
               disabled={deactivateUserMutation.isPending}
               onClick={handleDeactivate}
+              size="sm"
               variant="destructive"
             >
               {deactivateUserMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   Deactivating...
                 </>
               ) : (

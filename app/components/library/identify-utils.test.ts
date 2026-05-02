@@ -261,10 +261,7 @@ describe("pickInitialFile", () => {
   });
 
   it("treats reviewed=undefined as non-reviewed", () => {
-    const files = [
-      file(1, { reviewed: true }),
-      file(2),
-    ];
+    const files = [file(1, { reviewed: true }), file(2)];
     expect(
       pickInitialFile({ files, primary_file_id: 1 } as unknown as Book)?.id,
     ).toBe(2);
@@ -278,10 +275,7 @@ describe("pickInitialFile", () => {
   });
 
   it("falls back to first when primary not set", () => {
-    const files = [
-      file(10, { reviewed: true }),
-      file(20, { reviewed: true }),
-    ];
+    const files = [file(10, { reviewed: true }), file(20, { reviewed: true })];
     expect(
       pickInitialFile({ files, primary_file_id: undefined } as unknown as Book)
         ?.id,

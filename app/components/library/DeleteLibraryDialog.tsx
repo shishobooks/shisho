@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -63,7 +64,7 @@ export function DeleteLibraryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 min-w-0">
+        <DialogBody className="space-y-4 min-w-0">
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3 text-sm text-destructive break-words space-y-2">
             <p>This action is irreversible.</p>
             <p>Files on disk will not be deleted.</p>
@@ -90,12 +91,13 @@ export function DeleteLibraryDialog({
               value={typedName}
             />
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
             disabled={deleteMutation.isPending}
             onClick={() => onOpenChange(false)}
+            size="sm"
             variant="outline"
           >
             Cancel
@@ -103,10 +105,11 @@ export function DeleteLibraryDialog({
           <Button
             disabled={!canDelete}
             onClick={handleConfirm}
+            size="sm"
             variant="destructive"
           >
             {deleteMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Delete
           </Button>
