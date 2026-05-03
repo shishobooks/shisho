@@ -491,4 +491,65 @@ describe("FileEditDialog", () => {
       revokeObjectURLSpy.mockRestore();
     });
   });
+
+  describe("release date plain-text input", () => {
+    it("renders a text input with YYYY-MM-DD placeholder", async () => {
+      renderDialog();
+
+      const input = screen.getByPlaceholderText("YYYY-MM-DD");
+      expect(input).toBeInTheDocument();
+      expect(input.tagName).toBe("INPUT");
+    });
+
+    it("submits typed date value in payload", async () => {
+      const user = createUser();
+      renderDialog();
+
+      const input = screen.getByPlaceholderText("YYYY-MM-DD");
+      await user.clear(input);
+      await user.type(input, "1847-10-16");
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockUpdateFile).toHaveBeenCalled();
+      });
+      const payload = mockUpdateFile.mock.calls[0][0];
+      expect(payload.release_date).toBe("1847-10-16");
+    });
+
+    it("allows clearing the date field", async () => {
+      const user = createUser();
+      const fileWithDate: File = {
+        ...mockFile,
+        release_date: "2020-06-15T00:00:00Z",
+      };
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <FileEditDialog
+            file={fileWithDate}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const input = screen.getByPlaceholderText("YYYY-MM-DD");
+      expect(input).toHaveValue("2020-06-15");
+
+      await user.clear(input);
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockUpdateFile).toHaveBeenCalled();
+      });
+      const payload = mockUpdateFile.mock.calls[0][0];
+      expect(payload.release_date).toBe("");
+    });
+  });
 });
