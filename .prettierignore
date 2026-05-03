@@ -7,7 +7,6 @@ app/types/generated
 .claude/
 CLAUDE.md
 .cursor
-docs/
 website/build/
 website/.docusaurus/
 website/versioned_docs/
