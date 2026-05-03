@@ -33,6 +33,8 @@ func run(ctx context.Context, argv []string, stdout, stderr io.Writer) error {
 		return cmdPlan(ctx, argv[1:], stdout, stderr)
 	case "run":
 		return cmdRun(ctx, argv[1:], stdout, stderr)
+	case "prune":
+		return cmdPrune(ctx, argv[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		printUsage(stdout)
 		return nil
@@ -49,5 +51,6 @@ Usage:
   gotestsplit simulate -junit-dir=<dir> [-min=N] [-max=N]
   gotestsplit plan -junit-dir=<dir> -total=N -index=I [-detail] <pkg>...
   gotestsplit run -junit-dir=<dir> [-junit-out=<dir>] -total=N -index=I <pkg>... [-- go-test-args]
+  gotestsplit prune -junit-dir=<dir> -total=N
   gotestsplit [-junit-out=<dir>] -total=N -index=I <pkg>... [-- go-test-args]   # shortcut for "run"`)
 }
