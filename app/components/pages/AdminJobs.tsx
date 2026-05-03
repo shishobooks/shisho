@@ -135,7 +135,7 @@ const AdminJobs = () => {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+          <h1 className="text-2xl font-semibold mb-1 md:mb-2">
             Background Jobs
           </h1>
           <p className="text-sm md:text-base text-muted-foreground">

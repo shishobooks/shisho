@@ -215,7 +215,7 @@ const ListDetail = () => {
         {/* List Header */}
         <div className="mb-6 md:mb-8">
           <div className="flex flex-col gap-3 mb-2">
-            <h1 className="text-2xl md:text-3xl font-bold min-w-0 break-words">
+            <h1 className="text-2xl font-semibold min-w-0 break-words">
               {list.name}
             </h1>
             <div className="flex gap-2">

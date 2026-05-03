@@ -1098,9 +1098,7 @@ const BookDetail = () => {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
-              <h1 className="text-2xl md:text-3xl font-semibold">
-                {book.title}
-              </h1>
+              <h1 className="text-2xl font-semibold">{book.title}</h1>
               {/*
                 The relative wrapper exists so AddToListPopover can be opened
                 from the dropdown menu's "Add to list" item: its trigger is an

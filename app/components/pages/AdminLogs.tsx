@@ -55,9 +55,7 @@ const AdminLogs = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
       <div className="mb-4">
-        <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
-          Server Logs
-        </h1>
+        <h1 className="text-2xl font-semibold mb-1 md:mb-2">Server Logs</h1>
         <p className="text-sm md:text-base text-muted-foreground">
           Real-time server logs from the current session.
         </p>
