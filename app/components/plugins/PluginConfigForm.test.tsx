@@ -129,7 +129,7 @@ describe("PluginConfigForm", () => {
     // Radix Select renders a trigger with role="combobox"
     expect(
       screen.getByRole("combobox", { name: /split mode/i }),
-    ).toBeInTheDocument();
+    ).toHaveTextContent("Colon");
     // No native <select> elements should exist
     expect(document.querySelector("select")).toBeNull();
   });
