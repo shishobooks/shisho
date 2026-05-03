@@ -220,14 +220,14 @@ test.describe("Review flag", () => {
       .click({ force: true });
 
     // The selection toolbar should appear showing 2 books.
-    await expect(page.getByText(/2 books/)).toBeVisible();
+    await expect(page.getByText("2 books", { exact: true })).toBeVisible();
 
     // Open the "More" popover and click "Mark reviewed".
     await page.getByRole("button", { name: /^More$/ }).click();
     await page.getByText("Mark reviewed").click();
 
     // Wait for the toolbar to dismiss (selection mode exits after bulk action).
-    await expect(page.getByText(/2 books/)).not.toBeVisible();
+    await expect(page.getByText("2 books", { exact: true })).not.toBeVisible();
 
     // The filtered view should now show neither book (they were marked reviewed).
     await expect(page.getByText("Bulk Book Alpha")).not.toBeVisible();
