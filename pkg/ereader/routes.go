@@ -40,7 +40,6 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	ereader.GET("/libraries/:libraryId/authors/:authorId", h.AuthorBooks)
 	ereader.GET("/libraries/:libraryId/search", h.LibrarySearch)
 	ereader.GET("/download/:bookId", h.Download)
-	ereader.HEAD("/download/:bookId", h.Download)
 	ereader.GET("/cover/:bookId", h.Cover)
 	ereader.GET("/file/:fileId", h.DownloadFile)
 	ereader.HEAD("/file/:fileId", h.DownloadFile)

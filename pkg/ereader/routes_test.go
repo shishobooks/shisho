@@ -29,7 +29,6 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"/ereader/key/:apiKey/download/:bookId",
 		"/ereader/key/:apiKey/file/:fileId",
 		"/ereader/key/:apiKey/file/:fileId/kepub",
 	} {
