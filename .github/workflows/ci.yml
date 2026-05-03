@@ -90,9 +90,18 @@ jobs:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            tools/gotestsplit
+            go.mod
+            go.sum
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Prune stale junit files
+        run: go run ./tools/gotestsplit prune -junit-dir=.gotest-timings -total=12
       - name: Report cache size
-        # Visibility check — a sudden drop in file count means the merge-race
-        # bug or the fresh-only upload assumption regressed.
         run: |
           echo "junit files: $(find .gotest-timings -name 'junit-*.xml' | wc -l)"
           du -sh .gotest-timings || true

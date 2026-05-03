@@ -10,6 +10,7 @@ Subcommands:
 - `simulate -junit-dir=DIR [-min=N] [-max=N]` — read JUnit history, project per-shard wallclock and CI cost across a range of N. Used for picking shard count.
 - `plan -junit-dir=DIR -total=N -index=I [-detail] PKG...` — print the assignment for one shard. Useful for debugging "why is shard 3 slow?".
 - `run -junit-dir=DIR [-junit-out=DIR] -total=N -index=I PKG... [-- go-test-args]` — plan + exec `go test` per chunk + emit JUnit XML. `-junit-dir` is the read-only history input; `-junit-out` (defaults to `-junit-dir`) is where fresh XML is written.
+- `prune -junit-dir=DIR -total=N` — delete orphan `junit-{shard}-{seq}.xml` files where `shard >= N`. Run by the CI consolidator to keep the cache tidy after shard count changes.
 
 ## Architecture cheatsheet
 
@@ -126,7 +127,7 @@ Commit + push. The first run after the change is the contaminated one (Pack uses
 - **`gh run view <run-id>` returns "still in progress" until the entire workflow completes** — for partial logs of an in-progress run, view individual jobs via the GHA web UI.
 - **`actions/cache/restore@v5` and `actions/cache/save@v5` are separate actions** from `actions/cache@v5`; we use the split form so only the consolidator saves. Don't replace with the unified form — concurrent saves race and only one shard's data wins.
 - **`gh pr checks` shows checks for the latest commit on the PR**, so monitors that scope by PR (not run-id) will break if a new commit is pushed mid-monitor. Scope monitors to a specific `RUN_ID` (`gh run view $RUN_ID --json jobs`).
-- **The cache is never pruned** — `junit-N-K.xml` files outlive the run that wrote them, so when shard count or chunk count drops, leftover files persist. `ReadHistory` merges them by lexical order with later wins, which is mostly harmless (durations drift, packing is stable) but means the cache grows unboundedly and can carry stale (pkg, test) entries for tests that have been renamed or removed. Live with it until cache size or stale data causes pain; the planned mitigation is a `prune` step in the consolidator.
+- **The consolidator prunes orphan shard files** — `prune -junit-dir=DIR -total=N` deletes any `junit-{shard}-{seq}.xml` where `shard >= N`. This runs automatically in the `consolidate-test-timings` job before saving the cache, so changing the shard count doesn't leave stale files behind. Dead-test entries within valid shard files are not pruned (live tests overwrite them via later-wins merging, so the impact is negligible).
 - **Re-running CI on the same SHA fails the consolidator's `Save consolidated cache` step** — `actions/cache/save@v5` keys are immutable per (repo, key), and the key includes `github.sha`. The first attempt's save succeeded; the re-run's save sees the key already exists and exits non-zero. This is harmless — the previous attempt's consolidated cache is still there, and subsequent commits restore it via the `gotest-timings-${{ github.ref }}-` fallback prefix — but the red ✗ on the Save step in re-runs is expected, not a regression. Don't add `github.run_attempt` to the key to "fix" it; that fragments the cache pointlessly.
 
 ## Pull-out plan (future)
