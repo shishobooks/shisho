@@ -606,11 +606,11 @@ const HomeContent = () => {
           </div>
           <div className="flex-1" />
           {isSelectionMode ? (
-            <Button onClick={exitSelectionMode} variant="outline">
+            <Button onClick={exitSelectionMode} size="sm" variant="outline">
               Cancel
             </Button>
           ) : (
-            <Button onClick={enterSelectionMode} variant="outline">
+            <Button onClick={enterSelectionMode} size="sm" variant="outline">
               <CheckSquare className="h-4 w-4" />
               Select
             </Button>

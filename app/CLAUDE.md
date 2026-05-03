@@ -219,7 +219,7 @@ For settings/admin pages with title, description, and action buttons:
 ```tsx
 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
   <div>
-    <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+    <h1 className="text-2xl font-semibold mb-1 md:mb-2">
       Page Title
     </h1>
     <p className="text-sm md:text-base text-muted-foreground">
@@ -832,7 +832,7 @@ All metadata detail pages (Series, Person, Genre, Tag) follow a consistent struc
 ```tsx
 <div className="mb-8">
   <div className="flex items-start justify-between gap-4 mb-2">
-    <h1 className="text-3xl font-bold min-w-0 break-words">{name}</h1>
+    <h1 className="text-2xl font-semibold min-w-0 break-words">{name}</h1>
     <div className="flex gap-2 shrink-0">
       <Button onClick={() => setEditOpen(true)} size="sm" variant="outline">
         <Edit className="h-4 w-4 mr-2" />
