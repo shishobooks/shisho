@@ -65,7 +65,7 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 - A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, **Publishers**, and **Imprints**
 - A **Book** has one or more **Files**
 - A **Book** has many **Genres**, **Tags**, **Authors** (persons), and **Series**
-- A **File** has one **Publisher**, one **Imprint**, and many **Narrators** (persons)
+- A **File** has at most one **Publisher**, at most one **Imprint**, and many **Narrators** (persons)
 - A **Resource** (series, person, genre, tag, publisher, imprint) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
 
