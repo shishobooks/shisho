@@ -972,23 +972,10 @@ export function IdentifyReviewForm({
     [bookVisibleKeys, fileVisibleKeys],
   );
 
-  // Per-section counts use visible keys (consistent with what the section
-  // checkbox toggles). Global counts use all applicable keys (consistent with
-  // what actually gets applied).
-  const bookVisibleSelectedCount = bookVisibleKeys.filter(
-    (k) => decisions[k],
-  ).length;
-  const fileVisibleSelectedCount = fileVisibleKeys.filter(
-    (k) => decisions[k],
-  ).length;
-  const bookSelectedCount = bookApplicableKeys.filter(
-    (k) => decisions[k],
-  ).length;
-  const fileSelectedCount = fileApplicableKeys.filter(
-    (k) => decisions[k],
-  ).length;
+  const bookSelectedCount = bookVisibleKeys.filter((k) => decisions[k]).length;
+  const fileSelectedCount = fileVisibleKeys.filter((k) => decisions[k]).length;
   const totalSelected = bookSelectedCount + fileSelectedCount;
-  const totalApplicable = allApplicableKeys.length;
+  const totalApplicable = allVisibleKeys.length;
 
   const bookCheckboxState = aggregateDecisions(
     bookVisibleKeys.map((k) => decisions[k]),
@@ -1308,7 +1295,7 @@ export function IdentifyReviewForm({
               label="BOOK"
               onCheckedChange={(v) => setSectionDecisions(bookVisibleKeys, v)}
               onToggleCollapse={() => setBookCollapsed((c) => !c)}
-              selectedCount={bookVisibleSelectedCount}
+              selectedCount={bookSelectedCount}
               totalCount={bookVisibleKeys.length}
             />
             {!bookCollapsed && (
@@ -1648,7 +1635,7 @@ export function IdentifyReviewForm({
               label="FILE"
               onCheckedChange={(v) => setSectionDecisions(fileVisibleKeys, v)}
               onToggleCollapse={() => setFileCollapsed((c) => !c)}
-              selectedCount={fileVisibleSelectedCount}
+              selectedCount={fileSelectedCount}
               totalCount={fileVisibleKeys.length}
             />
             {!fileCollapsed && (
