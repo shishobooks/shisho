@@ -83,6 +83,8 @@ jobs:
             go.mod
             go.sum
       - name: Restore previous test timing cache
+        # Preserves shard history when a shard fails before writing junit
+        # or upload-artifact fails — fresh artifacts overlay on top.
         uses: actions/cache/restore@v5
         with:
           path: .gotest-timings
