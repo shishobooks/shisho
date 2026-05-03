@@ -75,7 +75,7 @@ const GenresList = () => {
 
     return (
       <Link
-        className="flex items-center justify-between p-3 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+        className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors"
         key={genre.id}
         to={`/libraries/${libraryId}/genres/${genre.id}`}
       >

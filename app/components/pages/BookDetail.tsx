@@ -1243,7 +1243,7 @@ const BookDetail = () => {
                   {book.book_series.map((bs) => (
                     <div className="flex items-center gap-2" key={bs.id}>
                       <Link
-                        className="text-sm font-medium text-primary hover:text-primary/80 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
+                        className="text-sm font-medium text-primary hover:text-primary/80 hover:underline"
                         to={`/libraries/${libraryId}/series/${bs.series_id}`}
                       >
                         {bs.series?.name ?? "Unknown Series"}

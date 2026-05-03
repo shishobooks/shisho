@@ -169,7 +169,7 @@ const PublisherDetail = () => {
             <div className="space-y-3">
               {publisherFilesQuery.data.map((file) => (
                 <div
-                  className="border-l-4 border-l-primary dark:border-l-violet-300 pl-4 py-2"
+                  className="border-l-4 border-l-primary pl-4 py-2"
                   key={file.id}
                 >
                   <div className="flex items-center justify-between gap-4">
