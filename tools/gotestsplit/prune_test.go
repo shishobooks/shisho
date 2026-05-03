@@ -105,6 +105,20 @@ func TestCmdPrune_NothingToDelete(t *testing.T) {
 	}
 }
 
+func TestCmdPrune_MissingDirectory(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	var stdout, stderr bytes.Buffer
+	err := cmdPrune(context.Background(), []string{"-junit-dir=" + dir, "-total=8"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("expected no error for missing directory, got: %v", err)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("does not exist")) {
+		t.Errorf("expected stderr to mention missing directory, got: %s", stderr.String())
+	}
+}
+
 func TestCmdPrune_RequiresFlags(t *testing.T) {
 	t.Parallel()
 

@@ -30,6 +30,10 @@ func cmdPrune(_ context.Context, argv []string, stdout, stderr io.Writer) error 
 	}
 
 	entries, err := os.ReadDir(*junitDir)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(stderr, "prune: directory does not exist, nothing to do")
+		return nil
+	}
 	if err != nil {
 		return err
 	}
