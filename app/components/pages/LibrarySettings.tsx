@@ -247,14 +247,14 @@ const LibrarySettings = () => {
 
   return (
     <LibraryLayout>
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
         <p className="text-muted-foreground">
           Manage library name, paths, and scanning behavior
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-6 border border-border rounded-md p-6">
+      <div className="max-w-2xl space-y-6 border border-border rounded-md p-4 md:p-6">
         {/* Library Name */}
         <div className="space-y-2">
           <Label htmlFor="library-name">Library Name</Label>

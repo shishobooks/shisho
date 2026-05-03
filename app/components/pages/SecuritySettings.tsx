@@ -109,7 +109,7 @@ const SecuritySettings = () => {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background px-4 py-8">
         <div className="w-full max-w-md">
-          <div className="flex flex-col items-center mb-8">
+          <div className="flex flex-col items-center mb-6 md:mb-8">
             <Logo className="mb-2" size="lg" />
             <h1 className="text-xl font-semibold mb-1">
               Password Reset Required
@@ -164,7 +164,7 @@ const SecuritySettings = () => {
     <div>
       <TopNav />
       <div className="mx-auto w-full max-w-7xl px-6 py-8">
-        <div className="mb-8">
+        <div className="mb-6 md:mb-8">
           <h1 className="mb-2 text-2xl font-semibold">Security Settings</h1>
           <p className="text-muted-foreground">
             Manage your password and API keys
@@ -466,7 +466,7 @@ function EReaderSetupDialog({
         {generateShortUrl.isPending ? (
           <DialogBody>Generating URL...</DialogBody>
         ) : shortUrl ? (
-          <DialogBody className="space-y-4">
+          <DialogBody className="space-y-6">
             <div className="flex gap-2">
               <Input
                 className="font-mono"
@@ -735,7 +735,7 @@ function KoboSetupDialog({
             Configure your Kobo device to sync books wirelessly from Shisho.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           {/* Scope Selection */}
           <div className="space-y-3">
             <Label>Sync Scope</Label>

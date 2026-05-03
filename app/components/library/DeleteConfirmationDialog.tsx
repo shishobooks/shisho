@@ -169,7 +169,7 @@ export function DeleteConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 min-w-0">
+        <DialogBody className="space-y-6 min-w-0">
           {/* Warning banner */}
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3 text-sm text-destructive break-words">
             This action cannot be undone. Files will be permanently deleted from

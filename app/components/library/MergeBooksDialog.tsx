@@ -168,7 +168,7 @@ export function MergeBooksDialog({
 
         {!isLoadingBooks && !bookQueryError && step === "select" && (
           <>
-            <DialogBody className="space-y-4">
+            <DialogBody className="space-y-6">
               <div className="space-y-2">
                 <Label>Select target book</Label>
                 <p className="text-sm text-muted-foreground">
@@ -254,7 +254,7 @@ export function MergeBooksDialog({
           step === "confirm" &&
           targetBook && (
             <>
-              <DialogBody className="space-y-4">
+              <DialogBody className="space-y-6">
                 {/* Warning banner */}
                 <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />

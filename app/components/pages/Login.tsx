@@ -69,7 +69,7 @@ const Login = () => {
     <div className="min-h-dvh flex items-center justify-center bg-background px-4 py-8">
       <Toaster richColors />
       <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6 md:mb-8">
           <Logo className="mb-2" size="lg" />
           <p className="text-muted-foreground text-center">
             Sign in to access your library

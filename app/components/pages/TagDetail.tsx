@@ -171,7 +171,7 @@ const TagDetail = () => {
       />
 
       {/* Tag Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
           <h1 className="text-2xl font-semibold min-w-0 break-words">
             {tag.name}

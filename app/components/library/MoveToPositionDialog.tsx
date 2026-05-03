@@ -68,7 +68,7 @@ export const MoveToPositionDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="position">Position (1-{totalBooks})</Label>
             <Input
