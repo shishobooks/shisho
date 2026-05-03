@@ -276,7 +276,7 @@ const FilterContent = ({
               className={cn(
                 "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium cursor-pointer transition-colors",
                 isSelected
-                  ? "border-primary bg-primary text-primary-foreground"
+                  ? "border-primary bg-primary/5 text-primary"
                   : "border-border bg-card hover:bg-accent",
               )}
               key={option.value}

@@ -173,7 +173,7 @@ function CoverGalleryTabs({
                   "px-2.5 py-1 text-xs font-medium rounded-full border cursor-pointer",
                   "transition-all duration-150",
                   file.id === selectedFileId
-                    ? "bg-primary border-primary text-primary-foreground"
+                    ? "border-primary bg-primary/5 text-primary"
                     : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
                 onClick={() => handleTabClick(file.id)}

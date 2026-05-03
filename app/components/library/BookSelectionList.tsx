@@ -117,8 +117,10 @@ function BookSelectionItem({ book, isSelected }: BookSelectionItemProps) {
   return (
     <label
       className={cn(
-        "flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors overflow-hidden",
-        isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+        "flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors overflow-hidden",
+        isSelected
+          ? "border-primary bg-primary/5"
+          : "border-transparent hover:bg-muted/50",
       )}
       htmlFor={`book-${book.id}`}
     >
