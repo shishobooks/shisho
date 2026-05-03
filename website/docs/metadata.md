@@ -70,6 +70,58 @@ Searches by identifier accept any of the cosmetic variants above — you can pas
 | File &rarr; Identifiers | One-to-many | A file can have multiple identifiers |
 | File &rarr; Chapters | One-to-many | Chapters support nested hierarchy |
 
+## Aliases
+
+Aliases are alternative names for resources that resolve to the canonical resource during any name-based lookup. When metadata arrives from different sources — embedded file data, plugins, sidecars, user edits — the same logical resource is often represented by different name variants. For example, "Nonfiction" vs "Non-fiction", "J.K. Rowling" vs "Joanne Rowling", or "Sci-Fi" vs "Science Fiction". Without aliases, each variant creates a separate resource that must be manually merged, and the duplicate reappears on the next scan.
+
+Aliases solve this by letting you declare that certain names map to an existing resource. When a name matches an alias, Shisho returns the existing resource instead of creating a new one.
+
+### Supported Resources
+
+All six resource types support aliases:
+
+- **People** (authors and narrators)
+- **Series**
+- **Genres**
+- **Tags**
+- **Publishers**
+- **Imprints**
+
+### How Aliases Work
+
+When Shisho encounters a resource name during a scan, [plugin](./plugins/overview) enrichment, or [sidecar](./sidecar-files) import, it resolves the name in this order:
+
+1. **Primary name** (case-insensitive) — if a resource with this name exists, use it
+2. **Aliases** (case-insensitive) — if the name matches an alias, use the alias's canonical resource
+3. **Create new** — if no match is found, create a new resource
+
+This resolution happens transparently in all contexts — library scans, plugin metadata, sidecar files, and manual edits via autocomplete. No changes to plugins or sidecar files are needed.
+
+### Managing Aliases
+
+**Edit dialog.** Open the edit dialog for any resource (person, series, genre, tag, publisher, or imprint). Below the name field, a chip input lets you add and remove aliases. Type a name and press Enter to add it; click the × on a chip to remove it.
+
+**Automatic creation on merge.** When you merge two resources, the source resource's name automatically becomes an alias of the target. Any existing aliases on the source transfer to the target as well, so no previously-working name mappings are lost.
+
+**Automatic creation on rename.** When you rename a resource, the old name automatically becomes an alias. Future references to the old name still resolve to the renamed resource.
+
+### Uniqueness Rules
+
+- Aliases are **case-insensitive** — "non-fiction" and "Non-Fiction" are treated as the same alias
+- An alias cannot duplicate an existing primary name or another alias within the same resource type and library
+- Shisho validates uniqueness when you add an alias and rejects conflicts
+
+### Aliases in Search
+
+- **Autocomplete:** When editing a book and typing in a resource field, the search matches against both primary names and aliases. Results show only the canonical name.
+- **Full-text search:** Author, narrator, and series aliases are included in book search results, so searching by an alias name surfaces the correct books.
+- **Resource search:** Searching on genre, tag, series, or person list pages also matches against aliases.
+
+### Aliases in the UI
+
+- **List pages:** Genres, tags, publishers, imprints, and people show aliases as a muted subtitle below the primary name. Series grid cards don't show aliases due to layout constraints.
+- **Detail pages:** All six resource types show aliases below the name in the header section.
+
 ## Editing Metadata
 
 ### What You Can Edit
@@ -93,9 +145,15 @@ Searches by identifier accept any of the cosmetic variants above — you can pas
 
 **On a person:**
 - Name and sort name
+- [Aliases](#aliases)
 
 **On a series:**
 - Name and sort name
+- [Aliases](#aliases)
+
+**On a genre, tag, publisher, or imprint:**
+- Name
+- [Aliases](#aliases)
 
 ### Sort Names
 

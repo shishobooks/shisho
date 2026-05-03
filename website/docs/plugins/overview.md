@@ -19,6 +19,10 @@ There are four types of plugins, each serving a different purpose:
 
 Plugins run in a sandboxed environment with controlled access to the filesystem, network, and system commands. Each plugin declares exactly what permissions it needs in its manifest.
 
+:::note[Alias-aware resolution]
+Resource names returned by plugins — authors, narrators, series, genres, tags, publishers, imprints — are resolved through Shisho's standard name lookup, which checks [aliases](../metadata#aliases). If a plugin returns a name that matches an alias, Shisho maps it to the existing canonical resource instead of creating a duplicate. No plugin changes are needed to take advantage of aliases.
+:::
+
 ## Installing Plugins
 
 Plugins are installed from **[plugin repositories](./repositories)** — curated lists of available plugins hosted on GitHub. Shisho ships with an official repository enabled by default.
