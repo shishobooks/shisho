@@ -22,7 +22,12 @@ interface SortableEntityListProps<T extends object> {
   onAppend: (next: T | { __create: string }) => void;
   comboboxProps: Pick<
     EntityComboboxProps<T>,
-    "hook" | "label" | "getOptionLabel" | "getOptionKey" | "canCreate"
+    | "hook"
+    | "label"
+    | "getOptionLabel"
+    | "getOptionKey"
+    | "getOptionDescription"
+    | "canCreate"
   >;
   renderExtras?: (item: T, index: number) => ReactNode;
   status?: (item: T, index: number) => EntityStatus | undefined;

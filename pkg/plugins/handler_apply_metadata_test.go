@@ -27,14 +27,18 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 }
 
 // stubRelStoreForApply is a no-op relationStore for applyMetadata tests.
-type stubRelStoreForApply struct{}
+// When captureBookSeries is non-nil, CreateBookSeries appends to it.
+type stubRelStoreForApply struct {
+	capturedBookSeries []*models.BookSeries
+}
 
 func (s *stubRelStoreForApply) DeleteAuthors(_ context.Context, _ int) error { return nil }
 func (s *stubRelStoreForApply) CreateAuthor(_ context.Context, _ *models.Author) error {
 	return nil
 }
 func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, _ int) error { return nil }
-func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, _ *models.BookSeries) error {
+func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.BookSeries) error {
+	s.capturedBookSeries = append(s.capturedBookSeries, bs)
 	return nil
 }
 func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, _ string, _ int, _ string) (*models.Series, error) {
@@ -87,6 +91,14 @@ type stubImprintFinder struct {
 func (s *stubImprintFinder) FindOrCreateImprint(_ context.Context, name string, _ int) (*models.Imprint, error) {
 	s.lastName = name
 	return &models.Imprint{ID: 1, Name: name}, nil
+}
+
+// newApplyTestHandlerWithRelStore creates a handler and returns the relStore stub
+// so tests can inspect captured CreateBookSeries calls.
+func newApplyTestHandlerWithRelStore(store *stubBookStoreForApply) (*handler, *stubRelStoreForApply) {
+	h := newApplyTestHandler(store)
+	rel := h.enrich.relStore.(*stubRelStoreForApply)
+	return h, rel
 }
 
 // newApplyTestHandlerWithFinders wires publisher/imprint finders so tests can
@@ -223,6 +235,27 @@ func TestApplyMetadata_OrganizesFiles_WhenSeriesChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when series changes")
+}
+
+func TestApplyMetadata_OrganizesFiles_WhenMultiSeriesArraySent(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"series": []any{
+			map[string]any{"name": "Series A", "number": 1.0},
+			map[string]any{"name": "Series B", "number": 2.0, "series_number_unit": "volume"},
+		},
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when multi-series array is sent")
 }
 
 func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
@@ -597,4 +630,29 @@ func TestApplyMetadata_ExplicitFileName_PreservesEditionName_NonPrimaryFile(t *t
 	require.NotNil(t, file.NameSource)
 	assert.Equal(t, models.DataSourceManual, *file.NameSource,
 		"file.NameSource must NOT be replaced by the plugin source")
+}
+
+func TestApplyMetadata_ScalarSeries_WritesSeriesNumberUnit(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h, rel := newApplyTestHandlerWithRelStore(store)
+	c := newApplyEchoContext(t, map[string]any{
+		"series":             "Naruto",
+		"series_number":      5.0,
+		"series_number_unit": "volume",
+	})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.Len(t, rel.capturedBookSeries, 1)
+	bs := rel.capturedBookSeries[0]
+	require.NotNil(t, bs.SeriesNumber)
+	assert.InDelta(t, 5.0, *bs.SeriesNumber, 0.001)
+	require.NotNil(t, bs.SeriesNumberUnit, "scalar series path must write SeriesNumberUnit")
+	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
 }

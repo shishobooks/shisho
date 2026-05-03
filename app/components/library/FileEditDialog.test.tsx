@@ -52,14 +52,10 @@ vi.mock("@/hooks/queries/books", () => ({
   }),
 }));
 
-// Mock the list hooks with empty data
-vi.mock("@/hooks/queries/people", () => ({
-  usePeopleList: () => ({ data: { people: [] } }),
-}));
-
-vi.mock("@/hooks/queries/publishers", () => ({
-  usePublishersList: () => ({ data: { publishers: [] } }),
-  useImprintsList: () => ({ data: { imprints: [] } }),
+vi.mock("@/hooks/queries/entity-search", () => ({
+  usePeopleSearch: () => ({ data: [], isLoading: false }),
+  usePublisherSearch: () => ({ data: [], isLoading: false }),
+  useImprintSearch: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock("@/hooks/queries/plugins", () => ({

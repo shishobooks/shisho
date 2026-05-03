@@ -81,6 +81,14 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		}
 	}
 
+	// Extract multi-series entries from fields (array format from identify form).
+	if seriesEntries := extractSeriesEntries(payload.Fields); seriesEntries != nil {
+		if overrides == nil {
+			overrides = &applyOverrides{}
+		}
+		overrides.SeriesEntries = seriesEntries
+	}
+
 	// Download cover if cover_url set
 	if md.CoverURL != "" {
 		manifest := rt.Manifest()
@@ -100,7 +108,8 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Trim title/series first so whitespace-only values don't trigger a no-op organize pass —
 	// persistMetadata already trims before persisting, so untrimmed values would never change the book.
 	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
-	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" {
+	hasSeriesEntries := overrides != nil && overrides.SeriesEntries != nil && len(*overrides.SeriesEntries) > 0
+	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" || hasSeriesEntries {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})

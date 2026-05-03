@@ -63,78 +63,14 @@ vi.mock("@/hooks/queries/plugins", async () => {
   };
 });
 
-vi.mock("@/hooks/queries/people", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/people")>(
-    "@/hooks/queries/people",
-  );
-  return {
-    ...actual,
-    usePeopleList: () => ({
-      data: { people: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/series", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/series")>(
-    "@/hooks/queries/series",
-  );
-  return {
-    ...actual,
-    useSeriesList: () => ({
-      data: { series: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/publishers", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/hooks/queries/publishers")
-  >("@/hooks/queries/publishers");
-  return {
-    ...actual,
-    usePublishersList: () => ({
-      data: { publishers: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/imprints", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/hooks/queries/imprints")
-  >("@/hooks/queries/imprints");
-  return {
-    ...actual,
-    useImprintsList: () => ({
-      data: { imprints: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/genres", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/genres")>(
-    "@/hooks/queries/genres",
-  );
-  return {
-    ...actual,
-    useGenresList: () => ({
-      data: { genres: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
-vi.mock("@/hooks/queries/tags", async () => {
-  const actual = await vi.importActual<typeof import("@/hooks/queries/tags")>(
-    "@/hooks/queries/tags",
-  );
-  return {
-    ...actual,
-    useTagsList: () => ({
-      data: { tags: [], total: 0 },
-      isLoading: false,
-    }),
-  };
-});
+vi.mock("@/hooks/queries/entity-search", () => ({
+  usePeopleSearch: () => ({ data: [], isLoading: false }),
+  useSeriesSearch: () => ({ data: [], isLoading: false }),
+  usePublisherSearch: () => ({ data: [], isLoading: false }),
+  useImprintSearch: () => ({ data: [], isLoading: false }),
+  useGenreSearch: () => ({ data: [], isLoading: false }),
+  useTagSearch: () => ({ data: [], isLoading: false }),
+}));
 
 vi.mock("@/libraries/api", async () => {
   const actual =
@@ -286,16 +222,16 @@ describe("IdentifyReviewForm component", () => {
     expect(screen.getByText("Narrators")).toBeInTheDocument();
   });
 
-  it("clears series and series_number when the Clear series button is pressed", async () => {
+  it("clears series when the Remove button is pressed on the series row", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ series: "Some Series", series_number: 1 }),
     });
 
-    const clearButton = await screen.findByRole("button", {
-      name: /clear series/i,
+    const removeButton = await screen.findByRole("button", {
+      name: /remove some series/i,
     });
-    await user.click(clearButton);
+    await user.click(removeButton);
 
     await user.click(getApplyButton());
 
@@ -304,8 +240,7 @@ describe("IdentifyReviewForm component", () => {
     });
 
     const payload = applyMock.mock.calls[0][0];
-    expect(payload.fields.series).toBe("");
-    expect(payload.fields.series_number).toBeUndefined();
+    expect(payload.fields.series).toEqual([]);
   });
 
   it("does not auto-select a broken plugin cover_url as the default cover", async () => {

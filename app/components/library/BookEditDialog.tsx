@@ -28,12 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
-import { useGenresList } from "@/hooks/queries/genres";
-import { usePeopleList } from "@/hooks/queries/people";
+import {
+  useAuthorSearch,
+  useGenreSearch,
+  useSeriesSearch,
+  useTagSearch,
+  type NameWithBookCount,
+} from "@/hooks/queries/entity-search";
 import { useSetBookReview } from "@/hooks/queries/review";
-import { useSeriesList } from "@/hooks/queries/series";
-import { useTagsList } from "@/hooks/queries/tags";
-import { useDebounce } from "@/hooks/useDebounce";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import {
   AuthorRoleWriter,
@@ -59,62 +61,6 @@ interface SeriesEntry {
   name: string;
   number: string;
   unit: "" | "volume" | "chapter"; // "" means unspecified
-}
-
-// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
-// signature. Defined at module scope so they're stable references and the same
-// hooks run in the same order on every render.
-//
-// Each adapter maps the API list-result shape (PersonWithCounts, Series) to the
-// parent list's item shape (AuthorInput, SeriesEntry). The combobox only needs
-// `name` to display each option; the extra fields specific to the parent list
-// (role, number) are filled in by `onAppend` when the user picks an option.
-
-function usePeopleSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: AuthorInput[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  // PersonWithCounts has many extra fields; the combobox only needs `name`.
-  // We expose AuthorInput-shaped objects so the SortableEntityList<AuthorInput>
-  // type lines up cleanly. The id is preserved on the object so getOptionKey
-  // can use it.
-  const adapted = data?.people.map<AuthorInput & { id: number }>((p) => ({
-    name: p.name,
-    id: p.id,
-  }));
-  return { data: adapted, isLoading };
-}
-
-function useSeriesSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: SeriesEntry[]; isLoading: boolean } {
-  const { data, isLoading } = useSeriesList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  // Adapt Series[] -> SeriesEntry[] so the type matches the parent list's item
-  // shape. The combobox only displays `name`; `number` is filled in when added.
-  const adapted = data?.series.map<SeriesEntry>((s) => ({
-    name: s.name,
-    number: "",
-    unit: "",
-  }));
-  return { data: adapted, isLoading };
 }
 
 export function BookEditDialog({
@@ -144,40 +90,16 @@ export function BookEditDialog({
   const [genres, setGenres] = useState<string[]>(
     book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [],
   );
-  const [genreSearch, setGenreSearch] = useState("");
-  const debouncedGenreSearch = useDebounce(genreSearch, 200);
 
   const [tags, setTags] = useState<string[]>(
     book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
   );
-  const [tagSearch, setTagSearch] = useState("");
-  const debouncedTagSearch = useDebounce(tagSearch, 200);
 
   const updateBookMutation = useUpdateBook();
   const setBookReviewMutation = useSetBookReview();
 
   // Check if book has CBZ files (determines whether to show role selection)
   const hasCBZFiles = book.files?.some((f) => f.file_type === FileTypeCBZ);
-
-  // Query for genres in this library with server-side search
-  const { data: genresData, isLoading: isLoadingGenres } = useGenresList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedGenreSearch || undefined,
-    },
-    { enabled: open && !!book.library_id },
-  );
-
-  // Query for tags in this library with server-side search
-  const { data: tagsData, isLoading: isLoadingTags } = useTagsList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedTagSearch || undefined,
-    },
-    { enabled: open && !!book.library_id },
-  );
 
   // Draft review override — toggling the panel updates this; the actual
   // setBookReview mutation only fires on Save.
@@ -259,9 +181,7 @@ export function BookEditDialog({
     setAuthors(initialAuthors);
     setSeriesEntries(initialSeries);
     setGenres(initialGenres);
-    setGenreSearch("");
     setTags(initialTags);
-    setTagSearch("");
     setDraftReviewOverride(initialReviewOverride);
 
     // Store initial values for comparison (use effective sort title, not semantic)
@@ -316,7 +236,7 @@ export function BookEditDialog({
 
   const handleAuthorRoleChange = (index: number, role: string | undefined) => {
     const updated = [...authors];
-    updated[index] = { ...updated[index], role };
+    updated[index].role = role;
     setAuthors(updated);
   };
 
@@ -349,7 +269,7 @@ export function BookEditDialog({
     unit: "" | "volume" | "chapter",
   ) => {
     const updated = [...seriesEntries];
-    updated[index] = { ...updated[index], unit };
+    updated[index].unit = unit;
     setSeriesEntries(updated);
   };
 
@@ -552,13 +472,21 @@ export function BookEditDialog({
             </div>
             <SortableEntityList<AuthorInput>
               comboboxProps={{
-                // Author options carry an extra `id` field (see usePeopleSearch);
+                // Author options carry an extra `id` field (see useAuthorSearch);
                 // use it as the option key when present, fall back to name.
                 getOptionKey: (p) =>
                   (p as AuthorInput & { id?: number }).id ?? p.name,
                 getOptionLabel: (p) => p.name,
+                getOptionDescription: (p) => {
+                  const c = (
+                    p as AuthorInput & { authored_book_count?: number }
+                  ).authored_book_count;
+                  return c != null
+                    ? `${c} ${c === 1 ? "book" : "books"}`
+                    : undefined;
+                },
                 hook: function useAuthorOptions(q) {
-                  return usePeopleSearch(book.library_id, open, q);
+                  return useAuthorSearch(book.library_id, open, q);
                 },
                 label: "Author",
               }}
@@ -622,8 +550,19 @@ export function BookEditDialog({
               comboboxProps={{
                 getOptionKey: (s) => s.name,
                 getOptionLabel: (s) => s.name,
+                getOptionDescription: (s) => {
+                  const c = (s as SeriesEntry & { book_count?: number })
+                    .book_count;
+                  return c != null
+                    ? `${c} ${c === 1 ? "book" : "books"}`
+                    : undefined;
+                },
                 hook: function useSeriesOptions(q) {
-                  return useSeriesSearch(book.library_id, open, q);
+                  const result = useSeriesSearch(book.library_id, open, q);
+                  return result as {
+                    data?: SeriesEntry[];
+                    isLoading: boolean;
+                  };
                 },
                 label: "Series",
               }}
@@ -672,14 +611,18 @@ export function BookEditDialog({
           {/* Genres */}
           <div className="space-y-2">
             <Label>Genres</Label>
-            <MultiSelectCombobox
-              isLoading={isLoadingGenres}
-              label="Genres"
+            <MultiSelectCombobox<NameWithBookCount>
+              getOptionCount={(g) => g.book_count}
+              getOptionDescription={(g) =>
+                `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
+              }
+              getOptionLabel={(g) => g.name}
+              hook={function useGenreOptions(q) {
+                return useGenreSearch(book.library_id, open, q);
+              }}
+              label="Genre"
               onChange={setGenres}
-              onSearch={setGenreSearch}
-              options={genresData?.genres.map((g) => g.name) || []}
               placeholder="Add genres..."
-              searchValue={genreSearch}
               values={genres}
             />
           </div>
@@ -687,14 +630,18 @@ export function BookEditDialog({
           {/* Tags */}
           <div className="space-y-2">
             <Label>Tags</Label>
-            <MultiSelectCombobox
-              isLoading={isLoadingTags}
-              label="Tags"
+            <MultiSelectCombobox<NameWithBookCount>
+              getOptionCount={(t) => t.book_count}
+              getOptionDescription={(t) =>
+                `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
+              }
+              getOptionLabel={(t) => t.name}
+              hook={function useTagOptions(q) {
+                return useTagSearch(book.library_id, open, q);
+              }}
+              label="Tag"
               onChange={setTags}
-              onSearch={setTagSearch}
-              options={tagsData?.tags.map((t) => t.name) || []}
               placeholder="Add tags..."
-              searchValue={tagSearch}
               values={tags}
             />
           </div>

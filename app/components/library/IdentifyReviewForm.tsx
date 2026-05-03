@@ -42,9 +42,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getLanguageName } from "@/constants/languages";
-import { useGenresList } from "@/hooks/queries/genres";
-import { useImprintsList } from "@/hooks/queries/imprints";
-import { usePeopleList } from "@/hooks/queries/people";
+import {
+  useGenreSearch,
+  useImprintSearch,
+  usePeopleSearch,
+  usePublisherSearch,
+  useSeriesSearch,
+  useTagSearch,
+  type NameOption,
+  type NameWithBookCount,
+  type NameWithFileCount,
+} from "@/hooks/queries/entity-search";
 import {
   usePluginApply,
   usePluginIdentifierTypes,
@@ -52,10 +60,6 @@ import {
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
-import { usePublishersList } from "@/hooks/queries/publishers";
-import { useSeriesList } from "@/hooks/queries/series";
-import { useTagsList } from "@/hooks/queries/tags";
-import { useDebounce } from "@/hooks/useDebounce";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
@@ -94,8 +98,10 @@ interface AuthorEntry {
   role?: string;
 }
 
-interface NameOption {
+interface SeriesEntry {
   name: string;
+  number: string;
+  unit: "" | "volume" | "chapter";
 }
 
 type BookFieldKey =
@@ -165,78 +171,6 @@ const PLUGIN_FIELD_ALIASES: Record<FieldKey, string[]> = {
 
 function fieldScope(k: FieldKey): FieldScope {
   return (BOOK_FIELDS as string[]).includes(k) ? "book" : "file";
-}
-
-// Adapter hooks: bridge useXxxList query hooks to EntityCombobox's `hook` prop
-// signature. Defined at module scope so they're stable references and the same
-// hooks run in the same order on every render.
-
-function usePeopleSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.people.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function useSeriesSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = useSeriesList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.series.map((s) => ({ name: s.name }));
-  return { data: adapted, isLoading };
-}
-
-function usePublisherSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePublishersList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.publishers.map((p) => ({ name: p.name }));
-  return { data: adapted, isLoading };
-}
-
-function useImprintSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameOption[]; isLoading: boolean } {
-  const { data, isLoading } = useImprintsList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.imprints.map((i) => ({ name: i.name }));
-  return { data: adapted, isLoading };
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +270,26 @@ function resolveAuthors(
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
   const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
+  const curKeys = current.map(key).sort();
+  const incKeys = incoming.map(key).sort();
+  if (
+    curKeys.length === incKeys.length &&
+    curKeys.every((v, i) => v === incKeys[i])
+  ) {
+    return { value: current, status: "unchanged" };
+  }
+  return { value: incoming, status: "changed" };
+}
+
+function resolveSeries(
+  current: SeriesEntry[],
+  incoming: SeriesEntry[],
+): { value: SeriesEntry[]; status: FieldStatus } {
+  if (current.length === 0 && incoming.length > 0)
+    return { value: incoming, status: "new" };
+  if (current.length > 0 && incoming.length === 0)
+    return { value: current, status: "unchanged" };
+  const key = (s: SeriesEntry) => `${s.name}|${s.number}|${s.unit}`;
   const curKeys = current.map(key).sort();
   const incKeys = incoming.map(key).sort();
   if (
@@ -528,11 +482,15 @@ export function IdentifyReviewForm({
     [file?.narrators],
   );
 
-  const currentSeries = book.book_series?.[0]?.series?.name ?? "";
-  const currentSeriesNumber =
-    book.book_series?.[0]?.series_number?.toString() ?? "";
-  const currentSeriesNumberUnit =
-    book.book_series?.[0]?.series_number_unit ?? "";
+  const currentSeriesEntries: SeriesEntry[] = useMemo(
+    () =>
+      (book.book_series ?? []).map((bs) => ({
+        name: bs.series?.name ?? "",
+        number: bs.series_number?.toString() ?? "",
+        unit: (bs.series_number_unit ?? "") as SeriesEntry["unit"],
+      })),
+    [book.book_series],
+  );
 
   const currentGenres: string[] = useMemo(
     () => (book.book_genres ?? []).map((bg) => bg.genre?.name ?? ""),
@@ -563,21 +521,23 @@ export function IdentifyReviewForm({
       result.identifiers ?? []
     ).map((id) => ({ type: id.type, value: id.value }));
 
+    const incomingSeries: SeriesEntry[] = result.series
+      ? [
+          {
+            name: result.series,
+            number: result.series_number?.toString() ?? "",
+            unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
+          },
+        ]
+      : [];
+
     return {
       title: resolveScalar(book.title, result.title),
       subtitle: resolveScalar(book.subtitle, result.subtitle),
       description: resolveScalar(book.description, result.description),
       authors: resolveAuthors(currentAuthors, incomingAuthors),
       narrators: resolveArray(currentNarrators, result.narrators ?? []),
-      series: resolveScalar(currentSeries, result.series),
-      seriesNumber: resolveScalar(
-        currentSeriesNumber,
-        result.series_number?.toString(),
-      ),
-      seriesNumberUnit: resolveScalar(
-        currentSeriesNumberUnit,
-        result.series_number_unit ?? undefined,
-      ),
+      series: resolveSeries(currentSeriesEntries, incomingSeries),
       genres: resolveArray(currentGenres, result.genres ?? []),
       tags: resolveArray(currentTags, result.tags ?? []),
       publisher: resolveScalar(file?.publisher?.name, result.publisher),
@@ -596,9 +556,7 @@ export function IdentifyReviewForm({
     result,
     currentAuthors,
     currentNarrators,
-    currentSeries,
-    currentSeriesNumber,
-    currentSeriesNumberUnit,
+    currentSeriesEntries,
     currentGenres,
     currentTags,
     currentIdentifiers,
@@ -617,10 +575,8 @@ export function IdentifyReviewForm({
     () => narrators.map((name) => ({ name })),
     [narrators],
   );
-  const [series, setSeries] = useState(defaults.series.value);
-  const [seriesNumber, setSeriesNumber] = useState(defaults.seriesNumber.value);
-  const [seriesNumberUnit, setSeriesNumberUnit] = useState(
-    defaults.seriesNumberUnit.value,
+  const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
+    defaults.series.value,
   );
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
@@ -650,29 +606,6 @@ export function IdentifyReviewForm({
     if (cur === initialName) return "unchanged";
     return "changed";
   }, [file?.name, initialName]);
-
-  // ---- Genre / tag option pools (server-side search) ----
-  const [genreSearch, setGenreSearch] = useState("");
-  const debouncedGenreSearch = useDebounce(genreSearch, 200);
-  const [tagSearch, setTagSearch] = useState("");
-  const debouncedTagSearch = useDebounce(tagSearch, 200);
-
-  const { data: genresData, isLoading: isLoadingGenres } = useGenresList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedGenreSearch || undefined,
-    },
-    { enabled: !!book.library_id },
-  );
-  const { data: tagsData, isLoading: isLoadingTags } = useTagsList(
-    {
-      library_id: book.library_id,
-      limit: 50,
-      search: debouncedTagSearch || undefined,
-    },
-    { enabled: !!book.library_id },
-  );
 
   // ---- Identifier types ----
   const availableIdentifierTypes = useMemo(
@@ -757,16 +690,7 @@ export function IdentifyReviewForm({
 
   // ---- Initial field statuses (plugin vs saved — for default decisions) ----
   const initialFieldStatus: Record<FieldKey, FieldStatus> = useMemo(() => {
-    const seriesStatus: FieldStatus =
-      defaults.series.status === "changed" ||
-      defaults.seriesNumber.status === "changed" ||
-      defaults.seriesNumberUnit.status === "changed"
-        ? "changed"
-        : defaults.series.status === "new" ||
-            defaults.seriesNumber.status === "new" ||
-            defaults.seriesNumberUnit.status === "new"
-          ? "new"
-          : "unchanged";
+    const seriesStatus: FieldStatus = defaults.series.status;
 
     const coverStatus: FieldStatus =
       hasCoverChoice && !preferCurrentCover
@@ -816,23 +740,18 @@ export function IdentifyReviewForm({
       return "changed";
     };
 
-    const seriesSaved = currentSeries.trim();
-    const seriesNumSaved = currentSeriesNumber.trim();
-    const seriesUnitSaved = currentSeriesNumberUnit.trim();
-    const seriesChanged =
-      series.trim() !== seriesSaved ||
-      seriesNumber.trim() !== seriesNumSaved ||
-      seriesNumberUnit.trim() !== seriesUnitSaved;
-    const seriesIsNew =
-      !seriesSaved &&
-      !seriesNumSaved &&
-      !seriesUnitSaved &&
-      (series.trim() || seriesNumber.trim() || seriesNumberUnit.trim());
-    const seriesStatus: FieldStatus = seriesChanged
-      ? seriesIsNew
+    const seriesKey = (s: SeriesEntry) =>
+      `${s.name.trim()}|${s.number.trim()}|${s.unit}`;
+    const seriesSavedKeys = currentSeriesEntries.map(seriesKey).sort();
+    const seriesCurrentKeys = seriesEntries.map(seriesKey).sort();
+    const seriesMatch =
+      seriesSavedKeys.length === seriesCurrentKeys.length &&
+      seriesSavedKeys.every((v, i) => v === seriesCurrentKeys[i]);
+    const seriesStatus: FieldStatus = seriesMatch
+      ? "unchanged"
+      : currentSeriesEntries.length === 0 && seriesEntries.length > 0
         ? "new"
-        : "changed"
-      : "unchanged";
+        : "changed";
 
     const arrayStatus = (saved: string[], current: string[]): FieldStatus => {
       if (saved.length === 0 && current.length > 0) return "new";
@@ -913,9 +832,7 @@ export function IdentifyReviewForm({
     description,
     authors,
     narrators,
-    series,
-    seriesNumber,
-    seriesNumberUnit,
+    seriesEntries,
     genres,
     tags,
     publisher,
@@ -928,9 +845,7 @@ export function IdentifyReviewForm({
     name,
     currentAuthors,
     currentNarrators,
-    currentSeries,
-    currentSeriesNumber,
-    currentSeriesNumberUnit,
+    currentSeriesEntries,
     currentGenres,
     currentTags,
     currentIdentifiers,
@@ -1124,9 +1039,7 @@ export function IdentifyReviewForm({
     setDescription(defaults.description.value);
     setAuthors(defaults.authors.value);
     setNarrators(defaults.narrators.value);
-    setSeries(defaults.series.value);
-    setSeriesNumber(defaults.seriesNumber.value);
-    setSeriesNumberUnit(defaults.seriesNumberUnit.value);
+    setSeriesEntries(defaults.series.value);
     setGenres(defaults.genres.value);
     setTags(defaults.tags.value);
     setPublisher(defaults.publisher.value);
@@ -1152,9 +1065,7 @@ export function IdentifyReviewForm({
       description !== defaults.description.value ||
       !equal(authors, defaults.authors.value) ||
       !equal(narrators, defaults.narrators.value) ||
-      series !== defaults.series.value ||
-      seriesNumber !== defaults.seriesNumber.value ||
-      seriesNumberUnit !== defaults.seriesNumberUnit.value ||
+      !equal(seriesEntries, defaults.series.value) ||
       !equal(genres, defaults.genres.value) ||
       !equal(tags, defaults.tags.value) ||
       publisher !== defaults.publisher.value ||
@@ -1176,9 +1087,7 @@ export function IdentifyReviewForm({
     description,
     authors,
     narrators,
-    series,
-    seriesNumber,
-    seriesNumberUnit,
+    seriesEntries,
     genres,
     tags,
     publisher,
@@ -1208,11 +1117,13 @@ export function IdentifyReviewForm({
     }
     if (decisions.narrators) fields.narrators = narrators;
     if (decisions.series) {
-      fields.series = series;
-      fields.series_number =
-        seriesNumber !== "" ? parseFloat(seriesNumber) : undefined;
-      fields.series_number_unit =
-        seriesNumberUnit !== "" ? seriesNumberUnit : undefined;
+      fields.series = seriesEntries
+        .filter((s) => s.name.trim())
+        .map((s) => ({
+          name: s.name,
+          number: s.number ? parseFloat(s.number) : undefined,
+          series_number_unit: s.unit !== "" ? s.unit : undefined,
+        }));
     }
     if (decisions.genres) fields.genres = genres;
     if (decisions.tags) fields.tags = tags;
@@ -1460,6 +1371,14 @@ export function IdentifyReviewForm({
                     comboboxProps={{
                       getOptionKey: (p) => p.name,
                       getOptionLabel: (p) => p.name,
+                      getOptionDescription: (p) => {
+                        const c = (
+                          p as AuthorEntry & { authored_book_count?: number }
+                        ).authored_book_count;
+                        return c != null
+                          ? `${c} ${c === 1 ? "book" : "books"}`
+                          : undefined;
+                      },
                       hook: function useAuthorOptions(q) {
                         return usePeopleSearch(book.library_id, true, q);
                       },
@@ -1531,12 +1450,17 @@ export function IdentifyReviewForm({
                 {/* Series */}
                 <FieldRow
                   currentValue={
-                    currentSeries
-                      ? `${currentSeries}${
-                          currentSeriesNumber
-                            ? ` ${formatSeriesNumber(parseFloat(currentSeriesNumber), currentSeriesNumberUnit || null, primaryFileType)}`
-                            : ""
-                        }`
+                    currentSeriesEntries.length > 0
+                      ? currentSeriesEntries
+                          .map(
+                            (s) =>
+                              `${s.name}${
+                                s.number
+                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.unit || null, primaryFileType)}`
+                                  : ""
+                              }`,
+                          )
+                          .join(", ")
                       : undefined
                   }
                   decision={decisions.series}
@@ -1546,47 +1470,89 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("series", v)}
                   status={fieldStatus.series}
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <EntityCombobox<NameOption>
-                        getOptionKey={(s) => s.name}
-                        getOptionLabel={(s) => s.name}
-                        hook={function useSeriesOptions(q) {
-                          return useSeriesSearch(book.library_id, true, q);
-                        }}
-                        label="Series"
-                        onChange={(next) =>
-                          setSeries(
-                            "__create" in next ? next.__create : next.name,
-                          )
-                        }
-                        value={series ? { name: series } : null}
-                      />
-                    </div>
-                    <Input
-                      className="w-24"
-                      disabled={isDisabled("series")}
-                      onChange={(e) => setSeriesNumber(e.target.value)}
-                      placeholder="#"
-                      type="number"
-                      value={seriesNumber}
-                    />
-                    {series && !isDisabled("series") && (
-                      <Button
-                        aria-label="Clear series"
-                        className="shrink-0 cursor-pointer"
-                        onClick={() => {
-                          setSeries("");
-                          setSeriesNumber("");
-                        }}
-                        size="icon"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                  <SortableEntityList<SeriesEntry>
+                    comboboxProps={{
+                      getOptionKey: (s) => s.name,
+                      getOptionLabel: (s) => s.name,
+                      getOptionDescription: (s) => {
+                        const c = (s as SeriesEntry & { book_count?: number })
+                          .book_count;
+                        return c != null
+                          ? `${c} ${c === 1 ? "book" : "books"}`
+                          : undefined;
+                      },
+                      hook: function useSeriesOptions(q) {
+                        const result = useSeriesSearch(
+                          book.library_id,
+                          true,
+                          q,
+                        );
+                        return result as {
+                          data?: SeriesEntry[];
+                          isLoading: boolean;
+                        };
+                      },
+                      label: "Series",
+                    }}
+                    items={seriesEntries}
+                    onAppend={(next) => {
+                      const name =
+                        "__create" in next ? next.__create : next.name;
+                      if (!name.trim()) return;
+                      if (seriesEntries.some((s) => s.name === name)) return;
+                      setSeriesEntries([
+                        ...seriesEntries,
+                        { name, number: "", unit: "" },
+                      ]);
+                    }}
+                    onRemove={(index) => {
+                      setSeriesEntries(
+                        seriesEntries.filter((_, i) => i !== index),
+                      );
+                    }}
+                    onReorder={setSeriesEntries}
+                    renderExtras={(entry, idx) => (
+                      <>
+                        <Input
+                          className="w-24"
+                          onChange={(e) => {
+                            const updated = [...seriesEntries];
+                            updated[idx].number = e.target.value;
+                            setSeriesEntries(updated);
+                          }}
+                          placeholder="#"
+                          type="number"
+                          value={entry.number}
+                        />
+                        <div className="w-32">
+                          <Select
+                            onValueChange={(value) => {
+                              const updated = [...seriesEntries];
+                              updated[idx].unit =
+                                value === "unspecified"
+                                  ? ""
+                                  : (value as "volume" | "chapter");
+                              setSeriesEntries(updated);
+                            }}
+                            value={
+                              entry.unit === "" ? "unspecified" : entry.unit
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unspecified">
+                                Unspecified
+                              </SelectItem>
+                              <SelectItem value="volume">Volume</SelectItem>
+                              <SelectItem value="chapter">Chapter</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
                     )}
-                  </div>
+                  />
                 </FieldRow>
 
                 {/* Genres */}
@@ -1603,14 +1569,18 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("genres", v)}
                   status={fieldStatus.genres}
                 >
-                  <MultiSelectCombobox
-                    isLoading={isLoadingGenres}
+                  <MultiSelectCombobox<NameWithBookCount>
+                    getOptionCount={(g) => g.book_count}
+                    getOptionDescription={(g) =>
+                      `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
+                    }
+                    getOptionLabel={(g) => g.name}
+                    hook={function useGenreOptions(q) {
+                      return useGenreSearch(book.library_id, true, q);
+                    }}
                     label="Genre"
                     onChange={setGenres}
-                    onSearch={setGenreSearch}
-                    options={genresData?.genres.map((g) => g.name) ?? []}
                     placeholder="Add genres..."
-                    searchValue={genreSearch}
                     values={genres}
                   />
                 </FieldRow>
@@ -1627,14 +1597,18 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("tags", v)}
                   status={fieldStatus.tags}
                 >
-                  <MultiSelectCombobox
-                    isLoading={isLoadingTags}
+                  <MultiSelectCombobox<NameWithBookCount>
+                    getOptionCount={(t) => t.book_count}
+                    getOptionDescription={(t) =>
+                      `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
+                    }
+                    getOptionLabel={(t) => t.name}
+                    hook={function useTagOptions(q) {
+                      return useTagSearch(book.library_id, true, q);
+                    }}
                     label="Tag"
                     onChange={setTags}
-                    onSearch={setTagSearch}
-                    options={tagsData?.tags.map((t) => t.name) ?? []}
                     placeholder="Add tags..."
-                    searchValue={tagSearch}
                     values={tags}
                   />
                 </FieldRow>
@@ -1811,6 +1785,14 @@ export function IdentifyReviewForm({
                       comboboxProps={{
                         getOptionKey: (p) => p.name,
                         getOptionLabel: (p) => p.name,
+                        getOptionDescription: (p) => {
+                          const c = (
+                            p as NameOption & { narrated_file_count?: number }
+                          ).narrated_file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        },
                         hook: function useNarratorOptions(q) {
                           return usePeopleSearch(book.library_id, true, q);
                         },
@@ -1855,6 +1837,12 @@ export function IdentifyReviewForm({
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <EntityCombobox<NameOption>
+                        getOptionDescription={(p) => {
+                          const c = (p as NameWithFileCount).file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        }}
                         getOptionKey={(p) => p.name}
                         getOptionLabel={(p) => p.name}
                         hook={function usePublisherOptions(q) {
@@ -1897,6 +1885,12 @@ export function IdentifyReviewForm({
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <EntityCombobox<NameOption>
+                        getOptionDescription={(p) => {
+                          const c = (p as NameWithFileCount).file_count;
+                          return c != null
+                            ? `${c} ${c === 1 ? "file" : "files"}`
+                            : undefined;
+                        }}
                         getOptionKey={(p) => p.name}
                         getOptionLabel={(p) => p.name}
                         hook={function useImprintOptions(q) {

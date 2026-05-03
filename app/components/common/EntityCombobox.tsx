@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -12,6 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -29,6 +30,7 @@ export interface EntityComboboxProps<T extends object> {
   onChange: (next: T | { __create: string }) => void;
   getOptionLabel: (item: T) => string;
   getOptionKey?: (item: T) => string | number;
+  getOptionDescription?: (item: T) => string | undefined;
   canCreate?: boolean;
   exclude?: (item: T) => boolean;
   status?: EntityStatus;
@@ -42,6 +44,7 @@ export function EntityCombobox<T extends object>({
   onChange,
   getOptionLabel,
   getOptionKey,
+  getOptionDescription,
   canCreate = true,
   exclude,
   status,
@@ -106,8 +109,8 @@ export function EntityCombobox<T extends object>({
                     : `No ${label.toLowerCase()} available.${canCreate ? " Type to create one." : ""}`}
                 </div>
               )}
-              {!isLoading && (
-                <CommandGroup>
+              {!isLoading && filtered.length > 0 && (
+                <CommandGroup heading="In your library">
                   {filtered.map((item) => {
                     const key = getOptionKey
                       ? getOptionKey(item)
@@ -123,12 +126,21 @@ export function EntityCombobox<T extends object>({
                         }}
                         value={getOptionLabel(item)}
                       >
-                        <Check className="mr-2 h-4 w-4 shrink-0 opacity-0" />
                         <span className="truncate">{getOptionLabel(item)}</span>
+                        {getOptionDescription?.(item) && (
+                          <span className="ml-auto pl-2 text-xs text-muted-foreground shrink-0">
+                            {getOptionDescription(item)}
+                          </span>
+                        )}
                       </CommandItem>
                     );
                   })}
-                  {showCreate && (
+                </CommandGroup>
+              )}
+              {!isLoading && showCreate && (
+                <>
+                  {filtered.length > 0 && <CommandSeparator />}
+                  <CommandGroup>
                     <CommandItem
                       className="cursor-pointer"
                       onSelect={() => {
@@ -139,10 +151,12 @@ export function EntityCombobox<T extends object>({
                       value={`create-${trimmed}`}
                     >
                       <Plus className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">Create "{trimmed}"</span>
+                      <span className="truncate">
+                        Create new {label.toLowerCase()} &quot;{trimmed}&quot;
+                      </span>
                     </CommandItem>
-                  )}
-                </CommandGroup>
+                  </CommandGroup>
+                </>
               )}
             </CommandList>
           </Command>
