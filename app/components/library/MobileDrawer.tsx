@@ -35,7 +35,7 @@ const NavItem = ({ to, icon, label, isActive, onClick }: NavItemProps) => (
     className={cn(
       "flex items-center gap-4 px-4 py-3.5 text-base font-medium transition-colors active:bg-muted/50",
       isActive
-        ? "bg-primary/10 text-primary dark:bg-violet-500/20 dark:text-violet-300"
+        ? "bg-primary/10 text-primary"
         : "text-foreground hover:bg-muted",
     )}
     onClick={onClick}
@@ -154,7 +154,7 @@ const MobileDrawer = () => {
       <aside
         aria-label="Mobile navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 bg-background dark:bg-neutral-900 shadow-2xl transition-transform duration-300 ease-out md:hidden flex flex-col",
+          "fixed inset-y-0 left-0 z-50 w-72 bg-background shadow-2xl transition-transform duration-300 ease-out md:hidden flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -225,7 +225,7 @@ const MobileDrawer = () => {
                           className={cn(
                             "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
                             isActive
-                              ? "bg-primary/10 text-primary dark:bg-violet-500/20 dark:text-violet-300"
+                              ? "bg-primary/10 text-primary"
                               : "hover:bg-muted",
                           )}
                           key={library.id}
@@ -254,7 +254,7 @@ const MobileDrawer = () => {
                           className={cn(
                             "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
                             isActive
-                              ? "bg-primary/10 text-primary dark:bg-violet-500/20 dark:text-violet-300"
+                              ? "bg-primary/10 text-primary"
                               : "hover:bg-muted",
                           )}
                           key={list.id}
@@ -266,7 +266,7 @@ const MobileDrawer = () => {
                             className={cn(
                               "shrink-0 tabular-nums text-xs",
                               isActive
-                                ? "text-primary/70 dark:text-violet-300/70"
+                                ? "text-primary/70"
                                 : "text-muted-foreground",
                             )}
                           >
