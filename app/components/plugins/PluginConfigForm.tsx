@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -207,20 +214,22 @@ export const PluginConfigForm = ({
             </span>
           </div>
         ) : field.type === "select" ? (
-          <select
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          <Select
             disabled={!canWrite}
-            id={fieldId}
-            onChange={(e) => handleChange(e.target.value)}
+            onValueChange={handleChange}
             value={value}
           >
-            <option value="">Select...</option>
-            {field.options?.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={fieldId}>
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+              {field.options?.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ) : field.type === "textarea" ? (
           <Textarea
             disabled={!canWrite}
