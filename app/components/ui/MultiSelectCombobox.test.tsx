@@ -98,6 +98,114 @@ describe("MultiSelectCombobox", () => {
     expect(screen.getByText("Horror")).toBeInTheDocument();
   });
 
+  it("resolves counts for selected values not in the initial item list", () => {
+    interface Item {
+      name: string;
+      count: number;
+    }
+
+    const libraryItems: Item[] = [
+      { name: "Adventure", count: 10 },
+      { name: "Fiction", count: 54 },
+      { name: "Horror", count: 8 },
+    ];
+
+    const beyondLimitItem: Item = { name: "Young Adult", count: 23 };
+
+    function useItemSearch(query: string): {
+      data: Item[];
+      isLoading: boolean;
+    } {
+      if (!query) {
+        return { data: libraryItems, isLoading: false };
+      }
+      const all = [...libraryItems, beyondLimitItem];
+      const matches = all.filter((i) =>
+        i.name.toLowerCase().includes(query.toLowerCase()),
+      );
+      return { data: matches, isLoading: false };
+    }
+
+    render(
+      <MultiSelectCombobox<Item>
+        getOptionCount={(i) => i.count}
+        getOptionLabel={(i) => i.name}
+        hook={useItemSearch}
+        label="Genre"
+        onChange={vi.fn()}
+        values={["Fiction", "Young Adult"]}
+      />,
+    );
+
+    const chips = screen.getAllByTestId("ms-chip");
+    expect(chips[0]).toHaveTextContent("Fiction");
+    expect(chips[0]).toHaveTextContent("(54)");
+    expect(chips[1]).toHaveTextContent("Young Adult");
+    expect(chips[1]).toHaveTextContent("(23)");
+  });
+
+  it("resolves counts for multiple missing values sequentially", async () => {
+    interface Item {
+      name: string;
+      count: number;
+    }
+
+    const libraryItems: Item[] = [
+      { name: "Adventure", count: 10 },
+      { name: "Fiction", count: 54 },
+    ];
+
+    const beyondLimitItems: Item[] = [
+      { name: "Science Fiction", count: 31 },
+      { name: "Young Adult", count: 23 },
+    ];
+
+    function useItemSearch(query: string): {
+      data: Item[];
+      isLoading: boolean;
+    } {
+      if (!query) {
+        return { data: libraryItems, isLoading: false };
+      }
+      const all = [...libraryItems, ...beyondLimitItems];
+      const matches = all.filter((i) =>
+        i.name.toLowerCase().includes(query.toLowerCase()),
+      );
+      return { data: matches, isLoading: false };
+    }
+
+    const { rerender } = render(
+      <MultiSelectCombobox<Item>
+        getOptionCount={(i) => i.count}
+        getOptionLabel={(i) => i.name}
+        hook={useItemSearch}
+        label="Genre"
+        onChange={vi.fn()}
+        values={["Fiction", "Science Fiction", "Young Adult"]}
+      />,
+    );
+
+    // Trigger re-render to allow useEffect advancement
+    rerender(
+      <MultiSelectCombobox<Item>
+        getOptionCount={(i) => i.count}
+        getOptionLabel={(i) => i.name}
+        hook={useItemSearch}
+        label="Genre"
+        onChange={vi.fn()}
+        values={["Fiction", "Science Fiction", "Young Adult"]}
+      />,
+    );
+
+    const chips = screen.getAllByTestId("ms-chip");
+    expect(chips[0]).toHaveTextContent("Fiction");
+    expect(chips[0]).toHaveTextContent("(54)");
+    expect(chips[1]).toHaveTextContent("Science Fiction");
+    expect(chips[1]).toHaveTextContent("(31)");
+    expect(chips[2]).toHaveTextContent("Young Adult");
+    expect(chips[2]).toHaveTextContent("(23)");
+  });
+
   it("shows Create option for unmatched search text", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 

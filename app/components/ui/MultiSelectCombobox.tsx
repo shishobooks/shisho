@@ -1,5 +1,5 @@
 import { ChevronsUpDown, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,12 +45,40 @@ export function MultiSelectCombobox<T>({
   const { data: items = [], isLoading } = hook(debouncedSearch);
 
   const chipCounts = useRef(new Map<string, number>());
+  const chipCountsSearched = useRef(new Set<string>());
+  const [, setResolveCount] = useState(0);
   if (getOptionCount) {
     for (const item of items) {
       const c = getOptionCount(item);
       if (c != null) chipCounts.current.set(getOptionLabel(item), c);
     }
   }
+
+  const nextMissingValue = getOptionCount
+    ? values.find(
+        (v) => !chipCounts.current.has(v) && !chipCountsSearched.current.has(v),
+      )
+    : undefined;
+
+  const { data: missingItems = [], isLoading: isLoadingMissing } = hook(
+    nextMissingValue ?? "",
+  );
+
+  if (getOptionCount && nextMissingValue && !isLoadingMissing) {
+    chipCountsSearched.current.add(nextMissingValue);
+    for (const item of missingItems) {
+      const c = getOptionCount(item);
+      if (c != null) chipCounts.current.set(getOptionLabel(item), c);
+    }
+  }
+
+  useEffect(() => {
+    if (!nextMissingValue || isLoadingMissing) return;
+    const hasMore = values.some(
+      (v) => !chipCounts.current.has(v) && !chipCountsSearched.current.has(v),
+    );
+    if (hasMore) setResolveCount((c) => c + 1);
+  }, [nextMissingValue, isLoadingMissing, values]);
 
   const filtered = items.filter(
     (opt) =>
