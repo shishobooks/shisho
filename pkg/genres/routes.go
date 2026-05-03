@@ -2,6 +2,7 @@ package genres
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -11,10 +12,12 @@ import (
 // RegisterRoutesWithGroup registers genre routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	genreService := NewService(db)
+	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)
 
 	h := &handler{
 		genreService:  genreService,
+		aliasService:  aliasService,
 		searchService: searchService,
 	}
 

@@ -7,12 +7,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
 	imprintService *Service
+	aliasService   *aliases.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -29,23 +31,24 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(imprint.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	// Get file count
 	fileCount, err := h.imprintService.GetFileCount(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, id)
+
 	response := struct {
 		*models.Imprint
-		FileCount int `json:"file_count"`
-	}{imprint, fileCount}
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
+	}{imprint, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -65,7 +68,6 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
 	if user, ok := c.Get("user").(*models.User); ok {
 		libraryIDs := user.GetAccessibleLibraryIDs()
 		if libraryIDs != nil {
@@ -78,15 +80,16 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with file counts
 	type ImprintWithCount struct {
 		*models.Imprint
-		FileCount int `json:"file_count"`
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
 	}
 	result := make([]ImprintWithCount, len(imprints))
 	for i, imp := range imprints {
 		fileCount, _ := h.imprintService.GetFileCount(ctx, imp.ID)
-		result[i] = ImprintWithCount{imp, fileCount}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, imp.ID)
+		result[i] = ImprintWithCount{imp, fileCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -109,7 +112,6 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the imprint
 	imprint, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
 		ID: &id,
 	})
@@ -117,68 +119,64 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(imprint.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	if params.Name == nil || *params.Name == imprint.Name {
-		// No change, just return current
-		fileCount, _ := h.imprintService.GetFileCount(ctx, id)
-		response := struct {
-			*models.Imprint
-			FileCount int `json:"file_count"`
-		}{imprint, fileCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
-	}
+	if params.Name != nil && *params.Name != imprint.Name {
+		newName := strings.TrimSpace(*params.Name)
+		if newName == "" {
+			return errcodes.ValidationError("Imprint name cannot be empty")
+		}
 
-	newName := strings.TrimSpace(*params.Name)
-	if newName == "" {
-		return errcodes.ValidationError("Imprint name cannot be empty")
-	}
+		existing, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
+			Name:      &newName,
+			LibraryID: &imprint.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			err = h.imprintService.MergeImprints(ctx, existing.ID, id)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
-	// Check if an imprint with the new name already exists (case-insensitive)
-	existing, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
-		Name:      &newName,
-		LibraryID: &imprint.LibraryID,
-	})
-	if err == nil && existing.ID != id {
-		// Merge into existing imprint
-		err = h.imprintService.MergeImprints(ctx, existing.ID, id)
+			fileCount, _ := h.imprintService.GetFileCount(ctx, existing.ID)
+			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, existing.ID)
+			response := struct {
+				*models.Imprint
+				FileCount int      `json:"file_count"`
+				Aliases   []string `json:"aliases"`
+			}{existing, fileCount, aliasList}
+			return errors.WithStack(c.JSON(http.StatusOK, response))
+		}
+
+		imprint.Name = newName
+		opts := UpdateImprintOptions{Columns: []string{"name"}}
+		err = h.imprintService.UpdateImprint(ctx, imprint, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-
-		// Return the target imprint
-		fileCount, _ := h.imprintService.GetFileCount(ctx, existing.ID)
-		response := struct {
-			*models.Imprint
-			FileCount int `json:"file_count"`
-		}{existing, fileCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
 	}
 
-	// Simple rename
-	imprint.Name = newName
-	opts := UpdateImprintOptions{Columns: []string{"name"}}
-	err = h.imprintService.UpdateImprint(ctx, imprint, opts)
-	if err != nil {
-		return errors.WithStack(err)
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.ImprintConfig, id, imprint.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
-	// Reload
 	imprint, err = h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	fileCount, _ := h.imprintService.GetFileCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, id)
 	response := struct {
 		*models.Imprint
-		FileCount int `json:"file_count"`
-	}{imprint, fileCount}
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
+	}{imprint, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -190,7 +188,6 @@ func (h *handler) files(c echo.Context) error {
 		return errcodes.NotFound("Imprint")
 	}
 
-	// Fetch the imprint to check library access
 	imprint, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
 		ID: &id,
 	})
@@ -198,7 +195,6 @@ func (h *handler) files(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(imprint.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
@@ -225,7 +221,6 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target imprint to check library access
 	imprint, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
 		ID: &id,
 	})
@@ -233,14 +228,12 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(imprint.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	// Merge source imprint into target (this) imprint
 	err = h.imprintService.MergeImprints(ctx, id, params.SourceID)
 	if err != nil {
 		return errors.WithStack(err)
@@ -256,7 +249,6 @@ func (h *handler) deleteImprint(c echo.Context) error {
 		return errcodes.NotFound("Imprint")
 	}
 
-	// Fetch the imprint to check library access
 	imprint, err := h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{
 		ID: &id,
 	})
@@ -264,7 +256,6 @@ func (h *handler) deleteImprint(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(imprint.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")

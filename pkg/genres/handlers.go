@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -15,6 +16,7 @@ import (
 
 type handler struct {
 	genreService  *Service
+	aliasService  *aliases.Service
 	searchService *search.Service
 }
 
@@ -45,10 +47,13 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
+
 	response := struct {
 		*models.Genre
-		BookCount int `json:"book_count"`
-	}{genre, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{genre, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -81,15 +86,17 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts
+	// Augment with book counts and aliases
 	type GenreWithCount struct {
 		*models.Genre
-		BookCount int `json:"book_count"`
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
 	}
 	result := make([]GenreWithCount, len(genres))
 	for i, g := range genres {
 		bookCount, _ := h.genreService.GetBookCount(ctx, g.ID)
-		result[i] = GenreWithCount{g, bookCount}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, g.ID)
+		result[i] = GenreWithCount{g, bookCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -127,72 +134,79 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	if params.Name == nil || *params.Name == genre.Name {
-		// No change, just return current
-		bookCount, _ := h.genreService.GetBookCount(ctx, id)
-		response := struct {
-			*models.Genre
-			BookCount int `json:"book_count"`
-		}{genre, bookCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
-	}
+	nameChanged := false
+	if params.Name != nil && *params.Name != genre.Name {
+		newName := strings.TrimSpace(*params.Name)
+		if newName == "" {
+			return errcodes.ValidationError("Genre name cannot be empty")
+		}
 
-	newName := strings.TrimSpace(*params.Name)
-	if newName == "" {
-		return errcodes.ValidationError("Genre name cannot be empty")
-	}
+		// Check if a genre with the new name already exists (case-insensitive)
+		existing, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
+			Name:      &newName,
+			LibraryID: &genre.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			// Merge into existing genre
+			err = h.genreService.MergeGenres(ctx, existing.ID, id)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
-	// Check if a genre with the new name already exists (case-insensitive)
-	existing, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
-		Name:      &newName,
-		LibraryID: &genre.LibraryID,
-	})
-	if err == nil && existing.ID != id {
-		// Merge into existing genre
-		err = h.genreService.MergeGenres(ctx, existing.ID, id)
+			// Remove merged genre from FTS index
+			log := logger.FromContext(ctx)
+			if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
+				log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
+			}
+
+			// Return the target genre
+			bookCount, _ := h.genreService.GetBookCount(ctx, existing.ID)
+			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, existing.ID)
+			response := struct {
+				*models.Genre
+				BookCount int      `json:"book_count"`
+				Aliases   []string `json:"aliases"`
+			}{existing, bookCount, aliasList}
+			return errors.WithStack(c.JSON(http.StatusOK, response))
+		}
+
+		// Simple rename
+		genre.Name = newName
+		opts := UpdateGenreOptions{Columns: []string{"name"}}
+		err = h.genreService.UpdateGenre(ctx, genre, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		nameChanged = true
+	}
 
-		// Remove merged genre from FTS index
-		log := logger.FromContext(ctx)
-		if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
-			log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
+	// Sync aliases if provided
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.GenreConfig, id, genre.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
 		}
-
-		// Return the target genre
-		bookCount, _ := h.genreService.GetBookCount(ctx, existing.ID)
-		response := struct {
-			*models.Genre
-			BookCount int `json:"book_count"`
-		}{existing, bookCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
 	}
 
-	// Simple rename
-	genre.Name = newName
-	opts := UpdateGenreOptions{Columns: []string{"name"}}
-	err = h.genreService.UpdateGenre(ctx, genre, opts)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Reload and update FTS index
+	// Reload
 	genre, err = h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-	if err := h.searchService.IndexGenre(ctx, genre); err != nil {
-		log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+	if nameChanged {
+		log := logger.FromContext(ctx)
+		if err := h.searchService.IndexGenre(ctx, genre); err != nil {
+			log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+		}
 	}
 
 	bookCount, _ := h.genreService.GetBookCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
 	response := struct {
 		*models.Genre
-		BookCount int `json:"book_count"`
-	}{genre, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{genre, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
