@@ -27,6 +27,7 @@ interface MultiSelectComboboxProps<T> {
   getOptionDescription?: (item: T) => string | undefined;
   getOptionCount?: (item: T) => number | undefined;
   placeholder?: string;
+  useSelectedItemCounts?: (values: string[]) => Map<string, number>;
 }
 
 export function MultiSelectCombobox<T>({
@@ -38,6 +39,7 @@ export function MultiSelectCombobox<T>({
   getOptionDescription,
   getOptionCount,
   placeholder,
+  useSelectedItemCounts,
 }: MultiSelectComboboxProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -49,6 +51,15 @@ export function MultiSelectCombobox<T>({
     for (const item of items) {
       const c = getOptionCount(item);
       if (c != null) chipCounts.current.set(getOptionLabel(item), c);
+    }
+  }
+
+  const selectedCounts = useSelectedItemCounts?.(values);
+  if (selectedCounts) {
+    for (const [name, count] of selectedCounts) {
+      if (!chipCounts.current.has(name)) {
+        chipCounts.current.set(name, count);
+      }
     }
   }
 

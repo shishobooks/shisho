@@ -43,11 +43,13 @@ import {
 } from "@/components/ui/tooltip";
 import { getLanguageName } from "@/constants/languages";
 import {
+  useGenreItemCounts,
   useGenreSearch,
   useImprintSearch,
   usePeopleSearch,
   usePublisherSearch,
   useSeriesSearch,
+  useTagItemCounts,
   useTagSearch,
   type NameOption,
   type NameWithBookCount,
@@ -1568,6 +1570,9 @@ export function IdentifyReviewForm({
                     label="Genre"
                     onChange={setGenres}
                     placeholder="Add genres..."
+                    useSelectedItemCounts={function useGenreCounts(v) {
+                      return useGenreItemCounts(book.library_id, v);
+                    }}
                     values={genres}
                   />
                 </FieldRow>
@@ -1596,6 +1601,9 @@ export function IdentifyReviewForm({
                     label="Tag"
                     onChange={setTags}
                     placeholder="Add tags..."
+                    useSelectedItemCounts={function useTagCounts(v) {
+                      return useTagItemCounts(book.library_id, v);
+                    }}
                     values={tags}
                   />
                 </FieldRow>

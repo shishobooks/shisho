@@ -4,7 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MultiSelectCombobox } from "./MultiSelectCombobox";
 
+interface NameWithCount {
+  name: string;
+  book_count: number;
+}
+
 function makeHook(items: string[], isLoading = false) {
+  return () => ({ data: items, isLoading });
+}
+
+function makeCountHook(items: NameWithCount[], isLoading = false) {
   return () => ({ data: items, isLoading });
 }
 
@@ -114,5 +123,37 @@ describe("MultiSelectCombobox", () => {
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText(/Search genre/i), "Thriller");
     expect(screen.getByText(/Create new genre "Thriller"/)).toBeInTheDocument();
+  });
+
+  it("displays counts for selected values not in the initial hook results", () => {
+    const hookItems: NameWithCount[] = [
+      { name: "Adventure", book_count: 10 },
+      { name: "Fantasy", book_count: 5 },
+    ];
+
+    render(
+      <MultiSelectCombobox<NameWithCount>
+        getOptionCount={(g) => g.book_count}
+        getOptionLabel={(g) => g.name}
+        hook={makeCountHook(hookItems)}
+        label="Genre"
+        onChange={vi.fn()}
+        useSelectedItemCounts={() =>
+          new Map([
+            ["Young Adult", 22],
+            ["Science Fiction", 15],
+          ])
+        }
+        values={["Fantasy", "Young Adult", "Science Fiction"]}
+      />,
+    );
+
+    const chips = screen.getAllByTestId("ms-chip");
+    expect(chips[0]).toHaveTextContent("Fantasy");
+    expect(chips[0]).toHaveTextContent("(5)");
+    expect(chips[1]).toHaveTextContent("Young Adult");
+    expect(chips[1]).toHaveTextContent("(22)");
+    expect(chips[2]).toHaveTextContent("Science Fiction");
+    expect(chips[2]).toHaveTextContent("(15)");
   });
 });

@@ -1,11 +1,23 @@
+import { useQueries } from "@tanstack/react-query";
+import { useMemo } from "react";
+
+import { API } from "@/libraries/api";
 import type { AuthorInput } from "@/types";
 
-import { useGenresList } from "./genres";
+import {
+  QueryKey as GenresQueryKey,
+  useGenresList,
+  type ListGenresData,
+} from "./genres";
 import { useImprintsList } from "./imprints";
 import { usePeopleList, type PersonWithCounts } from "./people";
 import { usePublishersList } from "./publishers";
 import { useSeriesList } from "./series";
-import { useTagsList } from "./tags";
+import {
+  QueryKey as TagsQueryKey,
+  useTagsList,
+  type ListTagsData,
+} from "./tags";
 
 interface NameOption {
   name: string;
@@ -155,4 +167,74 @@ export function useTagSearch(
     book_count: t.book_count,
   }));
   return { data: adapted, isLoading };
+}
+
+export function useGenreItemCounts(
+  libraryId: number | undefined,
+  values: string[],
+): Map<string, number> {
+  const results = useQueries({
+    queries: values.map((name) => ({
+      queryKey: [
+        GenresQueryKey.ListGenres,
+        { library_id: libraryId, search: name, limit: 1 },
+      ],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<ListGenresData>(
+          "GET",
+          "/genres",
+          null,
+          { library_id: libraryId, search: name, limit: 1 },
+          signal,
+        ),
+      enabled: !!libraryId,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  return useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < results.length; i++) {
+      const genre = results[i].data?.genres.find(
+        (g) => g.name.toLowerCase() === values[i].toLowerCase(),
+      );
+      if (genre) map.set(values[i], genre.book_count);
+    }
+    return map;
+  }, [results, values]);
+}
+
+export function useTagItemCounts(
+  libraryId: number | undefined,
+  values: string[],
+): Map<string, number> {
+  const results = useQueries({
+    queries: values.map((name) => ({
+      queryKey: [
+        TagsQueryKey.ListTags,
+        { library_id: libraryId, search: name, limit: 1 },
+      ],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<ListTagsData>(
+          "GET",
+          "/tags",
+          null,
+          { library_id: libraryId, search: name, limit: 1 },
+          signal,
+        ),
+      enabled: !!libraryId,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  return useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < results.length; i++) {
+      const tag = results[i].data?.tags.find(
+        (t) => t.name.toLowerCase() === values[i].toLowerCase(),
+      );
+      if (tag) map.set(values[i], tag.book_count);
+    }
+    return map;
+  }, [results, values]);
 }

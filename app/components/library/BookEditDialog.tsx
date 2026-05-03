@@ -30,8 +30,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdateBook } from "@/hooks/queries/books";
 import {
   useAuthorSearch,
+  useGenreItemCounts,
   useGenreSearch,
   useSeriesSearch,
+  useTagItemCounts,
   useTagSearch,
   type NameWithBookCount,
 } from "@/hooks/queries/entity-search";
@@ -623,6 +625,9 @@ export function BookEditDialog({
               label="Genre"
               onChange={setGenres}
               placeholder="Add genres..."
+              useSelectedItemCounts={function useGenreCounts(v) {
+                return useGenreItemCounts(book.library_id, v);
+              }}
               values={genres}
             />
           </div>
@@ -642,6 +647,9 @@ export function BookEditDialog({
               label="Tag"
               onChange={setTags}
               placeholder="Add tags..."
+              useSelectedItemCounts={function useTagCounts(v) {
+                return useTagItemCounts(book.library_id, v);
+              }}
               values={tags}
             />
           </div>

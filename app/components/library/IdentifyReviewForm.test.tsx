@@ -70,6 +70,8 @@ vi.mock("@/hooks/queries/entity-search", () => ({
   useImprintSearch: () => ({ data: [], isLoading: false }),
   useGenreSearch: () => ({ data: [], isLoading: false }),
   useTagSearch: () => ({ data: [], isLoading: false }),
+  useGenreItemCounts: () => new Map(),
+  useTagItemCounts: () => new Map(),
 }));
 
 vi.mock("@/libraries/api", async () => {
