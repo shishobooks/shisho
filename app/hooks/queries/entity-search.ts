@@ -177,14 +177,14 @@ export function useGenreItemCounts(
     queries: values.map((name) => ({
       queryKey: [
         GenresQueryKey.ListGenres,
-        { library_id: libraryId, search: name, limit: 1 },
+        { library_id: libraryId, search: name, limit: 5 },
       ],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         API.request<ListGenresData>(
           "GET",
           "/genres",
           null,
-          { library_id: libraryId, search: name, limit: 1 },
+          { library_id: libraryId, search: name, limit: 5 },
           signal,
         ),
       enabled: !!libraryId,
@@ -192,6 +192,7 @@ export function useGenreItemCounts(
     })),
   });
 
+  const dataKey = results.map((r) => r.dataUpdatedAt).join(",");
   return useMemo(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < results.length; i++) {
@@ -201,7 +202,8 @@ export function useGenreItemCounts(
       if (genre) map.set(values[i], genre.book_count);
     }
     return map;
-  }, [results, values]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey, values]);
 }
 
 export function useTagItemCounts(
@@ -212,14 +214,14 @@ export function useTagItemCounts(
     queries: values.map((name) => ({
       queryKey: [
         TagsQueryKey.ListTags,
-        { library_id: libraryId, search: name, limit: 1 },
+        { library_id: libraryId, search: name, limit: 5 },
       ],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         API.request<ListTagsData>(
           "GET",
           "/tags",
           null,
-          { library_id: libraryId, search: name, limit: 1 },
+          { library_id: libraryId, search: name, limit: 5 },
           signal,
         ),
       enabled: !!libraryId,
@@ -227,6 +229,7 @@ export function useTagItemCounts(
     })),
   });
 
+  const dataKey = results.map((r) => r.dataUpdatedAt).join(",");
   return useMemo(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < results.length; i++) {
@@ -236,5 +239,6 @@ export function useTagItemCounts(
       if (tag) map.set(values[i], tag.book_count);
     }
     return map;
-  }, [results, values]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey, values]);
 }

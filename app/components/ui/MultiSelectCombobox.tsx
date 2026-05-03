@@ -54,12 +54,13 @@ export function MultiSelectCombobox<T>({
     }
   }
 
-  const selectedCounts = useSelectedItemCounts?.(values);
+  const missingValues = values.filter((v) => !chipCounts.current.has(v));
+  const selectedCounts = useSelectedItemCounts
+    ? useSelectedItemCounts(missingValues)
+    : undefined;
   if (selectedCounts) {
     for (const [name, count] of selectedCounts) {
-      if (!chipCounts.current.has(name)) {
-        chipCounts.current.set(name, count);
-      }
+      chipCounts.current.set(name, count);
     }
   }
 
