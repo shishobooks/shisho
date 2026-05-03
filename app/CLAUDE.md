@@ -849,7 +849,7 @@ All metadata detail pages (Series, Person, Genre, Tag) follow a consistent struc
 
 **Header Section:**
 ```tsx
-<div className="mb-8">
+<div className="mb-6 md:mb-8">
   <div className="flex items-start justify-between gap-4 mb-2">
     <h1 className="text-2xl font-semibold min-w-0 break-words">{name}</h1>
     <div className="flex gap-2 shrink-0">
