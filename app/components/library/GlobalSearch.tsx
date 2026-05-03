@@ -472,7 +472,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       {isOpen && debouncedQuery && (
         <div
           className={cn(
-            "bg-background border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto",
+            "bg-background border border-border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto",
             fullWidth
               ? "fixed left-4 right-4 top-28"
               : "absolute top-full mt-2 left-0 w-80",

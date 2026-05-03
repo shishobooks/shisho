@@ -152,7 +152,7 @@ export function MergeBooksDialog({
 
         {bookQueryError && (
           <DialogBody>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-destructive">
@@ -256,7 +256,7 @@ export function MergeBooksDialog({
             <>
               <DialogBody className="space-y-4">
                 {/* Warning banner */}
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div className="text-sm">
                     <p className="font-medium text-destructive">
@@ -273,7 +273,7 @@ export function MergeBooksDialog({
 
                 {/* Summary */}
                 <div className="space-y-3">
-                  <div className="p-3 rounded-lg border bg-card">
+                  <div className="p-3 rounded-md border bg-card">
                     <div className="text-sm text-muted-foreground mb-1">
                       Target book
                     </div>

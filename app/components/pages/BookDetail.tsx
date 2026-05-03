@@ -1566,7 +1566,7 @@ const BookDetail = () => {
 
       {/* File selection action bar */}
       {selectedFileIds.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-3 z-50">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-md shadow-lg p-3 flex items-center gap-3 z-50">
           <span className="text-sm text-muted-foreground">
             {selectedFileIds.size} file
             {selectedFileIds.size !== 1 ? "s" : ""} selected

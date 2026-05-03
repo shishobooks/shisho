@@ -268,7 +268,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   );
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3 max-w-[calc(100vw-2rem)]">
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-md shadow-lg px-3 py-2 flex items-center gap-3 max-w-[calc(100vw-2rem)]">
       <span className="text-sm font-medium whitespace-nowrap tabular-nums">
         {bookLabel}
       </span>

@@ -89,7 +89,7 @@ export function MergeIntoDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-destructive">

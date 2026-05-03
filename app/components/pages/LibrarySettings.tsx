@@ -422,9 +422,9 @@ const LibrarySettings = () => {
 
       {canDeleteLibrary && libraryQuery.data && (
         <>
-          <section className="max-w-2xl mt-8 border border-destructive/40 rounded-md p-4 md:p-6">
-            <h2 className="text-base md:text-lg font-semibold text-destructive mb-1">
-              Danger Zone
+          <section className="max-w-2xl mt-8 space-y-3 rounded-md border border-destructive/40 p-4 md:p-6">
+            <h2 className="text-lg font-semibold text-destructive">
+              Danger zone
             </h2>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-2">
               <div className="min-w-0">

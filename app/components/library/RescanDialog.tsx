@@ -82,7 +82,7 @@ export function RescanDialog({
           >
             {modes.map((mode) => (
               <Label
-                className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[[data-state=checked]]:border-primary"
+                className="flex items-start gap-3 rounded-md border p-3 cursor-pointer has-[[data-state=checked]]:border-primary"
                 htmlFor={`rescan-${entityType}-${mode.value}`}
                 key={mode.value}
               >

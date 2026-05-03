@@ -66,7 +66,7 @@ const ListsIndex = () => {
 
     return (
       <Link
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors"
         key={list.id}
         to={`/lists/${list.id}`}
       >
@@ -93,7 +93,7 @@ const ListsIndex = () => {
   const renderTemplateCard = (template: ListTemplate) => {
     return (
       <button
-        className="flex flex-col items-start gap-2 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex flex-col items-start gap-2 p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={createFromTemplateMutation.isPending}
         key={template.name}
         onClick={() => handleCreateFromTemplate(template)}
