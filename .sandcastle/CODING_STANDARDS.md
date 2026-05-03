@@ -57,6 +57,7 @@
 ### Backend Structure
 
 Each domain package (`pkg/{domain}/`) contains:
+
 - `handlers.go` — HTTP request/response, binds params, calls service
 - `routes.go` — Echo route registration and middleware wiring
 - `service.go` — Business logic and database operations
