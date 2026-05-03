@@ -17,7 +17,7 @@ export interface FieldDecisionInput {
  *   files clobbering shared book metadata — the "second-identify" case).
  * - Unchanged: OFF.
  *
- * See spec `docs/superpowers/specs/2026-05-01-identify-flow-design.md`. */
+ */
 export function defaultDecision({
   scope,
   status,
