@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -22,6 +23,7 @@ import (
 
 type handler struct {
 	seriesService  *Service
+	aliasService   *aliases.Service
 	bookService    *books.Service
 	libraryService *libraries.Service
 	searchService  *search.Service
@@ -54,10 +56,13 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
+
 	response := struct {
 		*models.Series
-		BookCount int `json:"book_count"`
-	}{series, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{series, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -90,15 +95,17 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts
+	// Augment with book counts and aliases
 	type SeriesWithCount struct {
 		*models.Series
-		BookCount int `json:"book_count"`
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
 	}
 	result := make([]SeriesWithCount, len(seriesList))
 	for i, s := range seriesList {
 		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
-		result[i] = SeriesWithCount{s, count}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, s.ID)
+		result[i] = SeriesWithCount{s, count, aliasList}
 	}
 
 	response := map[string]interface{}{
@@ -175,6 +182,13 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Sync aliases if provided
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.SeriesConfig, id, series.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	// Reload the model
 	series, err = h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
 		ID: &id,
@@ -191,11 +205,13 @@ func (h *handler) update(c echo.Context) error {
 
 	// Get book count
 	bookCount, _ := h.seriesService.GetSeriesBookCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
 
 	response := struct {
 		*models.Series
-		BookCount int `json:"book_count"`
-	}{series, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{series, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

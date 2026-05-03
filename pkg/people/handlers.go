@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -32,6 +33,7 @@ type FileOrganizer interface {
 
 type handler struct {
 	personService *Service
+	aliasService  *aliases.Service
 	searchService *search.Service
 	fileOrganizer FileOrganizer // optional, can be nil if not configured
 }
@@ -68,11 +70,14 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
+
 	response := struct {
 		*models.Person
-		AuthoredBookCount int `json:"authored_book_count"`
-		NarratedFileCount int `json:"narrated_file_count"`
-	}{person, authoredCount, narratedCount}
+		AuthoredBookCount int      `json:"authored_book_count"`
+		NarratedFileCount int      `json:"narrated_file_count"`
+		Aliases           []string `json:"aliases"`
+	}{person, authoredCount, narratedCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -105,17 +110,19 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with counts
+	// Augment with counts and aliases
 	type PersonWithCounts struct {
 		*models.Person
-		AuthoredBookCount int `json:"authored_book_count"`
-		NarratedFileCount int `json:"narrated_file_count"`
+		AuthoredBookCount int      `json:"authored_book_count"`
+		NarratedFileCount int      `json:"narrated_file_count"`
+		Aliases           []string `json:"aliases"`
 	}
 	result := make([]PersonWithCounts, len(people))
 	for i, p := range people {
 		authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, p.ID)
 		narratedCount, _ := h.personService.GetNarratedFileCount(ctx, p.ID)
-		result[i] = PersonWithCounts{p, authoredCount, narratedCount}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, p.ID)
+		result[i] = PersonWithCounts{p, authoredCount, narratedCount, aliasList}
 	}
 
 	response := map[string]interface{}{
@@ -188,6 +195,13 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Sync aliases if provided
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.PersonConfig, id, person.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	// Reload the model
 	person, err = h.personService.RetrievePerson(ctx, RetrievePersonOptions{
 		ID: &id,
@@ -256,12 +270,14 @@ func (h *handler) update(c echo.Context) error {
 	// Get counts
 	authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, id)
 	narratedCount, _ := h.personService.GetNarratedFileCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
 
 	response := struct {
 		*models.Person
-		AuthoredBookCount int `json:"authored_book_count"`
-		NarratedFileCount int `json:"narrated_file_count"`
-	}{person, authoredCount, narratedCount}
+		AuthoredBookCount int      `json:"authored_book_count"`
+		NarratedFileCount int      `json:"narrated_file_count"`
+		Aliases           []string `json:"aliases"`
+	}{person, authoredCount, narratedCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

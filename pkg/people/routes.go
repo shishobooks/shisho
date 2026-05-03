@@ -2,6 +2,7 @@ package people
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -12,10 +13,12 @@ import (
 // fileOrganizer is optional and can be nil if file organization on person name change is not needed.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, fileOrganizer FileOrganizer) {
 	personService := NewService(db)
+	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)
 
 	h := &handler{
 		personService: personService,
+		aliasService:  aliasService,
 		searchService: searchService,
 		fileOrganizer: fileOrganizer,
 	}

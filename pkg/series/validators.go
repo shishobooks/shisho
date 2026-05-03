@@ -8,9 +8,10 @@ type ListSeriesQuery struct {
 }
 
 type UpdateSeriesPayload struct {
-	Name        *string `json:"name,omitempty" validate:"omitempty,max=300"`
-	SortName    *string `json:"sort_name,omitempty" validate:"omitempty,max=300"`
-	Description *string `json:"description,omitempty" validate:"omitempty,max=2000"`
+	Name        *string  `json:"name,omitempty" validate:"omitempty,max=300"`
+	SortName    *string  `json:"sort_name,omitempty" validate:"omitempty,max=300"`
+	Description *string  `json:"description,omitempty" validate:"omitempty,max=2000"`
+	Aliases     []string `json:"aliases,omitempty" validate:"omitempty,dive,min=1,max=300"`
 }
 
 type MergeSeriesPayload struct {

@@ -2,6 +2,7 @@ package publishers
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -10,9 +11,11 @@ import (
 // RegisterRoutesWithGroup registers publisher routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	publisherService := NewService(db)
+	aliasService := aliases.NewService(db)
 
 	h := &handler{
 		publisherService: publisherService,
+		aliasService:     aliasService,
 	}
 
 	g.GET("", h.list)

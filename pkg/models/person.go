@@ -9,13 +9,14 @@ import (
 type Person struct {
 	bun.BaseModel `bun:"table:persons,alias:p" tstype:"-"`
 
-	ID             int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	LibraryID      int       `bun:",nullzero" json:"library_id"`
-	Name           string    `bun:",nullzero" json:"name"`
-	SortName       string    `bun:",notnull" json:"sort_name"`
-	SortNameSource string    `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
+	ID             int            `bun:",pk,nullzero" json:"id"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	LibraryID      int            `bun:",nullzero" json:"library_id"`
+	Name           string         `bun:",nullzero" json:"name"`
+	SortName       string         `bun:",notnull" json:"sort_name"`
+	SortNameSource string         `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
+	Aliases        []*PersonAlias `bun:"rel:has-many,join:id=person_id" json:"aliases" tstype:"PersonAlias[]"`
 }
 
 // Author role constants for CBZ ComicInfo.xml creator types.

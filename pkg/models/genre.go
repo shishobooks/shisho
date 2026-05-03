@@ -9,12 +9,13 @@ import (
 type Genre struct {
 	bun.BaseModel `bun:"table:genres,alias:g" tstype:"-"`
 
-	ID        int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	LibraryID int       `bun:",nullzero" json:"library_id"`
-	Name      string    `bun:",nullzero" json:"name"`
-	BookCount int       `bun:",scanonly" json:"book_count"`
+	ID        int           `bun:",pk,nullzero" json:"id"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	LibraryID int           `bun:",nullzero" json:"library_id"`
+	Name      string        `bun:",nullzero" json:"name"`
+	Aliases   []*GenreAlias `bun:"rel:has-many,join:id=genre_id" json:"aliases" tstype:"GenreAlias[]"`
+	BookCount int           `bun:",scanonly" json:"book_count"`
 }
 
 type BookGenre struct {
