@@ -258,3 +258,17 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - **Foreign key enforcement is enabled** — `PRAGMA foreign_keys=ON` is set in production. Test DB helpers must also enable this pragma.
 - **All FK constraints must specify ON DELETE behavior** — Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `books.primary_file_id`, `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
 - **CASCADE does not clean up FTS indexes** — When deleting books/series/persons/etc., their FTS entries (`books_fts`, `series_fts`, `persons_fts`) are NOT automatically removed by CASCADE. Callers that delete searchable entities must also remove from the FTS index via the search service.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `shishobooks/shisho`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout. See `docs/agents/domain.md`.
