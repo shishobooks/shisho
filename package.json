@@ -71,6 +71,7 @@
     "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.7",
     "@eslint/js": "^9.39.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
     "@playwright/test": "^1.59.1",

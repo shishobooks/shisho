@@ -155,6 +155,8 @@ The **Rescan** dialog on a book or file offers three modes that interact with si
 
 Sidecar files are read during library scans, after parsing the embedded file metadata. If a sidecar exists, its values are applied according to the priority system.
 
+Resource names in sidecars — authors, narrators, series, genres, tags, publishers, and imprints — are resolved through Shisho's standard name lookup, which checks [aliases](./metadata#aliases). If a name in a sidecar matches an alias, it resolves to the existing canonical resource instead of creating a duplicate. No changes to the sidecar format are needed to take advantage of aliases.
+
 ## When Sidecars Are Written
 
 Sidecar files are automatically written whenever you edit metadata through the Shisho interface. This keeps the on-disk sidecars in sync with the database, so the customizations persist if you ever need to re-scan or move your library.
