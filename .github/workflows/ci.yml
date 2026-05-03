@@ -24,7 +24,8 @@ jobs:
       - run: mise lint
 
   test:
-    name: Go Test (${{ matrix.shard }}/${{ env.SHARD_TOTAL }})
+    # Keep this N in sync with env.SHARD_TOTAL (env not available in name).
+    name: Go Test (${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
