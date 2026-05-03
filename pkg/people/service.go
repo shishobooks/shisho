@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -112,6 +113,11 @@ func (svc *Service) FindOrCreatePerson(ctx context.Context, name string, library
 	}
 	if !errors.Is(err, errcodes.NotFound("Person")) {
 		return nil, err
+	}
+
+	// Check aliases
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.PersonConfig, name, libraryID); aliasErr == nil {
+		return svc.RetrievePerson(ctx, RetrievePersonOptions{ID: &resourceID})
 	}
 
 	// Create new person

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -149,4 +150,87 @@ func TestRetrievePerson_LibraryScoping(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errcodes.NotFound("Person")),
 		"expected NotFound when person ID belongs to a different library, got: %v", err)
+}
+
+func TestFindOrCreatePerson_PrimaryNameMatch(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+
+	person := &models.Person{
+		LibraryID:      lib.ID,
+		Name:           "Brandon Sanderson",
+		SortName:       "Sanderson, Brandon",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreatePerson(ctx, "Brandon Sanderson", lib.ID)
+	require.NoError(t, err)
+	assert.Equal(t, person.ID, found.ID)
+}
+
+func TestFindOrCreatePerson_AliasMatch(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+
+	person := &models.Person{
+		LibraryID:      lib.ID,
+		Name:           "Robert Jordan",
+		SortName:       "Jordan, Robert",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewRaw(
+		"INSERT INTO person_aliases (created_at, person_id, name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), person.ID, "James Oliver Rigney Jr.", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreatePerson(ctx, "James Oliver Rigney Jr.", lib.ID)
+	require.NoError(t, err)
+	assert.Equal(t, person.ID, found.ID)
+	assert.Equal(t, "Robert Jordan", found.Name)
+}
+
+func TestFindOrCreatePerson_NoMatch_CreatesNew(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreatePerson(ctx, "Terry Pratchett", lib.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Terry Pratchett", found.Name)
+	assert.Equal(t, lib.ID, found.LibraryID)
 }

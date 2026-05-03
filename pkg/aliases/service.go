@@ -24,6 +24,22 @@ type ResourceConfig struct {
 	ResourceTable string
 }
 
+// FindResourceIDByAlias looks up a resource ID by checking alias names (case-insensitive).
+// Returns the resource ID if found, or sql.ErrNoRows if no alias matches.
+func FindResourceIDByAlias(ctx context.Context, db bun.IDB, cfg ResourceConfig, name string, libraryID int) (int, error) {
+	var resourceID int
+	err := db.NewSelect().
+		TableExpr(cfg.AliasTable).
+		Column(cfg.ResourceFK).
+		Where("LOWER(name) = LOWER(?) AND library_id = ?", name, libraryID).
+		Limit(1).
+		Scan(ctx, &resourceID)
+	if err != nil {
+		return 0, err
+	}
+	return resourceID, nil
+}
+
 func (svc *Service) ListAliases(ctx context.Context, cfg ResourceConfig, resourceID int) ([]string, error) {
 	var names []string
 	err := svc.db.NewSelect().

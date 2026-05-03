@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -125,6 +126,21 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	}
 	if !errors.Is(err, errcodes.NotFound("Series")) {
 		return nil, err
+	}
+
+	// Check aliases
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.SeriesConfig, name, libraryID); aliasErr == nil {
+		s, retrieveErr := svc.RetrieveSeries(ctx, RetrieveSeriesOptions{ID: &resourceID})
+		if retrieveErr != nil {
+			return nil, retrieveErr
+		}
+		if models.GetDataSourcePriority(nameSource) < models.GetDataSourcePriority(s.NameSource) {
+			s.NameSource = nameSource
+			if updateErr := svc.UpdateSeries(ctx, s, UpdateSeriesOptions{Columns: []string{"name_source"}}); updateErr != nil {
+				return nil, updateErr
+			}
+		}
+		return s, nil
 	}
 
 	// Create new series
