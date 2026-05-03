@@ -3,16 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter from "@/components/library/PaginationFooter";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
@@ -148,44 +141,13 @@ const PersonList = () => {
             )}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href={`?page=${Math.max(1, currentPage - 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                  />
-                </PaginationItem>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  return (
-                    <PaginationItem key={pageNum}>
-                      <PaginationLink
-                        href={`?page=${pageNum}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                        isActive={pageNum === currentPage}
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                  );
-                })}
-                <PaginationItem>
-                  <PaginationNext
-                    href={`?page=${Math.min(totalPages, currentPage + 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
+          <PaginationFooter
+            buildHref={(page) =>
+              `?page=${page}${searchQuery ? `&search=${searchQuery}` : ""}`
+            }
+            currentPage={currentPage}
+            totalPages={totalPages}
+          />
         </>
       )}
     </LibraryLayout>

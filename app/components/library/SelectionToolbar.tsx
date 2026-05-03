@@ -1,5 +1,6 @@
 import {
   CheckCircle,
+  ChevronUp,
   Circle,
   Download,
   GitMerge,
@@ -44,6 +45,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
+  const [actionsPopoverOpen, setActionsPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -127,6 +129,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         `Added ${count} book${count !== 1 ? "s" : ""} to "${listName}"`,
       );
       setPopoverOpen(false);
+      setActionsPopoverOpen(false);
       exitSelectionMode();
     } catch (error) {
       const message =
@@ -139,6 +142,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
 
   const handleCreateList = () => {
     setPopoverOpen(false);
+    setActionsPopoverOpen(false);
     setCreateDialogOpen(true);
   };
 
@@ -175,7 +179,6 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       toast.success(
         `Marked ${count} book${count !== 1 ? "s" : ""} as ${label}`,
       );
-      setMorePopoverOpen(false);
       exitSelectionMode();
     } catch (error) {
       const message =
@@ -207,144 +210,264 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     return null;
   }
 
+  const bookLabel =
+    selectedBookIds.length === 1 ? `1 book` : `${selectedBookIds.length} books`;
+
+  const addToListContent = (
+    <>
+      <p className="text-xs font-medium text-muted-foreground px-3 py-2">
+        Add to List
+      </p>
+      {listsQuery.isLoading && (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {!listsQuery.isLoading && editableLists.length === 0 && (
+        <p className="text-sm text-muted-foreground px-3 py-3 text-center">
+          No editable lists
+        </p>
+      )}
+      {!listsQuery.isLoading && editableLists.length > 0 && (
+        <div className="flex flex-col gap-0.5 px-1 pb-1">
+          {editableLists.map((list) => {
+            const isAdding = addingToListId === list.id;
+            return (
+              <button
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isAdding}
+                key={list.id}
+                onClick={() => handleAddToList(list.id, list.name)}
+                type="button"
+              >
+                {isAdding ? (
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                ) : (
+                  <List className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+                <span className="truncate">{list.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {!listsQuery.isLoading && (
+        <div className="border-t px-1 py-1">
+          <Button
+            className="w-full justify-start"
+            onClick={handleCreateList}
+            size="sm"
+            variant="ghost"
+          >
+            <Plus className="h-4 w-4" />
+            Create New List
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3">
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3 max-w-[calc(100vw-2rem)]">
       <span className="text-sm font-medium whitespace-nowrap tabular-nums">
-        {selectedBookIds.length} selected
+        {bookLabel}
       </span>
 
-      <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+      {/* Mobile: single Actions popover */}
+      <Popover onOpenChange={setActionsPopoverOpen} open={actionsPopoverOpen}>
         <PopoverTrigger asChild>
-          <Button size="sm" variant="default">
-            <List className="h-4 w-4" />
-            Add
+          <Button className="sm:hidden" size="sm" variant="default">
+            Actions
+            <ChevronUp className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="center" className="w-56 p-0" side="top">
-          <p className="text-xs font-medium text-muted-foreground px-3 py-2">
-            Add to List
-          </p>
-          {listsQuery.isLoading && (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
-          )}
-          {!listsQuery.isLoading && editableLists.length === 0 && (
-            <p className="text-sm text-muted-foreground px-3 py-3 text-center">
-              No editable lists
-            </p>
-          )}
-          {!listsQuery.isLoading && editableLists.length > 0 && (
-            <div className="flex flex-col gap-0.5 px-1 pb-1">
-              {editableLists.map((list) => {
-                const isAdding = addingToListId === list.id;
-                return (
-                  <button
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isAdding}
-                    key={list.id}
-                    onClick={() => handleAddToList(list.id, list.name)}
-                    type="button"
-                  >
-                    {isAdding ? (
-                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                    ) : (
-                      <List className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate">{list.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        <PopoverContent
+          align="center"
+          className="w-56 max-h-[70vh] overflow-y-auto p-0"
+          side="top"
+        >
+          {addToListContent}
 
-          {!listsQuery.isLoading && (
-            <div className="border-t px-1 py-1">
+          <div className="border-t p-1">
+            <Button
+              className="w-full justify-start gap-2 font-normal"
+              onClick={() => {
+                setActionsPopoverOpen(false);
+                handleBulkReview("reviewed");
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">Mark reviewed</span>
+            </Button>
+            <Button
+              className="w-full justify-start gap-2 font-normal"
+              onClick={() => {
+                setActionsPopoverOpen(false);
+                handleBulkReview("unreviewed");
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">Mark needs review</span>
+            </Button>
+          </div>
+
+          <div className="border-t p-1">
+            <Button
+              className="w-full justify-start gap-2 font-normal"
+              disabled={
+                !downloadInfo ||
+                downloadInfo.fileIds.length === 0 ||
+                createJobMutation.isPending
+              }
+              onClick={() => {
+                setActionsPopoverOpen(false);
+                handleDownload();
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              {createJobMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              ) : (
+                <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="truncate">
+                Download
+                {downloadInfo && downloadInfo.totalSize > 0 && (
+                  <span className="text-xs opacity-75 ml-1">
+                    ({formatFileSize(downloadInfo.totalSize)})
+                  </span>
+                )}
+              </span>
+            </Button>
+
+            {selectedBookIds.length >= 2 && library && (
               <Button
-                className="w-full justify-start"
-                onClick={handleCreateList}
+                className="w-full justify-start gap-2 font-normal"
+                onClick={() => {
+                  setActionsPopoverOpen(false);
+                  setShowMergeDialog(true);
+                }}
                 size="sm"
                 variant="ghost"
               >
-                <Plus className="h-4 w-4" />
-                Create New List
+                <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">Merge</span>
               </Button>
-            </div>
-          )}
+            )}
+
+            <Button
+              className="w-full justify-start gap-2 font-normal text-destructive hover:text-destructive"
+              onClick={() => {
+                setActionsPopoverOpen(false);
+                setShowDeleteDialog(true);
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" />
+              <span className="truncate">Delete</span>
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
 
-      <Button
-        disabled={
-          !downloadInfo ||
-          downloadInfo.fileIds.length === 0 ||
-          createJobMutation.isPending
-        }
-        onClick={handleDownload}
-        size="sm"
-        variant="default"
-      >
-        {createJobMutation.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Download className="h-4 w-4" />
-        )}
-        Download
-        {downloadInfo && downloadInfo.totalSize > 0 && (
-          <span className="text-xs opacity-75">
-            ({formatFileSize(downloadInfo.totalSize)})
-          </span>
-        )}
-      </Button>
+      {/* Desktop: inline action buttons */}
+      <div className="hidden sm:flex items-center gap-3">
+        <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="default">
+              <List className="h-4 w-4" />
+              Add
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="center" className="w-56 p-0" side="top">
+            {addToListContent}
+          </PopoverContent>
+        </Popover>
 
-      {selectedBookIds.length >= 2 && library && (
         <Button
-          onClick={() => setShowMergeDialog(true)}
+          disabled={
+            !downloadInfo ||
+            downloadInfo.fileIds.length === 0 ||
+            createJobMutation.isPending
+          }
+          onClick={handleDownload}
           size="sm"
           variant="default"
         >
-          <GitMerge className="h-4 w-4" />
-          Merge
+          {createJobMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          Download
+          {downloadInfo && downloadInfo.totalSize > 0 && (
+            <span className="text-xs opacity-75">
+              ({formatFileSize(downloadInfo.totalSize)})
+            </span>
+          )}
         </Button>
-      )}
 
-      <Button
-        onClick={() => setShowDeleteDialog(true)}
-        size="sm"
-        variant="destructive"
-      >
-        <Trash2 className="h-4 w-4" />
-        Delete
-      </Button>
+        {selectedBookIds.length >= 2 && library && (
+          <Button
+            onClick={() => setShowMergeDialog(true)}
+            size="sm"
+            variant="default"
+          >
+            <GitMerge className="h-4 w-4" />
+            Merge
+          </Button>
+        )}
 
-      <Popover onOpenChange={setMorePopoverOpen} open={morePopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button size="sm" variant="default">
-            <MoreHorizontal className="h-4 w-4" />
-            More
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="center" className="w-56 p-1" side="top">
-          <Button
-            className="w-full justify-start gap-2 font-normal"
-            onClick={() => handleBulkReview("reviewed")}
-            size="sm"
-            variant="ghost"
-          >
-            <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">Mark reviewed</span>
-          </Button>
-          <Button
-            className="w-full justify-start gap-2 font-normal"
-            onClick={() => handleBulkReview("unreviewed")}
-            size="sm"
-            variant="ghost"
-          >
-            <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">Mark needs review</span>
-          </Button>
-        </PopoverContent>
-      </Popover>
+        <Button
+          onClick={() => setShowDeleteDialog(true)}
+          size="sm"
+          variant="destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </Button>
+
+        <Popover onOpenChange={setMorePopoverOpen} open={morePopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="default">
+              <MoreHorizontal className="h-4 w-4" />
+              More
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="center" className="w-56 p-1" side="top">
+            <Button
+              className="w-full justify-start gap-2 font-normal"
+              onClick={() => {
+                setMorePopoverOpen(false);
+                handleBulkReview("reviewed");
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">Mark reviewed</span>
+            </Button>
+            <Button
+              className="w-full justify-start gap-2 font-normal"
+              onClick={() => {
+                setMorePopoverOpen(false);
+                handleBulkReview("unreviewed");
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">Mark needs review</span>
+            </Button>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       <Button onClick={clearSelection} size="sm" variant="ghost">
         Clear
