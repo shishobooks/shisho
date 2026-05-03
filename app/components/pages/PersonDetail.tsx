@@ -280,7 +280,7 @@ const PersonDetail = () => {
             <div className="space-y-2">
               {narratedFilesQuery.data.map((file) => (
                 <Link
-                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-md border border-border hover:bg-muted/50 transition-colors"
                   key={file.id}
                   to={`/libraries/${libraryId}/books/${file.book_id}`}
                 >

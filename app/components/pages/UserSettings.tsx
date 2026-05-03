@@ -127,7 +127,7 @@ const UserSettings = () => {
           </div>
 
           {/* Security Settings Link */}
-          <div className="rounded-md border border-border p-6">
+          <div className="rounded-md border border-border p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Security</h2>

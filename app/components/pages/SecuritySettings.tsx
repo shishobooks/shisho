@@ -173,7 +173,7 @@ const SecuritySettings = () => {
 
         <div className="max-w-2xl space-y-6">
           {/* Password Change */}
-          <div className="rounded-md border border-border p-6">
+          <div className="rounded-md border border-border p-4 md:p-6">
             <h2 className="mb-4 text-lg font-semibold">Change Password</h2>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -249,7 +249,7 @@ function EReaderSection() {
   );
 
   return (
-    <div className="rounded-md border border-border p-6">
+    <div className="rounded-md border border-border p-4 md:p-6">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold">eReader Browser Access</h2>
@@ -506,7 +506,7 @@ function KoboSyncSection() {
   );
 
   return (
-    <div className="rounded-md border border-border p-6">
+    <div className="rounded-md border border-border p-4 md:p-6">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold">Kobo Wireless Sync</h2>

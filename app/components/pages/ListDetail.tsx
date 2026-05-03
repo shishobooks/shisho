@@ -191,9 +191,7 @@ const ListDetail = () => {
         <TopNav />
         <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
           <div className="text-center">
-            <h1 className="text-xl md:text-2xl font-semibold mb-4">
-              List Not Found
-            </h1>
+            <h1 className="text-2xl font-semibold mb-4">List Not Found</h1>
             <p className="text-muted-foreground">
               The list you're looking for doesn't exist or may have been
               removed.

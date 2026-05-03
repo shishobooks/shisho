@@ -215,7 +215,7 @@ Tailwind breakpoints used in Shisho:
 ```tsx
 // Good - stacked layout
 <div className="flex flex-col gap-3 mb-6">
-  <h1 className="text-2xl md:text-3xl font-semibold">{title}</h1>
+  <h1 className="text-2xl font-semibold">{title}</h1>
   <div className="flex items-center gap-2">
     <Button size="sm" variant="outline">
       <Edit className="h-4 w-4 sm:mr-2" />
@@ -226,7 +226,7 @@ Tailwind breakpoints used in Shisho:
 
 // Bad - side-by-side causes layout issues
 <div className="flex items-start justify-between">
-  <h1 className="text-3xl">{title}</h1>
+  <h1 className="text-2xl font-semibold">{title}</h1>
   <Button>Edit</Button>
 </div>
 ```
