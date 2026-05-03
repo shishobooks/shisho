@@ -217,8 +217,7 @@ export const PluginConfigForm = ({
           <Select
             disabled={!canWrite}
             onValueChange={handleChange}
-            // Radix Select doesn't accept "" as a valid item value
-            value={value || undefined}
+            value={value}
           >
             <SelectTrigger id={fieldId}>
               <SelectValue placeholder="Select..." />
