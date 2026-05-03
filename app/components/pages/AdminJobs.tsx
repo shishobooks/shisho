@@ -5,20 +5,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter from "@/components/library/PaginationFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
 import { useAuth } from "@/hooks/useAuth";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 
@@ -94,7 +85,6 @@ const AdminJobs = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
 
   const { hasPermission } = useAuth();
   const { data, isLoading, error, refetch } = useJobs({
@@ -111,24 +101,6 @@ const AdminJobs = () => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
     setSearchParams(newSearchParams);
-  };
-
-  const getPageNumbers = () => {
-    const pages = [];
-    const showPages = isSmallScreen ? 3 : 5;
-
-    let start = Math.max(1, currentPage - Math.floor(showPages / 2));
-    const end = Math.min(totalPages, start + showPages - 1);
-
-    if (end - start + 1 < showPages) {
-      start = Math.max(1, end - showPages + 1);
-    }
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
-    return pages;
   };
 
   const handleTriggerSync = useCallback(async () => {
@@ -207,82 +179,12 @@ const AdminJobs = () => {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination className="mt-6">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    className={
-                      currentPage <= 1
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                    onClick={() => handlePageChange(currentPage - 1)}
-                  />
-                </PaginationItem>
-
-                {getPageNumbers()[0] > 1 && (
-                  <>
-                    <PaginationItem>
-                      <PaginationLink
-                        className="cursor-pointer"
-                        onClick={() => handlePageChange(1)}
-                      >
-                        1
-                      </PaginationLink>
-                    </PaginationItem>
-                    {getPageNumbers()[0] > 2 && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </>
-                )}
-
-                {getPageNumbers().map((page) => (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      className="cursor-pointer"
-                      isActive={page === currentPage}
-                      onClick={() => handlePageChange(page)}
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-
-                {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
-                  <>
-                    {getPageNumbers()[getPageNumbers().length - 1] <
-                      totalPages - 1 && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    <PaginationItem>
-                      <PaginationLink
-                        className="cursor-pointer"
-                        onClick={() => handlePageChange(totalPages)}
-                      >
-                        {totalPages}
-                      </PaginationLink>
-                    </PaginationItem>
-                  </>
-                )}
-
-                <PaginationItem>
-                  <PaginationNext
-                    className={
-                      currentPage >= totalPages
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                    onClick={() => handlePageChange(currentPage + 1)}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
+          <PaginationFooter
+            className="mt-6"
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            totalPages={totalPages}
+          />
         </>
       )}
     </div>

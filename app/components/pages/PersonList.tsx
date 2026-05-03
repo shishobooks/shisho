@@ -3,18 +3,10 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter from "@/components/library/PaginationFooter";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const ITEMS_PER_PAGE = 24;
@@ -25,7 +17,6 @@ const PersonList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
   const searchQuery = searchParams.get("search") ?? "";
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
@@ -150,51 +141,13 @@ const PersonList = () => {
             )}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href={`?page=${Math.max(1, currentPage - 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                  />
-                </PaginationItem>
-                {(() => {
-                  const showPages = isSmallScreen ? 3 : 5;
-                  const half = Math.floor(showPages / 2);
-                  return Array.from(
-                    { length: Math.min(showPages, totalPages) },
-                    (_, i) => {
-                      let pageNum;
-                      if (totalPages <= showPages) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= half + 1) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - half) {
-                        pageNum = totalPages - showPages + 1 + i;
-                      } else {
-                        pageNum = currentPage - half + i;
-                      }
-                      return (
-                        <PaginationItem key={pageNum}>
-                          <PaginationLink
-                            href={`?page=${pageNum}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                            isActive={pageNum === currentPage}
-                          >
-                            {pageNum}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                    },
-                  );
-                })()}
-                <PaginationItem>
-                  <PaginationNext
-                    href={`?page=${Math.min(totalPages, currentPage + 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
+          <PaginationFooter
+            buildHref={(page) =>
+              `?page=${page}${searchQuery ? `&search=${searchQuery}` : ""}`
+            }
+            currentPage={currentPage}
+            totalPages={totalPages}
+          />
         </>
       )}
     </LibraryLayout>

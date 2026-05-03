@@ -179,7 +179,6 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       toast.success(
         `Marked ${count} book${count !== 1 ? "s" : ""} as ${label}`,
       );
-      setMorePopoverOpen(false);
       exitSelectionMode();
     } catch (error) {
       const message =
@@ -269,7 +268,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   );
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3">
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-background border rounded-lg shadow-lg px-3 py-2 flex items-center gap-3 max-w-[calc(100vw-2rem)]">
       <span className="text-sm font-medium whitespace-nowrap tabular-nums">
         {bookLabel}
       </span>
@@ -444,7 +443,10 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           <PopoverContent align="center" className="w-56 p-1" side="top">
             <Button
               className="w-full justify-start gap-2 font-normal"
-              onClick={() => handleBulkReview("reviewed")}
+              onClick={() => {
+                setMorePopoverOpen(false);
+                handleBulkReview("reviewed");
+              }}
               size="sm"
               variant="ghost"
             >
@@ -453,7 +455,10 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             </Button>
             <Button
               className="w-full justify-start gap-2 font-normal"
-              onClick={() => handleBulkReview("unreviewed")}
+              onClick={() => {
+                setMorePopoverOpen(false);
+                handleBulkReview("unreviewed");
+              }}
               size="sm"
               variant="ghost"
             >

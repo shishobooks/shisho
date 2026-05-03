@@ -2,16 +2,7 @@ import { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import PaginationFooter from "@/components/library/PaginationFooter";
 
 interface GalleryProps<T> {
   items: T[];
@@ -36,7 +27,6 @@ const Gallery = <T,>({
 }: GalleryProps<T>) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
 
   const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
@@ -46,24 +36,6 @@ const Gallery = <T,>({
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
     setSearchParams(newSearchParams);
-  };
-
-  const getPageNumbers = () => {
-    const pages = [];
-    const showPages = isSmallScreen ? 3 : 5;
-
-    let start = Math.max(1, currentPage - Math.floor(showPages / 2));
-    const end = Math.min(totalPages, start + showPages - 1);
-
-    if (end - start + 1 < showPages) {
-      start = Math.max(1, end - showPages + 1);
-    }
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
-    return pages;
   };
 
   if (isLoading) {
@@ -93,82 +65,12 @@ const Gallery = <T,>({
         {items.map(renderItem)}
       </div>
 
-      {totalPages > 1 && (
-        <Pagination className="mb-8">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                className={
-                  currentPage <= 1
-                    ? "pointer-events-none opacity-50"
-                    : "cursor-pointer"
-                }
-                onClick={() => handlePageChange(currentPage - 1)}
-              />
-            </PaginationItem>
-
-            {getPageNumbers()[0] > 1 && (
-              <>
-                <PaginationItem>
-                  <PaginationLink
-                    className="cursor-pointer"
-                    onClick={() => handlePageChange(1)}
-                  >
-                    1
-                  </PaginationLink>
-                </PaginationItem>
-                {getPageNumbers()[0] > 2 && (
-                  <PaginationItem>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                )}
-              </>
-            )}
-
-            {getPageNumbers().map((page) => (
-              <PaginationItem key={page}>
-                <PaginationLink
-                  className="cursor-pointer"
-                  isActive={page === currentPage}
-                  onClick={() => handlePageChange(page)}
-                >
-                  {page}
-                </PaginationLink>
-              </PaginationItem>
-            ))}
-
-            {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
-              <>
-                {getPageNumbers()[getPageNumbers().length - 1] <
-                  totalPages - 1 && (
-                  <PaginationItem>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                )}
-                <PaginationItem>
-                  <PaginationLink
-                    className="cursor-pointer"
-                    onClick={() => handlePageChange(totalPages)}
-                  >
-                    {totalPages}
-                  </PaginationLink>
-                </PaginationItem>
-              </>
-            )}
-
-            <PaginationItem>
-              <PaginationNext
-                className={
-                  currentPage >= totalPages
-                    ? "pointer-events-none opacity-50"
-                    : "cursor-pointer"
-                }
-                onClick={() => handlePageChange(currentPage + 1)}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      )}
+      <PaginationFooter
+        className="mb-8"
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        totalPages={totalPages}
+      />
     </>
   );
 };

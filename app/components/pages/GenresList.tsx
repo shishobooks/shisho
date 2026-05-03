@@ -3,18 +3,10 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter from "@/components/library/PaginationFooter";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { useGenresList } from "@/hooks/queries/genres";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Genre } from "@/types";
 
@@ -26,7 +18,6 @@ const GenresList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
   const searchQuery = searchParams.get("search") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
@@ -136,62 +127,11 @@ const GenresList = () => {
             </div>
           )}
 
-          {totalPages > 1 && (
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    className={
-                      currentPage <= 1
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                    onClick={() => handlePageChange(currentPage - 1)}
-                  />
-                </PaginationItem>
-                {(() => {
-                  const showPages = isSmallScreen ? 3 : 5;
-                  const half = Math.floor(showPages / 2);
-                  return Array.from(
-                    { length: Math.min(showPages, totalPages) },
-                    (_, i) => {
-                      let pageNum;
-                      if (totalPages <= showPages) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= half + 1) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - half) {
-                        pageNum = totalPages - showPages + 1 + i;
-                      } else {
-                        pageNum = currentPage - half + i;
-                      }
-                      return (
-                        <PaginationItem key={pageNum}>
-                          <PaginationLink
-                            className="cursor-pointer"
-                            isActive={pageNum === currentPage}
-                            onClick={() => handlePageChange(pageNum)}
-                          >
-                            {pageNum}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                    },
-                  );
-                })()}
-                <PaginationItem>
-                  <PaginationNext
-                    className={
-                      currentPage >= totalPages
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                    onClick={() => handlePageChange(currentPage + 1)}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
+          <PaginationFooter
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            totalPages={totalPages}
+          />
         </>
       )}
     </LibraryLayout>
