@@ -40,8 +40,19 @@ vi.mock("@/hooks/queries/plugins", () => ({
           min: 1,
           max: 100,
         },
+        splitMode: {
+          type: "select",
+          label: "Split Mode",
+          description: "How to split subtitles",
+          required: false,
+          secret: false,
+          options: [
+            { value: "colon", label: "Colon" },
+            { value: "dash", label: "Dash" },
+          ],
+        },
       },
-      values: { apiKey: "", maxResults: 10 },
+      values: { apiKey: "", maxResults: 10, splitMode: "colon" },
       // Declare a field so the field-settings save path fires.
       declaredFields: ["title"],
       fieldSettings: { title: true },
@@ -104,10 +115,23 @@ describe("PluginConfigForm", () => {
         expect.objectContaining({
           scope: "shisho",
           id: "test",
-          config: expect.objectContaining({ apiKey: "sk-123" }),
+          config: expect.objectContaining({
+            apiKey: "sk-123",
+            splitMode: "colon",
+          }),
         }),
       );
     });
+  });
+
+  it("renders select fields using Radix Select, not native <select>", () => {
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
+    // Radix Select renders a trigger with role="combobox"
+    expect(
+      screen.getByRole("combobox", { name: /split mode/i }),
+    ).toBeInTheDocument();
+    // No native <select> elements should exist
+    expect(document.querySelector("select")).toBeNull();
   });
 
   it("hides Save button and disables inputs when canWrite is false", () => {
@@ -118,6 +142,9 @@ describe("PluginConfigForm", () => {
       screen.queryByRole("button", { name: /save/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText(/api key/i)).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: /split mode/i }),
+    ).toBeDisabled();
   });
 
   // Regression test: when the field-settings save fails we must NOT reset
