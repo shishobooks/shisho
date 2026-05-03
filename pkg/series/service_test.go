@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
@@ -472,4 +473,87 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 		Where("id = ?", keep.ID).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count, "series with books must not be cleaned up")
+}
+
+func TestFindOrCreateSeries_PrimaryNameMatch(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	s := &models.Series{
+		LibraryID:  library.ID,
+		Name:       "Harry Potter",
+		NameSource: models.DataSourceFilepath,
+		SortName:   "Harry Potter",
+	}
+	err = svc.CreateSeries(ctx, s)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreateSeries(ctx, "Harry Potter", library.ID, models.DataSourceFilepath)
+	require.NoError(t, err)
+	assert.Equal(t, s.ID, found.ID)
+}
+
+func TestFindOrCreateSeries_AliasMatch(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	s := &models.Series{
+		LibraryID:  library.ID,
+		Name:       "A Song of Ice and Fire",
+		NameSource: models.DataSourceFilepath,
+		SortName:   "Song of Ice and Fire, A",
+	}
+	err = svc.CreateSeries(ctx, s)
+	require.NoError(t, err)
+
+	_, err = db.NewRaw(
+		"INSERT INTO series_aliases (created_at, series_id, name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), s.ID, "Game of Thrones", library.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreateSeries(ctx, "Game of Thrones", library.ID, models.DataSourceFilepath)
+	require.NoError(t, err)
+	assert.Equal(t, s.ID, found.ID)
+	assert.Equal(t, "A Song of Ice and Fire", found.Name)
+}
+
+func TestFindOrCreateSeries_NoMatch_CreatesNew(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	found, err := svc.FindOrCreateSeries(ctx, "The Wheel of Time", library.ID, models.DataSourceFilepath)
+	require.NoError(t, err)
+	assert.Equal(t, "The Wheel of Time", found.Name)
+	assert.Equal(t, library.ID, found.LibraryID)
 }

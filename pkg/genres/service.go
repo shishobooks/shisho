@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -98,6 +99,11 @@ func (svc *Service) FindOrCreateGenre(ctx context.Context, name string, libraryI
 	}
 	if !errors.Is(err, errcodes.NotFound("Genre")) {
 		return nil, err
+	}
+
+	// Check aliases
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.GenreConfig, name, libraryID); aliasErr == nil {
+		return svc.RetrieveGenre(ctx, RetrieveGenreOptions{ID: &resourceID})
 	}
 
 	// Create new genre

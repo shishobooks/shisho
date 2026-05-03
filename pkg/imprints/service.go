@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -98,6 +99,11 @@ func (svc *Service) FindOrCreateImprint(ctx context.Context, name string, librar
 	}
 	if !errors.Is(err, errcodes.NotFound("Imprint")) {
 		return nil, err
+	}
+
+	// Check aliases
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.ImprintConfig, name, libraryID); aliasErr == nil {
+		return svc.RetrieveImprint(ctx, RetrieveImprintOptions{ID: &resourceID})
 	}
 
 	// Create new imprint

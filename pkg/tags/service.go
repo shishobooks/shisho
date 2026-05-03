@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -98,6 +99,11 @@ func (svc *Service) FindOrCreateTag(ctx context.Context, name string, libraryID 
 	}
 	if !errors.Is(err, errcodes.NotFound("Tag")) {
 		return nil, err
+	}
+
+	// Check aliases
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.TagConfig, name, libraryID); aliasErr == nil {
+		return svc.RetrieveTag(ctx, RetrieveTagOptions{ID: &resourceID})
 	}
 
 	// Create new tag
