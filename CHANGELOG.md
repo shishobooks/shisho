@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-05-03
+
+### Features
+- Standardize styling on semantic design tokens (#192)
+- Mobile responsiveness: compact selection toolbar and pagination (#188)
+- Replace DatePicker with plain-text date input site-wide (#189)
+- Identify Phase 3: shared entity-search hooks and multi-series support (#186)
+- Identify dialog redesign - per-field opt-in (Phase 2) (#178)
+- Stop identify from clobbering file.Name with book.Title (#177)
+
+### Bug Fixes
+- Register HEAD on eReader download routes so HEAD-probing clients don't 405 (#191)
+- Refresh plugin config and related caches on enable/disable (#184)
+- Detect ASIN under Calibre's MOBI-ASIN/AMAZON scheme variants (#179)
+
+### CI/CD
+- Prune stale JUnit files in gotestsplit consolidator (#190)
+- Separate read/write dirs in gotestsplit run (-junit-out flag) (#187)
+- Fix gotestsplit JUnit cache merge race in consolidator (#185)
+
+### Other
+- Bump actions/upload-artifact from 4 to 7 (#182)
+- Bump the minor-and-patch group with 14 updates (#183)
+- Bump the minor-and-patch group with 2 updates (#180)
+- Bump actions/download-artifact from 4 to 8 (#181)
+
+
 ## [0.0.41] - 2026-04-28
 
 ### Features
