@@ -93,6 +93,8 @@ jobs:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
+      # Must come AFTER cache restore + artifact download so clean: false
+      # preserves the assembled .gotest-timings directory.
       - uses: actions/checkout@v6
         with:
           clean: false
