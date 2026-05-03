@@ -515,8 +515,8 @@ describe("FileEditDialog", () => {
       await waitFor(() => {
         expect(mockUpdateFile).toHaveBeenCalled();
       });
-      const payload = mockUpdateFile.mock.calls[0][0];
-      expect(payload.release_date).toBe("1847-10-16");
+      const call = mockUpdateFile.mock.calls[0][0];
+      expect(call.payload.release_date).toBe("1847-10-16");
     });
 
     it("allows clearing the date field", async () => {
@@ -548,8 +548,8 @@ describe("FileEditDialog", () => {
       await waitFor(() => {
         expect(mockUpdateFile).toHaveBeenCalled();
       });
-      const payload = mockUpdateFile.mock.calls[0][0];
-      expect(payload.release_date).toBe("");
+      const call = mockUpdateFile.mock.calls[0][0];
+      expect(call.payload.release_date).toBe("");
     });
   });
 });

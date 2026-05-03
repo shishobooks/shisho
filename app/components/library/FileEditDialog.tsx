@@ -12,7 +12,6 @@ import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
 import {
   DialogBody,
   DialogContent,
@@ -949,9 +948,9 @@ export function FileEditDialog({
               {/* Release Date */}
               <div className="space-y-2">
                 <Label>Release Date</Label>
-                <DatePicker
-                  onChange={setReleaseDate}
-                  placeholder="Pick a date"
+                <Input
+                  onChange={(e) => setReleaseDate(e.target.value)}
+                  placeholder="YYYY-MM-DD"
                   value={releaseDate}
                 />
               </div>
