@@ -11,6 +11,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 interface GalleryProps<T> {
   items: T[];
@@ -35,6 +36,7 @@ const Gallery = <T,>({
 }: GalleryProps<T>) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
 
   const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
@@ -48,7 +50,7 @@ const Gallery = <T,>({
 
   const getPageNumbers = () => {
     const pages = [];
-    const showPages = 5;
+    const showPages = isSmallScreen ? 3 : 5;
 
     let start = Math.max(1, currentPage - Math.floor(showPages / 2));
     const end = Math.min(totalPages, start + showPages - 1);

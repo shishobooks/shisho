@@ -14,6 +14,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useGenresList } from "@/hooks/queries/genres";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Genre } from "@/types";
 
@@ -25,6 +26,7 @@ const GenresList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
   const searchQuery = searchParams.get("search") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
@@ -147,29 +149,36 @@ const GenresList = () => {
                     onClick={() => handlePageChange(currentPage - 1)}
                   />
                 </PaginationItem>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  return (
-                    <PaginationItem key={pageNum}>
-                      <PaginationLink
-                        className="cursor-pointer"
-                        isActive={pageNum === currentPage}
-                        onClick={() => handlePageChange(pageNum)}
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
+                {(() => {
+                  const showPages = isSmallScreen ? 3 : 5;
+                  const half = Math.floor(showPages / 2);
+                  return Array.from(
+                    { length: Math.min(showPages, totalPages) },
+                    (_, i) => {
+                      let pageNum;
+                      if (totalPages <= showPages) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= half + 1) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - half) {
+                        pageNum = totalPages - showPages + 1 + i;
+                      } else {
+                        pageNum = currentPage - half + i;
+                      }
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            className="cursor-pointer"
+                            isActive={pageNum === currentPage}
+                            onClick={() => handlePageChange(pageNum)}
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    },
                   );
-                })}
+                })()}
                 <PaginationItem>
                   <PaginationNext
                     className={

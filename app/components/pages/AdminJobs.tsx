@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/pagination";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
 import { useAuth } from "@/hooks/useAuth";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 
@@ -93,6 +94,7 @@ const AdminJobs = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
 
   const { hasPermission } = useAuth();
   const { data, isLoading, error, refetch } = useJobs({
@@ -113,7 +115,7 @@ const AdminJobs = () => {
 
   const getPageNumbers = () => {
     const pages = [];
-    const showPages = 5;
+    const showPages = isSmallScreen ? 3 : 5;
 
     let start = Math.max(1, currentPage - Math.floor(showPages / 2));
     const end = Math.min(totalPages, start + showPages - 1);

@@ -14,6 +14,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const ITEMS_PER_PAGE = 24;
@@ -24,6 +25,7 @@ const PersonList = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
   const searchQuery = searchParams.get("search") ?? "";
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
@@ -156,28 +158,35 @@ const PersonList = () => {
                     href={`?page=${Math.max(1, currentPage - 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
                   />
                 </PaginationItem>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  return (
-                    <PaginationItem key={pageNum}>
-                      <PaginationLink
-                        href={`?page=${pageNum}${searchQuery ? `&search=${searchQuery}` : ""}`}
-                        isActive={pageNum === currentPage}
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
+                {(() => {
+                  const showPages = isSmallScreen ? 3 : 5;
+                  const half = Math.floor(showPages / 2);
+                  return Array.from(
+                    { length: Math.min(showPages, totalPages) },
+                    (_, i) => {
+                      let pageNum;
+                      if (totalPages <= showPages) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= half + 1) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - half) {
+                        pageNum = totalPages - showPages + 1 + i;
+                      } else {
+                        pageNum = currentPage - half + i;
+                      }
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            href={`?page=${pageNum}${searchQuery ? `&search=${searchQuery}` : ""}`}
+                            isActive={pageNum === currentPage}
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    },
                   );
-                })}
+                })()}
                 <PaginationItem>
                   <PaginationNext
                     href={`?page=${Math.min(totalPages, currentPage + 1)}${searchQuery ? `&search=${searchQuery}` : ""}`}
