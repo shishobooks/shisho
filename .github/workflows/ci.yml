@@ -7,6 +7,9 @@ on:
     branches: [master]
   workflow_call:
 
+env:
+  SHARD_TOTAL: 12
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -21,7 +24,7 @@ jobs:
       - run: mise lint
 
   test:
-    name: Go Test (${{ matrix.shard }}/12)
+    name: Go Test (${{ matrix.shard }}/${{ env.SHARD_TOTAL }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -52,7 +55,7 @@ jobs:
           go run ./tools/gotestsplit run \
             -junit-dir=.gotest-timings \
             -junit-out=.gotest-timings-fresh \
-            -total=12 -index=$((SHARD - 1)) \
+            -total=$SHARD_TOTAL -index=$((SHARD - 1)) \
             ./pkg/... -- -race
       - name: Upload shard JUnit
         if: always()
@@ -92,6 +95,7 @@ jobs:
           merge-multiple: true
       - uses: actions/checkout@v6
         with:
+          clean: false
           sparse-checkout: |
             tools/gotestsplit
             go.mod
@@ -100,8 +104,10 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Prune stale junit files
-        run: go run ./tools/gotestsplit prune -junit-dir=.gotest-timings -total=12
+        run: go run ./tools/gotestsplit prune -junit-dir=.gotest-timings -total=$SHARD_TOTAL
       - name: Report cache size
+        # Visibility check — a sudden drop beyond what prune removes means
+        # the merge-race bug or fresh-only upload assumption regressed.
         run: |
           echo "junit files: $(find .gotest-timings -name 'junit-*.xml' | wc -l)"
           du -sh .gotest-timings || true

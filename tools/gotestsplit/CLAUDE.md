@@ -115,9 +115,8 @@ In 2026-04, N=12 was settled on as the best cost/value balance: typical slowest 
 ### Step 6: Pick the N and update CI
 
 Edit `.github/workflows/ci.yml`:
+- `env.SHARD_TOTAL: N` at the workflow level (the matrix, run step, job name, and prune step all reference this)
 - `matrix.shard: [1, 2, ..., N]`
-- `-total=N` in the `Run tests` step
-- `name: Go Test (${{ matrix.shard }}/N)` (cosmetic, but the job name is what shows up in the PR check list)
 
 Commit + push. The first run after the change is the contaminated one (Pack uses old-N cache for new-N split); subsequent runs are clean.
 
