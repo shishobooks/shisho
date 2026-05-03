@@ -141,9 +141,8 @@ export function FileEditDialog({
   // when the user actively checks the box (to set it to `true`) or unchecks
   // after checking (which sends `""` to clear to `null`).
   //
-  // If you're tempted to "fix" this by adding a three-state dropdown, please
-  // read the design spec at docs/superpowers/specs/2026-04-07-language-
-  // abridged-fields-design.md first — this was a deliberate UX simplification.
+  // If you're tempted to "fix" this by adding a three-state dropdown:
+  // this was a deliberate UX simplification.
   const [abridged, setAbridged] = useState<string>(
     file.abridged === true ? "true" : "",
   );

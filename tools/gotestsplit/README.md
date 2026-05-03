@@ -14,4 +14,4 @@ gotestsplit plan -junit-dir=.gotest-timings -total=8 -index=0 ./pkg/...
 gotestsplit run -junit-dir=.gotest-timings -total=8 -index=0 ./pkg/... -- -race
 ```
 
-See `docs/superpowers/specs/2026-04-27-gotestsplit-design.md` for design rationale.
+See `tools/gotestsplit/CLAUDE.md` for design rationale and architecture details.
