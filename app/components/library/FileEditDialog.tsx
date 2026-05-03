@@ -67,7 +67,7 @@ interface FileEditDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Helper to format date to YYYY-MM-DD for input[type="date"]
+// Extract YYYY-MM-DD from an ISO 8601 date string
 const formatDateForInput = (dateString: string | undefined): string => {
   if (!dateString) return "";
   try {
