@@ -48,7 +48,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		*models.Imprint
 		FileCount int      `json:"file_count"`
 		Aliases   []string `json:"aliases"`
-	}{imprint, fileCount, ensureSlice(aliasList)}
+	}{imprint, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -89,7 +89,7 @@ func (h *handler) list(c echo.Context) error {
 	for i, imp := range imprints {
 		fileCount, _ := h.imprintService.GetFileCount(ctx, imp.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, imp.ID)
-		result[i] = ImprintWithCount{imp, fileCount, ensureSlice(aliasList)}
+		result[i] = ImprintWithCount{imp, fileCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -147,7 +147,7 @@ func (h *handler) update(c echo.Context) error {
 				*models.Imprint
 				FileCount int      `json:"file_count"`
 				Aliases   []string `json:"aliases"`
-			}{existing, fileCount, ensureSlice(aliasList)}
+			}{existing, fileCount, aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -176,7 +176,7 @@ func (h *handler) update(c echo.Context) error {
 		*models.Imprint
 		FileCount int      `json:"file_count"`
 		Aliases   []string `json:"aliases"`
-	}{imprint, fileCount, ensureSlice(aliasList)}
+	}{imprint, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -268,11 +268,4 @@ func (h *handler) deleteImprint(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

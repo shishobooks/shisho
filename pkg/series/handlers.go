@@ -62,7 +62,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		*models.Series
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{series, bookCount, ensureSlice(aliasList)}
+	}{series, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -105,7 +105,7 @@ func (h *handler) list(c echo.Context) error {
 	for i, s := range seriesList {
 		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, s.ID)
-		result[i] = SeriesWithCount{s, count, ensureSlice(aliasList)}
+		result[i] = SeriesWithCount{s, count, aliasList}
 	}
 
 	response := map[string]interface{}{
@@ -211,7 +211,7 @@ func (h *handler) update(c echo.Context) error {
 		*models.Series
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{series, bookCount, ensureSlice(aliasList)}
+	}{series, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -447,11 +447,4 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

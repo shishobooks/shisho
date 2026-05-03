@@ -169,6 +169,7 @@ func TestListAliases_Empty(t *testing.T) {
 
 	aliases, err := svc.ListAliases(ctx, GenreConfig, genre.ID)
 	require.NoError(t, err)
+	assert.NotNil(t, aliases)
 	assert.Empty(t, aliases)
 }
 
@@ -258,7 +259,6 @@ func TestAddAlias_DifferentLibrariesAllowed(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Verify the error type is a validation error (422).
 func TestAddAlias_ReturnsValidationError(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

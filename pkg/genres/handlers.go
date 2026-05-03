@@ -53,7 +53,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		*models.Genre
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{genre, bookCount, ensureSlice(aliasList)}
+	}{genre, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -96,7 +96,7 @@ func (h *handler) list(c echo.Context) error {
 	for i, g := range genres {
 		bookCount, _ := h.genreService.GetBookCount(ctx, g.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, g.ID)
-		result[i] = GenreWithCount{g, bookCount, ensureSlice(aliasList)}
+		result[i] = GenreWithCount{g, bookCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -166,7 +166,7 @@ func (h *handler) update(c echo.Context) error {
 				*models.Genre
 				BookCount int      `json:"book_count"`
 				Aliases   []string `json:"aliases"`
-			}{existing, bookCount, ensureSlice(aliasList)}
+			}{existing, bookCount, aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -206,7 +206,7 @@ func (h *handler) update(c echo.Context) error {
 		*models.Genre
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{genre, bookCount, ensureSlice(aliasList)}
+	}{genre, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -317,11 +317,4 @@ func (h *handler) deleteGenre(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

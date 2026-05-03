@@ -48,7 +48,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		*models.Publisher
 		FileCount int      `json:"file_count"`
 		Aliases   []string `json:"aliases"`
-	}{publisher, fileCount, ensureSlice(aliasList)}
+	}{publisher, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -89,7 +89,7 @@ func (h *handler) list(c echo.Context) error {
 	for i, p := range publishers {
 		fileCount, _ := h.publisherService.GetFileCount(ctx, p.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, p.ID)
-		result[i] = PublisherWithCount{p, fileCount, ensureSlice(aliasList)}
+		result[i] = PublisherWithCount{p, fileCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -147,7 +147,7 @@ func (h *handler) update(c echo.Context) error {
 				*models.Publisher
 				FileCount int      `json:"file_count"`
 				Aliases   []string `json:"aliases"`
-			}{existing, fileCount, ensureSlice(aliasList)}
+			}{existing, fileCount, aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -176,7 +176,7 @@ func (h *handler) update(c echo.Context) error {
 		*models.Publisher
 		FileCount int      `json:"file_count"`
 		Aliases   []string `json:"aliases"`
-	}{publisher, fileCount, ensureSlice(aliasList)}
+	}{publisher, fileCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -268,11 +268,4 @@ func (h *handler) deletePublisher(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

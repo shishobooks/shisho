@@ -35,6 +35,9 @@ func (svc *Service) ListAliases(ctx context.Context, cfg ResourceConfig, resourc
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	if names == nil {
+		return []string{}, nil
+	}
 	return names, nil
 }
 
@@ -44,7 +47,6 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		return errcodes.ValidationError("Alias name cannot be empty")
 	}
 
-	// Check if alias matches the resource's own primary name
 	var primaryName string
 	err := svc.db.NewSelect().
 		TableExpr(cfg.ResourceTable).
@@ -58,7 +60,6 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		return errcodes.ValidationError("Alias cannot match the resource's own name")
 	}
 
-	// Check if alias duplicates another resource's primary name (same type + library)
 	var conflictCount int
 	conflictCount, err = svc.db.NewSelect().
 		TableExpr(cfg.ResourceTable).
@@ -71,7 +72,6 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		return errcodes.ValidationError("Alias conflicts with an existing name")
 	}
 
-	// Check if alias duplicates an existing alias (same type + library)
 	var aliasCount int
 	aliasCount, err = svc.db.NewSelect().
 		TableExpr(cfg.AliasTable).
@@ -130,7 +130,6 @@ func (svc *Service) SyncAliases(ctx context.Context, cfg ResourceConfig, resourc
 		desiredSet[strings.ToLower(strings.TrimSpace(a))] = true
 	}
 
-	// Remove aliases not in desired
 	for _, a := range current {
 		if !desiredSet[strings.ToLower(a)] {
 			if err := svc.RemoveAlias(ctx, cfg, resourceID, a); err != nil {
@@ -139,7 +138,6 @@ func (svc *Service) SyncAliases(ctx context.Context, cfg ResourceConfig, resourc
 		}
 	}
 
-	// Add aliases in desired but not in current
 	for _, a := range desired {
 		trimmed := strings.TrimSpace(a)
 		if trimmed == "" {

@@ -52,7 +52,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		*models.Tag
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{tag, bookCount, ensureSlice(aliasList)}
+	}{tag, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -93,7 +93,7 @@ func (h *handler) list(c echo.Context) error {
 	for i, t := range tags {
 		bookCount, _ := h.tagService.GetBookCount(ctx, t.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, t.ID)
-		result[i] = TagWithCount{t, bookCount, ensureSlice(aliasList)}
+		result[i] = TagWithCount{t, bookCount, aliasList}
 	}
 
 	response := map[string]any{
@@ -157,7 +157,7 @@ func (h *handler) update(c echo.Context) error {
 				*models.Tag
 				BookCount int      `json:"book_count"`
 				Aliases   []string `json:"aliases"`
-			}{existing, bookCount, ensureSlice(aliasList)}
+			}{existing, bookCount, aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -194,7 +194,7 @@ func (h *handler) update(c echo.Context) error {
 		*models.Tag
 		BookCount int      `json:"book_count"`
 		Aliases   []string `json:"aliases"`
-	}{tag, bookCount, ensureSlice(aliasList)}
+	}{tag, bookCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -296,11 +296,4 @@ func (h *handler) deleteTag(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

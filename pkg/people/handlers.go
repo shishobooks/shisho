@@ -77,7 +77,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		AuthoredBookCount int      `json:"authored_book_count"`
 		NarratedFileCount int      `json:"narrated_file_count"`
 		Aliases           []string `json:"aliases"`
-	}{person, authoredCount, narratedCount, ensureSlice(aliasList)}
+	}{person, authoredCount, narratedCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -122,7 +122,7 @@ func (h *handler) list(c echo.Context) error {
 		authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, p.ID)
 		narratedCount, _ := h.personService.GetNarratedFileCount(ctx, p.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, p.ID)
-		result[i] = PersonWithCounts{p, authoredCount, narratedCount, ensureSlice(aliasList)}
+		result[i] = PersonWithCounts{p, authoredCount, narratedCount, aliasList}
 	}
 
 	response := map[string]interface{}{
@@ -277,7 +277,7 @@ func (h *handler) update(c echo.Context) error {
 		AuthoredBookCount int      `json:"authored_book_count"`
 		NarratedFileCount int      `json:"narrated_file_count"`
 		Aliases           []string `json:"aliases"`
-	}{person, authoredCount, narratedCount, ensureSlice(aliasList)}
+	}{person, authoredCount, narratedCount, aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -418,11 +418,4 @@ func (h *handler) deletePerson(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-func ensureSlice(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

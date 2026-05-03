@@ -10,31 +10,23 @@ import (
 func init() {
 	up := func(_ context.Context, db *bun.DB) error {
 		tables := []struct {
-			name string
-			fk   string
+			name   string
+			fk     string
+			parent string
 		}{
-			{"genre_aliases", "genre_id"},
-			{"tag_aliases", "tag_id"},
-			{"series_aliases", "series_id"},
-			{"person_aliases", "person_id"},
-			{"publisher_aliases", "publisher_id"},
-			{"imprint_aliases", "imprint_id"},
-		}
-
-		parentTables := map[string]string{
-			"genre_id":     "genres",
-			"tag_id":       "tags",
-			"series_id":    "series",
-			"person_id":    "persons",
-			"publisher_id": "publishers",
-			"imprint_id":   "imprints",
+			{"genre_aliases", "genre_id", "genres"},
+			{"tag_aliases", "tag_id", "tags"},
+			{"series_aliases", "series_id", "series"},
+			{"person_aliases", "person_id", "persons"},
+			{"publisher_aliases", "publisher_id", "publishers"},
+			{"imprint_aliases", "imprint_id", "imprints"},
 		}
 
 		for _, t := range tables {
 			create := `CREATE TABLE ` + t.name + ` (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				` + t.fk + ` INTEGER NOT NULL REFERENCES ` + parentTables[t.fk] + `(id) ON DELETE CASCADE,
+				` + t.fk + ` INTEGER NOT NULL REFERENCES ` + t.parent + `(id) ON DELETE CASCADE,
 				name TEXT NOT NULL,
 				library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE
 			)`
