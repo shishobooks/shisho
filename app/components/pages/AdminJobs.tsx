@@ -26,7 +26,7 @@ const getStatusColor = (status: string) => {
     case "failed":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
+      return "bg-muted text-muted-foreground";
   }
 };
 
@@ -135,7 +135,7 @@ const AdminJobs = () => {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+          <h1 className="text-2xl font-semibold mb-1 md:mb-2">
             Background Jobs
           </h1>
           <p className="text-sm md:text-base text-muted-foreground">

@@ -50,7 +50,7 @@ export const CapabilitiesWarning = ({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           {rows.length > 0 && (
             <div className="space-y-2">
               {rows.map((def) => (

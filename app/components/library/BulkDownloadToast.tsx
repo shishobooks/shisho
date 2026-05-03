@@ -16,7 +16,7 @@ export const BulkDownloadToast = () => {
   const progressPercent = total > 0 ? Math.round((current / total) * 100) : 0;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 bg-background border rounded-lg shadow-lg p-4 w-80">
+    <div className="fixed bottom-4 right-4 z-50 bg-background border rounded-md shadow-lg p-4 w-80">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           {status === "completed" ? (

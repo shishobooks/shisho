@@ -109,7 +109,7 @@ const SecuritySettings = () => {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background px-4 py-8">
         <div className="w-full max-w-md">
-          <div className="flex flex-col items-center mb-8">
+          <div className="flex flex-col items-center mb-6 md:mb-8">
             <Logo className="mb-2" size="lg" />
             <h1 className="text-xl font-semibold mb-1">
               Password Reset Required
@@ -164,7 +164,7 @@ const SecuritySettings = () => {
     <div>
       <TopNav />
       <div className="mx-auto w-full max-w-7xl px-6 py-8">
-        <div className="mb-8">
+        <div className="mb-6 md:mb-8">
           <h1 className="mb-2 text-2xl font-semibold">Security Settings</h1>
           <p className="text-muted-foreground">
             Manage your password and API keys
@@ -173,7 +173,7 @@ const SecuritySettings = () => {
 
         <div className="max-w-2xl space-y-6">
           {/* Password Change */}
-          <div className="rounded-md border border-border p-6">
+          <div className="rounded-md border border-border p-4 md:p-6">
             <h2 className="mb-4 text-lg font-semibold">Change Password</h2>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -249,7 +249,7 @@ function EReaderSection() {
   );
 
   return (
-    <div className="rounded-md border border-border p-6">
+    <div className="rounded-md border border-border p-4 md:p-6">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold">eReader Browser Access</h2>
@@ -466,7 +466,7 @@ function EReaderSetupDialog({
         {generateShortUrl.isPending ? (
           <DialogBody>Generating URL...</DialogBody>
         ) : shortUrl ? (
-          <DialogBody className="space-y-4">
+          <DialogBody className="space-y-6">
             <div className="flex gap-2">
               <Input
                 className="font-mono"
@@ -506,7 +506,7 @@ function KoboSyncSection() {
   );
 
   return (
-    <div className="rounded-md border border-border p-6">
+    <div className="rounded-md border border-border p-4 md:p-6">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold">Kobo Wireless Sync</h2>
@@ -735,7 +735,7 @@ function KoboSetupDialog({
             Configure your Kobo device to sync books wirelessly from Shisho.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           {/* Scope Selection */}
           <div className="space-y-3">
             <Label>Sync Scope</Label>

@@ -133,7 +133,7 @@ interface ErrorStageProps {
 
 const ErrorStage = ({ code, onRetry }: ErrorStageProps) => (
   <div className="space-y-4">
-    <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3">
+    <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3">
       <p className="text-sm font-medium text-destructive">Lookup failed</p>
       <p className="mt-1 text-sm text-destructive/80">{errorMessage(code)}</p>
     </div>
@@ -219,7 +219,7 @@ const ResultStage = ({
 
       {/* Duration match / mismatch callout */}
       {!detection.withinTolerance ? (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3">
+        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3">
           <p className="text-sm font-medium text-destructive">
             Duration differs by {formatDurationMs(diffMs)}. May be a different
             edition.
@@ -287,7 +287,7 @@ const ResultStage = ({
 
       {/* Overwrite warning */}
       {hasChanges && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3">
+        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3">
           <p className="text-sm font-medium text-destructive">
             Unsaved changes will be overwritten
           </p>

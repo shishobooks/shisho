@@ -4,7 +4,7 @@ import { cn } from "@/libraries/utils";
 
 const ShelfIcon = ({ className }: { className?: string }) => (
   <svg
-    className={cn("text-primary dark:text-violet-300", className)}
+    className={cn("text-primary", className)}
     fill="none"
     viewBox="0 0 48 48"
     xmlns="http://www.w3.org/2000/svg"
@@ -65,7 +65,7 @@ const Logo = ({ asLink = false, className, size = "md" }: LogoProps) => {
         Shisho
         <span
           className={cn(
-            "align-super font-normal text-primary dark:text-violet-300 ml-0.5",
+            "align-super font-normal text-primary ml-0.5",
             superscriptSizeClasses[size],
           )}
         >

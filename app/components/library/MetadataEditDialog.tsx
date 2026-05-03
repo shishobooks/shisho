@@ -157,7 +157,7 @@ export function MetadataEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input

@@ -71,7 +71,7 @@ const UserSettings = () => {
     <div>
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
-        <div className="mb-8">
+        <div className="mb-6 md:mb-8">
           <h1 className="text-2xl font-semibold mb-2">User Settings</h1>
           <p className="text-muted-foreground">
             Manage your account preferences
@@ -80,7 +80,7 @@ const UserSettings = () => {
 
         <div className="max-w-2xl space-y-6">
           {/* Theme Settings */}
-          <div className="border border-border rounded-md p-6">
+          <div className="border border-border rounded-md p-4 md:p-6">
             <h2 className="text-lg font-semibold mb-4">Appearance</h2>
             <div className="space-y-3">
               <ThemeOption
@@ -127,7 +127,7 @@ const UserSettings = () => {
           </div>
 
           {/* Security Settings Link */}
-          <div className="rounded-md border border-border p-6">
+          <div className="rounded-md border border-border p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Security</h2>

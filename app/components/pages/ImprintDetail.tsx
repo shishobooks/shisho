@@ -121,9 +121,9 @@ const ImprintDetail = () => {
       />
 
       {/* Imprint Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
-          <h1 className="text-3xl font-bold min-w-0 break-words">
+          <h1 className="text-2xl font-semibold min-w-0 break-words">
             {imprint.name}
           </h1>
           <div className="flex gap-2 shrink-0">
@@ -169,7 +169,7 @@ const ImprintDetail = () => {
             <div className="space-y-3">
               {imprintFilesQuery.data.map((file) => (
                 <div
-                  className="border-l-4 border-l-primary dark:border-l-violet-300 pl-4 py-2"
+                  className="border-l-4 border-l-primary pl-4 py-2"
                   key={file.id}
                 >
                   <div className="flex items-center justify-between gap-4">

@@ -64,9 +64,7 @@ const AdminCache = () => {
   return (
     <div>
       <div className="mb-6 md:mb-8">
-        <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
-          Cache
-        </h1>
+        <h1 className="text-2xl font-semibold mb-1 md:mb-2">Cache</h1>
         <p className="text-sm md:text-base text-muted-foreground">
           Inspect and clear server caches. Content will be regenerated on next
           access.

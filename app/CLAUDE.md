@@ -10,6 +10,25 @@ This file documents frontend patterns and conventions specific to Shisho.
 - Vite for bundling
 - Radix UI primitives with shadcn/ui patterns
 
+## Design Tokens
+
+Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dark:bg-neutral-*`, `dark:text-violet-*`, `text-gray-*`, `bg-neutral-*`). The CSS variables in the theme already handle dark mode — manual `dark:` color overrides cause drift.
+
+| Pattern | Classes |
+|---------|---------|
+| Page titles (all pages) | `text-2xl font-semibold` |
+| Dialog titles | `text-sm font-semibold` |
+| Page header margin | `mb-6 md:mb-8` |
+| Card/section padding | `p-4 md:p-6` |
+| Dialog body spacing | `space-y-6` |
+| Border radius (page components) | `rounded-md` (not `rounded-lg`) |
+| Hover backgrounds | `hover:bg-muted/50` |
+| Selected card | `border-primary bg-primary/5` + `border-transparent` when unselected |
+| Selected toggle chip | `border-primary bg-primary/5 text-primary` |
+| Inline warning | `rounded-md bg-destructive/10 border border-destructive/20 p-3` |
+| Danger zone section | `space-y-3 rounded-md border border-destructive/40 p-4 md:p-6` with `text-lg font-semibold text-destructive` title (see `PluginDangerZone.tsx`) |
+| Muted status badge | `bg-muted text-muted-foreground` |
+
 ## Architecture
 
 ### React Router (`app/router.tsx`)
@@ -196,7 +215,7 @@ Tailwind breakpoints used in Shisho:
 ```tsx
 // Good - stacked layout
 <div className="flex flex-col gap-3 mb-6">
-  <h1 className="text-2xl md:text-3xl font-semibold">{title}</h1>
+  <h1 className="text-2xl font-semibold">{title}</h1>
   <div className="flex items-center gap-2">
     <Button size="sm" variant="outline">
       <Edit className="h-4 w-4 sm:mr-2" />
@@ -207,7 +226,7 @@ Tailwind breakpoints used in Shisho:
 
 // Bad - side-by-side causes layout issues
 <div className="flex items-start justify-between">
-  <h1 className="text-3xl">{title}</h1>
+  <h1 className="text-2xl font-semibold">{title}</h1>
   <Button>Edit</Button>
 </div>
 ```
@@ -219,7 +238,7 @@ For settings/admin pages with title, description, and action buttons:
 ```tsx
 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
   <div>
-    <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
+    <h1 className="text-2xl font-semibold mb-1 md:mb-2">
       Page Title
     </h1>
     <p className="text-sm md:text-base text-muted-foreground">
@@ -830,9 +849,9 @@ All metadata detail pages (Series, Person, Genre, Tag) follow a consistent struc
 
 **Header Section:**
 ```tsx
-<div className="mb-8">
+<div className="mb-6 md:mb-8">
   <div className="flex items-start justify-between gap-4 mb-2">
-    <h1 className="text-3xl font-bold min-w-0 break-words">{name}</h1>
+    <h1 className="text-2xl font-semibold min-w-0 break-words">{name}</h1>
     <div className="flex gap-2 shrink-0">
       <Button onClick={() => setEditOpen(true)} size="sm" variant="outline">
         <Edit className="h-4 w-4 mr-2" />

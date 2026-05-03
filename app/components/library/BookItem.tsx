@@ -259,7 +259,7 @@ const BookItem = ({
           {(!coverLoaded || coverError) && (
             <CoverPlaceholder
               className={cn(
-                "absolute inset-0 rounded-sm border border-neutral-300 dark:border-neutral-600",
+                "absolute inset-0 rounded-sm border border-border",
                 isSelected && "ring-2 ring-primary ring-offset-1",
               )}
               variant={placeholderVariant}
@@ -270,7 +270,7 @@ const BookItem = ({
             <img
               alt={`${book.title} Cover`}
               className={cn(
-                "w-full h-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+                "w-full h-full object-cover rounded-sm border-border border-1",
                 !coverLoaded && "opacity-0",
                 isSelected && "ring-2 ring-primary ring-offset-1",
               )}
@@ -354,7 +354,7 @@ const BookItem = ({
           if (uniqueAuthors.length === 0) return null;
 
           return (
-            <div className="mt-1 text-xs line-clamp-2 text-neutral-500">
+            <div className="mt-1 text-xs line-clamp-2 text-muted-foreground">
               {uniqueAuthors.map((a, i) => (
                 <span key={a.personId}>
                   {a.hasPerson ? (

@@ -152,7 +152,7 @@ export function MergeBooksDialog({
 
         {bookQueryError && (
           <DialogBody>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-destructive">
@@ -168,7 +168,7 @@ export function MergeBooksDialog({
 
         {!isLoadingBooks && !bookQueryError && step === "select" && (
           <>
-            <DialogBody className="space-y-4">
+            <DialogBody className="space-y-6">
               <div className="space-y-2">
                 <Label>Select target book</Label>
                 <p className="text-sm text-muted-foreground">
@@ -188,8 +188,10 @@ export function MergeBooksDialog({
                     return (
                       <label
                         className={cn(
-                          "flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors",
-                          isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+                          "flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors",
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-transparent hover:bg-muted/50",
                         )}
                         htmlFor={`book-${book.id}`}
                         key={book.id}
@@ -252,9 +254,9 @@ export function MergeBooksDialog({
           step === "confirm" &&
           targetBook && (
             <>
-              <DialogBody className="space-y-4">
+              <DialogBody className="space-y-6">
                 {/* Warning banner */}
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div className="text-sm">
                     <p className="font-medium text-destructive">
@@ -271,7 +273,7 @@ export function MergeBooksDialog({
 
                 {/* Summary */}
                 <div className="space-y-3">
-                  <div className="p-3 rounded-lg border bg-card">
+                  <div className="p-3 rounded-md border bg-card">
                     <div className="text-sm text-muted-foreground mb-1">
                       Target book
                     </div>

@@ -82,7 +82,7 @@ const SearchResultCover = ({
   return (
     <div
       className={cn(
-        "flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 rounded overflow-hidden relative",
+        "flex-shrink-0 bg-muted rounded overflow-hidden relative",
         thumbnailClasses,
       )}
     >
@@ -326,9 +326,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         <Link
           className={cn(
             "flex items-center gap-3 px-3 py-2 rounded-md",
-            selectedIndex === index
-              ? "bg-neutral-100 dark:bg-neutral-800"
-              : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+            selectedIndex === index ? "bg-muted" : "hover:bg-muted",
           )}
           key={`book-${book.id}`}
           onClick={handleResultClick}
@@ -372,9 +370,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       <Link
         className={cn(
           "flex items-center gap-3 px-3 py-2 rounded-md",
-          selectedIndex === index
-            ? "bg-neutral-100 dark:bg-neutral-800"
-            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+          selectedIndex === index ? "bg-muted" : "hover:bg-muted",
         )}
         key={`series-${series.id}`}
         onClick={handleResultClick}
@@ -414,9 +410,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       <Link
         className={cn(
           "flex items-center gap-3 px-3 py-2 rounded-md",
-          selectedIndex === index
-            ? "bg-neutral-100 dark:bg-neutral-800"
-            : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+          selectedIndex === index ? "bg-muted" : "hover:bg-muted",
         )}
         key={`person-${person.id}`}
         onClick={handleResultClick}
@@ -478,7 +472,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       {isOpen && debouncedQuery && (
         <div
           className={cn(
-            "bg-background border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto",
+            "bg-background border border-border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto",
             fullWidth
               ? "fixed left-4 right-4 top-28"
               : "absolute top-full mt-2 left-0 w-80",

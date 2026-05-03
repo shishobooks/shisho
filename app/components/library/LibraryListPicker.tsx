@@ -77,7 +77,7 @@ const LibraryListPicker = () => {
                     group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer
                     ${
                       isActive
-                        ? "bg-primary/10 text-primary dark:bg-primary/15 dark:text-violet-300"
+                        ? "bg-primary/10 text-primary"
                         : "text-foreground hover:bg-accent"
                     }
                   `}
@@ -89,7 +89,7 @@ const LibraryListPicker = () => {
                       flex h-7 w-7 shrink-0 items-center justify-center rounded-md
                       ${
                         isActive
-                          ? "bg-primary text-primary-foreground dark:bg-violet-400 dark:text-neutral-900"
+                          ? "bg-primary text-primary-foreground"
                           : "bg-muted text-muted-foreground group-hover:bg-muted/80"
                       }
                     `}
@@ -100,7 +100,7 @@ const LibraryListPicker = () => {
                     {library.name}
                   </span>
                   {isActive && (
-                    <Check className="h-4 w-4 shrink-0 text-primary dark:text-violet-300" />
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
                   )}
                 </button>
               );
@@ -128,7 +128,7 @@ const LibraryListPicker = () => {
                       group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors
                       ${
                         isActive
-                          ? "bg-primary/10 text-primary dark:bg-primary/15 dark:text-violet-300"
+                          ? "bg-primary/10 text-primary"
                           : "text-foreground hover:bg-accent/50"
                       }
                     `}
@@ -140,7 +140,7 @@ const LibraryListPicker = () => {
                         flex h-7 w-7 shrink-0 items-center justify-center rounded-md
                         ${
                           isActive
-                            ? "bg-primary text-primary-foreground dark:bg-violet-400 dark:text-neutral-900"
+                            ? "bg-primary text-primary-foreground"
                             : "bg-background text-muted-foreground group-hover:bg-background/80"
                         }
                       `}
@@ -153,13 +153,13 @@ const LibraryListPicker = () => {
                     <span
                       className={`
                         shrink-0 tabular-nums text-xs
-                        ${isActive ? "text-primary/70 dark:text-violet-300/70" : "text-muted-foreground"}
+                        ${isActive ? "text-primary/70" : "text-muted-foreground"}
                       `}
                     >
                       {list.book_count}
                     </span>
                     {isActive && (
-                      <Check className="h-4 w-4 shrink-0 text-primary dark:text-violet-300" />
+                      <Check className="h-4 w-4 shrink-0 text-primary" />
                     )}
                   </Link>
                 );

@@ -90,9 +90,7 @@ const SeriesCard = ({
           {/* Placeholder shown until image loads or on error */}
           {(!coverLoaded || coverError) && (
             <CoverPlaceholder
-              className={cn(
-                "absolute inset-0 rounded-sm border border-neutral-300 dark:border-neutral-600",
-              )}
+              className={cn("absolute inset-0 rounded-sm border border-border")}
               variant={isAudiobook ? "audiobook" : "book"}
             />
           )}
@@ -101,7 +99,7 @@ const SeriesCard = ({
             <img
               alt={`${seriesItem.name} Cover`}
               className={cn(
-                "w-full h-full object-cover rounded-sm border-neutral-300 dark:border-neutral-600 border-1",
+                "w-full h-full object-cover rounded-sm border-border border-1",
                 !coverLoaded && "opacity-0",
               )}
               onError={() => setCoverError(true)}
@@ -125,7 +123,7 @@ const SeriesCard = ({
           <TooltipContent>{seriesItem.name}</TooltipContent>
         </Tooltip>
       </Link>
-      <div className="mt-1 text-xs line-clamp-1 text-neutral-500 dark:text-neutral-500">
+      <div className="mt-1 text-xs line-clamp-1 text-muted-foreground">
         <Badge className="text-xs" variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>

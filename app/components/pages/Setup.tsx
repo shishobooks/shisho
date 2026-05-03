@@ -159,7 +159,7 @@ const Setup = () => {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Toaster richColors />
       <div className="w-full max-w-md p-8">
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6 md:mb-8">
           <Logo className="mb-2" size="lg" />
           <h1 className="text-xl font-semibold mb-1">Welcome!</h1>
           <p className="text-muted-foreground text-center">

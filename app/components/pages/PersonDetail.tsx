@@ -183,9 +183,9 @@ const PersonDetail = () => {
       />
 
       {/* Person Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
-          <h1 className="text-3xl font-bold min-w-0 break-words">
+          <h1 className="text-2xl font-semibold min-w-0 break-words">
             {person.name}
           </h1>
           <div className="flex gap-2 shrink-0">
@@ -280,7 +280,7 @@ const PersonDetail = () => {
             <div className="space-y-2">
               {narratedFilesQuery.data.map((file) => (
                 <Link
-                  className="flex items-center justify-between p-4 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-md border border-border hover:bg-muted/50 transition-colors"
                   key={file.id}
                   to={`/libraries/${libraryId}/books/${file.book_id}`}
                 >

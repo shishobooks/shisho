@@ -247,14 +247,14 @@ const LibrarySettings = () => {
 
   return (
     <LibraryLayout>
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <h1 className="text-2xl font-semibold mb-2">Library Settings</h1>
         <p className="text-muted-foreground">
           Manage library name, paths, and scanning behavior
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-6 border border-border rounded-md p-6">
+      <div className="max-w-2xl space-y-6 border border-border rounded-md p-4 md:p-6">
         {/* Library Name */}
         <div className="space-y-2">
           <Label htmlFor="library-name">Library Name</Label>
@@ -422,11 +422,11 @@ const LibrarySettings = () => {
 
       {canDeleteLibrary && libraryQuery.data && (
         <>
-          <section className="max-w-2xl mt-8 border border-destructive/40 rounded-md p-4 md:p-6">
-            <h2 className="text-base md:text-lg font-semibold text-destructive mb-1">
-              Danger Zone
+          <section className="max-w-2xl mt-8 space-y-3 rounded-md border border-destructive/40 p-4 md:p-6">
+            <h2 className="text-lg font-semibold text-destructive">
+              Danger zone
             </h2>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium">Delete this library</p>
                 <p className="text-sm text-muted-foreground">

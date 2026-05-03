@@ -1098,9 +1098,7 @@ const BookDetail = () => {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
-              <h1 className="text-2xl md:text-3xl font-semibold">
-                {book.title}
-              </h1>
+              <h1 className="text-2xl font-semibold">{book.title}</h1>
               {/*
                 The relative wrapper exists so AddToListPopover can be opened
                 from the dropdown menu's "Add to list" item: its trigger is an
@@ -1243,7 +1241,7 @@ const BookDetail = () => {
                   {book.book_series.map((bs) => (
                     <div className="flex items-center gap-2" key={bs.id}>
                       <Link
-                        className="text-sm font-medium text-primary hover:text-primary/80 hover:underline dark:text-violet-300 dark:hover:text-violet-400"
+                        className="text-sm font-medium text-primary hover:text-primary/80 hover:underline"
                         to={`/libraries/${libraryId}/series/${bs.series_id}`}
                       >
                         {bs.series?.name ?? "Unknown Series"}
@@ -1568,7 +1566,7 @@ const BookDetail = () => {
 
       {/* File selection action bar */}
       {selectedFileIds.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-3 z-50">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-md shadow-lg p-3 flex items-center gap-3 z-50">
           <span className="text-sm text-muted-foreground">
             {selectedFileIds.size} file
             {selectedFileIds.size !== 1 ? "s" : ""} selected

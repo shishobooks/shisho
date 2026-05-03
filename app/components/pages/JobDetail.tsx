@@ -35,7 +35,7 @@ const getLevelColor = (level: string) => {
     case JobLogLevelFatal:
       return "bg-red-700/30 text-red-300";
     default:
-      return "bg-gray-500/20 text-gray-400";
+      return "bg-muted text-muted-foreground";
   }
 };
 
@@ -50,7 +50,7 @@ const getStatusColor = (status: string) => {
     case "failed":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
+      return "bg-muted text-muted-foreground";
   }
 };
 

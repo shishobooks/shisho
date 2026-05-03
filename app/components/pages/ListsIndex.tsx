@@ -66,7 +66,7 @@ const ListsIndex = () => {
 
     return (
       <Link
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-lg border bg-card hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors"
         key={list.id}
         to={`/lists/${list.id}`}
       >
@@ -93,7 +93,7 @@ const ListsIndex = () => {
   const renderTemplateCard = (template: ListTemplate) => {
     return (
       <button
-        className="flex flex-col items-start gap-2 p-4 rounded-lg border bg-card hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex flex-col items-start gap-2 p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={createFromTemplateMutation.isPending}
         key={template.name}
         onClick={() => handleCreateFromTemplate(template)}
@@ -113,9 +113,7 @@ const ListsIndex = () => {
       <div className="max-w-3xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-xl md:text-2xl font-semibold mb-1 md:mb-2">
-              Lists
-            </h1>
+            <h1 className="text-2xl font-semibold mb-1 md:mb-2">Lists</h1>
             <p className="text-sm md:text-base text-muted-foreground">
               Organize your books into custom collections
             </p>

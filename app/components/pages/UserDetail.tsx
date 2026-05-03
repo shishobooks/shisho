@@ -267,7 +267,7 @@ const UserDetail = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 md:mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">{user.username}</h1>
           <div className="flex items-center gap-2">
@@ -280,7 +280,7 @@ const UserDetail = () => {
         </div>
       </div>
 
-      <div className="max-w-2xl space-y-6 border border-border rounded-md p-6">
+      <div className="max-w-2xl space-y-6 border border-border rounded-md p-4 md:p-6">
         {/* Basic Info */}
         <div className="space-y-4">
           <h2 className="text-lg font-medium">Basic Information</h2>
@@ -449,7 +449,7 @@ const UserDetail = () => {
                 : "Enter a new password for this user."}
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody className="space-y-6">
             {isSelf && (
               <div className="space-y-2">
                 <Label htmlFor="current-password">Current Password</Label>

@@ -196,7 +196,7 @@ export function IdentifyBookDialog({
         )}
 
         {step === "search" && (
-          <DialogBody className="space-y-4">
+          <DialogBody className="space-y-6">
             {/* File selector — only shown on the search step. The review step
                 scopes to the file already chosen here, so re-presenting the
                 picker would be misleading; switching files always means

@@ -95,9 +95,9 @@ export function MoveFilesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-6">
           {willDeleteBook ? (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-destructive">
@@ -107,7 +107,7 @@ export function MoveFilesDialog({
               </div>
             </div>
           ) : (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border">
+            <div className="flex items-start gap-3 p-3 rounded-md bg-muted/50 border">
               <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground">{warningMessage}</p>
             </div>
