@@ -76,11 +76,15 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            tools/gotestsplit
+            go.mod
+            go.sum
       - name: Restore previous test timing cache
-        # Belt-and-suspenders alongside the fresh-only uploads above: if a
-        # shard fails before writing any junit (or upload-artifact fails),
-        # we still preserve that shard's prior history rather than dropping
-        # it from the cache permanently.
+        # Preserves shard history when a shard fails before writing junit
+        # or upload-artifact fails — fresh artifacts overlay on top.
         uses: actions/cache/restore@v5
         with:
           path: .gotest-timings
@@ -94,15 +98,6 @@ jobs:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
-      # Must come AFTER cache restore + artifact download so clean: false
-      # preserves the assembled .gotest-timings directory.
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-          sparse-checkout: |
-            tools/gotestsplit
-            go.mod
-            go.sum
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
