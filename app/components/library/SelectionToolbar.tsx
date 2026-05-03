@@ -282,7 +282,11 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             <ChevronUp className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="center" className="w-56 p-0" side="top">
+        <PopoverContent
+          align="center"
+          className="w-56 max-h-[70vh] overflow-y-auto p-0"
+          side="top"
+        >
           {addToListContent}
 
           <div className="border-t p-1">
