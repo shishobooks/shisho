@@ -7,12 +7,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
 	publisherService *Service
+	aliasService     *aliases.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -29,23 +31,24 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(publisher.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	// Get file count
 	fileCount, err := h.publisherService.GetFileCount(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
+
 	response := struct {
 		*models.Publisher
-		FileCount int `json:"file_count"`
-	}{publisher, fileCount}
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
+	}{publisher, fileCount, ensureSlice(aliasList)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -65,7 +68,6 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
 	if user, ok := c.Get("user").(*models.User); ok {
 		libraryIDs := user.GetAccessibleLibraryIDs()
 		if libraryIDs != nil {
@@ -78,15 +80,16 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with file counts
 	type PublisherWithCount struct {
 		*models.Publisher
-		FileCount int `json:"file_count"`
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
 	}
 	result := make([]PublisherWithCount, len(publishers))
 	for i, p := range publishers {
 		fileCount, _ := h.publisherService.GetFileCount(ctx, p.ID)
-		result[i] = PublisherWithCount{p, fileCount}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, p.ID)
+		result[i] = PublisherWithCount{p, fileCount, ensureSlice(aliasList)}
 	}
 
 	response := map[string]any{
@@ -109,7 +112,6 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the publisher
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
@@ -117,68 +119,64 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(publisher.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	if params.Name == nil || *params.Name == publisher.Name {
-		// No change, just return current
-		fileCount, _ := h.publisherService.GetFileCount(ctx, id)
-		response := struct {
-			*models.Publisher
-			FileCount int `json:"file_count"`
-		}{publisher, fileCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
-	}
+	if params.Name != nil && *params.Name != publisher.Name {
+		newName := strings.TrimSpace(*params.Name)
+		if newName == "" {
+			return errcodes.ValidationError("Publisher name cannot be empty")
+		}
 
-	newName := strings.TrimSpace(*params.Name)
-	if newName == "" {
-		return errcodes.ValidationError("Publisher name cannot be empty")
-	}
+		existing, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
+			Name:      &newName,
+			LibraryID: &publisher.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			err = h.publisherService.MergePublishers(ctx, existing.ID, id)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
-	// Check if a publisher with the new name already exists (case-insensitive)
-	existing, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
-		Name:      &newName,
-		LibraryID: &publisher.LibraryID,
-	})
-	if err == nil && existing.ID != id {
-		// Merge into existing publisher
-		err = h.publisherService.MergePublishers(ctx, existing.ID, id)
+			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
+			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
+			response := struct {
+				*models.Publisher
+				FileCount int      `json:"file_count"`
+				Aliases   []string `json:"aliases"`
+			}{existing, fileCount, ensureSlice(aliasList)}
+			return errors.WithStack(c.JSON(http.StatusOK, response))
+		}
+
+		publisher.Name = newName
+		opts := UpdatePublisherOptions{Columns: []string{"name"}}
+		err = h.publisherService.UpdatePublisher(ctx, publisher, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-
-		// Return the target publisher
-		fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
-		response := struct {
-			*models.Publisher
-			FileCount int `json:"file_count"`
-		}{existing, fileCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
 	}
 
-	// Simple rename
-	publisher.Name = newName
-	opts := UpdatePublisherOptions{Columns: []string{"name"}}
-	err = h.publisherService.UpdatePublisher(ctx, publisher, opts)
-	if err != nil {
-		return errors.WithStack(err)
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.PublisherConfig, id, publisher.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
-	// Reload
 	publisher, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	fileCount, _ := h.publisherService.GetFileCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
 	response := struct {
 		*models.Publisher
-		FileCount int `json:"file_count"`
-	}{publisher, fileCount}
+		FileCount int      `json:"file_count"`
+		Aliases   []string `json:"aliases"`
+	}{publisher, fileCount, ensureSlice(aliasList)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -190,7 +188,6 @@ func (h *handler) files(c echo.Context) error {
 		return errcodes.NotFound("Publisher")
 	}
 
-	// Fetch the publisher to check library access
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
@@ -198,7 +195,6 @@ func (h *handler) files(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(publisher.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
@@ -225,7 +221,6 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target publisher to check library access
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
@@ -233,14 +228,12 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(publisher.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	// Merge source publisher into target (this) publisher
 	err = h.publisherService.MergePublishers(ctx, id, params.SourceID)
 	if err != nil {
 		return errors.WithStack(err)
@@ -256,7 +249,6 @@ func (h *handler) deletePublisher(c echo.Context) error {
 		return errcodes.NotFound("Publisher")
 	}
 
-	// Fetch the publisher to check library access
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
@@ -264,7 +256,6 @@ func (h *handler) deletePublisher(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(publisher.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
@@ -277,4 +268,11 @@ func (h *handler) deletePublisher(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func ensureSlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

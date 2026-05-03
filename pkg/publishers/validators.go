@@ -8,7 +8,8 @@ type ListPublishersQuery struct {
 }
 
 type UpdatePublisherPayload struct {
-	Name *string `json:"name,omitempty" validate:"omitempty,min=1,max=300"`
+	Name    *string  `json:"name,omitempty" validate:"omitempty,min=1,max=300"`
+	Aliases []string `json:"aliases,omitempty" validate:"omitempty,dive,min=1,max=300"`
 }
 
 type MergePublishersPayload struct {

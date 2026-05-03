@@ -8,8 +8,9 @@ type ListPeopleQuery struct {
 }
 
 type UpdatePersonPayload struct {
-	Name     *string `json:"name,omitempty" validate:"omitempty,max=300"`
-	SortName *string `json:"sort_name,omitempty" validate:"omitempty,max=300"`
+	Name     *string  `json:"name,omitempty" validate:"omitempty,max=300"`
+	SortName *string  `json:"sort_name,omitempty" validate:"omitempty,max=300"`
+	Aliases  []string `json:"aliases,omitempty" validate:"omitempty,dive,min=1,max=300"`
 }
 
 type MergePeoplePayload struct {

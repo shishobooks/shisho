@@ -9,12 +9,13 @@ import (
 type Tag struct {
 	bun.BaseModel `bun:"table:tags,alias:t" tstype:"-"`
 
-	ID        int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	LibraryID int       `bun:",nullzero" json:"library_id"`
-	Name      string    `bun:",nullzero" json:"name"`
-	BookCount int       `bun:",scanonly" json:"book_count"`
+	ID        int         `bun:",pk,nullzero" json:"id"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+	LibraryID int         `bun:",nullzero" json:"library_id"`
+	Name      string      `bun:",nullzero" json:"name"`
+	Aliases   []*TagAlias `bun:"rel:has-many,join:id=tag_id" json:"aliases" tstype:"TagAlias[]"`
+	BookCount int         `bun:",scanonly" json:"book_count"`
 }
 
 type BookTag struct {

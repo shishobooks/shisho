@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -15,6 +16,7 @@ import (
 
 type handler struct {
 	tagService    *Service
+	aliasService  *aliases.Service
 	searchService *search.Service
 }
 
@@ -39,16 +41,18 @@ func (h *handler) retrieve(c echo.Context) error {
 		}
 	}
 
-	// Get book count
 	bookCount, err := h.tagService.GetBookCount(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
+
 	response := struct {
 		*models.Tag
-		BookCount int `json:"book_count"`
-	}{tag, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{tag, bookCount, ensureSlice(aliasList)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -68,7 +72,6 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
 	if user, ok := c.Get("user").(*models.User); ok {
 		libraryIDs := user.GetAccessibleLibraryIDs()
 		if libraryIDs != nil {
@@ -81,15 +84,16 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts
 	type TagWithCount struct {
 		*models.Tag
-		BookCount int `json:"book_count"`
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
 	}
 	result := make([]TagWithCount, len(tags))
 	for i, t := range tags {
 		bookCount, _ := h.tagService.GetBookCount(ctx, t.ID)
-		result[i] = TagWithCount{t, bookCount}
+		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, t.ID)
+		result[i] = TagWithCount{t, bookCount, ensureSlice(aliasList)}
 	}
 
 	response := map[string]any{
@@ -112,7 +116,6 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the tag
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
@@ -120,79 +123,78 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(tag.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	if params.Name == nil || *params.Name == tag.Name {
-		// No change, just return current
-		bookCount, _ := h.tagService.GetBookCount(ctx, id)
-		response := struct {
-			*models.Tag
-			BookCount int `json:"book_count"`
-		}{tag, bookCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
-	}
+	nameChanged := false
+	if params.Name != nil && *params.Name != tag.Name {
+		newName := strings.TrimSpace(*params.Name)
+		if newName == "" {
+			return errcodes.ValidationError("Tag name cannot be empty")
+		}
 
-	newName := strings.TrimSpace(*params.Name)
-	if newName == "" {
-		return errcodes.ValidationError("Tag name cannot be empty")
-	}
+		existing, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
+			Name:      &newName,
+			LibraryID: &tag.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			err = h.tagService.MergeTags(ctx, existing.ID, id)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
-	// Check if a tag with the new name already exists (case-insensitive)
-	existing, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
-		Name:      &newName,
-		LibraryID: &tag.LibraryID,
-	})
-	if err == nil && existing.ID != id {
-		// Merge into existing tag
-		err = h.tagService.MergeTags(ctx, existing.ID, id)
+			log := logger.FromContext(ctx)
+			if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
+				log.Warn("failed to remove merged tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
+			}
+
+			bookCount, _ := h.tagService.GetBookCount(ctx, existing.ID)
+			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, existing.ID)
+			response := struct {
+				*models.Tag
+				BookCount int      `json:"book_count"`
+				Aliases   []string `json:"aliases"`
+			}{existing, bookCount, ensureSlice(aliasList)}
+			return errors.WithStack(c.JSON(http.StatusOK, response))
+		}
+
+		tag.Name = newName
+		opts := UpdateTagOptions{Columns: []string{"name"}}
+		err = h.tagService.UpdateTag(ctx, tag, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		nameChanged = true
+	}
 
-		// Remove merged tag from FTS index
-		log := logger.FromContext(ctx)
-		if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
-			log.Warn("failed to remove merged tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
+	if params.Aliases != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.TagConfig, id, tag.LibraryID, params.Aliases); err != nil {
+			return errors.WithStack(err)
 		}
-
-		// Return the target tag
-		bookCount, _ := h.tagService.GetBookCount(ctx, existing.ID)
-		response := struct {
-			*models.Tag
-			BookCount int `json:"book_count"`
-		}{existing, bookCount}
-		return errors.WithStack(c.JSON(http.StatusOK, response))
 	}
 
-	// Simple rename
-	tag.Name = newName
-	opts := UpdateTagOptions{Columns: []string{"name"}}
-	err = h.tagService.UpdateTag(ctx, tag, opts)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Reload and update FTS index
 	tag, err = h.tagService.RetrieveTag(ctx, RetrieveTagOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-	if err := h.searchService.IndexTag(ctx, tag); err != nil {
-		log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+	if nameChanged {
+		log := logger.FromContext(ctx)
+		if err := h.searchService.IndexTag(ctx, tag); err != nil {
+			log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+		}
 	}
 
 	bookCount, _ := h.tagService.GetBookCount(ctx, id)
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
 	response := struct {
 		*models.Tag
-		BookCount int `json:"book_count"`
-	}{tag, bookCount}
+		BookCount int      `json:"book_count"`
+		Aliases   []string `json:"aliases"`
+	}{tag, bookCount, ensureSlice(aliasList)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -204,7 +206,6 @@ func (h *handler) books(c echo.Context) error {
 		return errcodes.NotFound("Tag")
 	}
 
-	// Fetch the tag to check library access
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
@@ -212,7 +213,6 @@ func (h *handler) books(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(tag.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
@@ -239,7 +239,6 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target tag to check library access
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
@@ -247,20 +246,17 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(tag.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
 	}
 
-	// Merge source tag into target (this) tag
 	err = h.tagService.MergeTags(ctx, id, params.SourceID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Remove the merged (source) tag from FTS index
 	log := logger.FromContext(ctx)
 	if err := h.searchService.DeleteFromTagIndex(ctx, params.SourceID); err != nil {
 		log.Warn("failed to remove merged tag from search index", logger.Data{"tag_id": params.SourceID, "error": err.Error()})
@@ -276,7 +272,6 @@ func (h *handler) deleteTag(c echo.Context) error {
 		return errcodes.NotFound("Tag")
 	}
 
-	// Fetch the tag to check library access
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
@@ -284,7 +279,6 @@ func (h *handler) deleteTag(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
 		if !user.HasLibraryAccess(tag.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
@@ -296,11 +290,17 @@ func (h *handler) deleteTag(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Remove from FTS index
 	log := logger.FromContext(ctx)
 	if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
 		log.Warn("failed to remove tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func ensureSlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

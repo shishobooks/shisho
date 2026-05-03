@@ -15,19 +15,20 @@ const (
 type Series struct {
 	bun.BaseModel `bun:"table:series,alias:s" tstype:"-"`
 
-	ID                 int           `bun:",pk,nullzero" json:"id"`
-	CreatedAt          time.Time     `json:"created_at"`
-	UpdatedAt          time.Time     `json:"updated_at"`
-	LibraryID          int           `bun:",nullzero" json:"library_id"`
-	Library            *Library      `bun:"rel:belongs-to" json:"library,omitempty" tstype:"Library"`
-	Name               string        `bun:",nullzero" json:"name"`
-	NameSource         string        `bun:",nullzero" json:"name_source" tstype:"DataSource"`
-	SortName           string        `bun:",notnull" json:"sort_name"`
-	SortNameSource     string        `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
-	Description        *string       `json:"description,omitempty"`
-	CoverImageFilename *string       `json:"cover_image_filename,omitempty"`
-	BookSeries         []*BookSeries `bun:"rel:has-many" json:"book_series,omitempty" tstype:"BookSeries[]"`
-	BookCount          int           `bun:",scanonly" json:"book_count"`
+	ID                 int            `bun:",pk,nullzero" json:"id"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	LibraryID          int            `bun:",nullzero" json:"library_id"`
+	Library            *Library       `bun:"rel:belongs-to" json:"library,omitempty" tstype:"Library"`
+	Name               string         `bun:",nullzero" json:"name"`
+	NameSource         string         `bun:",nullzero" json:"name_source" tstype:"DataSource"`
+	SortName           string         `bun:",notnull" json:"sort_name"`
+	SortNameSource     string         `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
+	Description        *string        `json:"description,omitempty"`
+	CoverImageFilename *string        `json:"cover_image_filename,omitempty"`
+	Aliases            []*SeriesAlias `bun:"rel:has-many,join:id=series_id" json:"aliases" tstype:"SeriesAlias[]"`
+	BookSeries         []*BookSeries  `bun:"rel:has-many" json:"book_series,omitempty" tstype:"BookSeries[]"`
+	BookCount          int            `bun:",scanonly" json:"book_count"`
 }
 
 type BookSeries struct {

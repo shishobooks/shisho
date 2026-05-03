@@ -2,6 +2,7 @@ package series
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
@@ -14,12 +15,14 @@ import (
 // RegisterRoutesWithGroup registers series routes on a pre-configured group.
 func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, appSettingsSvc *appsettings.Service) {
 	seriesService := NewService(db)
+	aliasService := aliases.NewService(db)
 	bookService := books.NewService(db).WithAppSettings(appSettingsSvc)
 	libraryService := libraries.NewService(db)
 	searchService := search.NewService(db)
 
 	h := &handler{
 		seriesService:  seriesService,
+		aliasService:   aliasService,
 		bookService:    bookService,
 		libraryService: libraryService,
 		searchService:  searchService,
