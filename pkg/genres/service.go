@@ -273,6 +273,10 @@ func (svc *Service) MergeGenres(ctx context.Context, targetID, sourceID int) err
 			return errors.WithStack(err)
 		}
 
+		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.GenreConfig, sourceID, targetID); err != nil {
+			return err
+		}
+
 		// Delete the source genre
 		_, err = tx.NewDelete().
 			Model((*models.Genre)(nil)).

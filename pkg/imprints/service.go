@@ -261,6 +261,10 @@ func (svc *Service) MergeImprints(ctx context.Context, targetID, sourceID int) e
 			return errors.WithStack(err)
 		}
 
+		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.ImprintConfig, sourceID, targetID); err != nil {
+			return err
+		}
+
 		// Delete the source imprint
 		_, err = tx.NewDelete().
 			Model((*models.Imprint)(nil)).

@@ -130,6 +130,86 @@ func (svc *Service) RemoveAllAliases(ctx context.Context, cfg ResourceConfig, re
 	return errors.WithStack(err)
 }
 
+// TransferAliasesOnMerge reassigns the source resource's aliases to the target
+// and adds the source's primary name as a new alias of the target. Duplicates
+// (case-insensitive match against the target's primary name or existing aliases)
+// are silently left for CASCADE to clean up when the source is deleted.
+// Accepts bun.IDB so it works inside a transaction.
+func TransferAliasesOnMerge(ctx context.Context, db bun.IDB, cfg ResourceConfig, sourceID, targetID int) error {
+	var targetName string
+	err := db.NewSelect().
+		TableExpr(cfg.ResourceTable).
+		Column("name").
+		Where("id = ?", targetID).
+		Scan(ctx, &targetName)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var targetAliases []string
+	err = db.NewSelect().
+		TableExpr(cfg.AliasTable).
+		Column("name").
+		Where(cfg.ResourceFK+" = ?", targetID).
+		Scan(ctx, &targetAliases)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	existing := make(map[string]bool, 1+len(targetAliases))
+	existing[strings.ToLower(targetName)] = true
+	for _, a := range targetAliases {
+		existing[strings.ToLower(a)] = true
+	}
+
+	var sourceAliases []string
+	err = db.NewSelect().
+		TableExpr(cfg.AliasTable).
+		Column("name").
+		Where(cfg.ResourceFK+" = ?", sourceID).
+		Scan(ctx, &sourceAliases)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	for _, name := range sourceAliases {
+		if existing[strings.ToLower(name)] {
+			continue
+		}
+		existing[strings.ToLower(name)] = true
+		_, err = db.NewRaw(
+			"UPDATE "+cfg.AliasTable+" SET "+cfg.ResourceFK+" = ? WHERE "+cfg.ResourceFK+" = ? AND LOWER(name) = LOWER(?)",
+			targetID, sourceID, name,
+		).Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	var sourceName string
+	var sourceLibraryID int
+	err = db.NewSelect().
+		TableExpr(cfg.ResourceTable).
+		Column("name", "library_id").
+		Where("id = ?", sourceID).
+		Scan(ctx, &sourceName, &sourceLibraryID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if !existing[strings.ToLower(sourceName)] {
+		_, err = db.NewRaw(
+			"INSERT INTO "+cfg.AliasTable+" (created_at, "+cfg.ResourceFK+", name, library_id) VALUES (?, ?, ?, ?)",
+			time.Now(), targetID, sourceName, sourceLibraryID,
+		).Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
+}
+
 func (svc *Service) SyncAliases(ctx context.Context, cfg ResourceConfig, resourceID int, libraryID int, desired []string) error {
 	current, err := svc.ListAliases(ctx, cfg, resourceID)
 	if err != nil {
