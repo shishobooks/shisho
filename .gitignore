@@ -377,3 +377,6 @@ test-results/
 
 # Superpowers brainstorm mockups
 .superpowers/
+
+# wktr
+.wktr.local.yaml
