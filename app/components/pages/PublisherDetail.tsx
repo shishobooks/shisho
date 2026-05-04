@@ -101,6 +101,7 @@ const PublisherDetail = () => {
   }
 
   const publisher = publisherQuery.data;
+  const aliases = (publisher.aliases as unknown as string[]) ?? [];
   const fileCount = publisher.file_count ?? 0;
   const canDelete = fileCount === 0;
 
@@ -155,6 +156,11 @@ const PublisherDetail = () => {
             )}
           </div>
         </div>
+        {aliases.length > 0 && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
+          </p>
+        )}
         <Badge variant="secondary">
           {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
@@ -203,7 +209,7 @@ const PublisherDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(publisher.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={publisher.name}
         entityType="publisher"
         isPending={updatePublisherMutation.isPending}

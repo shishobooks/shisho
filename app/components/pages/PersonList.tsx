@@ -63,6 +63,7 @@ const PersonList = () => {
 
   const renderPersonItem = (person: PersonWithCounts) => {
     const totalWorks = person.authored_book_count + person.narrated_file_count;
+    const aliases = (person.aliases as unknown as string[]) ?? [];
 
     return (
       <Link
@@ -70,12 +71,18 @@ const PersonList = () => {
         key={person.id}
         to={`/libraries/${libraryId}/people/${person.id}`}
       >
-        <div className="flex-1">
+        <div className="flex-1 min-w-0 mr-3">
           <div className="font-semibold text-lg">{person.name}</div>
-          {person.sort_name !== person.name && (
-            <div className="text-sm text-muted-foreground">
-              {person.sort_name}
+          {aliases.length > 0 ? (
+            <div className="text-sm text-muted-foreground truncate">
+              Aliases: {aliases.join(", ")}
             </div>
+          ) : (
+            person.sort_name !== person.name && (
+              <div className="text-sm text-muted-foreground">
+                {person.sort_name}
+              </div>
+            )
           )}
         </div>
         <div className="flex gap-2">

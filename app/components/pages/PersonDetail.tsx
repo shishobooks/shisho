@@ -173,6 +173,7 @@ const PersonDetail = () => {
   }
 
   const person = personQuery.data;
+  const aliases = (person.aliases as unknown as string[]) ?? [];
   const canDelete =
     person.authored_book_count === 0 && person.narrated_file_count === 0;
 
@@ -225,6 +226,11 @@ const PersonDetail = () => {
         {person.sort_name !== person.name && (
           <p className="text-muted-foreground mb-2">
             Sort name: {person.sort_name}
+          </p>
+        )}
+        {aliases.length > 0 && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
           </p>
         )}
         <div className="flex gap-2">
@@ -316,7 +322,7 @@ const PersonDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(person.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={person.name}
         entityType="person"
         isPending={updatePersonMutation.isPending}

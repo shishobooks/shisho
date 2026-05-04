@@ -156,6 +156,7 @@ const TagDetail = () => {
   }
 
   const tag = tagQuery.data;
+  const aliases = (tag.aliases as unknown as string[]) ?? [];
   const bookCount = tag.book_count ?? 0;
   const canDelete = bookCount === 0;
 
@@ -205,6 +206,11 @@ const TagDetail = () => {
             )}
           </div>
         </div>
+        {aliases.length > 0 && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
+          </p>
+        )}
         <Badge variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>
@@ -251,7 +257,7 @@ const TagDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(tag.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={tag.name}
         entityType="tag"
         isPending={updateTagMutation.isPending}
