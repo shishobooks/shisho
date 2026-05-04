@@ -142,16 +142,17 @@ func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, li
 	remaining := limit - len(results)
 	if remaining > 0 {
 		q := svc.db.NewSelect().
-			TableExpr("books_fts").
-			ColumnExpr("book_id AS id, library_id, title, subtitle, authors").
+			TableExpr("books_fts bf").
+			ColumnExpr("bf.book_id AS id, bf.library_id, bf.title, bf.subtitle").
+			ColumnExpr("(SELECT GROUP_CONCAT(DISTINCT p.name) FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = bf.book_id) AS authors").
 			Where("books_fts MATCH ?", ftsQuery).
-			Where("library_id = ?", libraryID).
-			Order("rank").
+			Where("bf.library_id = ?", libraryID).
+			Order("bf.rank").
 			Limit(remaining + len(seenIDs)). // Fetch extra to account for potential duplicates
 			Offset(offset)
 
 		if len(fileTypes) > 0 {
-			q = q.Where("book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
+			q = q.Where("bf.book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
 		}
 
 		ftsResults := []BookSearchResult{}
