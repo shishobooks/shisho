@@ -311,8 +311,8 @@ func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	require.NoError(t, h.merge(c))
 	require.Equal(t, http.StatusNoContent, rec.Code)
 
-	assert.Equal(t, "New Target Name", readBooksFTSSeriesNames(ctx, t, db, book.ID),
-		"books_fts.series_names must reflect the target series name after a merge")
+	assert.Equal(t, "New Target Name Old Source Name", readBooksFTSSeriesNames(ctx, t, db, book.ID),
+		"books_fts.series_names must include the target name and the source name (now an alias)")
 }
 
 // TestDeleteSeries_HardDeletesRowAndFTS pins the post-soft-delete behavior:

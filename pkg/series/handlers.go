@@ -400,12 +400,7 @@ func (h *handler) merge(c echo.Context) error {
 	// their books_fts row; re-index them so the target series name is what
 	// shows up in search.
 	for _, bookID := range movedBookIDs {
-		book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
-		if err != nil {
-			log.Warn("failed to retrieve book for FTS reindex after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
-			continue
-		}
-		if err := h.searchService.IndexBook(ctx, book); err != nil {
+		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
 			log.Warn("failed to update book search index after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
 		}
 	}
@@ -459,12 +454,7 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	for _, bookID := range affectedBookIDs {
 		h.bookService.RecomputeReviewedForBook(ctx, bookID)
 
-		book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
-		if err != nil {
-			log.Warn("failed to retrieve book for FTS reindex after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
-			continue
-		}
-		if err := h.searchService.IndexBook(ctx, book); err != nil {
+		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
 			log.Warn("failed to update book search index after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
 		}
 	}
