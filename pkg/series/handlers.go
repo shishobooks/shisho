@@ -396,9 +396,8 @@ func (h *handler) merge(c echo.Context) error {
 		log.Warn("failed to remove merged series from search index", logger.Data{"series_id": params.SourceID, "error": err.Error()})
 	}
 
-	// Books that moved from source to target carry the source series name in
-	// their books_fts row; re-index them so the target series name is what
-	// shows up in search.
+	// Books that moved need their books_fts row refreshed to reflect the
+	// target series name and the source name (now an alias of the target).
 	for _, bookID := range movedBookIDs {
 		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
 			log.Warn("failed to update book search index after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
