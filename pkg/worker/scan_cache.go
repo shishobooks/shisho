@@ -39,6 +39,17 @@ type ImprintFinder interface {
 	FindOrCreateImprint(ctx context.Context, name string, libraryID int) (*models.Imprint, error)
 }
 
+// AliasLister fetches alias names for resolved resources so the cache can
+// pre-populate entries for every name variant (canonical + aliases).
+type AliasLister interface {
+	ListPersonAliases(ctx context.Context, personID int) ([]string, error)
+	ListGenreAliases(ctx context.Context, genreID int) ([]string, error)
+	ListTagAliases(ctx context.Context, tagID int) ([]string, error)
+	ListSeriesAliases(ctx context.Context, seriesID int) ([]string, error)
+	ListPublisherAliases(ctx context.Context, publisherID int) ([]string, error)
+	ListImprintAliases(ctx context.Context, imprintID int) ([]string, error)
+}
+
 // ScanCache provides thread-safe caching for entity lookups during parallel file processing.
 // It uses sync.Map for cache storage and per-key mutexes to prevent duplicate concurrent DB calls.
 type ScanCache struct {
@@ -82,6 +93,8 @@ type ScanCache struct {
 	// after the scan (renaming folders back into the structured layout).
 	movedBookIDs map[int]struct{}
 
+	aliasLister AliasLister
+
 	// libraryRootPaths caches the library's root paths (from
 	// library.LibraryPaths) so syncBookFilepathAfterMove can enforce its
 	// "don't set Book.Filepath to a library root" guard without a DB
@@ -103,6 +116,12 @@ func NewScanCache() *ScanCache {
 	return &ScanCache{
 		knownFiles: make(map[string]*models.File),
 	}
+}
+
+// SetAliasLister configures alias lookup so that cache misses pre-populate
+// entries for the canonical name and every alias of the resolved resource.
+func (c *ScanCache) SetAliasLister(lister AliasLister) {
+	c.aliasLister = lister
 }
 
 // LoadKnownFiles populates the known files cache from a list of existing files.
@@ -128,6 +147,17 @@ func cacheKey(name string, libraryID int) string {
 func getMutex(mutexMap *sync.Map, key any) *sync.Mutex {
 	mu, _ := mutexMap.LoadOrStore(key, &sync.Mutex{})
 	return mu.(*sync.Mutex)
+}
+
+// populateAliasEntries stores the resource in the cache under its canonical name
+// and every alias name, so subsequent lookups for any variant are cache hits.
+func populateAliasEntries(cacheMap *sync.Map, canonicalName string, libraryID int, value any, aliasNames []string) {
+	canonKey := cacheKey(canonicalName, libraryID)
+	cacheMap.LoadOrStore(canonKey, value)
+	for _, alias := range aliasNames {
+		aliasKey := cacheKey(alias, libraryID)
+		cacheMap.LoadOrStore(aliasKey, value)
+	}
 }
 
 // GetOrCreatePerson retrieves a person from the cache or calls the service to find/create one.
@@ -158,6 +188,13 @@ func (c *ScanCache) GetOrCreatePerson(ctx context.Context, name string, libraryI
 
 	c.persons.Store(key, person)
 	c.personCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListPersonAliases(ctx, person.ID); err == nil {
+			populateAliasEntries(&c.persons, person.Name, libraryID, person, aliasNames)
+		}
+	}
+
 	return person, nil
 }
 
@@ -189,6 +226,13 @@ func (c *ScanCache) GetOrCreateGenre(ctx context.Context, name string, libraryID
 
 	c.genres.Store(key, genre)
 	c.genreCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListGenreAliases(ctx, genre.ID); err == nil {
+			populateAliasEntries(&c.genres, genre.Name, libraryID, genre, aliasNames)
+		}
+	}
+
 	return genre, nil
 }
 
@@ -220,6 +264,13 @@ func (c *ScanCache) GetOrCreateTag(ctx context.Context, name string, libraryID i
 
 	c.tags.Store(key, tag)
 	c.tagCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListTagAliases(ctx, tag.ID); err == nil {
+			populateAliasEntries(&c.tags, tag.Name, libraryID, tag, aliasNames)
+		}
+	}
+
 	return tag, nil
 }
 
@@ -251,6 +302,13 @@ func (c *ScanCache) GetOrCreateSeries(ctx context.Context, name string, libraryI
 
 	c.series.Store(key, series)
 	c.seriesCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListSeriesAliases(ctx, series.ID); err == nil {
+			populateAliasEntries(&c.series, series.Name, libraryID, series, aliasNames)
+		}
+	}
+
 	return series, nil
 }
 
@@ -302,6 +360,13 @@ func (c *ScanCache) GetOrCreatePublisher(ctx context.Context, name string, libra
 
 	c.publishers.Store(key, publisher)
 	c.publisherCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListPublisherAliases(ctx, publisher.ID); err == nil {
+			populateAliasEntries(&c.publishers, publisher.Name, libraryID, publisher, aliasNames)
+		}
+	}
+
 	return publisher, nil
 }
 
@@ -333,6 +398,13 @@ func (c *ScanCache) GetOrCreateImprint(ctx context.Context, name string, library
 
 	c.imprints.Store(key, imprint)
 	c.imprintCount.Add(1)
+
+	if c.aliasLister != nil {
+		if aliasNames, err := c.aliasLister.ListImprintAliases(ctx, imprint.ID); err == nil {
+			populateAliasEntries(&c.imprints, imprint.Name, libraryID, imprint, aliasNames)
+		}
+	}
+
 	return imprint, nil
 }
 

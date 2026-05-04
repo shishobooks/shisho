@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
@@ -111,6 +112,7 @@ func newTestContext(t *testing.T) *testContext {
 		config:             cfg,
 		log:                logger.New(),
 		db:                 db,
+		aliasService:       aliases.NewService(db),
 		bookService:        bookService,
 		chapterService:     chapterService,
 		libraryService:     libraryService,
@@ -333,6 +335,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		config:             cfg,
 		log:                logger.New(),
 		db:                 db,
+		aliasService:       aliases.NewService(db),
 		bookService:        bookService,
 		chapterService:     chapterService,
 		libraryService:     libraryService,

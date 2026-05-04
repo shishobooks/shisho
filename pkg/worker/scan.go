@@ -368,6 +368,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// .pdf companion next to a .epub) and skip it instead of trying to
 		// recreate it as a main file and hitting UNIQUE(filepath, library_id).
 		cache := NewScanCache()
+		cache.SetAliasLister(NewAliasServiceAdapter(w.aliasService))
 		allFiles, err := w.bookService.ListAllFilesForLibrary(ctx, library.ID)
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
