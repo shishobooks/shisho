@@ -261,6 +261,10 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 			return errors.WithStack(err)
 		}
 
+		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.PublisherConfig, sourceID, targetID); err != nil {
+			return err
+		}
+
 		// Delete the source publisher
 		_, err = tx.NewDelete().
 			Model((*models.Publisher)(nil)).

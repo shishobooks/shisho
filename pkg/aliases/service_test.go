@@ -259,6 +259,110 @@ func TestAddAlias_DifferentLibrariesAllowed(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestTransferAliasesOnMerge_SourceNameBecomesAlias(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Science Fiction", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+
+	err := TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	aliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Sci-Fi"}, aliases)
+}
+
+func TestTransferAliasesOnMerge_TransfersSourceAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Science Fiction", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+
+	// Add aliases to source
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, source.ID, "SF", lib.ID))
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, source.ID, "SciFi", lib.ID))
+
+	err := TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID)
+	require.NoError(t, err)
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"Sci-Fi", "SF", "SciFi"}, aliases)
+}
+
+func TestTransferAliasesOnMerge_PreservesExistingTargetAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Science Fiction", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, target.ID, "SF", lib.ID))
+
+	err := TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID)
+	require.NoError(t, err)
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"SF", "Sci-Fi"}, aliases)
+}
+
+func TestTransferAliasesOnMerge_CascadeCleansUpRemainingSourceAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Science Fiction", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, source.ID, "SF", lib.ID))
+
+	err := TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID)
+	require.NoError(t, err)
+
+	// Simulate what merge does: delete the source. Any remaining source
+	// aliases (none here since all were transferred) are cascade-deleted.
+	_, err = db.NewDelete().Model((*models.Genre)(nil)).Where("id = ?", source.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"Sci-Fi", "SF"}, aliases)
+}
+
+func TestTransferAliasesOnMerge_NoAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Science Fiction", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+
+	err := TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID)
+	require.NoError(t, err)
+
+	// Source name should still become an alias even when neither side had aliases
+	svc := NewService(db)
+	aliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Sci-Fi"}, aliases)
+}
+
 func TestAddAlias_ReturnsValidationError(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

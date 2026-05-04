@@ -273,6 +273,10 @@ func (svc *Service) MergeTags(ctx context.Context, targetID, sourceID int) error
 			return errors.WithStack(err)
 		}
 
+		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.TagConfig, sourceID, targetID); err != nil {
+			return err
+		}
+
 		// Delete the source tag
 		_, err = tx.NewDelete().
 			Model((*models.Tag)(nil)).

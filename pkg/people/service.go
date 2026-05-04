@@ -325,6 +325,10 @@ func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) err
 			return errors.WithStack(err)
 		}
 
+		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.PersonConfig, sourceID, targetID); err != nil {
+			return err
+		}
+
 		// Delete the source person
 		_, err = tx.NewDelete().
 			Model((*models.Person)(nil)).
