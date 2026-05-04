@@ -199,7 +199,7 @@ export function MetadataEditDialog({
           <DialogTitle>Edit {ENTITY_LABELS[entityType]}</DialogTitle>
           <DialogDescription>
             Update the {ENTITY_LABELS[entityType].toLowerCase()} name
-            {hasSortName ? " and sort order" : ""}.
+            {hasSortName ? ", sort order," : ""} and aliases.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,11 +228,11 @@ export function MetadataEditDialog({
 
           <div className="space-y-2">
             <Label htmlFor="aliases">Aliases</Label>
-            <div className="flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent px-3 py-1.5">
+            <div className="flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent px-3 py-1.5 focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
               {editAliases.map((alias, index) => (
                 <Badge
                   className="max-w-full gap-1 pr-1"
-                  key={alias}
+                  key={index}
                   variant="secondary"
                 >
                   <span className="truncate" title={alias}>
