@@ -109,11 +109,11 @@ const GenreDetail = () => {
     { enabled: mergeOpen && !!genreQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string }) => {
+  const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!genreId) return;
     await updateGenreMutation.mutateAsync({
       genreId,
-      payload: { name: data.name },
+      payload: { name: data.name, aliases: data.aliases },
     });
     setEditOpen(false);
   };
@@ -251,6 +251,7 @@ const GenreDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(genre.aliases as unknown as string[]) ?? []}
         entityName={genre.name}
         entityType="genre"
         isPending={updateGenreMutation.isPending}

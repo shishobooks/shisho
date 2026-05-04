@@ -109,11 +109,11 @@ const TagDetail = () => {
     { enabled: mergeOpen && !!tagQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string }) => {
+  const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!tagId) return;
     await updateTagMutation.mutateAsync({
       tagId,
-      payload: { name: data.name },
+      payload: { name: data.name, aliases: data.aliases },
     });
     setEditOpen(false);
   };
@@ -251,6 +251,7 @@ const TagDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(tag.aliases as unknown as string[]) ?? []}
         entityName={tag.name}
         entityType="tag"
         isPending={updateTagMutation.isPending}

@@ -53,11 +53,11 @@ const ImprintDetail = () => {
     { enabled: mergeOpen && !!imprintQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string }) => {
+  const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!imprintId) return;
     await updateImprintMutation.mutateAsync({
       imprintId,
-      payload: { name: data.name },
+      payload: { name: data.name, aliases: data.aliases },
     });
     setEditOpen(false);
   };
@@ -203,6 +203,7 @@ const ImprintDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(imprint.aliases as unknown as string[]) ?? []}
         entityName={imprint.name}
         entityType="imprint"
         isPending={updateImprintMutation.isPending}

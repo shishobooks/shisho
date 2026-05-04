@@ -109,13 +109,18 @@ const SeriesDetail = () => {
     { enabled: mergeOpen && !!seriesQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string; sort_name?: string }) => {
+  const handleEdit = async (data: {
+    name: string;
+    sort_name?: string;
+    aliases?: string[];
+  }) => {
     if (!seriesId) return;
     await updateSeriesMutation.mutateAsync({
       seriesId,
       payload: {
         name: data.name,
         sort_name: data.sort_name,
+        aliases: data.aliases,
       },
     });
     setEditOpen(false);
@@ -263,6 +268,7 @@ const SeriesDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(series.aliases as unknown as string[]) ?? []}
         entityName={series.name}
         entityType="series"
         isPending={updateSeriesMutation.isPending}
