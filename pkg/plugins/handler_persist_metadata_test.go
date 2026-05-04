@@ -509,11 +509,13 @@ func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
 // invisible to search-driven dropdowns (e.g. the series combobox in the
 // IdentifyReviewForm).
 type stubSearchIndexer struct {
-	indexedBookIDs   []int
-	indexedSeriesIDs []int
-	indexedPersonIDs []int
-	indexedGenreIDs  []int
-	indexedTagIDs    []int
+	indexedBookIDs      []int
+	indexedSeriesIDs    []int
+	indexedPersonIDs    []int
+	indexedGenreIDs     []int
+	indexedTagIDs       []int
+	indexedPublisherIDs []int
+	indexedImprintIDs   []int
 }
 
 func (s *stubSearchIndexer) IndexBook(_ context.Context, b *models.Book) error {
@@ -538,6 +540,16 @@ func (s *stubSearchIndexer) IndexGenre(_ context.Context, g *models.Genre) error
 
 func (s *stubSearchIndexer) IndexTag(_ context.Context, tag *models.Tag) error {
 	s.indexedTagIDs = append(s.indexedTagIDs, tag.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexPublisher(_ context.Context, pub *models.Publisher) error {
+	s.indexedPublisherIDs = append(s.indexedPublisherIDs, pub.ID)
+	return nil
+}
+
+func (s *stubSearchIndexer) IndexImprint(_ context.Context, imp *models.Imprint) error {
+	s.indexedImprintIDs = append(s.indexedImprintIDs, imp.ID)
 	return nil
 }
 

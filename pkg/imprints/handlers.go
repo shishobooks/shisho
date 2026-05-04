@@ -11,11 +11,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 type handler struct {
 	imprintService *Service
 	aliasService   *aliases.Service
+	searchService  *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -144,6 +146,14 @@ func (h *handler) update(c echo.Context) error {
 				return errors.WithStack(err)
 			}
 
+			log := logger.FromContext(ctx)
+			if err := h.searchService.DeleteFromImprintIndex(ctx, id); err != nil {
+				log.Warn("failed to remove merged imprint from search index", logger.Data{"imprint_id": id, "error": err.Error()})
+			}
+			if err := h.searchService.IndexImprint(ctx, existing); err != nil {
+				log.Warn("failed to re-index target imprint after merge", logger.Data{"imprint_id": existing.ID, "error": err.Error()})
+			}
+
 			fileCount, _ := h.imprintService.GetFileCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.ImprintConfig, existing.ID)
 			response := struct {
@@ -183,6 +193,13 @@ func (h *handler) update(c echo.Context) error {
 	imprint, err = h.imprintService.RetrieveImprint(ctx, RetrieveImprintOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if nameChanged || params.Aliases != nil {
+		log := logger.FromContext(ctx)
+		if err := h.searchService.IndexImprint(ctx, imprint); err != nil {
+			log.Warn("failed to update search index for imprint", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
+		}
 	}
 
 	fileCount, _ := h.imprintService.GetFileCount(ctx, id)
@@ -254,6 +271,14 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromImprintIndex(ctx, params.SourceID); err != nil {
+		log.Warn("failed to remove merged imprint from search index", logger.Data{"imprint_id": params.SourceID, "error": err.Error()})
+	}
+	if err := h.searchService.IndexImprint(ctx, imprint); err != nil {
+		log.Warn("failed to re-index target imprint after merge", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -280,6 +305,11 @@ func (h *handler) deleteImprint(c echo.Context) error {
 	err = h.imprintService.DeleteImprint(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromImprintIndex(ctx, id); err != nil {
+		log.Warn("failed to remove imprint from search index", logger.Data{"imprint_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)

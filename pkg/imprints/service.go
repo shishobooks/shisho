@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -152,10 +153,11 @@ func (svc *Service) listImprintsWithTotal(ctx context.Context, opts ListImprints
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("imp.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
-	// Search using LIKE (no FTS for imprints) — also matches alias names
 	if opts.Search != nil && *opts.Search != "" {
-		search := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("(LOWER(imp.name) LIKE ? OR imp.id IN (SELECT imprint_id FROM imprint_aliases WHERE LOWER(name) LIKE ? AND library_id = imp.library_id))", search, search)
+		ftsQuery := search.BuildPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("imp.id IN (SELECT imprint_id FROM imprints_fts WHERE imprints_fts MATCH ?)", ftsQuery)
+		}
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
@@ -274,15 +276,18 @@ func (svc *Service) MergeImprints(ctx context.Context, targetID, sourceID int) e
 	})
 }
 
-// CleanupOrphanedImprints deletes imprints with no file associations.
-func (svc *Service) CleanupOrphanedImprints(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedImprints deletes imprints with no file associations and
+// returns the IDs of deleted imprints. Callers must pass the returned IDs to
+// searchService.DeleteFromImprintIndex to keep imprints_fts in sync.
+func (svc *Service) CleanupOrphanedImprints(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Imprint)(nil)).
 		Where("id NOT IN (SELECT DISTINCT imprint_id FROM files WHERE imprint_id IS NOT NULL)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }

@@ -90,6 +90,8 @@ type searchIndexer interface {
 	IndexPerson(ctx context.Context, person *models.Person) error
 	IndexGenre(ctx context.Context, genre *models.Genre) error
 	IndexTag(ctx context.Context, tag *models.Tag) error
+	IndexPublisher(ctx context.Context, publisher *models.Publisher) error
+	IndexImprint(ctx context.Context, imprint *models.Imprint) error
 }
 
 // pageExtractor renders a page from a page-based file (CBZ/PDF) and writes

@@ -447,7 +447,7 @@ The app uses SQLite Full-Text Search (FTS5) for fast searching.
 
 **Key files:**
 - `pkg/search/service.go` - Search service with index methods
-- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`
+- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`, `publishers_fts`, `imprints_fts`
 
 **IMPORTANT - Search Index Updates:**
 

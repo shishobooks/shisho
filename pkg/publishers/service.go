@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -152,10 +153,11 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("pub.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
-	// Search using LIKE (no FTS for publishers) — also matches alias names
 	if opts.Search != nil && *opts.Search != "" {
-		search := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("(LOWER(pub.name) LIKE ? OR pub.id IN (SELECT publisher_id FROM publisher_aliases WHERE LOWER(name) LIKE ? AND library_id = pub.library_id))", search, search)
+		ftsQuery := search.BuildPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("pub.id IN (SELECT publisher_id FROM publishers_fts WHERE publishers_fts MATCH ?)", ftsQuery)
+		}
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
@@ -274,15 +276,18 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 	})
 }
 
-// CleanupOrphanedPublishers deletes publishers with no file associations.
-func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) (int, error) {
-	result, err := svc.db.NewDelete().
+// CleanupOrphanedPublishers deletes publishers with no file associations and
+// returns the IDs of deleted publishers. Callers must pass the returned IDs to
+// searchService.DeleteFromPublisherIndex to keep publishers_fts in sync.
+func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) ([]int, error) {
+	deletedIDs := []int{}
+	err := svc.db.NewDelete().
 		Model((*models.Publisher)(nil)).
 		Where("id NOT IN (SELECT DISTINCT publisher_id FROM files WHERE publisher_id IS NOT NULL)").
-		Exec(ctx)
+		Returning("id").
+		Scan(ctx, &deletedIDs)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	n, _ := result.RowsAffected()
-	return int(n), nil
+	return deletedIDs, nil
 }
