@@ -229,7 +229,7 @@ const PersonDetail = () => {
           </p>
         )}
         {aliases.length > 0 && (
-          <p className="text-sm text-muted-foreground mb-2">
+          <p className="text-muted-foreground mb-2">
             Aliases: {aliases.join(", ")}
           </p>
         )}

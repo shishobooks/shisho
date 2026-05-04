@@ -74,7 +74,10 @@ const PersonList = () => {
         <div className="flex-1 min-w-0 mr-3">
           <div className="font-semibold text-lg">{person.name}</div>
           {aliases.length > 0 ? (
-            <div className="text-sm text-muted-foreground truncate">
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
               Aliases: {aliases.join(", ")}
             </div>
           ) : (

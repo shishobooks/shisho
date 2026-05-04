@@ -81,7 +81,10 @@ const ImprintsList = () => {
         <div className="min-w-0 flex-1 mr-3">
           <div className="font-medium">{imprint.name}</div>
           {aliases.length > 0 && (
-            <div className="text-sm text-muted-foreground truncate">
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
               Aliases: {aliases.join(", ")}
             </div>
           )}
