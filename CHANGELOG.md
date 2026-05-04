@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-05-04
+
+### Features
+- Display aliases on detail and list pages (#228)
+- Add wktr config and remove unused task scripts (#227)
+- Include aliases in FTS indexes and LIKE search (#224)
+- Add alias management to MetadataEditDialog (#225)
+- Auto-add old name as alias when renaming resources (#223)
+- Merge transfers source name and aliases (#222)
+- Scanner cache: pre-populate alias entries on first resolution (#221)
+- Alias-aware FindOrCreate resolution (#219)
+- Remove sandcastle integration (#216)
+- Alias schema, model, and CRUD API (#213)
+
+### Bug Fixes
+- Use SQL-based FTS reindex in series merge/delete handlers (#226)
+- Show book counts for genres/tags beyond first 50 alphabetically (#217)
+- Fix Prettier formatting in CODING_STANDARDS.md (#215)
+- Apply-all counter ignores Changed/All filter in identify review (#211)
+- Replace native select with Radix UI Select in plugin config form (#197)
+
+### Documentation
+- Add domain glossary and alias storage ADR for resource aliases feature (#218)
+- Document resource aliases across website docs (#212)
+- Add agent skills configuration for issue tracker, triage, and domain docs (#196)
+- Remove stale planning docs (#194)
+
+### Testing
+- Add alias workflow tests and fix rename+sync alias bug (#229)
+- Fix flaky review-flag bulk-mark-reviewed test on Firefox (#193)
+
+### CI/CD
+- Fix consolidate test timings job losing artifacts (#220)
+
+
 ## [0.0.42] - 2026-05-03
 
 ### Features
