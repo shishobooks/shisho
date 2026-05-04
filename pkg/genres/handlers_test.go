@@ -78,7 +78,7 @@ func TestUpdateGenre_RenameAddsOldNameAsAlias(t *testing.T) {
 	assert.Contains(t, aliasList, "Science Fiction")
 }
 
-func TestUpdateGenre_RenameWithPreExistingAlias_NoDuplicate(t *testing.T) {
+func TestUpdateGenre_RenamePreservesExistingAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -88,7 +88,6 @@ func TestUpdateGenre_RenameWithPreExistingAlias_NoDuplicate(t *testing.T) {
 	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
 	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
 
-	// Pre-add "Science Fiction" as an alias manually (simulate user adding it before rename)
 	_, err := db.NewRaw(
 		"INSERT INTO genre_aliases (created_at, genre_id, name, library_id) VALUES (?, ?, ?, ?)",
 		time.Now(), genre.ID, "SF", lib.ID,
@@ -103,6 +102,29 @@ func TestUpdateGenre_RenameWithPreExistingAlias_NoDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, aliasList, "Science Fiction", "old name should be added as alias")
 	assert.Contains(t, aliasList, "SF", "existing alias should be preserved")
+}
+
+func TestUpdateGenre_SequentialRenames_NoDuplicateAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(t, db)
+
+	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
+	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
+
+	nameB := "Sci-Fi"
+	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameB})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	nameC := "SF"
+	rec = patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameC})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"Science Fiction", "Sci-Fi"}, aliasList)
 }
 
 func TestUpdateGenre_RenameBackToOriginalName(t *testing.T) {
