@@ -1,0 +1,7 @@
+layout:
+  direction: vertical
+  panes:
+    - command: "claude --dangerously-skip-permissions"
+    - command: "mise start"
+      run: false
+    - command: ""
