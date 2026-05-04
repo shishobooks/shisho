@@ -152,10 +152,10 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("pub.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
-	// Search using LIKE (no FTS for publishers)
+	// Search using LIKE (no FTS for publishers) — also matches alias names
 	if opts.Search != nil && *opts.Search != "" {
 		search := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("LOWER(pub.name) LIKE ?", search)
+		q = q.Where("(LOWER(pub.name) LIKE ? OR pub.id IN (SELECT publisher_id FROM publisher_aliases WHERE LOWER(name) LIKE ? AND library_id = pub.library_id))", search, search)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)

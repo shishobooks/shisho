@@ -102,3 +102,31 @@ func TestFindOrCreateImprint_NoMatch_CreatesNew(t *testing.T) {
 	assert.Equal(t, "Tor Books", found.Name)
 	assert.Equal(t, lib.ID, found.LibraryID)
 }
+
+func TestListImprints_SearchMatchesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	imp := &models.Imprint{LibraryID: lib.ID, Name: "Vintage Books"}
+	err := svc.CreateImprint(ctx, imp)
+	require.NoError(t, err)
+
+	_, err = db.NewRaw(
+		"INSERT INTO imprint_aliases (created_at, imprint_id, name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), imp.ID, "Vintage Classics", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	search := "Vintage Classics"
+	results, err := svc.ListImprints(ctx, ListImprintsOptions{
+		LibraryID: &lib.ID,
+		Search:    &search,
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Should find imprint by alias 'Vintage Classics'")
+	assert.Equal(t, "Vintage Books", results[0].Name)
+}

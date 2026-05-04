@@ -152,10 +152,10 @@ func (svc *Service) listImprintsWithTotal(ctx context.Context, opts ListImprints
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("imp.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
-	// Search using LIKE (no FTS for imprints)
+	// Search using LIKE (no FTS for imprints) — also matches alias names
 	if opts.Search != nil && *opts.Search != "" {
 		search := "%" + strings.ToLower(*opts.Search) + "%"
-		q = q.Where("LOWER(imp.name) LIKE ?", search)
+		q = q.Where("(LOWER(imp.name) LIKE ? OR imp.id IN (SELECT imprint_id FROM imprint_aliases WHERE LOWER(name) LIKE ? AND library_id = imp.library_id))", search, search)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)

@@ -195,10 +195,12 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Sync aliases if provided
+	aliasesChanged := false
 	if params.Aliases != nil {
 		if err := h.aliasService.SyncAliases(ctx, aliases.SeriesConfig, id, series.LibraryID, params.Aliases); err != nil {
 			return errors.WithStack(err)
 		}
+		aliasesChanged = true
 	}
 
 	// Reload the model
@@ -213,6 +215,20 @@ func (h *handler) update(c echo.Context) error {
 	log := logger.FromContext(ctx)
 	if err := h.searchService.IndexSeries(ctx, series); err != nil {
 		log.Warn("failed to update search index for series", logger.Data{"series_id": series.ID, "error": err.Error()})
+	}
+
+	// Re-index associated books when aliases change (books_fts includes series aliases)
+	if aliasesChanged {
+		bookIDs, err := h.seriesService.GetSeriesBookIDs(ctx, id)
+		if err != nil {
+			log.Warn("failed to get series book IDs for FTS reindex after alias change", logger.Data{"series_id": id, "error": err.Error()})
+		} else {
+			for _, bookID := range bookIDs {
+				if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
+					log.Warn("failed to reindex book after series alias change", logger.Data{"series_id": id, "book_id": bookID, "error": err.Error()})
+				}
+			}
+		}
 	}
 
 	// Get book count
