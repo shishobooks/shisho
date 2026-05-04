@@ -186,10 +186,6 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if nameChanged {
-		_ = h.aliasService.RemoveAlias(ctx, aliases.SeriesConfig, id, series.Name)
-	}
-
 	// Sync aliases if provided
 	aliasesChanged := false
 	if params.Aliases != nil {
@@ -202,6 +198,7 @@ func (h *handler) update(c echo.Context) error {
 		}
 		aliasesChanged = true
 	} else if nameChanged {
+		_ = h.aliasService.RemoveAlias(ctx, aliases.SeriesConfig, id, series.Name)
 		log := logger.FromContext(ctx)
 		if err := h.aliasService.AddAlias(ctx, aliases.SeriesConfig, id, oldName, series.LibraryID); err != nil {
 			log.Warn("failed to add old name as alias after rename", logger.Data{"series_id": id, "old_name": oldName, "error": err.Error()})
