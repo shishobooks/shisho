@@ -72,6 +72,7 @@ const GenresList = () => {
 
   const renderGenreItem = (genre: Genre) => {
     const bookCount = genre.book_count ?? 0;
+    const aliases = (genre.aliases as unknown as string[]) ?? [];
 
     return (
       <Link
@@ -79,8 +80,18 @@ const GenresList = () => {
         key={genre.id}
         to={`/libraries/${libraryId}/genres/${genre.id}`}
       >
-        <span className="font-medium">{genre.name}</span>
-        <Badge variant="secondary">
+        <div className="min-w-0 flex-1 mr-3">
+          <div className="font-medium">{genre.name}</div>
+          {aliases.length > 0 && (
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
+              Aliases: {aliases.join(", ")}
+            </div>
+          )}
+        </div>
+        <Badge className="shrink-0" variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>
       </Link>

@@ -156,6 +156,7 @@ const GenreDetail = () => {
   }
 
   const genre = genreQuery.data;
+  const aliases = (genre.aliases as unknown as string[]) ?? [];
   const bookCount = genre.book_count ?? 0;
   const canDelete = bookCount === 0;
 
@@ -205,6 +206,11 @@ const GenreDetail = () => {
             )}
           </div>
         </div>
+        {aliases.length > 0 && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
+          </p>
+        )}
         <Badge variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>
@@ -251,7 +257,7 @@ const GenreDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(genre.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={genre.name}
         entityType="genre"
         isPending={updateGenreMutation.isPending}

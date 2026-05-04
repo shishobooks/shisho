@@ -165,6 +165,7 @@ const SeriesDetail = () => {
   }
 
   const series = seriesQuery.data;
+  const aliases = (series.aliases as unknown as string[]) ?? [];
   const canDelete = series.book_count === 0;
 
   return (
@@ -221,6 +222,11 @@ const SeriesDetail = () => {
         {series.description && (
           <p className="text-muted-foreground mb-2">{series.description}</p>
         )}
+        {aliases.length > 0 && (
+          <p className="text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
+          </p>
+        )}
         <Badge variant="secondary">
           {series.book_count} book{series.book_count !== 1 ? "s" : ""}
         </Badge>
@@ -268,7 +274,7 @@ const SeriesDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(series.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={series.name}
         entityType="series"
         isPending={updateSeriesMutation.isPending}

@@ -70,6 +70,7 @@ const ImprintsList = () => {
 
   const renderImprintItem = (imprint: Imprint) => {
     const fileCount = imprint.file_count ?? 0;
+    const aliases = (imprint.aliases as unknown as string[]) ?? [];
 
     return (
       <Link
@@ -77,8 +78,18 @@ const ImprintsList = () => {
         key={imprint.id}
         to={`/libraries/${libraryId}/imprints/${imprint.id}`}
       >
-        <span className="font-medium">{imprint.name}</span>
-        <Badge variant="secondary">
+        <div className="min-w-0 flex-1 mr-3">
+          <div className="font-medium">{imprint.name}</div>
+          {aliases.length > 0 && (
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
+              Aliases: {aliases.join(", ")}
+            </div>
+          )}
+        </div>
+        <Badge className="shrink-0" variant="secondary">
           {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
       </Link>

@@ -72,6 +72,7 @@ const TagsList = () => {
 
   const renderTagItem = (tag: Tag) => {
     const bookCount = tag.book_count ?? 0;
+    const aliases = (tag.aliases as unknown as string[]) ?? [];
 
     return (
       <Link
@@ -79,8 +80,18 @@ const TagsList = () => {
         key={tag.id}
         to={`/libraries/${libraryId}/tags/${tag.id}`}
       >
-        <span className="font-medium">{tag.name}</span>
-        <Badge variant="secondary">
+        <div className="min-w-0 flex-1 mr-3">
+          <div className="font-medium">{tag.name}</div>
+          {aliases.length > 0 && (
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
+              Aliases: {aliases.join(", ")}
+            </div>
+          )}
+        </div>
+        <Badge className="shrink-0" variant="secondary">
           {bookCount} book{bookCount !== 1 ? "s" : ""}
         </Badge>
       </Link>

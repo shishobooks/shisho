@@ -101,6 +101,7 @@ const ImprintDetail = () => {
   }
 
   const imprint = imprintQuery.data;
+  const aliases = (imprint.aliases as unknown as string[]) ?? [];
   const fileCount = imprint.file_count ?? 0;
   const canDelete = fileCount === 0;
 
@@ -155,6 +156,11 @@ const ImprintDetail = () => {
             )}
           </div>
         </div>
+        {aliases.length > 0 && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Aliases: {aliases.join(", ")}
+          </p>
+        )}
         <Badge variant="secondary">
           {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
@@ -203,7 +209,7 @@ const ImprintDetail = () => {
       )}
 
       <MetadataEditDialog
-        aliases={(imprint.aliases as unknown as string[]) ?? []}
+        aliases={aliases}
         entityName={imprint.name}
         entityType="imprint"
         isPending={updateImprintMutation.isPending}

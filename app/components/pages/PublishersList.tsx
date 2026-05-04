@@ -70,6 +70,7 @@ const PublishersList = () => {
 
   const renderPublisherItem = (publisher: Publisher) => {
     const fileCount = publisher.file_count ?? 0;
+    const aliases = (publisher.aliases as unknown as string[]) ?? [];
 
     return (
       <Link
@@ -77,8 +78,18 @@ const PublishersList = () => {
         key={publisher.id}
         to={`/libraries/${libraryId}/publishers/${publisher.id}`}
       >
-        <span className="font-medium">{publisher.name}</span>
-        <Badge variant="secondary">
+        <div className="min-w-0 flex-1 mr-3">
+          <div className="font-medium">{publisher.name}</div>
+          {aliases.length > 0 && (
+            <div
+              className="text-sm text-muted-foreground truncate"
+              title={`Aliases: ${aliases.join(", ")}`}
+            >
+              Aliases: {aliases.join(", ")}
+            </div>
+          )}
+        </div>
+        <Badge className="shrink-0" variant="secondary">
           {fileCount} file{fileCount !== 1 ? "s" : ""}
         </Badge>
       </Link>
