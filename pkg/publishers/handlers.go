@@ -126,6 +126,8 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	nameChanged := false
+	var oldName string
 	if params.Name != nil && *params.Name != publisher.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -152,24 +154,29 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
-		oldName := publisher.Name
+		oldName = publisher.Name
 		publisher.Name = newName
 		opts := UpdatePublisherOptions{Columns: []string{"name"}}
 		err = h.publisherService.UpdatePublisher(ctx, publisher, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-
-		log := logger.FromContext(ctx)
-		_ = h.aliasService.RemoveAlias(ctx, aliases.PublisherConfig, id, newName)
-		if err := h.aliasService.AddAlias(ctx, aliases.PublisherConfig, id, oldName, publisher.LibraryID); err != nil {
-			log.Warn("failed to add old name as alias after rename", logger.Data{"publisher_id": id, "old_name": oldName, "error": err.Error()})
-		}
+		nameChanged = true
 	}
 
 	if params.Aliases != nil {
-		if err := h.aliasService.SyncAliases(ctx, aliases.PublisherConfig, id, publisher.LibraryID, params.Aliases); err != nil {
+		syncList := params.Aliases
+		if nameChanged {
+			syncList = append(syncList, oldName)
+		}
+		if err := h.aliasService.SyncAliases(ctx, aliases.PublisherConfig, id, publisher.LibraryID, syncList); err != nil {
 			return errors.WithStack(err)
+		}
+	} else if nameChanged {
+		_ = h.aliasService.RemoveAlias(ctx, aliases.PublisherConfig, id, publisher.Name)
+		log := logger.FromContext(ctx)
+		if err := h.aliasService.AddAlias(ctx, aliases.PublisherConfig, id, oldName, publisher.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"publisher_id": id, "old_name": oldName, "error": err.Error()})
 		}
 	}
 
