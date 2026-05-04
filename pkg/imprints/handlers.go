@@ -126,6 +126,8 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	nameChanged := false
+	var oldName string
 	if params.Name != nil && *params.Name != imprint.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -152,24 +154,30 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
-		oldName := imprint.Name
+		oldName = imprint.Name
 		imprint.Name = newName
 		opts := UpdateImprintOptions{Columns: []string{"name"}}
 		err = h.imprintService.UpdateImprint(ctx, imprint, opts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		nameChanged = true
 
-		log := logger.FromContext(ctx)
 		_ = h.aliasService.RemoveAlias(ctx, aliases.ImprintConfig, id, newName)
-		if err := h.aliasService.AddAlias(ctx, aliases.ImprintConfig, id, oldName, imprint.LibraryID); err != nil {
-			log.Warn("failed to add old name as alias after rename", logger.Data{"imprint_id": id, "old_name": oldName, "error": err.Error()})
-		}
 	}
 
 	if params.Aliases != nil {
-		if err := h.aliasService.SyncAliases(ctx, aliases.ImprintConfig, id, imprint.LibraryID, params.Aliases); err != nil {
+		syncList := params.Aliases
+		if nameChanged {
+			syncList = append(syncList, oldName)
+		}
+		if err := h.aliasService.SyncAliases(ctx, aliases.ImprintConfig, id, imprint.LibraryID, syncList); err != nil {
 			return errors.WithStack(err)
+		}
+	} else if nameChanged {
+		log := logger.FromContext(ctx)
+		if err := h.aliasService.AddAlias(ctx, aliases.ImprintConfig, id, oldName, imprint.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"imprint_id": id, "old_name": oldName, "error": err.Error()})
 		}
 	}
 

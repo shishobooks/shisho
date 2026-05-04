@@ -130,6 +130,7 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	nameChanged := false
+	var oldName string
 	if params.Name != nil && *params.Name != tag.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -161,7 +162,7 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
-		oldName := tag.Name
+		oldName = tag.Name
 		tag.Name = newName
 		opts := UpdateTagOptions{Columns: []string{"name"}}
 		err = h.tagService.UpdateTag(ctx, tag, opts)
@@ -170,16 +171,21 @@ func (h *handler) update(c echo.Context) error {
 		}
 		nameChanged = true
 
-		log := logger.FromContext(ctx)
 		_ = h.aliasService.RemoveAlias(ctx, aliases.TagConfig, id, newName)
-		if err := h.aliasService.AddAlias(ctx, aliases.TagConfig, id, oldName, tag.LibraryID); err != nil {
-			log.Warn("failed to add old name as alias after rename", logger.Data{"tag_id": id, "old_name": oldName, "error": err.Error()})
-		}
 	}
 
 	if params.Aliases != nil {
-		if err := h.aliasService.SyncAliases(ctx, aliases.TagConfig, id, tag.LibraryID, params.Aliases); err != nil {
+		syncList := params.Aliases
+		if nameChanged {
+			syncList = append(syncList, oldName)
+		}
+		if err := h.aliasService.SyncAliases(ctx, aliases.TagConfig, id, tag.LibraryID, syncList); err != nil {
 			return errors.WithStack(err)
+		}
+	} else if nameChanged {
+		log := logger.FromContext(ctx)
+		if err := h.aliasService.AddAlias(ctx, aliases.TagConfig, id, oldName, tag.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"tag_id": id, "old_name": oldName, "error": err.Error()})
 		}
 	}
 

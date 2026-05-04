@@ -198,20 +198,25 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	if nameChanged {
-		log := logger.FromContext(ctx)
 		_ = h.aliasService.RemoveAlias(ctx, aliases.PersonConfig, id, person.Name)
-		if err := h.aliasService.AddAlias(ctx, aliases.PersonConfig, id, oldName, person.LibraryID); err != nil {
-			log.Warn("failed to add old name as alias after rename", logger.Data{"person_id": id, "old_name": oldName, "error": err.Error()})
-		}
 	}
 
 	// Sync aliases if provided
 	aliasesChanged := false
 	if params.Aliases != nil {
-		if err := h.aliasService.SyncAliases(ctx, aliases.PersonConfig, id, person.LibraryID, params.Aliases); err != nil {
+		syncList := params.Aliases
+		if nameChanged {
+			syncList = append(syncList, oldName)
+		}
+		if err := h.aliasService.SyncAliases(ctx, aliases.PersonConfig, id, person.LibraryID, syncList); err != nil {
 			return errors.WithStack(err)
 		}
 		aliasesChanged = true
+	} else if nameChanged {
+		log := logger.FromContext(ctx)
+		if err := h.aliasService.AddAlias(ctx, aliases.PersonConfig, id, oldName, person.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"person_id": id, "old_name": oldName, "error": err.Error()})
+		}
 	}
 
 	// Reload the model
