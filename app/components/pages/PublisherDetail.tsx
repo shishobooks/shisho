@@ -53,11 +53,11 @@ const PublisherDetail = () => {
     { enabled: mergeOpen && !!publisherQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string }) => {
+  const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!publisherId) return;
     await updatePublisherMutation.mutateAsync({
       publisherId,
-      payload: { name: data.name },
+      payload: { name: data.name, aliases: data.aliases },
     });
     setEditOpen(false);
   };
@@ -203,6 +203,7 @@ const PublisherDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(publisher.aliases as unknown as string[]) ?? []}
         entityName={publisher.name}
         entityType="publisher"
         isPending={updatePublisherMutation.isPending}

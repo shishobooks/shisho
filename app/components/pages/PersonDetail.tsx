@@ -117,13 +117,18 @@ const PersonDetail = () => {
     { enabled: mergeOpen && !!personQuery.data?.library_id },
   );
 
-  const handleEdit = async (data: { name: string; sort_name?: string }) => {
+  const handleEdit = async (data: {
+    name: string;
+    sort_name?: string;
+    aliases?: string[];
+  }) => {
     if (!personId) return;
     await updatePersonMutation.mutateAsync({
       personId,
       payload: {
         name: data.name,
         sort_name: data.sort_name,
+        aliases: data.aliases,
       },
     });
     setEditOpen(false);
@@ -311,6 +316,7 @@ const PersonDetail = () => {
       )}
 
       <MetadataEditDialog
+        aliases={(person.aliases as unknown as string[]) ?? []}
         entityName={person.name}
         entityType="person"
         isPending={updatePersonMutation.isPending}

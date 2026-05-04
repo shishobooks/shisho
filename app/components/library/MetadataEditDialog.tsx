@@ -1,7 +1,8 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -31,9 +32,14 @@ interface MetadataEditDialogProps {
   onOpenChange: (open: boolean) => void;
   entityType: EntityType;
   entityName: string;
+  aliases?: string[];
   sortName?: string;
   sortNameSource?: DataSource;
-  onSave: (data: { name: string; sort_name?: string }) => Promise<void>;
+  onSave: (data: {
+    name: string;
+    sort_name?: string;
+    aliases?: string[];
+  }) => Promise<void>;
   isPending: boolean;
 }
 
@@ -51,6 +57,7 @@ export function MetadataEditDialog({
   onOpenChange,
   entityType,
   entityName,
+  aliases,
   sortName,
   sortNameSource,
   onSave,
@@ -58,11 +65,15 @@ export function MetadataEditDialog({
 }: MetadataEditDialogProps) {
   const [name, setName] = useState(entityName);
   const [editSortName, setEditSortName] = useState(sortName || "");
+  const [editAliases, setEditAliases] = useState<string[]>([]);
+  const [aliasInput, setAliasInput] = useState("");
+  const [serverError, setServerError] = useState<string | null>(null);
   const [changesSaved, setChangesSaved] = useState(false);
   // Store initial values when dialog opens - used for hasChanges comparison
   const [initialValues, setInitialValues] = useState<{
     name: string;
     sortName: string;
+    aliases: string[];
   } | null>(null);
 
   const hasSortName = entityType === "person" || entityType === "series";
@@ -93,27 +104,57 @@ export function MetadataEditDialog({
           : null;
     const effectiveSortName =
       sortName || (generateSort ? generateSort(initialName) : "");
+    const initialAliases = aliases ?? [];
     setName(initialName);
     setEditSortName(semanticSortName);
+    setEditAliases([...initialAliases]);
+    setAliasInput("");
+    setServerError(null);
     setInitialValues({
       name: initialName,
       sortName: effectiveSortName,
+      aliases: [...initialAliases],
     });
     setChangesSaved(false);
-  }, [open, entityName, sortName, sortNameSource, entityType]);
+  }, [open, entityName, sortName, sortNameSource, entityType, aliases]);
+
+  const handleAddAlias = () => {
+    const trimmed = aliasInput.trim();
+    if (!trimmed) return;
+    if (editAliases.some((a) => a.toLowerCase() === trimmed.toLowerCase()))
+      return;
+    setEditAliases([...editAliases, trimmed]);
+    setAliasInput("");
+  };
+
+  const handleRemoveAlias = (index: number) => {
+    setEditAliases(editAliases.filter((_, i) => i !== index));
+  };
+
+  const handleAliasKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddAlias();
+    }
+  };
 
   const handleSubmit = async () => {
+    setServerError(null);
     try {
-      const data: { name: string; sort_name?: string } = { name };
+      const data: { name: string; sort_name?: string; aliases?: string[] } = {
+        name,
+      };
       if (hasSortName) {
-        // Pass empty string through - backend interprets it as "regenerate sort name"
         data.sort_name = editSortName;
       }
+      data.aliases = editAliases;
       await onSave(data);
       setChangesSaved(true);
       requestClose();
-    } catch {
-      // Error handling (e.g., toast) is done by the parent callback
+    } catch (err) {
+      if (err instanceof Error) {
+        setServerError(err.message);
+      }
     }
   };
 
@@ -130,10 +171,14 @@ export function MetadataEditDialog({
           : null;
     const effectiveSortName =
       editSortName || (generateSort ? generateSort(name) : "");
+    const aliasesChanged =
+      editAliases.length !== initialValues.aliases.length ||
+      editAliases.some((a, i) => a !== initialValues.aliases[i]);
     // Compare against stored initial values, not live props
     return (
       name !== initialValues.name ||
-      (hasSortName && effectiveSortName !== initialValues.sortName)
+      (hasSortName && effectiveSortName !== initialValues.sortName) ||
+      aliasesChanged
     );
   }, [
     name,
@@ -142,6 +187,7 @@ export function MetadataEditDialog({
     changesSaved,
     initialValues,
     entityType,
+    editAliases,
   ]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
@@ -179,6 +225,46 @@ export function MetadataEditDialog({
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="aliases">Aliases</Label>
+            <div className="flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent px-3 py-1.5">
+              {editAliases.map((alias, index) => (
+                <Badge
+                  className="max-w-full gap-1 pr-1"
+                  key={alias}
+                  variant="secondary"
+                >
+                  <span className="truncate" title={alias}>
+                    {alias}
+                  </span>
+                  <button
+                    aria-label={`Remove alias ${alias}`}
+                    className="shrink-0 ml-0.5 rounded-sm hover:bg-muted cursor-pointer"
+                    onClick={() => handleRemoveAlias(index)}
+                    type="button"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              <input
+                className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                id="aliases"
+                onChange={(e) => setAliasInput(e.target.value)}
+                onKeyDown={handleAliasKeyDown}
+                placeholder={
+                  editAliases.length === 0
+                    ? "Type alias and press Enter"
+                    : "Add another..."
+                }
+                value={aliasInput}
+              />
+            </div>
+            {serverError && (
+              <p className="text-sm text-destructive">{serverError}</p>
+            )}
+          </div>
         </DialogBody>
 
         <DialogFooter>
