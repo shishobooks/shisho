@@ -193,7 +193,7 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if nameChanged {
+	if nameChanged || params.Aliases != nil {
 		log := logger.FromContext(ctx)
 		if err := h.searchService.IndexGenre(ctx, genre); err != nil {
 			log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})

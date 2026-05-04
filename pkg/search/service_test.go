@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -479,4 +480,379 @@ func TestRebuildAllIndexes_DeduplicatesAuthorNames(t *testing.T) {
 
 	// The author name should appear only once, not duplicated
 	require.Equal(t, "Stan Lee", results.Books[0].Authors, "Author name should not be duplicated")
+}
+
+// --- Helper to insert an alias row directly ---
+
+func insertAlias(t *testing.T, db *bun.DB, table, fkColumn string, resourceID, libraryID int, name string) {
+	t.Helper()
+	_, err := db.NewRaw(
+		"INSERT INTO "+table+" (created_at, "+fkColumn+", name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), resourceID, name, libraryID,
+	).Exec(context.Background())
+	require.NoError(t, err)
+}
+
+// --- Alias FTS tests ---
+
+func TestIndexGenre_IncludesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	genre := &models.Genre{LibraryID: library.ID, Name: "Science Fiction"}
+	_, err = db.NewInsert().Model(genre).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "genre_aliases", "genre_id", genre.ID, library.ID, "SciFi")
+	insertAlias(t, db, "genre_aliases", "genre_id", genre.ID, library.ID, "SF")
+
+	svc := NewService(db)
+	err = svc.IndexGenre(ctx, genre)
+	require.NoError(t, err)
+
+	var count int
+	err = db.NewSelect().TableExpr("genres_fts").
+		ColumnExpr("COUNT(*)").
+		Where("genres_fts MATCH ?", `"SciFi"`).
+		Where("library_id = ?", library.ID).
+		Scan(ctx, &count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "Should find genre by alias 'SciFi'")
+}
+
+func TestIndexTag_IncludesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	tag := &models.Tag{LibraryID: library.ID, Name: "Artificial Intelligence"}
+	_, err = db.NewInsert().Model(tag).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "tag_aliases", "tag_id", tag.ID, library.ID, "AI")
+
+	svc := NewService(db)
+	err = svc.IndexTag(ctx, tag)
+	require.NoError(t, err)
+
+	var count int
+	err = db.NewSelect().TableExpr("tags_fts").
+		ColumnExpr("COUNT(*)").
+		Where("tags_fts MATCH ?", `"AI"`).
+		Where("library_id = ?", library.ID).
+		Scan(ctx, &count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "Should find tag by alias 'AI'")
+}
+
+func TestIndexPerson_IncludesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	person := &models.Person{LibraryID: library.ID, Name: "Stephen King", SortName: "King, Stephen", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "person_aliases", "person_id", person.ID, library.ID, "Richard Bachman")
+
+	svc := NewService(db)
+	err = svc.IndexPerson(ctx, person)
+	require.NoError(t, err)
+
+	results, _, err := svc.SearchPeople(ctx, library.ID, "Bachman", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Should find person by alias 'Bachman'")
+	require.Equal(t, "Stephen King", results[0].Name)
+}
+
+func TestIndexSeries_IncludesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	series := &models.Series{LibraryID: library.ID, Name: "A Song of Ice and Fire", NameSource: "file", SortName: "Song of Ice and Fire, A", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "series_aliases", "series_id", series.ID, library.ID, "Game of Thrones")
+
+	svc := NewService(db)
+	err = svc.IndexSeries(ctx, series)
+	require.NoError(t, err)
+
+	results, _, err := svc.SearchSeries(ctx, library.ID, "Thrones", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Should find series by alias 'Thrones'")
+	require.Equal(t, "A Song of Ice and Fire", results[0].Name)
+}
+
+func TestIndexBook_IncludesAuthorAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	person := &models.Person{LibraryID: library.ID, Name: "Stephen King", SortName: "King, Stephen", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "person_aliases", "person_id", person.ID, library.ID, "Richard Bachman")
+
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/book", Title: "Thinner",
+		TitleSource: "file", SortTitle: "Thinner", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.Author{}).
+		Value("book_id", "?", book.ID).
+		Value("person_id", "?", person.ID).
+		Value("sort_order", "?", 0).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/test/book/thinner.epub", FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, FilesizeBytes: 1000}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	book.Authors = []*models.Author{{PersonID: person.ID, Person: person, SortOrder: 0}}
+	book.Files = []*models.File{file}
+
+	svc := NewService(db)
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	results, err := svc.GlobalSearch(ctx, library.ID, "Bachman")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find book by author alias 'Bachman'")
+	require.Equal(t, "Thinner", results.Books[0].Title)
+}
+
+func TestIndexBook_IncludesNarratorAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	narrator := &models.Person{LibraryID: library.ID, Name: "Jim Dale", SortName: "Dale, Jim", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(narrator).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "person_aliases", "person_id", narrator.ID, library.ID, "James Dale")
+
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/audiobook", Title: "Harry Potter",
+		TitleSource: "file", SortTitle: "Harry Potter", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	m4bFile := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/test/audiobook/hp.m4b", FileType: models.FileTypeM4B, FileRole: models.FileRoleMain, FilesizeBytes: 1000}
+	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.Narrator{}).
+		Value("file_id", "?", m4bFile.ID).
+		Value("person_id", "?", narrator.ID).
+		Value("sort_order", "?", 0).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	m4bFile.Narrators = []*models.Narrator{{PersonID: narrator.ID, Person: narrator, SortOrder: 0}}
+	book.Files = []*models.File{m4bFile}
+
+	svc := NewService(db)
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	results, err := svc.GlobalSearch(ctx, library.ID, "James Dale")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find book by narrator alias 'James Dale'")
+}
+
+func TestIndexBook_IncludesSeriesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	series := &models.Series{LibraryID: library.ID, Name: "The Dark Tower", NameSource: "file", SortName: "Dark Tower, The", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+
+	insertAlias(t, db, "series_aliases", "series_id", series.ID, library.ID, "DT Series")
+
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/dt", Title: "The Gunslinger",
+		TitleSource: "file", SortTitle: "Gunslinger, The", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.BookSeries{}).
+		Value("book_id", "?", book.ID).
+		Value("series_id", "?", series.ID).
+		Value("sort_order", "?", 0).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/test/dt/gunslinger.epub", FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, FilesizeBytes: 1000}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	book.BookSeries = []*models.BookSeries{{SeriesID: series.ID, Series: series, SortOrder: 0}}
+	book.Files = []*models.File{file}
+
+	svc := NewService(db)
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	results, err := svc.GlobalSearch(ctx, library.ID, "DT Series")
+	require.NoError(t, err)
+	require.Len(t, results.Books, 1, "Should find book by series alias 'DT Series'")
+}
+
+func TestIndexBook_ExcludesGenreAndTagAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	genre := &models.Genre{LibraryID: library.ID, Name: "Horror"}
+	_, err = db.NewInsert().Model(genre).Exec(ctx)
+	require.NoError(t, err)
+	insertAlias(t, db, "genre_aliases", "genre_id", genre.ID, library.ID, "Spooky")
+
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/horror", Title: "It",
+		TitleSource: "file", SortTitle: "It", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/test/horror/it.epub", FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, FilesizeBytes: 1000}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	book.Files = []*models.File{file}
+
+	svc := NewService(db)
+	err = svc.IndexBook(ctx, book)
+	require.NoError(t, err)
+
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spooky")
+	require.NoError(t, err)
+	require.Empty(t, results.Books, "Genre aliases should not be in books_fts")
+}
+
+func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	person := &models.Person{LibraryID: library.ID, Name: "Stephen King", SortName: "King, Stephen", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	insertAlias(t, db, "person_aliases", "person_id", person.ID, library.ID, "Richard Bachman")
+
+	series := &models.Series{LibraryID: library.ID, Name: "The Dark Tower", NameSource: "file", SortName: "Dark Tower, The", SortNameSource: "file"}
+	_, err = db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+	insertAlias(t, db, "series_aliases", "series_id", series.ID, library.ID, "DT Series")
+
+	genre := &models.Genre{LibraryID: library.ID, Name: "Horror"}
+	_, err = db.NewInsert().Model(genre).Exec(ctx)
+	require.NoError(t, err)
+	insertAlias(t, db, "genre_aliases", "genre_id", genre.ID, library.ID, "Spooky")
+
+	tag := &models.Tag{LibraryID: library.ID, Name: "Bestseller"}
+	_, err = db.NewInsert().Model(tag).Exec(ctx)
+	require.NoError(t, err)
+	insertAlias(t, db, "tag_aliases", "tag_id", tag.ID, library.ID, "Popular")
+
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/dt", Title: "The Gunslinger",
+		TitleSource: "file", SortTitle: "Gunslinger, The", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.Author{}).
+		Value("book_id", "?", book.ID).Value("person_id", "?", person.ID).Value("sort_order", "?", 0).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.BookSeries{}).
+		Value("book_id", "?", book.ID).Value("series_id", "?", series.ID).Value("sort_order", "?", 0).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/test/dt/gunslinger.epub", FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, FilesizeBytes: 1000}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	err = svc.RebuildAllIndexes(ctx)
+	require.NoError(t, err)
+
+	people, _, err := svc.SearchPeople(ctx, library.ID, "Bachman", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, people, 1, "RebuildAllIndexes should include person aliases")
+
+	seriesResults, _, err := svc.SearchSeries(ctx, library.ID, "DT Series", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, seriesResults, 1, "RebuildAllIndexes should include series aliases")
+
+	var genreCount int
+	err = db.NewSelect().TableExpr("genres_fts").ColumnExpr("COUNT(*)").
+		Where("genres_fts MATCH ?", `"Spooky"`).Where("library_id = ?", library.ID).Scan(ctx, &genreCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, genreCount, "RebuildAllIndexes should include genre aliases")
+
+	var tagCount int
+	err = db.NewSelect().TableExpr("tags_fts").ColumnExpr("COUNT(*)").
+		Where("tags_fts MATCH ?", `"Popular"`).Where("library_id = ?", library.ID).Scan(ctx, &tagCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, tagCount, "RebuildAllIndexes should include tag aliases")
+
+	bookResults, err := svc.GlobalSearch(ctx, library.ID, "Bachman")
+	require.NoError(t, err)
+	require.Len(t, bookResults.Books, 1, "RebuildAllIndexes should include author aliases in books_fts")
+
+	bookResults, err = svc.GlobalSearch(ctx, library.ID, "DT Series")
+	require.NoError(t, err)
+	require.Len(t, bookResults.Books, 1, "RebuildAllIndexes should include series aliases in books_fts")
 }

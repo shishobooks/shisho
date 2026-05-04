@@ -340,6 +340,16 @@ func (svc *Service) GetSeriesBookCount(ctx context.Context, seriesID int) (int, 
 	return count, errors.WithStack(err)
 }
 
+func (svc *Service) GetSeriesBookIDs(ctx context.Context, seriesID int) ([]int, error) {
+	var ids []int
+	err := svc.db.NewSelect().
+		Model((*models.BookSeries)(nil)).
+		Column("book_id").
+		Where("series_id = ?", seriesID).
+		Scan(ctx, &ids)
+	return ids, errors.WithStack(err)
+}
+
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.
 // It sanitizes the input to prevent FTS5 injection and appends a wildcard.
 func buildFTSPrefixQuery(input string) string {

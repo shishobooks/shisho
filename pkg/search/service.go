@@ -273,12 +273,13 @@ func (svc *Service) searchSeriesInternal(ctx context.Context, ftsQuery string, l
 	results := []SeriesSearchResult{}
 
 	err := svc.db.NewSelect().
-		TableExpr("series_fts").
-		ColumnExpr("series_id AS id, library_id, name").
-		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE series_id = series_fts.series_id) AS book_count").
+		TableExpr("series_fts sf").
+		Join("JOIN series s ON s.id = sf.series_id").
+		ColumnExpr("sf.series_id AS id, sf.library_id, s.name").
+		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE series_id = sf.series_id) AS book_count").
 		Where("series_fts MATCH ?", ftsQuery).
-		Where("library_id = ?", libraryID).
-		Order("rank").
+		Where("sf.library_id = ?", libraryID).
+		Order("sf.rank").
 		Limit(limit).
 		Offset(offset).
 		Scan(ctx, &results)
@@ -304,11 +305,12 @@ func (svc *Service) searchPeopleInternal(ctx context.Context, ftsQuery string, l
 	results := []PersonSearchResult{}
 
 	err := svc.db.NewSelect().
-		TableExpr("persons_fts").
-		ColumnExpr("person_id AS id, library_id, name, sort_name").
+		TableExpr("persons_fts pf").
+		Join("JOIN persons p ON p.id = pf.person_id").
+		ColumnExpr("pf.person_id AS id, pf.library_id, p.name, p.sort_name").
 		Where("persons_fts MATCH ?", ftsQuery).
-		Where("library_id = ?", libraryID).
-		Order("rank").
+		Where("pf.library_id = ?", libraryID).
+		Order("pf.rank").
 		Limit(limit).
 		Offset(offset).
 		Scan(ctx, &results)
@@ -338,19 +340,31 @@ func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 		return errors.WithStack(err)
 	}
 
-	// Collect author names (deduplicated - same person can have multiple roles)
+	// Collect author names and their aliases (deduplicated)
 	seenAuthors := make(map[string]bool)
+	seenAuthorIDs := make(map[int]bool)
 	var authorNames []string
 	for _, author := range book.Authors {
 		if author.Person != nil && !seenAuthors[author.Person.Name] {
 			authorNames = append(authorNames, author.Person.Name)
 			seenAuthors[author.Person.Name] = true
 		}
+		if author.Person != nil && !seenAuthorIDs[author.PersonID] {
+			seenAuthorIDs[author.PersonID] = true
+			aliasNames, _ := svc.queryAliasNames(ctx, "person_aliases", "person_id", author.PersonID)
+			for _, a := range aliasNames {
+				if !seenAuthors[a] {
+					authorNames = append(authorNames, a)
+					seenAuthors[a] = true
+				}
+			}
+		}
 	}
 
-	// Collect file names and narrators (deduplicated)
+	// Collect file names and narrators with aliases (deduplicated)
 	var filenames []string
 	seenNarrators := make(map[string]bool)
+	seenNarratorIDs := make(map[int]bool)
 	var narratorNames []string
 	for _, file := range book.Files {
 		filenames = append(filenames, file.Filepath)
@@ -359,14 +373,26 @@ func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 				narratorNames = append(narratorNames, narrator.Person.Name)
 				seenNarrators[narrator.Person.Name] = true
 			}
+			if narrator.Person != nil && !seenNarratorIDs[narrator.PersonID] {
+				seenNarratorIDs[narrator.PersonID] = true
+				aliasNames, _ := svc.queryAliasNames(ctx, "person_aliases", "person_id", narrator.PersonID)
+				for _, a := range aliasNames {
+					if !seenNarrators[a] {
+						narratorNames = append(narratorNames, a)
+						seenNarrators[a] = true
+					}
+				}
+			}
 		}
 	}
 
-	// Collect series names
+	// Collect series names with aliases
 	var seriesNames []string
 	for _, bs := range book.BookSeries {
 		if bs.Series != nil {
 			seriesNames = append(seriesNames, bs.Series.Name)
+			aliasNames, _ := svc.queryAliasNames(ctx, "series_aliases", "series_id", bs.SeriesID)
+			seriesNames = append(seriesNames, aliasNames...)
 		}
 	}
 
@@ -441,12 +467,17 @@ func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) erro
 		description = *series.Description
 	}
 
+	nameWithAliases, err := svc.nameWithAliases(ctx, "series_aliases", "series_id", series.ID, series.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	_, err = svc.db.ExecContext(ctx,
 		`INSERT INTO series_fts (series_id, library_id, name, description, book_titles, book_authors)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		series.ID,
 		series.LibraryID,
-		series.Name,
+		nameWithAliases,
 		description,
 		strings.Join(bookTitles, " "),
 		strings.Join(bookAuthors, " "),
@@ -471,10 +502,15 @@ func (svc *Service) IndexPerson(ctx context.Context, person *models.Person) erro
 		return errors.WithStack(err)
 	}
 
+	nameWithAliases, err := svc.nameWithAliases(ctx, "person_aliases", "person_id", person.ID, person.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	_, err = svc.db.ExecContext(ctx,
 		`INSERT INTO persons_fts (person_id, library_id, name, sort_name)
 		 VALUES (?, ?, ?, ?)`,
-		person.ID, person.LibraryID, person.Name, person.SortName,
+		person.ID, person.LibraryID, nameWithAliases, person.SortName,
 	)
 	return errors.WithStack(err)
 }
@@ -496,10 +532,15 @@ func (svc *Service) IndexGenre(ctx context.Context, genre *models.Genre) error {
 		return errors.WithStack(err)
 	}
 
+	nameWithAliases, err := svc.nameWithAliases(ctx, "genre_aliases", "genre_id", genre.ID, genre.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	_, err = svc.db.ExecContext(ctx,
 		`INSERT INTO genres_fts (genre_id, library_id, name)
 		 VALUES (?, ?, ?)`,
-		genre.ID, genre.LibraryID, genre.Name,
+		genre.ID, genre.LibraryID, nameWithAliases,
 	)
 	return errors.WithStack(err)
 }
@@ -521,10 +562,15 @@ func (svc *Service) IndexTag(ctx context.Context, tag *models.Tag) error {
 		return errors.WithStack(err)
 	}
 
+	nameWithAliases, err := svc.nameWithAliases(ctx, "tag_aliases", "tag_id", tag.ID, tag.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	_, err = svc.db.ExecContext(ctx,
 		`INSERT INTO tags_fts (tag_id, library_id, name)
 		 VALUES (?, ?, ?)`,
-		tag.ID, tag.LibraryID, tag.Name,
+		tag.ID, tag.LibraryID, nameWithAliases,
 	)
 	return errors.WithStack(err)
 }
@@ -536,6 +582,69 @@ func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
 		Where("tag_id = ?", tagID).
 		Exec(ctx)
 	return errors.WithStack(err)
+}
+
+// ReindexBookByID re-indexes a single book in books_fts using the same SQL
+// pattern as RebuildAllIndexes. Useful when related data changes (e.g., an
+// author's or series' aliases are modified) without a full book model in hand.
+func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr("books_fts").
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = svc.db.ExecContext(ctx, `
+		INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+		SELECT
+			b.id,
+			b.library_id,
+			b.title,
+			b.filepath,
+			COALESCE(b.subtitle, ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id
+				UNION
+				SELECT DISTINCT pa.name FROM authors a JOIN person_aliases pa ON pa.person_id = a.person_id WHERE a.book_id = b.id
+			)), ''),
+			COALESCE((SELECT GROUP_CONCAT(f.filepath, ' ') FROM files f WHERE f.book_id = b.id), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT DISTINCT p.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id
+				UNION
+				SELECT DISTINCT pa.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN person_aliases pa ON pa.person_id = n.person_id WHERE f.book_id = b.id
+			)), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT s.name FROM book_series bs JOIN series s ON bs.series_id = s.id WHERE bs.book_id = b.id
+				UNION
+				SELECT sa.name FROM book_series bs JOIN series_aliases sa ON sa.series_id = bs.series_id WHERE bs.book_id = b.id
+			)), '')
+		FROM books b
+		WHERE b.id = ?
+	`, bookID)
+	return errors.WithStack(err)
+}
+
+func (svc *Service) queryAliasNames(ctx context.Context, table, fkColumn string, resourceID int) ([]string, error) {
+	var names []string
+	err := svc.db.NewSelect().
+		TableExpr(table).
+		Column("name").
+		Where(fkColumn+" = ?", resourceID).
+		Scan(ctx, &names)
+	return names, errors.WithStack(err)
+}
+
+func (svc *Service) nameWithAliases(ctx context.Context, table, fkColumn string, resourceID int, primaryName string) (string, error) {
+	aliasNames, err := svc.queryAliasNames(ctx, table, fkColumn, resourceID)
+	if err != nil {
+		return primaryName, err
+	}
+	if len(aliasNames) == 0 {
+		return primaryName, nil
+	}
+	return primaryName + " " + strings.Join(aliasNames, " "), nil
 }
 
 // RebuildAllIndexes rebuilds all FTS indexes from scratch.
@@ -563,7 +672,7 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Rebuild books index
+	// Rebuild books index (includes person and series aliases in authors/narrators/series_names)
 	_, err = svc.db.ExecContext(ctx, `
 		INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
 		SELECT
@@ -572,23 +681,35 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 			b.title,
 			b.filepath,
 			COALESCE(b.subtitle, ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id)), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id
+				UNION
+				SELECT DISTINCT pa.name FROM authors a JOIN person_aliases pa ON pa.person_id = a.person_id WHERE a.book_id = b.id
+			)), ''),
 			COALESCE((SELECT GROUP_CONCAT(f.filepath, ' ') FROM files f WHERE f.book_id = b.id), ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id)), ''),
-			COALESCE((SELECT GROUP_CONCAT(s.name, ' ') FROM book_series bs JOIN series s ON bs.series_id = s.id WHERE bs.book_id = b.id), '')
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT DISTINCT p.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id
+				UNION
+				SELECT DISTINCT pa.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN person_aliases pa ON pa.person_id = n.person_id WHERE f.book_id = b.id
+			)), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
+				SELECT s.name FROM book_series bs JOIN series s ON bs.series_id = s.id WHERE bs.book_id = b.id
+				UNION
+				SELECT sa.name FROM book_series bs JOIN series_aliases sa ON sa.series_id = bs.series_id WHERE bs.book_id = b.id
+			)), '')
 		FROM books b
 	`)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Rebuild series index
+	// Rebuild series index (includes series aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
 		INSERT INTO series_fts (series_id, library_id, name, description, book_titles, book_authors)
 		SELECT
 			s.id,
 			s.library_id,
-			s.name,
+			s.name || COALESCE(' ' || (SELECT GROUP_CONCAT(sa.name, ' ') FROM series_aliases sa WHERE sa.series_id = s.id), ''),
 			COALESCE(s.description, ''),
 			COALESCE((SELECT GROUP_CONCAT(b.title, ' ') FROM book_series bs JOIN books b ON bs.book_id = b.id WHERE bs.series_id = s.id), ''),
 			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM book_series bs JOIN books b ON bs.book_id = b.id JOIN authors a ON a.book_id = b.id JOIN persons p ON a.person_id = p.id WHERE bs.series_id = s.id)), '')
@@ -598,30 +719,34 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Rebuild persons index
+	// Rebuild persons index (includes person aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
 		INSERT INTO persons_fts (person_id, library_id, name, sort_name)
-		SELECT id, library_id, name, sort_name
+		SELECT id, library_id,
+			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM person_aliases pa WHERE pa.person_id = persons.id), ''),
+			sort_name
 		FROM persons
 	`)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Rebuild genres index
+	// Rebuild genres index (includes genre aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
 		INSERT INTO genres_fts (genre_id, library_id, name)
-		SELECT id, library_id, name
+		SELECT id, library_id,
+			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ga.name, ' ') FROM genre_aliases ga WHERE ga.genre_id = genres.id), '')
 		FROM genres
 	`)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Rebuild tags index
+	// Rebuild tags index (includes tag aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
 		INSERT INTO tags_fts (tag_id, library_id, name)
-		SELECT id, library_id, name
+		SELECT id, library_id,
+			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ta.name, ' ') FROM tag_aliases ta WHERE ta.tag_id = tags.id), '')
 		FROM tags
 	`)
 	if err != nil {

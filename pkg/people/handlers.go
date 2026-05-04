@@ -196,10 +196,12 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Sync aliases if provided
+	aliasesChanged := false
 	if params.Aliases != nil {
 		if err := h.aliasService.SyncAliases(ctx, aliases.PersonConfig, id, person.LibraryID, params.Aliases); err != nil {
 			return errors.WithStack(err)
 		}
+		aliasesChanged = true
 	}
 
 	// Reload the model
@@ -214,6 +216,34 @@ func (h *handler) update(c echo.Context) error {
 	log := logger.FromContext(ctx)
 	if err := h.searchService.IndexPerson(ctx, person); err != nil {
 		log.Warn("failed to update search index for person", logger.Data{"person_id": person.ID, "error": err.Error()})
+	}
+
+	// Re-index associated books when aliases change (books_fts includes author/narrator aliases)
+	if aliasesChanged {
+		authoredBooks, err := h.personService.GetAuthoredBooks(ctx, id)
+		if err != nil {
+			log.Warn("failed to get authored books for FTS reindex after alias change", logger.Data{"person_id": id, "error": err.Error()})
+		} else {
+			for _, book := range authoredBooks {
+				if err := h.searchService.ReindexBookByID(ctx, book.ID); err != nil {
+					log.Warn("failed to reindex book after person alias change", logger.Data{"person_id": id, "book_id": book.ID, "error": err.Error()})
+				}
+			}
+		}
+		narratedFiles, err := h.personService.GetNarratedFiles(ctx, id)
+		if err != nil {
+			log.Warn("failed to get narrated files for FTS reindex after alias change", logger.Data{"person_id": id, "error": err.Error()})
+		} else {
+			reindexedBooks := make(map[int]bool)
+			for _, file := range narratedFiles {
+				if !reindexedBooks[file.BookID] {
+					reindexedBooks[file.BookID] = true
+					if err := h.searchService.ReindexBookByID(ctx, file.BookID); err != nil {
+						log.Warn("failed to reindex book after narrator alias change", logger.Data{"person_id": id, "book_id": file.BookID, "error": err.Error()})
+					}
+				}
+			}
+		}
 	}
 
 	// If name changed and file organizer is configured, reorganize associated files

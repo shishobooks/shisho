@@ -181,7 +181,7 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if nameChanged {
+	if nameChanged || params.Aliases != nil {
 		log := logger.FromContext(ctx)
 		if err := h.searchService.IndexTag(ctx, tag); err != nil {
 			log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
