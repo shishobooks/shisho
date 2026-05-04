@@ -84,21 +84,22 @@ test.describe("Alias workflows", () => {
 
     // Open edit dialog.
     await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
     await expect(
-      page.getByRole("heading", { name: "Edit Series" }),
+      dialog.getByRole("heading", { name: "Edit Series" }),
     ).toBeVisible();
 
     // Type an alias and press Enter to add it.
-    await page.getByLabel("Aliases").fill("FS");
-    await page.getByLabel("Aliases").press("Enter");
+    await dialog.getByLabel("Aliases").fill("FS");
+    await dialog.getByLabel("Aliases").press("Enter");
 
-    // Badge should appear.
-    await expect(page.getByText("FS")).toBeVisible();
+    // Badge should appear inside the dialog.
+    await expect(dialog.getByText("FS")).toBeVisible();
 
     // Add a second alias.
-    await page.getByLabel("Aliases").fill("The Fantasy Saga");
-    await page.getByLabel("Aliases").press("Enter");
-    await expect(page.getByText("The Fantasy Saga")).toBeVisible();
+    await dialog.getByLabel("Aliases").fill("The Fantasy Saga");
+    await dialog.getByLabel("Aliases").press("Enter");
+    await expect(dialog.getByText("The Fantasy Saga")).toBeVisible();
 
     // Save — wait for the PATCH response.
     await Promise.all([
@@ -108,16 +109,17 @@ test.describe("Alias workflows", () => {
           r.request().method() === "PATCH" &&
           r.ok(),
       ),
-      page.getByRole("button", { name: "Save" }).click(),
+      dialog.getByRole("button", { name: "Save" }).click(),
     ]);
 
     // Reopen the edit dialog to verify aliases persisted.
     await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog2 = page.getByRole("dialog");
     await expect(
-      page.getByRole("heading", { name: "Edit Series" }),
+      dialog2.getByRole("heading", { name: "Edit Series" }),
     ).toBeVisible();
-    await expect(page.getByText("FS")).toBeVisible();
-    await expect(page.getByText("The Fantasy Saga")).toBeVisible();
+    await expect(dialog2.getByText("FS")).toBeVisible();
+    await expect(dialog2.getByText("The Fantasy Saga")).toBeVisible();
 
     // Also verify via API.
     const resp = await page.request.get(`/api/series/${series.id}`);
@@ -149,17 +151,18 @@ test.describe("Alias workflows", () => {
       waitUntil: "domcontentloaded",
     });
     await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
     await expect(
-      page.getByRole("heading", { name: "Edit Series" }),
+      dialog.getByRole("heading", { name: "Edit Series" }),
     ).toBeVisible();
 
-    // Both aliases should be present.
-    await expect(page.getByText("MN")).toBeVisible();
-    await expect(page.getByText("Whodunit Collection")).toBeVisible();
+    // Both aliases should be present inside the dialog.
+    await expect(dialog.getByText("MN")).toBeVisible();
+    await expect(dialog.getByText("Whodunit Collection")).toBeVisible();
 
     // Remove "MN" by clicking its X button.
-    await page.getByRole("button", { name: "Remove alias MN" }).click();
-    await expect(page.getByText("MN")).not.toBeVisible();
+    await dialog.getByRole("button", { name: "Remove alias MN" }).click();
+    await expect(dialog.getByText("MN")).not.toBeVisible();
 
     // Save.
     await Promise.all([
@@ -250,10 +253,11 @@ test.describe("Alias workflows", () => {
 
     // Open edit dialog to verify "Dune Saga" is now an alias.
     await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
     await expect(
-      page.getByRole("heading", { name: "Edit Series" }),
+      dialog.getByRole("heading", { name: "Edit Series" }),
     ).toBeVisible();
-    await expect(page.getByText("Dune Saga")).toBeVisible();
+    await expect(dialog.getByText("Dune Saga")).toBeVisible();
 
     // Verify via API.
     const resp = await page.request.get(`/api/series/${target.id}`);
@@ -306,10 +310,11 @@ test.describe("Alias workflows", () => {
 
     // Reopen edit dialog — old name should be an alias.
     await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
     await expect(
-      page.getByRole("heading", { name: "Edit Series" }),
+      dialog.getByRole("heading", { name: "Edit Series" }),
     ).toBeVisible();
-    await expect(page.getByText("The Lord of the Rings")).toBeVisible();
+    await expect(dialog.getByText("The Lord of the Rings")).toBeVisible();
 
     // Verify via API.
     const resp = await page.request.get(`/api/series/${series.id}`);
