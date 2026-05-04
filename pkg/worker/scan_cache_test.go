@@ -571,3 +571,263 @@ func TestScanCache_LockBook_DifferentBooks(t *testing.T) {
 			"all goroutines for book %d should complete", i)
 	}
 }
+
+// mockAliasLister implements AliasLister for testing alias pre-population.
+type mockAliasLister struct {
+	mu              sync.Mutex
+	personAliases   map[int][]string
+	genreAliases    map[int][]string
+	tagAliases      map[int][]string
+	seriesAliases   map[int][]string
+	publisherAlias  map[int][]string
+	imprintAliases  map[int][]string
+	personCallCount int
+	genreCallCount  int
+}
+
+func (m *mockAliasLister) ListPersonAliases(_ context.Context, personID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.personCallCount++
+	return m.personAliases[personID], nil
+}
+
+func (m *mockAliasLister) ListGenreAliases(_ context.Context, genreID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.genreCallCount++
+	return m.genreAliases[genreID], nil
+}
+
+func (m *mockAliasLister) ListTagAliases(_ context.Context, tagID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.tagAliases[tagID], nil
+}
+
+func (m *mockAliasLister) ListSeriesAliases(_ context.Context, seriesID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.seriesAliases[seriesID], nil
+}
+
+func (m *mockAliasLister) ListPublisherAliases(_ context.Context, publisherID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.publisherAlias[publisherID], nil
+}
+
+func (m *mockAliasLister) ListImprintAliases(_ context.Context, imprintID int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.imprintAliases[imprintID], nil
+}
+
+// aliasAwarePersonFinder always resolves to a fixed canonical person,
+// simulating alias-aware FindOrCreate behavior.
+type aliasAwarePersonFinder struct {
+	mu        sync.Mutex
+	callCount int
+	canonical *models.Person
+}
+
+func (m *aliasAwarePersonFinder) FindOrCreatePerson(_ context.Context, _ string, _ int) (*models.Person, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	return m.canonical, nil
+}
+
+func (m *aliasAwarePersonFinder) CallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+// aliasAwareGenreFinder always resolves to a fixed canonical genre.
+type aliasAwareGenreFinder struct {
+	mu        sync.Mutex
+	callCount int
+	canonical *models.Genre
+}
+
+func (m *aliasAwareGenreFinder) FindOrCreateGenre(_ context.Context, _ string, _ int) (*models.Genre, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	return m.canonical, nil
+}
+
+func (m *aliasAwareGenreFinder) CallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+func TestScanCache_AliasPrePopulation_Person(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	canonical := &models.Person{ID: 42, Name: "Joanne Rowling", LibraryID: 1}
+	svc := &aliasAwarePersonFinder{canonical: canonical}
+
+	cache.SetAliasLister(&mockAliasLister{
+		personAliases: map[int][]string{
+			42: {"J.K. Rowling", "JK Rowling"},
+		},
+	})
+
+	// First lookup by alias — hits service
+	person1, err := cache.GetOrCreatePerson(ctx, "J.K. Rowling", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 42, person1.ID)
+	assert.Equal(t, "Joanne Rowling", person1.Name)
+	assert.Equal(t, 1, svc.CallCount())
+
+	// Lookup by canonical name — should hit cache, no service call
+	person2, err := cache.GetOrCreatePerson(ctx, "Joanne Rowling", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 42, person2.ID)
+	assert.Equal(t, 1, svc.CallCount(), "canonical name lookup should hit cache")
+
+	// Lookup by different alias — should hit cache, no service call
+	person3, err := cache.GetOrCreatePerson(ctx, "JK Rowling", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 42, person3.ID)
+	assert.Equal(t, 1, svc.CallCount(), "alias lookup should hit cache")
+}
+
+func TestScanCache_AliasPrePopulation_Genre(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	canonical := &models.Genre{ID: 10, Name: "Science Fiction", LibraryID: 1}
+	svc := &aliasAwareGenreFinder{canonical: canonical}
+
+	cache.SetAliasLister(&mockAliasLister{
+		genreAliases: map[int][]string{
+			10: {"Sci-Fi", "SF"},
+		},
+	})
+
+	// First lookup by alias — hits service
+	genre1, err := cache.GetOrCreateGenre(ctx, "Sci-Fi", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 10, genre1.ID)
+	assert.Equal(t, 1, svc.CallCount())
+
+	// Lookup by canonical name — cache hit
+	genre2, err := cache.GetOrCreateGenre(ctx, "Science Fiction", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 10, genre2.ID)
+	assert.Equal(t, 1, svc.CallCount(), "canonical name lookup should hit cache")
+
+	// Lookup by other alias — cache hit
+	genre3, err := cache.GetOrCreateGenre(ctx, "SF", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 10, genre3.ID)
+	assert.Equal(t, 1, svc.CallCount(), "alias lookup should hit cache")
+}
+
+func TestScanCache_AliasPrePopulation_NoAliasLister(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	canonical := &models.Person{ID: 1, Name: "Author", LibraryID: 1}
+	svc := &aliasAwarePersonFinder{canonical: canonical}
+
+	// No alias lister set — should still work, just no pre-population
+	person, err := cache.GetOrCreatePerson(ctx, "Author", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, person.ID)
+	assert.Equal(t, 1, svc.CallCount())
+
+	// Same name hits cache as before
+	_, err = cache.GetOrCreatePerson(ctx, "Author", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, svc.CallCount())
+}
+
+func TestScanCache_AliasPrePopulation_DifferentLibraries(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	personLib1 := &models.Person{ID: 1, Name: "Author", LibraryID: 1}
+	personLib2 := &models.Person{ID: 2, Name: "Author", LibraryID: 2}
+
+	callCount := 0
+	svc := &mockPersonFinder{
+		persons: map[string]*models.Person{
+			"Author|1": personLib1,
+			"Author|2": personLib2,
+		},
+	}
+
+	cache.SetAliasLister(&mockAliasLister{
+		personAliases: map[int][]string{
+			1: {"Alias1"},
+			2: {"Alias2"},
+		},
+	})
+
+	// Resolve in library 1
+	p1, err := cache.GetOrCreatePerson(ctx, "Author", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, p1.ID)
+	_ = callCount
+
+	// "Alias1" should hit cache for library 1
+	p2, err := cache.GetOrCreatePerson(ctx, "Alias1", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, p2.ID, "alias should resolve to library 1 person")
+
+	// "Alias1" in library 2 should NOT hit the library-1 cache
+	p3, err := cache.GetOrCreatePerson(ctx, "Alias1", 2, svc)
+	require.NoError(t, err)
+	assert.NotEqual(t, 1, p3.ID, "alias in different library should not cross-contaminate")
+}
+
+func TestScanCache_AliasPrePopulation_Concurrent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	canonical := &models.Person{ID: 42, Name: "Canonical", LibraryID: 1}
+	svc := &aliasAwarePersonFinder{canonical: canonical}
+
+	cache.SetAliasLister(&mockAliasLister{
+		personAliases: map[int][]string{
+			42: {"Alias1", "Alias2", "Alias3"},
+		},
+	})
+
+	const numGoroutines = 50
+	var wg sync.WaitGroup
+	names := []string{"Canonical", "Alias1", "Alias2", "Alias3"}
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			name := names[idx%len(names)]
+			person, err := cache.GetOrCreatePerson(ctx, name, 1, svc)
+			assert.NoError(t, err)
+			assert.Equal(t, 42, person.ID)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// The service should only be called a small number of times
+	// (ideally 1, but concurrent first-access on different keys may cause a few)
+	assert.LessOrEqual(t, svc.CallCount(), 4, "service should be called at most once per unique name before pre-population kicks in")
+}
