@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -574,28 +575,24 @@ func TestScanCache_LockBook_DifferentBooks(t *testing.T) {
 
 // mockAliasLister implements AliasLister for testing alias pre-population.
 type mockAliasLister struct {
-	mu              sync.Mutex
-	personAliases   map[int][]string
-	genreAliases    map[int][]string
-	tagAliases      map[int][]string
-	seriesAliases   map[int][]string
-	publisherAlias  map[int][]string
-	imprintAliases  map[int][]string
-	personCallCount int
-	genreCallCount  int
+	mu               sync.Mutex
+	personAliases    map[int][]string
+	genreAliases     map[int][]string
+	tagAliases       map[int][]string
+	seriesAliases    map[int][]string
+	publisherAliases map[int][]string
+	imprintAliases   map[int][]string
 }
 
 func (m *mockAliasLister) ListPersonAliases(_ context.Context, personID int) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.personCallCount++
 	return m.personAliases[personID], nil
 }
 
 func (m *mockAliasLister) ListGenreAliases(_ context.Context, genreID int) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.genreCallCount++
 	return m.genreAliases[genreID], nil
 }
 
@@ -614,7 +611,7 @@ func (m *mockAliasLister) ListSeriesAliases(_ context.Context, seriesID int) ([]
 func (m *mockAliasLister) ListPublisherAliases(_ context.Context, publisherID int) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.publisherAlias[publisherID], nil
+	return m.publisherAliases[publisherID], nil
 }
 
 func (m *mockAliasLister) ListImprintAliases(_ context.Context, imprintID int) ([]string, error) {
@@ -763,7 +760,6 @@ func TestScanCache_AliasPrePopulation_DifferentLibraries(t *testing.T) {
 	personLib1 := &models.Person{ID: 1, Name: "Author", LibraryID: 1}
 	personLib2 := &models.Person{ID: 2, Name: "Author", LibraryID: 2}
 
-	callCount := 0
 	svc := &mockPersonFinder{
 		persons: map[string]*models.Person{
 			"Author|1": personLib1,
@@ -782,7 +778,6 @@ func TestScanCache_AliasPrePopulation_DifferentLibraries(t *testing.T) {
 	p1, err := cache.GetOrCreatePerson(ctx, "Author", 1, svc)
 	require.NoError(t, err)
 	assert.Equal(t, 1, p1.ID)
-	_ = callCount
 
 	// "Alias1" should hit cache for library 1
 	p2, err := cache.GetOrCreatePerson(ctx, "Alias1", 1, svc)
@@ -830,4 +825,50 @@ func TestScanCache_AliasPrePopulation_Concurrent(t *testing.T) {
 	// The service should only be called a small number of times
 	// (ideally 1, but concurrent first-access on different keys may cause a few)
 	assert.LessOrEqual(t, svc.CallCount(), 4, "service should be called at most once per unique name before pre-population kicks in")
+}
+
+// errorAliasLister always returns an error, simulating a DB failure.
+type errorAliasLister struct{}
+
+func (e *errorAliasLister) ListPersonAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorAliasLister) ListGenreAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorAliasLister) ListTagAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorAliasLister) ListSeriesAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorAliasLister) ListPublisherAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorAliasLister) ListImprintAliases(context.Context, int) ([]string, error) {
+	return nil, errors.New("db error")
+}
+
+func TestScanCache_AliasPrePopulation_ListError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := NewScanCache()
+
+	canonical := &models.Person{ID: 42, Name: "Joanne Rowling", LibraryID: 1}
+	svc := &aliasAwarePersonFinder{canonical: canonical}
+
+	cache.SetAliasLister(&errorAliasLister{})
+
+	// First lookup succeeds despite alias listing error
+	person1, err := cache.GetOrCreatePerson(ctx, "J.K. Rowling", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 42, person1.ID)
+	assert.Equal(t, 1, svc.CallCount())
+
+	// Canonical name is NOT pre-populated due to error, so it hits service
+	person2, err := cache.GetOrCreatePerson(ctx, "Joanne Rowling", 1, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 42, person2.ID)
+	assert.Equal(t, 2, svc.CallCount(), "canonical name should hit service since alias listing failed")
 }

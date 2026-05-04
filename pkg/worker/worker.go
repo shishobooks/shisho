@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/chapters"
@@ -45,6 +46,7 @@ type Worker struct {
 
 	processFuncs map[string]func(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error
 
+	aliasService       *aliases.Service
 	bookService        *books.Service
 	chapterService     *chapters.Service
 	genreService       *genres.Service
@@ -90,6 +92,7 @@ type Worker struct {
 }
 
 func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
+	aliasService := aliases.NewService(db)
 	appSettingsService := appsettings.NewService(db)
 	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
@@ -116,6 +119,7 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 		ctx:    ctx,
 		cancel: cancel,
 
+		aliasService:       aliasService,
 		appSettingsService: appSettingsService,
 		bookService:        bookService,
 		chapterService:     chapterService,
