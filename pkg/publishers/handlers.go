@@ -150,6 +150,9 @@ func (h *handler) update(c echo.Context) error {
 			if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
 				log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
 			}
+			if err := h.searchService.IndexPublisher(ctx, existing); err != nil {
+				log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
+			}
 
 			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
@@ -271,6 +274,9 @@ func (h *handler) merge(c echo.Context) error {
 	log := logger.FromContext(ctx)
 	if err := h.searchService.DeleteFromPublisherIndex(ctx, params.SourceID); err != nil {
 		log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": params.SourceID, "error": err.Error()})
+	}
+	if err := h.searchService.IndexPublisher(ctx, publisher); err != nil {
+		log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)

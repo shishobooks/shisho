@@ -154,10 +154,13 @@ func (h *handler) update(c echo.Context) error {
 				return errors.WithStack(err)
 			}
 
-			// Remove merged genre from FTS index
+			// Remove merged genre from FTS index and re-index the target
 			log := logger.FromContext(ctx)
 			if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
 				log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
+			}
+			if err := h.searchService.IndexGenre(ctx, existing); err != nil {
+				log.Warn("failed to re-index target genre after merge", logger.Data{"genre_id": existing.ID, "error": err.Error()})
 			}
 
 			// Return the target genre
@@ -286,10 +289,13 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Remove the merged (source) genre from FTS index
+	// Remove the merged (source) genre from FTS index and re-index the target
 	log := logger.FromContext(ctx)
 	if err := h.searchService.DeleteFromGenreIndex(ctx, params.SourceID); err != nil {
 		log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": params.SourceID, "error": err.Error()})
+	}
+	if err := h.searchService.IndexGenre(ctx, genre); err != nil {
+		log.Warn("failed to re-index target genre after merge", logger.Data{"genre_id": genre.ID, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)
