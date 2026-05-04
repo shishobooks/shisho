@@ -585,6 +585,64 @@ func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
 	return errors.WithStack(err)
 }
 
+// IndexPublisher adds or updates a publisher in the FTS index.
+func (svc *Service) IndexPublisher(ctx context.Context, publisher *models.Publisher) error {
+	err := svc.DeleteFromPublisherIndex(ctx, publisher.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	nameWithAliases, err := svc.nameWithAliases(ctx, "publisher_aliases", "publisher_id", publisher.ID, publisher.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = svc.db.ExecContext(ctx,
+		`INSERT INTO publishers_fts (publisher_id, library_id, name)
+		 VALUES (?, ?, ?)`,
+		publisher.ID, publisher.LibraryID, nameWithAliases,
+	)
+	return errors.WithStack(err)
+}
+
+// DeleteFromPublisherIndex removes a publisher from the FTS index.
+func (svc *Service) DeleteFromPublisherIndex(ctx context.Context, publisherID int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr("publishers_fts").
+		Where("publisher_id = ?", publisherID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// IndexImprint adds or updates an imprint in the FTS index.
+func (svc *Service) IndexImprint(ctx context.Context, imprint *models.Imprint) error {
+	err := svc.DeleteFromImprintIndex(ctx, imprint.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	nameWithAliases, err := svc.nameWithAliases(ctx, "imprint_aliases", "imprint_id", imprint.ID, imprint.Name)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = svc.db.ExecContext(ctx,
+		`INSERT INTO imprints_fts (imprint_id, library_id, name)
+		 VALUES (?, ?, ?)`,
+		imprint.ID, imprint.LibraryID, nameWithAliases,
+	)
+	return errors.WithStack(err)
+}
+
+// DeleteFromImprintIndex removes an imprint from the FTS index.
+func (svc *Service) DeleteFromImprintIndex(ctx context.Context, imprintID int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr("imprints_fts").
+		Where("imprint_id = ?", imprintID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // ReindexBookByID re-indexes a single book in books_fts using the same SQL
 // pattern as RebuildAllIndexes. Useful when related data changes (e.g., an
 // author's or series' aliases are modified) without a full book model in hand.
@@ -672,6 +730,14 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	_, err = svc.db.ExecContext(ctx, "DELETE FROM publishers_fts")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = svc.db.ExecContext(ctx, "DELETE FROM imprints_fts")
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
 	// Rebuild books index (includes person and series aliases in authors/narrators/series_names)
 	_, err = svc.db.ExecContext(ctx, `
@@ -749,6 +815,28 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 		SELECT id, library_id,
 			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ta.name, ' ') FROM tag_aliases ta WHERE ta.tag_id = tags.id), '')
 		FROM tags
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Rebuild publishers index (includes publisher aliases in name column)
+	_, err = svc.db.ExecContext(ctx, `
+		INSERT INTO publishers_fts (publisher_id, library_id, name)
+		SELECT id, library_id,
+			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM publisher_aliases pa WHERE pa.publisher_id = publishers.id), '')
+		FROM publishers
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Rebuild imprints index (includes imprint aliases in name column)
+	_, err = svc.db.ExecContext(ctx, `
+		INSERT INTO imprints_fts (imprint_id, library_id, name)
+		SELECT id, library_id,
+			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ia.name, ' ') FROM imprint_aliases ia WHERE ia.imprint_id = imprints.id), '')
+		FROM imprints
 	`)
 	if err != nil {
 		return errors.WithStack(err)

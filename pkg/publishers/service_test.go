@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -108,6 +109,7 @@ func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
+	searchSvc := search.NewService(db)
 
 	lib := createTestLibrary(t, db)
 
@@ -121,10 +123,13 @@ func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	).Exec(ctx)
 	require.NoError(t, err)
 
-	search := "PRH"
+	err = searchSvc.IndexPublisher(ctx, pub)
+	require.NoError(t, err)
+
+	searchStr := "PRH"
 	results, err := svc.ListPublishers(ctx, ListPublishersOptions{
 		LibraryID: &lib.ID,
-		Search:    &search,
+		Search:    &searchStr,
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 1, "Should find publisher by alias 'PRH'")

@@ -447,8 +447,8 @@ func (w *Worker) checkPluginUpdates() {
 	}
 }
 
-// cleanupOrphanedEntities removes series, people, genres, and tags
-// that are no longer referenced by any books.
+// cleanupOrphanedEntities removes series, people, genres, tags, publishers,
+// and imprints that are no longer referenced by any books or files.
 func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger) {
 	if deletedIDs, err := w.seriesService.CleanupOrphanedSeries(ctx); err != nil {
 		log.Err(err).Warn("failed to cleanup orphaned series")
@@ -492,6 +492,28 @@ func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger)
 			}
 		}
 		log.Info("cleaned up orphaned tags", logger.Data{"count": len(deletedIDs)})
+	}
+
+	if deletedIDs, err := w.publisherService.CleanupOrphanedPublishers(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned publishers")
+	} else if len(deletedIDs) > 0 {
+		for _, id := range deletedIDs {
+			if err := w.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
+				log.Err(err).Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": id})
+			}
+		}
+		log.Info("cleaned up orphaned publishers", logger.Data{"count": len(deletedIDs)})
+	}
+
+	if deletedIDs, err := w.imprintService.CleanupOrphanedImprints(ctx); err != nil {
+		log.Err(err).Warn("failed to cleanup orphaned imprints")
+	} else if len(deletedIDs) > 0 {
+		for _, id := range deletedIDs {
+			if err := w.searchService.DeleteFromImprintIndex(ctx, id); err != nil {
+				log.Err(err).Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": id})
+			}
+		}
+		log.Info("cleaned up orphaned imprints", logger.Data{"count": len(deletedIDs)})
 	}
 }
 

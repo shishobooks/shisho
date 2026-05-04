@@ -11,11 +11,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 type handler struct {
 	publisherService *Service
 	aliasService     *aliases.Service
+	searchService    *search.Service
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -144,6 +146,11 @@ func (h *handler) update(c echo.Context) error {
 				return errors.WithStack(err)
 			}
 
+			log := logger.FromContext(ctx)
+			if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
+				log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
+			}
+
 			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
 			response := struct {
@@ -183,6 +190,13 @@ func (h *handler) update(c echo.Context) error {
 	publisher, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if nameChanged || params.Aliases != nil {
+		log := logger.FromContext(ctx)
+		if err := h.searchService.IndexPublisher(ctx, publisher); err != nil {
+			log.Warn("failed to update search index for publisher", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
+		}
 	}
 
 	fileCount, _ := h.publisherService.GetFileCount(ctx, id)
@@ -254,6 +268,11 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromPublisherIndex(ctx, params.SourceID); err != nil {
+		log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": params.SourceID, "error": err.Error()})
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -280,6 +299,11 @@ func (h *handler) deletePublisher(c echo.Context) error {
 	err = h.publisherService.DeletePublisher(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	log := logger.FromContext(ctx)
+	if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
+		log.Warn("failed to remove publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)
