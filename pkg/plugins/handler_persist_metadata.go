@@ -351,6 +351,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			targetFile.PublisherID = &publisher.ID
 			targetFile.PublisherSource = &pluginSource
 			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexPublisher(ctx, publisher); err != nil {
+					log.Warn("failed to index publisher", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
+				}
+			}
 		}
 	}
 
@@ -364,6 +369,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			targetFile.ImprintID = &imprint.ID
 			targetFile.ImprintSource = &pluginSource
 			fileColumns = append(fileColumns, "imprint_id", "imprint_source")
+			if h.enrich.searchIndexer != nil {
+				if err := h.enrich.searchIndexer.IndexImprint(ctx, imprint); err != nil {
+					log.Warn("failed to index imprint", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
+				}
+			}
 		}
 	}
 

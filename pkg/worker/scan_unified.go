@@ -4383,4 +4383,22 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldR
 			logWarn("failed to update search index for tag", logger.Data{"tag_id": bt.Tag.ID, "error": err.Error()})
 		}
 	}
+
+	// Publishers / imprints: file-level, re-index each file's publisher/imprint.
+	seenPublishers := map[int]bool{}
+	seenImprints := map[int]bool{}
+	for _, f := range book.Files {
+		if f.Publisher != nil && !seenPublishers[f.Publisher.ID] {
+			seenPublishers[f.Publisher.ID] = true
+			if err := w.searchService.IndexPublisher(ctx, f.Publisher); err != nil {
+				logWarn("failed to update search index for publisher", logger.Data{"publisher_id": f.Publisher.ID, "error": err.Error()})
+			}
+		}
+		if f.Imprint != nil && !seenImprints[f.Imprint.ID] {
+			seenImprints[f.Imprint.ID] = true
+			if err := w.searchService.IndexImprint(ctx, f.Imprint); err != nil {
+				logWarn("failed to update search index for imprint", logger.Data{"imprint_id": f.Imprint.ID, "error": err.Error()})
+			}
+		}
+	}
 }

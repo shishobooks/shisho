@@ -1023,6 +1023,9 @@ func (h *handler) updateFile(c echo.Context) error {
 				} else {
 					file.PublisherID = &publisher.ID
 					file.Publisher = publisher
+					if err := h.searchService.IndexPublisher(ctx, publisher); err != nil {
+						log.Warn("failed to update search index for publisher", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
+					}
 				}
 			}
 			file.PublisherSource = strPtr(models.DataSourceManual)
@@ -1047,6 +1050,9 @@ func (h *handler) updateFile(c echo.Context) error {
 				} else {
 					file.ImprintID = &imprint.ID
 					file.Imprint = imprint
+					if err := h.searchService.IndexImprint(ctx, imprint); err != nil {
+						log.Warn("failed to update search index for imprint", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
+					}
 				}
 			}
 			file.ImprintSource = strPtr(models.DataSourceManual)
@@ -2507,6 +2513,24 @@ func (h *handler) deleteBook(c echo.Context) error {
 			log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err.Error()})
 		}
 	}
+	orphanedPublisherIDs, err := h.publisherService.CleanupOrphanedPublishers(ctx)
+	if err != nil {
+		log.Warn("failed to cleanup orphaned publishers", logger.Data{"error": err.Error()})
+	}
+	for _, pubID := range orphanedPublisherIDs {
+		if err := h.searchService.DeleteFromPublisherIndex(ctx, pubID); err != nil {
+			log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err.Error()})
+		}
+	}
+	orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
+	if err != nil {
+		log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err.Error()})
+	}
+	for _, impID := range orphanedImprintIDs {
+		if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
+			log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err.Error()})
+		}
+	}
 
 	return c.JSON(http.StatusOK, DeleteBookResponse{
 		FilesDeleted: result.FilesDeleted,
@@ -2600,6 +2624,24 @@ func (h *handler) deleteFile(c echo.Context) error {
 		for _, tagID := range orphanedTagIDs {
 			if err := h.searchService.DeleteFromTagIndex(ctx, tagID); err != nil {
 				log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err})
+			}
+		}
+		orphanedPublisherIDs, err := h.publisherService.CleanupOrphanedPublishers(ctx)
+		if err != nil {
+			log.Warn("failed to cleanup orphaned publishers", logger.Data{"error": err})
+		}
+		for _, pubID := range orphanedPublisherIDs {
+			if err := h.searchService.DeleteFromPublisherIndex(ctx, pubID); err != nil {
+				log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err})
+			}
+		}
+		orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
+		if err != nil {
+			log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err})
+		}
+		for _, impID := range orphanedImprintIDs {
+			if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
+				log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err})
 			}
 		}
 	}
@@ -2711,6 +2753,24 @@ func (h *handler) deleteBooks(c echo.Context) error {
 	for _, tagID := range orphanedTagIDs {
 		if err := h.searchService.DeleteFromTagIndex(ctx, tagID); err != nil {
 			log.Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": tagID, "error": err.Error()})
+		}
+	}
+	orphanedPublisherIDs, err := h.publisherService.CleanupOrphanedPublishers(ctx)
+	if err != nil {
+		log.Warn("failed to cleanup orphaned publishers", logger.Data{"error": err.Error()})
+	}
+	for _, pubID := range orphanedPublisherIDs {
+		if err := h.searchService.DeleteFromPublisherIndex(ctx, pubID); err != nil {
+			log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err.Error()})
+		}
+	}
+	orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
+	if err != nil {
+		log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err.Error()})
+	}
+	for _, impID := range orphanedImprintIDs {
+		if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
+			log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err.Error()})
 		}
 	}
 

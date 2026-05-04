@@ -587,6 +587,7 @@ func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
 
 // IndexPublisher adds or updates a publisher in the FTS index.
 func (svc *Service) IndexPublisher(ctx context.Context, publisher *models.Publisher) error {
+	// First, delete any existing entry
 	err := svc.DeleteFromPublisherIndex(ctx, publisher.ID)
 	if err != nil {
 		return errors.WithStack(err)
@@ -616,6 +617,7 @@ func (svc *Service) DeleteFromPublisherIndex(ctx context.Context, publisherID in
 
 // IndexImprint adds or updates an imprint in the FTS index.
 func (svc *Service) IndexImprint(ctx context.Context, imprint *models.Imprint) error {
+	// First, delete any existing entry
 	err := svc.DeleteFromImprintIndex(ctx, imprint.ID)
 	if err != nil {
 		return errors.WithStack(err)
