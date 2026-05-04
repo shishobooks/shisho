@@ -146,7 +146,11 @@ func (h *handler) update(c echo.Context) error {
 	// Keep track of what's been changed
 	opts := UpdateSeriesOptions{Columns: []string{}}
 
+	var oldName string
+	nameChanged := false
 	if params.Name != nil && *params.Name != series.Name {
+		oldName = series.Name
+		nameChanged = true
 		series.Name = *params.Name
 		series.NameSource = models.DataSourceManual
 		opts.Columns = append(opts.Columns, "name", "name_source")
@@ -180,6 +184,14 @@ func (h *handler) update(c echo.Context) error {
 	err = h.seriesService.UpdateSeries(ctx, series, opts)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if nameChanged {
+		log := logger.FromContext(ctx)
+		_ = h.aliasService.RemoveAlias(ctx, aliases.SeriesConfig, id, series.Name)
+		if err := h.aliasService.AddAlias(ctx, aliases.SeriesConfig, id, oldName, series.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"series_id": id, "old_name": oldName, "error": err.Error()})
+		}
 	}
 
 	// Sync aliases if provided

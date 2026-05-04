@@ -170,7 +170,8 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
-		// Simple rename
+		// Simple rename — capture old name before mutation
+		oldName := genre.Name
 		genre.Name = newName
 		opts := UpdateGenreOptions{Columns: []string{"name"}}
 		err = h.genreService.UpdateGenre(ctx, genre, opts)
@@ -178,6 +179,12 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		nameChanged = true
+
+		log := logger.FromContext(ctx)
+		_ = h.aliasService.RemoveAlias(ctx, aliases.GenreConfig, id, newName)
+		if err := h.aliasService.AddAlias(ctx, aliases.GenreConfig, id, oldName, genre.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"genre_id": id, "old_name": oldName, "error": err.Error()})
+		}
 	}
 
 	// Sync aliases if provided

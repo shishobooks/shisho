@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -151,11 +152,18 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
+		oldName := publisher.Name
 		publisher.Name = newName
 		opts := UpdatePublisherOptions{Columns: []string{"name"}}
 		err = h.publisherService.UpdatePublisher(ctx, publisher, opts)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		log := logger.FromContext(ctx)
+		_ = h.aliasService.RemoveAlias(ctx, aliases.PublisherConfig, id, newName)
+		if err := h.aliasService.AddAlias(ctx, aliases.PublisherConfig, id, oldName, publisher.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"publisher_id": id, "old_name": oldName, "error": err.Error()})
 		}
 	}
 

@@ -161,6 +161,7 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
+		oldName := tag.Name
 		tag.Name = newName
 		opts := UpdateTagOptions{Columns: []string{"name"}}
 		err = h.tagService.UpdateTag(ctx, tag, opts)
@@ -168,6 +169,12 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		nameChanged = true
+
+		log := logger.FromContext(ctx)
+		_ = h.aliasService.RemoveAlias(ctx, aliases.TagConfig, id, newName)
+		if err := h.aliasService.AddAlias(ctx, aliases.TagConfig, id, oldName, tag.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"tag_id": id, "old_name": oldName, "error": err.Error()})
+		}
 	}
 
 	if params.Aliases != nil {

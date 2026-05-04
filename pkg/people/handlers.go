@@ -164,7 +164,9 @@ func (h *handler) update(c echo.Context) error {
 	opts := UpdatePersonOptions{Columns: []string{}}
 	nameChanged := false
 
+	var oldName string
 	if params.Name != nil && *params.Name != person.Name {
+		oldName = person.Name
 		nameChanged = true
 		person.Name = *params.Name
 		// Regenerate sort name when name changes (unless sort_name_source is manual)
@@ -193,6 +195,14 @@ func (h *handler) update(c echo.Context) error {
 	err = h.personService.UpdatePerson(ctx, person, opts)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	if nameChanged {
+		log := logger.FromContext(ctx)
+		_ = h.aliasService.RemoveAlias(ctx, aliases.PersonConfig, id, person.Name)
+		if err := h.aliasService.AddAlias(ctx, aliases.PersonConfig, id, oldName, person.LibraryID); err != nil {
+			log.Warn("failed to add old name as alias after rename", logger.Data{"person_id": id, "old_name": oldName, "error": err.Error()})
+		}
 	}
 
 	// Sync aliases if provided
