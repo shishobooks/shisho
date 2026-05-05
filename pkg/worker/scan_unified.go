@@ -1378,36 +1378,6 @@ func (w *Worker) scanFileCore(
 				}
 			}
 		}
-
-		// Reorganize book directory on disk if title or authors changed and library has OrganizeFileStructure enabled
-		// Only do this during resyncs - during full scans, organization would rename directories while
-		// other files are still being discovered/processed, breaking the scan
-		if (bookTitleChanged || authorsChanged) && isResync {
-			// Reload book to get fresh author data for organization
-			book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
-			if err != nil {
-				logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
-			} else {
-				// Call UpdateBook with OrganizeFiles flag to trigger file/folder organization
-				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
-					logWarn("failed to organize book files after title/author change", logger.Data{
-						"book_id": book.ID,
-						"error":   err.Error(),
-					})
-				} else {
-					// Reload book again to get updated file paths
-					book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
-					if err != nil {
-						logWarn("failed to reload book after organization", logger.Data{"error": err.Error()})
-					}
-					// Also reload file to get updated filepath
-					file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
-					if err != nil {
-						logWarn("failed to reload file after organization", logger.Data{"error": err.Error()})
-					}
-				}
-			}
-		}
 	} // end if isMainFile
 
 	// ==========================================================================
@@ -1967,6 +1937,33 @@ func (w *Worker) scanFileCore(
 	if relUpdates.DeleteAuthors || relUpdates.DeleteSeries || relUpdates.DeleteGenres || relUpdates.DeleteTags || relUpdates.DeleteNarrators {
 		if err := w.UpdateBookRelationships(ctx, book.ID, relUpdates); err != nil {
 			logWarn("failed to update book relationships", logger.Data{"error": err.Error()})
+		}
+	}
+
+	// Reorganize book directory on disk if title or authors changed and library has OrganizeFileStructure enabled.
+	// Only do this during resyncs - during full scans, organization would rename directories while
+	// other files are still being discovered/processed, breaking the scan.
+	// This must run AFTER UpdateBookRelationships so the fresh DB read includes the new authors.
+	if isMainFile && (bookTitleChanged || authorsChanged) && isResync {
+		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
+		if err != nil {
+			logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
+		} else {
+			if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
+				logWarn("failed to organize book files after title/author change", logger.Data{
+					"book_id": book.ID,
+					"error":   err.Error(),
+				})
+			} else {
+				book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
+				if err != nil {
+					logWarn("failed to reload book after organization", logger.Data{"error": err.Error()})
+				}
+				file, err = w.bookService.RetrieveFileWithRelations(ctx, file.ID)
+				if err != nil {
+					logWarn("failed to reload file after organization", logger.Data{"error": err.Error()})
+				}
+			}
 		}
 	}
 
