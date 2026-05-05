@@ -5352,6 +5352,61 @@ func TestScanFileByID_ResetMode_ReplacedFile_UsesNewChapters(t *testing.T) {
 	assert.Equal(t, "Good 3", chaptersAfterReset[2].Title)
 }
 
+func TestScanFileByID_ResetMode_OrganizesWithAuthors(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	// Setup: Library with OrganizeFileStructure enabled
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	// Create a book directory with author prefix
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Test Author] Reset Organize Book")
+	testgen.GenerateEPUB(t, bookDir, "Reset Organize Book.epub", testgen.EPUBOptions{
+		Title:   "Reset Organize Book",
+		Authors: []string{"Test Author"},
+	})
+
+	// Run initial scan
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &allBooks[0].ID})
+	require.NoError(t, err)
+	require.NotEmpty(t, book.Authors)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Verify directory has author prefix before reset
+	assert.Contains(t, book.Filepath, "[Test Author]")
+
+	// Run reset scan
+	result, err := tc.worker.scanInternal(tc.ctx, ScanOptions{
+		FileID:       fileID,
+		ForceRefresh: true,
+		SkipPlugins:  true,
+		Reset:        true,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Reload book after reset
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+
+	// Authors should be repopulated from EPUB metadata
+	require.NotEmpty(t, book.Authors, "authors should be repopulated after reset")
+	assert.Equal(t, "Test Author", book.Authors[0].Person.Name)
+
+	// Directory should still have the author prefix (organization should use the new authors)
+	assert.Contains(t, book.Filepath, "[Test Author]",
+		"directory should retain author prefix after reset — organization must use freshly-written authors")
+}
+
 func TestScanFileByID_ResetMode_FilepathFallbackTitle(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
