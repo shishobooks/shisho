@@ -1010,6 +1010,101 @@ func TestComputeFingerprint_ChapterOrderStableAgainstSortOrderDrift(t *testing.T
 	})
 }
 
+func TestComputeFingerprint_SourceFileIdentity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("source file mtime and size are included", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "book.epub")
+		err := os.WriteFile(srcPath, []byte("fake epub content"), 0644)
+		require.NoError(t, err)
+
+		info, err := os.Stat(srcPath)
+		require.NoError(t, err)
+
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{Filepath: srcPath}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.Equal(t, info.ModTime(), fp.SourceModTime)
+		assert.Equal(t, info.Size(), fp.SourceSize)
+	})
+
+	t.Run("different source mtime produces different hash", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "book.epub")
+
+		err := os.WriteFile(srcPath, []byte("content v1"), 0644)
+		require.NoError(t, err)
+
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{Filepath: srcPath}
+
+		fp1, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+		hash1, err := fp1.Hash()
+		require.NoError(t, err)
+
+		// Rewrite with same content but different mtime
+		futureTime := time.Now().Add(time.Hour)
+		require.NoError(t, os.Chtimes(srcPath, futureTime, futureTime))
+
+		fp2, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+		hash2, err := fp2.Hash()
+		require.NoError(t, err)
+
+		assert.NotEqual(t, hash1, hash2, "changing source file mtime should produce a different hash")
+	})
+
+	t.Run("different source size produces different hash", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "book.epub")
+
+		err := os.WriteFile(srcPath, []byte("short"), 0644)
+		require.NoError(t, err)
+
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{Filepath: srcPath}
+
+		fp1, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+		hash1, err := fp1.Hash()
+		require.NoError(t, err)
+
+		// Rewrite with different size, set same mtime
+		originalInfo, _ := os.Stat(srcPath)
+		origMtime := originalInfo.ModTime()
+		err = os.WriteFile(srcPath, []byte("much longer content here"), 0644)
+		require.NoError(t, err)
+		require.NoError(t, os.Chtimes(srcPath, origMtime, origMtime))
+
+		fp2, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+		hash2, err := fp2.Hash()
+		require.NoError(t, err)
+
+		assert.NotEqual(t, hash1, hash2, "changing source file size should produce a different hash")
+	})
+
+	t.Run("missing source file uses zero values", func(t *testing.T) {
+		t.Parallel()
+		book := &models.Book{Title: "Test Book"}
+		file := &models.File{Filepath: "/nonexistent/book.epub"}
+
+		fp, err := ComputeFingerprint(book, file)
+		require.NoError(t, err)
+
+		assert.True(t, fp.SourceModTime.IsZero())
+		assert.Equal(t, int64(0), fp.SourceSize)
+	})
+}
+
 func strPtr(s string) *string {
 	return &s
 }
