@@ -801,12 +801,14 @@ func (h *handler) DownloadFile(c echo.Context) error {
 			})
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.File(cachedPath)
 }
 
@@ -875,6 +877,7 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 			})
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		var genErr *filegen.GenerationError
@@ -886,12 +889,14 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 			})
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.File(cachedPath)
 }
 

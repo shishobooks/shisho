@@ -200,6 +200,7 @@ func (h *handler) download(c echo.Context) error {
 
 	filename := fmt.Sprintf("shisho-download-%d-books.zip", data.FileCount)
 	httputil.SetAttachmentFilename(c.Response(), filename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(zipPath)
 }

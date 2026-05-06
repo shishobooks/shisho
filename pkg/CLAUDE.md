@@ -117,6 +117,23 @@ file.CoverImageFilename = &newCoverPath
 
 **Conditional-GET for cover endpoints:** `/files/:id/cover` serves via `c.File()` — `http.ServeContent` handles `Last-Modified`/`If-Modified-Since` from the cover file's on-disk mtime, which is sufficient because the served file's identity is pinned by the URL. `/books/:id/cover` (and its OPDS / eReader mirrors) and `/series/:id/cover` are different: the served file is *selected*, and that selection can change without any change to the newly-selected cover file's mtime — flipping the library's `CoverAspectRatio` setting on a hybrid book (EPUB + M4B) swaps which file's cover is served, removing a file from a hybrid book falls back to the remaining file's cover, and a series' first book can change because of book deletion / re-sorting / series-number changes. Mtime-only revalidation returns stale 304s in those cases. Both `pkg/covers.ServeBookCover` and `pkg/series/handlers.go::seriesCover` therefore issue an `ETag: "<file_id>-<mtime_unix>"` that bakes the selected file's identity into the validator, check `If-None-Match` manually, and pass `time.Time{}` to `http.ServeContent` so it omits `Last-Modified` and skips IMS handling (which would otherwise shortcut to 304 using just the new file's mtime).
 
+### Cache-Control Headers for File-Serving Endpoints
+
+All file-serving endpoints must include a `Cache-Control` header to prevent reverse proxies (OpenResty, Nginx, Cloudflare) from heuristically caching responses that include `Last-Modified` but no `Cache-Control`, which can serve stale content even after Shisho's internal caches are cleared.
+
+| Endpoint Category | Header | Reason |
+|---|---|---|
+| **Cover endpoints** (`/cover`) | `Cache-Control: private, no-cache` | Allows conditional revalidation via `Last-Modified`/`ETag` |
+| **Download/stream endpoints** (`/download`, `/stream`) | `Cache-Control: private, no-store` | No proxy caching at all — generated files can change without the URL changing |
+| **Page endpoint** (`getPage`) | `Cache-Control: public, max-age=31536000, immutable` | Rendered pages are immutable per fileID+pageNum |
+
+When adding a new endpoint that serves files via `c.File()` or `c.Stream()`, set the appropriate `Cache-Control` header before the call:
+
+```go
+c.Response().Header().Set("Cache-Control", "private, no-store")
+return c.File(path)
+```
+
 ### Data Source Priority System
 
 Metadata sources ranked (lower number = higher precedence):

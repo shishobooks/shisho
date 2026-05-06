@@ -1770,6 +1770,7 @@ func (h *handler) downloadFile(c echo.Context) error {
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(cachedPath)
 }
@@ -1805,6 +1806,7 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 
 	filename := filepath.Base(file.Filepath)
 	httputil.SetAttachmentFilename(c.Response(), filename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(file.Filepath)
 }
@@ -1875,6 +1877,7 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(cachedPath)
 }
@@ -2080,6 +2083,7 @@ func (h *handler) streamFile(c echo.Context) error {
 	// Set Accept-Ranges header to indicate we support range requests
 	c.Response().Header().Set("Accept-Ranges", "bytes")
 	c.Response().Header().Set("Content-Type", "audio/mp4")
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	// Check for Range header
 	rangeHeader := c.Request().Header.Get("Range")
