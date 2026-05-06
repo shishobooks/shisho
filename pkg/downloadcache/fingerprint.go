@@ -56,6 +56,8 @@ type Fingerprint struct {
 	PluginFingerprint string                  `json:"plugin_fingerprint,omitempty"` // Plugin-specific fingerprint for cache invalidation
 	Language          *string                 `json:"language,omitempty"`
 	Abridged          *bool                   `json:"abridged,omitempty"`
+	SourceModTime     time.Time               `json:"source_mod_time"`
+	SourceSize        int64                   `json:"source_size"`
 }
 
 // FingerprintAuthor represents author information for fingerprinting.
@@ -184,6 +186,14 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		Genres:           make([]string, 0),
 		Tags:             make([]string, 0),
 		Identifiers:      make([]FingerprintIdentifier, 0),
+	}
+
+	// Stat the source file so the fingerprint changes when the file is replaced on disk.
+	if file != nil && file.Filepath != "" {
+		if info, err := os.Stat(file.Filepath); err == nil {
+			fp.SourceModTime = info.ModTime()
+			fp.SourceSize = info.Size()
+		}
 	}
 
 	// Add file-level metadata
