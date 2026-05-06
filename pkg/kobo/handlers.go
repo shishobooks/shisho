@@ -679,6 +679,7 @@ func getBaseURL(c echo.Context) string {
 // serveFileWithHeaders serves a file with proper Content-Type and Content-Disposition headers.
 func serveFileWithHeaders(c echo.Context, filepath, filename string) error {
 	c.Response().Header().Set("Content-Type", "application/octet-stream")
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	httputil.SetAttachmentFilename(c.Response(), filename)
 	return c.File(filepath)
 }

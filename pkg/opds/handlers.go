@@ -735,12 +735,14 @@ func (h *handler) download(c echo.Context) error {
 			// Fall back to original file
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(cachedPath)
 }
@@ -805,6 +807,7 @@ func (h *handler) downloadKepub(c echo.Context) error {
 			// Fall back to original file for unsupported types (M4B)
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		// For other errors, also fall back to original
@@ -817,12 +820,14 @@ func (h *handler) downloadKepub(c echo.Context) error {
 			})
 			filename := filepath.Base(file.Filepath)
 			httputil.SetAttachmentFilename(c.Response(), filename)
+			c.Response().Header().Set("Cache-Control", "private, no-store")
 			return c.File(file.Filepath)
 		}
 		return errors.WithStack(err)
 	}
 
 	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(cachedPath)
 }
