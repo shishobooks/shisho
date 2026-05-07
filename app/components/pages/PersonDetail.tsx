@@ -93,9 +93,13 @@ const PersonDetail = () => {
   const personQuery = usePerson(personId);
 
   usePageTitle(personQuery.data?.name ?? "Person");
-  const authoredBooksQuery = usePersonAuthoredBooks(personId, {
-    enabled: userSettingsResolved && Boolean(personId),
-  });
+  const authoredBooksQuery = usePersonAuthoredBooks(
+    personId,
+    {},
+    {
+      enabled: userSettingsResolved && Boolean(personId),
+    },
+  );
   const narratedFilesQuery = usePersonNarratedFiles(personId);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -268,7 +272,7 @@ const PersonDetail = () => {
           {authoredBooksQuery.isLoading && <LoadingSpinner />}
           {authoredBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
-              {authoredBooksQuery.data.map((book) => (
+              {authoredBooksQuery.data.items.map((book) => (
                 <BookItem
                   book={book}
                   cacheKey={authoredBooksQuery.dataUpdatedAt}
@@ -289,7 +293,7 @@ const PersonDetail = () => {
           {narratedFilesQuery.isLoading && <LoadingSpinner />}
           {narratedFilesQuery.isSuccess && (
             <div className="space-y-2">
-              {narratedFilesQuery.data.map((file) => (
+              {narratedFilesQuery.data.items.map((file) => (
                 <Link
                   className="flex items-center justify-between p-4 rounded-md border border-border hover:bg-muted/50 transition-colors"
                   key={file.id}
@@ -335,7 +339,7 @@ const PersonDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          peopleListQuery.data?.people.map((p) => ({
+          peopleListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
             count: p.authored_book_count + p.narrated_file_count,

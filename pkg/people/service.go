@@ -284,6 +284,46 @@ func (svc *Service) GetNarratedFiles(ctx context.Context, personID int) ([]*mode
 	return files, nil
 }
 
+// GetAuthoredBooksPaginated returns a paginated list of books authored by this person.
+func (svc *Service) GetAuthoredBooksPaginated(ctx context.Context, personID, limit, offset int) ([]*models.Book, int, error) {
+	var books []*models.Book
+
+	total, err := svc.db.NewSelect().
+		Model(&books).
+		Distinct().
+		Join("INNER JOIN authors a ON a.book_id = b.id").
+		Where("a.person_id = ?", personID).
+		Order("b.title ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return books, total, nil
+}
+
+// GetNarratedFilesPaginated returns a paginated list of files narrated by this person.
+func (svc *Service) GetNarratedFilesPaginated(ctx context.Context, personID, limit, offset int) ([]*models.File, int, error) {
+	var files []*models.File
+
+	total, err := svc.db.NewSelect().
+		Model(&files).
+		Relation("Book").
+		Join("INNER JOIN narrators n ON n.file_id = f.id").
+		Where("n.person_id = ?", personID).
+		Order("f.filepath ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return files, total, nil
+}
+
 // GetAuthoredBookCount returns the count of books authored by this person.
 func (svc *Service) GetAuthoredBookCount(ctx context.Context, personID int) (int, error) {
 	count, err := svc.db.NewSelect().

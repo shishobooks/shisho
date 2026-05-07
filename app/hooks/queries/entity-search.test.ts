@@ -10,7 +10,7 @@ import {
 } from "./entity-search";
 
 const mockPeopleData = {
-  people: [
+  items: [
     { id: 1, name: "Alice", authored_book_count: 3, narrated_file_count: 0 },
     { id: 2, name: "Bob", authored_book_count: 1, narrated_file_count: 5 },
   ],
@@ -23,7 +23,7 @@ vi.mock("./people", () => ({
 vi.mock("./genres", () => ({
   useGenresList: () => ({
     data: {
-      genres: [
+      items: [
         { name: "Fantasy", book_count: 5 },
         { name: "Sci-Fi", book_count: 12 },
       ],
@@ -34,25 +34,25 @@ vi.mock("./genres", () => ({
 }));
 vi.mock("./tags", () => ({
   useTagsList: () => ({
-    data: { tags: [{ name: "favorite", book_count: 2 }], total: 1 },
+    data: { items: [{ name: "favorite", book_count: 2 }], total: 1 },
     isLoading: false,
   }),
 }));
 vi.mock("./series", () => ({
   useSeriesList: () => ({
-    data: { series: [{ name: "Dune", book_count: 6 }], total: 1 },
+    data: { items: [{ name: "Dune", book_count: 6 }], total: 1 },
     isLoading: false,
   }),
 }));
 vi.mock("./publishers", () => ({
   usePublishersList: () => ({
-    data: { publishers: [{ name: "Tor", file_count: 8 }], total: 1 },
+    data: { items: [{ name: "Tor", file_count: 8 }], total: 1 },
     isLoading: false,
   }),
 }));
 vi.mock("./imprints", () => ({
   useImprintsList: () => ({
-    data: { imprints: [{ name: "Orbit", file_count: 3 }], total: 1 },
+    data: { items: [{ name: "Orbit", file_count: 3 }], total: 1 },
     isLoading: false,
   }),
 }));

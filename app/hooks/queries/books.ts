@@ -18,6 +18,7 @@ import type {
   MergeBooksResponse,
   MoveFilesPayload,
   MoveFilesResponse,
+  ResourceListResponse,
   UpdateBookPayload,
   UpdateFilePayload,
 } from "@/types";
@@ -53,10 +54,7 @@ export const useBook = (
   });
 };
 
-export interface ListBooksData {
-  books: Book[];
-  total: number;
-}
+export type ListBooksData = ResourceListResponse<Book>;
 
 export const useBooks = (
   query: ListBooksQuery = {},

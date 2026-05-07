@@ -250,6 +250,25 @@ func (svc *Service) GetFiles(ctx context.Context, imprintID int) ([]*models.File
 	return files, nil
 }
 
+// GetFilesPaginated returns a paginated list of files with this imprint.
+func (svc *Service) GetFilesPaginated(ctx context.Context, imprintID, limit, offset int) ([]*models.File, int, error) {
+	var files []*models.File
+
+	total, err := svc.db.NewSelect().
+		Model(&files).
+		Where("f.imprint_id = ?", imprintID).
+		Relation("Book").
+		Order("f.filepath ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return files, total, nil
+}
+
 // MergeImprints merges sourceImprint into targetImprint (moves all file associations, deletes source).
 func (svc *Service) MergeImprints(ctx context.Context, targetID, sourceID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {

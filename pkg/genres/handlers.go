@@ -100,8 +100,8 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	response := map[string]any{
-		"genres": result,
-		"total":  total,
+		"items": result,
+		"total": total,
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
@@ -233,6 +233,11 @@ func (h *handler) books(c echo.Context) error {
 		return errcodes.NotFound("Genre")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Fetch the genre to check library access
 	genre, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
 		ID: &id,
@@ -248,12 +253,17 @@ func (h *handler) books(c echo.Context) error {
 		}
 	}
 
-	books, err := h.genreService.GetBooks(ctx, id)
+	books, total, err := h.genreService.GetBooksPaginated(ctx, id, params.Limit, params.Offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, books))
+	response := map[string]any{
+		"items": books,
+		"total": total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) merge(c echo.Context) error {

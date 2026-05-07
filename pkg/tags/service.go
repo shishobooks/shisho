@@ -249,6 +249,25 @@ func (svc *Service) GetBooks(ctx context.Context, tagID int) ([]*models.Book, er
 	return books, nil
 }
 
+// GetBooksPaginated returns a paginated list of books with this tag.
+func (svc *Service) GetBooksPaginated(ctx context.Context, tagID, limit, offset int) ([]*models.Book, int, error) {
+	var books []*models.Book
+
+	total, err := svc.db.NewSelect().
+		Model(&books).
+		Join("INNER JOIN book_tags bt ON bt.book_id = b.id").
+		Where("bt.tag_id = ?", tagID).
+		Order("b.title ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return books, total, nil
+}
+
 // MergeTags merges sourceTag into targetTag (moves all associations, deletes source).
 func (svc *Service) MergeTags(ctx context.Context, targetID, sourceID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {

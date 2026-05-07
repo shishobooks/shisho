@@ -86,9 +86,13 @@ const TagDetail = () => {
   const tagQuery = useTag(tagId);
 
   usePageTitle(tagQuery.data?.name ?? "Tag");
-  const tagBooksQuery = useTagBooks(tagId, {
-    enabled: userSettingsResolved && Boolean(tagId),
-  });
+  const tagBooksQuery = useTagBooks(
+    tagId,
+    {},
+    {
+      enabled: userSettingsResolved && Boolean(tagId),
+    },
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -235,7 +239,7 @@ const TagDetail = () => {
           {tagBooksQuery.isLoading && <LoadingSpinner />}
           {tagBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
-              {tagBooksQuery.data.map((book) => (
+              {tagBooksQuery.data.items.map((book) => (
                 <BookItem
                   book={book}
                   cacheKey={tagBooksQuery.dataUpdatedAt}
@@ -268,7 +272,7 @@ const TagDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          tagsListQuery.data?.tags.map((t) => ({
+          tagsListQuery.data?.items.map((t) => ({
             id: t.id,
             name: t.name,
             count: t.book_count ?? 0,

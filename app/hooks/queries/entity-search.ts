@@ -52,7 +52,7 @@ export function usePeopleSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.people.map((p: PersonWithCounts) => ({
+  const adapted = data?.items.map((p: PersonWithCounts) => ({
     name: p.name,
     id: p.id,
     authored_book_count: p.authored_book_count,
@@ -82,7 +82,7 @@ export function useSeriesSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.series.map((s) => ({
+  const adapted = data?.items.map((s) => ({
     name: s.name,
     book_count: s.book_count,
   }));
@@ -102,7 +102,7 @@ export function usePublisherSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.publishers.map((p) => ({
+  const adapted = data?.items.map((p) => ({
     name: p.name,
     file_count: p.file_count,
   }));
@@ -122,7 +122,7 @@ export function useImprintSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.imprints.map((i) => ({
+  const adapted = data?.items.map((i) => ({
     name: i.name,
     file_count: i.file_count,
   }));
@@ -142,7 +142,7 @@ export function useGenreSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.genres.map((g) => ({
+  const adapted = data?.items.map((g) => ({
     name: g.name,
     book_count: g.book_count,
   }));
@@ -162,7 +162,7 @@ export function useTagSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.tags.map((t) => ({
+  const adapted = data?.items.map((t) => ({
     name: t.name,
     book_count: t.book_count,
   }));
@@ -196,7 +196,7 @@ export function useGenreItemCounts(
   return useMemo(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < results.length; i++) {
-      const genre = results[i].data?.genres.find(
+      const genre = results[i].data?.items.find(
         (g) => g.name.toLowerCase() === values[i].toLowerCase(),
       );
       if (genre) map.set(values[i], genre.book_count);
@@ -233,7 +233,7 @@ export function useTagItemCounts(
   return useMemo(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < results.length; i++) {
-      const tag = results[i].data?.tags.find(
+      const tag = results[i].data?.items.find(
         (t) => t.name.toLowerCase() === values[i].toLowerCase(),
       );
       if (tag) map.set(values[i], tag.book_count);

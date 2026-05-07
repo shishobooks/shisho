@@ -96,8 +96,8 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	response := map[string]any{
-		"publishers": result,
-		"total":      total,
+		"items": result,
+		"total": total,
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
@@ -220,6 +220,11 @@ func (h *handler) files(c echo.Context) error {
 		return errcodes.NotFound("Publisher")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
@@ -233,12 +238,17 @@ func (h *handler) files(c echo.Context) error {
 		}
 	}
 
-	files, err := h.publisherService.GetFiles(ctx, id)
+	files, total, err := h.publisherService.GetFilesPaginated(ctx, id, params.Limit, params.Offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, files))
+	response := map[string]any{
+		"items": files,
+		"total": total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) merge(c echo.Context) error {

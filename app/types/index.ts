@@ -38,10 +38,26 @@ export * from "./generated/roles";
 export * from "./generated/search";
 export * from "./generated/series";
 export * from "./generated/people";
-export * from "./generated/genres";
-export * from "./generated/tags";
-export * from "./generated/publishers";
-export * from "./generated/imprints";
+export {
+  type ListGenresQuery,
+  type UpdateGenrePayload,
+  type MergeGenresPayload,
+} from "./generated/genres";
+export {
+  type ListTagsQuery,
+  type UpdateTagPayload,
+  type MergeTagsPayload,
+} from "./generated/tags";
+export {
+  type ListPublishersQuery,
+  type UpdatePublisherPayload,
+  type MergePublishersPayload,
+} from "./generated/publishers";
+export {
+  type ListImprintsQuery,
+  type UpdateImprintPayload,
+  type MergeImprintsPayload,
+} from "./generated/imprints";
 export * from "./generated/chapters";
 export {
   type CreateListPayload,
@@ -57,6 +73,11 @@ export {
 } from "./generated/lists";
 
 export type { UserSettings } from "@/hooks/queries/settings";
+
+export interface ResourceListResponse<T> {
+  items: T[];
+  total: number;
+}
 
 // Delete operation types
 // TODO: Move these to validators.go and regenerate via tygo

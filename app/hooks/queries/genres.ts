@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, Genre } from "@/types";
+import type { Book, Genre, ResourceListResponse } from "@/types";
 import type {
   ListGenresQuery,
   UpdateGenrePayload,
@@ -20,10 +20,7 @@ export enum QueryKey {
   GenreBooks = "GenreBooks",
 }
 
-export interface ListGenresData {
-  genres: Genre[];
-  total: number;
-}
+export type ListGenresData = ResourceListResponse<Genre>;
 
 export const useGenresList = (
   query: ListGenresQuery = {},
@@ -58,19 +55,31 @@ export const useGenre = (
   });
 };
 
+export interface GenreBooksQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const useGenreBooks = (
   genreId?: number,
+  query: GenreBooksQuery = {},
   options: Omit<
-    UseQueryOptions<Book[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Book[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(genreId),
     ...options,
-    queryKey: [QueryKey.GenreBooks, genreId],
+    queryKey: [QueryKey.GenreBooks, genreId, query],
     queryFn: ({ signal }) => {
-      return API.request("GET", `/genres/${genreId}/books`, null, null, signal);
+      return API.request(
+        "GET",
+        `/genres/${genreId}/books`,
+        null,
+        query,
+        signal,
+      );
     },
   });
 };

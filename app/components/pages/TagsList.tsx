@@ -126,7 +126,7 @@ const TagsList = () => {
             </div>
           )}
 
-          {tagsQuery.data.tags.length === 0 ? (
+          {tagsQuery.data.items.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {confirmedSearch
                 ? "No tags found matching your search."
@@ -134,7 +134,7 @@ const TagsList = () => {
             </div>
           ) : (
             <div className="space-y-1 mb-6">
-              {tagsQuery.data.tags.map(renderTagItem)}
+              {tagsQuery.data.items.map(renderTagItem)}
             </div>
           )}
 

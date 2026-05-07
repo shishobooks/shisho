@@ -288,7 +288,7 @@ const SeriesList = () => {
           seriesQuery.isSuccess && !seriesQuery.isFetching && !isStaleData
         }
         itemLabel="series"
-        items={seriesQuery.data?.series ?? []}
+        items={seriesQuery.data?.items ?? []}
         itemsPerPage={itemsPerPage}
         renderItem={renderSeriesItem}
         total={seriesQuery.data?.total ?? 0}

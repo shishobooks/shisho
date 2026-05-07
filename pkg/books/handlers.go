@@ -192,7 +192,7 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	resp := struct {
-		Books []*models.Book `json:"books"`
+		Items []*models.Book `json:"items"`
 		Total int            `json:"total"`
 	}{books, total}
 

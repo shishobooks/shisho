@@ -250,6 +250,25 @@ func (svc *Service) GetFiles(ctx context.Context, publisherID int) ([]*models.Fi
 	return files, nil
 }
 
+// GetFilesPaginated returns a paginated list of files with this publisher.
+func (svc *Service) GetFilesPaginated(ctx context.Context, publisherID, limit, offset int) ([]*models.File, int, error) {
+	var files []*models.File
+
+	total, err := svc.db.NewSelect().
+		Model(&files).
+		Where("f.publisher_id = ?", publisherID).
+		Relation("Book").
+		Order("f.filepath ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return files, total, nil
+}
+
 // MergePublishers merges sourcePublisher into targetPublisher (moves all file associations, deletes source).
 func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {

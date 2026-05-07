@@ -173,7 +173,7 @@ const ImprintDetail = () => {
           {imprintFilesQuery.isLoading && <LoadingSpinner />}
           {imprintFilesQuery.isSuccess && (
             <div className="space-y-3">
-              {imprintFilesQuery.data.map((file) => (
+              {imprintFilesQuery.data.items.map((file) => (
                 <div
                   className="border-l-4 border-l-primary pl-4 py-2"
                   key={file.id}
@@ -220,7 +220,7 @@ const ImprintDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          imprintsListQuery.data?.imprints.map((imp) => ({
+          imprintsListQuery.data?.items.map((imp) => ({
             id: imp.id,
             name: imp.name,
             count: imp.file_count ?? 0,

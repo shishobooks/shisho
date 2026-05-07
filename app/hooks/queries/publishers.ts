@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { File, Publisher } from "@/types";
+import type { File, Publisher, ResourceListResponse } from "@/types";
 import type {
   ListPublishersQuery,
   UpdatePublisherPayload,
@@ -20,10 +20,7 @@ export enum QueryKey {
   PublisherFiles = "PublisherFiles",
 }
 
-export interface ListPublishersData {
-  publishers: Publisher[];
-  total: number;
-}
+export type ListPublishersData = ResourceListResponse<Publisher>;
 
 export const usePublishersList = (
   query: ListPublishersQuery = {},
@@ -65,24 +62,30 @@ export const usePublisher = (
   });
 };
 
+export interface PublisherFilesQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const usePublisherFiles = (
   publisherId?: number,
+  query: PublisherFilesQuery = {},
   options: Omit<
-    UseQueryOptions<File[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<File>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<File[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<File>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,
-    queryKey: [QueryKey.PublisherFiles, publisherId],
+    queryKey: [QueryKey.PublisherFiles, publisherId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/publishers/${publisherId}/files`,
         null,
-        null,
+        query,
         signal,
       );
     },
