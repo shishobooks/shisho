@@ -287,7 +287,7 @@ const SeriesDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          seriesListQuery.data?.series.map((s) => ({
+          seriesListQuery.data?.items.map((s) => ({
             id: s.id,
             name: s.name,
             count: s.book_count ?? 0,

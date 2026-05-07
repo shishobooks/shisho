@@ -108,9 +108,9 @@ func (h *handler) list(c echo.Context) error {
 		result[i] = SeriesWithCount{s, count, aliasList}
 	}
 
-	response := map[string]interface{}{
-		"series": result,
-		"total":  total,
+	response := map[string]any{
+		"items": result,
+		"total": total,
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))

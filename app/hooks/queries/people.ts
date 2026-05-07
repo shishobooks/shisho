@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, File, Person } from "@/types";
+import type { Book, File, Person, ResourceListResponse } from "@/types";
 import type { UpdatePersonPayload } from "@/types/generated/people";
 
 import { QueryKey as BooksQueryKey } from "./books";
@@ -31,10 +31,7 @@ export interface PersonWithCounts extends Person {
   narrated_file_count: number;
 }
 
-export interface ListPeopleData {
-  people: PersonWithCounts[];
-  total: number;
-}
+export type ListPeopleData = ResourceListResponse<PersonWithCounts>;
 
 export const usePeopleList = (
   query: ListPeopleQuery = {},
@@ -70,24 +67,30 @@ export const usePerson = (
   });
 };
 
+export interface PersonSubResourceQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const usePersonAuthoredBooks = (
   personId?: number,
+  query: PersonSubResourceQuery = {},
   options: Omit<
-    UseQueryOptions<Book[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Book[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
-    queryKey: [QueryKey.PersonAuthoredBooks, personId],
+    queryKey: [QueryKey.PersonAuthoredBooks, personId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/people/${personId}/authored-books`,
         null,
-        null,
+        query,
         signal,
       );
     },
@@ -96,22 +99,23 @@ export const usePersonAuthoredBooks = (
 
 export const usePersonNarratedFiles = (
   personId?: number,
+  query: PersonSubResourceQuery = {},
   options: Omit<
-    UseQueryOptions<File[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<File>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<File[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<File>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
-    queryKey: [QueryKey.PersonNarratedFiles, personId],
+    queryKey: [QueryKey.PersonNarratedFiles, personId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/people/${personId}/narrated-files`,
         null,
-        null,
+        query,
         signal,
       );
     },

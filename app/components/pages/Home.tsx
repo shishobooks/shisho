@@ -210,12 +210,12 @@ const HomeContent = () => {
   });
 
   const genres = useMemo(
-    () => genresQuery.data?.genres ?? [],
-    [genresQuery.data?.genres],
+    () => genresQuery.data?.items ?? [],
+    [genresQuery.data?.items],
   );
   const tags = useMemo(
-    () => tagsQuery.data?.tags ?? [],
-    [tagsQuery.data?.tags],
+    () => tagsQuery.data?.items ?? [],
+    [tagsQuery.data?.items],
   );
 
   // Cache genre/tag objects so selected items persist across searches
@@ -518,8 +518,8 @@ const HomeContent = () => {
   });
 
   const pageBookIds = useMemo(
-    () => booksQuery.data?.books?.map((b) => b.id) ?? [],
-    [booksQuery.data?.books],
+    () => booksQuery.data?.items?.map((b) => b.id) ?? [],
+    [booksQuery.data?.items],
   );
 
   const renderBookItem = (book: Book) => (
@@ -664,7 +664,7 @@ const HomeContent = () => {
             booksQuery.isSuccess && !booksQuery.isFetching && !isStaleData
           }
           itemLabel="books"
-          items={booksQuery.data?.books ?? []}
+          items={booksQuery.data?.items ?? []}
           itemsPerPage={itemsPerPage}
           renderItem={renderBookItem}
           total={booksQuery.data?.total ?? 0}

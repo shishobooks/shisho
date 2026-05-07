@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { File, Imprint } from "@/types";
+import type { File, Imprint, ResourceListResponse } from "@/types";
 import type {
   ListImprintsQuery,
   UpdateImprintPayload,
@@ -20,10 +20,7 @@ export enum QueryKey {
   ImprintFiles = "ImprintFiles",
 }
 
-export interface ListImprintsData {
-  imprints: Imprint[];
-  total: number;
-}
+export type ListImprintsData = ResourceListResponse<Imprint>;
 
 export const useImprintsList = (
   query: ListImprintsQuery = {},
@@ -59,24 +56,30 @@ export const useImprint = (
   });
 };
 
+export interface ImprintFilesQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const useImprintFiles = (
   imprintId?: number,
+  query: ImprintFilesQuery = {},
   options: Omit<
-    UseQueryOptions<File[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<File>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<File[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<File>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(imprintId),
     ...options,
-    queryKey: [QueryKey.ImprintFiles, imprintId],
+    queryKey: [QueryKey.ImprintFiles, imprintId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/imprints/${imprintId}/files`,
         null,
-        null,
+        query,
         signal,
       );
     },

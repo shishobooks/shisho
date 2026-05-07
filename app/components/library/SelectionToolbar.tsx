@@ -67,7 +67,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   );
 
   const downloadInfo = useMemo(() => {
-    const allBooks = allSelectedBooksQuery.data?.books;
+    const allBooks = allSelectedBooksQuery.data?.items;
     if (!allBooks || selectedBookIds.length === 0) return null;
 
     const fileIds: number[] = [];
@@ -86,7 +86,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     }
 
     return { fileIds, totalSize };
-  }, [allSelectedBooksQuery.data?.books, selectedBookIds]);
+  }, [allSelectedBooksQuery.data?.items, selectedBookIds]);
 
   const handleDownload = async () => {
     if (!downloadInfo || downloadInfo.fileIds.length === 0) return;
@@ -503,7 +503,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       />
 
       <DeleteConfirmationDialog
-        books={allSelectedBooksQuery.data?.books?.map((b) => ({
+        books={allSelectedBooksQuery.data?.items?.map((b) => ({
           id: b.id,
           title: b.title,
           files: b.files,

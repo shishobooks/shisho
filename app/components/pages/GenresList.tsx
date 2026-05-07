@@ -126,7 +126,7 @@ const GenresList = () => {
             </div>
           )}
 
-          {genresQuery.data.genres.length === 0 ? (
+          {genresQuery.data.items.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {confirmedSearch
                 ? "No genres found matching your search."
@@ -134,7 +134,7 @@ const GenresList = () => {
             </div>
           ) : (
             <div className="space-y-1 mb-6">
-              {genresQuery.data.genres.map(renderGenreItem)}
+              {genresQuery.data.items.map(renderGenreItem)}
             </div>
           )}
 

@@ -249,6 +249,25 @@ func (svc *Service) GetBooks(ctx context.Context, genreID int) ([]*models.Book, 
 	return books, nil
 }
 
+// GetBooksPaginated returns a paginated list of books with this genre.
+func (svc *Service) GetBooksPaginated(ctx context.Context, genreID, limit, offset int) ([]*models.Book, int, error) {
+	var books []*models.Book
+
+	total, err := svc.db.NewSelect().
+		Model(&books).
+		Join("INNER JOIN book_genres bg ON bg.book_id = b.id").
+		Where("bg.genre_id = ?", genreID).
+		Order("b.title ASC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	return books, total, nil
+}
+
 // MergeGenres merges sourceGenre into targetGenre (moves all associations, deletes source).
 func (svc *Service) MergeGenres(ctx context.Context, targetID, sourceID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {

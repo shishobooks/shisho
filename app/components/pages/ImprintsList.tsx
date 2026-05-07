@@ -118,7 +118,7 @@ const ImprintsList = () => {
       {imprintsQuery.isSuccess &&
         !imprintsQuery.isFetching &&
         !isStaleData &&
-        imprintsQuery.data.imprints.length === 0 && (
+        imprintsQuery.data.items.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             {confirmedSearch
               ? "No imprints found matching your search."
@@ -129,9 +129,9 @@ const ImprintsList = () => {
       {imprintsQuery.isSuccess &&
         !imprintsQuery.isFetching &&
         !isStaleData &&
-        imprintsQuery.data.imprints.length > 0 && (
+        imprintsQuery.data.items.length > 0 && (
           <div className="space-y-1">
-            {imprintsQuery.data.imprints.map(renderImprintItem)}
+            {imprintsQuery.data.items.map(renderImprintItem)}
           </div>
         )}
 

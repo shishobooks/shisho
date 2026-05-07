@@ -86,9 +86,13 @@ const GenreDetail = () => {
   const genreQuery = useGenre(genreId);
 
   usePageTitle(genreQuery.data?.name ?? "Genre");
-  const genreBooksQuery = useGenreBooks(genreId, {
-    enabled: userSettingsResolved && Boolean(genreId),
-  });
+  const genreBooksQuery = useGenreBooks(
+    genreId,
+    {},
+    {
+      enabled: userSettingsResolved && Boolean(genreId),
+    },
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -235,7 +239,7 @@ const GenreDetail = () => {
           {genreBooksQuery.isLoading && <LoadingSpinner />}
           {genreBooksQuery.isSuccess && (
             <div className="flex flex-wrap gap-4">
-              {genreBooksQuery.data.map((book) => (
+              {genreBooksQuery.data.items.map((book) => (
                 <BookItem
                   book={book}
                   cacheKey={genreBooksQuery.dataUpdatedAt}
@@ -268,7 +272,7 @@ const GenreDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          genresListQuery.data?.genres.map((g) => ({
+          genresListQuery.data?.items.map((g) => ({
             id: g.id,
             name: g.name,
             count: g.book_count ?? 0,

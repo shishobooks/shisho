@@ -140,14 +140,14 @@ const PersonList = () => {
           )}
 
           <div className="space-y-2 mb-6">
-            {peopleQuery.data.people.length === 0 ? (
+            {peopleQuery.data.items.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 {confirmedSearch
                   ? "No people found matching your search."
                   : "No people in this library yet."}
               </div>
             ) : (
-              peopleQuery.data.people.map(renderPersonItem)
+              peopleQuery.data.items.map(renderPersonItem)
             )}
           </div>
 

@@ -97,7 +97,7 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	response := map[string]any{
-		"tags":  result,
+		"items": result,
 		"total": total,
 	}
 
@@ -221,6 +221,11 @@ func (h *handler) books(c echo.Context) error {
 		return errcodes.NotFound("Tag")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
@@ -234,12 +239,17 @@ func (h *handler) books(c echo.Context) error {
 		}
 	}
 
-	books, err := h.tagService.GetBooks(ctx, id)
+	books, total, err := h.tagService.GetBooksPaginated(ctx, id, params.Limit, params.Offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, books))
+	response := map[string]any{
+		"items": books,
+		"total": total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) merge(c echo.Context) error {

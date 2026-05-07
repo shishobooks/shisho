@@ -45,7 +45,7 @@ export function BookSelectionList({
   );
 
   const availableBooks =
-    booksQuery.data?.books?.filter((book) => book.id !== excludeBookId) ?? [];
+    booksQuery.data?.items?.filter((book) => book.id !== excludeBookId) ?? [];
 
   return (
     <RadioGroup onValueChange={onSelectBook} value={selectedBookId}>

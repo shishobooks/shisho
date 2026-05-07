@@ -7,6 +7,11 @@ type ListPeopleQuery struct {
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
 }
 
+type SubResourceQuery struct {
+	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Offset int `query:"offset" json:"offset,omitempty" validate:"min=0"`
+}
+
 type UpdatePersonPayload struct {
 	Name     *string  `json:"name,omitempty" validate:"omitempty,max=300"`
 	SortName *string  `json:"sort_name,omitempty" validate:"omitempty,max=300"`

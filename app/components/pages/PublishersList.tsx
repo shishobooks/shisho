@@ -120,7 +120,7 @@ const PublishersList = () => {
       {publishersQuery.isSuccess &&
         !publishersQuery.isFetching &&
         !isStaleData &&
-        publishersQuery.data.publishers.length === 0 && (
+        publishersQuery.data.items.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             {confirmedSearch
               ? "No publishers found matching your search."
@@ -131,9 +131,9 @@ const PublishersList = () => {
       {publishersQuery.isSuccess &&
         !publishersQuery.isFetching &&
         !isStaleData &&
-        publishersQuery.data.publishers.length > 0 && (
+        publishersQuery.data.items.length > 0 && (
           <div className="space-y-1">
-            {publishersQuery.data.publishers.map(renderPublisherItem)}
+            {publishersQuery.data.items.map(renderPublisherItem)}
           </div>
         )}
 

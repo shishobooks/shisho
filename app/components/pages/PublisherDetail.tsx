@@ -173,7 +173,7 @@ const PublisherDetail = () => {
           {publisherFilesQuery.isLoading && <LoadingSpinner />}
           {publisherFilesQuery.isSuccess && (
             <div className="space-y-3">
-              {publisherFilesQuery.data.map((file) => (
+              {publisherFilesQuery.data.items.map((file) => (
                 <div
                   className="border-l-4 border-l-primary pl-4 py-2"
                   key={file.id}
@@ -220,7 +220,7 @@ const PublisherDetail = () => {
 
       <MetadataMergeDialog
         entities={
-          publishersListQuery.data?.publishers.map((p) => ({
+          publishersListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
             count: p.file_count ?? 0,

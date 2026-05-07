@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, Series } from "@/types";
+import type { Book, ResourceListResponse, Series } from "@/types";
 import type {
   ListSeriesQuery,
   UpdateSeriesPayload,
@@ -27,10 +27,7 @@ export interface SeriesWithCount extends Series {
 
 export type { ListSeriesQuery };
 
-export interface ListSeriesData {
-  series: Series[];
-  total: number;
-}
+export type ListSeriesData = ResourceListResponse<Series>;
 
 export const useSeriesList = (
   query: ListSeriesQuery = {},

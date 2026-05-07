@@ -87,13 +87,13 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp struct {
-		Books []*models.Book `json:"books"`
+		Items []*models.Book `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Books, 2)
+	require.Len(t, resp.Items, 2)
 	// title:asc → Apple before Cheese.
-	assert.Equal(t, apple.ID, resp.Books[0].ID)
-	assert.Equal(t, cheese.ID, resp.Books[1].ID)
+	assert.Equal(t, apple.ID, resp.Items[0].ID)
+	assert.Equal(t, cheese.ID, resp.Items[1].ID)
 }
 
 // TestListHandler_StoredPreferenceUsed verifies that when no URL sort is
@@ -129,15 +129,15 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	require.NoError(t, h.list(c))
 
 	var resp struct {
-		Books []*models.Book `json:"books"`
+		Items []*models.Book `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Books, 2)
+	require.Len(t, resp.Items, 2)
 	// title:asc → apple (alphabetical) before banana. If the resolver
 	// hadn't fired, the builtin default (date_added:desc) would return
 	// banana (newer) first and the assertion would fail.
-	assert.Equal(t, apple.ID, resp.Books[0].ID)
-	assert.Equal(t, banana.ID, resp.Books[1].ID)
+	assert.Equal(t, apple.ID, resp.Items[0].ID)
+	assert.Equal(t, banana.ID, resp.Items[1].ID)
 }
 
 // TestListHandler_InvalidSortReturns400 verifies sort validation.
@@ -200,13 +200,13 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	require.NoError(t, h.list(c))
 
 	var resp struct {
-		Books []*models.Book `json:"books"`
+		Items []*models.Book `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Books, 2)
+	require.Len(t, resp.Items, 2)
 	// Without library_id the resolver is skipped, so the stored title:asc
 	// preference is ignored and the builtin default (date_added:desc) wins
 	// → Cheese (newer) before Apple (older).
-	assert.Equal(t, cheese.ID, resp.Books[0].ID)
-	assert.Equal(t, apple.ID, resp.Books[1].ID)
+	assert.Equal(t, cheese.ID, resp.Items[0].ID)
+	assert.Equal(t, apple.ID, resp.Items[1].ID)
 }

@@ -125,9 +125,9 @@ func (h *handler) list(c echo.Context) error {
 		result[i] = PersonWithCounts{p, authoredCount, narratedCount, aliasList}
 	}
 
-	response := map[string]interface{}{
-		"people": result,
-		"total":  total,
+	response := map[string]any{
+		"items": result,
+		"total": total,
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
@@ -331,6 +331,11 @@ func (h *handler) authoredBooks(c echo.Context) error {
 		return errcodes.NotFound("Person")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Fetch the person to check library access
 	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
 		ID: &id,
@@ -346,12 +351,17 @@ func (h *handler) authoredBooks(c echo.Context) error {
 		}
 	}
 
-	books, err := h.personService.GetAuthoredBooks(ctx, id)
+	books, total, err := h.personService.GetAuthoredBooksPaginated(ctx, id, params.Limit, params.Offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, books))
+	response := map[string]any{
+		"items": books,
+		"total": total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) narratedFiles(c echo.Context) error {
@@ -361,6 +371,11 @@ func (h *handler) narratedFiles(c echo.Context) error {
 		return errcodes.NotFound("Person")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Fetch the person to check library access
 	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
 		ID: &id,
@@ -376,12 +391,17 @@ func (h *handler) narratedFiles(c echo.Context) error {
 		}
 	}
 
-	files, err := h.personService.GetNarratedFiles(ctx, id)
+	files, total, err := h.personService.GetNarratedFilesPaginated(ctx, id, params.Limit, params.Offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, files))
+	response := map[string]any{
+		"items": files,
+		"total": total,
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) merge(c echo.Context) error {

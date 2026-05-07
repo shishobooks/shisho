@@ -3,7 +3,9 @@ package genres
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,12 +15,37 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
+
+func setupHandlerTestDB(t *testing.T) *bun.DB {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
+	require.NoError(t, err)
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	_, err = migrations.BringUpToDate(context.Background(), db)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return db
+}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -125,6 +152,151 @@ func TestUpdateGenre_SequentialRenames_NoDuplicateAliases(t *testing.T) {
 	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"Science Fiction", "Sci-Fi"}, aliasList)
+}
+
+func seedGenreWithBooks(t *testing.T, db *bun.DB, lib *models.Library, genreName string, bookTitles []string) *models.Genre {
+	t.Helper()
+	ctx := context.Background()
+
+	genre := &models.Genre{LibraryID: lib.ID, Name: genreName}
+	_, err := db.NewInsert().Model(genre).Exec(ctx)
+	require.NoError(t, err)
+
+	for _, title := range bookTitles {
+		book := &models.Book{
+			LibraryID:       lib.ID,
+			Title:           title,
+			Filepath:        t.TempDir(),
+			TitleSource:     models.DataSourceFilepath,
+			SortTitle:       title,
+			SortTitleSource: models.DataSourceFilepath,
+			AuthorSource:    models.DataSourceFilepath,
+		}
+		_, err = db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
+
+		bg := &models.BookGenre{BookID: book.ID, GenreID: genre.ID}
+		_, err = db.NewInsert().Model(bg).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	return genre
+}
+
+func TestBooks_DefaultPagination(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	e := newTestEcho(t)
+	lib := createTestLibrary(t, db)
+	genre := seedGenreWithBooks(t, db, lib, "Fiction", []string{"Alpha", "Beta", "Charlie"})
+	h := newTestHandler(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(genre.ID))
+
+	err := h.books(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []models.Book `json:"items"`
+		Total int           `json:"total"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, resp.Total)
+	assert.Len(t, resp.Items, 3)
+	assert.Equal(t, "Alpha", resp.Items[0].Title)
+}
+
+func TestBooks_ExplicitLimitOffset(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	e := newTestEcho(t)
+	lib := createTestLibrary(t, db)
+	genre := seedGenreWithBooks(t, db, lib, "Fiction", []string{"Alpha", "Beta", "Charlie", "Delta", "Echo"})
+	h := newTestHandler(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(genre.ID))
+
+	err := h.books(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []models.Book `json:"items"`
+		Total int           `json:"total"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, 5, resp.Total)
+	assert.Len(t, resp.Items, 2)
+	assert.Equal(t, "Beta", resp.Items[0].Title)
+	assert.Equal(t, "Charlie", resp.Items[1].Title)
+}
+
+func TestBooks_ResponseShape(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	e := newTestEcho(t)
+	lib := createTestLibrary(t, db)
+	_ = seedGenreWithBooks(t, db, lib, "Empty Genre", nil)
+	h := newTestHandler(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("1")
+
+	err := h.books(c)
+	require.NoError(t, err)
+
+	var raw map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &raw)
+	require.NoError(t, err)
+
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	assert.True(t, hasItems, "response must have 'items' key")
+	assert.True(t, hasTotal, "response must have 'total' key")
+	assert.Len(t, raw, 2, "response must have exactly 2 keys")
+}
+
+func TestList_ResponseUsesItemsKey(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	e := newTestEcho(t)
+	lib := createTestLibrary(t, db)
+	_ = seedGenreWithBooks(t, db, lib, "Fiction", []string{"Book1"})
+	h := newTestHandler(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := h.list(c)
+	require.NoError(t, err)
+
+	var raw map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &raw)
+	require.NoError(t, err)
+
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	_, hasGenres := raw["genres"]
+	assert.True(t, hasItems, "list response must use 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.False(t, hasGenres, "list response must NOT use 'genres' key")
 }
 
 func TestUpdateGenre_RenameBackToOriginalName(t *testing.T) {

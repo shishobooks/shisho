@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, Tag } from "@/types";
+import type { Book, ResourceListResponse, Tag } from "@/types";
 import type { ListTagsQuery, UpdateTagPayload } from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
@@ -17,10 +17,7 @@ export enum QueryKey {
   TagBooks = "TagBooks",
 }
 
-export interface ListTagsData {
-  tags: Tag[];
-  total: number;
-}
+export type ListTagsData = ResourceListResponse<Tag>;
 
 export const useTagsList = (
   query: ListTagsQuery = {},
@@ -55,19 +52,25 @@ export const useTag = (
   });
 };
 
+export interface TagBooksQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const useTagBooks = (
   tagId?: number,
+  query: TagBooksQuery = {},
   options: Omit<
-    UseQueryOptions<Book[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Book[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(tagId),
     ...options,
-    queryKey: [QueryKey.TagBooks, tagId],
+    queryKey: [QueryKey.TagBooks, tagId, query],
     queryFn: ({ signal }) => {
-      return API.request("GET", `/tags/${tagId}/books`, null, null, signal);
+      return API.request("GET", `/tags/${tagId}/books`, null, query, signal);
     },
   });
 };
