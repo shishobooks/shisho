@@ -11,8 +11,6 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import type { useResourceListState } from "@/hooks/useResourceListState";
 import type { ResourceListResponse } from "@/types";
 
-const ITEMS_PER_PAGE = 50;
-
 interface BadgeConfig {
   label: string;
   count: number;
@@ -26,7 +24,7 @@ interface ItemConfig {
   badges: BadgeConfig[];
 }
 
-interface ResourceListProps<T> {
+interface ResourceListProps<T extends { id: number }> {
   title: string;
   subtitle: string;
   searchPlaceholder: string;
@@ -38,7 +36,7 @@ interface ResourceListProps<T> {
   maxWidth?: string;
 }
 
-const ResourceList = <T,>({
+const ResourceList = <T extends { id: number }>({
   title,
   subtitle,
   searchPlaceholder,
@@ -76,22 +74,22 @@ const ResourceList = <T,>({
     confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
   const total = query.data?.total ?? 0;
-  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(total / limit);
 
-  const renderItem = (item: T, index: number) => {
+  const renderItem = (item: T) => {
     const config = itemConfig(item);
 
     return (
       <Link
         className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors"
-        key={index}
+        key={item.id}
         to={linkTo(item, libraryId)}
       >
         <div className="min-w-0 flex-1 mr-3">
-          <div className="flex items-baseline gap-0">
+          <div className="flex items-baseline">
             <span className="font-semibold text-lg">{config.name}</span>
             {config.secondaryText && (
-              <span className="text-sm text-muted-foreground ml-0">
+              <span className="text-sm text-muted-foreground">
                 <span className="mx-1.5 text-muted-foreground/50">·</span>
                 {config.secondaryText}
               </span>
