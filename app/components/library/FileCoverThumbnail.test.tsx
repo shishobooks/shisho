@@ -79,4 +79,32 @@ describe("FileCoverThumbnail", () => {
     );
     expect(container.querySelector("img")).not.toBeNull();
   });
+
+  it("applies interactive styles by default", () => {
+    const { container } = render(<FileCoverThumbnail file={makeFile()} />);
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).toContain("cursor-pointer");
+    expect(wrapper.className).toContain("hover:scale-105");
+    expect(wrapper.className).toContain("hover:shadow-md");
+  });
+
+  it("applies interactive styles when interactive is explicitly true", () => {
+    const { container } = render(
+      <FileCoverThumbnail file={makeFile()} interactive={true} />,
+    );
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).toContain("cursor-pointer");
+    expect(wrapper.className).toContain("hover:scale-105");
+    expect(wrapper.className).toContain("hover:shadow-md");
+  });
+
+  it("removes interactive styles when interactive is false", () => {
+    const { container } = render(
+      <FileCoverThumbnail file={makeFile()} interactive={false} />,
+    );
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).not.toContain("cursor-pointer");
+    expect(wrapper.className).not.toContain("hover:scale-105");
+    expect(wrapper.className).not.toContain("hover:shadow-md");
+  });
 });
