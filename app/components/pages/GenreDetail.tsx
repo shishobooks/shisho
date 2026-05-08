@@ -61,6 +61,9 @@ const GenreDetail = () => {
   const [mergeSearchRaw, setMergeSearchRaw] = useState("");
   const mergeSearch = useDebounce(mergeSearchRaw, 200);
 
+  // Fires as soon as library_id is available rather than waiting for the merge
+  // dialog to open. The query is cheap (50 items, single index scan) and
+  // pre-fetching means the dialog opens instantly without a loading flash.
   const genresListQuery = useGenresList(
     {
       library_id: genreQuery.data?.library_id,

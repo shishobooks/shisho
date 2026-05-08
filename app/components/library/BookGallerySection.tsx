@@ -115,9 +115,12 @@ export function BookGallerySection({
 
   if (total === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        {emptyMessage ?? `No books found.`}
-      </div>
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-4">{title}</h2>
+        <div className="text-center py-8 text-muted-foreground">
+          {emptyMessage ?? "No books found."}
+        </div>
+      </section>
     );
   }
 
@@ -137,12 +140,10 @@ export function BookGallerySection({
         </div>
       </div>
 
-      {total > 0 && (
-        <div className="mb-4 text-sm text-muted-foreground">
-          Showing {offset + 1}-{Math.min(offset + itemsPerPage, total)} of{" "}
-          {total} books
-        </div>
-      )}
+      <div className="mb-4 text-sm text-muted-foreground">
+        Showing {offset + 1}-{Math.min(offset + itemsPerPage, total)} of {total}{" "}
+        books
+      </div>
 
       <div className="flex flex-wrap gap-4 mb-6 md:mb-8">
         {query.data?.items.map((book) => (

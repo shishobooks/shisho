@@ -150,4 +150,67 @@ describe("ResourceDetail", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Edit Genre")).toBeInTheDocument();
   });
+
+  it("closes delete dialog after onDelete resolves", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    render(
+      wrap(
+        <ResourceDetail
+          {...defaultProps}
+          deleteConfig={{ isPending: false, onDelete, disabled: false }}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /Delete/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // Click the destructive Delete button inside the dialog
+    const dialogButtons = screen.getAllByRole("button", { name: /Delete/ });
+    const confirmButton = dialogButtons.find(
+      (b) => b.closest("[role='dialog']") !== null,
+    )!;
+    await user.click(confirmButton);
+
+    expect(onDelete).toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes merge dialog after onMerge resolves", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onMerge = vi.fn().mockResolvedValue(undefined);
+    const entities = [
+      { id: 10, name: "Fantasy", count: 5 },
+      { id: 20, name: "Horror", count: 3 },
+    ];
+    render(
+      wrap(
+        <ResourceDetail
+          {...defaultProps}
+          mergeConfig={{
+            entities,
+            isLoadingEntities: false,
+            isPending: false,
+            onMerge,
+            onSearch: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /Merge/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // Open the combobox and select an entity
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Fantasy"));
+
+    // Click the Merge confirm button
+    const mergeButton = screen
+      .getAllByRole("button", { name: /Merge/ })
+      .find((b) => b.closest("[role='dialog']") !== null)!;
+    await user.click(mergeButton);
+
+    expect(onMerge).toHaveBeenCalledWith(10);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

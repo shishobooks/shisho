@@ -193,7 +193,10 @@ export function ResourceDetail({
         entityType={entityType}
         isLoadingEntities={mergeConfig.isLoadingEntities}
         isPending={mergeConfig.isPending}
-        onMerge={mergeConfig.onMerge}
+        onMerge={async (sourceId) => {
+          await mergeConfig.onMerge(sourceId);
+          setMergeOpen(false);
+        }}
         onOpenChange={setMergeOpen}
         onSearch={mergeConfig.onSearch}
         open={mergeOpen}
@@ -205,7 +208,10 @@ export function ResourceDetail({
         entityName={name}
         entityType={entityType}
         isPending={deleteConfig.isPending}
-        onDelete={deleteConfig.onDelete}
+        onDelete={async () => {
+          await deleteConfig.onDelete();
+          setDeleteOpen(false);
+        }}
         onOpenChange={setDeleteOpen}
         open={deleteOpen}
       />

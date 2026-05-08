@@ -109,7 +109,7 @@ describe("BookGallerySection", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders empty state when no books", () => {
+  it("renders empty state with section title when no books", () => {
     render(
       wrap(
         <BookGallerySection
@@ -120,6 +120,9 @@ describe("BookGallerySection", () => {
         />,
       ),
     );
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Books" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("No books here.")).toBeInTheDocument();
   });
 
