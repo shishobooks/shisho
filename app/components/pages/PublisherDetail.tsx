@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { FileListSection } from "@/components/library/FileListSection";
+import {
+  FILE_LIST_ITEMS_PER_PAGE,
+  FileListSection,
+} from "@/components/library/FileListSection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import {
   useDeletePublisher,
@@ -13,8 +16,6 @@ import {
 } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
-const ITEMS_PER_PAGE = 50;
 
 const PublisherDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -30,8 +31,8 @@ const PublisherDetail = () => {
   const publisherFilesQuery = usePublisherFiles(
     publisherId,
     {
-      limit: ITEMS_PER_PAGE,
-      offset: (currentPage - 1) * ITEMS_PER_PAGE,
+      limit: FILE_LIST_ITEMS_PER_PAGE,
+      offset: (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE,
     },
     { enabled: Boolean(publisherId) },
   );

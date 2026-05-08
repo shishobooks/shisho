@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { FileListSection } from "@/components/library/FileListSection";
+import {
+  FILE_LIST_ITEMS_PER_PAGE,
+  FileListSection,
+} from "@/components/library/FileListSection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import {
   useDeleteImprint,
@@ -13,8 +16,6 @@ import {
 } from "@/hooks/queries/imprints";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
-const ITEMS_PER_PAGE = 50;
 
 const ImprintDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -30,8 +31,8 @@ const ImprintDetail = () => {
   const imprintFilesQuery = useImprintFiles(
     imprintId,
     {
-      limit: ITEMS_PER_PAGE,
-      offset: (currentPage - 1) * ITEMS_PER_PAGE,
+      limit: FILE_LIST_ITEMS_PER_PAGE,
+      offset: (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE,
     },
     { enabled: Boolean(imprintId) },
   );

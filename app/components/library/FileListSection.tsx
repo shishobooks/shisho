@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import type { File, ResourceListResponse } from "@/types";
 import { formatDuration, getFilename } from "@/utils/format";
 
-const ITEMS_PER_PAGE = 50;
+export const FILE_LIST_ITEMS_PER_PAGE = 50;
 
 interface FileListQuery {
   data: ResourceListResponse<File> | undefined;
@@ -60,9 +60,9 @@ export function FileListSection({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE;
   const total = query.data?.total ?? 0;
-  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(total / FILE_LIST_ITEMS_PER_PAGE);
 
   const handlePageChange = (page: number) => {
     setSearchParams((prev) => {
@@ -101,8 +101,8 @@ export function FileListSection({
       <h2 className="text-xl font-semibold mb-4">{title}</h2>
 
       <div className="mb-4 text-sm text-muted-foreground">
-        Showing {offset + 1}-{Math.min(offset + ITEMS_PER_PAGE, total)} of{" "}
-        {total} files
+        Showing {offset + 1}-
+        {Math.min(offset + FILE_LIST_ITEMS_PER_PAGE, total)} of {total} files
       </div>
 
       <div className="space-y-2 mb-6 md:mb-8">
