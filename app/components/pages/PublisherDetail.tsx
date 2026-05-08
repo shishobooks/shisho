@@ -1,16 +1,11 @@
-import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
-import LibraryLayout from "@/components/library/LibraryLayout";
-import LoadingSpinner from "@/components/library/LoadingSpinner";
-import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
-import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
-import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useLibrary } from "@/hooks/queries/libraries";
+import {
+  FILE_LIST_ITEMS_PER_PAGE,
+  FileListSection,
+} from "@/components/library/FileListSection";
+import { ResourceDetail } from "@/components/library/ResourceDetail";
 import {
   useDeletePublisher,
   useMergePublisher,
@@ -21,37 +16,50 @@ import {
 } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { File } from "@/types";
 
 const PublisherDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const publisherId = id ? parseInt(id, 10) : undefined;
 
-  const libraryQuery = useLibrary(libraryId);
+  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+
   const publisherQuery = usePublisher(publisherId);
-
   usePageTitle(publisherQuery.data?.name ?? "Publisher");
-  const publisherFilesQuery = usePublisherFiles(publisherId);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [mergeSearch, setMergeSearch] = useState("");
-  const debouncedMergeSearch = useDebounce(mergeSearch, 200);
+  const publisherFilesQuery = usePublisherFiles(
+    publisherId,
+    {
+      limit: FILE_LIST_ITEMS_PER_PAGE,
+      offset: (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE,
+    },
+    { enabled: Boolean(publisherId) },
+  );
 
   const updatePublisherMutation = useUpdatePublisher();
   const mergePublisherMutation = useMergePublisher();
   const deletePublisherMutation = useDeletePublisher();
 
+  const [mergeSearchRaw, setMergeSearchRaw] = useState("");
+  const mergeSearch = useDebounce(mergeSearchRaw, 200);
+
+  // Pre-fetch the publisher list as soon as library_id is available so the
+  // merge dialog opens instantly without a loading flash.
   const publishersListQuery = usePublishersList(
     {
       library_id: publisherQuery.data?.library_id,
       limit: 50,
-      search: debouncedMergeSearch || undefined,
+      search: mergeSearch || undefined,
     },
-    { enabled: mergeOpen && !!publisherQuery.data?.library_id },
+    { enabled: !!publisherQuery.data?.library_id },
   );
+
+  const publisher = publisherQuery.data;
+  const aliases = publisher
+    ? ((publisher.aliases as unknown as string[]) ?? [])
+    : [];
+  const fileCount = publisher?.file_count ?? 0;
 
   const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!publisherId) return;
@@ -59,7 +67,6 @@ const PublisherDetail = () => {
       publisherId,
       payload: { name: data.name, aliases: data.aliases },
     });
-    setEditOpen(false);
   };
 
   const handleMerge = async (sourceId: number) => {
@@ -68,184 +75,61 @@ const PublisherDetail = () => {
       targetId: publisherId,
       sourceId,
     });
-    setMergeOpen(false);
   };
 
   const handleDelete = async () => {
     if (!publisherId) return;
     await deletePublisherMutation.mutateAsync({ publisherId });
-    setDeleteOpen(false);
     navigate(`/libraries/${libraryId}/publishers`);
   };
 
-  if (publisherQuery.isLoading) {
-    return (
-      <LibraryLayout>
-        <LoadingSpinner />
-      </LibraryLayout>
-    );
-  }
-
-  if (!publisherQuery.isSuccess || !publisherQuery.data) {
-    return (
-      <LibraryLayout>
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">Publisher Not Found</h1>
-          <p className="text-muted-foreground">
-            The publisher you're looking for doesn't exist or may have been
-            removed.
-          </p>
-        </div>
-      </LibraryLayout>
-    );
-  }
-
-  const publisher = publisherQuery.data;
-  const aliases = (publisher.aliases as unknown as string[]) ?? [];
-  const fileCount = publisher.file_count ?? 0;
-  const canDelete = fileCount === 0;
-
-  const getFileName = (file: File) => {
-    const parts = file.filepath.split("/");
-    return parts[parts.length - 1];
-  };
-
   return (
-    <LibraryLayout>
-      <LibraryBreadcrumbs
-        items={[
-          { label: "Publishers", to: `/libraries/${libraryId}/publishers` },
-          { label: publisher.name },
-        ]}
-        libraryId={libraryId!}
-        libraryName={libraryQuery.data?.name}
-      />
-
-      {/* Publisher Header */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <h1 className="text-2xl font-semibold min-w-0 break-words">
-            {publisher.name}
-          </h1>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              onClick={() => setEditOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              onClick={() => setMergeOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <GitMerge className="h-4 w-4 mr-2" />
-              Merge
-            </Button>
-            {canDelete && (
-              <Button
-                onClick={() => setDeleteOpen(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            )}
-          </div>
-        </div>
-        {aliases.length > 0 && (
-          <p className="text-sm text-muted-foreground mb-2">
-            Aliases: {aliases.join(", ")}
-          </p>
-        )}
-        <Badge variant="secondary">
-          {fileCount} file{fileCount !== 1 ? "s" : ""}
-        </Badge>
-      </div>
-
-      {/* Files with this Publisher */}
-      {fileCount > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-4">Files</h2>
-          {publisherFilesQuery.isLoading && <LoadingSpinner />}
-          {publisherFilesQuery.isSuccess && (
-            <div className="space-y-3">
-              {publisherFilesQuery.data.items.map((file) => (
-                <div
-                  className="border-l-4 border-l-primary pl-4 py-2"
-                  key={file.id}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        className="font-medium hover:underline block truncate"
-                        to={`/libraries/${libraryId}/books/${file.book_id}`}
-                      >
-                        {file.book?.title ?? "Unknown Book"}
-                      </Link>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {getFileName(file)}
-                      </p>
-                    </div>
-                    <Badge variant="outline">
-                      {file.file_type?.toUpperCase()}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* No Files */}
-      {fileCount === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          This publisher has no associated files.
-        </div>
-      )}
-
-      <MetadataEditDialog
-        aliases={aliases}
-        entityName={publisher.name}
-        entityType="publisher"
-        isPending={updatePublisherMutation.isPending}
-        onOpenChange={setEditOpen}
-        onSave={handleEdit}
-        open={editOpen}
-      />
-
-      <MetadataMergeDialog
-        entities={
+    <ResourceDetail
+      aliases={aliases}
+      bookCount={fileCount}
+      breadcrumbItems={[
+        { label: "Publishers", to: `/libraries/${libraryId}/publishers` },
+        { label: publisher?.name ?? "" },
+      ]}
+      countLabel={{ singular: "file", plural: "files" }}
+      deleteConfig={{
+        isPending: deletePublisherMutation.isPending,
+        onDelete: handleDelete,
+        disabled: fileCount > 0,
+      }}
+      editConfig={{
+        isPending: updatePublisherMutation.isPending,
+        onSave: handleEdit,
+      }}
+      entityId={publisherId!}
+      entityType="publisher"
+      isLoading={publisherQuery.isLoading}
+      libraryId={libraryId!}
+      mergeConfig={{
+        entities:
           publishersListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
             count: p.file_count ?? 0,
-          })) ?? []
-        }
-        entityType="publisher"
-        isLoadingEntities={publishersListQuery.isLoading}
-        isPending={mergePublisherMutation.isPending}
-        onMerge={handleMerge}
-        onOpenChange={setMergeOpen}
-        onSearch={setMergeSearch}
-        open={mergeOpen}
-        targetId={publisherId!}
-        targetName={publisher.name}
+          })) ?? [],
+        isLoadingEntities: publishersListQuery.isLoading,
+        isPending: mergePublisherMutation.isPending,
+        onMerge: handleMerge,
+        onSearch: setMergeSearchRaw,
+      }}
+      name={publisher?.name ?? ""}
+      notFound={
+        !publisherQuery.isLoading && (!publisherQuery.isSuccess || !publisher)
+      }
+      notFoundLabel="Publisher Not Found"
+    >
+      <FileListSection
+        emptyMessage="This publisher has no associated files."
+        libraryId={libraryId!}
+        query={publisherFilesQuery}
+        title="Files"
       />
-
-      <MetadataDeleteDialog
-        entityName={publisher.name}
-        entityType="publisher"
-        isPending={deletePublisherMutation.isPending}
-        onDelete={handleDelete}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-      />
-    </LibraryLayout>
+    </ResourceDetail>
   );
 };
 

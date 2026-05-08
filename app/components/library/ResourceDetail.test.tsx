@@ -132,6 +132,32 @@ describe("ResourceDetail", () => {
     expect(screen.getByText("1 book")).toBeInTheDocument();
   });
 
+  it("renders custom count label when provided", () => {
+    render(
+      wrap(
+        <ResourceDetail
+          {...defaultProps}
+          bookCount={5}
+          countLabel={{ singular: "file", plural: "files" }}
+        />,
+      ),
+    );
+    expect(screen.getByText("5 files")).toBeInTheDocument();
+  });
+
+  it("renders singular custom count label", () => {
+    render(
+      wrap(
+        <ResourceDetail
+          {...defaultProps}
+          bookCount={1}
+          countLabel={{ singular: "file", plural: "files" }}
+        />,
+      ),
+    );
+    expect(screen.getByText("1 file")).toBeInTheDocument();
+  });
+
   it("renders children", () => {
     render(
       wrap(

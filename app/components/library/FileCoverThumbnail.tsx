@@ -13,6 +13,11 @@ interface FileCoverThumbnailProps {
    * Typically a React Query `dataUpdatedAt` from a mutation-aware query.
    */
   cacheKey?: number;
+  /**
+   * Whether to apply interactive styles (cursor-pointer, hover:scale, hover:shadow).
+   * Defaults to true. Pass false for non-interactive contexts like file list rows.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -25,6 +30,7 @@ function FileCoverThumbnail({
   className,
   onClick,
   cacheKey,
+  interactive = true,
 }: FileCoverThumbnailProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -52,8 +58,10 @@ function FileCoverThumbnail({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded border border-border shrink-0 cursor-pointer",
-        "transition-all duration-200 hover:scale-105 hover:shadow-md",
+        "relative overflow-hidden rounded border border-border shrink-0",
+        interactive && "cursor-pointer",
+        interactive &&
+          "transition-all duration-200 hover:scale-105 hover:shadow-md",
         aspectClass,
         className,
       )}

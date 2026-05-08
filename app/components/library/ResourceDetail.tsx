@@ -47,6 +47,11 @@ interface DeleteConfig {
   disabled: boolean;
 }
 
+interface CountLabel {
+  singular: string;
+  plural: string;
+}
+
 interface ResourceDetailProps {
   libraryId: string;
   entityId: number;
@@ -56,6 +61,8 @@ interface ResourceDetailProps {
   sortName?: string;
   aliases: string[];
   bookCount: number;
+  /** Label for the count badge. Defaults to { singular: "book", plural: "books" } */
+  countLabel?: CountLabel;
   breadcrumbItems: BreadcrumbItem[];
   editConfig: EditConfig;
   mergeConfig: MergeConfig;
@@ -69,6 +76,8 @@ interface ResourceDetailProps {
   children?: ReactNode;
 }
 
+const DEFAULT_COUNT_LABEL: CountLabel = { singular: "book", plural: "books" };
+
 export function ResourceDetail({
   libraryId,
   entityId,
@@ -77,6 +86,7 @@ export function ResourceDetail({
   sortName,
   aliases,
   bookCount,
+  countLabel = DEFAULT_COUNT_LABEL,
   breadcrumbItems,
   editConfig,
   mergeConfig,
@@ -170,7 +180,8 @@ export function ResourceDetail({
           </p>
         )}
         <Badge variant="secondary">
-          {bookCount} book{bookCount !== 1 ? "s" : ""}
+          {bookCount}{" "}
+          {bookCount !== 1 ? countLabel.plural : countLabel.singular}
         </Badge>
       </div>
 
