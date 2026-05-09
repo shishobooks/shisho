@@ -21,6 +21,8 @@ interface FileListSectionProps {
   query: FileListQuery;
   title: string;
   emptyMessage?: string;
+  /** URL search param name for pagination (defaults to "page") */
+  pageParam?: string;
 }
 
 function FileMetaInfo({ file }: { file: File }) {
@@ -56,10 +58,11 @@ export function FileListSection({
   query,
   title,
   emptyMessage,
+  pageParam = "page",
 }: FileListSectionProps) {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parseInt(searchParams.get(pageParam) ?? "1", 10);
   const offset = (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE;
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / FILE_LIST_ITEMS_PER_PAGE);
@@ -68,9 +71,9 @@ export function FileListSection({
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (page === 1) {
-        params.delete("page");
+        params.delete(pageParam);
       } else {
-        params.set("page", page.toString());
+        params.set(pageParam, page.toString());
       }
       return params;
     });
