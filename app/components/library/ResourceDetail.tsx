@@ -63,6 +63,8 @@ interface ResourceDetailProps {
   bookCount: number;
   /** Label for the count badge. Defaults to { singular: "book", plural: "books" } */
   countLabel?: CountLabel;
+  /** Additional badges rendered after the primary count badge */
+  extraBadges?: ReactNode;
   breadcrumbItems: BreadcrumbItem[];
   editConfig: EditConfig;
   mergeConfig: MergeConfig;
@@ -87,6 +89,7 @@ export function ResourceDetail({
   aliases,
   bookCount,
   countLabel = DEFAULT_COUNT_LABEL,
+  extraBadges,
   breadcrumbItems,
   editConfig,
   mergeConfig,
@@ -181,10 +184,13 @@ export function ResourceDetail({
             {aliases.join(", ")}
           </p>
         )}
-        <Badge variant="secondary">
-          {bookCount}{" "}
-          {bookCount !== 1 ? countLabel.plural : countLabel.singular}
-        </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="secondary">
+            {bookCount}{" "}
+            {bookCount !== 1 ? countLabel.plural : countLabel.singular}
+          </Badge>
+          {extraBadges}
+        </div>
       </div>
 
       {children}

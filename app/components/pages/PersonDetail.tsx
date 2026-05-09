@@ -7,6 +7,7 @@ import {
   FileListSection,
 } from "@/components/library/FileListSection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
+import { Badge } from "@/components/ui/badge";
 import {
   DEFAULT_GALLERY_SIZE,
   ITEMS_PER_PAGE_BY_SIZE,
@@ -91,6 +92,7 @@ const PersonDetail = () => {
   const person = personQuery.data;
   const aliases = person ? ((person.aliases as unknown as string[]) ?? []) : [];
   const bookCount = person?.authored_book_count ?? 0;
+  const narratedFileCount = person?.narrated_file_count ?? 0;
 
   const handleEdit = async (data: {
     name: string;
@@ -130,6 +132,7 @@ const PersonDetail = () => {
         { label: "People", to: `/libraries/${libraryId}/people` },
         { label: person?.name ?? "" },
       ]}
+      countLabel={{ singular: "book authored", plural: "books authored" }}
       deleteConfig={{
         isPending: deletePersonMutation.isPending,
         onDelete: handleDelete,
@@ -145,6 +148,14 @@ const PersonDetail = () => {
       }}
       entityId={personId!}
       entityType="person"
+      extraBadges={
+        narratedFileCount > 0 ? (
+          <Badge variant="secondary">
+            {narratedFileCount}{" "}
+            {narratedFileCount !== 1 ? "files narrated" : "file narrated"}
+          </Badge>
+        ) : null
+      }
       isLoading={personQuery.isLoading}
       libraryId={libraryId!}
       mergeConfig={{
