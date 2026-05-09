@@ -138,12 +138,14 @@ export function ResourceDetail({
       <div className="mb-6 md:mb-8">
         <div className="flex items-start justify-between gap-4 mb-2">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold break-words">{name}</h1>
-            {sortName && sortName !== name && (
-              <p className="text-sm text-muted-foreground mt-1">
-                <span className="text-muted-foreground/50">·</span> {sortName}
-              </p>
-            )}
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <h1 className="text-2xl font-semibold break-words">{name}</h1>
+              {sortName && sortName !== name && (
+                <span className="text-sm text-muted-foreground">
+                  <span className="text-muted-foreground/50">·</span> {sortName}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex gap-2 shrink-0">
             <Button

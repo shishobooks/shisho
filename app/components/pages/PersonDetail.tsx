@@ -1,24 +1,16 @@
-import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import BookItem from "@/components/library/BookItem";
-import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
-import LibraryLayout from "@/components/library/LibraryLayout";
-import LoadingSpinner from "@/components/library/LoadingSpinner";
-import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
-import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
-import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
-import { SizeButton, SizePopover } from "@/components/library/SizePopover";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { BookGallerySection } from "@/components/library/BookGallerySection";
+import {
+  FILE_LIST_ITEMS_PER_PAGE,
+  FileListSection,
+} from "@/components/library/FileListSection";
+import { ResourceDetail } from "@/components/library/ResourceDetail";
+import {
+  DEFAULT_GALLERY_SIZE,
+  ITEMS_PER_PAGE_BY_SIZE,
+} from "@/constants/gallerySize";
 import {
   useDeletePerson,
   useMergePerson,
@@ -28,10 +20,7 @@ import {
   usePersonNarratedFiles,
   useUpdatePerson,
 } from "@/hooks/queries/people";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
+import { useUserSettings } from "@/hooks/queries/settings";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
@@ -39,13 +28,13 @@ import type { GallerySize } from "@/types";
 
 const PersonDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const personId = id ? parseInt(id, 10) : undefined;
 
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-
   const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
   const urlSize: GallerySize | null = parseGallerySize(
     searchParams.get("size"),
@@ -53,73 +42,55 @@ const PersonDetail = () => {
   const savedSize: GallerySize =
     userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
   const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
+  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
+  const filePage = parseInt(searchParams.get("filePage") ?? "1", 10);
 
-  // No page recalc here — this gallery is unpaginated (single unbounded
-  // fetch). The paginated pages (Home / SeriesList / ListDetail) call
-  // pageForSizeChange to preserve the user's first-visible book across
-  // size changes; that math is meaningless when there's only one page.
-  const applyGallerySize = (next: GallerySize) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      return params;
-    });
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
-
-  const libraryQuery = useLibrary(libraryId);
   const personQuery = usePerson(personId);
-
   usePageTitle(personQuery.data?.name ?? "Person");
+
   const authoredBooksQuery = usePersonAuthoredBooks(
     personId,
-    {},
+    {
+      limit: itemsPerPage,
+      offset: (currentPage - 1) * itemsPerPage,
+    },
     {
       enabled: userSettingsResolved && Boolean(personId),
     },
   );
-  const narratedFilesQuery = usePersonNarratedFiles(personId);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [mergeSearch, setMergeSearch] = useState("");
-  const debouncedMergeSearch = useDebounce(mergeSearch, 200);
+  const narratedFilesQuery = usePersonNarratedFiles(
+    personId,
+    {
+      limit: FILE_LIST_ITEMS_PER_PAGE,
+      offset: (filePage - 1) * FILE_LIST_ITEMS_PER_PAGE,
+    },
+    {
+      enabled: Boolean(personId),
+    },
+  );
 
   const updatePersonMutation = useUpdatePerson();
   const mergePersonMutation = useMergePerson();
   const deletePersonMutation = useDeletePerson();
 
+  const [mergeSearchRaw, setMergeSearchRaw] = useState("");
+  const mergeSearch = useDebounce(mergeSearchRaw, 200);
+
   const peopleListQuery = usePeopleList(
     {
       library_id: personQuery.data?.library_id,
       limit: 50,
-      search: debouncedMergeSearch || undefined,
+      search: mergeSearch || undefined,
     },
-    { enabled: mergeOpen && !!personQuery.data?.library_id },
+    { enabled: !!personQuery.data?.library_id },
   );
+
+  const person = personQuery.data;
+  const aliases = person ? ((person.aliases as unknown as string[]) ?? []) : [];
+  const bookCount = person?.authored_book_count ?? 0;
 
   const handleEdit = async (data: {
     name: string;
@@ -135,7 +106,6 @@ const PersonDetail = () => {
         aliases: data.aliases,
       },
     });
-    setEditOpen(false);
   };
 
   const handleMerge = async (sourceId: number) => {
@@ -144,227 +114,70 @@ const PersonDetail = () => {
       targetId: personId,
       sourceId,
     });
-    setMergeOpen(false);
   };
 
   const handleDelete = async () => {
     if (!personId) return;
     await deletePersonMutation.mutateAsync({ personId });
-    setDeleteOpen(false);
     navigate(`/libraries/${libraryId}/people`);
   };
 
-  if (personQuery.isLoading) {
-    return (
-      <LibraryLayout>
-        <LoadingSpinner />
-      </LibraryLayout>
-    );
-  }
-
-  if (!personQuery.isSuccess || !personQuery.data) {
-    return (
-      <LibraryLayout>
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">Person Not Found</h1>
-          <p className="text-muted-foreground">
-            The person you're looking for doesn't exist or may have been
-            removed.
-          </p>
-        </div>
-      </LibraryLayout>
-    );
-  }
-
-  const person = personQuery.data;
-  const aliases = (person.aliases as unknown as string[]) ?? [];
-  const canDelete =
-    person.authored_book_count === 0 && person.narrated_file_count === 0;
-
   return (
-    <LibraryLayout>
-      <LibraryBreadcrumbs
-        items={[
-          { label: "People", to: `/libraries/${libraryId}/people` },
-          { label: person.name },
-        ]}
-        libraryId={libraryId!}
-        libraryName={libraryQuery.data?.name}
-      />
-
-      {/* Person Header */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <h1 className="text-2xl font-semibold min-w-0 break-words">
-            {person.name}
-          </h1>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              onClick={() => setEditOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              onClick={() => setMergeOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <GitMerge className="h-4 w-4 mr-2" />
-              Merge
-            </Button>
-            {canDelete && (
-              <Button
-                onClick={() => setDeleteOpen(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            )}
-          </div>
-        </div>
-        {person.sort_name !== person.name && (
-          <p className="text-muted-foreground mb-2">
-            Sort name: {person.sort_name}
-          </p>
-        )}
-        {aliases.length > 0 && (
-          <p className="text-muted-foreground mb-2">
-            Aliases: {aliases.join(", ")}
-          </p>
-        )}
-        <div className="flex gap-2">
-          {person.authored_book_count > 0 && (
-            <Badge variant="secondary">
-              {person.authored_book_count} book
-              {person.authored_book_count !== 1 ? "s" : ""} authored
-            </Badge>
-          )}
-          {person.narrated_file_count > 0 && (
-            <Badge variant="outline">
-              {person.narrated_file_count} file
-              {person.narrated_file_count !== 1 ? "s" : ""} narrated
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Authored Books Section */}
-      {person.authored_book_count > 0 && (
-        <section className="mb-10">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Books Authored</h2>
-            <div className="hidden sm:flex">
-              <SizePopover
-                effectiveSize={effectiveSize}
-                isSaving={updateUserSettings.isPending}
-                onChange={applyGallerySize}
-                onSaveAsDefault={handleSaveSizeAsDefault}
-                savedSize={savedSize}
-                trigger={<SizeButton isDirty={isSizeDirty} />}
-              />
-            </div>
-          </div>
-          {authoredBooksQuery.isLoading && <LoadingSpinner />}
-          {authoredBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-4">
-              {authoredBooksQuery.data.items.map((book) => (
-                <BookItem
-                  book={book}
-                  cacheKey={authoredBooksQuery.dataUpdatedAt}
-                  gallerySize={effectiveSize}
-                  key={book.id}
-                  libraryId={libraryId!}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Narrated Files Section */}
-      {person.narrated_file_count > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-4">Files Narrated</h2>
-          {narratedFilesQuery.isLoading && <LoadingSpinner />}
-          {narratedFilesQuery.isSuccess && (
-            <div className="space-y-2">
-              {narratedFilesQuery.data.items.map((file) => (
-                <Link
-                  className="flex items-center justify-between p-4 rounded-md border border-border hover:bg-muted/50 transition-colors"
-                  key={file.id}
-                  to={`/libraries/${libraryId}/books/${file.book_id}`}
-                >
-                  <div className="flex-1">
-                    <div className="font-medium">
-                      {file.book?.title ?? "Unknown Book"}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {file.file_type.toUpperCase()} -{" "}
-                      {file.audiobook_duration_seconds
-                        ? `${Math.round(file.audiobook_duration_seconds / 60)} min`
-                        : "Duration unknown"}
-                    </div>
-                  </div>
-                  <Badge variant="outline">{file.file_type}</Badge>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* No Works */}
-      {person.authored_book_count === 0 && person.narrated_file_count === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          This person has no associated books or files.
-        </div>
-      )}
-
-      <MetadataEditDialog
-        aliases={aliases}
-        entityName={person.name}
-        entityType="person"
-        isPending={updatePersonMutation.isPending}
-        onOpenChange={setEditOpen}
-        onSave={handleEdit}
-        open={editOpen}
-        sortName={person.sort_name}
-        sortNameSource={person.sort_name_source}
-      />
-
-      <MetadataMergeDialog
-        entities={
+    <ResourceDetail
+      aliases={aliases}
+      bookCount={bookCount}
+      breadcrumbItems={[
+        { label: "People", to: `/libraries/${libraryId}/people` },
+        { label: person?.name ?? "" },
+      ]}
+      deleteConfig={{
+        isPending: deletePersonMutation.isPending,
+        onDelete: handleDelete,
+        disabled:
+          (person?.authored_book_count ?? 0) > 0 ||
+          (person?.narrated_file_count ?? 0) > 0,
+      }}
+      editConfig={{
+        isPending: updatePersonMutation.isPending,
+        onSave: handleEdit,
+        sortName: person?.sort_name,
+        sortNameSource: person?.sort_name_source,
+      }}
+      entityId={personId!}
+      entityType="person"
+      isLoading={personQuery.isLoading}
+      libraryId={libraryId!}
+      mergeConfig={{
+        entities:
           peopleListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
             count: p.authored_book_count + p.narrated_file_count,
-          })) ?? []
-        }
-        entityType="person"
-        isLoadingEntities={peopleListQuery.isLoading}
-        isPending={mergePersonMutation.isPending}
-        onMerge={handleMerge}
-        onOpenChange={setMergeOpen}
-        onSearch={setMergeSearch}
-        open={mergeOpen}
-        targetId={personId!}
-        targetName={person.name}
+          })) ?? [],
+        isLoadingEntities: peopleListQuery.isLoading,
+        isPending: mergePersonMutation.isPending,
+        onMerge: handleMerge,
+        onSearch: setMergeSearchRaw,
+      }}
+      name={person?.name ?? ""}
+      notFound={!personQuery.isLoading && (!personQuery.isSuccess || !person)}
+      notFoundLabel="Person Not Found"
+      sortName={person?.sort_name}
+    >
+      <BookGallerySection
+        emptyMessage="This person has no authored books."
+        libraryId={libraryId!}
+        query={authoredBooksQuery}
+        title="Books Authored"
       />
-
-      <MetadataDeleteDialog
-        entityName={person.name}
-        entityType="person"
-        isPending={deletePersonMutation.isPending}
-        onDelete={handleDelete}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
+      <FileListSection
+        emptyMessage="This person has no narrated files."
+        libraryId={libraryId!}
+        pageParam="filePage"
+        query={narratedFilesQuery}
+        title="Files Narrated"
       />
-    </LibraryLayout>
+    </ResourceDetail>
   );
 };
 
