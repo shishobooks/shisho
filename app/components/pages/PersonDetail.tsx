@@ -150,7 +150,7 @@ const PersonDetail = () => {
       entityType="person"
       extraBadges={
         narratedFileCount > 0 ? (
-          <Badge variant="secondary">
+          <Badge variant="outline">
             {narratedFileCount}{" "}
             {narratedFileCount !== 1 ? "files narrated" : "file narrated"}
           </Badge>
