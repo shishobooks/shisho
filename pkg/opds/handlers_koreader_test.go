@@ -40,6 +40,11 @@ func TestTruncateFeedAuthors(t *testing.T) {
 			authors:         nil,
 			expectedAuthors: nil,
 		},
+		{
+			name:            "empty authors unchanged",
+			authors:         []Author{},
+			expectedAuthors: []Author{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -102,7 +107,7 @@ func TestIsKOReader(t *testing.T) {
 	}
 }
 
-func TestRespondXML_KOReaderConcatsAuthors(t *testing.T) {
+func TestRespondXML_KOReaderTruncatesAuthors(t *testing.T) {
 	t.Parallel()
 
 	feed := &Feed{
