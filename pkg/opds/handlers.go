@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -862,8 +863,28 @@ func (h *handler) bookCover(c echo.Context) error {
 	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio)
 }
 
+// isKOReader returns true when the request comes from KOReader's OPDS client.
+func isKOReader(c echo.Context) bool {
+	return strings.Contains(c.Request().UserAgent(), "KOReader")
+}
+
+// truncateFeedAuthors keeps only the first author per entry. KOReader's
+// XML parser treats <author> as a scalar (last element wins), so
+// multiple elements cause it to show only the last author.
+func truncateFeedAuthors(feed *Feed) {
+	for i := range feed.Entries {
+		if len(feed.Entries[i].Authors) > 1 {
+			feed.Entries[i].Authors = feed.Entries[i].Authors[:1]
+		}
+	}
+}
+
 // respondXML sends an XML response with the correct content type.
 func respondXML(c echo.Context, data interface{}) error {
+	if feed, ok := data.(*Feed); ok && isKOReader(c) {
+		truncateFeedAuthors(feed)
+	}
+
 	c.Response().Header().Set(echo.HeaderContentType, MimeTypeAtom+"; charset=utf-8")
 	c.Response().WriteHeader(http.StatusOK)
 
