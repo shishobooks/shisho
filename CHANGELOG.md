@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-05-11
+
+### Features
+- Migrate PersonDetail to shared components (#249)
+- Build FileListSection, migrate Publisher and Imprint detail pages (#245)
+- Build ResourceDetail and BookGallerySection, migrate Genre and Tag detail pages (#244)
+- Build ResourceList component and migrate all list pages (#243)
+- Normalize list responses and add pagination to detail sub-endpoints (#242)
+- Add FTS indexes for publishers/imprints and sidebar navigation (#230)
+
+### Bug Fixes
+- Truncate OPDS authors to first entry for KOReader (#250)
+- Add Cache-Control headers to download/stream endpoints (#235)
+- Include source file mtime/size in download cache fingerprint (#234)
+- Reset to file metadata drops author from directory name (#231)
+
+### Other
+- Bump actions/setup-go from 5 to 6 (#247)
+- Bump the minor-and-patch group with 5 updates (#246)
+
+
 ## [0.0.43] - 2026-05-04
 
 ### Features
