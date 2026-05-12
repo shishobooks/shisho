@@ -788,7 +788,9 @@ func (svc *Service) UpdateFile(ctx context.Context, file *models.File, opts Upda
 	return nil
 }
 
-// GetFirstBookInSeriesByID returns the first book in a series, ordered by series number.
+// GetFirstBookInSeriesByID returns the first book in a series, preferring
+// whole-numbered entries (1, 2, …) over fractional ones (0.5, 1.5, …) so
+// that prequels don't become the series cover when a main entry exists.
 func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) (*models.Book, error) {
 	var book models.Book
 
@@ -798,7 +800,7 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 		Relation("Files").
 		Join("INNER JOIN book_series bs ON bs.book_id = b.id").
 		Where("bs.series_id = ?", seriesID).
-		Order("bs.series_number ASC", "b.title ASC").
+		OrderExpr("CASE WHEN bs.series_number = CAST(bs.series_number AS INTEGER) THEN 0 ELSE 1 END ASC, bs.series_number ASC, b.title ASC").
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
