@@ -1246,7 +1246,7 @@ const BookDetail = () => {
                       >
                         {bs.series?.name ?? "Unknown Series"}
                       </Link>
-                      {bs.series_number && (
+                      {bs.series_number != null && (
                         <Badge className="text-xs" variant="outline">
                           {formatSeriesNumber(
                             bs.series_number,

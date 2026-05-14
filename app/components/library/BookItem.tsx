@@ -297,11 +297,11 @@ const BookItem = ({
             <div
               className={cn(
                 "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
-                seriesNumber && "leading-[1.6]",
+                seriesNumber != null && "leading-[1.6]",
               )}
               ref={titleRef}
             >
-              {seriesNumber && (
+              {seriesNumber != null && (
                 <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
                   {formatSeriesNumber(
                     seriesNumber,
