@@ -157,6 +157,10 @@ export const useMergePublisher = () => {
         queryKey: [QueryKey.RetrievePublisher, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
+      // Invalidate detail-page file list since files moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PublisherFiles, variables.targetId],
+      });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

@@ -136,6 +136,10 @@ export const useMergeTag = () => {
         queryKey: [QueryKey.RetrieveTag, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
+      // Invalidate detail-page book list since books moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.TagBooks, variables.targetId],
+      });
       // Invalidate book queries since they display tag info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
