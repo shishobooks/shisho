@@ -329,7 +329,7 @@ export function BookEditDialog({
         .filter((s) => s.name.trim())
         .map((s) => ({
           name: s.name,
-          number: s.number ? parseFloat(s.number) : undefined,
+          number: s.number !== "" ? parseFloat(s.number) : undefined,
           series_number_unit: s.unit !== "" ? s.unit : undefined,
         }));
     }
