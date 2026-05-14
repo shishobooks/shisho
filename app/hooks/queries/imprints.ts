@@ -147,6 +147,10 @@ export const useMergeImprint = () => {
         queryKey: [QueryKey.RetrieveImprint, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListImprints] });
+      // Invalidate detail-page file list since files moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.ImprintFiles, variables.targetId],
+      });
       // Invalidate book queries since they display imprint info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

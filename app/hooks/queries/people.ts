@@ -175,6 +175,13 @@ export const useMergePerson = () => {
         queryKey: [QueryKey.RetrievePerson, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPeople] });
+      // Invalidate detail-page lists since books/files moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PersonAuthoredBooks, variables.targetId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PersonNarratedFiles, variables.targetId],
+      });
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

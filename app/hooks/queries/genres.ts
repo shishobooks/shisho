@@ -145,6 +145,10 @@ export const useMergeGenre = () => {
         queryKey: [QueryKey.RetrieveGenre, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
+      // Invalidate detail-page book list since books moved from source to target
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.GenreBooks, variables.targetId],
+      });
       // Invalidate book queries since they display genre info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
