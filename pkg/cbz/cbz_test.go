@@ -148,6 +148,84 @@ func TestParseCBZ_Language(t *testing.T) {
 	}
 }
 
+func TestParseCBZ_PublisherPrefersImprint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		comicInfo     string
+		wantPublisher string
+	}{
+		{
+			name: "imprint overrides publisher",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+  <Publisher>Big Publisher</Publisher>
+  <Imprint>Cool Imprint</Imprint>
+</ComicInfo>`,
+			wantPublisher: "Cool Imprint",
+		},
+		{
+			name: "publisher used when no imprint",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+  <Publisher>Big Publisher</Publisher>
+</ComicInfo>`,
+			wantPublisher: "Big Publisher",
+		},
+		{
+			name: "imprint only",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+  <Imprint>Cool Imprint</Imprint>
+</ComicInfo>`,
+			wantPublisher: "Cool Imprint",
+		},
+		{
+			name: "neither present",
+			comicInfo: `<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Test Comic</Title>
+</ComicInfo>`,
+			wantPublisher: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			cbzPath := filepath.Join(tmpDir, "test.cbz")
+
+			f, err := os.Create(cbzPath)
+			require.NoError(t, err)
+
+			zw := zip.NewWriter(f)
+
+			imgWriter, err := zw.Create("page001.jpg")
+			require.NoError(t, err)
+			_, err = imgWriter.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // JPEG header
+			require.NoError(t, err)
+
+			comicInfoWriter, err := zw.Create("ComicInfo.xml")
+			require.NoError(t, err)
+			_, err = comicInfoWriter.Write([]byte(tt.comicInfo))
+			require.NoError(t, err)
+
+			require.NoError(t, zw.Close())
+			require.NoError(t, f.Close())
+
+			metadata, err := Parse(cbzPath)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantPublisher, metadata.Publisher)
+		})
+	}
+}
+
 func TestExtractSeriesNumberFromFilename(t *testing.T) {
 	t.Parallel()
 	floatPtr := func(f float64) *float64 { return &f }

@@ -54,7 +54,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 <meta name="calibre:series" content="Series Name"/>
 <meta name="calibre:series_index" content="3"/>
 <meta name="calibre:tags" content="Tag1, Tag2"/>  <!-- Tags, comma-separated -->
-<meta name="imprint" content="Imprint Name"/>     <!-- Fallback for imprint -->
+<meta name="imprint" content="Imprint Name"/>     <!-- Overrides dc:publisher when present -->
 ```
 
 #### Meta Elements (EPUB3 style)
@@ -63,7 +63,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 <meta property="belongs-to-collection" id="series-1">Series Name</meta>
 <meta property="collection-type" refines="#series-1">series</meta>
 <meta property="group-position" refines="#series-1">3</meta>
-<meta property="ibooks:imprint">Imprint Name</meta>  <!-- Preferred imprint source -->
+<meta property="ibooks:imprint">Imprint Name</meta>  <!-- Overrides dc:publisher when present -->
 ```
 
 ## Shisho Implementation
@@ -81,8 +81,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Genres | `<dc:subject>` | All subject elements |
 | Tags | `<meta name="calibre:tags">` | Comma-separated in content attribute |
 | Description | `<dc:description>` | Full text content |
-| Publisher | `<dc:publisher>` | Single element |
-| Imprint | `<meta property="ibooks:imprint">` | Falls back to `<meta name="imprint">` |
+| Publisher | `<dc:publisher>` | Overridden by `ibooks:imprint` or `<meta name="imprint">` when present (more specific) |
 | URL | `<dc:relation>` or `<dc:source>` | First URL starting with http:// or https:// |
 | Release Date | `<dc:date>` | Tries 4 date formats in order |
 | Language | `<dc:language>` | BCP 47 tag, normalized via `NormalizeLanguage` (handles ISO 639-2/T like "eng" → "en") |
@@ -105,7 +104,6 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 | Publisher | `<dc:publisher>` (from file.Publisher.Name) |
 | Release Date | `<dc:date>` (format: "2006-01-02") |
 | URL | `<meta name="shisho:url" content="..."/>` |
-| Imprint | `<meta name="shisho:imprint" content="..."/>` |
 | Description | `<dc:description>` |
 | Language | `<dc:language>` (from file.Language) |
 | Cover | Replaces image file and updates manifest MIME type |

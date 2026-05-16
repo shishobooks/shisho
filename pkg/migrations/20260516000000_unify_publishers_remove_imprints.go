@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pkg/errors"
 	"github.com/uptrace/bun"
@@ -178,6 +179,13 @@ func init() {
 			return errors.WithStack(err)
 		}
 
+		// 7. Remove "imprint" from review_criteria JSON in app_settings.
+		// If a user had "imprint" in their criteria, the isPresent() switch
+		// would fall through and permanently flag files as incomplete.
+		if err := cleanReviewCriteriaImprint(db); err != nil {
+			return err
+		}
+
 		return nil
 	}
 
@@ -249,4 +257,50 @@ func init() {
 	}
 
 	Migrations.MustRegister(up, down)
+}
+
+// cleanReviewCriteriaImprint removes "imprint" from the review_criteria JSON
+// stored in app_settings. The value schema is:
+//
+//	{"book_fields":["publisher","imprint",...],"audio_fields":[...]}
+//
+// "imprint" is no longer a valid field after this migration.
+func cleanReviewCriteriaImprint(db *bun.DB) error {
+	var value string
+	err := db.QueryRow(`SELECT value FROM app_settings WHERE key = 'review_criteria'`).Scan(&value)
+	if err != nil {
+		// No row means the user never customized criteria — nothing to clean.
+		return nil
+	}
+
+	var criteria map[string][]string
+	if err := json.Unmarshal([]byte(value), &criteria); err != nil {
+		// Malformed JSON — skip silently, don't fail the migration.
+		return nil
+	}
+
+	changed := false
+	for key, fields := range criteria {
+		filtered := make([]string, 0, len(fields))
+		for _, f := range fields {
+			if f == "imprint" {
+				changed = true
+				continue
+			}
+			filtered = append(filtered, f)
+		}
+		criteria[key] = filtered
+	}
+
+	if !changed {
+		return nil
+	}
+
+	encoded, err := json.Marshal(criteria)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = db.Exec(`UPDATE app_settings SET value = ? WHERE key = 'review_criteria'`, string(encoded))
+	return errors.WithStack(err)
 }

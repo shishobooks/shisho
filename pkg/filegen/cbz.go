@@ -248,24 +248,27 @@ func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 // cbzComicInfo represents ComicInfo.xml structure for CBZ generation.
 // Uses pointers for optional string fields to distinguish empty from omitted.
 type cbzComicInfo struct {
-	XMLName         xml.Name  `xml:"ComicInfo"`
-	Title           string    `xml:"Title,omitempty"`
-	Series          string    `xml:"Series,omitempty"`
-	Number          string    `xml:"Number,omitempty"`
-	Volume          string    `xml:"Volume,omitempty"`
-	Summary         string    `xml:"Summary,omitempty"`
-	Year            string    `xml:"Year,omitempty"`
-	Month           string    `xml:"Month,omitempty"`
-	Day             string    `xml:"Day,omitempty"`
-	Writer          string    `xml:"Writer,omitempty"`
-	Penciller       string    `xml:"Penciller,omitempty"`
-	Inker           string    `xml:"Inker,omitempty"`
-	Colorist        string    `xml:"Colorist,omitempty"`
-	Letterer        string    `xml:"Letterer,omitempty"`
-	CoverArtist     string    `xml:"CoverArtist,omitempty"`
-	Editor          string    `xml:"Editor,omitempty"`
-	Translator      string    `xml:"Translator,omitempty"`
-	Publisher       string    `xml:"Publisher,omitempty"`
+	XMLName     xml.Name `xml:"ComicInfo"`
+	Title       string   `xml:"Title,omitempty"`
+	Series      string   `xml:"Series,omitempty"`
+	Number      string   `xml:"Number,omitempty"`
+	Volume      string   `xml:"Volume,omitempty"`
+	Summary     string   `xml:"Summary,omitempty"`
+	Year        string   `xml:"Year,omitempty"`
+	Month       string   `xml:"Month,omitempty"`
+	Day         string   `xml:"Day,omitempty"`
+	Writer      string   `xml:"Writer,omitempty"`
+	Penciller   string   `xml:"Penciller,omitempty"`
+	Inker       string   `xml:"Inker,omitempty"`
+	Colorist    string   `xml:"Colorist,omitempty"`
+	Letterer    string   `xml:"Letterer,omitempty"`
+	CoverArtist string   `xml:"CoverArtist,omitempty"`
+	Editor      string   `xml:"Editor,omitempty"`
+	Translator  string   `xml:"Translator,omitempty"`
+	Publisher   string   `xml:"Publisher,omitempty"`
+	// Imprint is kept for XML round-trip deserialization of existing ComicInfo.xml
+	// files that contain <Imprint>. It is never populated during generation — the
+	// imprint value is folded into Publisher at parse time.
 	Imprint         string    `xml:"Imprint,omitempty"`
 	Genre           string    `xml:"Genre,omitempty"`
 	Tags            string    `xml:"Tags,omitempty"`
