@@ -33,13 +33,11 @@ A category classification for a book (e.g., "Science Fiction").
 A user-defined label for a book, more granular than genre.
 
 **Publisher**:
-The publishing entity for a file.
-
-**Imprint**:
-A branded subdivision of a publisher, associated with a file.
+A publishing entity associated with a file. Publishers form a hierarchy via an optional parent relationship — a publisher can have one parent and many children. An imprint, a division, and a conglomerate are all represented as publishers at different levels of the tree. A file references exactly one publisher (at any level of the hierarchy); ancestor publishers are derived by walking up the tree.
+_Avoid_: imprint (as a separate concept — imprints are just publishers with a parent)
 
 **Alias**:
-An alternative name for a resource (series, person, genre, tag, publisher, or imprint) that resolves to the canonical resource during name-based lookups. Aliases are library-scoped and case-insensitive. A resource can have many aliases; each alias belongs to exactly one resource.
+An alternative name for a resource (series, person, genre, tag, or publisher) that resolves to the canonical resource during name-based lookups. Aliases are library-scoped and case-insensitive. A resource can have many aliases; each alias belongs to exactly one resource.
 _Avoid_: synonym, alternate name, variant
 
 **Primary Name**:
@@ -62,11 +60,12 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 
 ## Relationships
 
-- A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, **Publishers**, and **Imprints**
+- A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, and **Publishers**
 - A **Book** has one or more **Files**
 - A **Book** has many **Genres**, **Tags**, **Authors** (persons), and **Series**
-- A **File** has at most one **Publisher**, at most one **Imprint**, and many **Narrators** (persons)
-- A **Resource** (series, person, genre, tag, publisher, imprint) has many **Aliases**
+- A **File** has at most one **Publisher** and many **Narrators** (persons)
+- A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
+- A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
 
 ## Example dialogue
@@ -80,4 +79,4 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 ## Flagged ambiguities
 
 - The database table for persons is `persons`, but the URL path uses `people` and the Go package is `pkg/people`. The domain term is **Person**.
-- **Publisher** and **Imprint** are file-level metadata, not book-level. This differs from series/genre/tag/author which are book-level.
+- **Publisher** is file-level metadata, not book-level. This differs from series/genre/tag/author which are book-level.
