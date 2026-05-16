@@ -321,7 +321,9 @@ export default function PageReader({
         <img
           alt={`Page ${currentPage + 1}`}
           className={
-            fitMode === "fit-height" ? "max-h-full w-auto object-contain" : ""
+            fitMode === "fit-height"
+              ? "max-h-full w-auto object-contain"
+              : "w-full h-auto"
           }
           onError={() => setImageLoading(false)}
           onLoad={() => setImageLoading(false)}
