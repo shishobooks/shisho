@@ -437,21 +437,25 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
           </div>
         )}
 
-        <Button
-          aria-label="Previous page"
-          className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
-          onClick={goPrev}
-          variant="ghost"
-        />
-        <Button
-          aria-label="Next page"
-          className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
-          onClick={goNext}
-          variant="ghost"
-        />
+        {flow !== "scrolled" && (
+          <>
+            <Button
+              aria-label="Previous page"
+              className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
+              onClick={goPrev}
+              variant="ghost"
+            />
+            <Button
+              aria-label="Next page"
+              className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
+              onClick={goNext}
+              variant="ghost"
+            />
+          </>
+        )}
 
-        {/* Center tap zone: toggle chrome on mobile */}
-        {hideChrome && (
+        {/* Center tap zone: toggle chrome on mobile (paginated only) */}
+        {hideChrome && flow !== "scrolled" && (
           <Button
             aria-label="Toggle controls"
             className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
