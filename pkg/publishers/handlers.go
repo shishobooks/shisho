@@ -20,6 +20,11 @@ type handler struct {
 	searchService    *search.Service
 }
 
+type ancestorResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := strconv.Atoi(c.Param("id"))
@@ -47,11 +52,27 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
 
+	ancestors, err := h.publisherService.GetAncestors(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	ancestorList := make([]ancestorResponse, len(ancestors))
+	for i, a := range ancestors {
+		ancestorList[i] = ancestorResponse{ID: a.ID, Name: a.Name}
+	}
+
+	descendantIDs, err := h.publisherService.GetDescendantIDs(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	response := struct {
 		*models.Publisher
-		FileCount int      `json:"file_count"`
-		Aliases   []string `json:"aliases"`
-	}{publisher, fileCount, aliasList}
+		FileCount     int                `json:"file_count"`
+		Aliases       []string           `json:"aliases"`
+		Ancestors     []ancestorResponse `json:"ancestors"`
+		DescendantIDs []int              `json:"descendant_ids"`
+	}{publisher, fileCount, aliasList, ancestorList, descendantIDs}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -65,10 +86,11 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	opts := ListPublishersOptions{
-		Limit:     &params.Limit,
-		Offset:    &params.Offset,
-		LibraryID: params.LibraryID,
-		Search:    params.Search,
+		Limit:      &params.Limit,
+		Offset:     &params.Offset,
+		LibraryID:  params.LibraryID,
+		Search:     params.Search,
+		ExcludeIDs: params.ExcludeIDs,
 	}
 
 	if user, ok := c.Get("user").(*models.User); ok {
@@ -172,6 +194,16 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		nameChanged = true
+	}
+
+	// Handle parent_id update
+	if params.ParentID.Set {
+		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
+			if strings.Contains(err.Error(), "cycle") {
+				return errcodes.ValidationError("Cannot set parent: would create a cycle in the publisher hierarchy")
+			}
+			return errors.WithStack(err)
+		}
 	}
 
 	if params.Aliases != nil {

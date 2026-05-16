@@ -108,6 +108,34 @@ export function usePublisherSearch(
   return { data: adapted, isLoading };
 }
 
+export interface PublisherIdOption {
+  id: number;
+  name: string;
+  file_count: number;
+}
+
+export function useParentPublisherSearch(
+  libraryId: number | undefined,
+  excludeIds: number[],
+  enabled: boolean,
+  query: string,
+): { data?: PublisherIdOption[]; isLoading: boolean } {
+  const { data, isLoading } = usePublishersList(
+    {
+      library_id: libraryId,
+      limit: 50,
+      search: query.trim() || undefined,
+      exclude_ids: excludeIds.length > 0 ? excludeIds : undefined,
+    },
+    { enabled: enabled && !!libraryId },
+  );
+  const adapted = data?.items.map((p) => ({
+    id: p.id,
+    name: p.name,
+    file_count: p.file_count,
+  }));
+  return { data: adapted, isLoading };
+}
 export function useGenreSearch(
   libraryId: number | undefined,
   enabled: boolean,
