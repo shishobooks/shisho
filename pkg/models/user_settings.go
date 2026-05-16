@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	//tygo:emit export type FitMode = typeof FitModeHeight | typeof FitModeOriginal;
-	FitModeHeight   = "fit-height"
-	FitModeOriginal = "original"
+	//tygo:emit export type FitMode = typeof FitModeHeight | typeof FitModeWidth;
+	FitModeHeight = "fit-height"
+	FitModeWidth  = "fit-width"
 )
 
 const (
@@ -46,6 +46,7 @@ type UserSettings struct {
 	EpubTheme          string    `bun:"viewer_epub_theme,notnull,default:'light'" json:"viewer_epub_theme" tstype:"EpubTheme"`
 	EpubFlow           string    `bun:"viewer_epub_flow,notnull,default:'paginated'" json:"viewer_epub_flow" tstype:"EpubFlow"`
 	GallerySize        string    `bun:",notnull,default:'m'" json:"gallery_size" tstype:"GallerySize"`
+	ViewerHideChrome   bool      `bun:",notnull,default:false" json:"viewer_hide_chrome"`
 }
 
 // DefaultUserSettings returns a UserSettings with default values.
@@ -57,5 +58,6 @@ func DefaultUserSettings() *UserSettings {
 		EpubTheme:          EpubThemeLight,
 		EpubFlow:           EpubFlowPaginated,
 		GallerySize:        GallerySizeMedium,
+		ViewerHideChrome:   false,
 	}
 }

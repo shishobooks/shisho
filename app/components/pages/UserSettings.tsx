@@ -6,6 +6,7 @@ import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import { SizeSelector } from "@/components/library/SizeSelector";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
 import {
   useUpdateUserSettings,
@@ -123,6 +124,33 @@ const UserSettings = () => {
                   them.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Reader Settings */}
+          <div className="border border-border rounded-md p-4 md:p-6">
+            <h2 className="text-lg font-semibold mb-4">Reader</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="hide-chrome-setting"
+                >
+                  Auto-hide controls
+                </label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Hide the header and footer in the reader. Move your mouse or
+                  tap the screen to reveal them.
+                </p>
+              </div>
+              <Switch
+                checked={userSettingsQuery.data?.viewer_hide_chrome ?? false}
+                disabled={!userSettingsQuery.data}
+                id="hide-chrome-setting"
+                onCheckedChange={(checked) =>
+                  updateUserSettings.mutate({ viewer_hide_chrome: checked })
+                }
+              />
             </div>
           </div>
 

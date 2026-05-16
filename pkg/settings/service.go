@@ -50,6 +50,7 @@ type UserSettingsUpdate struct {
 	EpubTheme    *string
 	EpubFlow     *string
 	GallerySize  *string
+	HideChrome   *bool
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -99,6 +100,9 @@ func (svc *Service) UpdateUserSettings(
 		if update.GallerySize != nil {
 			current.GallerySize = *update.GallerySize
 		}
+		if update.HideChrome != nil {
+			current.ViewerHideChrome = *update.HideChrome
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -117,6 +121,7 @@ func (svc *Service) UpdateUserSettings(
 			Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
 			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
 			Set("gallery_size = EXCLUDED.gallery_size").
+			Set("viewer_hide_chrome = EXCLUDED.viewer_hide_chrome").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {

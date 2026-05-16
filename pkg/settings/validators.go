@@ -18,6 +18,7 @@ type UserSettingsPayload struct {
 	EpubTheme    *string `json:"viewer_epub_theme,omitempty"`
 	EpubFlow     *string `json:"viewer_epub_flow,omitempty"`
 	GallerySize  *string `json:"gallery_size,omitempty"`
+	HideChrome   *bool   `json:"viewer_hide_chrome,omitempty"`
 }
 
 // UserSettingsResponse is the response for user settings.
@@ -28,11 +29,12 @@ type UserSettingsResponse struct {
 	EpubTheme    string `json:"viewer_epub_theme"`
 	EpubFlow     string `json:"viewer_epub_flow"`
 	GallerySize  string `json:"gallery_size"`
+	HideChrome   bool   `json:"viewer_hide_chrome"`
 }
 
 // ValidFitModes returns all valid fit mode values.
 func ValidFitModes() []string {
-	return []string{models.FitModeHeight, models.FitModeOriginal}
+	return []string{models.FitModeHeight, models.FitModeWidth}
 }
 
 // IsValidFitMode returns true if the fit mode is valid.

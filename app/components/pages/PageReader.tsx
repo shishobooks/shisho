@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Loader2, Settings } from "lucide-react";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,12 +16,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { useFileChapters } from "@/hooks/queries/chapters";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { cn } from "@/libraries/utils";
 import type { Chapter } from "@/types";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
@@ -65,6 +69,12 @@ export default function PageReader({
   const [imageLoading, setImageLoading] = useState(true);
   const currentPageUrl = getPageUrl(currentPage);
   const imgRef = useRef<HTMLImageElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Reset scroll position on page change (layout effect to avoid flash)
+  useLayoutEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [currentPage]);
 
   // Reset loading state when the page URL changes
   useEffect(() => {
@@ -87,7 +97,10 @@ export default function PageReader({
   const updateSettings = useUpdateUserSettings();
   const preloadCount = settings?.preload_count ?? 3;
   const fitMode = settings?.fit_mode ?? "fit-height";
+  const hideChrome = settings?.viewer_hide_chrome ?? false;
   const settingsReady = !settingsLoading && settings != null;
+
+  const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
 
   // Sync URL with current page
   useEffect(() => {
@@ -162,7 +175,14 @@ export default function PageReader({
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header
+        className={cn(
+          "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          hideChrome &&
+            "fixed top-0 inset-x-0 z-20 transition-transform duration-300",
+          hideChrome && !chromeVisible && "-translate-y-full",
+        )}
+      >
         <div className="flex items-center gap-2">
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
@@ -227,14 +247,27 @@ export default function PageReader({
                     <Button
                       disabled={!settingsReady}
                       onClick={() =>
-                        updateSettings.mutate({ fit_mode: "original" })
+                        updateSettings.mutate({ fit_mode: "fit-width" })
                       }
                       size="sm"
-                      variant={fitMode === "original" ? "default" : "outline"}
+                      variant={fitMode === "fit-width" ? "default" : "outline"}
                     >
-                      Original
+                      Fit Width
                     </Button>
                   </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium" htmlFor="hide-chrome">
+                    Auto-hide controls
+                  </label>
+                  <Switch
+                    checked={hideChrome}
+                    disabled={!settingsReady}
+                    id="hide-chrome"
+                    onCheckedChange={(checked) =>
+                      updateSettings.mutate({ viewer_hide_chrome: checked })
+                    }
+                  />
                 </div>
               </div>
             </PopoverContent>
@@ -244,9 +277,14 @@ export default function PageReader({
 
       {/* Page Display */}
       <main
-        className={`flex-1 flex items-center justify-center bg-black relative ${
-          fitMode === "original" ? "overflow-auto" : "overflow-hidden"
-        }`}
+        className={cn(
+          "flex bg-black relative",
+          hideChrome ? "fixed inset-0" : "flex-1",
+          fitMode === "fit-width"
+            ? "items-start justify-start overflow-auto"
+            : "items-center justify-center overflow-hidden",
+        )}
+        ref={mainRef}
       >
         {/* Tap zones for mobile navigation */}
         <Button
@@ -263,6 +301,16 @@ export default function PageReader({
           variant="ghost"
         />
 
+        {/* Center tap zone: toggle chrome on mobile */}
+        {hideChrome && (
+          <Button
+            aria-label="Toggle controls"
+            className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
+            onClick={toggleChrome}
+            variant="ghost"
+          />
+        )}
+
         {/* Loading spinner */}
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
@@ -273,7 +321,9 @@ export default function PageReader({
         <img
           alt={`Page ${currentPage + 1}`}
           className={
-            fitMode === "fit-height" ? "max-h-full w-auto object-contain" : "" // original: no constraints, natural size
+            fitMode === "fit-height"
+              ? "max-h-full w-auto object-contain"
+              : "w-full h-auto"
           }
           onError={() => setImageLoading(false)}
           onLoad={() => setImageLoading(false)}
@@ -289,7 +339,14 @@ export default function PageReader({
       </main>
 
       {/* Controls */}
-      <footer className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <footer
+        className={cn(
+          "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          hideChrome &&
+            "fixed bottom-0 inset-x-0 z-20 transition-transform duration-300",
+          hideChrome && !chromeVisible && "translate-y-full",
+        )}
+      >
         {/* Progress Bar */}
         <div className="px-4 pt-3">
           <div

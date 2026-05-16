@@ -29,7 +29,7 @@ func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
 	svc := NewService(db)
 
 	preload := 5
-	fitMode := "original"
+	fitMode := "fit-width"
 	fontSize := 140
 	theme := models.EpubThemeSepia
 	flow := models.EpubFlowScrolled
@@ -70,7 +70,7 @@ func TestUpdateUserSettings_PartialUpdateDoesNotClobber(t *testing.T) {
 
 	// Seed all five fields to known non-default values.
 	preload := 7
-	fitMode := "original"
+	fitMode := "fit-width"
 	fontSize := 130
 	theme := models.EpubThemeDark
 	flow := models.EpubFlowScrolled
@@ -90,7 +90,7 @@ func TestUpdateUserSettings_PartialUpdateDoesNotClobber(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 7, updated.ViewerPreloadCount)
-	assert.Equal(t, "original", updated.ViewerFitMode)
+	assert.Equal(t, "fit-width", updated.ViewerFitMode)
 	assert.Equal(t, 130, updated.EpubFontSize)
 	assert.Equal(t, models.EpubThemeSepia, updated.EpubTheme)
 	assert.Equal(t, models.EpubFlowScrolled, updated.EpubFlow)

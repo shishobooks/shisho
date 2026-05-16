@@ -13,8 +13,8 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Ebooks
 
-- **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more. Includes an in-app reader with font size, theme, and flow controls
-- **PDF** — Full [metadata extraction](./metadata#pdf) including title, authors, description, cover art, page count, language, and chapter extraction from PDF bookmarks. Includes an in-app viewer with page-by-page reading
+- **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more. Includes an in-app reader with font size, theme, flow (paginated or scrolled), and auto-hide controls
+- **PDF** — Full [metadata extraction](./metadata#pdf) including title, authors, description, cover art, page count, language, and chapter extraction from PDF bookmarks. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
 
 ## Audiobooks
 
@@ -22,7 +22,7 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Comics
 
-- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language
+- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
 
 ## Downloads
 

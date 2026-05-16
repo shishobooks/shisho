@@ -15,6 +15,7 @@ export interface UserSettings {
   viewer_epub_theme: EpubTheme;
   viewer_epub_flow: EpubFlow;
   gallery_size: GallerySize;
+  viewer_hide_chrome: boolean;
 }
 
 export enum QueryKey {
@@ -46,6 +47,7 @@ export interface UpdateUserSettingsVariables {
   viewer_epub_theme?: EpubTheme;
   viewer_epub_flow?: EpubFlow;
   gallery_size?: GallerySize;
+  viewer_hide_chrome?: boolean;
 }
 
 export const useUpdateUserSettings = () => {
