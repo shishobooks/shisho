@@ -434,11 +434,6 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo.Publisher = file.Publisher.Name
 	}
 
-	// Update imprint
-	if file.Imprint != nil {
-		comicInfo.Imprint = file.Imprint.Name
-	}
-
 	// Update release date (Year, Month, Day)
 	if file.ReleaseDate != nil {
 		comicInfo.Year = strconv.Itoa(file.ReleaseDate.Year())

@@ -18,8 +18,6 @@ import FileReader from "@/components/pages/FileReader";
 import GenreDetail from "@/components/pages/GenreDetail";
 import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
-import ImprintDetail from "@/components/pages/ImprintDetail";
-import ImprintsList from "@/components/pages/ImprintsList";
 import JobDetail from "@/components/pages/JobDetail";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
@@ -404,22 +402,6 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute checkLibraryAccess>
             <PublisherDetail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "libraries/:libraryId/imprints",
-        element: (
-          <ProtectedRoute checkLibraryAccess>
-            <ImprintsList />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "libraries/:libraryId/imprints/:id",
-        element: (
-          <ProtectedRoute checkLibraryAccess>
-            <ImprintDetail />
           </ProtectedRoute>
         ),
       },

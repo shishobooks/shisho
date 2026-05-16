@@ -42,7 +42,6 @@ export interface ParsedMetadata {
   tags?: string[];
   description?: string;
   publisher?: string;
-  imprint?: string;
   url?: string;
   /** BCP 47 language tag (e.g., "en", "en-US", "zh-Hans"). */
   language?: string;

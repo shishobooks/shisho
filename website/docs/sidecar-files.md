@@ -95,7 +95,6 @@ Valid roles: `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_arti
     }
   ],
   "publisher": "Penguin Books",
-  "imprint": "Penguin Classics",
   "release_date": "2004-09-30",
   "url": "https://example.com/book",
   "identifiers": [
@@ -155,7 +154,7 @@ The **Rescan** dialog on a book or file offers three modes that interact with si
 
 Sidecar files are read during library scans, after parsing the embedded file metadata. If a sidecar exists, its values are applied according to the priority system.
 
-Resource names in sidecars — authors, narrators, series, genres, tags, publishers, and imprints — are resolved through Shisho's standard name lookup, which checks [aliases](./metadata#aliases). If a name in a sidecar matches an alias, it resolves to the existing canonical resource instead of creating a duplicate. No changes to the sidecar format are needed to take advantage of aliases.
+Resource names in sidecars — authors, narrators, series, genres, tags, and publishers — are resolved through Shisho's standard name lookup, which checks [aliases](./metadata#aliases). If a name in a sidecar matches an alias, it resolves to the existing canonical resource instead of creating a duplicate. No changes to the sidecar format are needed to take advantage of aliases.
 
 ## When Sidecars Are Written
 

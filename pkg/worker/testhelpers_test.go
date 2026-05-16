@@ -14,7 +14,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/genres"
-	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -94,7 +93,6 @@ func newTestContext(t *testing.T) *testContext {
 	tagService := tags.NewService(db)
 	searchService := search.NewService(db)
 	publisherService := publishers.NewService(db)
-	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
 
 	// Create worker
@@ -124,7 +122,6 @@ func newTestContext(t *testing.T) *testContext {
 		tagService:         tagService,
 		searchService:      searchService,
 		publisherService:   publisherService,
-		imprintService:     imprintService,
 		fingerprintService: fingerprintService,
 		appSettingsService: appSettingsService,
 	}
@@ -317,7 +314,6 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	tagService := tags.NewService(db)
 	searchService := search.NewService(db)
 	publisherService := publishers.NewService(db)
-	imprintService := imprints.NewService(db)
 	fingerprintService := fingerprints.NewService(db)
 
 	// Create worker with search service
@@ -347,7 +343,6 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		tagService:         tagService,
 		searchService:      searchService,
 		publisherService:   publisherService,
-		imprintService:     imprintService,
 		fingerprintService: fingerprintService,
 		appSettingsService: appSettingsService,
 	}

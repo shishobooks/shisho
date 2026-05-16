@@ -53,11 +53,6 @@ export {
   type UpdatePublisherPayload,
   type MergePublishersPayload,
 } from "./generated/publishers";
-export {
-  type ListImprintsQuery,
-  type UpdateImprintPayload,
-  type MergeImprintsPayload,
-} from "./generated/imprints";
 export * from "./generated/chapters";
 export {
   type CreateListPayload,

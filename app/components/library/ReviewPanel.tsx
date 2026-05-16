@@ -41,7 +41,7 @@ interface ReviewPanelProps {
  * active review criteria.
  *
  * Book-level fields: authors, description, genres, tags, series, subtitle
- * File-level fields: cover, publisher, imprint, identifiers, release_date, language, url
+ * File-level fields: cover, publisher, identifiers, release_date, language, url
  * Audio-only fields: narrators, chapters, abridged
  */
 function getMissingFields(
@@ -81,9 +81,6 @@ function getMissingFields(
         break;
       case "publisher":
         if (!file.publisher) missing.push(field);
-        break;
-      case "imprint":
-        if (!file.imprint) missing.push(field);
         break;
       case "identifiers":
         if (!file.identifiers || file.identifiers.length === 0)

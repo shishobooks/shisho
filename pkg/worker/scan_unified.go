@@ -1658,65 +1658,6 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
-	// Imprint (from metadata)
-	imprintName := strings.TrimSpace(metadata.Imprint)
-	if imprintName != "" {
-		existingImprintName := ""
-		existingImprintSource := ""
-		if file.Imprint != nil {
-			existingImprintName = file.Imprint.Name
-		}
-		if file.ImprintSource != nil {
-			existingImprintSource = *file.ImprintSource
-		}
-		imprintSource := metadata.SourceForField("imprint")
-		if shouldUpdateScalar(imprintName, existingImprintName, imprintSource, existingImprintSource, forceRefresh) {
-			var imprint *models.Imprint
-			var err error
-			if cache != nil {
-				imprint, err = cache.GetOrCreateImprint(ctx, imprintName, book.LibraryID, w.imprintService)
-			} else {
-				imprint, err = w.imprintService.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
-			}
-			if err != nil {
-				logWarn("failed to find/create imprint", logger.Data{"imprint": imprintName, "error": err.Error()})
-			} else {
-				logInfo("updating file imprint", logger.Data{"from": existingImprintName, "to": imprintName})
-				file.ImprintID = &imprint.ID
-				file.ImprintSource = &imprintSource
-				fileUpdateOpts.Columns = append(fileUpdateOpts.Columns, "imprint_id", "imprint_source")
-			}
-		}
-	}
-	// Imprint (from sidecar)
-	if fileSidecarData != nil && fileSidecarData.Imprint != nil && *fileSidecarData.Imprint != "" {
-		existingImprintName := ""
-		existingImprintSource := ""
-		if file.Imprint != nil {
-			existingImprintName = file.Imprint.Name
-		}
-		if file.ImprintSource != nil {
-			existingImprintSource = *file.ImprintSource
-		}
-		if shouldApplySidecarScalar(*fileSidecarData.Imprint, existingImprintName, existingImprintSource, forceRefresh) {
-			var imprint *models.Imprint
-			var err error
-			if cache != nil {
-				imprint, err = cache.GetOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID, w.imprintService)
-			} else {
-				imprint, err = w.imprintService.FindOrCreateImprint(ctx, *fileSidecarData.Imprint, book.LibraryID)
-			}
-			if err != nil {
-				logWarn("failed to find/create imprint", logger.Data{"imprint": *fileSidecarData.Imprint, "error": err.Error()})
-			} else {
-				logInfo("updating file imprint from sidecar", logger.Data{"from": existingImprintName, "to": *fileSidecarData.Imprint})
-				file.ImprintID = &imprint.ID
-				file.ImprintSource = &sidecarSource
-				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "imprint_id", "imprint_source")
-			}
-		}
-	}
-
 	// Update audiobook-specific fields (M4B) - these always come from file metadata
 	if metadata.Duration > 0 {
 		durationSeconds := metadata.Duration.Seconds()
@@ -3482,10 +3423,6 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.Publisher = enrichment.Publisher
 		target.FieldDataSources["publisher"] = source
 	}
-	if target.Imprint == "" && enrichment.Imprint != "" {
-		target.Imprint = enrichment.Imprint
-		target.FieldDataSources["imprint"] = source
-	}
 	if target.URL == "" && enrichment.URL != "" {
 		target.URL = enrichment.URL
 		target.FieldDataSources["url"] = source
@@ -3652,10 +3589,6 @@ func filterMetadataFields(
 	if !isFieldAllowed("publisher") {
 		warnIfUndeclared("publisher", result.Publisher != "")
 		result.Publisher = ""
-	}
-	if !isFieldAllowed("imprint") {
-		warnIfUndeclared("imprint", result.Imprint != "")
-		result.Imprint = ""
 	}
 	if !isFieldAllowed("url") {
 		warnIfUndeclared("url", result.URL != "")
@@ -4110,8 +4043,6 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 	file.ReleaseDateSource = nil
 	file.PublisherID = nil
 	file.PublisherSource = nil
-	file.ImprintID = nil
-	file.ImprintSource = nil
 	file.Language = nil
 	file.LanguageSource = nil
 	file.Abridged = nil
@@ -4125,7 +4056,6 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 		"url", "url_source",
 		"release_date", "release_date_source",
 		"publisher_id", "publisher_source",
-		"imprint_id", "imprint_source",
 		"language", "language_source",
 		"abridged", "abridged_source",
 		"chapter_source",
@@ -4381,20 +4311,13 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldR
 		}
 	}
 
-	// Publishers / imprints: file-level, re-index each file's publisher/imprint.
+	// Publishers: file-level, re-index each file's publisher.
 	seenPublishers := map[int]bool{}
-	seenImprints := map[int]bool{}
 	for _, f := range book.Files {
 		if f.Publisher != nil && !seenPublishers[f.Publisher.ID] {
 			seenPublishers[f.Publisher.ID] = true
 			if err := w.searchService.IndexPublisher(ctx, f.Publisher); err != nil {
 				logWarn("failed to update search index for publisher", logger.Data{"publisher_id": f.Publisher.ID, "error": err.Error()})
-			}
-		}
-		if f.Imprint != nil && !seenImprints[f.Imprint.ID] {
-			seenImprints[f.Imprint.ID] = true
-			if err := w.searchService.IndexImprint(ctx, f.Imprint); err != nil {
-				logWarn("failed to update search index for imprint", logger.Data{"imprint_id": f.Imprint.ID, "error": err.Error()})
 			}
 		}
 	}

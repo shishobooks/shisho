@@ -19,7 +19,6 @@ const (
 	FieldSeries      = "series"
 	FieldSubtitle    = "subtitle"
 	FieldPublisher   = "publisher"
-	FieldImprint     = "imprint"
 	FieldIdentifiers = "identifiers"
 	FieldReleaseDate = "release_date"
 	FieldLanguage    = "language"
@@ -32,7 +31,7 @@ const (
 // UniversalCandidates is the set of fields that can be required for all books.
 var UniversalCandidates = []string{
 	FieldAuthors, FieldDescription, FieldCover, FieldGenres, FieldTags,
-	FieldSeries, FieldSubtitle, FieldPublisher, FieldImprint, FieldIdentifiers,
+	FieldSeries, FieldSubtitle, FieldPublisher, FieldIdentifiers,
 	FieldReleaseDate, FieldLanguage, FieldURL,
 }
 

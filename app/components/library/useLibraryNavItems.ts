@@ -4,7 +4,6 @@ import {
   Building2,
   Layers,
   Settings,
-  Stamp,
   Tags,
   Users,
   type LucideIcon,
@@ -39,7 +38,6 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       !location.pathname.startsWith(`${basePath}/genres`) &&
       !location.pathname.startsWith(`${basePath}/tags`) &&
       !location.pathname.startsWith(`${basePath}/publishers`) &&
-      !location.pathname.startsWith(`${basePath}/imprints`) &&
       !location.pathname.startsWith(`${basePath}/settings`));
 
   return [
@@ -83,13 +81,6 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       Icon: Building2,
       label: "Publishers",
       isActive: location.pathname.startsWith(`${basePath}/publishers`),
-      show: true,
-    },
-    {
-      to: `${basePath}/imprints`,
-      Icon: Stamp,
-      label: "Imprints",
-      isActive: location.pathname.startsWith(`${basePath}/imprints`),
       show: true,
     },
     {

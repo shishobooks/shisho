@@ -272,7 +272,6 @@ The full set of fields you can return:
 | `tags` | `[string]` | Tag names |
 | `description` | `string` | Book description |
 | `publisher` | `string` | Publisher name |
-| `imprint` | `string` | Imprint name |
 | `url` | `string` | Book URL |
 | `releaseDate` | `string` | ISO 8601 date string |
 | `coverData` | `ArrayBuffer` | Cover image data |
@@ -288,7 +287,7 @@ The full set of fields you can return:
 | `chapters` | `[{ title, startPage?, startTimestampMs?, href?, children? }]` | Chapter list |
 
 :::note[Resource names resolve against aliases]
-When a file parser or enricher returns resource names (authors, narrators, series, genres, tags, publishers, imprints), Shisho checks them against [aliases](../metadata#aliases) before creating new resources. If a returned name matches an alias, it resolves to the existing canonical resource. No special handling is needed in plugin code — alias resolution is automatic.
+When a file parser or enricher returns resource names (authors, narrators, series, genres, tags, publishers), Shisho checks them against [aliases](../metadata#aliases) before creating new resources. If a returned name matches an alias, it resolves to the existing canonical resource. No special handling is needed in plugin code — alias resolution is automatic.
 :::
 
 :::warning[Identifier values are canonicalized on write]
@@ -385,7 +384,6 @@ var plugin = (function() {
               coverUrl: item.coverUrl,
               releaseDate: item.publishDate,
               publisher: item.publisher,
-              imprint: item.imprint,
               url: item.url,
               identifiers: [{ type: "isbn_13", value: item.isbn }],
               confidence: item.matchScore  // optional, 0-1
@@ -414,7 +412,6 @@ var plugin = (function() {
 | `coverUrl` | `string` | Cover image URL. Server downloads at apply time. Domain must be in `httpAccess.domains`. |
 | `releaseDate` | `string` | Publication date (`YYYY-MM-DD` or ISO 8601) |
 | `publisher` | `string` | Publisher name |
-| `imprint` | `string` | Imprint name |
 | `url` | `string` | Web URL for the book |
 | `language` | `string` | BCP 47 language tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`) |
 | `abridged` | `boolean` | `true` if abridged, `false` if unabridged |
@@ -550,7 +547,7 @@ During automatic scans, enrichment also respects a cover resolution gate — enr
 
 Only fields declared in the manifest's `fields` array will be applied. Any returned fields not in the declared list are silently stripped. Users can further disable individual fields in the plugin settings.
 
-**Valid enricher fields:** `title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`
+**Valid enricher fields:** `title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `url`, `releaseDate`, `cover`, `identifiers`
 
 **Manifest capability:**
 

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   useGenreSearch,
-  useImprintSearch,
   usePeopleSearch,
   usePublisherSearch,
   useSeriesSearch,
@@ -50,13 +49,6 @@ vi.mock("./publishers", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("./imprints", () => ({
-  useImprintsList: () => ({
-    data: { items: [{ name: "Orbit", file_count: 3 }], total: 1 },
-    isLoading: false,
-  }),
-}));
-
 describe("entity-search adapter hooks", () => {
   it("usePeopleSearch includes counts", () => {
     const result = usePeopleSearch(1, true, "");
@@ -88,10 +80,5 @@ describe("entity-search adapter hooks", () => {
   it("usePublisherSearch includes file_count", () => {
     const result = usePublisherSearch(1, true, "");
     expect(result.data).toEqual([{ name: "Tor", file_count: 8 }]);
-  });
-
-  it("useImprintSearch includes file_count", () => {
-    const result = useImprintSearch(1, true, "");
-    expect(result.data).toEqual([{ name: "Orbit", file_count: 3 }]);
   });
 });

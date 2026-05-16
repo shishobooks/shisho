@@ -34,11 +34,6 @@ type PublisherFinder interface {
 	FindOrCreatePublisher(ctx context.Context, name string, libraryID int) (*models.Publisher, error)
 }
 
-// ImprintFinder is an interface for finding or creating imprints.
-type ImprintFinder interface {
-	FindOrCreateImprint(ctx context.Context, name string, libraryID int) (*models.Imprint, error)
-}
-
 // AliasLister fetches alias names for resolved resources so the cache can
 // pre-populate entries for every name variant (canonical + aliases).
 type AliasLister interface {
@@ -47,7 +42,6 @@ type AliasLister interface {
 	ListTagAliases(ctx context.Context, tagID int) ([]string, error)
 	ListSeriesAliases(ctx context.Context, seriesID int) ([]string, error)
 	ListPublisherAliases(ctx context.Context, publisherID int) ([]string, error)
-	ListImprintAliases(ctx context.Context, imprintID int) ([]string, error)
 }
 
 // ScanCache provides thread-safe caching for entity lookups during parallel file processing.
@@ -59,7 +53,6 @@ type ScanCache struct {
 	tags       sync.Map // map[string]*models.Tag
 	series     sync.Map // map[string]*models.Series
 	publishers sync.Map // map[string]*models.Publisher
-	imprints   sync.Map // map[string]*models.Imprint
 
 	// Per-key mutexes to prevent duplicate concurrent DB calls
 	personMu    sync.Map // map[string]*sync.Mutex
@@ -67,7 +60,6 @@ type ScanCache struct {
 	tagMu       sync.Map // map[string]*sync.Mutex
 	seriesMu    sync.Map // map[string]*sync.Mutex
 	publisherMu sync.Map // map[string]*sync.Mutex
-	imprintMu   sync.Map // map[string]*sync.Mutex
 
 	// Per-path mutexes to prevent concurrent book creation for same path
 	bookPathMu sync.Map // map[string]*sync.Mutex
@@ -108,7 +100,6 @@ type ScanCache struct {
 	tagCount       atomic.Int64
 	seriesCount    atomic.Int64
 	publisherCount atomic.Int64
-	imprintCount   atomic.Int64
 }
 
 // NewScanCache creates a new ScanCache.
@@ -370,52 +361,9 @@ func (c *ScanCache) GetOrCreatePublisher(ctx context.Context, name string, libra
 	return publisher, nil
 }
 
-// GetOrCreateImprint retrieves an imprint from the cache or calls the service to find/create one.
-// It uses per-key locking to prevent duplicate concurrent DB calls for the same imprint.
-func (c *ScanCache) GetOrCreateImprint(ctx context.Context, name string, libraryID int, svc ImprintFinder) (*models.Imprint, error) {
-	key := cacheKey(name, libraryID)
-
-	// Fast path: check cache first
-	if val, ok := c.imprints.Load(key); ok {
-		return val.(*models.Imprint), nil
-	}
-
-	// Slow path: acquire per-key mutex
-	mu := getMutex(&c.imprintMu, key)
-	mu.Lock()
-	defer mu.Unlock()
-
-	// Double-check after acquiring lock
-	if val, ok := c.imprints.Load(key); ok {
-		return val.(*models.Imprint), nil
-	}
-
-	// Call service
-	imprint, err := svc.FindOrCreateImprint(ctx, name, libraryID)
-	if err != nil {
-		return nil, err
-	}
-
-	c.imprints.Store(key, imprint)
-	c.imprintCount.Add(1)
-
-	if c.aliasLister != nil {
-		if aliasNames, err := c.aliasLister.ListImprintAliases(ctx, imprint.ID); err == nil {
-			populateAliasEntries(&c.imprints, imprint.Name, libraryID, imprint, aliasNames)
-		}
-	}
-
-	return imprint, nil
-}
-
 // PublisherCount returns the number of unique publishers in the cache.
 func (c *ScanCache) PublisherCount() int {
 	return int(c.publisherCount.Load())
-}
-
-// ImprintCount returns the number of unique imprints in the cache.
-func (c *ScanCache) ImprintCount() int {
-	return int(c.imprintCount.Load())
 }
 
 // LockBookPath acquires a lock for the given book path to prevent concurrent book creation.

@@ -67,7 +67,6 @@ vi.mock("@/hooks/queries/entity-search", () => ({
   usePeopleSearch: () => ({ data: [], isLoading: false }),
   useSeriesSearch: () => ({ data: [], isLoading: false }),
   usePublisherSearch: () => ({ data: [], isLoading: false }),
-  useImprintSearch: () => ({ data: [], isLoading: false }),
   useGenreSearch: () => ({ data: [], isLoading: false }),
   useTagSearch: () => ({ data: [], isLoading: false }),
   useGenreItemCounts: () => new Map(),
@@ -84,7 +83,6 @@ vi.mock("@/libraries/api", async () => {
         if (path === "/people") return { people: [], total: 0 };
         if (path === "/series") return { series: [], total: 0 };
         if (path === "/publishers") return { publishers: [], total: 0 };
-        if (path === "/imprints") return { imprints: [], total: 0 };
         if (path === "/genres") return { genres: [], total: 0 };
         if (path === "/tags") return { tags: [], total: 0 };
         return null;

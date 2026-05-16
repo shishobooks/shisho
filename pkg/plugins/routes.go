@@ -17,7 +17,6 @@ type EnrichDeps struct {
 	GenreFinder     genreFinder
 	TagFinder       tagFinder
 	PublisherFinder publisherFinder
-	ImprintFinder   imprintFinder
 	SearchIndexer   searchIndexer
 	PageExtractor   pageExtractor
 }
@@ -34,7 +33,6 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 			genreFinder:     ed.GenreFinder,
 			tagFinder:       ed.TagFinder,
 			publisherFinder: ed.PublisherFinder,
-			imprintFinder:   ed.ImprintFinder,
 			searchIndexer:   ed.SearchIndexer,
 			pageExtractor:   ed.PageExtractor,
 		}
@@ -78,7 +76,6 @@ func RegisterIdentifyRoutes(g *echo.Group, service *Service, manager *Manager, e
 			genreFinder:     ed.GenreFinder,
 			tagFinder:       ed.TagFinder,
 			publisherFinder: ed.PublisherFinder,
-			imprintFinder:   ed.ImprintFinder,
 			searchIndexer:   ed.SearchIndexer,
 			pageExtractor:   ed.PageExtractor,
 		}

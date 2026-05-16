@@ -167,9 +167,6 @@ func BuildFileContext(file *models.File) map[string]interface{} {
 	if file.Publisher != nil {
 		ctx["publisher"] = file.Publisher.Name
 	}
-	if file.Imprint != nil {
-		ctx["imprint"] = file.Imprint.Name
-	}
 	if file.ReleaseDate != nil {
 		ctx["releaseDate"] = file.ReleaseDate.Format("2006-01-02")
 	}

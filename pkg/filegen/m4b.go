@@ -83,7 +83,6 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		Chapters:    src.Chapters,
 		Freeform:    src.Freeform,
 		Publisher:   src.Publisher,
-		Imprint:     src.Imprint,
 		URL:         src.URL,
 		ReleaseDate: src.ReleaseDate,
 
@@ -114,11 +113,6 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 	// Set publisher from file if available
 	if file.Publisher != nil {
 		meta.Publisher = file.Publisher.Name
-	}
-
-	// Set imprint from file if available
-	if file.Imprint != nil {
-		meta.Imprint = file.Imprint.Name
 	}
 
 	// Set URL from file if available

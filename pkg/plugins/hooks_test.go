@@ -160,7 +160,6 @@ func TestRunFileParser_AllFields(t *testing.T) {
 	assert.Equal(t, "Test Series", md.Series)
 	assert.Equal(t, "A test book description", md.Description)
 	assert.Equal(t, "Test Publisher", md.Publisher)
-	assert.Equal(t, "Test Imprint", md.Imprint)
 	assert.Equal(t, "https://example.com/book", md.URL)
 	assert.Equal(t, "image/jpeg", md.CoverMimeType)
 
@@ -461,7 +460,6 @@ func TestRunMetadataSearch_NewFields(t *testing.T) {
 	assert.Equal(t, "Search Series", result.Series)
 	require.NotNil(t, result.SeriesNumber)
 	assert.InDelta(t, 2.5, *result.SeriesNumber, 0.001)
-	assert.Equal(t, "Search Imprint", result.Imprint)
 	assert.Equal(t, "https://example.com/book", result.URL)
 	assert.Equal(t, "https://example.com/cover.jpg", result.CoverURL)
 
@@ -708,7 +706,6 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
             genres: ["SciFi"],
             coverUrl: "https://example.com/cover.jpg",
             authors: [{ name: "Full Author", role: "writer" }],
-            imprint: "Full Imprint",
             url: "https://example.com/book"
           }]
         };
@@ -759,7 +756,6 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
 	require.Len(t, md.Authors, 1)
 	assert.Equal(t, "Full Author", md.Authors[0].Name)
 	assert.Equal(t, "writer", md.Authors[0].Role)
-	assert.Equal(t, "Full Imprint", md.Imprint)
 	assert.Equal(t, "https://example.com/book", md.URL)
 }
 

@@ -34,7 +34,3 @@ func (a *aliasServiceAdapter) ListSeriesAliases(ctx context.Context, seriesID in
 func (a *aliasServiceAdapter) ListPublisherAliases(ctx context.Context, publisherID int) ([]string, error) {
 	return a.svc.ListAliases(ctx, aliases.PublisherConfig, publisherID)
 }
-
-func (a *aliasServiceAdapter) ListImprintAliases(ctx context.Context, imprintID int) ([]string, error) {
-	return a.svc.ListAliases(ctx, aliases.ImprintConfig, imprintID)
-}

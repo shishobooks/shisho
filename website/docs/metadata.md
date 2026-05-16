@@ -20,7 +20,7 @@ A book is the central entity in Shisho. It groups one or more files together (e.
 
 Each book contains one or more files. Files hold format-specific metadata that may differ between editions.
 
-**File-level fields:** name, narrators (M4B only), publisher, imprint, release date, URL, identifiers, chapters, language, abridged
+**File-level fields:** name, narrators (M4B only), publisher, release date, URL, identifiers, chapters, language, abridged
 
 ### People
 
@@ -34,9 +34,9 @@ A book can belong to multiple series, each with an optional series number. Serie
 
 Genres and tags are simple labels attached to books. The distinction is semantic — genres are typically extracted from file metadata, while tags are more often user-defined.
 
-### Publishers and Imprints
+### Publishers
 
-Publishers and imprints are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers.
+Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. Publishers support a `parent_id` field for future hierarchy support (e.g., imprints as children of parent publishers).
 
 ### Identifiers
 
@@ -66,7 +66,6 @@ Searches by identifier accept any of the cosmetic variants above — you can pas
 | Book &rarr; Files | One-to-many | A book has one or more files |
 | File &harr; Narrators | Many-to-many | M4B audiobook files only |
 | File &rarr; Publisher | Many-to-one | A file has at most one publisher |
-| File &rarr; Imprint | Many-to-one | A file has at most one imprint |
 | File &rarr; Identifiers | One-to-many | A file can have multiple identifiers |
 | File &rarr; Chapters | One-to-many | Chapters support nested hierarchy |
 
@@ -85,7 +84,6 @@ All six resource types support aliases:
 - **Genres**
 - **Tags**
 - **Publishers**
-- **Imprints**
 
 ### How Aliases Work
 
@@ -99,7 +97,7 @@ This resolution happens transparently in all contexts — library scans, plugin 
 
 ### Managing Aliases
 
-**Edit dialog.** Open the edit dialog for any resource (person, series, genre, tag, publisher, or imprint). Below the name field, a chip input lets you add and remove aliases. Type a name and press Enter to add it; click the × on a chip to remove it.
+**Edit dialog.** Open the edit dialog for any resource (person, series, genre, tag, or publisher). Below the name field, a chip input lets you add and remove aliases. Type a name and press Enter to add it; click the × on a chip to remove it.
 
 **Automatic creation on merge.** When you merge two resources, the source resource's name automatically becomes an alias of the target. Any existing aliases on the source transfer to the target as well, so no previously-working name mappings are lost.
 
@@ -119,8 +117,8 @@ This resolution happens transparently in all contexts — library scans, plugin 
 
 ### Aliases in the UI
 
-- **List pages:** Genres, tags, publishers, imprints, and people show aliases as a muted subtitle below the primary name. Series grid cards don't show aliases due to layout constraints.
-- **Detail pages:** All six resource types show aliases below the name in the header section.
+- **List pages:** Genres, tags, publishers, and people show aliases as a muted subtitle below the primary name. Series grid cards don't show aliases due to layout constraints.
+- **Detail pages:** All five resource types show aliases below the name in the header section.
 
 ## Editing Metadata
 
@@ -135,7 +133,7 @@ This resolution happens transparently in all contexts — library scans, plugin 
 **On a file:**
 - Display name
 - Narrators (M4B only)
-- Publisher and imprint
+- Publisher
 - Release date
 - URL
 - Identifiers
@@ -151,7 +149,7 @@ This resolution happens transparently in all contexts — library scans, plugin 
 - Name and sort name
 - [Aliases](#aliases)
 
-**On a genre, tag, publisher, or imprint:**
+**On a genre, tag, or publisher:**
 - Name
 - [Aliases](#aliases)
 
@@ -161,7 +159,7 @@ Shisho automatically generates sort names from display names (e.g., "J.R.R. Tolk
 
 ### Identify Review
 
-When you identify a book against a metadata plugin, the review screen splits the proposed metadata into two sections — **Book** (title, subtitle, authors, series, genres, tags, description) and **File** (cover, name, narrators, publisher, imprint, language, release date, URL, identifiers, abridged). Each row carries a checkbox: only the checked fields are written when you click Apply.
+When you identify a book against a metadata plugin, the review screen splits the proposed metadata into two sections — **Book** (title, subtitle, authors, series, genres, tags, description) and **File** (cover, name, narrators, publisher, language, release date, URL, identifiers, abridged). Each row carries a checkbox: only the checked fields are written when you click Apply.
 
 **Smart defaults at open time** decide which boxes start checked, so most identifies are one click:
 
@@ -195,7 +193,7 @@ Extracted from the OPF package document (`content.opf`):
 
 Extracted from `ComicInfo.xml`:
 
-- **Basic**: title, series, number, summary, publisher, imprint, URL, release date, language (`LanguageISO` field, BCP 47 tag)
+- **Basic**: title, series, number, summary, publisher, URL, release date, language (`LanguageISO` field, BCP 47 tag)
 - **Creators**: writer, penciller, inker, colorist, letterer, cover artist, editor, translator (each as a distinct role)
 - **Categorization**: genres and tags (comma-separated)
 - **Identifiers**: GTIN

@@ -805,35 +805,6 @@ func TestIndexPublisher_IncludesAliases(t *testing.T) {
 	require.Equal(t, 1, count, "Should find publisher by alias 'PRH'")
 }
 
-func TestIndexImprint_IncludesAliases(t *testing.T) {
-	t.Parallel()
-	db := setupTestDB(t)
-	ctx := context.Background()
-
-	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
-	_, err := db.NewInsert().Model(library).Exec(ctx)
-	require.NoError(t, err)
-
-	imprint := &models.Imprint{LibraryID: library.ID, Name: "Del Rey"}
-	_, err = db.NewInsert().Model(imprint).Exec(ctx)
-	require.NoError(t, err)
-
-	insertAlias(t, db, "imprint_aliases", "imprint_id", imprint.ID, library.ID, "DelRey Books")
-
-	svc := NewService(db)
-	err = svc.IndexImprint(ctx, imprint)
-	require.NoError(t, err)
-
-	var count int
-	err = db.NewSelect().TableExpr("imprints_fts").
-		ColumnExpr("COUNT(*)").
-		Where("imprints_fts MATCH ?", `"DelRey"`).
-		Where("library_id = ?", library.ID).
-		Scan(ctx, &count)
-	require.NoError(t, err)
-	require.Equal(t, 1, count, "Should find imprint by alias 'DelRey Books'")
-}
-
 func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
@@ -867,11 +838,6 @@ func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 	_, err = db.NewInsert().Model(publisher).Exec(ctx)
 	require.NoError(t, err)
 	insertAlias(t, db, "publisher_aliases", "publisher_id", publisher.ID, library.ID, "S&S")
-
-	imprint := &models.Imprint{LibraryID: library.ID, Name: "Scribner"}
-	_, err = db.NewInsert().Model(imprint).Exec(ctx)
-	require.NoError(t, err)
-	insertAlias(t, db, "imprint_aliases", "imprint_id", imprint.ID, library.ID, "Scribner Books")
 
 	book := &models.Book{
 		LibraryID: library.ID, Filepath: "/test/dt", Title: "The Gunslinger",
@@ -929,10 +895,4 @@ func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 		Where("publishers_fts MATCH ?", `"S&S"`).Where("library_id = ?", library.ID).Scan(ctx, &pubCount)
 	require.NoError(t, err)
 	require.Equal(t, 1, pubCount, "RebuildAllIndexes should include publisher aliases")
-
-	var impCount int
-	err = db.NewSelect().TableExpr("imprints_fts").ColumnExpr("COUNT(*)").
-		Where("imprints_fts MATCH ?", `"Scribner Books"`).Where("library_id = ?", library.ID).Scan(ctx, &impCount)
-	require.NoError(t, err)
-	require.Equal(t, 1, impCount, "RebuildAllIndexes should include imprint aliases")
 }

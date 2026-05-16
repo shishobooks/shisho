@@ -60,7 +60,7 @@ type OutputGeneratorCap struct {
 var ValidMetadataFields = []string{
 	"title", "subtitle", "authors", "narrators",
 	"series", "seriesNumber", "genres", "tags",
-	"description", "publisher", "imprint", "url",
+	"description", "publisher", "url",
 	"releaseDate", "cover", "identifiers",
 	"language", "abridged",
 }

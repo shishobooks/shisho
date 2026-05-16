@@ -25,7 +25,6 @@ type FileSidecar struct {
 	Narrators   []NarratorMetadata   `json:"narrators,omitempty"`
 	URL         *string              `json:"url,omitempty"`
 	Publisher   *string              `json:"publisher,omitempty"`
-	Imprint     *string              `json:"imprint,omitempty"`
 	ReleaseDate *string              `json:"release_date,omitempty"` // ISO 8601 date string (YYYY-MM-DD)
 	Identifiers []IdentifierMetadata `json:"identifiers,omitempty"`
 	Name        *string              `json:"name,omitempty"`

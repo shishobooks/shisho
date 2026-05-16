@@ -24,7 +24,6 @@ import type {
 } from "@/types";
 
 import { QueryKey as GenresQueryKey } from "./genres";
-import { QueryKey as ImprintsQueryKey } from "./imprints";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
 import { QueryKey as PublishersQueryKey } from "./publishers";
@@ -124,14 +123,11 @@ export const useUpdateFile = () => {
         queryKey: [LibrariesQueryKey.LibraryLanguages],
       });
       // File updates accept entity names; the server creates new narrators
-      // (persons), publishers, or imprints as needed. Invalidate those caches
+      // (persons) or publishers as needed. Invalidate those caches
       // so the newly-created entities show up in admin pages and combobox results.
       queryClient.invalidateQueries({ queryKey: [PeopleQueryKey.ListPeople] });
       queryClient.invalidateQueries({
         queryKey: [PublishersQueryKey.ListPublishers],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [ImprintsQueryKey.ListImprints],
       });
       // Filenames and narrators both feed books_fts — invalidate search.
       queryClient.invalidateQueries({

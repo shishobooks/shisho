@@ -46,7 +46,6 @@ type Fingerprint struct {
 	Identifiers       []FingerprintIdentifier `json:"identifiers,omitempty"`
 	URL               *string                 `json:"url,omitempty"`
 	Publisher         *string                 `json:"publisher,omitempty"`
-	Imprint           *string                 `json:"imprint,omitempty"`
 	ReleaseDate       *time.Time              `json:"release_date,omitempty"`
 	Cover             *FingerprintCover       `json:"cover,omitempty"`
 	CoverPage         *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
@@ -203,9 +202,6 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		fp.Name = file.Name
 		if file.Publisher != nil {
 			fp.Publisher = &file.Publisher.Name
-		}
-		if file.Imprint != nil {
-			fp.Imprint = &file.Imprint.Name
 		}
 		fp.Language = file.Language
 		fp.Abridged = file.Abridged

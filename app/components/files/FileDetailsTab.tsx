@@ -165,21 +165,11 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
           </div>
         )}
 
-      {/* Publisher and Imprint */}
-      {(file.publisher || file.imprint) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          {file.publisher && (
-            <div>
-              <p className="font-semibold">Publisher</p>
-              <p className="text-muted-foreground">{file.publisher.name}</p>
-            </div>
-          )}
-          {file.imprint && (
-            <div>
-              <p className="font-semibold">Imprint</p>
-              <p className="text-muted-foreground">{file.imprint.name}</p>
-            </div>
-          )}
+      {/* Publisher */}
+      {file.publisher && (
+        <div className="text-sm">
+          <p className="font-semibold">Publisher</p>
+          <p className="text-muted-foreground">{file.publisher.name}</p>
         </div>
       )}
 

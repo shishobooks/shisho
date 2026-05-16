@@ -24,9 +24,6 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	if v, ok := fields["publisher"].(string); ok {
 		md.Publisher = v
 	}
-	if v, ok := fields["imprint"].(string); ok {
-		md.Imprint = v
-	}
 	if v, ok := fields["url"].(string); ok {
 		md.URL = v
 	}

@@ -110,7 +110,7 @@ shisho/goodreads-metadata/
 - Invalid field names in `fields` → **load fails**
 
 **Valid metadata fields for enrichers:**
-`title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `imprint`, `url`, `releaseDate`, `cover`, `identifiers`, `language`, `abridged`
+`title`, `subtitle`, `authors`, `narrators`, `series`, `seriesNumber`, `genres`, `tags`, `description`, `publisher`, `url`, `releaseDate`, `cover`, `identifiers`, `language`, `abridged`
 
 **Logical field groupings:**
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
@@ -177,7 +177,6 @@ fileParser: {
       tags: ["epic"],
       description: "...",
       publisher: "Publisher",
-      imprint: "Imprint",
       url: "https://...",
       releaseDate: "2023-06-15T00:00:00Z",  // ISO 8601
       coverMimeType: "image/jpeg",

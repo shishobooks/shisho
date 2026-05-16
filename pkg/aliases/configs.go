@@ -26,9 +26,4 @@ var (
 		ResourceFK:    "publisher_id",
 		ResourceTable: "publishers",
 	}
-	ImprintConfig = ResourceConfig{
-		AliasTable:    "imprint_aliases",
-		ResourceFK:    "imprint_id",
-		ResourceTable: "imprints",
-	}
 )

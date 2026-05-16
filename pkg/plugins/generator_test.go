@@ -313,7 +313,6 @@ func TestBuildFileContext(t *testing.T) {
 			Name:          &name,
 			URL:           &url,
 			Publisher:     &models.Publisher{Name: "My Publisher"},
-			Imprint:       &models.Imprint{Name: "My Imprint"},
 		}
 
 		ctx := BuildFileContext(file)
@@ -325,7 +324,6 @@ func TestBuildFileContext(t *testing.T) {
 		assert.Equal(t, "My Edition", ctx["name"])
 		assert.Equal(t, "https://example.com", ctx["url"])
 		assert.Equal(t, "My Publisher", ctx["publisher"])
-		assert.Equal(t, "My Imprint", ctx["imprint"])
 	})
 
 	t.Run("file with narrators", func(t *testing.T) {

@@ -54,8 +54,6 @@ func isPresent(book *models.Book, file *models.File, field string) bool {
 		return file.CoverImageFilename != nil && *file.CoverImageFilename != ""
 	case FieldPublisher:
 		return file.PublisherID != nil
-	case FieldImprint:
-		return file.ImprintID != nil
 	case FieldIdentifiers:
 		return len(file.Identifiers) > 0
 	case FieldReleaseDate:

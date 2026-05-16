@@ -45,7 +45,6 @@ import { getLanguageName } from "@/constants/languages";
 import {
   useGenreItemCounts,
   useGenreSearch,
-  useImprintSearch,
   usePeopleSearch,
   usePublisherSearch,
   useSeriesSearch,
@@ -119,7 +118,6 @@ type FileFieldKey =
   | "name"
   | "narrators"
   | "publisher"
-  | "imprint"
   | "language"
   | "release_date"
   | "url"
@@ -141,7 +139,6 @@ const FILE_FIELDS: FileFieldKey[] = [
   "name",
   "narrators",
   "publisher",
-  "imprint",
   "language",
   "release_date",
   "url",
@@ -164,7 +161,6 @@ const PLUGIN_FIELD_ALIASES: Record<FieldKey, string[]> = {
   name: ["name"],
   narrators: ["narrators"],
   publisher: ["publisher"],
-  imprint: ["imprint"],
   language: ["language"],
   url: ["url"],
   identifiers: ["identifiers"],
@@ -543,7 +539,6 @@ export function IdentifyReviewForm({
       genres: resolveArray(currentGenres, result.genres ?? []),
       tags: resolveArray(currentTags, result.tags ?? []),
       publisher: resolveScalar(file?.publisher?.name, result.publisher),
-      imprint: resolveScalar(file?.imprint?.name, result.imprint),
       releaseDate: resolveScalar(
         file?.release_date ? file.release_date.split("T")[0] : undefined,
         result.release_date ? result.release_date.split("T")[0] : undefined,
@@ -583,7 +578,6 @@ export function IdentifyReviewForm({
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
   const [publisher, setPublisher] = useState(defaults.publisher.value);
-  const [imprint, setImprint] = useState(defaults.imprint.value);
   const [releaseDate, setReleaseDate] = useState(defaults.releaseDate.value);
   const [url, setUrl] = useState(defaults.url.value);
   const [language, setLanguage] = useState(defaults.language.value);
@@ -713,7 +707,6 @@ export function IdentifyReviewForm({
       name: initialNameStatus,
       narrators: defaults.narrators.status,
       publisher: defaults.publisher.status,
-      imprint: defaults.imprint.status,
       language: defaults.language.status,
       release_date: defaults.releaseDate.status,
       url: defaults.url.status,
@@ -816,7 +809,6 @@ export function IdentifyReviewForm({
       name: scalarStatus(file?.name, name),
       narrators: arrayStatus(currentNarrators, narrators),
       publisher: scalarStatus(file?.publisher?.name, publisher),
-      imprint: scalarStatus(file?.imprint?.name, imprint),
       language: scalarStatus(file?.language, language),
       release_date: scalarStatus(
         file?.release_date ? file.release_date.split("T")[0] : undefined,
@@ -838,7 +830,6 @@ export function IdentifyReviewForm({
     genres,
     tags,
     publisher,
-    imprint,
     releaseDate,
     url,
     language,
@@ -1032,7 +1023,6 @@ export function IdentifyReviewForm({
     setGenres(defaults.genres.value);
     setTags(defaults.tags.value);
     setPublisher(defaults.publisher.value);
-    setImprint(defaults.imprint.value);
     setReleaseDate(defaults.releaseDate.value);
     setUrl(defaults.url.value);
     setLanguage(defaults.language.value);
@@ -1058,7 +1048,6 @@ export function IdentifyReviewForm({
       !equal(genres, defaults.genres.value) ||
       !equal(tags, defaults.tags.value) ||
       publisher !== defaults.publisher.value ||
-      imprint !== defaults.imprint.value ||
       releaseDate !== defaults.releaseDate.value ||
       url !== defaults.url.value ||
       language !== defaults.language.value ||
@@ -1080,7 +1069,6 @@ export function IdentifyReviewForm({
     genres,
     tags,
     publisher,
-    imprint,
     releaseDate,
     url,
     language,
@@ -1117,7 +1105,6 @@ export function IdentifyReviewForm({
     if (decisions.genres) fields.genres = genres;
     if (decisions.tags) fields.tags = tags;
     if (decisions.publisher) fields.publisher = publisher;
-    if (decisions.imprint) fields.imprint = imprint;
     if (decisions.release_date) fields.release_date = releaseDate;
     if (decisions.url) fields.url = url;
     if (decisions.language) fields.language = language;
@@ -1857,54 +1844,6 @@ export function IdentifyReviewForm({
                         aria-label="Clear publisher"
                         className="shrink-0 cursor-pointer"
                         onClick={() => setPublisher("")}
-                        size="icon"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </FieldRow>
-
-                {/* Imprint */}
-                <FieldRow
-                  currentValue={file?.imprint?.name || undefined}
-                  decision={decisions.imprint}
-                  disabled={isDisabled("imprint")}
-                  hidden={!isRowVisible("imprint")}
-                  label={formatMetadataFieldLabel("imprint")}
-                  onDecisionChange={(v) => setDecision("imprint", v)}
-                  status={fieldStatus.imprint}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <EntityCombobox<NameOption>
-                        getOptionDescription={(p) => {
-                          const c = (p as NameWithFileCount).file_count;
-                          return c != null
-                            ? `${c} ${c === 1 ? "file" : "files"}`
-                            : undefined;
-                        }}
-                        getOptionKey={(p) => p.name}
-                        getOptionLabel={(p) => p.name}
-                        hook={function useImprintOptions(q) {
-                          return useImprintSearch(book.library_id, true, q);
-                        }}
-                        label="Imprint"
-                        onChange={(next) =>
-                          setImprint(
-                            "__create" in next ? next.__create : next.name,
-                          )
-                        }
-                        value={imprint ? { name: imprint } : null}
-                      />
-                    </div>
-                    {imprint && !isDisabled("imprint") && (
-                      <Button
-                        aria-label="Clear imprint"
-                        className="shrink-0 cursor-pointer"
-                        onClick={() => setImprint("")}
                         size="icon"
                         type="button"
                         variant="ghost"

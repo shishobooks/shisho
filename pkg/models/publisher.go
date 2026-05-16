@@ -14,6 +14,9 @@ type Publisher struct {
 	UpdatedAt time.Time         `json:"updated_at"`
 	LibraryID int               `bun:",nullzero" json:"library_id"`
 	Name      string            `bun:",nullzero" json:"name"`
+	ParentID  *int              `json:"parent_id"`
+	Parent    *Publisher        `bun:"rel:belongs-to,join:parent_id=id" json:"parent,omitempty" tstype:"Publisher"`
+	Children  []*Publisher      `bun:"rel:has-many,join:id=parent_id" json:"children,omitempty" tstype:"Publisher[]"`
 	Aliases   []*PublisherAlias `bun:"rel:has-many,join:id=publisher_id" json:"aliases" tstype:"PublisherAlias[]"`
 	FileCount int               `bun:",scanonly" json:"file_count"`
 }

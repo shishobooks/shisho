@@ -26,7 +26,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/identifiers"
-	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -75,7 +74,6 @@ type handler struct {
 	genreService       *genres.Service
 	tagService         *tags.Service
 	publisherService   *publishers.Service
-	imprintService     *imprints.Service
 	listsService       *lists.Service
 	settingsService    *settings.Service
 	appSettingsService *appsettings.Service
@@ -776,7 +774,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the file with all relations (including Publisher/Imprint for change detection)
+	// Fetch the file with all relations (including Publisher for change detection)
 	file, err := h.bookService.RetrieveFileWithRelations(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
@@ -853,12 +851,10 @@ func (h *handler) updateFile(c echo.Context) error {
 			file.AudiobookBitrateBps = nil
 			opts.Columns = append(opts.Columns, "audiobook_duration_seconds", "audiobook_bitrate_bps")
 
-			// Clear publisher/imprint
+			// Clear publisher
 			file.PublisherID = nil
 			file.PublisherSource = nil
-			file.ImprintID = nil
-			file.ImprintSource = nil
-			opts.Columns = append(opts.Columns, "publisher_id", "publisher_source", "imprint_id", "imprint_source")
+			opts.Columns = append(opts.Columns, "publisher_id", "publisher_source")
 
 			// Clear release date
 			file.ReleaseDate = nil
@@ -1030,33 +1026,6 @@ func (h *handler) updateFile(c echo.Context) error {
 			}
 			file.PublisherSource = strPtr(models.DataSourceManual)
 			opts.Columns = append(opts.Columns, "publisher_id", "publisher_source")
-		}
-	}
-
-	// Update imprint
-	if params.Imprint != nil {
-		currentImprint := ""
-		if file.Imprint != nil {
-			currentImprint = file.Imprint.Name
-		}
-		if *params.Imprint != currentImprint {
-			if *params.Imprint == "" {
-				file.ImprintID = nil
-				file.Imprint = nil
-			} else {
-				imprint, err := h.imprintService.FindOrCreateImprint(ctx, *params.Imprint, file.LibraryID)
-				if err != nil {
-					log.Error("failed to find/create imprint", logger.Data{"imprint": *params.Imprint, "error": err.Error()})
-				} else {
-					file.ImprintID = &imprint.ID
-					file.Imprint = imprint
-					if err := h.searchService.IndexImprint(ctx, imprint); err != nil {
-						log.Warn("failed to update search index for imprint", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
-					}
-				}
-			}
-			file.ImprintSource = strPtr(models.DataSourceManual)
-			opts.Columns = append(opts.Columns, "imprint_id", "imprint_source")
 		}
 	}
 
@@ -2526,16 +2495,6 @@ func (h *handler) deleteBook(c echo.Context) error {
 			log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err.Error()})
 		}
 	}
-	orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
-	if err != nil {
-		log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err.Error()})
-	}
-	for _, impID := range orphanedImprintIDs {
-		if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
-			log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err.Error()})
-		}
-	}
-
 	return c.JSON(http.StatusOK, DeleteBookResponse{
 		FilesDeleted: result.FilesDeleted,
 	})
@@ -2637,15 +2596,6 @@ func (h *handler) deleteFile(c echo.Context) error {
 		for _, pubID := range orphanedPublisherIDs {
 			if err := h.searchService.DeleteFromPublisherIndex(ctx, pubID); err != nil {
 				log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err})
-			}
-		}
-		orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
-		if err != nil {
-			log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err})
-		}
-		for _, impID := range orphanedImprintIDs {
-			if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
-				log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err})
 			}
 		}
 	}
@@ -2768,16 +2718,6 @@ func (h *handler) deleteBooks(c echo.Context) error {
 			log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err.Error()})
 		}
 	}
-	orphanedImprintIDs, err := h.imprintService.CleanupOrphanedImprints(ctx)
-	if err != nil {
-		log.Warn("failed to cleanup orphaned imprints", logger.Data{"error": err.Error()})
-	}
-	for _, impID := range orphanedImprintIDs {
-		if err := h.searchService.DeleteFromImprintIndex(ctx, impID); err != nil {
-			log.Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": impID, "error": err.Error()})
-		}
-	}
-
 	return c.JSON(http.StatusOK, DeleteBooksResponse{
 		BooksDeleted: result.BooksDeleted,
 		FilesDeleted: result.FilesDeleted,

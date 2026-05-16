@@ -191,16 +191,14 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		url = comicInfo.Web
 	}
 
-	// Extract publisher
+	// Extract publisher — prefer Imprint over Publisher when both present (more specific)
 	var publisher string
-	if comicInfo != nil && comicInfo.Publisher != "" {
-		publisher = comicInfo.Publisher
-	}
-
-	// Extract imprint
-	var imprint string
-	if comicInfo != nil && comicInfo.Imprint != "" {
-		imprint = comicInfo.Imprint
+	if comicInfo != nil {
+		if comicInfo.Imprint != "" {
+			publisher = comicInfo.Imprint
+		} else if comicInfo.Publisher != "" {
+			publisher = comicInfo.Publisher
+		}
 	}
 
 	// Extract release date from Year/Month/Day
@@ -263,7 +261,6 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Tags:          tags,
 		Description:   description,
 		Publisher:     publisher,
-		Imprint:       imprint,
 		URL:           url,
 		ReleaseDate:   releaseDate,
 		Language:      language,
