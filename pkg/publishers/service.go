@@ -286,17 +286,27 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 			return errors.WithStack(err)
 		}
 
-		// Re-parent children of source to target
+		// Re-parent children of source to target (exclude target itself to avoid self-reference)
 		_, err = tx.NewUpdate().
 			Model((*models.Publisher)(nil)).
 			Set("parent_id = ?", targetID).
-			Where("parent_id = ?", sourceID).
+			Where("parent_id = ? AND id != ?", sourceID, targetID).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		// If source was a child of target, clear that to avoid self-reference after merge
+		// If target was a child of source, clear target's parent_id to avoid dangling reference
+		_, err = tx.NewUpdate().
+			Model((*models.Publisher)(nil)).
+			Set("parent_id = NULL").
+			Where("id = ? AND parent_id = ?", targetID, sourceID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// If source was a child of target, clear that to avoid issues during deletion
 		_, err = tx.NewUpdate().
 			Model((*models.Publisher)(nil)).
 			Set("parent_id = NULL").
@@ -320,13 +330,16 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 }
 
 // CleanupOrphanedPublishers deletes publishers with no file associations and
-// returns the IDs of deleted publishers. Callers must pass the returned IDs to
-// searchService.DeleteFromPublisherIndex to keep publishers_fts in sync.
+// no children, returning the IDs of deleted publishers. Callers must pass the
+// returned IDs to searchService.DeleteFromPublisherIndex to keep publishers_fts
+// in sync. Publishers that serve as parents in the hierarchy are preserved even
+// if they have no direct file associations.
 func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) ([]int, error) {
 	deletedIDs := []int{}
 	err := svc.db.NewDelete().
 		Model((*models.Publisher)(nil)).
 		Where("id NOT IN (SELECT DISTINCT publisher_id FROM files WHERE publisher_id IS NOT NULL)").
+		Where("id NOT IN (SELECT DISTINCT parent_id FROM publishers WHERE parent_id IS NOT NULL)").
 		Returning("id").
 		Scan(ctx, &deletedIDs)
 	if err != nil {
@@ -433,6 +446,7 @@ func (svc *Service) GetAncestors(ctx context.Context, publisherID int) ([]*model
 func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]int, error) {
 	var descendants []int
 	queue := []int{publisherID}
+	visited := map[int]bool{publisherID: true}
 
 	for len(queue) > 0 {
 		currentID := queue[0]
@@ -447,8 +461,14 @@ func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]in
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-		descendants = append(descendants, childIDs...)
-		queue = append(queue, childIDs...)
+		for _, childID := range childIDs {
+			if visited[childID] {
+				continue // Safety: prevent infinite loop on corrupt circular data
+			}
+			visited[childID] = true
+			descendants = append(descendants, childID)
+			queue = append(queue, childID)
+		}
 	}
 
 	return descendants, nil

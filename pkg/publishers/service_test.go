@@ -354,6 +354,90 @@ func TestListPublishers_ExcludeIDs(t *testing.T) {
 	assert.Equal(t, "B", results[0].Name)
 }
 
+func TestMergePublishers_TargetIsChildOfSource_NoSelfReference(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create hierarchy: source -> target (target is child of source)
+	source := &models.Publisher{LibraryID: lib.ID, Name: "Source"}
+	err := svc.CreatePublisher(ctx, source)
+	require.NoError(t, err)
+
+	target := &models.Publisher{LibraryID: lib.ID, Name: "Target", ParentID: &source.ID}
+	err = svc.CreatePublisher(ctx, target)
+	require.NoError(t, err)
+
+	// Also give source another child to verify it gets re-parented to target
+	sibling := &models.Publisher{LibraryID: lib.ID, Name: "Sibling", ParentID: &source.ID}
+	err = svc.CreatePublisher(ctx, sibling)
+	require.NoError(t, err)
+
+	// Merge source into target
+	err = svc.MergePublishers(ctx, target.ID, source.ID)
+	require.NoError(t, err)
+
+	// Target must NOT have a self-reference (parent_id must not be target.ID)
+	updated, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &target.ID})
+	require.NoError(t, err)
+	if updated.ParentID != nil {
+		assert.NotEqual(t, target.ID, *updated.ParentID, "target must not have self-reference")
+	}
+	// Target's parent should be nil (it was child of source, source is deleted)
+	assert.Nil(t, updated.ParentID, "target parent_id should be cleared since source is deleted")
+
+	// Sibling should now be re-parented to target
+	updatedSibling, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &sibling.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updatedSibling.ParentID)
+	assert.Equal(t, target.ID, *updatedSibling.ParentID, "sibling should be re-parented to target")
+
+	// Source should be deleted
+	_, err = svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &source.ID})
+	require.Error(t, err)
+}
+
+func TestCleanupOrphanedPublishers_PreservesParents(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create a parent publisher with no files but with a child
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	err := svc.CreatePublisher(ctx, parent)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &parent.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	// Create a truly orphaned publisher (no files, no children)
+	orphan := &models.Publisher{LibraryID: lib.ID, Name: "Orphan"}
+	err = svc.CreatePublisher(ctx, orphan)
+	require.NoError(t, err)
+
+	// Run cleanup
+	deletedIDs, err := svc.CleanupOrphanedPublishers(ctx)
+	require.NoError(t, err)
+
+	// Orphan and child (no files, no children) should be deleted
+	assert.Contains(t, deletedIDs, orphan.ID, "orphan with no files and no children should be deleted")
+	assert.Contains(t, deletedIDs, child.ID, "child with no files and no children should be deleted")
+
+	// Parent should be preserved because it has a child
+	assert.NotContains(t, deletedIDs, parent.ID, "parent with children should be preserved")
+
+	// Verify parent still exists
+	_, err = svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &parent.ID})
+	require.NoError(t, err)
+}
+
 func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

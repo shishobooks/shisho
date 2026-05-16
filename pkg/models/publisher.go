@@ -13,7 +13,6 @@ type Publisher struct {
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
 	LibraryID int               `bun:",nullzero" json:"library_id"`
-	ParentID  *int              `json:"parent_id"`
 	Name      string            `bun:",nullzero" json:"name"`
 	ParentID  *int              `json:"parent_id"`
 	Parent    *Publisher        `bun:"rel:belongs-to,join:parent_id=id" json:"parent,omitempty" tstype:"Publisher"`

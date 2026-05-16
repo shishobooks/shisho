@@ -136,6 +136,7 @@ export function useParentPublisherSearch(
   }));
   return { data: adapted, isLoading };
 }
+
 export function useGenreSearch(
   libraryId: number | undefined,
   enabled: boolean,
