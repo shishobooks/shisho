@@ -33,6 +33,7 @@ func (h *handler) getUserSettings(c echo.Context) error {
 		EpubTheme:    settings.EpubTheme,
 		EpubFlow:     settings.EpubFlow,
 		GallerySize:  settings.GallerySize,
+		HideChrome:   settings.ViewerHideChrome,
 	})
 }
 
@@ -55,7 +56,7 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		return errcodes.ValidationError("preload_count must be between 1 and 10")
 	}
 	if payload.FitMode != nil && !IsValidFitMode(*payload.FitMode) {
-		return errcodes.ValidationError("fit_mode must be 'fit-height' or 'original'")
+		return errcodes.ValidationError("fit_mode must be 'fit-height' or 'fit-width'")
 	}
 	if payload.EpubFontSize != nil && (*payload.EpubFontSize < 50 || *payload.EpubFontSize > 200) {
 		return errcodes.ValidationError("viewer_epub_font_size must be between 50 and 200")
@@ -83,5 +84,6 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		EpubTheme:    settings.EpubTheme,
 		EpubFlow:     settings.EpubFlow,
 		GallerySize:  settings.GallerySize,
+		HideChrome:   settings.ViewerHideChrome,
 	})
 }

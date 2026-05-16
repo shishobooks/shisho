@@ -14,13 +14,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { useEpubBlob } from "@/hooks/queries/epub";
 import {
   useUpdateUserSettings,
   useUserSettings,
   type UpdateUserSettingsVariables,
 } from "@/hooks/queries/settings";
+import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
 
 import "@/libraries/foliate/view.js";
@@ -75,6 +78,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   const fontSize = settings?.viewer_epub_font_size ?? 100;
   const theme = settings?.viewer_epub_theme ?? "light";
   const flow = settings?.viewer_epub_flow ?? "paginated";
+  const hideChrome = settings?.viewer_hide_chrome ?? false;
+
+  const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
 
   // Local draft state lets the slider thumb and label update live while the
   // user drags, without firing a PUT on every tick. We only commit to the API
@@ -314,7 +320,14 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
-      <header className="flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header
+        className={cn(
+          "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          hideChrome &&
+            "fixed top-0 inset-x-0 z-20 transition-transform duration-300",
+          hideChrome && !chromeVisible && "-translate-y-full",
+        )}
+      >
         <div className="flex items-center gap-2">
           {toc.length > 0 && (
             <select
@@ -387,13 +400,31 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                     ))}
                   </div>
                 </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium" htmlFor="hide-chrome">
+                    Auto-hide controls
+                  </label>
+                  <Switch
+                    checked={hideChrome}
+                    disabled={!settingsReady}
+                    id="hide-chrome"
+                    onCheckedChange={(checked) =>
+                      commitSettings({ viewer_hide_chrome: checked })
+                    }
+                  />
+                </div>
               </div>
             </PopoverContent>
           </Popover>
         </div>
       </header>
 
-      <main className="flex-1 relative bg-background">
+      <main
+        className={cn(
+          "relative bg-background",
+          hideChrome ? "fixed inset-0" : "flex-1",
+        )}
+      >
         {(isLoading || !blob || !bookReady) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background z-20">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -419,6 +450,16 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
           variant="ghost"
         />
 
+        {/* Center tap zone: toggle chrome on mobile */}
+        {hideChrome && (
+          <Button
+            aria-label="Toggle controls"
+            className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
+            onClick={toggleChrome}
+            variant="ghost"
+          />
+        )}
+
         <foliate-view
           ref={(el) => {
             viewRef.current = el;
@@ -431,7 +472,14 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         />
       </main>
 
-      <footer className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <footer
+        className={cn(
+          "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          hideChrome &&
+            "fixed bottom-0 inset-x-0 z-20 transition-transform duration-300",
+          hideChrome && !chromeVisible && "translate-y-full",
+        )}
+      >
         <div className="px-4 pt-3">
           <div
             className="relative h-1.5 bg-muted rounded-full cursor-pointer"
