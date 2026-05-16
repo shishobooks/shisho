@@ -24,7 +24,6 @@ type Metadata struct {
 	Tags          []string                     // from ----:com.shisho:tags freeform atom
 	Description   string                       // from desc
 	Publisher     string                       // from ©pub
-	Imprint       string                       // from com.shisho:imprint freeform
 	URL           string                       // from com.shisho:url freeform
 	ReleaseDate   *time.Time                   // parsed from rldt or ©day
 	Comment       string                       // from ©cmt
@@ -151,10 +150,6 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 		// Extract tags from freeform shisho:tags atom (comma-separated)
 		if tagsStr, ok := raw.freeform["com.shisho:tags"]; ok {
 			meta.Tags = splitMultiValue(tagsStr)
-		}
-		// Extract imprint from freeform
-		if imp, ok := raw.freeform["com.shisho:imprint"]; ok {
-			meta.Imprint = imp
 		}
 		// Extract URL from freeform
 		if url, ok := raw.freeform["com.shisho:url"]; ok {

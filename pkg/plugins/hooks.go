@@ -406,7 +406,6 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 			Publisher:   getStringField(itemObj, "publisher"),
 			Subtitle:    getStringField(itemObj, "subtitle"),
 			Series:      getStringField(itemObj, "series"),
-			Imprint:     getStringField(itemObj, "imprint"),
 			URL:         getStringField(itemObj, "url"),
 			CoverURL:    getStringField(itemObj, "coverUrl"),
 			PluginScope: pluginScope,
@@ -523,7 +522,6 @@ func parseParsedMetadata(vm *goja.Runtime, val goja.Value) (*mediafile.ParsedMet
 	md.Series = getStringField(obj, "series")
 	md.Description = htmlutil.StripTags(getStringField(obj, "description")) // strip HTML for clean display
 	md.Publisher = getStringField(obj, "publisher")
-	md.Imprint = getStringField(obj, "imprint")
 	md.URL = getStringField(obj, "url")
 	md.CoverMimeType = getStringField(obj, "coverMimeType")
 	md.CoverURL = getStringField(obj, "coverUrl")

@@ -28,7 +28,6 @@ const ENTITY_LABELS: Record<EntityType, string> = {
   genre: "Genre",
   tag: "Tag",
   publisher: "Publisher",
-  imprint: "Imprint",
 };
 
 export function MetadataDeleteDialog({

@@ -194,7 +194,7 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 | Resource | Description | Used For |
 |----------|-------------|----------|
 | `libraries` | Library management | Create/update libraries, filesystem operations |
-| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers, imprints |
+| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers |
 | `people` | Author/narrator management | Create/update/delete/merge people |
 | `series` | Series management | Update/delete/merge series |
 | `users` | User administration | Create users, manage roles, reset passwords |
@@ -369,13 +369,13 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 
 | Function | Required Relations |
 |----------|-------------------|
-| `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Imprint, Chapters |
+| `WriteFileSidecarFromModel()` | Narrators, Identifiers, Publisher, Chapters |
 | `WriteBookSidecarFromModel()` | Authors.Person, BookSeries.Series, BookGenres.Genre, BookTags.Tag |
 | `ComputeFingerprint()` | Narrators, Identifiers |
 
 **Use the right retrieval method:**
 - `RetrieveFile()` - File with Book, Identifiers, and Narrators. Use for most lookups.
-- `RetrieveFileWithRelations()` - Complete file with all relations (adds Publisher, Imprint, Chapters). **Use this for sidecar writing or fingerprinting.**
+- `RetrieveFileWithRelations()` - Complete file with all relations (adds Publisher, Chapters). **Use this for sidecar writing or fingerprinting.**
 - Book queries (`RetrieveBook`) - Already include `Files.Identifiers`, `Files.Narrators`, etc.
 
 **Common mistake**: Retrieving a file with `RetrieveFile()` then passing it to `WriteFileSidecarFromModel()` or `ComputeFingerprint()`. The sidecar/fingerprint will be missing data because relations aren't loaded.
@@ -449,7 +449,7 @@ if fieldChanged && library.OrganizeFileStructure {
 
 ## Adding New Entity Types
 
-When adding a new entity type (like Publisher, Imprint, Genre, Tag) that files or books reference:
+When adding a new entity type (like Publisher, Genre, Tag) that files or books reference:
 
 1. Create model in `pkg/models/` with appropriate fields and Bun struct tags
 2. Create service in `pkg/{entity}/service.go` following the pattern from `pkg/genres/service.go`:
@@ -464,7 +464,7 @@ The app uses SQLite Full-Text Search (FTS5) for fast searching.
 
 **Key files:**
 - `pkg/search/service.go` - Search service with index methods
-- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`, `publishers_fts`, `imprints_fts`
+- FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`, `publishers_fts`
 
 **IMPORTANT - Search Index Updates:**
 

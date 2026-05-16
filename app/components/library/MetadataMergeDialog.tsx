@@ -51,7 +51,6 @@ const ENTITY_PLURALS: Record<EntityType, string> = {
   genre: "genres",
   tag: "tags",
   publisher: "publishers",
-  imprint: "imprints",
 };
 
 export function MetadataMergeDialog({

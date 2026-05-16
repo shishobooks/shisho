@@ -30,7 +30,6 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Tags:          meta.Tags,
 		Description:   meta.Description,
 		Publisher:     meta.Publisher,
-		Imprint:       meta.Imprint,
 		URL:           meta.URL,
 		ReleaseDate:   meta.ReleaseDate,
 		CoverMimeType: meta.CoverMimeType,

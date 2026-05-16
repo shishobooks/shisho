@@ -19,7 +19,6 @@ func TestParseSearchResponse_AllFields(t *testing.T) {
 			subtitle: "A Subtitle",
 			description: "A detailed description",
 			publisher: "Big Publisher",
-			imprint: "Imprint Name",
 			url: "https://example.com/book",
 			coverUrl: "https://example.com/cover.jpg",
 			series: "Epic Series",
@@ -50,7 +49,6 @@ func TestParseSearchResponse_AllFields(t *testing.T) {
 	assert.Equal(t, "A Subtitle", md.Subtitle)
 	assert.Equal(t, "A detailed description", md.Description)
 	assert.Equal(t, "Big Publisher", md.Publisher)
-	assert.Equal(t, "Imprint Name", md.Imprint)
 	assert.Equal(t, "https://example.com/book", md.URL)
 	assert.Equal(t, "https://example.com/cover.jpg", md.CoverURL)
 	assert.Equal(t, "Epic Series", md.Series)

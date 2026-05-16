@@ -55,7 +55,6 @@ vi.mock("@/hooks/queries/books", () => ({
 vi.mock("@/hooks/queries/entity-search", () => ({
   usePeopleSearch: () => ({ data: [], isLoading: false }),
   usePublisherSearch: () => ({ data: [], isLoading: false }),
-  useImprintSearch: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock("@/hooks/queries/plugins", () => ({

@@ -2542,63 +2542,6 @@ func TestScanFileCore_FileLevelFields_Publisher(t *testing.T) {
 	assert.Equal(t, models.DataSourceEPUBMetadata, *updatedFile.PublisherSource)
 }
 
-// TestScanFileCore_FileLevelFields_Imprint verifies that imprint metadata is extracted
-// from files and stored on the file record (regression test for file-level fields).
-func TestScanFileCore_FileLevelFields_Imprint(t *testing.T) {
-	t.Parallel()
-	tc := newTestContext(t)
-
-	// Setup: Create library
-	libraryPath := testgen.TempLibraryDir(t)
-	tc.createLibrary([]string{libraryPath})
-
-	// Create a book
-	book := &models.Book{
-		LibraryID:    1,
-		Filepath:     libraryPath,
-		Title:        "Test Book",
-		TitleSource:  models.DataSourceFilepath,
-		SortTitle:    "Test Book",
-		AuthorSource: models.DataSourceFilepath,
-	}
-	err := tc.bookService.CreateBook(tc.ctx, book)
-	require.NoError(t, err)
-
-	// Create file for the book
-	file := &models.File{
-		LibraryID:     1,
-		BookID:        book.ID,
-		Filepath:      filepath.Join(libraryPath, "test.epub"),
-		FileType:      models.FileTypeEPUB,
-		FilesizeBytes: 1000,
-	}
-	err = tc.bookService.CreateFile(tc.ctx, file)
-	require.NoError(t, err)
-
-	// Metadata with imprint
-	metadata := &mediafile.ParsedMetadata{
-		Imprint:    "Test Imprint",
-		DataSource: models.DataSourceEPUBMetadata,
-	}
-
-	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
-
-	// Should succeed
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Reload file to verify imprint update
-	updatedFile, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, file.ID)
-	require.NoError(t, err)
-
-	// File should have imprint set
-	require.NotNil(t, updatedFile.Imprint)
-	assert.Equal(t, "Test Imprint", updatedFile.Imprint.Name)
-	require.NotNil(t, updatedFile.ImprintSource)
-	assert.Equal(t, models.DataSourceEPUBMetadata, *updatedFile.ImprintSource)
-}
-
 // TestScanFileCore_FileLevelFields_ReleaseDate verifies that release date metadata is extracted
 // from files and stored on the file record (regression test for file-level fields).
 func TestScanFileCore_FileLevelFields_ReleaseDate(t *testing.T) {
@@ -3174,7 +3117,7 @@ func TestScanBook_CoverRecovery_RefreshMode_PDF(t *testing.T) {
 }
 
 // TestScanFileCore_SidecarReading_FileLevelFields verifies that file sidecar files
-// are read and their values (publisher, imprint, release date) override filepath-sourced
+// are read and their values (publisher, release date) override filepath-sourced
 // data (regression test for sidecar reading of file-level fields).
 func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
 	t.Parallel()
@@ -3211,9 +3154,9 @@ func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
 	err = tc.bookService.CreateFile(tc.ctx, file)
 	require.NoError(t, err)
 
-	// Create file sidecar with publisher, imprint, and release date
+	// Create file sidecar with publisher and release date
 	fileSidecarPath := filePath + ".metadata.json"
-	sidecarContent := `{"version":1,"publisher":"Sidecar Publisher","imprint":"Sidecar Imprint","release_date":"2024-12-25"}`
+	sidecarContent := `{"version":1,"publisher":"Sidecar Publisher","release_date":"2024-12-25"}`
 	err = os.WriteFile(fileSidecarPath, []byte(sidecarContent), 0644)
 	require.NoError(t, err)
 
@@ -3236,10 +3179,6 @@ func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
 	// Publisher should be set from sidecar
 	require.NotNil(t, updatedFile.Publisher)
 	assert.Equal(t, "Sidecar Publisher", updatedFile.Publisher.Name)
-
-	// Imprint should be set from sidecar
-	require.NotNil(t, updatedFile.Imprint)
-	assert.Equal(t, "Sidecar Imprint", updatedFile.Imprint.Name)
 
 	// Release date should be set from sidecar
 	require.NotNil(t, updatedFile.ReleaseDate)
@@ -4937,8 +4876,6 @@ func TestResetBookFileState_ClearsBookMetadata(t *testing.T) {
 	assert.Nil(t, file.ReleaseDateSource, "release_date_source should be nil")
 	assert.Nil(t, file.PublisherID, "publisher_id should be nil")
 	assert.Nil(t, file.PublisherSource, "publisher_source should be nil")
-	assert.Nil(t, file.ImprintID, "imprint_id should be nil")
-	assert.Nil(t, file.ImprintSource, "imprint_source should be nil")
 	assert.Nil(t, file.ChapterSource, "chapter_source should be nil")
 	assert.Nil(t, file.NarratorSource, "narrator_source should be nil")
 	assert.Nil(t, file.IdentifierSource, "identifier_source should be nil")

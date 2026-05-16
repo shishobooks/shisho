@@ -76,7 +76,6 @@ Custom metadata uses freeform atoms with namespace:
 ----:com.apple.iTunes:SERIES       # Series name (preferred)
 ----:com.apple.iTunes:SERIES-PART  # Series number (preferred)
 ----:com.shisho:tags               # Tags (comma-separated)
-----:com.shisho:imprint            # Imprint name
 ----:com.shisho:url                # URL
 ----:com.pilabor.tone:LANGUAGE     # Language (BCP 47 tag, preferred)
 ----:com.apple.iTunes:LANGUAGE     # Language (BCP 47 tag, fallback)
@@ -117,7 +116,6 @@ Freeform atom structure:
 | Tags | `com.shisho:tags` | Freeform atom, comma-separated |
 | Description | `desc` or `©cmt` | desc preferred |
 | Publisher | `©pub` | Direct extraction |
-| Imprint | `com.shisho:imprint` | Freeform atom |
 | URL | `com.shisho:url` | Freeform atom |
 | Release Date | `rldt` or `©day` | ISO 8601 or year |
 | Duration | `mvhd` box | Calculated from timescale |
@@ -177,7 +175,6 @@ Uses `mp4.WriteToFile()` for atomic writes.
 | Description | `desc` | book.Description |
 | Comment | `©cmt` | book.Description (mirrored from desc) |
 | Publisher | `©pub` | file.Publisher.Name |
-| Imprint | `com.shisho:imprint` | file.Imprint.Name |
 | URL | `com.shisho:url` | file.URL |
 | Cover | `covr` | Image with type flag (13=JPEG, 14=PNG) |
 | Media Type | `stik` | Always `2` (audiobook) |
@@ -209,7 +206,6 @@ type Metadata struct {
     Copyright    string
     Encoder      string
     Publisher    string
-    Imprint      string
     URL          string
     Authors      []ParsedAuthor
     Narrators    []string
@@ -322,7 +318,6 @@ type FileSidecar struct {
     Narrators   []NarratorMetadata  // Audio-specific
     URL         *string
     Publisher   *string
-    Imprint     *string
     ReleaseDate *string             // ISO 8601
 }
 ```

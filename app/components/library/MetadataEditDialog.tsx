@@ -19,13 +19,7 @@ import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { DataSourceManual, type DataSource } from "@/types";
 import { forPerson, forTitle } from "@/utils/sortname";
 
-export type EntityType =
-  | "person"
-  | "series"
-  | "genre"
-  | "tag"
-  | "publisher"
-  | "imprint";
+export type EntityType = "person" | "series" | "genre" | "tag" | "publisher";
 
 interface MetadataEditDialogProps {
   open: boolean;
@@ -49,7 +43,6 @@ const ENTITY_LABELS: Record<EntityType, string> = {
   genre: "Genre",
   tag: "Tag",
   publisher: "Publisher",
-  imprint: "Imprint",
 };
 
 export function MetadataEditDialog({

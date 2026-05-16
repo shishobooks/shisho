@@ -55,13 +55,3 @@ type PublisherAlias struct {
 	Name        string    `bun:",nullzero" json:"name"`
 	LibraryID   int       `bun:",nullzero" json:"library_id"`
 }
-
-type ImprintAlias struct {
-	bun.BaseModel `bun:"table:imprint_aliases,alias:impa" tstype:"-"`
-
-	ID        int       `bun:",pk,nullzero" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	ImprintID int       `bun:",nullzero" json:"imprint_id"`
-	Name      string    `bun:",nullzero" json:"name"`
-	LibraryID int       `bun:",nullzero" json:"library_id"`
-}

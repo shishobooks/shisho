@@ -581,7 +581,6 @@ type mockAliasLister struct {
 	tagAliases       map[int][]string
 	seriesAliases    map[int][]string
 	publisherAliases map[int][]string
-	imprintAliases   map[int][]string
 }
 
 func (m *mockAliasLister) ListPersonAliases(_ context.Context, personID int) ([]string, error) {
@@ -612,12 +611,6 @@ func (m *mockAliasLister) ListPublisherAliases(_ context.Context, publisherID in
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.publisherAliases[publisherID], nil
-}
-
-func (m *mockAliasLister) ListImprintAliases(_ context.Context, imprintID int) ([]string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.imprintAliases[imprintID], nil
 }
 
 // aliasAwarePersonFinder always resolves to a fixed canonical person,
@@ -845,10 +838,6 @@ func (e *errorAliasLister) ListSeriesAliases(context.Context, int) ([]string, er
 func (e *errorAliasLister) ListPublisherAliases(context.Context, int) ([]string, error) {
 	return nil, errors.New("db error")
 }
-func (e *errorAliasLister) ListImprintAliases(context.Context, int) ([]string, error) {
-	return nil, errors.New("db error")
-}
-
 func TestScanCache_AliasPrePopulation_ListError(t *testing.T) {
 	t.Parallel()
 

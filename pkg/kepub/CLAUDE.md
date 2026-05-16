@@ -196,7 +196,6 @@ type CBZMetadata struct {
     Tags        []string
     URL         *string
     Publisher   *string
-    Imprint     *string
     ReleaseDate *time.Time
 }
 
@@ -256,7 +255,7 @@ type CBZSeries struct {
 - `<meta property="belongs-to-collection">` for series
 - `<dc:subject>` for each genre
 - `<meta name="calibre:tags">` for tags (comma-separated)
-- `<meta name="shisho:url">` and `<meta name="shisho:imprint">` for custom fields
+- `<meta name="shisho:url">` for custom fields
 
 ### XHTML Page Structure (KCC-style)
 

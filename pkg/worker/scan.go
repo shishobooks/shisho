@@ -570,7 +570,6 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			"tags_cached":       cache.TagCount(),
 			"series_cached":     cache.SeriesCount(),
 			"publishers_cached": cache.PublisherCount(),
-			"imprints_cached":   cache.ImprintCount(),
 		})
 
 		// If we were cancelled mid-scan, return now rather than running orphan

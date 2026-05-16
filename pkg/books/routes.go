@@ -8,7 +8,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/genres"
-	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -40,7 +39,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	genreService := genres.NewService(db)
 	tagService := tags.NewService(db)
 	publisherService := publishers.NewService(db)
-	imprintService := imprints.NewService(db)
 	listsService := lists.NewService(db)
 	settingsService := settings.NewService(db)
 	pageCache := cbzpages.NewCache(cfg.CacheDir)
@@ -55,7 +53,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		genreService:       genreService,
 		tagService:         tagService,
 		publisherService:   publisherService,
-		imprintService:     imprintService,
 		listsService:       listsService,
 		settingsService:    settingsService,
 		appSettingsService: appSettingsSvc,

@@ -9,7 +9,6 @@ import {
   useGenresList,
   type ListGenresData,
 } from "./genres";
-import { useImprintsList } from "./imprints";
 import { usePeopleList, type PersonWithCounts } from "./people";
 import { usePublishersList } from "./publishers";
 import { useSeriesList } from "./series";
@@ -105,26 +104,6 @@ export function usePublisherSearch(
   const adapted = data?.items.map((p) => ({
     name: p.name,
     file_count: p.file_count,
-  }));
-  return { data: adapted, isLoading };
-}
-
-export function useImprintSearch(
-  libraryId: number | undefined,
-  enabled: boolean,
-  query: string,
-): { data?: NameWithFileCount[]; isLoading: boolean } {
-  const { data, isLoading } = useImprintsList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
-  const adapted = data?.items.map((i) => ({
-    name: i.name,
-    file_count: i.file_count,
   }));
   return { data: adapted, isLoading };
 }

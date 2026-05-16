@@ -320,7 +320,6 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 		Tags:          []string{"enricher-tag"},
 		Description:   "Enricher Description",
 		Publisher:     "Enricher Publisher",
-		Imprint:       "Enricher Imprint",
 		URL:           "https://enricher.example.com",
 		ReleaseDate:   &releaseDate,
 		Language:      &enricherLanguage,
@@ -344,7 +343,6 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 		Tags:          []string{"file-tag"},
 		Description:   "File Description",
 		Publisher:     "File Publisher",
-		Imprint:       "File Imprint",
 		URL:           "https://file.example.com",
 		ReleaseDate:   &fileReleaseDate,
 		Language:      &fileLanguage,
@@ -380,7 +378,6 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	assert.Equal(t, "enricher-tag", enrichedMeta.Tags[0])
 	assert.Equal(t, "Enricher Description", enrichedMeta.Description)
 	assert.Equal(t, "Enricher Publisher", enrichedMeta.Publisher)
-	assert.Equal(t, "Enricher Imprint", enrichedMeta.Imprint)
 	assert.Equal(t, "https://enricher.example.com", enrichedMeta.URL)
 	require.NotNil(t, enrichedMeta.ReleaseDate)
 	assert.Equal(t, 2025, enrichedMeta.ReleaseDate.Year())
@@ -408,7 +405,6 @@ func TestMergeEnrichedMetadata_AllFields(t *testing.T) {
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["tags"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["description"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["publisher"])
-	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["imprint"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["url"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["releaseDate"])
 	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["language"])

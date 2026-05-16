@@ -34,7 +34,6 @@ type CBZMetadata struct {
 	Tags        []string
 	URL         *string
 	Publisher   *string
-	Imprint     *string
 	ReleaseDate *time.Time
 	Chapters    []CBZChapter
 	CoverPage   *int    // 0-indexed page number for cover (nil = first page)
@@ -460,14 +459,6 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 	if metadata != nil && metadata.URL != nil && *metadata.URL != "" {
 		buf.WriteString(`    <meta name="shisho:url" content="`)
 		buf.WriteString(html.EscapeString(*metadata.URL))
-		buf.WriteString(`"/>
-`)
-	}
-
-	// Add imprint as custom meta (not standard EPUB but preserved for round-trip)
-	if metadata != nil && metadata.Imprint != nil && *metadata.Imprint != "" {
-		buf.WriteString(`    <meta name="shisho:imprint" content="`)
-		buf.WriteString(html.EscapeString(*metadata.Imprint))
 		buf.WriteString(`"/>
 `)
 	}

@@ -93,7 +93,6 @@ export const METADATA_FIELD_LABELS: Record<string, string> = {
   tags: "Tags",
   description: "Description",
   publisher: "Publisher",
-  imprint: "Imprint",
   url: "URL",
   releaseDate: "Release Date",
   cover: "Cover Image",

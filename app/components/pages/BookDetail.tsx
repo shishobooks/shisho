@@ -592,18 +592,12 @@ const FileRow = ({
         {/* Expandable details section */}
         {isExpanded && hasExpandableMetadata && (
           <div className="mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
-            {/* Publisher, Imprint, Released, URL */}
+            {/* Publisher, Released, URL */}
             <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               {file.publisher && (
                 <>
                   <span className="text-muted-foreground">Publisher</span>
                   <span>{file.publisher.name}</span>
-                </>
-              )}
-              {file.imprint && (
-                <>
-                  <span className="text-muted-foreground">Imprint</span>
-                  <span>{file.imprint.name}</span>
                 </>
               )}
               {file.release_date && (
@@ -775,7 +769,6 @@ const BookDetail = () => {
   const hasExpandableMetadata = (file: File): boolean => {
     return !!(
       file.publisher ||
-      file.imprint ||
       file.release_date ||
       file.url ||
       file.language ||

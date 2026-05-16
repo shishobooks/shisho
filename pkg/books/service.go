@@ -238,7 +238,6 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 		}).
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
-		Relation("Files.Imprint").
 		Relation("Files.Identifiers").
 		Relation("Files.Chapters", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("ch.sort_order ASC")
@@ -296,7 +295,6 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 		}).
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
-		Relation("Files.Imprint").
 		Relation("Files.Identifiers").
 		Relation("Files.Chapters", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("ch.sort_order ASC")
@@ -357,7 +355,6 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		}).
 		Relation("Files.Narrators.Person").
 		Relation("Files.Publisher").
-		Relation("Files.Imprint").
 		Relation("Files.Identifiers")
 
 	// Apply series filter first (affects ordering)
@@ -667,7 +664,7 @@ func (svc *Service) RetrieveFile(ctx context.Context, opts RetrieveFileOptions) 
 }
 
 // RetrieveFileWithRelations retrieves a file with all relations needed for
-// sidecar writing and fingerprint generation (Narrators, Identifiers, Publisher, Imprint).
+// sidecar writing and fingerprint generation (Narrators, Identifiers, Publisher).
 // Use this instead of RetrieveFile when you need to call WriteFileSidecarFromModel
 // or ComputeFingerprint.
 func (svc *Service) RetrieveFileWithRelations(ctx context.Context, fileID int) (*models.File, error) {
@@ -683,7 +680,6 @@ func (svc *Service) RetrieveFileWithRelations(ctx context.Context, fileID int) (
 		Relation("Narrators.Person").
 		Relation("Identifiers").
 		Relation("Publisher").
-		Relation("Imprint").
 		Relation("Chapters", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("ch.sort_order ASC")
 		}).

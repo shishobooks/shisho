@@ -33,7 +33,7 @@ Click the button, type the library name to confirm, and click **Delete**. The co
 ### What Is Deleted
 
 - The library row itself.
-- All books, files, series, persons (authors and narrators), genres, tags, publishers, and imprints scoped to the library.
+- All books, files, series, persons (authors and narrators), genres, tags, and publishers scoped to the library.
 - All file identifiers and chapters for those files.
 - Per-library plugin configuration, hook configuration, and field settings.
 - Per-user library access grants and per-user library settings (sort spec, etc.).

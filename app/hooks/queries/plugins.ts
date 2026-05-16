@@ -7,7 +7,6 @@ import {
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as GenresQueryKey } from "@/hooks/queries/genres";
-import { QueryKey as ImprintsQueryKey } from "@/hooks/queries/imprints";
 import { QueryKey as PeopleQueryKey } from "@/hooks/queries/people";
 import { QueryKey as PublishersQueryKey } from "@/hooks/queries/publishers";
 import { QueryKey as SeriesQueryKey } from "@/hooks/queries/series";
@@ -661,7 +660,6 @@ export interface PluginSearchResult {
   tags?: string[];
   narrators?: string[];
   identifiers?: Array<{ type: string; value: string }>;
-  imprint?: string;
   url?: string;
   language?: string;
   abridged?: boolean;
@@ -741,7 +739,7 @@ export const usePluginApply = () => {
     },
     onSuccess: async () => {
       // Apply accepts entity name strings; the server creates new persons,
-      // series, publishers, imprints, genres, or tags as needed. Invalidate
+      // series, publishers, genres, or tags as needed. Invalidate
       // those caches so newly-created entities show up in admin pages and
       // combobox results.
       await Promise.all([
@@ -759,9 +757,6 @@ export const usePluginApply = () => {
         }),
         queryClient.invalidateQueries({
           queryKey: [PublishersQueryKey.ListPublishers],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: [ImprintsQueryKey.ListImprints],
         }),
         queryClient.invalidateQueries({
           queryKey: [GenresQueryKey.ListGenres],

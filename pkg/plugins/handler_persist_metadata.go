@@ -359,24 +359,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	// Imprint (file-level, applied to target file)
-	imprintName := strings.TrimSpace(md.Imprint)
-	if imprintName != "" && targetFile != nil && h.enrich.imprintFinder != nil {
-		imprint, iErr := h.enrich.imprintFinder.FindOrCreateImprint(ctx, imprintName, book.LibraryID)
-		if iErr != nil {
-			log.Warn("failed to find/create imprint", logger.Data{"name": imprintName, "error": iErr.Error()})
-		} else {
-			targetFile.ImprintID = &imprint.ID
-			targetFile.ImprintSource = &pluginSource
-			fileColumns = append(fileColumns, "imprint_id", "imprint_source")
-			if h.enrich.searchIndexer != nil {
-				if err := h.enrich.searchIndexer.IndexImprint(ctx, imprint); err != nil {
-					log.Warn("failed to index imprint", logger.Data{"imprint_id": imprint.ID, "error": err.Error()})
-				}
-			}
-		}
-	}
-
 	// URL (file-level, applied to target file)
 	url := strings.TrimSpace(md.URL)
 	if url != "" && targetFile != nil {

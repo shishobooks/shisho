@@ -41,7 +41,6 @@ export type MetadataField =
   | "tags"
   | "description"
   | "publisher"
-  | "imprint"
   | "url"
   | "releaseDate"
   | "cover"

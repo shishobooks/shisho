@@ -19,7 +19,6 @@ type enrichDeps struct {
 	genreFinder     genreFinder
 	tagFinder       tagFinder
 	publisherFinder publisherFinder
-	imprintFinder   imprintFinder
 	searchIndexer   searchIndexer
 	pageExtractor   pageExtractor
 }
@@ -73,11 +72,6 @@ type publisherFinder interface {
 	FindOrCreatePublisher(ctx context.Context, name string, libraryID int) (*models.Publisher, error)
 }
 
-// imprintFinder finds or creates imprints.
-type imprintFinder interface {
-	FindOrCreateImprint(ctx context.Context, name string, libraryID int) (*models.Imprint, error)
-}
-
 // searchIndexer updates the search index after metadata changes. Each entity
 // type has its own FTS table (books_fts, series_fts, persons_fts, genres_fts,
 // tags_fts), and rows in those tables are populated only by explicit Index*
@@ -91,7 +85,6 @@ type searchIndexer interface {
 	IndexGenre(ctx context.Context, genre *models.Genre) error
 	IndexTag(ctx context.Context, tag *models.Tag) error
 	IndexPublisher(ctx context.Context, publisher *models.Publisher) error
-	IndexImprint(ctx context.Context, imprint *models.Imprint) error
 }
 
 // pageExtractor renders a page from a page-based file (CBZ/PDF) and writes

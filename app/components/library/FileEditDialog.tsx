@@ -36,7 +36,6 @@ import {
   useUploadFileCover,
 } from "@/hooks/queries/books";
 import {
-  useImprintSearch,
   usePeopleSearch,
   usePublisherSearch,
   type NameOption,
@@ -120,7 +119,6 @@ export function FileEditDialog({
   const [name, setName] = useState(file.name || "");
   const [url, setUrl] = useState(file.url || "");
   const [publisher, setPublisher] = useState(file.publisher?.name || "");
-  const [imprint, setImprint] = useState(file.imprint?.name || "");
   const [releaseDate, setReleaseDate] = useState(
     formatDateForInput(file.release_date),
   );
@@ -217,7 +215,6 @@ export function FileEditDialog({
     name: string;
     url: string;
     publisher: string;
-    imprint: string;
     releaseDate: string;
     identifiers: Array<{ type: string; value: string }>;
     fileRole: string;
@@ -254,7 +251,6 @@ export function FileEditDialog({
     const initialName = file.name || "";
     const initialUrl = file.url || "";
     const initialPublisher = file.publisher?.name || "";
-    const initialImprint = file.imprint?.name || "";
     const initialReleaseDate = formatDateForInput(file.release_date);
     const initialIdentifiers =
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
@@ -274,7 +270,6 @@ export function FileEditDialog({
     setName(initialName);
     setUrl(initialUrl);
     setPublisher(initialPublisher);
-    setImprint(initialImprint);
     setReleaseDate(initialReleaseDate);
     setIdentifiers(initialIdentifiers);
     setFileRole(initialFileRole);
@@ -292,7 +287,6 @@ export function FileEditDialog({
       name: initialName,
       url: initialUrl,
       publisher: initialPublisher,
-      imprint: initialImprint,
       releaseDate: initialReleaseDate,
       identifiers: initialIdentifiers,
       fileRole: initialFileRole,
@@ -311,7 +305,6 @@ export function FileEditDialog({
       name !== initialValues.name ||
       url !== initialValues.url ||
       publisher !== initialValues.publisher ||
-      imprint !== initialValues.imprint ||
       releaseDate !== initialValues.releaseDate ||
       !equal(identifiers, initialValues.identifiers) ||
       fileRole !== initialValues.fileRole ||
@@ -327,7 +320,6 @@ export function FileEditDialog({
     name,
     url,
     publisher,
-    imprint,
     releaseDate,
     identifiers,
     fileRole,
@@ -370,7 +362,6 @@ export function FileEditDialog({
       narrators?: string[];
       url?: string;
       publisher?: string;
-      imprint?: string;
       release_date?: string;
       language?: string;
       abridged?: string;
@@ -411,12 +402,6 @@ export function FileEditDialog({
     const originalPublisher = file.publisher?.name || "";
     if (publisher !== originalPublisher) {
       payload.publisher = publisher;
-    }
-
-    // Check if imprint changed
-    const originalImprint = file.imprint?.name || "";
-    if (imprint !== originalImprint) {
-      payload.imprint = imprint;
     }
 
     // Check if release date changed
@@ -520,7 +505,6 @@ export function FileEditDialog({
       name,
       url,
       publisher,
-      imprint,
       releaseDate,
       identifiers: [...identifiers],
       fileRole,
@@ -893,47 +877,6 @@ export function FileEditDialog({
                       aria-label="Clear publisher"
                       className="cursor-pointer shrink-0"
                       onClick={() => setPublisher("")}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Imprint */}
-              <div className="space-y-2">
-                <Label>Imprint</Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <EntityCombobox<NameOption>
-                      getOptionDescription={(p) => {
-                        const c = (p as NameWithFileCount).file_count;
-                        return c != null
-                          ? `${c} ${c === 1 ? "file" : "files"}`
-                          : undefined;
-                      }}
-                      getOptionKey={(item) => item.name}
-                      getOptionLabel={(item) => item.name}
-                      hook={function useImprintOptions(q) {
-                        return useImprintSearch(file.library_id, open, q);
-                      }}
-                      label="Imprint"
-                      onChange={(next) => {
-                        const nextName =
-                          "__create" in next ? next.__create : next.name;
-                        setImprint(nextName);
-                      }}
-                      value={imprint ? { name: imprint } : null}
-                    />
-                  </div>
-                  {imprint && (
-                    <Button
-                      aria-label="Clear imprint"
-                      className="cursor-pointer shrink-0"
-                      onClick={() => setImprint("")}
                       size="icon"
                       type="button"
                       variant="ghost"

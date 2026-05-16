@@ -17,7 +17,6 @@ func TestConvertFieldsToMetadata_StringFields(t *testing.T) {
 		"subtitle":    "A Subtitle",
 		"description": "A description",
 		"publisher":   "Publisher Co",
-		"imprint":     "Imprint Name",
 		"url":         "https://example.com",
 		"series":      "Great Series",
 		"cover_url":   "https://example.com/cover.jpg",
@@ -29,7 +28,6 @@ func TestConvertFieldsToMetadata_StringFields(t *testing.T) {
 	assert.Equal(t, "A Subtitle", md.Subtitle)
 	assert.Equal(t, "A description", md.Description)
 	assert.Equal(t, "Publisher Co", md.Publisher)
-	assert.Equal(t, "Imprint Name", md.Imprint)
 	assert.Equal(t, "https://example.com", md.URL)
 	assert.Equal(t, "Great Series", md.Series)
 	assert.Equal(t, "https://example.com/cover.jpg", md.CoverURL)
@@ -144,7 +142,6 @@ func TestConvertFieldsToMetadata_EmptyFields(t *testing.T) {
 	assert.Empty(t, md.Subtitle)
 	assert.Empty(t, md.Description)
 	assert.Empty(t, md.Publisher)
-	assert.Empty(t, md.Imprint)
 	assert.Empty(t, md.URL)
 	assert.Empty(t, md.Series)
 	assert.Empty(t, md.CoverURL)

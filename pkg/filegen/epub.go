@@ -435,21 +435,6 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 	}
 	finalMetas = filteredForURL
 
-	// Remove and add imprint meta tag if file has one
-	var filteredForImprint []opfMeta
-	for _, meta := range finalMetas {
-		if meta.Name != "shisho:imprint" {
-			filteredForImprint = append(filteredForImprint, meta)
-		}
-	}
-	if file != nil && file.Imprint != nil {
-		filteredForImprint = append(filteredForImprint, opfMeta{
-			Name:    "shisho:imprint",
-			Content: file.Imprint.Name,
-		})
-	}
-	finalMetas = filteredForImprint
-
 	pkg.Metadata.Meta = finalMetas
 
 	// Update identifiers from file

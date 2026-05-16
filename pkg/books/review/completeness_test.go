@@ -90,7 +90,7 @@ func TestMissingFields_AllFields(t *testing.T) {
 	criteria := Criteria{
 		BookFields: []string{
 			FieldAuthors, FieldDescription, FieldCover, FieldGenres, FieldTags,
-			FieldSeries, FieldSubtitle, FieldPublisher, FieldImprint,
+			FieldSeries, FieldSubtitle, FieldPublisher,
 			FieldIdentifiers, FieldReleaseDate, FieldLanguage, FieldURL,
 		},
 		AudioFields: []string{FieldNarrators, FieldChapters, FieldAbridged},
@@ -108,7 +108,6 @@ func TestMissingFields_AllFields(t *testing.T) {
 		FileRole:           models.FileRoleMain,
 		CoverImageFilename: ptrStr("c.jpg"),
 		PublisherID:        ptrInt(1),
-		ImprintID:          ptrInt(1),
 		Identifiers:        []*models.FileIdentifier{{}},
 		ReleaseDate:        ptrTime(time.Now()),
 		Language:           ptrStr("en"),

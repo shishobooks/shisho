@@ -13,7 +13,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/genres"
-	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -50,7 +49,6 @@ type Worker struct {
 	bookService        *books.Service
 	chapterService     *chapters.Service
 	genreService       *genres.Service
-	imprintService     *imprints.Service
 	jobService         *jobs.Service
 	jobLogService      *joblogs.Service
 	libraryService     *libraries.Service
@@ -97,7 +95,6 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	bookService := books.NewService(db).WithAppSettings(appSettingsService)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
-	imprintService := imprints.NewService(db)
 	jobService := jobs.NewService(db)
 	jobLogService := joblogs.NewService(db)
 	libraryService := libraries.NewService(db)
@@ -124,7 +121,6 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 		bookService:        bookService,
 		chapterService:     chapterService,
 		genreService:       genreService,
-		imprintService:     imprintService,
 		jobService:         jobService,
 		jobLogService:      jobLogService,
 		libraryService:     libraryService,
@@ -447,8 +443,8 @@ func (w *Worker) checkPluginUpdates() {
 	}
 }
 
-// cleanupOrphanedEntities removes series, people, genres, tags, publishers,
-// and imprints that are no longer referenced by any books or files.
+// cleanupOrphanedEntities removes series, people, genres, tags, and publishers
+// that are no longer referenced by any books or files.
 func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger) {
 	if deletedIDs, err := w.seriesService.CleanupOrphanedSeries(ctx); err != nil {
 		log.Err(err).Warn("failed to cleanup orphaned series")
@@ -503,17 +499,6 @@ func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger)
 			}
 		}
 		log.Info("cleaned up orphaned publishers", logger.Data{"count": len(deletedIDs)})
-	}
-
-	if deletedIDs, err := w.imprintService.CleanupOrphanedImprints(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned imprints")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromImprintIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned imprint from search index", logger.Data{"imprint_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned imprints", logger.Data{"count": len(deletedIDs)})
 	}
 }
 

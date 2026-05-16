@@ -28,7 +28,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/filesystem"
 	"github.com/shishobooks/shisho/pkg/genres"
-	"github.com/shishobooks/shisho/pkg/imprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/kobo"
@@ -204,12 +203,6 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	publishersGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	publishers.RegisterRoutesWithGroup(publishersGroup, db, authMiddleware)
 
-	// Imprints routes
-	imprintsGroup := e.Group("/imprints")
-	imprintsGroup.Use(authMiddleware.Authenticate)
-	imprintsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	imprints.RegisterRoutesWithGroup(imprintsGroup, db, authMiddleware)
-
 	// Search routes (requires read access to books since search returns book data)
 	searchGroup := e.Group("/search")
 	searchGroup.Use(authMiddleware.Authenticate)
@@ -230,7 +223,6 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 		GenreFinder:     genres.NewService(db),
 		TagFinder:       tags.NewService(db),
 		PublisherFinder: publishers.NewService(db),
-		ImprintFinder:   imprints.NewService(db),
 		SearchIndexer:   search.NewService(db),
 		PageExtractor:   pageExtractor,
 	}

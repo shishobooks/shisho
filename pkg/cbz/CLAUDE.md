@@ -108,8 +108,7 @@ Multiple creators per role are comma-separated:
 | Tags | `<Tags>` | Comma-separated, split into array |
 | Description | `<Summary>` | Full text |
 | URL | `<Web>` | Direct extraction |
-| Publisher | `<Publisher>` | Direct extraction |
-| Imprint | `<Imprint>` | Direct extraction |
+| Publisher | `<Imprint>` or `<Publisher>` | Prefers `<Imprint>` over `<Publisher>` when both present (more specific) |
 | Release Date | `<Year>/<Month>/<Day>` | Combined into time.Time |
 | Language | `<LanguageISO>` | ISO 639-1 code (valid BCP 47), normalized via `NormalizeLanguage` |
 | Cover Page | `<Pages>` | Index of page with Type="FrontCover" |
@@ -151,7 +150,6 @@ When generating CBZ files, Shisho:
 | Description | `<Summary>` | book.Description |
 | URL | `<Web>` | file.URL |
 | Publisher | `<Publisher>` | file.Publisher.Name |
-| Imprint | `<Imprint>` | file.Imprint.Name |
 | Release Date | `<Year>/<Month>/<Day>` | file.ReleaseDate |
 | Language | `<LanguageISO>` | file.Language |
 

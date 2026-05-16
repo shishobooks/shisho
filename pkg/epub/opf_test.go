@@ -209,6 +209,71 @@ func TestParseOPF_Cover_PropertiesFallback(t *testing.T) {
 	assert.Equal(t, "image/png", result.OPF.CoverMimeType)
 }
 
+func TestParseOPF_PublisherPrefersImprint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		opfXML        string
+		wantPublisher string
+	}{
+		{
+			name: "ibooks:imprint overrides dc:publisher",
+			opfXML: `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:publisher>Big Publisher</dc:publisher>
+    <meta property="ibooks:imprint">Cool Imprint</meta>
+  </metadata>
+</package>`,
+			wantPublisher: "Cool Imprint",
+		},
+		{
+			name: "meta name=imprint overrides dc:publisher",
+			opfXML: `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:publisher>Big Publisher</dc:publisher>
+    <meta name="imprint" content="EPUB2 Imprint"/>
+  </metadata>
+</package>`,
+			wantPublisher: "EPUB2 Imprint",
+		},
+		{
+			name: "dc:publisher used when no imprint",
+			opfXML: `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:publisher>Big Publisher</dc:publisher>
+  </metadata>
+</package>`,
+			wantPublisher: "Big Publisher",
+		},
+		{
+			name: "neither present",
+			opfXML: `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`,
+			wantPublisher: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(tt.opfXML)))
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantPublisher, result.OPF.Publisher)
+		})
+	}
+}
+
 func TestParseOPF_Language_Missing(t *testing.T) {
 	t.Parallel()
 	// No dc:language element: Language should be nil

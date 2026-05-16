@@ -27,7 +27,6 @@ type OPF struct {
 	Tags          []string
 	Description   string
 	Publisher     string
-	Imprint       string
 	URL           string
 	ReleaseDate   *time.Time
 	CoverFilepath string
@@ -209,7 +208,6 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Tags:          opf.Tags,
 		Description:   opf.Description,
 		Publisher:     opf.Publisher,
-		Imprint:       opf.Imprint,
 		URL:           opf.URL,
 		ReleaseDate:   opf.ReleaseDate,
 		CoverMimeType: opf.CoverMimeType,
@@ -384,8 +382,23 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 	// Extract description (strip HTML tags for clean display)
 	description := htmlutil.StripTags(pkg.Metadata.Description)
 
-	// Extract publisher
+	// Extract publisher from dc:publisher
 	publisher := pkg.Metadata.Publisher
+
+	// Extract imprint from meta tags — if present, it overrides dc:publisher
+	// (imprint is more specific than publisher)
+	for _, m := range pkg.Metadata.Meta {
+		if m.Property == "ibooks:imprint" || m.Name == "imprint" {
+			imprint := m.Text
+			if imprint == "" {
+				imprint = m.Content
+			}
+			if imprint != "" {
+				publisher = imprint
+			}
+			break
+		}
+	}
 
 	// Extract release date from dc:date
 	var releaseDate *time.Time
@@ -402,18 +415,6 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 				releaseDate = &t
 				break
 			}
-		}
-	}
-
-	// Extract imprint from meta tags
-	var imprint string
-	for _, m := range pkg.Metadata.Meta {
-		if m.Property == "ibooks:imprint" || m.Name == "imprint" {
-			imprint = m.Text
-			if imprint == "" {
-				imprint = m.Content
-			}
-			break
 		}
 	}
 
@@ -469,7 +470,6 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 			Tags:          tags,
 			Description:   description,
 			Publisher:     publisher,
-			Imprint:       imprint,
 			URL:           url,
 			ReleaseDate:   releaseDate,
 			CoverFilepath: coverFilepath,

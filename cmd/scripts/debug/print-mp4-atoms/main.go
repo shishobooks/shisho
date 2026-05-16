@@ -35,7 +35,6 @@ func main() {
 	fmt.Printf("Genres: %v\n", meta.Genres)
 	fmt.Printf("Tags: %v\n", meta.Tags)
 	fmt.Printf("Publisher: %q\n", meta.Publisher)
-	fmt.Printf("Imprint: %q\n", meta.Imprint)
 	fmt.Printf("URL: %q\n", meta.URL)
 	fmt.Printf("Year: %q\n", meta.Year)
 	fmt.Printf("ReleaseDate: %v\n", meta.ReleaseDate)

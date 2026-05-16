@@ -83,16 +83,6 @@ func (s *stubPublisherFinder) FindOrCreatePublisher(_ context.Context, name stri
 	return &models.Publisher{ID: 1, Name: name}, nil
 }
 
-// stubImprintFinder records the name FindOrCreateImprint was called with.
-type stubImprintFinder struct {
-	lastName string
-}
-
-func (s *stubImprintFinder) FindOrCreateImprint(_ context.Context, name string, _ int) (*models.Imprint, error) {
-	s.lastName = name
-	return &models.Imprint{ID: 1, Name: name}, nil
-}
-
 // newApplyTestHandlerWithRelStore creates a handler and returns the relStore stub
 // so tests can inspect captured CreateBookSeries calls.
 func newApplyTestHandlerWithRelStore(store *stubBookStoreForApply) (*handler, *stubRelStoreForApply) {
@@ -101,12 +91,11 @@ func newApplyTestHandlerWithRelStore(store *stubBookStoreForApply) (*handler, *s
 	return h, rel
 }
 
-// newApplyTestHandlerWithFinders wires publisher/imprint finders so tests can
+// newApplyTestHandlerWithFinders wires publisher finder so tests can
 // assert on the exact names persistMetadata passed to FindOrCreate*.
-func newApplyTestHandlerWithFinders(store *stubBookStoreForApply, pub *stubPublisherFinder, imp *stubImprintFinder) *handler {
+func newApplyTestHandlerWithFinders(store *stubBookStoreForApply, pub *stubPublisherFinder) *handler {
 	h := newApplyTestHandler(store)
 	h.enrich.publisherFinder = pub
-	h.enrich.imprintFinder = imp
 	return h
 }
 
@@ -481,7 +470,7 @@ func TestApplyMetadata_PreservesVolumeNotation_CBZ(t *testing.T) {
 	assert.Nil(t, file.Name, "file.Name must NOT be auto-set by a title-only payload (Phase 1 fix)")
 }
 
-func TestApplyMetadata_TrimsPublisherImprintURL(t *testing.T) {
+func TestApplyMetadata_TrimsPublisherURL(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
@@ -489,11 +478,9 @@ func TestApplyMetadata_TrimsPublisherImprintURL(t *testing.T) {
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	pub := &stubPublisherFinder{}
-	imp := &stubImprintFinder{}
-	h := newApplyTestHandlerWithFinders(store, pub, imp)
+	h := newApplyTestHandlerWithFinders(store, pub)
 	c := newApplyEchoContext(t, map[string]any{
 		"publisher": "  Some Publisher  ",
-		"imprint":   "  Penguin Classics  ",
 		"url":       "  https://example.com  ",
 	})
 
@@ -501,7 +488,6 @@ func TestApplyMetadata_TrimsPublisherImprintURL(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "Some Publisher", pub.lastName, "publisher name must be trimmed before FindOrCreate")
-	assert.Equal(t, "Penguin Classics", imp.lastName, "imprint name must be trimmed before FindOrCreate")
 	require.NotNil(t, file.URL)
 	assert.Equal(t, "https://example.com", *file.URL, "file URL must be trimmed")
 }

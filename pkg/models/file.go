@@ -62,9 +62,6 @@ type File struct {
 	PublisherID              *int              `json:"publisher_id"`
 	PublisherSource          *string           `json:"publisher_source" tstype:"DataSource"`
 	Publisher                *Publisher        `bun:"rel:belongs-to,join:publisher_id=id" json:"publisher,omitempty" tstype:"Publisher"`
-	ImprintID                *int              `json:"imprint_id"`
-	ImprintSource            *string           `json:"imprint_source" tstype:"DataSource"`
-	Imprint                  *Imprint          `bun:"rel:belongs-to,join:imprint_id=id" json:"imprint,omitempty" tstype:"Imprint"`
 	ChapterSource            *string           `json:"chapter_source" tstype:"DataSource"`
 	Language                 *string           `json:"language"`
 	LanguageSource           *string           `json:"language_source" tstype:"DataSource"`

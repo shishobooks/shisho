@@ -44,7 +44,6 @@ type ParsedMetadata struct {
 	Tags             []string   `json:"tags"`   // Tag names from file metadata
 	Description      string     `json:"description"`
 	Publisher        string     `json:"publisher"`
-	Imprint          string     `json:"imprint"`
 	URL              string     `json:"url"`
 	ReleaseDate      *time.Time `json:"release_date,omitempty"`
 	CoverMimeType    string     `json:"cover_mime_type"`
@@ -56,7 +55,7 @@ type ParsedMetadata struct {
 	// FieldDataSources maps individual field names to the data source that provided them.
 	// Used when multiple enrichers contribute different fields (per-field first-wins tracking).
 	// Keys are field names: "title", "subtitle", "authors", "narrators", "series",
-	// "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate",
+	// "genres", "tags", "description", "publisher", "url", "releaseDate",
 	// "cover", "identifiers", "language", "abridged".
 	FieldDataSources map[string]string `json:"-"`
 	PluginScope      string            `json:"-"`

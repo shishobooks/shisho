@@ -56,7 +56,7 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 
 When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes.
 
-**Cross-resource invalidation is required**: When metadata entities (genres, tags, series, people, publishers, imprints) are modified, also invalidate `ListBooks` and `RetrieveBook` queries since books display this metadata.
+**Cross-resource invalidation is required**: When metadata entities (genres, tags, series, people, publishers) are modified, also invalidate `ListBooks` and `RetrieveBook` queries since books display this metadata.
 
 **Pattern:**
 ```typescript

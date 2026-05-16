@@ -926,7 +926,6 @@ func TestScanWithPluginFileParser_AllSourcesSet(t *testing.T) {
           tags: ["tag-one", "tag-two"],
           description: "Parser description text",
           publisher: "Parser Publisher",
-          imprint: "Parser Imprint",
           url: "https://example.com/parser-book",
           releaseDate: "2024-06-15T00:00:00Z",
           identifiers: [{type: "isbn_13", value: "9781234567890"}],
@@ -1024,11 +1023,6 @@ func TestScanWithPluginFileParser_AllSourcesSet(t *testing.T) {
 	require.NotNil(t, file.PublisherSource)
 	assert.Equal(t, expectedSource, *file.PublisherSource, "PublisherSource should be set to plugin source")
 
-	require.NotNil(t, file.Imprint)
-	assert.Equal(t, "Parser Imprint", file.Imprint.Name)
-	require.NotNil(t, file.ImprintSource)
-	assert.Equal(t, expectedSource, *file.ImprintSource, "ImprintSource should be set to plugin source")
-
 	require.Len(t, file.Narrators, 1)
 	assert.Equal(t, "Parser Narrator", file.Narrators[0].Person.Name)
 	require.NotNil(t, file.NarratorSource)
@@ -1105,7 +1099,7 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
     "metadataEnricher": {
       "description": "Enriches with all metadata fields",
       "fileTypes": ["enrichall"],
-      "fields": ["subtitle", "authors", "narrators", "series", "seriesNumber", "genres", "tags", "description", "publisher", "imprint", "url", "releaseDate", "identifiers"]
+      "fields": ["subtitle", "authors", "narrators", "series", "seriesNumber", "genres", "tags", "description", "publisher", "url", "releaseDate", "identifiers"]
     }
   }
 }`
@@ -1124,7 +1118,6 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
           tags: ["enriched-tag"],
           description: "Enriched description",
           publisher: "Enriched Publisher",
-          imprint: "Enriched Imprint",
           url: "https://example.com/enriched",
           releaseDate: "2025-01-10T00:00:00Z",
           identifiers: [{type: "asin", value: "B01ENRICHED"}]
@@ -1220,12 +1213,6 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
 	assert.Equal(t, "Enriched Publisher", file.Publisher.Name)
 	require.NotNil(t, file.PublisherSource)
 	assert.Equal(t, enricherSource, *file.PublisherSource, "PublisherSource should be enricher plugin source")
-
-	// Imprint from enricher
-	require.NotNil(t, file.Imprint)
-	assert.Equal(t, "Enriched Imprint", file.Imprint.Name)
-	require.NotNil(t, file.ImprintSource)
-	assert.Equal(t, enricherSource, *file.ImprintSource, "ImprintSource should be enricher plugin source")
 
 	// Narrators from enricher
 	require.Len(t, file.Narrators, 1)
@@ -1566,7 +1553,6 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 		Tags:          []string{"Tag"},
 		Description:   "Description",
 		Publisher:     "Publisher",
-		Imprint:       "Imprint",
 		URL:           "http://example.com",
 		ReleaseDate:   &releaseDate,
 		Language:      &language,
@@ -1580,7 +1566,7 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 	declaredFields := []string{
 		"title", "subtitle", "authors", "narrators",
 		"series", "genres", "tags", "description",
-		"publisher", "imprint", "url", "releaseDate",
+		"publisher", "url", "releaseDate",
 		"cover", "identifiers", "language", "abridged",
 	}
 	enabledFields := make(map[string]bool)
@@ -1602,7 +1588,6 @@ func TestFilterMetadataFields_AllFieldsEnabled(t *testing.T) {
 	assert.Len(t, filtered.Tags, 1)
 	assert.Equal(t, "Description", filtered.Description)
 	assert.Equal(t, "Publisher", filtered.Publisher)
-	assert.Equal(t, "Imprint", filtered.Imprint)
 	assert.Equal(t, "http://example.com", filtered.URL)
 	assert.NotNil(t, filtered.ReleaseDate)
 	require.NotNil(t, filtered.Language)
