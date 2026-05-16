@@ -9,7 +9,7 @@ We chose to unify into a single `publishers` table with a self-referential `pare
 - **Adjacency list** (not closure table) — hierarchy is shallow (3-4 levels), SQLite supports recursive CTEs, and we don't need heavy tree queries in hot paths.
 - **Files attach at any level** — metadata sources vary in specificity; forcing leaf-node attachment would require placeholder nodes or lose data.
 - **Clean break** — `imprint` removed entirely from sidecar files, plugin SDK, and format parser outputs. No backwards-compatibility shim. Justified by 0.0.X status.
-- **Migration strategy** — copy imprints into publishers (skip on name conflict), set file's publisher to the imprint value (more specific), drop imprint tables. No auto-generated hierarchy; parent relationships are a manual curation task.
+- **Migration strategy** — copy imprints into publishers (skip on name conflict), copy imprint aliases into publisher aliases (skip on conflict), set file's publisher to the imprint value (more specific), drop imprint tables. No auto-generated hierarchy; parent relationships are a manual curation task.
 - **Cycle prevention** — validate on write (walk ancestor chain), exclude invalid options from comboboxes.
 
 ## Considered options
