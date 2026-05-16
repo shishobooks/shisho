@@ -22,7 +22,7 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Comics
 
-- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language
+- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
 
 ## Downloads
 
