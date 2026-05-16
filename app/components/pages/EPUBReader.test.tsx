@@ -166,6 +166,33 @@ describe("EPUBReader", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides chrome toggle button in scrolled flow even with auto-hide enabled", () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: {
+        preload_count: 3,
+        fit_mode: "fit-height",
+        viewer_epub_font_size: 100,
+        viewer_epub_theme: "light",
+        viewer_epub_flow: "scrolled",
+        viewer_hide_chrome: true,
+      },
+      isLoading: false,
+    } as never);
+
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    expect(
+      screen.queryByRole("button", { name: /toggle controls/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("updates settings when the theme button is clicked", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const mutate = vi.fn();
