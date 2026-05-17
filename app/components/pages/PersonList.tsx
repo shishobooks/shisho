@@ -49,7 +49,6 @@ const PersonList = () => {
       linkTo={(person, libraryId) =>
         `/libraries/${libraryId}/people/${person.id}`
       }
-      maxWidth="max-w-4xl"
       query={query}
       searchPlaceholder="Search by name..."
       state={state}
