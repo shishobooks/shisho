@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.45] - 2026-05-17
+
+### Features
+- Widen resource list pages to max-w-4xl (#275)
+- Publisher merge flow: "Set as child" option (#273)
+- Publisher hierarchy: children list + counts (#272)
+- Descendant-inclusive file filtering by publisher (#271)
+- Publisher hierarchy: set parent + ancestor breadcrumbs (#270)
+- Remove imprint concept and consolidate into unified publishers (#269)
+- Add auto-hide viewer chrome and fix EPUB scroll mode (#258)
+
+### Bug Fixes
+- Render series number badge when series_number is 0 (#255)
+- Invalidate detail-page list queries after metadata entity merges (#254)
+- Prefer whole-numbered books for series cover over prequels (#251)
+
+### Documentation
+- Document publisher hierarchy and remove imprint references (#274)
+- Unified publisher hierarchy — ADR and CONTEXT.md update (#266)
+
+### Other
+- Bump @babel/plugin-transform-modules-systemjs from 7.29.0 to 7.29.4 (#268)
+- Bump fast-uri from 3.1.0 to 3.1.2 (#267)
+- Bump the minor-and-patch group across 1 directory with 19 updates (#257)
+- Bump the minor-and-patch group with 2 updates (#256)
+
+
 ## [0.0.44] - 2026-05-11
 
 ### Features
