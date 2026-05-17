@@ -389,6 +389,130 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	assert.Len(t, items, 2)
 }
 
+func TestFiles_IncludesDescendantPublisherFiles(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create publisher hierarchy: parent -> child
+	parent := seedPublisherWithFiles(t, db, lib, "Parent Corp", []string{"parent-f1"})
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child Imprint", ParentID: &parent.ID}
+	_, err := db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	// Add files to the child publisher
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Child Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Child Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	childFile := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/tmp/child-f1.epub",
+		FilesizeBytes: 1,
+		PublisherID:   &child.ID,
+	}
+	_, err = db.NewInsert().Model(childFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Request files for the parent publisher
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(parent.ID))
+
+	err = h.files(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	var total int
+	err = json.Unmarshal(resp["total"], &total)
+	require.NoError(t, err)
+	assert.Equal(t, 2, total, "parent publisher should show files from self + child")
+
+	var items []json.RawMessage
+	err = json.Unmarshal(resp["items"], &items)
+	require.NoError(t, err)
+	assert.Len(t, items, 2)
+}
+
+func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create hierarchy: root -> child with files on both
+	root := seedPublisherWithFiles(t, db, lib, "Root Publisher", []string{"root-file"})
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child Publisher", ParentID: &root.ID}
+	_, err := db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Child Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Child Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	childFile := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/tmp/child-pub-file.epub",
+		FilesizeBytes: 1,
+		PublisherID:   &child.ID,
+	}
+	_, err = db.NewInsert().Model(childFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Request the root publisher detail
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(root.ID))
+
+	err = h.retrieve(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	var fileCount int
+	err = json.Unmarshal(resp["file_count"], &fileCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, fileCount, "file_count should include descendant publisher files")
+}
+
 func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	t.Parallel()
 	db := setupHandlerTestDB(t)
