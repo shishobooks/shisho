@@ -126,6 +126,7 @@ func TestFetchRepository_HTTPError(t *testing.T) {
 }
 
 func TestFilterCompatibleVersions(t *testing.T) {
+	t.Parallel()
 	versions := []PluginVersion{
 		{Version: "1.0.0", ManifestVersion: 1},
 		{Version: "2.0.0", ManifestVersion: 2},
@@ -140,6 +141,7 @@ func TestFilterCompatibleVersions(t *testing.T) {
 }
 
 func TestFilterCompatibleVersions_NoMatch(t *testing.T) {
+	t.Parallel()
 	versions := []PluginVersion{
 		{Version: "2.0.0", ManifestVersion: 2},
 		{Version: "3.0.0", ManifestVersion: 3},
@@ -150,6 +152,7 @@ func TestFilterCompatibleVersions_NoMatch(t *testing.T) {
 }
 
 func TestFilterCompatibleVersions_Empty(t *testing.T) {
+	t.Parallel()
 	compatible := FilterCompatibleVersions(nil)
 	assert.Empty(t, compatible)
 }

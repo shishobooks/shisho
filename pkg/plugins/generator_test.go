@@ -224,11 +224,13 @@ func TestPluginGenerator_NotLoaded(t *testing.T) {
 func TestBuildBookContext(t *testing.T) {
 	t.Parallel()
 	t.Run("nil book returns nil", func(t *testing.T) {
+		t.Parallel()
 		ctx := BuildBookContext(nil)
 		assert.Nil(t, ctx)
 	})
 
 	t.Run("basic book fields", func(t *testing.T) {
+		t.Parallel()
 		subtitle := "A Subtitle"
 		description := "A Description"
 		book := &models.Book{
@@ -246,6 +248,7 @@ func TestBuildBookContext(t *testing.T) {
 	})
 
 	t.Run("book with authors", func(t *testing.T) {
+		t.Parallel()
 		book := &models.Book{
 			ID:    1,
 			Title: "My Book",
@@ -264,6 +267,7 @@ func TestBuildBookContext(t *testing.T) {
 	})
 
 	t.Run("book with series", func(t *testing.T) {
+		t.Parallel()
 		num := 3.0
 		book := &models.Book{
 			ID:    1,
@@ -281,6 +285,7 @@ func TestBuildBookContext(t *testing.T) {
 	})
 
 	t.Run("book with genres and tags", func(t *testing.T) {
+		t.Parallel()
 		book := &models.Book{
 			ID:    1,
 			Title: "My Book",
@@ -305,11 +310,13 @@ func TestBuildBookContext(t *testing.T) {
 func TestBuildFileContext(t *testing.T) {
 	t.Parallel()
 	t.Run("nil file returns nil", func(t *testing.T) {
+		t.Parallel()
 		ctx := BuildFileContext(nil)
 		assert.Nil(t, ctx)
 	})
 
 	t.Run("basic file fields", func(t *testing.T) {
+		t.Parallel()
 		name := "My Edition"
 		url := "https://example.com"
 		file := &models.File{
@@ -335,6 +342,7 @@ func TestBuildFileContext(t *testing.T) {
 	})
 
 	t.Run("file with narrators", func(t *testing.T) {
+		t.Parallel()
 		file := &models.File{
 			ID:       1,
 			FileType: "m4b",
@@ -354,6 +362,7 @@ func TestBuildFileContext(t *testing.T) {
 	})
 
 	t.Run("file with identifiers", func(t *testing.T) {
+		t.Parallel()
 		file := &models.File{
 			ID:       1,
 			FileType: "epub",
@@ -372,6 +381,7 @@ func TestBuildFileContext(t *testing.T) {
 	})
 
 	t.Run("file with release date", func(t *testing.T) {
+		t.Parallel()
 		releaseDate := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)
 		file := &models.File{
 			ID:          1,

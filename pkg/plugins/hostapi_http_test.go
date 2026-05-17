@@ -62,6 +62,7 @@ func setupHTTPNamespace(t *testing.T, rt *Runtime) {
 }
 
 func TestHTTPFetch_AllowedDomain(t *testing.T) {
+	t.Parallel()
 	// Create a test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -93,6 +94,7 @@ func TestHTTPFetch_AllowedDomain(t *testing.T) {
 }
 
 func TestHTTPFetch_BlockedDomain(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntimeWithHTTPAccess([]string{"allowed.example.com"})
 	setupHTTPNamespace(t, rt)
 
@@ -102,6 +104,7 @@ func TestHTTPFetch_BlockedDomain(t *testing.T) {
 }
 
 func TestHTTPFetch_RedirectToBlockedDomain(t *testing.T) {
+	t.Parallel()
 	// Create a target server (blocked domain)
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -127,6 +130,7 @@ func TestHTTPFetch_RedirectToBlockedDomain(t *testing.T) {
 }
 
 func TestHTTPFetch_ResponseJSON(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -160,6 +164,7 @@ func TestHTTPFetch_ResponseJSON(t *testing.T) {
 }
 
 func TestHTTPFetch_ResponseText(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
@@ -182,6 +187,7 @@ func TestHTTPFetch_ResponseText(t *testing.T) {
 }
 
 func TestHTTPFetch_ResponseBytes(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
@@ -211,6 +217,7 @@ func TestHTTPFetch_ResponseBytes(t *testing.T) {
 }
 
 func TestHTTPFetch_NoHTTPAccessCapability(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntimeWithoutHTTPAccess()
 	setupHTTPNamespace(t, rt)
 
@@ -220,6 +227,7 @@ func TestHTTPFetch_NoHTTPAccessCapability(t *testing.T) {
 }
 
 func TestHTTPFetch_NonStandardPortBlocked(t *testing.T) {
+	t.Parallel()
 	// A domain listed without port should block non-standard ports
 	rt := newTestRuntimeWithHTTPAccess([]string{"example.com"})
 	setupHTTPNamespace(t, rt)
@@ -230,6 +238,7 @@ func TestHTTPFetch_NonStandardPortBlocked(t *testing.T) {
 }
 
 func TestHTTPFetch_ExplicitPortAllowed(t *testing.T) {
+	t.Parallel()
 	// Create a test server on a non-standard port
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -253,6 +262,7 @@ func TestHTTPFetch_ExplicitPortAllowed(t *testing.T) {
 }
 
 func TestHTTPFetch_StandardPortAllowed(t *testing.T) {
+	t.Parallel()
 	// A domain listed without port should allow standard ports (80, 443)
 	// We can't easily test real 80/443 connections, so test the validateDomain function directly
 	err := validateDomain("example.com:443", []string{"example.com"})
@@ -266,6 +276,7 @@ func TestHTTPFetch_StandardPortAllowed(t *testing.T) {
 }
 
 func TestHTTPFetch_SubdomainNotAllowed(t *testing.T) {
+	t.Parallel()
 	// "goodreads.com" should NOT allow "api.goodreads.com"
 	rt := newTestRuntimeWithHTTPAccess([]string{"goodreads.com"})
 	setupHTTPNamespace(t, rt)
@@ -276,6 +287,7 @@ func TestHTTPFetch_SubdomainNotAllowed(t *testing.T) {
 }
 
 func TestHTTPFetch_PostWithHeaders(t *testing.T) {
+	t.Parallel()
 	var receivedMethod string
 	var receivedContentType string
 	var receivedBody string
@@ -321,6 +333,7 @@ func TestHTTPFetch_PostWithHeaders(t *testing.T) {
 }
 
 func TestHTTPFetch_ResponseHeaders(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Custom-Header", "custom-value")
 		w.Header().Set("Content-Type", "text/plain")
@@ -352,6 +365,7 @@ func TestHTTPFetch_ResponseHeaders(t *testing.T) {
 }
 
 func TestHTTPFetch_StatusText(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("not found")) //nolint:errcheck
@@ -379,6 +393,7 @@ func TestHTTPFetch_StatusText(t *testing.T) {
 }
 
 func TestHTTPFetch_InvalidURL(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntimeWithHTTPAccess([]string{"example.com"})
 	setupHTTPNamespace(t, rt)
 
@@ -388,6 +403,7 @@ func TestHTTPFetch_InvalidURL(t *testing.T) {
 }
 
 func TestHTTPFetch_ResponseBodyMultipleReads(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -420,6 +436,7 @@ func TestHTTPFetch_ResponseBodyMultipleReads(t *testing.T) {
 }
 
 func TestValidateDomain_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	err := validateDomain("Example.COM", []string{"example.com"})
 	require.NoError(t, err)
 
@@ -428,6 +445,7 @@ func TestValidateDomain_CaseInsensitive(t *testing.T) {
 }
 
 func TestHTTPFetch_RedirectToAllowedDomain(t *testing.T) {
+	t.Parallel()
 	// Final target (allowed)
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -676,6 +694,7 @@ func TestValidateDomain_WildcardCaseInsensitive(t *testing.T) {
 }
 
 func TestHTTPFetch_WildcardDomainAllowed(t *testing.T) {
+	t.Parallel()
 	// Create a test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -700,6 +719,7 @@ func TestHTTPFetch_WildcardDomainAllowed(t *testing.T) {
 }
 
 func TestHTTPFetch_WildcardRedirectAllowed(t *testing.T) {
+	t.Parallel()
 	// This test validates that wildcard domains work with redirects
 	// Since we can't easily create test servers with custom hostnames,
 	// we verify the validateDomain function behavior instead

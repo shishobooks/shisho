@@ -166,6 +166,7 @@ func TestLoadPlugin_MetadataEnricherFieldValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create temp directory with plugin files
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(tt.manifest), 0644))
