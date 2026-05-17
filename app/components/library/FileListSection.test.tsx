@@ -95,7 +95,61 @@ describe("FileListSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders file name and book title for each row", () => {
+  it("shows author names as subtitle when authors are available", () => {
+    const files = [
+      makeFile(1, {
+        book: {
+          id: 10,
+          title: "Book Title 1",
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+          library_id: 1,
+          authors: [
+            {
+              id: 1,
+              book_id: 10,
+              person_id: 1,
+              person: {
+                id: 1,
+                created_at: "2024-01-01T00:00:00Z",
+                updated_at: "2024-01-01T00:00:00Z",
+                name: "Alice",
+                sort_name: "Alice",
+              },
+              sort_order: 0,
+            },
+            {
+              id: 2,
+              book_id: 10,
+              person_id: 2,
+              person: {
+                id: 2,
+                created_at: "2024-01-01T00:00:00Z",
+                updated_at: "2024-01-01T00:00:00Z",
+                name: "Bob",
+                sort_name: "Bob",
+              },
+              sort_order: 1,
+            },
+          ],
+        } as File["book"],
+      }),
+    ];
+    render(
+      wrap(
+        <FileListSection
+          libraryId="1"
+          query={makeQueryResult(files, 1)}
+          title="Files"
+        />,
+      ),
+    );
+    expect(screen.getByText("Edition 1")).toBeInTheDocument();
+    expect(screen.getByText("Alice, Bob")).toBeInTheDocument();
+    expect(screen.queryByText("Book Title 1")).not.toBeInTheDocument();
+  });
+
+  it("falls back to book title when no authors are available", () => {
     const files = [makeFile(1), makeFile(2)];
     render(
       wrap(
