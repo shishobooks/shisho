@@ -23,11 +23,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
 
@@ -83,6 +85,7 @@ export function MetadataMergeDialog({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [action, setAction] = useState<"merge" | "set-child">("merge");
 
   // Filter out the target entity from the list
   const availableEntities = useMemo(() => {
@@ -102,26 +105,23 @@ export function MetadataMergeDialog({
     onSearch(value);
   };
 
-  const handleMerge = async () => {
-    if (selectedId) {
-      await onMerge(selectedId);
-      setSelectedId(null);
-      setSearch("");
-    }
-  };
-
-  const handleSetChild = async () => {
-    if (selectedId && setChildConfig) {
+  const handleConfirm = async () => {
+    if (!selectedId) return;
+    if (action === "set-child" && setChildConfig) {
       await setChildConfig.onSetChild(selectedId);
-      setSelectedId(null);
-      setSearch("");
+    } else {
+      await onMerge(selectedId);
     }
+    setSelectedId(null);
+    setSearch("");
+    setAction("merge");
   };
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setSelectedId(null);
       setSearch("");
+      setAction("merge");
     }
     onOpenChange(isOpen);
   };
@@ -184,6 +184,12 @@ export function MetadataMergeDialog({
                           onSelect={() => {
                             setSelectedId(entity.id);
                             setComboboxOpen(false);
+                            if (
+                              setChildConfig?.disabledIds.includes(entity.id) &&
+                              action === "set-child"
+                            ) {
+                              setAction("merge");
+                            }
                           }}
                           value={String(entity.id)}
                         >
@@ -219,29 +225,63 @@ export function MetadataMergeDialog({
           )}
 
           {selectedEntity && setChildConfig && (
-            <div className="mt-4 space-y-3">
-              <div className="rounded-md border p-3">
-                <p className="text-sm font-medium mb-1">Merge</p>
-                <p className="text-xs text-muted-foreground">
-                  Move all files from "{selectedEntity.name}" to "{targetName}",
-                  add "{selectedEntity.name}" as an alias, and delete "
-                  {selectedEntity.name}".
-                </p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-sm font-medium mb-1">Set as child</p>
-                <p className="text-xs text-muted-foreground">
-                  Make "{selectedEntity.name}" a child of "{targetName}". Both
-                  publishers keep their files and identity.
-                </p>
-                {setChildDisabled && (
-                  <p className="text-xs text-destructive mt-1">
-                    Cannot set as child: "{selectedEntity.name}" is already an
-                    ancestor of "{targetName}", which would create a cycle.
-                  </p>
+            <RadioGroup
+              className="mt-4 space-y-3"
+              onValueChange={(v) => setAction(v as "merge" | "set-child")}
+              value={action}
+            >
+              <label
+                className={cn(
+                  "flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors",
+                  action === "merge"
+                    ? "border-primary bg-primary/5"
+                    : "border-border",
                 )}
-              </div>
-            </div>
+              >
+                <RadioGroupItem className="mt-0.5 shrink-0" value="merge" />
+                <div>
+                  <p className="text-sm font-medium mb-1">Merge</p>
+                  <p className="text-xs text-muted-foreground">
+                    Move all files from "{selectedEntity.name}" to "
+                    {targetName}", add "{selectedEntity.name}" as an alias, and
+                    delete "{selectedEntity.name}".
+                  </p>
+                </div>
+              </label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label
+                    className={cn(
+                      "flex items-start gap-3 rounded-md border p-3 transition-colors",
+                      setChildDisabled
+                        ? "opacity-50 cursor-not-allowed"
+                        : "cursor-pointer",
+                      action === "set-child"
+                        ? "border-primary bg-primary/5"
+                        : "border-border",
+                    )}
+                  >
+                    <RadioGroupItem
+                      className="mt-0.5 shrink-0"
+                      disabled={setChildDisabled}
+                      value="set-child"
+                    />
+                    <div>
+                      <p className="text-sm font-medium mb-1">Set as child</p>
+                      <p className="text-xs text-muted-foreground">
+                        Make "{selectedEntity.name}" a child of "{targetName}".
+                        Both publishers keep their files and identity.
+                      </p>
+                    </div>
+                  </label>
+                </TooltipTrigger>
+                {setChildDisabled && (
+                  <TooltipContent>
+                    Would create a cycle in the publisher hierarchy
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </RadioGroup>
           )}
         </DialogBody>
 
@@ -253,43 +293,25 @@ export function MetadataMergeDialog({
           >
             Cancel
           </Button>
-          {setChildConfig && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    disabled={
-                      setChildConfig.isPending ||
-                      isPending ||
-                      !selectedId ||
-                      setChildDisabled
-                    }
-                    onClick={handleSetChild}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    {setChildConfig.isPending && (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    )}
-                    Set as child
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {setChildDisabled && (
-                <TooltipContent>
-                  Would create a cycle in the publisher hierarchy
-                </TooltipContent>
-              )}
-            </Tooltip>
-          )}
           <Button
-            disabled={isPending || setChildConfig?.isPending || !selectedId}
-            onClick={handleMerge}
+            disabled={
+              isPending ||
+              setChildConfig?.isPending ||
+              !selectedId ||
+              (action === "set-child" && setChildDisabled)
+            }
+            onClick={handleConfirm}
             size="sm"
-            variant="destructive"
+            variant={action === "merge" ? "destructive" : "default"}
           >
-            {isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-            Merge
+            {(isPending || setChildConfig?.isPending) && (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            )}
+            {setChildConfig
+              ? action === "merge"
+                ? "Merge"
+                : "Set as child"
+              : "Merge"}
           </Button>
         </DialogFooter>
       </DialogContent>

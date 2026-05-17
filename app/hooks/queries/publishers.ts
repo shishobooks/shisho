@@ -215,6 +215,9 @@ export const useSetChildPublisher = () => {
         queryKey: [QueryKey.RetrievePublisher, variables.childId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PublisherFiles, variables.parentId],
+      });
     },
   });
 };
