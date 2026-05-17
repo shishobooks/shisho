@@ -226,6 +226,7 @@ export function MetadataMergeDialog({
 
           {selectedEntity && setChildConfig && (
             <RadioGroup
+              aria-label="Action"
               className="mt-4 space-y-3"
               onValueChange={(v) => setAction(v as "merge" | "set-child")}
               value={action}
@@ -242,15 +243,16 @@ export function MetadataMergeDialog({
                 <div>
                   <p className="text-sm font-medium mb-1">Merge</p>
                   <p className="text-xs text-muted-foreground">
-                    Move all files from "{selectedEntity.name}" to "
-                    {targetName}", add "{selectedEntity.name}" as an alias, and
-                    delete "{selectedEntity.name}".
+                    Move all files from "{selectedEntity.name}" to "{targetName}
+                    ", add "{selectedEntity.name}" as an alias, and delete "
+                    {selectedEntity.name}".
                   </p>
                 </div>
               </label>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <label
+                    aria-disabled={setChildDisabled || undefined}
                     className={cn(
                       "flex items-start gap-3 rounded-md border p-3 transition-colors",
                       setChildDisabled
@@ -272,6 +274,12 @@ export function MetadataMergeDialog({
                         Make "{selectedEntity.name}" a child of "{targetName}".
                         Both publishers keep their files and identity.
                       </p>
+                      {setChildDisabled && (
+                        <p className="text-xs text-destructive mt-1">
+                          Cannot set as child — would create a cycle in the
+                          publisher hierarchy.
+                        </p>
+                      )}
                     </div>
                   </label>
                 </TooltipTrigger>
