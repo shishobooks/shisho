@@ -388,3 +388,46 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
 }
+
+func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create the target publisher (the name we're renaming TO)
+	target := &models.Publisher{LibraryID: lib.ID, Name: "Target"}
+	_, err := db.NewInsert().Model(target).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create the source publisher (the one being renamed/merged)
+	source := &models.Publisher{LibraryID: lib.ID, Name: "Source"}
+	_, err = db.NewInsert().Model(source).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a parent publisher to set as the parent of the merged result
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err = db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	// Rename source to "Target" (triggering merge) and simultaneously set parent_id
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"name": "Target", "parent_id": %d}`, parent.ID)
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(source.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// The merge target should now have the parent set
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &target.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID, "parent_id should be set on merge target")
+	assert.Equal(t, parent.ID, *updated.ParentID)
+}

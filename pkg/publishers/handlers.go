@@ -150,6 +150,17 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Handle parent_id update before name-change/merge so that the parent_id
+	// change applies even when a rename triggers a merge (which returns early).
+	if params.ParentID.Set {
+		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
+			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
+				return errcodes.ValidationError(err.Error())
+			}
+			return errors.WithStack(err)
+		}
+	}
+
 	nameChanged := false
 	var oldName string
 	if params.Name != nil && *params.Name != publisher.Name {
@@ -163,6 +174,16 @@ func (h *handler) update(c echo.Context) error {
 			LibraryID: &publisher.LibraryID,
 		})
 		if err == nil && existing.ID != id {
+			// If parent_id was set on the source publisher above, transfer it to the
+			// merge target so the intent is preserved.
+			if params.ParentID.Set {
+				if err := h.publisherService.SetParent(ctx, existing.ID, params.ParentID.Value); err != nil {
+					// Non-fatal: merge succeeded, log and continue
+					log := logger.FromContext(ctx)
+					log.Warn("failed to set parent on merge target", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
+				}
+			}
+
 			err = h.publisherService.MergePublishers(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
@@ -176,6 +197,8 @@ func (h *handler) update(c echo.Context) error {
 				log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
 			}
 
+			// Re-retrieve to pick up parent_id change
+			existing, _ = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
 			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
 			response := struct {
@@ -194,16 +217,6 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 		nameChanged = true
-	}
-
-	// Handle parent_id update
-	if params.ParentID.Set {
-		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
-			if strings.Contains(err.Error(), "cycle") {
-				return errcodes.ValidationError("Cannot set parent: would create a cycle in the publisher hierarchy")
-			}
-			return errors.WithStack(err)
-		}
 	}
 
 	if params.Aliases != nil {

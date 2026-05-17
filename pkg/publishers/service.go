@@ -352,6 +352,23 @@ func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) ([]int, error
 // it validates that setting the parent would not create a cycle.
 func (svc *Service) SetParent(ctx context.Context, publisherID int, parentID *int) error {
 	if parentID != nil {
+		if *parentID <= 0 {
+			return errors.New("invalid parent: parent_id must be a positive integer")
+		}
+
+		// Verify parent is in the same library as the child
+		child, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &publisherID})
+		if err != nil {
+			return err
+		}
+		parent, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: parentID})
+		if err != nil {
+			return err
+		}
+		if child.LibraryID != parent.LibraryID {
+			return errors.New("parent publisher must be in the same library")
+		}
+
 		if err := svc.ValidateNoCycle(ctx, publisherID, *parentID); err != nil {
 			return err
 		}
@@ -391,6 +408,9 @@ func (svc *Service) ValidateNoCycle(ctx context.Context, publisherID, proposedPa
 			Where("id = ?", currentID).
 			Scan(ctx, &parentID)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errors.New("parent publisher not found")
+			}
 			return errors.WithStack(err)
 		}
 		if parentID == nil {

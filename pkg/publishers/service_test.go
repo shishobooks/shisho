@@ -438,6 +438,93 @@ func TestCleanupOrphanedPublishers_PreservesParents(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSetParent_CrossLibraryRejected(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib1 := createTestLibrary(t, db)
+
+	// Create a second library
+	lib2 := &models.Library{
+		Name:                     "Second Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(lib2).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib1.ID, Name: "Child"}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	parent := &models.Publisher{LibraryID: lib2.ID, Name: "Parent In Other Library"}
+	err = svc.CreatePublisher(ctx, parent)
+	require.NoError(t, err)
+
+	// Attempt to set parent from a different library
+	err = svc.SetParent(ctx, child.ID, &parent.ID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "same library")
+}
+
+func TestSetParent_ZeroParentIDRejected(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	pub := &models.Publisher{LibraryID: lib.ID, Name: "Publisher"}
+	err := svc.CreatePublisher(ctx, pub)
+	require.NoError(t, err)
+
+	// parent_id: 0 should be rejected
+	zero := 0
+	err = svc.SetParent(ctx, pub.ID, &zero)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent")
+}
+
+func TestSetParent_NegativeParentIDRejected(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	pub := &models.Publisher{LibraryID: lib.ID, Name: "Publisher"}
+	err := svc.CreatePublisher(ctx, pub)
+	require.NoError(t, err)
+
+	// parent_id: -1 should be rejected
+	neg := -1
+	err = svc.SetParent(ctx, pub.ID, &neg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent")
+}
+
+func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	pub := &models.Publisher{LibraryID: lib.ID, Name: "Publisher"}
+	err := svc.CreatePublisher(ctx, pub)
+	require.NoError(t, err)
+
+	// proposedParentID that doesn't exist
+	err = svc.ValidateNoCycle(ctx, pub.ID, 99999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parent publisher not found")
+}
+
 func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
