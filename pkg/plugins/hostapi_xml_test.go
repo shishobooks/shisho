@@ -8,6 +8,7 @@ import (
 )
 
 func TestXML_Parse_CreatesDocument(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -22,6 +23,7 @@ func TestXML_Parse_CreatesDocument(t *testing.T) {
 }
 
 func TestXML_Parse_NestedElements(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -36,6 +38,7 @@ func TestXML_Parse_NestedElements(t *testing.T) {
 }
 
 func TestXML_Parse_TextContentConcatenation(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -52,6 +55,7 @@ func TestXML_Parse_TextContentConcatenation(t *testing.T) {
 }
 
 func TestXML_Parse_Attributes(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -66,6 +70,7 @@ func TestXML_Parse_Attributes(t *testing.T) {
 }
 
 func TestXML_Parse_NamespacedElements(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -81,6 +86,7 @@ func TestXML_Parse_NamespacedElements(t *testing.T) {
 }
 
 func TestXML_QuerySelector_FindsByTagName(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -96,6 +102,7 @@ func TestXML_QuerySelector_FindsByTagName(t *testing.T) {
 }
 
 func TestXML_QuerySelector_FindsByNamespacePrefix(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -111,6 +118,7 @@ func TestXML_QuerySelector_FindsByNamespacePrefix(t *testing.T) {
 }
 
 func TestXML_QuerySelector_ReturnsNullForNoMatch(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -126,6 +134,7 @@ func TestXML_QuerySelector_ReturnsNullForNoMatch(t *testing.T) {
 }
 
 func TestXML_QuerySelectorAll_ReturnsMultipleMatches(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -145,6 +154,7 @@ func TestXML_QuerySelectorAll_ReturnsMultipleMatches(t *testing.T) {
 }
 
 func TestXML_QuerySelectorAll_ReturnsEmptyArrayForNoMatch(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -160,6 +170,7 @@ func TestXML_QuerySelectorAll_ReturnsEmptyArrayForNoMatch(t *testing.T) {
 }
 
 func TestXML_QuerySelector_NamespaceQualifiedMultipleNS(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -185,6 +196,7 @@ func TestXML_QuerySelector_NamespaceQualifiedMultipleNS(t *testing.T) {
 }
 
 func TestXML_QuerySelector_UnqualifiedMatchesAnyNamespace(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -201,6 +213,7 @@ func TestXML_QuerySelector_UnqualifiedMatchesAnyNamespace(t *testing.T) {
 }
 
 func TestXML_QuerySelectorAll_DeepNested(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -220,6 +233,7 @@ func TestXML_QuerySelectorAll_DeepNested(t *testing.T) {
 }
 
 func TestXML_QuerySelector_MatchesRoot(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -235,6 +249,7 @@ func TestXML_QuerySelector_MatchesRoot(t *testing.T) {
 }
 
 func TestXML_Parse_EmptyElement(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -249,6 +264,7 @@ func TestXML_Parse_EmptyElement(t *testing.T) {
 }
 
 func TestXML_Parse_InvalidXML(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -260,6 +276,7 @@ func TestXML_Parse_InvalidXML(t *testing.T) {
 }
 
 func TestXML_Parse_NoArgument(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -271,6 +288,7 @@ func TestXML_Parse_NoArgument(t *testing.T) {
 }
 
 func TestXML_QuerySelector_NoArguments(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -282,6 +300,7 @@ func TestXML_QuerySelector_NoArguments(t *testing.T) {
 }
 
 func TestXML_QuerySelectorAll_NoArguments(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -293,6 +312,7 @@ func TestXML_QuerySelectorAll_NoArguments(t *testing.T) {
 }
 
 func TestXML_FunctionsExist(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -307,6 +327,7 @@ func TestXML_FunctionsExist(t *testing.T) {
 }
 
 func TestXML_QuerySelector_NamespaceMismatch(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -323,6 +344,7 @@ func TestXML_QuerySelector_NamespaceMismatch(t *testing.T) {
 }
 
 func TestXML_Parse_MultipleChildren(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -341,6 +363,7 @@ func TestXML_Parse_MultipleChildren(t *testing.T) {
 }
 
 func TestXML_Parse_ChildTextContent(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)

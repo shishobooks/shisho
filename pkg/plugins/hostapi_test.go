@@ -47,6 +47,7 @@ func strPtr(s string) *string {
 }
 
 func TestInjectHostAPIs_LogNamespace(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 
@@ -68,6 +69,7 @@ func TestInjectHostAPIs_LogNamespace(t *testing.T) {
 }
 
 func TestInjectHostAPIs_ConfigGet(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{
 		"api_key":  strPtr("secret123"),
@@ -87,6 +89,7 @@ func TestInjectHostAPIs_ConfigGet(t *testing.T) {
 }
 
 func TestInjectHostAPIs_ConfigGet_Undefined(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 
@@ -99,6 +102,7 @@ func TestInjectHostAPIs_ConfigGet_Undefined(t *testing.T) {
 }
 
 func TestInjectHostAPIs_ConfigGetAll(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{
 		"key1": strPtr("value1"),
@@ -120,6 +124,7 @@ func TestInjectHostAPIs_ConfigGetAll(t *testing.T) {
 }
 
 func TestInjectHostAPIs_FFmpegRequiresCapability(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 
@@ -133,6 +138,7 @@ func TestInjectHostAPIs_FFmpegRequiresCapability(t *testing.T) {
 }
 
 func TestInjectHostAPIs_LogPluginTag(t *testing.T) {
+	t.Parallel()
 	// Verify the runtime uses the correct scope/pluginID combination
 	rt := newTestRuntime("community", "my-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
@@ -229,6 +235,7 @@ func TestInjectHostAPIs_Sleep_InvalidArgs(t *testing.T) {
 }
 
 func TestInjectHostAPIs_ConfigGetAll_Empty(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 

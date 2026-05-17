@@ -58,6 +58,7 @@ func copyTestdataFile(t *testing.T, srcDir, destDir, filename string) {
 }
 
 func TestManager_LoadAll(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -83,6 +84,7 @@ func TestManager_LoadAll(t *testing.T) {
 }
 
 func TestManager_LoadAll_Disabled(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -106,6 +108,7 @@ func TestManager_LoadAll_Disabled(t *testing.T) {
 }
 
 func TestManager_LoadAll_LoadError(t *testing.T) {
+	t.Parallel()
 	// Create a manager with no plugin files (pointing to non-existent dir)
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -141,6 +144,7 @@ func TestManager_LoadAll_LoadError(t *testing.T) {
 }
 
 func TestManager_LoadPlugin(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -165,6 +169,7 @@ func TestManager_LoadPlugin(t *testing.T) {
 }
 
 func TestManager_UnloadPlugin(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -190,6 +195,7 @@ func TestManager_UnloadPlugin(t *testing.T) {
 }
 
 func TestManager_ReloadPlugin(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -219,6 +225,7 @@ func TestManager_ReloadPlugin(t *testing.T) {
 }
 
 func TestManager_GetOrderedRuntimes(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -250,6 +257,7 @@ func TestManager_GetOrderedRuntimes(t *testing.T) {
 }
 
 func TestManager_RegisteredFileExtensions(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
 	ctx := context.Background()
 
@@ -273,6 +281,7 @@ func TestManager_RegisteredFileExtensions(t *testing.T) {
 }
 
 func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
+	t.Parallel()
 	// Create a plugin that declares reserved extensions in fileParser.types
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -336,6 +345,7 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 }
 
 func TestManager_RegisteredConverterExtensions(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
 	ctx := context.Background()
 
@@ -359,6 +369,7 @@ func TestManager_RegisteredConverterExtensions(t *testing.T) {
 }
 
 func TestManager_GetParserForType(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
 	ctx := context.Background()
 
@@ -397,6 +408,7 @@ func TestManager_GetParserForType(t *testing.T) {
 }
 
 func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -459,6 +471,7 @@ func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 }
 
 func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -647,6 +660,7 @@ func TestManager_LoadPlugin_NoMinVersion(t *testing.T) {
 }
 
 func TestManager_GetManualRuntimes(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -704,6 +718,7 @@ func TestManager_GetManualRuntimes(t *testing.T) {
 }
 
 func TestManager_GetOrderedRuntimes_GlobalModeFiltering(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

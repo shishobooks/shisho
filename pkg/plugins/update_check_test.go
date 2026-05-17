@@ -13,6 +13,7 @@ import (
 )
 
 func TestManager_CheckForUpdatesForRepo_UsesPassedManifest(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -81,6 +82,7 @@ func TestManager_CheckForUpdatesForRepo_UsesPassedManifest(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -139,6 +141,7 @@ func TestManager_CheckForUpdates_UpdateAvailable(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_AlreadyUpToDate(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -194,6 +197,7 @@ func TestManager_CheckForUpdates_AlreadyUpToDate(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_ClearsStaleUpdate(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -251,6 +255,7 @@ func TestManager_CheckForUpdates_ClearsStaleUpdate(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_DisabledRepoSkipped(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -314,6 +319,7 @@ func TestManager_CheckForUpdates_DisabledRepoSkipped(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_FetchErrorSkipped(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -356,6 +362,7 @@ func TestManager_CheckForUpdates_FetchErrorSkipped(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_IncompatibleVersionsFiltered(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -411,6 +418,7 @@ func TestManager_CheckForUpdates_IncompatibleVersionsFiltered(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_NoPlugins(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -422,6 +430,7 @@ func TestManager_CheckForUpdates_NoPlugins(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -477,6 +486,7 @@ func TestManager_CheckForUpdates_ScopeMismatch(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_NewestFirstOrdering(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")
@@ -535,6 +545,7 @@ func TestManager_CheckForUpdates_NewestFirstOrdering(t *testing.T) {
 }
 
 func TestManager_CheckForUpdates_SemverNotLexicographic(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	mgr := NewManager(service, t.TempDir(), "")

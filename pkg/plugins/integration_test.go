@@ -15,6 +15,7 @@ import (
 // TestPluginLifecycle exercises the full plugin lifecycle:
 // install, load, run all hooks, and uninstall.
 func TestPluginLifecycle(t *testing.T) {
+	t.Parallel()
 	// 1. Set up infrastructure: in-memory DB, service, plugin directory
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -320,6 +321,7 @@ func TestPluginLifecycle(t *testing.T) {
 // TestPluginLifecycle_ConfigIntegration verifies that plugin config is accessible
 // from within JavaScript hooks via shisho.config.get/getAll.
 func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
@@ -413,6 +415,7 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 // TestPluginLifecycle_LoadAll verifies that LoadAll loads all enabled plugins
 // and properly skips disabled ones.
 func TestPluginLifecycle_LoadAll(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
@@ -491,6 +494,7 @@ func TestPluginLifecycle_LoadAll(t *testing.T) {
 
 // TestPluginLifecycle_ReloadPlugin verifies hot-reload swaps the runtime.
 func TestPluginLifecycle_ReloadPlugin(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()

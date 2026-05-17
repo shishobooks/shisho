@@ -49,6 +49,7 @@ func createTestZipWithDirs(t *testing.T, zipPath string, dirs []string, files ma
 }
 
 func TestArchive_ExtractZip_ExtractsFiles(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	// Create a zip file in the plugin dir
@@ -79,6 +80,7 @@ func TestArchive_ExtractZip_ExtractsFiles(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_ZipSlipBlocked(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	// Create a malicious zip with a path traversal entry
@@ -108,6 +110,7 @@ func TestArchive_ExtractZip_ZipSlipBlocked(t *testing.T) {
 }
 
 func TestArchive_CreateZip_CreatesValidZip(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	// Create source directory with files
@@ -142,6 +145,7 @@ func TestArchive_CreateZip_CreatesValidZip(t *testing.T) {
 }
 
 func TestArchive_ReadZipEntry_ReadsSpecificEntry(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	zipPath := filepath.Join(pluginDir, "test.zip")
@@ -167,6 +171,7 @@ func TestArchive_ReadZipEntry_ReadsSpecificEntry(t *testing.T) {
 }
 
 func TestArchive_ReadZipEntry_NonExistentEntry(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	zipPath := filepath.Join(pluginDir, "test.zip")
@@ -183,6 +188,7 @@ func TestArchive_ReadZipEntry_NonExistentEntry(t *testing.T) {
 }
 
 func TestArchive_ListZipEntries_ReturnsAllNames(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	zipPath := filepath.Join(pluginDir, "test.zip")
@@ -205,6 +211,7 @@ func TestArchive_ListZipEntries_ReturnsAllNames(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_ReadAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -224,6 +231,7 @@ func TestArchive_ExtractZip_ReadAccessDenied(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_WriteAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -243,6 +251,7 @@ func TestArchive_ExtractZip_WriteAccessDenied(t *testing.T) {
 }
 
 func TestArchive_CreateZip_ReadAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -262,6 +271,7 @@ func TestArchive_CreateZip_ReadAccessDenied(t *testing.T) {
 }
 
 func TestArchive_CreateZip_WriteAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -282,6 +292,7 @@ func TestArchive_CreateZip_WriteAccessDenied(t *testing.T) {
 }
 
 func TestArchive_NoFSContext_DeniesAccess(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -308,6 +319,7 @@ func TestArchive_NoFSContext_DeniesAccess(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_WithDirectoryEntries(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	zipPath := filepath.Join(pluginDir, "test.zip")
@@ -337,6 +349,7 @@ func TestArchive_ExtractZip_WithDirectoryEntries(t *testing.T) {
 }
 
 func TestArchive_ReadZipEntry_ReadAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -352,6 +365,7 @@ func TestArchive_ReadZipEntry_ReadAccessDenied(t *testing.T) {
 }
 
 func TestArchive_ListZipEntries_ReadAccessDenied(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -367,6 +381,7 @@ func TestArchive_ListZipEntries_ReadAccessDenied(t *testing.T) {
 }
 
 func TestArchive_FunctionsExist(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -381,6 +396,7 @@ func TestArchive_FunctionsExist(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_WithAllowedPaths(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	srcDir := t.TempDir()
 	destDir := t.TempDir()
@@ -402,6 +418,7 @@ func TestArchive_ExtractZip_WithAllowedPaths(t *testing.T) {
 }
 
 func TestArchive_CreateZip_RoundTrip(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	// Create source files
@@ -433,6 +450,7 @@ func TestArchive_CreateZip_RoundTrip(t *testing.T) {
 }
 
 func TestArchive_ExtractZip_MissingArgs(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -443,6 +461,7 @@ func TestArchive_ExtractZip_MissingArgs(t *testing.T) {
 }
 
 func TestArchive_CreateZip_MissingArgs(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -453,6 +472,7 @@ func TestArchive_CreateZip_MissingArgs(t *testing.T) {
 }
 
 func TestArchive_ReadZipEntry_MissingArgs(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -463,6 +483,7 @@ func TestArchive_ReadZipEntry_MissingArgs(t *testing.T) {
 }
 
 func TestArchive_ListZipEntries_MissingArgs(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)

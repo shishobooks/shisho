@@ -136,6 +136,7 @@ func TestInstaller_InstallPlugin_InvalidURL(t *testing.T) {
 }
 
 func TestInstaller_UninstallPlugin(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	inst := NewInstaller(pluginDir)
 
@@ -154,6 +155,7 @@ func TestInstaller_UninstallPlugin(t *testing.T) {
 }
 
 func TestInstaller_UninstallPlugin_NotExists(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	inst := NewInstaller(pluginDir)
 

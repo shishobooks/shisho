@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseManifest_Valid(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion":  1,
 		"id":               "enricher-goodreads",
@@ -73,6 +74,7 @@ func TestParseManifest_Valid(t *testing.T) {
 }
 
 func TestParseManifest_MissingRequiredFields(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		manifest    map[string]interface{}
@@ -118,6 +120,7 @@ func TestParseManifest_MissingRequiredFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			data, err := json.Marshal(tt.manifest)
 			require.NoError(t, err)
 
@@ -129,6 +132,7 @@ func TestParseManifest_MissingRequiredFields(t *testing.T) {
 }
 
 func TestParseManifest_UnsupportedManifestVersion(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion": 99,
 		"id":              "test-plugin",
@@ -145,6 +149,7 @@ func TestParseManifest_UnsupportedManifestVersion(t *testing.T) {
 }
 
 func TestParseManifest_InputConverter(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion": 1,
 		"id":              "converter-cbz-to-epub",
@@ -174,6 +179,7 @@ func TestParseManifest_InputConverter(t *testing.T) {
 }
 
 func TestParseManifest_FileParser(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion": 1,
 		"id":              "parser-mobi",
@@ -201,6 +207,7 @@ func TestParseManifest_FileParser(t *testing.T) {
 }
 
 func TestParseManifest_IdentifierTypes(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion": 1,
 		"id":              "identifier-goodreads",
@@ -244,6 +251,7 @@ func TestParseManifest_IdentifierTypes(t *testing.T) {
 }
 
 func TestParseManifest_FileParserReservedExtensions(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"manifestVersion": 1,
 		"id":              "parser-custom-epub",

@@ -12,6 +12,7 @@ import (
 const testdataRoot = "testdata"
 
 func TestLoadPlugin_SimpleEnricher(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "simple-enricher")
 	rt, err := LoadPlugin(dir, "official", "simple-enricher")
 	require.NoError(t, err)
@@ -22,6 +23,7 @@ func TestLoadPlugin_SimpleEnricher(t *testing.T) {
 }
 
 func TestLoadPlugin_MultiHook(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "multi-hook")
 	rt, err := LoadPlugin(dir, "official", "multi-hook")
 	require.NoError(t, err)
@@ -32,6 +34,7 @@ func TestLoadPlugin_MultiHook(t *testing.T) {
 }
 
 func TestLoadPlugin_UndeclaredHook(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "undeclared-hook")
 	_, err := LoadPlugin(dir, "official", "undeclared")
 	require.Error(t, err)
@@ -39,6 +42,7 @@ func TestLoadPlugin_UndeclaredHook(t *testing.T) {
 }
 
 func TestLoadPlugin_MissingMainJS(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "missing-mainjs")
 	_, err := LoadPlugin(dir, "official", "missing-mainjs")
 	require.Error(t, err)
@@ -46,6 +50,7 @@ func TestLoadPlugin_MissingMainJS(t *testing.T) {
 }
 
 func TestLoadPlugin_InvalidJS(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "invalid-js")
 	_, err := LoadPlugin(dir, "official", "invalid-js")
 	require.Error(t, err)
@@ -53,6 +58,7 @@ func TestLoadPlugin_InvalidJS(t *testing.T) {
 }
 
 func TestLoadPlugin_ManifestReturned(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(testdataRoot, "simple-enricher")
 	rt, err := LoadPlugin(dir, "official", "simple-enricher")
 	require.NoError(t, err)
@@ -70,6 +76,7 @@ func TestLoadPlugin_ManifestReturned(t *testing.T) {
 }
 
 func TestLoadPlugin_MetadataEnricherFieldValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		manifest    string
@@ -159,6 +166,7 @@ func TestLoadPlugin_MetadataEnricherFieldValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create temp directory with plugin files
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(tt.manifest), 0644))
