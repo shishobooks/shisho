@@ -50,7 +50,6 @@ func sha256Hex(data []byte) string {
 }
 
 func TestInstaller_InstallPlugin_Success(t *testing.T) {
-	t.Parallel()
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
@@ -91,7 +90,6 @@ func TestInstaller_InstallPlugin_Success(t *testing.T) {
 }
 
 func TestInstaller_InstallPlugin_BadChecksum(t *testing.T) {
-	t.Parallel()
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
@@ -125,7 +123,6 @@ func TestInstaller_InstallPlugin_BadChecksum(t *testing.T) {
 }
 
 func TestInstaller_InstallPlugin_InvalidURL(t *testing.T) {
-	t.Parallel()
 	origHosts := AllowedDownloadHosts
 	AllowedDownloadHosts = []string{"https://github.com/"}
 	defer func() { AllowedDownloadHosts = origHosts }()
@@ -168,7 +165,6 @@ func TestInstaller_UninstallPlugin_NotExists(t *testing.T) {
 }
 
 func TestInstaller_UpdatePlugin(t *testing.T) {
-	t.Parallel()
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
@@ -215,7 +211,6 @@ func TestInstaller_UpdatePlugin(t *testing.T) {
 }
 
 func TestIsAllowedDownloadURL_AcceptsLocalhostWhenConfigured(t *testing.T) {
-	t.Parallel()
 	// Not parallel: mutates package-level AllowedDownloadHosts, which is also
 	// mutated by other tests in this file. Running in parallel would race.
 	orig := AllowedDownloadHosts
@@ -227,7 +222,6 @@ func TestIsAllowedDownloadURL_AcceptsLocalhostWhenConfigured(t *testing.T) {
 }
 
 func TestInstaller_UpdatePlugin_BadChecksum(t *testing.T) {
-	t.Parallel()
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
