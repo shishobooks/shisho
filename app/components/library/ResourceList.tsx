@@ -45,7 +45,7 @@ const ResourceList = <T extends { id: number }>({
   itemConfig,
   linkTo,
   itemLabel,
-  maxWidth = "max-w-3xl",
+  maxWidth = "max-w-4xl",
 }: ResourceListProps<T>) => {
   usePageTitle(title);
 
