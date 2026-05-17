@@ -75,6 +75,8 @@ interface ResourceDetailProps {
   notFound?: boolean;
   /** Label for the not-found page heading (e.g. "Genre Not Found") */
   notFoundLabel?: string;
+  /** Override the Edit button to use an external dialog instead of the built-in MetadataEditDialog */
+  onEditClick?: () => void;
   children?: ReactNode;
 }
 
@@ -97,6 +99,7 @@ export function ResourceDetail({
   isLoading,
   notFound,
   notFoundLabel,
+  onEditClick,
   children,
 }: ResourceDetailProps) {
   const libraryQuery = useLibrary(libraryId);
@@ -152,7 +155,7 @@ export function ResourceDetail({
           </div>
           <div className="flex gap-2 shrink-0">
             <Button
-              onClick={() => setEditOpen(true)}
+              onClick={() => (onEditClick ? onEditClick() : setEditOpen(true))}
               size="sm"
               variant="outline"
             >
@@ -195,17 +198,19 @@ export function ResourceDetail({
 
       {children}
 
-      <MetadataEditDialog
-        aliases={aliases}
-        entityName={name}
-        entityType={entityType}
-        isPending={editConfig.isPending}
-        onOpenChange={setEditOpen}
-        onSave={editConfig.onSave}
-        open={editOpen}
-        sortName={editConfig.sortName}
-        sortNameSource={editConfig.sortNameSource}
-      />
+      {!onEditClick && (
+        <MetadataEditDialog
+          aliases={aliases}
+          entityName={name}
+          entityType={entityType}
+          isPending={editConfig.isPending}
+          onOpenChange={setEditOpen}
+          onSave={editConfig.onSave}
+          open={editOpen}
+          sortName={editConfig.sortName}
+          sortNameSource={editConfig.sortNameSource}
+        />
+      )}
 
       <MetadataMergeDialog
         entities={mergeConfig.entities}

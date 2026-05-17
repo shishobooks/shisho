@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -198,6 +199,160 @@ func TestFiles_ResponseShape(t *testing.T) {
 	assert.Contains(t, resp, "total")
 }
 
+func TestRetrieve_IncludesAncestorsAndDescendants(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	_, err := db.NewInsert().Model(root).Exec(ctx)
+	require.NoError(t, err)
+
+	middle := &models.Publisher{LibraryID: lib.ID, Name: "Middle", ParentID: &root.ID}
+	_, err = db.NewInsert().Model(middle).Exec(ctx)
+	require.NoError(t, err)
+
+	leaf := &models.Publisher{LibraryID: lib.ID, Name: "Leaf", ParentID: &middle.ID}
+	_, err = db.NewInsert().Model(leaf).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(middle.ID))
+
+	err = h.retrieve(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	// Check ancestors (should be root)
+	assert.Contains(t, resp, "ancestors")
+	var ancestors []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	err = json.Unmarshal(resp["ancestors"], &ancestors)
+	require.NoError(t, err)
+	require.Len(t, ancestors, 1)
+	assert.Equal(t, "Root", ancestors[0].Name)
+	assert.Equal(t, root.ID, ancestors[0].ID)
+
+	// Check descendant_ids (should be leaf)
+	assert.Contains(t, resp, "descendant_ids")
+	var descendantIDs []int
+	err = json.Unmarshal(resp["descendant_ids"], &descendantIDs)
+	require.NoError(t, err)
+	require.Len(t, descendantIDs, 1)
+	assert.Equal(t, leaf.ID, descendantIDs[0])
+}
+
+func TestUpdate_SetParent(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child"}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"parent_id": %d}`, parent.ID)
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(child.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify the parent was set
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, parent.ID, *updated.ParentID)
+}
+
+func TestUpdate_ClearParent(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &parent.ID}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	body := `{"parent_id": null}`
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(child.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify the parent was cleared
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	assert.Nil(t, updated.ParentID)
+}
+
+func TestUpdate_CycleRejected(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	pubA := &models.Publisher{LibraryID: lib.ID, Name: "A"}
+	_, err := db.NewInsert().Model(pubA).Exec(ctx)
+	require.NoError(t, err)
+
+	pubB := &models.Publisher{LibraryID: lib.ID, Name: "B", ParentID: &pubA.ID}
+	_, err = db.NewInsert().Model(pubB).Exec(ctx)
+	require.NoError(t, err)
+
+	// Try to set A's parent to B (would create A->B->A cycle)
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"parent_id": %d}`, pubB.ID)
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(pubA.ID))
+
+	err = h.update(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle")
+}
+
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
 	db := setupHandlerTestDB(t)
@@ -232,4 +387,47 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
+}
+
+func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create the target publisher (the name we're renaming TO)
+	target := &models.Publisher{LibraryID: lib.ID, Name: "Target"}
+	_, err := db.NewInsert().Model(target).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create the source publisher (the one being renamed/merged)
+	source := &models.Publisher{LibraryID: lib.ID, Name: "Source"}
+	_, err = db.NewInsert().Model(source).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create a parent publisher to set as the parent of the merged result
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err = db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	// Rename source to "Target" (triggering merge) and simultaneously set parent_id
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"name": "Target", "parent_id": %d}`, parent.ID)
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(source.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// The merge target should now have the parent set
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &target.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID, "parent_id should be set on merge target")
+	assert.Equal(t, parent.ID, *updated.ParentID)
 }

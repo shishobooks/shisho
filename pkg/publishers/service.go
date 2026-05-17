@@ -26,6 +26,7 @@ type ListPublishersOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
+	ExcludeIDs []int // Exclude specific publisher IDs from results
 
 	includeTotal bool
 }
@@ -159,6 +160,9 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 			q = q.Where("pub.id IN (SELECT publisher_id FROM publishers_fts WHERE publishers_fts MATCH ?)", ftsQuery)
 		}
 	}
+	if len(opts.ExcludeIDs) > 0 {
+		q = q.Where("pub.id NOT IN (?)", bun.List(opts.ExcludeIDs))
+	}
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
 	}
@@ -282,6 +286,36 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 			return errors.WithStack(err)
 		}
 
+		// Re-parent children of source to target (exclude target itself to avoid self-reference)
+		_, err = tx.NewUpdate().
+			Model((*models.Publisher)(nil)).
+			Set("parent_id = ?", targetID).
+			Where("parent_id = ? AND id != ?", sourceID, targetID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// If target was a child of source, clear target's parent_id to avoid dangling reference
+		_, err = tx.NewUpdate().
+			Model((*models.Publisher)(nil)).
+			Set("parent_id = NULL").
+			Where("id = ? AND parent_id = ?", targetID, sourceID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// If source was a child of target, clear that to avoid issues during deletion
+		_, err = tx.NewUpdate().
+			Model((*models.Publisher)(nil)).
+			Set("parent_id = NULL").
+			Where("id = ? AND parent_id = ?", sourceID, targetID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		if err := aliases.TransferAliasesOnMerge(ctx, tx, aliases.PublisherConfig, sourceID, targetID); err != nil {
 			return err
 		}
@@ -296,17 +330,166 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 }
 
 // CleanupOrphanedPublishers deletes publishers with no file associations and
-// returns the IDs of deleted publishers. Callers must pass the returned IDs to
-// searchService.DeleteFromPublisherIndex to keep publishers_fts in sync.
+// no children, returning the IDs of deleted publishers. Callers must pass the
+// returned IDs to searchService.DeleteFromPublisherIndex to keep publishers_fts
+// in sync. Publishers that serve as parents in the hierarchy are preserved even
+// if they have no direct file associations.
 func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) ([]int, error) {
 	deletedIDs := []int{}
 	err := svc.db.NewDelete().
 		Model((*models.Publisher)(nil)).
 		Where("id NOT IN (SELECT DISTINCT publisher_id FROM files WHERE publisher_id IS NOT NULL)").
+		Where("id NOT IN (SELECT DISTINCT parent_id FROM publishers WHERE parent_id IS NOT NULL)").
 		Returning("id").
 		Scan(ctx, &deletedIDs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	return deletedIDs, nil
+}
+
+// SetParent sets or clears the parent of a publisher. If parentID is non-nil,
+// it validates that setting the parent would not create a cycle.
+func (svc *Service) SetParent(ctx context.Context, publisherID int, parentID *int) error {
+	if parentID != nil {
+		if *parentID <= 0 {
+			return errors.New("invalid parent: parent_id must be a positive integer")
+		}
+
+		// Verify parent is in the same library as the child
+		child, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &publisherID})
+		if err != nil {
+			return err
+		}
+		parent, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: parentID})
+		if err != nil {
+			return err
+		}
+		if child.LibraryID != parent.LibraryID {
+			return errors.New("parent publisher must be in the same library")
+		}
+
+		if err := svc.ValidateNoCycle(ctx, publisherID, *parentID); err != nil {
+			return err
+		}
+	}
+
+	publisher := &models.Publisher{ID: publisherID, ParentID: parentID}
+	_, err := svc.db.NewUpdate().
+		Model(publisher).
+		Column("parent_id").
+		WherePK().
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// ValidateNoCycle walks the ancestor chain of proposedParentID and rejects the
+// operation if publisherID is found (which would create a cycle). It also
+// rejects self-references (publisherID == proposedParentID).
+func (svc *Service) ValidateNoCycle(ctx context.Context, publisherID, proposedParentID int) error {
+	if publisherID == proposedParentID {
+		return errors.New("cannot set parent: would create a cycle")
+	}
+
+	// Walk up from proposedParentID to check for cycles
+	currentID := proposedParentID
+	visited := map[int]bool{publisherID: true}
+
+	for {
+		if visited[currentID] {
+			return errors.New("cannot set parent: would create a cycle")
+		}
+		visited[currentID] = true
+
+		var parentID *int
+		err := svc.db.NewSelect().
+			Model((*models.Publisher)(nil)).
+			Column("parent_id").
+			Where("id = ?", currentID).
+			Scan(ctx, &parentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errors.New("parent publisher not found")
+			}
+			return errors.WithStack(err)
+		}
+		if parentID == nil {
+			break
+		}
+		currentID = *parentID
+	}
+
+	return nil
+}
+
+// GetAncestors returns the ancestor chain for a publisher, ordered from
+// immediate parent to root.
+func (svc *Service) GetAncestors(ctx context.Context, publisherID int) ([]*models.Publisher, error) {
+	// First get the publisher's parent_id
+	var parentID *int
+	err := svc.db.NewSelect().
+		Model((*models.Publisher)(nil)).
+		Column("parent_id").
+		Where("id = ?", publisherID).
+		Scan(ctx, &parentID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var ancestors []*models.Publisher
+	visited := map[int]bool{publisherID: true}
+
+	currentID := parentID
+	for currentID != nil {
+		if visited[*currentID] {
+			break // Safety: prevent infinite loop on corrupt data
+		}
+		visited[*currentID] = true
+
+		ancestor := &models.Publisher{}
+		err := svc.db.NewSelect().
+			Model(ancestor).
+			Where("pub.id = ?", *currentID).
+			Scan(ctx)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		ancestors = append(ancestors, ancestor)
+		currentID = ancestor.ParentID
+	}
+
+	return ancestors, nil
+}
+
+// GetDescendantIDs returns all descendant IDs of a publisher (children,
+// grandchildren, etc.) using a breadth-first traversal.
+func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]int, error) {
+	var descendants []int
+	queue := []int{publisherID}
+	visited := map[int]bool{publisherID: true}
+
+	for len(queue) > 0 {
+		currentID := queue[0]
+		queue = queue[1:]
+
+		var childIDs []int
+		err := svc.db.NewSelect().
+			Model((*models.Publisher)(nil)).
+			Column("id").
+			Where("parent_id = ?", currentID).
+			Scan(ctx, &childIDs)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		for _, childID := range childIDs {
+			if visited[childID] {
+				continue // Safety: prevent infinite loop on corrupt circular data
+			}
+			visited[childID] = true
+			descendants = append(descendants, childID)
+			queue = append(queue, childID)
+		}
+	}
+
+	return descendants, nil
 }

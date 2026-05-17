@@ -20,6 +20,11 @@ type handler struct {
 	searchService    *search.Service
 }
 
+type ancestorResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := strconv.Atoi(c.Param("id"))
@@ -47,11 +52,27 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
 
+	ancestors, err := h.publisherService.GetAncestors(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	ancestorList := make([]ancestorResponse, len(ancestors))
+	for i, a := range ancestors {
+		ancestorList[i] = ancestorResponse{ID: a.ID, Name: a.Name}
+	}
+
+	descendantIDs, err := h.publisherService.GetDescendantIDs(ctx, id)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	response := struct {
 		*models.Publisher
-		FileCount int      `json:"file_count"`
-		Aliases   []string `json:"aliases"`
-	}{publisher, fileCount, aliasList}
+		FileCount     int                `json:"file_count"`
+		Aliases       []string           `json:"aliases"`
+		Ancestors     []ancestorResponse `json:"ancestors"`
+		DescendantIDs []int              `json:"descendant_ids"`
+	}{publisher, fileCount, aliasList, ancestorList, descendantIDs}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -65,10 +86,11 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	opts := ListPublishersOptions{
-		Limit:     &params.Limit,
-		Offset:    &params.Offset,
-		LibraryID: params.LibraryID,
-		Search:    params.Search,
+		Limit:      &params.Limit,
+		Offset:     &params.Offset,
+		LibraryID:  params.LibraryID,
+		Search:     params.Search,
+		ExcludeIDs: params.ExcludeIDs,
 	}
 
 	if user, ok := c.Get("user").(*models.User); ok {
@@ -128,6 +150,17 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Handle parent_id update before name-change/merge so that the parent_id
+	// change applies even when a rename triggers a merge (which returns early).
+	if params.ParentID.Set {
+		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
+			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
+				return errcodes.ValidationError(err.Error())
+			}
+			return errors.WithStack(err)
+		}
+	}
+
 	nameChanged := false
 	var oldName string
 	if params.Name != nil && *params.Name != publisher.Name {
@@ -141,6 +174,16 @@ func (h *handler) update(c echo.Context) error {
 			LibraryID: &publisher.LibraryID,
 		})
 		if err == nil && existing.ID != id {
+			// If parent_id was set on the source publisher above, transfer it to the
+			// merge target so the intent is preserved.
+			if params.ParentID.Set {
+				if err := h.publisherService.SetParent(ctx, existing.ID, params.ParentID.Value); err != nil {
+					// Non-fatal: merge succeeded, log and continue
+					log := logger.FromContext(ctx)
+					log.Warn("failed to set parent on merge target", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
+				}
+			}
+
 			err = h.publisherService.MergePublishers(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
@@ -154,6 +197,8 @@ func (h *handler) update(c echo.Context) error {
 				log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
 			}
 
+			// Re-retrieve to pick up parent_id change
+			existing, _ = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
 			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
 			response := struct {

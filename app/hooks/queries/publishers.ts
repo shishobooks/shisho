@@ -14,6 +14,16 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 
+export interface PublisherAncestor {
+  id: number;
+  name: string;
+}
+
+export interface PublisherDetail extends Publisher {
+  ancestors: PublisherAncestor[];
+  descendant_ids: number[];
+}
+
 export enum QueryKey {
   ListPublishers = "ListPublishers",
   RetrievePublisher = "RetrievePublisher",
@@ -41,11 +51,11 @@ export const usePublishersList = (
 export const usePublisher = (
   publisherId?: number,
   options: Omit<
-    UseQueryOptions<Publisher, ShishoAPIError>,
+    UseQueryOptions<PublisherDetail, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Publisher, ShishoAPIError>({
+  return useQuery<PublisherDetail, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,
