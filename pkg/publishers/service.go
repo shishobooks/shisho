@@ -262,6 +262,7 @@ func (svc *Service) GetFilesPaginated(ctx context.Context, publisherID, limit, o
 		Model(&files).
 		Where("f.publisher_id IN ("+descendantIDsSubquery()+")", publisherID).
 		Relation("Book").
+		Relation("Book.Authors.Person").
 		Order("f.filepath ASC").
 		Limit(limit).
 		Offset(offset).

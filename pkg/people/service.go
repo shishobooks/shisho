@@ -311,6 +311,7 @@ func (svc *Service) GetNarratedFilesPaginated(ctx context.Context, personID, lim
 	total, err := svc.db.NewSelect().
 		Model(&files).
 		Relation("Book").
+		Relation("Book.Authors.Person").
 		Join("INNER JOIN narrators n ON n.file_id = f.id").
 		Where("n.person_id = ?", personID).
 		Order("f.filepath ASC").
