@@ -47,7 +47,7 @@ The hierarchy is **manually curated** — Shisho does not automatically infer pa
 **Descendant-inclusive filtering.** Viewing files by publisher includes files attached to any descendant publisher in the hierarchy. For example, viewing files for "Penguin Random House" also shows files tagged with "Dutton" or "Berkley" if those are children (or deeper descendants) of Penguin Random House.
 
 **Hierarchy in the UI:**
-- **Detail page:** Shows total file count (inclusive of descendants) and a separate descendant file count badge showing how many of those come from sub-publishers. Lists child publishers with their own inclusive file counts as clickable links.
+- **Detail page:** Shows total file count (inclusive of descendants) and a separate descendant file count badge showing how many of those come from sub-publishers. Lists child publishers with their direct file counts as clickable links.
 - **List page:** Shows parent publisher name as secondary text, plus per-publisher counts for total files (inclusive of descendants), descendant files, and descendant publishers.
 
 The merge picker on a publisher's detail page offers two actions after selecting another publisher: **Merge** (moves files, adds an alias, deletes the source) and **Set as child** (makes the selected publisher a child of the current one without moving files or deleting either publisher). The "Set as child" option is disabled when it would create a cycle.
