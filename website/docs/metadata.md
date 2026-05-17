@@ -36,9 +36,15 @@ Genres and tags are simple labels attached to books. The distinction is semantic
 
 ### Publishers
 
-Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. Publishers support a hierarchical structure for organizing imprints and parent companies.
+Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. A file references one publisher at whatever level of specificity is known from the source metadata.
 
-**Publisher hierarchy.** Publishers can be organized into a parent-child hierarchy. Set a parent publisher from the publisher edit dialog to express relationships like "Dutton" is a child of "Penguin Random House". The publisher detail page displays the full ancestor chain as clickable breadcrumbs. Cycles are rejected (you cannot make A a child of B if B is already a descendant of A). The parent combobox in the edit dialog automatically excludes the publisher itself and all its descendants to prevent invalid selections.
+**Publisher hierarchy.** Publishers can be organized into a parent-child hierarchy to express relationships between imprints, divisions, and parent companies — they are all "publishers" at different levels of the tree. For example, "Dutton" might be a child of "Penguin Publishing Group", which is a child of "Penguin Random House". Set a parent publisher from the publisher edit dialog. The detail page displays the full ancestor chain as clickable breadcrumbs.
+
+The hierarchy is **manually curated** — Shisho does not automatically infer parent-child relationships from metadata sources. You build the tree yourself through the edit dialog or the merge picker's "Set as child" action.
+
+**Cycle prevention.** You cannot make A a child of B if B is already a descendant of A. The parent combobox in the edit dialog automatically excludes the publisher itself and all its descendants to prevent invalid selections.
+
+**Descendant-inclusive filtering.** Viewing files by publisher includes files attached to any descendant publisher in the hierarchy. For example, viewing files for "Penguin Random House" also shows files tagged with "Dutton" or "Berkley" if those are children (or deeper descendants) of Penguin Random House.
 
 **Hierarchy in the UI:**
 - **Detail page:** Shows direct file count and descendant file count (files attached to any sub-publisher). Lists child publishers with their file counts as clickable links.
@@ -197,6 +203,10 @@ Extracted from the OPF package document (`content.opf`):
 - **Cover**: from manifest item with `properties="cover-image"` or the `cover` meta tag
 - **Chapters**: from EPUB 3 nav document, falling back to NCX table of contents
 
+:::note[Imprint metadata]
+If an EPUB contains an `ibooks:imprint` or `imprint` meta tag, Shisho reads it as the publisher value (overriding `<dc:publisher>`). The imprint is typically more specific than the publisher, so it takes precedence.
+:::
+
 ### CBZ
 
 Extracted from `ComicInfo.xml`:
@@ -207,6 +217,10 @@ Extracted from `ComicInfo.xml`:
 - **Identifiers**: GTIN
 - **Cover**: from the page marked `Type="FrontCover"`, falling back to the first image
 - **Chapters**: auto-detected from directory structure in image filenames
+
+:::note[Imprint metadata]
+If a CBZ's `ComicInfo.xml` contains an `<Imprint>` element, Shisho reads it as the publisher value (overriding `<Publisher>`). The imprint is typically more specific than the publisher, so it takes precedence.
+:::
 
 ### M4B
 
