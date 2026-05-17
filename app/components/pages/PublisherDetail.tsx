@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import {
   FILE_LIST_ITEMS_PER_PAGE,
@@ -10,6 +15,7 @@ import {
   type PublisherEditData,
 } from "@/components/library/PublisherEditDialog";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
+import { Badge } from "@/components/ui/badge";
 import { useParentPublisherSearch } from "@/hooks/queries/entity-search";
 import {
   useDeletePublisher,
@@ -65,6 +71,8 @@ const PublisherDetail = () => {
     ? ((publisher.aliases as unknown as string[]) ?? [])
     : [];
   const fileCount = publisher?.file_count ?? 0;
+  const descendantFileCount = publisher?.descendant_file_count ?? 0;
+  const children = publisher?.children ?? [];
 
   // Compute exclusion list for parent publisher search (self + descendants)
   const descendantIds = publisher?.descendant_ids;
@@ -163,6 +171,14 @@ const PublisherDetail = () => {
         }}
         entityId={publisherId!}
         entityType="publisher"
+        extraBadges={
+          descendantFileCount > 0 ? (
+            <Badge variant="secondary">
+              {descendantFileCount}{" "}
+              {descendantFileCount === 1 ? "file" : "files"} in sub-publishers
+            </Badge>
+          ) : undefined
+        }
         isLoading={publisherQuery.isLoading}
         libraryId={libraryId!}
         mergeConfig={{
@@ -184,6 +200,27 @@ const PublisherDetail = () => {
         notFoundLabel="Publisher Not Found"
         onEditClick={() => setEditOpen(true)}
       >
+        {children.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-xl font-semibold mb-4">Child Publishers</h2>
+            <div className="space-y-1">
+              {children.map((child) => (
+                <Link
+                  className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors"
+                  key={child.id}
+                  to={`/libraries/${libraryId}/publishers/${child.id}`}
+                >
+                  <span className="font-medium">{child.name}</span>
+                  <Badge variant="secondary">
+                    {child.file_count}{" "}
+                    {child.file_count === 1 ? "file" : "files"}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         <FileListSection
           emptyMessage="This publisher has no associated files."
           libraryId={libraryId!}

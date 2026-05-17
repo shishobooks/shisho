@@ -36,9 +36,13 @@ Genres and tags are simple labels attached to books. The distinction is semantic
 
 ### Publishers
 
-Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. Publishers support a `parent_id` field for future hierarchy support (e.g., imprints as children of parent publishers).
+Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. Publishers support a hierarchical structure for organizing imprints and parent companies.
 
 **Publisher hierarchy.** Publishers can be organized into a parent-child hierarchy. Set a parent publisher from the publisher edit dialog to express relationships like "Dutton" is a child of "Penguin Random House". The publisher detail page displays the full ancestor chain as clickable breadcrumbs. Cycles are rejected (you cannot make A a child of B if B is already a descendant of A). The parent combobox in the edit dialog automatically excludes the publisher itself and all its descendants to prevent invalid selections.
+
+**Hierarchy in the UI:**
+- **Detail page:** Shows direct file count and descendant file count (files attached to any sub-publisher). Lists child publishers with their file counts as clickable links.
+- **List page:** Shows parent publisher name as secondary text, plus per-publisher counts for direct files, descendant files, and descendant publishers.
 
 ### Identifiers
 

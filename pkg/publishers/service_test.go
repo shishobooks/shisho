@@ -3,6 +3,7 @@ package publishers
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -555,4 +556,170 @@ func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1, "Should find publisher by alias 'PRH'")
 	assert.Equal(t, "Penguin Random House", results[0].Name)
+}
+
+// createFilesForPublisher creates a book and the specified number of files
+// associated with the given publisher.
+func createFilesForPublisher(t *testing.T, db *bun.DB, lib *models.Library, publisherID int, count int) {
+	t.Helper()
+	ctx := context.Background()
+
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err := db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	for i := 0; i < count; i++ {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      fmt.Sprintf("/tmp/pub%d_file%d.epub", publisherID, i),
+			FilesizeBytes: 1,
+			PublisherID:   &publisherID,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+	}
+}
+
+func TestGetChildren_ReturnsDirectChildrenWithFileCount(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	err := svc.CreatePublisher(ctx, parent)
+	require.NoError(t, err)
+
+	childA := &models.Publisher{LibraryID: lib.ID, Name: "ChildA", ParentID: &parent.ID}
+	err = svc.CreatePublisher(ctx, childA)
+	require.NoError(t, err)
+
+	childB := &models.Publisher{LibraryID: lib.ID, Name: "ChildB", ParentID: &parent.ID}
+	err = svc.CreatePublisher(ctx, childB)
+	require.NoError(t, err)
+
+	// Grandchild should NOT appear in children of parent
+	grandchild := &models.Publisher{LibraryID: lib.ID, Name: "Grandchild", ParentID: &childA.ID}
+	err = svc.CreatePublisher(ctx, grandchild)
+	require.NoError(t, err)
+
+	// Create files for children
+	createFilesForPublisher(t, db, lib, childA.ID, 3)
+	createFilesForPublisher(t, db, lib, childB.ID, 1)
+
+	children, err := svc.GetChildren(ctx, parent.ID)
+	require.NoError(t, err)
+	require.Len(t, children, 2)
+
+	// Children should be ordered by name
+	assert.Equal(t, "ChildA", children[0].Name)
+	assert.Equal(t, 3, children[0].FileCount)
+	assert.Equal(t, "ChildB", children[1].Name)
+	assert.Equal(t, 1, children[1].FileCount)
+}
+
+func TestGetChildren_NoChildren(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	leaf := &models.Publisher{LibraryID: lib.ID, Name: "Leaf"}
+	err := svc.CreatePublisher(ctx, leaf)
+	require.NoError(t, err)
+
+	children, err := svc.GetChildren(ctx, leaf.ID)
+	require.NoError(t, err)
+	assert.Empty(t, children)
+}
+
+func TestGetDescendantFileCount_CountsAllDescendantFiles(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	grandchild := &models.Publisher{LibraryID: lib.ID, Name: "Grandchild", ParentID: &child.ID}
+	err = svc.CreatePublisher(ctx, grandchild)
+	require.NoError(t, err)
+
+	// Create files at different levels
+	createFilesForPublisher(t, db, lib, child.ID, 2)
+	createFilesForPublisher(t, db, lib, grandchild.ID, 3)
+
+	count, err := svc.GetDescendantFileCount(ctx, root.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, count) // 2 + 3
+
+	// Child's descendants have 3 files (grandchild only)
+	count, err = svc.GetDescendantFileCount(ctx, child.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
+
+	// Grandchild has no descendants
+	count, err = svc.GetDescendantFileCount(ctx, grandchild.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestGetDescendantPublisherCount_CountsAllDescendantPublishers(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	childA := &models.Publisher{LibraryID: lib.ID, Name: "ChildA", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, childA)
+	require.NoError(t, err)
+
+	childB := &models.Publisher{LibraryID: lib.ID, Name: "ChildB", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, childB)
+	require.NoError(t, err)
+
+	grandchild := &models.Publisher{LibraryID: lib.ID, Name: "Grandchild", ParentID: &childA.ID}
+	err = svc.CreatePublisher(ctx, grandchild)
+	require.NoError(t, err)
+
+	count, err := svc.GetDescendantPublisherCount(ctx, root.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, count) // childA + childB + grandchild
+
+	count, err = svc.GetDescendantPublisherCount(ctx, childA.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count) // grandchild only
+
+	count, err = svc.GetDescendantPublisherCount(ctx, childB.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count) // no children
 }
