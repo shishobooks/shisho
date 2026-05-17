@@ -21,6 +21,7 @@ func newFSTestRuntime(t *testing.T, fsCtx *FSContext) *Runtime {
 }
 
 func TestFS_ReadTextFile_PluginDir(t *testing.T) {
+	t.Parallel()
 	// Create a temp dir to act as the plugin directory
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "test.txt")
@@ -36,6 +37,7 @@ func TestFS_ReadTextFile_PluginDir(t *testing.T) {
 }
 
 func TestFS_ReadFile_PluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "binary.bin")
 	data := []byte{0x00, 0x01, 0x02, 0xFF}
@@ -60,6 +62,7 @@ func TestFS_ReadFile_PluginDir(t *testing.T) {
 }
 
 func TestFS_WriteTextFile_PluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "output.txt")
 
@@ -75,6 +78,7 @@ func TestFS_WriteTextFile_PluginDir(t *testing.T) {
 }
 
 func TestFS_WriteFile_PluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "output.bin")
 
@@ -93,6 +97,7 @@ func TestFS_WriteFile_PluginDir(t *testing.T) {
 }
 
 func TestFS_WriteTextFile_ReadwriteAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "external.txt")
@@ -109,6 +114,7 @@ func TestFS_WriteTextFile_ReadwriteAccess(t *testing.T) {
 }
 
 func TestFS_Write_DeniedWithoutFileAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "denied.txt")
@@ -123,6 +129,7 @@ func TestFS_Write_DeniedWithoutFileAccess(t *testing.T) {
 }
 
 func TestFS_Write_DeniedWithReadOnlyAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "denied.txt")
@@ -137,6 +144,7 @@ func TestFS_Write_DeniedWithReadOnlyAccess(t *testing.T) {
 }
 
 func TestFS_Read_AllowedWithReadAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "readable.txt")
@@ -152,6 +160,7 @@ func TestFS_Read_AllowedWithReadAccess(t *testing.T) {
 }
 
 func TestFS_Exists_True(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "exists.txt")
 	err := os.WriteFile(testFile, []byte("hi"), 0644)
@@ -166,6 +175,7 @@ func TestFS_Exists_True(t *testing.T) {
 }
 
 func TestFS_Exists_False(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "nonexistent.txt")
 
@@ -178,6 +188,7 @@ func TestFS_Exists_False(t *testing.T) {
 }
 
 func TestFS_Mkdir_PluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	newDir := filepath.Join(pluginDir, "sub", "dir")
 
@@ -193,6 +204,7 @@ func TestFS_Mkdir_PluginDir(t *testing.T) {
 }
 
 func TestFS_Mkdir_DeniedOutsidePluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	newDir := filepath.Join(externalDir, "denied-dir")
@@ -206,6 +218,7 @@ func TestFS_Mkdir_DeniedOutsidePluginDir(t *testing.T) {
 }
 
 func TestFS_ListDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	// Create some files
 	err := os.WriteFile(filepath.Join(pluginDir, "a.txt"), []byte("a"), 0644)
@@ -228,6 +241,7 @@ func TestFS_ListDir(t *testing.T) {
 }
 
 func TestFS_TempDir_ConsistentPerInvocation(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -257,6 +271,7 @@ func TestFS_TempDir_ConsistentPerInvocation(t *testing.T) {
 }
 
 func TestFS_TempDir_WriteAllowed(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -277,6 +292,7 @@ func TestFS_TempDir_WriteAllowed(t *testing.T) {
 }
 
 func TestFS_AllowedPaths_ReadAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	allowedDir := t.TempDir()
 	testFile := filepath.Join(allowedDir, "allowed.txt")
@@ -293,6 +309,7 @@ func TestFS_AllowedPaths_ReadAccess(t *testing.T) {
 }
 
 func TestFS_AllowedPaths_WriteAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	allowedDir := t.TempDir()
 	testFile := filepath.Join(allowedDir, "allowed-write.txt")
@@ -310,6 +327,7 @@ func TestFS_AllowedPaths_WriteAccess(t *testing.T) {
 }
 
 func TestFS_AllowedPaths_ExactFileMatch(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	allowedDir := t.TempDir()
 	allowedFile := filepath.Join(allowedDir, "specific.txt")
@@ -326,6 +344,7 @@ func TestFS_AllowedPaths_ExactFileMatch(t *testing.T) {
 }
 
 func TestFS_DeniedOutsideAllPaths(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	deniedDir := t.TempDir()
 	testFile := filepath.Join(deniedDir, "secret.txt")
@@ -342,6 +361,7 @@ func TestFS_DeniedOutsideAllPaths(t *testing.T) {
 }
 
 func TestFS_Read_DeniedOutsidePluginDir_NoFileAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "external.txt")
@@ -357,6 +377,7 @@ func TestFS_Read_DeniedOutsidePluginDir_NoFileAccess(t *testing.T) {
 }
 
 func TestFS_NoFSContext_DeniesAllAccess(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -369,6 +390,7 @@ func TestFS_NoFSContext_DeniesAllAccess(t *testing.T) {
 }
 
 func TestFS_Exists_DeniedOutsidePluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "secret.txt")
@@ -382,6 +404,7 @@ func TestFS_Exists_DeniedOutsidePluginDir(t *testing.T) {
 }
 
 func TestFS_ListDir_DeniedOutsidePluginDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 
@@ -394,6 +417,7 @@ func TestFS_ListDir_DeniedOutsidePluginDir(t *testing.T) {
 }
 
 func TestFS_ReadFile_NonexistentFile(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "nonexistent.txt")
 
@@ -406,6 +430,7 @@ func TestFS_ReadFile_NonexistentFile(t *testing.T) {
 }
 
 func TestFS_WriteFile_InvalidData(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "output.bin")
 
@@ -419,6 +444,7 @@ func TestFS_WriteFile_InvalidData(t *testing.T) {
 }
 
 func TestFS_ReadTextFile_Subdirectory(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	subDir := filepath.Join(pluginDir, "sub", "nested")
 	err := os.MkdirAll(subDir, 0755)
@@ -436,6 +462,7 @@ func TestFS_ReadTextFile_Subdirectory(t *testing.T) {
 }
 
 func TestFS_IsPathWithin(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		child    string
@@ -457,6 +484,7 @@ func TestFS_IsPathWithin(t *testing.T) {
 }
 
 func TestFS_SetFSContext_CanBeCleared(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -486,6 +514,7 @@ func TestFS_SetFSContext_CanBeCleared(t *testing.T) {
 }
 
 func TestFS_Cleanup_NoTempDir(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 
@@ -495,6 +524,7 @@ func TestFS_Cleanup_NoTempDir(t *testing.T) {
 }
 
 func TestFS_WriteFile_Mkdir_WithReadwriteAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	newDir := filepath.Join(externalDir, "new-dir")
@@ -511,6 +541,7 @@ func TestFS_WriteFile_Mkdir_WithReadwriteAccess(t *testing.T) {
 }
 
 func TestFS_Mkdir_DeniedWithReadOnlyAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	newDir := filepath.Join(externalDir, "new-dir")
@@ -524,6 +555,7 @@ func TestFS_Mkdir_DeniedWithReadOnlyAccess(t *testing.T) {
 }
 
 func TestFS_TempDir_DifferentPerFSContext(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 
 	fsCtx1 := NewFSContext(pluginDir, "", nil, nil)
@@ -546,6 +578,7 @@ func TestFS_TempDir_DifferentPerFSContext(t *testing.T) {
 }
 
 func TestFS_ReadFile_ReadwriteAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	externalDir := t.TempDir()
 	testFile := filepath.Join(externalDir, "readable.txt")
@@ -562,6 +595,7 @@ func TestFS_ReadFile_ReadwriteAccess(t *testing.T) {
 }
 
 func TestFS_NewFSContext_NilAllowedPaths(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	assert.NotNil(t, fsCtx)
@@ -571,6 +605,7 @@ func TestFS_NewFSContext_NilAllowedPaths(t *testing.T) {
 }
 
 func TestFS_ReadFile_NoArgument(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -581,6 +616,7 @@ func TestFS_ReadFile_NoArgument(t *testing.T) {
 }
 
 func TestFS_ReadTextFile_NoArgument(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -591,6 +627,7 @@ func TestFS_ReadTextFile_NoArgument(t *testing.T) {
 }
 
 func TestFS_WriteTextFile_NoArguments(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -601,6 +638,7 @@ func TestFS_WriteTextFile_NoArguments(t *testing.T) {
 }
 
 func TestFS_WriteFile_NoArguments(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -611,6 +649,7 @@ func TestFS_WriteFile_NoArguments(t *testing.T) {
 }
 
 func TestFS_Exists_NoArgument(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -622,6 +661,7 @@ func TestFS_Exists_NoArgument(t *testing.T) {
 }
 
 func TestFS_Mkdir_NoArgument(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -632,6 +672,7 @@ func TestFS_Mkdir_NoArgument(t *testing.T) {
 }
 
 func TestFS_ListDir_NoArgument(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	fsCtx := NewFSContext(pluginDir, "", nil, nil)
 	rt := newFSTestRuntime(t, fsCtx)
@@ -644,6 +685,7 @@ func TestFS_ListDir_NoArgument(t *testing.T) {
 // Verify that the fs namespace functions properly check argument count
 // by using the same pattern as existing host APIs.
 func TestFS_FunctionsExist(t *testing.T) {
+	t.Parallel()
 	rt := newTestRuntime("official", "test-plugin")
 	cfg := &mockConfigGetter{configs: map[string]*string{}}
 	err := InjectHostAPIs(rt, cfg)
@@ -659,6 +701,7 @@ func TestFS_FunctionsExist(t *testing.T) {
 }
 
 func TestFS_AllowedPaths_SubdirectoryAccess(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	allowedDir := t.TempDir()
 	subDir := filepath.Join(allowedDir, "sub")
@@ -678,6 +721,7 @@ func TestFS_AllowedPaths_SubdirectoryAccess(t *testing.T) {
 }
 
 func TestFS_WriteFile_Uint8Array(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "uint8.bin")
 
@@ -697,6 +741,7 @@ func TestFS_WriteFile_Uint8Array(t *testing.T) {
 }
 
 func TestFS_ReadFile_RoundTrip(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	testFile := filepath.Join(pluginDir, "roundtrip.bin")
 

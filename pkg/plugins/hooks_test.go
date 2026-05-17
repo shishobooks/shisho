@@ -57,6 +57,7 @@ func setupHooksTestManager(t *testing.T, testdata, pluginID string) (*Manager, *
 }
 
 func TestRunInputConverter_Success(t *testing.T) {
+	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
 
@@ -82,6 +83,7 @@ func TestRunInputConverter_Success(t *testing.T) {
 }
 
 func TestRunInputConverter_Failure(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
@@ -147,6 +149,7 @@ func TestRunInputConverter_Failure(t *testing.T) {
 }
 
 func TestRunFileParser_AllFields(t *testing.T) {
+	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-parser", "hooks-parser")
 	ctx := context.Background()
 
@@ -230,6 +233,7 @@ func TestRunFileParser_AllFields(t *testing.T) {
 }
 
 func TestRunFileParser_MinimalFields(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
@@ -309,6 +313,7 @@ func TestRunFileParser_MinimalFields(t *testing.T) {
 }
 
 func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
+	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-enricher", "hooks-enricher")
 	ctx := context.Background()
 
@@ -340,6 +345,7 @@ func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
 }
 
 func TestRunOutputGenerator_Success(t *testing.T) {
+	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-generator", "hooks-generator")
 	ctx := context.Background()
 
@@ -372,6 +378,7 @@ func TestRunOutputGenerator_Success(t *testing.T) {
 }
 
 func TestRunFingerprint(t *testing.T) {
+	t.Parallel()
 	mgr, rt := setupHooksTestManager(t, "hooks-generator", "hooks-generator")
 	_ = mgr
 
@@ -395,6 +402,7 @@ func TestRunFingerprint(t *testing.T) {
 }
 
 func TestRunInputConverter_NoHook(t *testing.T) {
+	t.Parallel()
 	// Use the parser plugin which has no converter hook
 	mgr, rt := setupHooksTestManager(t, "hooks-parser", "hooks-parser")
 	ctx := context.Background()
@@ -405,6 +413,7 @@ func TestRunInputConverter_NoHook(t *testing.T) {
 }
 
 func TestRunFileParser_NoHook(t *testing.T) {
+	t.Parallel()
 	// Use the converter plugin which has no parser hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
@@ -415,6 +424,7 @@ func TestRunFileParser_NoHook(t *testing.T) {
 }
 
 func TestRunMetadataSearch_NoHook(t *testing.T) {
+	t.Parallel()
 	// Use the converter plugin which has no enricher hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
@@ -760,6 +770,7 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
 }
 
 func TestRunOutputGenerator_NoHook(t *testing.T) {
+	t.Parallel()
 	// Use the converter plugin which has no generator hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 	ctx := context.Background()
@@ -770,6 +781,7 @@ func TestRunOutputGenerator_NoHook(t *testing.T) {
 }
 
 func TestRunFingerprint_NoHook(t *testing.T) {
+	t.Parallel()
 	// Use the converter plugin which has no generator hook
 	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
 

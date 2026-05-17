@@ -8,6 +8,7 @@ import (
 )
 
 func TestSetEventCallback_ReceivesEvents(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -37,6 +38,7 @@ func TestSetEventCallback_ReceivesEvents(t *testing.T) {
 }
 
 func TestEmitEvent_NoCallback_NoPanic(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -49,6 +51,7 @@ func TestEmitEvent_NoCallback_NoPanic(t *testing.T) {
 }
 
 func TestSetEventCallback_ReplacesExisting(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	db := setupTestDB(t)
 	service := NewService(db)

@@ -15,6 +15,7 @@ import (
 )
 
 func TestLibraryPluginOrder_GetDefault(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := t.Context()
@@ -54,6 +55,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 }
 
 func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := t.Context()
@@ -106,6 +108,7 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 }
 
 func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := t.Context()
@@ -143,6 +146,7 @@ func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
 }
 
 func TestLibraryPluginOrder_ResetAll(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := t.Context()

@@ -53,6 +53,7 @@ func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin
 }
 
 func TestService_InstallAndRetrievePlugin(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -84,6 +85,7 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 }
 
 func TestService_ListPlugins(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -120,6 +122,7 @@ func TestService_ListPlugins_Empty(t *testing.T) {
 }
 
 func TestService_UpdatePlugin(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -142,6 +145,7 @@ func TestService_UpdatePlugin(t *testing.T) {
 }
 
 func TestService_UninstallPlugin(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -181,6 +185,7 @@ func TestService_UninstallPlugin(t *testing.T) {
 }
 
 func TestService_GetConfig_MasksSecrets(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -219,6 +224,7 @@ func TestService_GetConfig_MasksSecrets(t *testing.T) {
 }
 
 func TestService_SetConfig_Upsert(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -245,6 +251,7 @@ func TestService_SetConfig_Upsert(t *testing.T) {
 }
 
 func TestService_GetConfigRaw(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -267,6 +274,7 @@ func TestService_GetConfigRaw(t *testing.T) {
 }
 
 func TestService_GetOrder_SetOrder(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -316,6 +324,7 @@ func TestService_GetOrder_SetOrder(t *testing.T) {
 }
 
 func TestService_AppendToOrder(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -350,6 +359,7 @@ func TestService_AppendToOrder(t *testing.T) {
 }
 
 func TestService_ListRepositories(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -365,6 +375,7 @@ func TestService_ListRepositories(t *testing.T) {
 }
 
 func TestService_AddAndRemoveRepository(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -406,6 +417,7 @@ func TestService_AddAndRemoveRepository(t *testing.T) {
 }
 
 func TestService_UpsertIdentifierTypes(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -522,6 +534,7 @@ func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 }
 
 func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -535,6 +548,7 @@ func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
 }
 
 func TestService_SetFieldSetting_DisableField(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -552,6 +566,7 @@ func TestService_SetFieldSetting_DisableField(t *testing.T) {
 }
 
 func TestService_SetFieldSetting_EnableFieldRemovesRow(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -572,6 +587,7 @@ func TestService_SetFieldSetting_EnableFieldRemovesRow(t *testing.T) {
 }
 
 func TestService_SetFieldSetting_MultipleFields(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -607,6 +623,7 @@ func TestService_SetFieldSetting_MultipleFields(t *testing.T) {
 }
 
 func TestService_GetLibraryFieldSettings_EmptyByDefault(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -620,6 +637,7 @@ func TestService_GetLibraryFieldSettings_EmptyByDefault(t *testing.T) {
 }
 
 func TestService_SetLibraryFieldSetting_Override(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -648,6 +666,7 @@ func TestService_SetLibraryFieldSetting_Override(t *testing.T) {
 }
 
 func TestService_ResetLibraryFieldSettings(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -671,6 +690,7 @@ func TestService_ResetLibraryFieldSettings(t *testing.T) {
 }
 
 func TestService_GetEffectiveFieldSettings_GlobalOnly(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -693,6 +713,7 @@ func TestService_GetEffectiveFieldSettings_GlobalOnly(t *testing.T) {
 }
 
 func TestService_GetEffectiveFieldSettings_LibraryOverridesGlobal(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -722,6 +743,7 @@ func TestService_GetEffectiveFieldSettings_LibraryOverridesGlobal(t *testing.T) 
 }
 
 func TestService_GetEffectiveFieldSettings_OnlyDeclaredFields(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -747,6 +769,7 @@ func TestService_GetEffectiveFieldSettings_OnlyDeclaredFields(t *testing.T) {
 }
 
 func TestService_GetEffectiveFieldSettings_EmptyDeclaredFields(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

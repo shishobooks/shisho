@@ -27,6 +27,7 @@ func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library { 
 }
 
 func TestService_IsLibraryCustomized(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -48,6 +49,7 @@ func TestService_IsLibraryCustomized(t *testing.T) {
 }
 
 func TestService_GetLibraryOrder(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -84,6 +86,7 @@ func TestService_GetLibraryOrder(t *testing.T) {
 }
 
 func TestService_ResetLibraryOrder(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
@@ -130,6 +133,7 @@ func TestService_GetLibraryOrder_Empty(t *testing.T) {
 }
 
 func TestService_ResetAllLibraryOrders(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()

@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetOutputGenerator(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "hooks-generator", "hooks-generator"})
 	ctx := context.Background()
 
@@ -43,6 +44,7 @@ func TestGetOutputGenerator(t *testing.T) {
 }
 
 func TestRegisteredOutputFormats(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "hooks-generator", "hooks-generator"})
 	ctx := context.Background()
 
@@ -73,6 +75,7 @@ func TestRegisteredOutputFormats(t *testing.T) {
 }
 
 func TestRegisteredOutputFormats_Empty(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "simple-enricher", "simple-enricher"})
 	ctx := context.Background()
 
@@ -97,6 +100,7 @@ func TestRegisteredOutputFormats_Empty(t *testing.T) {
 }
 
 func TestPluginGenerator_Generate(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "hooks-generator", "hooks-generator"})
 	ctx := context.Background()
 
@@ -147,6 +151,7 @@ func TestPluginGenerator_Generate(t *testing.T) {
 }
 
 func TestPluginGenerator_Fingerprint(t *testing.T) {
+	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "hooks-generator", "hooks-generator"})
 	ctx := context.Background()
 
@@ -195,6 +200,7 @@ func TestPluginGenerator_Fingerprint(t *testing.T) {
 }
 
 func TestPluginGenerator_NotLoaded(t *testing.T) {
+	t.Parallel()
 	mgr, _ := setupTestManager(t)
 	ctx := context.Background()
 
@@ -216,6 +222,7 @@ func TestPluginGenerator_NotLoaded(t *testing.T) {
 }
 
 func TestBuildBookContext(t *testing.T) {
+	t.Parallel()
 	t.Run("nil book returns nil", func(t *testing.T) {
 		ctx := BuildBookContext(nil)
 		assert.Nil(t, ctx)
@@ -296,6 +303,7 @@ func TestBuildBookContext(t *testing.T) {
 }
 
 func TestBuildFileContext(t *testing.T) {
+	t.Parallel()
 	t.Run("nil file returns nil", func(t *testing.T) {
 		ctx := BuildFileContext(nil)
 		assert.Nil(t, ctx)

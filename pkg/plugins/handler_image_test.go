@@ -14,6 +14,7 @@ import (
 )
 
 func TestGetImage_PathTraversal(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
 	h := NewHandler(nil, nil, installer)
@@ -53,6 +54,7 @@ func TestGetImage_PathTraversal(t *testing.T) {
 }
 
 func TestGetImage_ValidPlugin(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
 	h := NewHandler(nil, nil, installer)
@@ -76,6 +78,7 @@ func TestGetImage_ValidPlugin(t *testing.T) {
 }
 
 func TestGetImage_NotFound(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
 	h := NewHandler(nil, nil, installer)
