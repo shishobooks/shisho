@@ -513,7 +513,6 @@ func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
 	assert.Equal(t, 2, fileCount, "file_count should include descendant publisher files")
 }
 
-
 func TestSetChild_Success(t *testing.T) {
 	t.Parallel()
 	db := setupHandlerTestDB(t)
@@ -637,7 +636,6 @@ func TestSetChild_LibraryAccessEnforced(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "access")
 }
-
 
 func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	t.Parallel()
@@ -794,13 +792,13 @@ func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	// Check file_count (direct)
+	// Check file_count (includes descendants)
 	var fileCount int
 	err = json.Unmarshal(resp["file_count"], &fileCount)
 	require.NoError(t, err)
-	assert.Equal(t, 2, fileCount)
+	assert.Equal(t, 6, fileCount) // 2 direct + 3 childA + 1 childB
 
-	// Check descendant_file_count (files on children)
+	// Check descendant_file_count (descendants only, excludes direct)
 	assert.Contains(t, resp, "descendant_file_count")
 	var descendantFileCount int
 	err = json.Unmarshal(resp["descendant_file_count"], &descendantFileCount)
@@ -906,13 +904,13 @@ func TestList_IncludesHierarchyCounts(t *testing.T) {
 		}
 	}
 
-	// Parent: 0 direct files, 2 descendant files, 1 descendant publisher
-	assert.Equal(t, 0, parentItem.FileCount)
+	// Parent: 2 files (inclusive of descendants), 2 descendant files, 1 descendant publisher
+	assert.Equal(t, 2, parentItem.FileCount)
 	assert.Equal(t, 2, parentItem.DescendantFileCount)
 	assert.Equal(t, 1, parentItem.DescendantPublisherCount)
 	assert.Nil(t, parentItem.ParentName)
 
-	// Child: 2 direct files, 0 descendant files, 0 descendant publishers, parent name = "Parent"
+	// Child: 2 files (direct, no descendants), 0 descendant files, 0 descendant publishers, parent name = "Parent"
 	assert.Equal(t, 2, childItem.FileCount)
 	assert.Equal(t, 0, childItem.DescendantFileCount)
 	assert.Equal(t, 0, childItem.DescendantPublisherCount)
