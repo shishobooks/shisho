@@ -320,7 +320,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		NewSelect().
 		Model(&listBooks).
 		Relation("Book").
-		Relation("Book.Authors").
+		Relation("Book.Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("a.sort_order ASC")
+		}).
 		Relation("Book.Authors.Person").
 		Relation("Book.BookSeries").
 		Relation("Book.BookSeries.Series").
