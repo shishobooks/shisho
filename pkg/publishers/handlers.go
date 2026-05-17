@@ -386,6 +386,42 @@ func (h *handler) merge(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+func (h *handler) setChild(c echo.Context) error {
+	ctx := c.Request().Context()
+	parentID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return errcodes.NotFound("Publisher")
+	}
+
+	params := SetChildPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
+	parent, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
+		ID: &parentID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if user, ok := c.Get("user").(*models.User); ok {
+		if !user.HasLibraryAccess(parent.LibraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
+	// SetParent validates same-library, cycle detection, and sets the parent
+	if err := h.publisherService.SetParent(ctx, params.ChildID, &parentID); err != nil {
+		if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
+			return errcodes.ValidationError(err.Error())
+		}
+		return errors.WithStack(err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
 func (h *handler) deletePublisher(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := strconv.Atoi(c.Param("id"))

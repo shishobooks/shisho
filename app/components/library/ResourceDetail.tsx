@@ -9,7 +9,10 @@ import {
   MetadataEditDialog,
   type EntityType,
 } from "@/components/library/MetadataEditDialog";
-import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
+import {
+  MetadataMergeDialog,
+  type SetChildConfig,
+} from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -38,6 +41,8 @@ interface MergeConfig {
   isPending: boolean;
   onMerge: (sourceId: number) => Promise<void>;
   onSearch: (search: string) => void;
+  /** When provided, the merge dialog shows a "Set as child" option */
+  setChildConfig?: SetChildConfig;
 }
 
 interface DeleteConfig {
@@ -224,6 +229,18 @@ export function ResourceDetail({
         onOpenChange={setMergeOpen}
         onSearch={mergeConfig.onSearch}
         open={mergeOpen}
+        setChildConfig={
+          mergeConfig.setChildConfig
+            ? {
+                onSetChild: async (childId) => {
+                  await mergeConfig.setChildConfig!.onSetChild(childId);
+                  setMergeOpen(false);
+                },
+                isPending: mergeConfig.setChildConfig.isPending,
+                disabledIds: mergeConfig.setChildConfig.disabledIds,
+              }
+            : undefined
+        }
         targetId={entityId}
         targetName={name}
       />

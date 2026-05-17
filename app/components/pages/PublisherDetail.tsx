@@ -23,6 +23,7 @@ import {
   usePublisher,
   usePublisherFiles,
   usePublishersList,
+  useSetChildPublisher,
   useUpdatePublisher,
 } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -50,6 +51,7 @@ const PublisherDetail = () => {
 
   const updatePublisherMutation = useUpdatePublisher();
   const mergePublisherMutation = useMergePublisher();
+  const setChildPublisherMutation = useSetChildPublisher();
   const deletePublisherMutation = useDeletePublisher();
 
   const [mergeSearchRaw, setMergeSearchRaw] = useState("");
@@ -135,6 +137,21 @@ const PublisherDetail = () => {
     });
   };
 
+  const handleSetChild = async (childId: number) => {
+    if (!publisherId) return;
+    await setChildPublisherMutation.mutateAsync({
+      parentId: publisherId,
+      childId,
+    });
+  };
+
+  // IDs of ancestors of this publisher — selecting one of these as "child"
+  // would create a cycle in the hierarchy
+  const ancestorIds = useMemo(() => {
+    if (!ancestors) return [];
+    return ancestors.map((a) => a.id);
+  }, [ancestors]);
+
   const handleDelete = async () => {
     if (!publisherId) return;
     await deletePublisherMutation.mutateAsync({ publisherId });
@@ -192,6 +209,11 @@ const PublisherDetail = () => {
           isPending: mergePublisherMutation.isPending,
           onMerge: handleMerge,
           onSearch: setMergeSearchRaw,
+          setChildConfig: {
+            onSetChild: handleSetChild,
+            isPending: setChildPublisherMutation.isPending,
+            disabledIds: ancestorIds,
+          },
         }}
         name={publisher?.name ?? ""}
         notFound={

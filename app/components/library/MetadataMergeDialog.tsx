@@ -23,6 +23,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type { EntityType } from "./MetadataEditDialog";
 
@@ -30,6 +35,13 @@ interface EntityOption {
   id: number;
   name: string;
   count: number;
+}
+
+export interface SetChildConfig {
+  onSetChild: (childId: number) => Promise<void>;
+  isPending: boolean;
+  /** IDs of entities that are ancestors of the target — setting them as child would create a cycle */
+  disabledIds: number[];
 }
 
 interface MetadataMergeDialogProps {
@@ -43,6 +55,8 @@ interface MetadataMergeDialogProps {
   entities: EntityOption[];
   isLoadingEntities: boolean;
   onSearch: (search: string) => void;
+  /** When provided, shows a "Set as child" option alongside Merge */
+  setChildConfig?: SetChildConfig;
 }
 
 const ENTITY_PLURALS: Record<EntityType, string> = {
@@ -64,6 +78,7 @@ export function MetadataMergeDialog({
   entities,
   isLoadingEntities,
   onSearch,
+  setChildConfig,
 }: MetadataMergeDialogProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [comboboxOpen, setComboboxOpen] = useState(false);
@@ -76,6 +91,12 @@ export function MetadataMergeDialog({
 
   const selectedEntity = availableEntities.find((e) => e.id === selectedId);
 
+  // Determine if "Set as child" is disabled for the selected entity (would create cycle)
+  const setChildDisabled = useMemo(() => {
+    if (!setChildConfig || !selectedId) return false;
+    return setChildConfig.disabledIds.includes(selectedId);
+  }, [setChildConfig, selectedId]);
+
   const handleSearchChange = (value: string) => {
     setSearch(value);
     onSearch(value);
@@ -84,6 +105,14 @@ export function MetadataMergeDialog({
   const handleMerge = async () => {
     if (selectedId) {
       await onMerge(selectedId);
+      setSelectedId(null);
+      setSearch("");
+    }
+  };
+
+  const handleSetChild = async () => {
+    if (selectedId && setChildConfig) {
+      await setChildConfig.onSetChild(selectedId);
       setSelectedId(null);
       setSearch("");
     }
@@ -105,8 +134,10 @@ export function MetadataMergeDialog({
             Merge into "{targetName}"
           </DialogTitle>
           <DialogDescription>
-            Select a {entityType} to merge into this one. All associated books
-            will be transferred and the selected {entityType} will be deleted.
+            Select a {entityType} to merge into this one.{" "}
+            {setChildConfig
+              ? "Then choose to merge or set as a child."
+              : `All associated books will be transferred and the selected ${entityType} will be deleted.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -121,8 +152,8 @@ export function MetadataMergeDialog({
               >
                 <span className="truncate">
                   {selectedEntity
-                    ? `${selectedEntity.name} (${selectedEntity.count} books)`
-                    : `Select ${entityType} to merge...`}
+                    ? `${selectedEntity.name} (${selectedEntity.count} ${selectedEntity.count !== 1 ? "files" : "file"})`
+                    : `Select ${entityType}...`}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
@@ -178,13 +209,39 @@ export function MetadataMergeDialog({
             </PopoverContent>
           </Popover>
 
-          {selectedEntity && (
+          {selectedEntity && !setChildConfig && (
             <p className="mt-4 text-sm text-muted-foreground">
               This will move all {selectedEntity.count} book
               {selectedEntity.count !== 1 ? "s" : ""} from "
               {selectedEntity.name}" to "{targetName}" and delete "
               {selectedEntity.name}".
             </p>
+          )}
+
+          {selectedEntity && setChildConfig && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium mb-1">Merge</p>
+                <p className="text-xs text-muted-foreground">
+                  Move all files from "{selectedEntity.name}" to "{targetName}",
+                  add "{selectedEntity.name}" as an alias, and delete "
+                  {selectedEntity.name}".
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium mb-1">Set as child</p>
+                <p className="text-xs text-muted-foreground">
+                  Make "{selectedEntity.name}" a child of "{targetName}". Both
+                  publishers keep their files and identity.
+                </p>
+                {setChildDisabled && (
+                  <p className="text-xs text-destructive mt-1">
+                    Cannot set as child: "{selectedEntity.name}" is already an
+                    ancestor of "{targetName}", which would create a cycle.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </DialogBody>
 
@@ -196,8 +253,37 @@ export function MetadataMergeDialog({
           >
             Cancel
           </Button>
+          {setChildConfig && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    disabled={
+                      setChildConfig.isPending ||
+                      isPending ||
+                      !selectedId ||
+                      setChildDisabled
+                    }
+                    onClick={handleSetChild}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {setChildConfig.isPending && (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    )}
+                    Set as child
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {setChildDisabled && (
+                <TooltipContent>
+                  Would create a cycle in the publisher hierarchy
+                </TooltipContent>
+              )}
+            </Tooltip>
+          )}
           <Button
-            disabled={isPending || !selectedId}
+            disabled={isPending || setChildConfig?.isPending || !selectedId}
             onClick={handleMerge}
             size="sm"
             variant="destructive"
