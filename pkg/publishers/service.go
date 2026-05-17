@@ -461,6 +461,58 @@ func (svc *Service) GetAncestors(ctx context.Context, publisherID int) ([]*model
 	return ancestors, nil
 }
 
+// GetChildren returns the direct children of a publisher with their file counts.
+func (svc *Service) GetChildren(ctx context.Context, publisherID int) ([]*models.Publisher, error) {
+	var children []*models.Publisher
+
+	err := svc.db.NewSelect().
+		Model(&children).
+		Where("pub.parent_id = ?", publisherID).
+		ColumnExpr("pub.*").
+		ColumnExpr("(SELECT COUNT(*) FROM files WHERE files.publisher_id = pub.id) AS file_count").
+		Order("pub.name ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return children, nil
+}
+
+// GetDescendantFileCount returns the count of files attached to any descendant
+// of the given publisher (not including the publisher's own direct files).
+func (svc *Service) GetDescendantFileCount(ctx context.Context, publisherID int) (int, error) {
+	descendantIDs, err := svc.GetDescendantIDs(ctx, publisherID)
+	if err != nil {
+		return 0, err
+	}
+	return svc.GetFileCountForPublisherIDs(ctx, descendantIDs)
+}
+
+// GetFileCountForPublisherIDs returns the count of files attached to any of the
+// given publisher IDs. Useful when descendant IDs have already been computed.
+func (svc *Service) GetFileCountForPublisherIDs(ctx context.Context, publisherIDs []int) (int, error) {
+	if len(publisherIDs) == 0 {
+		return 0, nil
+	}
+
+	count, err := svc.db.NewSelect().
+		Model((*models.File)(nil)).
+		Where("publisher_id IN (?)", bun.List(publisherIDs)).
+		Count(ctx)
+	return count, errors.WithStack(err)
+}
+
+// GetDescendantPublisherCount returns the count of all publishers in the
+// subtree rooted at publisherID (not including the publisher itself).
+func (svc *Service) GetDescendantPublisherCount(ctx context.Context, publisherID int) (int, error) {
+	descendantIDs, err := svc.GetDescendantIDs(ctx, publisherID)
+	if err != nil {
+		return 0, err
+	}
+	return len(descendantIDs), nil
+}
+
 // GetDescendantIDs returns all descendant IDs of a publisher (children,
 // grandchildren, etc.) using a breadth-first traversal.
 func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]int, error) {

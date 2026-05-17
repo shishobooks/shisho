@@ -555,3 +555,241 @@ func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	require.NotNil(t, updated.ParentID, "parent_id should be set on merge target")
 	assert.Equal(t, parent.ID, *updated.ParentID)
 }
+
+func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	childA := &models.Publisher{LibraryID: lib.ID, Name: "ChildA", ParentID: &parent.ID}
+	_, err = db.NewInsert().Model(childA).Exec(ctx)
+	require.NoError(t, err)
+
+	childB := &models.Publisher{LibraryID: lib.ID, Name: "ChildB", ParentID: &parent.ID}
+	_, err = db.NewInsert().Model(childB).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create files: 2 direct on parent, 3 on childA, 1 on childB
+	// Use the actual publisher IDs for file creation
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Direct Parent Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Direct Parent Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	for i := 0; i < 2; i++ {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      fmt.Sprintf("/tmp/parent_file_%d.epub", i),
+			FilesizeBytes: 1,
+			PublisherID:   &parent.ID,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	book2 := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "ChildA Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "ChildA Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book2).Exec(ctx)
+	require.NoError(t, err)
+
+	for i := 0; i < 3; i++ {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book2.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      fmt.Sprintf("/tmp/childA_file_%d.epub", i),
+			FilesizeBytes: 1,
+			PublisherID:   &childA.ID,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	book3 := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "ChildB Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "ChildB Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book3).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        book3.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/tmp/childB_file_0.epub",
+		FilesizeBytes: 1,
+		PublisherID:   &childB.ID,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(parent.ID))
+
+	err = h.retrieve(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]json.RawMessage
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	// Check file_count (direct)
+	var fileCount int
+	err = json.Unmarshal(resp["file_count"], &fileCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, fileCount)
+
+	// Check descendant_file_count (files on children)
+	assert.Contains(t, resp, "descendant_file_count")
+	var descendantFileCount int
+	err = json.Unmarshal(resp["descendant_file_count"], &descendantFileCount)
+	require.NoError(t, err)
+	assert.Equal(t, 4, descendantFileCount) // 3 + 1
+
+	// Check children
+	assert.Contains(t, resp, "children")
+	var children []struct {
+		ID        int    `json:"id"`
+		Name      string `json:"name"`
+		FileCount int    `json:"file_count"`
+	}
+	err = json.Unmarshal(resp["children"], &children)
+	require.NoError(t, err)
+	require.Len(t, children, 2)
+	assert.Equal(t, "ChildA", children[0].Name)
+	assert.Equal(t, 3, children[0].FileCount)
+	assert.Equal(t, "ChildB", children[1].Name)
+	assert.Equal(t, 1, children[1].FileCount)
+}
+
+func TestList_IncludesHierarchyCounts(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &parent.ID}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create files on child
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Child Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Child Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	for i := 0; i < 2; i++ {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      fmt.Sprintf("/tmp/list_child_file_%d.epub", i),
+			FilesizeBytes: 1,
+			PublisherID:   &child.ID,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err = h.list(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []struct {
+			ID                       int     `json:"id"`
+			Name                     string  `json:"name"`
+			FileCount                int     `json:"file_count"`
+			DescendantFileCount      int     `json:"descendant_file_count"`
+			DescendantPublisherCount int     `json:"descendant_publisher_count"`
+			ParentName               *string `json:"parent_name"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, 2, resp.Total)
+
+	// Find parent and child in response (sorted by name: Child, Parent)
+	var parentItem, childItem struct {
+		ID                       int     `json:"id"`
+		Name                     string  `json:"name"`
+		FileCount                int     `json:"file_count"`
+		DescendantFileCount      int     `json:"descendant_file_count"`
+		DescendantPublisherCount int     `json:"descendant_publisher_count"`
+		ParentName               *string `json:"parent_name"`
+	}
+	for _, item := range resp.Items {
+		if item.Name == "Parent" {
+			parentItem = item
+		} else {
+			childItem = item
+		}
+	}
+
+	// Parent: 0 direct files, 2 descendant files, 1 descendant publisher
+	assert.Equal(t, 0, parentItem.FileCount)
+	assert.Equal(t, 2, parentItem.DescendantFileCount)
+	assert.Equal(t, 1, parentItem.DescendantPublisherCount)
+	assert.Nil(t, parentItem.ParentName)
+
+	// Child: 2 direct files, 0 descendant files, 0 descendant publishers, parent name = "Parent"
+	assert.Equal(t, 2, childItem.FileCount)
+	assert.Equal(t, 0, childItem.DescendantFileCount)
+	assert.Equal(t, 0, childItem.DescendantPublisherCount)
+	require.NotNil(t, childItem.ParentName)
+	assert.Equal(t, "Parent", *childItem.ParentName)
+}

@@ -19,18 +19,32 @@ export interface PublisherAncestor {
   name: string;
 }
 
-export interface PublisherDetail extends Publisher {
+export interface PublisherChild {
+  id: number;
+  name: string;
+  file_count: number;
+}
+
+export interface PublisherDetail extends Omit<Publisher, "children"> {
   ancestors: PublisherAncestor[];
   descendant_ids: number[];
+  children: PublisherChild[];
+  descendant_file_count: number;
 }
+
+export interface PublisherListItem extends Publisher {
+  descendant_file_count: number;
+  descendant_publisher_count: number;
+  parent_name: string | null;
+}
+
+export type ListPublishersData = ResourceListResponse<PublisherListItem>;
 
 export enum QueryKey {
   ListPublishers = "ListPublishers",
   RetrievePublisher = "RetrievePublisher",
   PublisherFiles = "PublisherFiles",
 }
-
-export type ListPublishersData = ResourceListResponse<Publisher>;
 
 export const usePublishersList = (
   query: ListPublishersQuery = {},
