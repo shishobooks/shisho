@@ -228,22 +228,22 @@ func (svc *Service) DeletePublisher(ctx context.Context, publisherID int) error 
 	})
 }
 
-// GetFileCount returns the count of files with this publisher.
+// GetFileCount returns the count of files with this publisher and all its descendants.
 func (svc *Service) GetFileCount(ctx context.Context, publisherID int) (int, error) {
 	count, err := svc.db.NewSelect().
 		Model((*models.File)(nil)).
-		Where("publisher_id = ?", publisherID).
+		Where("publisher_id IN ("+descendantIDsSubquery()+")", publisherID).
 		Count(ctx)
 	return count, errors.WithStack(err)
 }
 
-// GetFiles returns all files with this publisher.
+// GetFiles returns all files with this publisher and all its descendants.
 func (svc *Service) GetFiles(ctx context.Context, publisherID int) ([]*models.File, error) {
 	var files []*models.File
 
 	err := svc.db.NewSelect().
 		Model(&files).
-		Where("f.publisher_id = ?", publisherID).
+		Where("f.publisher_id IN ("+descendantIDsSubquery()+")", publisherID).
 		Relation("Book").
 		Order("f.filepath ASC").
 		Scan(ctx)
@@ -254,13 +254,13 @@ func (svc *Service) GetFiles(ctx context.Context, publisherID int) ([]*models.Fi
 	return files, nil
 }
 
-// GetFilesPaginated returns a paginated list of files with this publisher.
+// GetFilesPaginated returns a paginated list of files with this publisher and all its descendants.
 func (svc *Service) GetFilesPaginated(ctx context.Context, publisherID, limit, offset int) ([]*models.File, int, error) {
 	var files []*models.File
 
 	total, err := svc.db.NewSelect().
 		Model(&files).
-		Where("f.publisher_id = ?", publisherID).
+		Where("f.publisher_id IN ("+descendantIDsSubquery()+")", publisherID).
 		Relation("Book").
 		Order("f.filepath ASC").
 		Limit(limit).
@@ -492,4 +492,18 @@ func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]in
 	}
 
 	return descendants, nil
+}
+
+// descendantIDsSubquery returns a raw SQL expression that computes all publisher IDs
+// in the subtree rooted at the given publisherID (inclusive of the root itself).
+// Uses a recursive CTE to traverse the publisher hierarchy.
+func descendantIDsSubquery() string {
+	return `SELECT id FROM (
+		WITH RECURSIVE publisher_tree(id) AS (
+			SELECT ?
+			UNION ALL
+			SELECT p.id FROM publishers p JOIN publisher_tree pt ON p.parent_id = pt.id
+		)
+		SELECT id FROM publisher_tree
+	)`
 }

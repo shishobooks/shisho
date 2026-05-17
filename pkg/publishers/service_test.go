@@ -525,6 +525,177 @@ func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "parent publisher not found")
 }
 
+func createTestFile(t *testing.T, db *bun.DB, lib *models.Library, publisherID int, filepath string) {
+	t.Helper()
+	ctx := context.Background()
+
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err := db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filepath,
+		FilesizeBytes: 1,
+		PublisherID:   &publisherID,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+}
+
+func TestGetFileCount_IncludesDescendantFiles(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create hierarchy: root -> child -> grandchild
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	grandchild := &models.Publisher{LibraryID: lib.ID, Name: "Grandchild", ParentID: &child.ID}
+	err = svc.CreatePublisher(ctx, grandchild)
+	require.NoError(t, err)
+
+	// Create files for each publisher
+	createTestFile(t, db, lib, root.ID, "/tmp/root-file.epub")
+	createTestFile(t, db, lib, child.ID, "/tmp/child-file.epub")
+	createTestFile(t, db, lib, grandchild.ID, "/tmp/grandchild-file.epub")
+
+	// Root should count files from self + child + grandchild = 3
+	count, err := svc.GetFileCount(ctx, root.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
+
+	// Child should count files from self + grandchild = 2
+	count, err = svc.GetFileCount(ctx, child.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	// Grandchild (leaf) should count only its own files = 1
+	count, err = svc.GetFileCount(ctx, grandchild.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestGetFilesPaginated_IncludesDescendantFiles(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create hierarchy: root -> child
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	// Create files
+	createTestFile(t, db, lib, root.ID, "/tmp/root-file.epub")
+	createTestFile(t, db, lib, child.ID, "/tmp/child-file.epub")
+
+	// Root paginated query should return both files
+	files, total, err := svc.GetFilesPaginated(ctx, root.ID, 50, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	assert.Len(t, files, 2)
+
+	// Child paginated query should return only child's file
+	files, total, err = svc.GetFilesPaginated(ctx, child.ID, 50, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	assert.Len(t, files, 1)
+}
+
+func TestGetFilesPaginated_PaginatesCorrectlyWithDescendants(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create hierarchy: root -> child
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	// Create 3 files total (1 root, 2 child)
+	createTestFile(t, db, lib, root.ID, "/tmp/a-root.epub")
+	createTestFile(t, db, lib, child.ID, "/tmp/b-child1.epub")
+	createTestFile(t, db, lib, child.ID, "/tmp/c-child2.epub")
+
+	// Page 1 of size 2 should return 2 items, total 3
+	files, total, err := svc.GetFilesPaginated(ctx, root.ID, 2, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 3, total)
+	assert.Len(t, files, 2)
+
+	// Page 2 of size 2 should return 1 item, total 3
+	files, total, err = svc.GetFilesPaginated(ctx, root.ID, 2, 2)
+	require.NoError(t, err)
+	assert.Equal(t, 3, total)
+	assert.Len(t, files, 1)
+}
+
+func TestGetFiles_IncludesDescendantFiles(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	// Create hierarchy: root -> child
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	err := svc.CreatePublisher(ctx, root)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &root.ID}
+	err = svc.CreatePublisher(ctx, child)
+	require.NoError(t, err)
+
+	createTestFile(t, db, lib, root.ID, "/tmp/root-file.epub")
+	createTestFile(t, db, lib, child.ID, "/tmp/child-file.epub")
+
+	// Root GetFiles should return both files
+	files, err := svc.GetFiles(ctx, root.ID)
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+
+	// Child GetFiles should return only child's file
+	files, err = svc.GetFiles(ctx, child.ID)
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+}
+
 func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
