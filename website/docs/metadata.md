@@ -44,6 +44,8 @@ Publishers are attached at the **file level**, not the book level. This means di
 - **Detail page:** Shows direct file count and descendant file count (files attached to any sub-publisher). Lists child publishers with their file counts as clickable links.
 - **List page:** Shows parent publisher name as secondary text, plus per-publisher counts for direct files, descendant files, and descendant publishers.
 
+The merge picker on a publisher's detail page offers two actions after selecting another publisher: **Merge** (moves files, adds an alias, deletes the source) and **Set as child** (makes the selected publisher a child of the current one without moving files or deleting either publisher). The "Set as child" option is disabled when it would create a cycle.
+
 ### Identifiers
 
 Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple identifiers of **different** types: `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and custom types registered by [plugins](./plugins/overview).

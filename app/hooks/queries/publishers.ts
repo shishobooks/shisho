@@ -191,3 +191,30 @@ export const useMergePublisher = () => {
     },
   });
 };
+
+export const useSetChildPublisher = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      parentId,
+      childId,
+    }: {
+      parentId: number;
+      childId: number;
+    }) => {
+      return API.request<void>("POST", `/publishers/${parentId}/set-child`, {
+        child_id: childId,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrievePublisher, variables.parentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.RetrievePublisher, variables.childId],
+      });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
+    },
+  });
+};

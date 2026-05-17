@@ -32,12 +32,21 @@ interface EditConfig {
   sortNameSource?: DataSource;
 }
 
+interface SetChildConfig {
+  onSetChild: (childId: number) => Promise<void>;
+  isPending: boolean;
+  /** IDs of entities that are ancestors of the target — setting them as child would create a cycle */
+  disabledIds: number[];
+}
+
 interface MergeConfig {
   entities: { id: number; name: string; count: number }[];
   isLoadingEntities: boolean;
   isPending: boolean;
   onMerge: (sourceId: number) => Promise<void>;
   onSearch: (search: string) => void;
+  /** When provided, the merge dialog shows a "Set as child" option */
+  setChildConfig?: SetChildConfig;
 }
 
 interface DeleteConfig {
@@ -224,6 +233,18 @@ export function ResourceDetail({
         onOpenChange={setMergeOpen}
         onSearch={mergeConfig.onSearch}
         open={mergeOpen}
+        setChildConfig={
+          mergeConfig.setChildConfig
+            ? {
+                onSetChild: async (childId) => {
+                  await mergeConfig.setChildConfig!.onSetChild(childId);
+                  setMergeOpen(false);
+                },
+                isPending: mergeConfig.setChildConfig.isPending,
+                disabledIds: mergeConfig.setChildConfig.disabledIds,
+              }
+            : undefined
+        }
         targetId={entityId}
         targetName={name}
       />

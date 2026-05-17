@@ -513,6 +513,132 @@ func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
 	assert.Equal(t, 2, fileCount, "file_count should include descendant publisher files")
 }
 
+
+func TestSetChild_Success(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child"}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"child_id": %d}`, child.ID)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(parent.ID))
+
+	err = h.setChild(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	// Verify child's parent_id was set to parent
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, parent.ID, *updated.ParentID)
+}
+
+func TestSetChild_CycleRejected(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create hierarchy: A -> B (B is child of A)
+	pubA := &models.Publisher{LibraryID: lib.ID, Name: "A"}
+	_, err := db.NewInsert().Model(pubA).Exec(ctx)
+	require.NoError(t, err)
+
+	pubB := &models.Publisher{LibraryID: lib.ID, Name: "B", ParentID: &pubA.ID}
+	_, err = db.NewInsert().Model(pubB).Exec(ctx)
+	require.NoError(t, err)
+
+	// Try to set A as child of B (would create B->A->B cycle)
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"child_id": %d}`, pubA.ID)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(pubB.ID))
+
+	err = h.setChild(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle")
+}
+
+func TestSetChild_SamePublisherRejected(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	pub := &models.Publisher{LibraryID: lib.ID, Name: "Self"}
+	_, err := db.NewInsert().Model(pub).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"child_id": %d}`, pub.ID)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(pub.ID))
+
+	err = h.setChild(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle")
+}
+
+func TestSetChild_LibraryAccessEnforced(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	parent := &models.Publisher{LibraryID: lib.ID, Name: "Parent"}
+	_, err := db.NewInsert().Model(parent).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child"}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	// User without access to this library (no LibraryAccess entries)
+	user := &models.User{Username: "restricted", PasswordHash: "x", LibraryAccess: []*models.UserLibraryAccess{}}
+
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"child_id": %d}`, child.ID)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(parent.ID))
+	c.Set("user", user)
+
+	err = h.setChild(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access")
+}
+
+
 func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	t.Parallel()
 	db := setupHandlerTestDB(t)

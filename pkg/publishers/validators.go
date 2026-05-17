@@ -49,3 +49,7 @@ type UpdatePublisherPayload struct {
 type MergePublishersPayload struct {
 	SourceID int `json:"source_id" validate:"required,min=1"`
 }
+
+type SetChildPayload struct {
+	ChildID int `json:"child_id" validate:"required,min=1"`
+}
