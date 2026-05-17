@@ -114,6 +114,7 @@ export function MetadataMergeDialog({
     }
     setSelectedId(null);
     setSearch("");
+    onSearch("");
     if (setChildConfig) setAction("merge");
   };
 
@@ -121,6 +122,7 @@ export function MetadataMergeDialog({
     if (!isOpen) {
       setSelectedId(null);
       setSearch("");
+      onSearch("");
       if (setChildConfig) setAction("merge");
     }
     onOpenChange(isOpen);
