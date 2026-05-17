@@ -114,14 +114,14 @@ export function MetadataMergeDialog({
     }
     setSelectedId(null);
     setSearch("");
-    setAction("merge");
+    if (setChildConfig) setAction("merge");
   };
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setSelectedId(null);
       setSearch("");
-      setAction("merge");
+      if (setChildConfig) setAction("merge");
     }
     onOpenChange(isOpen);
   };
@@ -194,11 +194,12 @@ export function MetadataMergeDialog({
                           value={String(entity.id)}
                         >
                           <Check
-                            className={`mr-2 h-4 w-4 shrink-0 ${
+                            className={cn(
+                              "mr-2 h-4 w-4 shrink-0",
                               selectedId === entity.id
                                 ? "opacity-100"
-                                : "opacity-0"
-                            }`}
+                                : "opacity-0",
+                            )}
                           />
                           <span className="flex-1 truncate" title={entity.name}>
                             {entity.name}
