@@ -486,13 +486,19 @@ func (svc *Service) GetDescendantFileCount(ctx context.Context, publisherID int)
 	if err != nil {
 		return 0, err
 	}
-	if len(descendantIDs) == 0 {
+	return svc.GetFileCountForPublisherIDs(ctx, descendantIDs)
+}
+
+// GetFileCountForPublisherIDs returns the count of files attached to any of the
+// given publisher IDs. Useful when descendant IDs have already been computed.
+func (svc *Service) GetFileCountForPublisherIDs(ctx context.Context, publisherIDs []int) (int, error) {
+	if len(publisherIDs) == 0 {
 		return 0, nil
 	}
 
 	count, err := svc.db.NewSelect().
 		Model((*models.File)(nil)).
-		Where("publisher_id IN (?)", bun.List(descendantIDs)).
+		Where("publisher_id IN (?)", bun.List(publisherIDs)).
 		Count(ctx)
 	return count, errors.WithStack(err)
 }

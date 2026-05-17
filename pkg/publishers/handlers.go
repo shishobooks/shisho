@@ -81,7 +81,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		childList[i] = childResponse{ID: ch.ID, Name: ch.Name, FileCount: ch.FileCount}
 	}
 
-	descendantFileCount, err := h.publisherService.GetDescendantFileCount(ctx, id)
+	descendantFileCount, err := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -145,8 +145,9 @@ func (h *handler) list(c echo.Context) error {
 	result := make([]PublisherWithCount, len(publishers))
 	for i, p := range publishers {
 		fileCount, _ := h.publisherService.GetFileCount(ctx, p.ID)
-		descendantFileCount, _ := h.publisherService.GetDescendantFileCount(ctx, p.ID)
-		descendantPublisherCount, _ := h.publisherService.GetDescendantPublisherCount(ctx, p.ID)
+		descendantIDs, _ := h.publisherService.GetDescendantIDs(ctx, p.ID)
+		descendantFileCount, _ := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
+		descendantPublisherCount := len(descendantIDs)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, p.ID)
 
 		var parentName *string

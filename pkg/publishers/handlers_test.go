@@ -452,7 +452,6 @@ func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create files: 2 direct on parent, 3 on childA, 1 on childB
-	seedPublisherWithFiles(t, db, lib, "direct_parent", nil)
 	// Use the actual publisher IDs for file creation
 	book := &models.Book{
 		LibraryID:       lib.ID,
