@@ -9,7 +9,10 @@ import {
   MetadataEditDialog,
   type EntityType,
 } from "@/components/library/MetadataEditDialog";
-import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
+import {
+  MetadataMergeDialog,
+  type SetChildConfig,
+} from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -30,13 +33,6 @@ interface EditConfig {
   /** Show sort name field in edit dialog (for person/series) */
   sortName?: string;
   sortNameSource?: DataSource;
-}
-
-interface SetChildConfig {
-  onSetChild: (childId: number) => Promise<void>;
-  isPending: boolean;
-  /** IDs of entities that are ancestors of the target — setting them as child would create a cycle */
-  disabledIds: number[];
 }
 
 interface MergeConfig {

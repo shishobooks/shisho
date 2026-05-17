@@ -37,7 +37,7 @@ interface EntityOption {
   count: number;
 }
 
-interface SetChildConfig {
+export interface SetChildConfig {
   onSetChild: (childId: number) => Promise<void>;
   isPending: boolean;
   /** IDs of entities that are ancestors of the target — setting them as child would create a cycle */
@@ -260,6 +260,7 @@ export function MetadataMergeDialog({
                   <Button
                     disabled={
                       setChildConfig.isPending ||
+                      isPending ||
                       !selectedId ||
                       setChildDisabled
                     }
@@ -282,7 +283,7 @@ export function MetadataMergeDialog({
             </Tooltip>
           )}
           <Button
-            disabled={isPending || !selectedId}
+            disabled={isPending || setChildConfig?.isPending || !selectedId}
             onClick={handleMerge}
             size="sm"
             variant="destructive"
