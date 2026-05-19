@@ -25,6 +25,14 @@ interface FileListSectionProps {
   pageParam?: string;
 }
 
+function fileSubtitle(file: File): string {
+  const authors = file.book?.authors
+    ?.map((a) => a.person?.name)
+    .filter(Boolean);
+  if (authors && authors.length > 0) return authors.join(", ");
+  return file.book?.title ?? "Unknown Book";
+}
+
 function FileMetaInfo({ file }: { file: File }) {
   if (
     file.file_type === "m4b" &&
@@ -128,7 +136,7 @@ export function FileListSection({
                 {file.name || getFilename(file.filepath)}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                {file.book?.title ?? "Unknown Book"}
+                {fileSubtitle(file)}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

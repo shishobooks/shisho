@@ -246,6 +246,9 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 	q := svc.db.NewSelect().
 		Model(&files).
 		Relation("Book").
+		Relation("Book.Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("a.sort_order ASC")
+		}).
 		Relation("Book.Authors.Person").
 		Relation("Book.BookSeries.Series").
 		Relation("Publisher").
