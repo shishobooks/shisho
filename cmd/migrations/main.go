@@ -35,7 +35,7 @@ func main() {
 				Name:  "init",
 				Usage: "create migration tables",
 				Action: func(c *cli.Context) error {
-					migrator := migrate.NewMigrator(db, migrations.Migrations)
+					migrator := migrations.NewMigrator(db)
 					return migrator.Init(c.Context)
 				},
 			},
@@ -43,7 +43,7 @@ func main() {
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(c *cli.Context) error {
-					migrator := migrate.NewMigrator(db, migrations.Migrations)
+					migrator := migrations.NewMigrator(db)
 
 					group, err := migrator.Migrate(c.Context)
 					if err != nil {
@@ -63,7 +63,7 @@ func main() {
 				Name:  "rollback",
 				Usage: "rollback the last migration group",
 				Action: func(c *cli.Context) error {
-					migrator := migrate.NewMigrator(db, migrations.Migrations)
+					migrator := migrations.NewMigrator(db)
 
 					group, err := migrator.Rollback(c.Context)
 					if err != nil {
@@ -83,7 +83,7 @@ func main() {
 				Name:  "create",
 				Usage: "create Go migration",
 				Action: func(c *cli.Context) error {
-					migrator := migrate.NewMigrator(db, migrations.Migrations)
+					migrator := migrations.NewMigrator(db)
 
 					name := strings.Join(c.Args().Slice(), "_")
 					mf, err := migrator.CreateGoMigration(
@@ -103,7 +103,7 @@ func main() {
 				Name:  "status",
 				Usage: "print migrations status",
 				Action: func(c *cli.Context) error {
-					migrator := migrate.NewMigrator(db, migrations.Migrations)
+					migrator := migrations.NewMigrator(db)
 
 					ms, err := migrator.MigrationsWithStatus(c.Context)
 					if err != nil {

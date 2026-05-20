@@ -10,8 +10,12 @@ import (
 
 var Migrations = migrate.NewMigrations()
 
+func NewMigrator(db *bun.DB) *migrate.Migrator {
+	return migrate.NewMigrator(db, Migrations, migrate.WithMarkAppliedOnSuccess(true))
+}
+
 func BringUpToDate(ctx context.Context, db *bun.DB) (*migrate.MigrationGroup, error) {
-	migrator := migrate.NewMigrator(db, Migrations)
+	migrator := NewMigrator(db)
 	err := migrator.Init(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)

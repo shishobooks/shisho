@@ -159,6 +159,18 @@ func init() {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		_, err = db.Exec(`CREATE INDEX ix_files_file_type_book_id ON files (file_type, book_id)`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX idx_files_language ON files(language COLLATE NOCASE) WHERE language IS NOT NULL`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = db.Exec(`CREATE INDEX idx_files_book_reviewed ON files(book_id, reviewed) WHERE file_role = 'main'`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		_, err = db.Exec(`CREATE INDEX ix_files_publisher_id ON files (publisher_id)`)
 		if err != nil {
 			return errors.WithStack(err)
