@@ -11,9 +11,9 @@ We're removing the concept because every consumer either doesn't need a persiste
 | OPDS feeds | Primary file's metadata takes priority | List each file as a separate acquisition; user selects |
 | Gallery sorting | Sort by primary file's release date / page count / duration | Sort by newest file's value, fall back to any file with a non-null value |
 | Batch download | Downloads primary file per book; skips books without a primary | File-type checkboxes let users pick which formats to include |
-| Identify decisions | Book-level changed fields default ON only when identifying the primary file (or the sole main file) | Default based on source priority — ON when field source is filepath/file-metadata, OFF when already plugin/manual |
+| Identify decisions | Book-level changed fields default ON only when identifying the primary file (or the sole main file, i.e. non-supplement) | Default based on source priority — ON when field source is filepath/file-metadata, OFF when already plugin/manual |
 | `getPrimaryFileType` (series number formatting) | Uses primary file's type to decide "Vol." vs plain number | Any-CBZ check across all files |
-| Identify dialog (initial file selection) | Prefers primary after unreviewed heuristic | Drop primary preference; unreviewed heuristic + first main file is sufficient |
+| Identify dialog (initial file selection) | Prefers primary file after the unreviewed-file heuristic (prefer files not yet identified by the user) | Drop primary preference; unreviewed heuristic + first main file (non-supplement) is sufficient |
 
 The main argument for primary file was preventing Kobo duplicates, but the common multi-file case is cross-format (EPUB + M4B) where Kobo's format filter already deduplicates. Same-format editions are uncommon and have different covers and `file.Name` values — e.g., "Foobar (5th Edition)" — making them distinguishable on the device, the same as having bought both editions from the Kobo store.
 
