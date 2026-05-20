@@ -249,7 +249,9 @@ Each commit should be in the format of `[{Category}] {Change description}`
 
 ## Database Best Practices
 
+- **Migrations must only be marked applied after success** — Always construct Bun migrators through `pkg/migrations.NewMigrator`, not `migrate.NewMigrator` directly. The helper enables `migrate.WithMarkAppliedOnSuccess(true)`. Without it, Bun records a migration before running its body; a failed DDL/data migration can leave the DB half-mutated while future startups skip the migration as already applied.
 - **Always consider indexes** when modifying database schema or query patterns
+- **SQLite table-rebuild migrations must recreate all indexes** — When recreating a table to drop/change columns, list every existing index for that table and recreate it on the replacement table. Dropping the old table drops its indexes too.
 - For deletion queries, ensure indexes exist on the WHERE clause columns
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`)
 - Composite indexes should match query patterns (column order matters)
