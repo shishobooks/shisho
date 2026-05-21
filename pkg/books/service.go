@@ -1722,6 +1722,19 @@ func (svc *Service) ListAllFilesForLibrary(ctx context.Context, libraryID int) (
 	return files, errors.WithStack(err)
 }
 
+// ListFilesWithMissingBooksForLibrary returns files whose book_id points to a
+// missing book row. Used to repair corruption before a scan seeds its known-file cache.
+func (svc *Service) ListFilesWithMissingBooksForLibrary(ctx context.Context, libraryID int) ([]*models.File, error) {
+	var files []*models.File
+	err := svc.db.NewSelect().
+		Model(&files).
+		Join("LEFT JOIN books AS b ON b.id = f.book_id").
+		Where("f.library_id = ?", libraryID).
+		Where("b.id IS NULL").
+		Scan(ctx)
+	return files, errors.WithStack(err)
+}
+
 // DeleteBook deletes a book and all its associated records.
 // All child records (files, authors, book_series, book_genres, book_tags) cascade via FK.
 // File children (narrators, identifiers, chapters) cascade from files via FK.

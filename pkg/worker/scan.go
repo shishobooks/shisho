@@ -373,6 +373,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
 		} else {
+			allFiles = w.repairMissingParentFilesBeforeScan(ctx, library.ID, allFiles, jobLog)
 			cache.LoadKnownFiles(allFiles)
 			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
 		}
@@ -646,6 +647,59 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 	jobLog.Info("finished scan job", nil)
 	return nil
+}
+
+func (w *Worker) repairMissingParentFilesBeforeScan(
+	ctx context.Context,
+	libraryID int,
+	allFiles []*models.File,
+	jobLog *joblogs.JobLogger,
+) []*models.File {
+	missingParentFiles, err := w.bookService.ListFilesWithMissingBooksForLibrary(ctx, libraryID)
+	if err != nil {
+		jobLog.Warn("failed to detect files with missing parent books", logger.Data{"library_id": libraryID, "error": err.Error()})
+		return allFiles
+	}
+	if len(missingParentFiles) == 0 {
+		return allFiles
+	}
+
+	jobLog.Warn("repairing files with missing parent books before scan", logger.Data{
+		"library_id":     libraryID,
+		"book_count":     countDistinctBookIDs(missingParentFiles),
+		"orphaned_files": len(missingParentFiles),
+	})
+
+	cleanedBookIDs := make(map[int]struct{})
+	for _, file := range missingParentFiles {
+		if _, seen := cleanedBookIDs[file.BookID]; seen {
+			continue
+		}
+		if err := w.cleanupMissingBookOrphans(ctx, file.BookID, jobLog); err == nil {
+			cleanedBookIDs[file.BookID] = struct{}{}
+		}
+	}
+	if len(cleanedBookIDs) == 0 {
+		return allFiles
+	}
+
+	filtered := make([]*models.File, 0, len(allFiles))
+	for _, file := range allFiles {
+		if _, cleaned := cleanedBookIDs[file.BookID]; cleaned {
+			continue
+		}
+		filtered = append(filtered, file)
+	}
+
+	return filtered
+}
+
+func countDistinctBookIDs(files []*models.File) int {
+	bookIDs := make(map[int]struct{}, len(files))
+	for _, file := range files {
+		bookIDs[file.BookID] = struct{}{}
+	}
+	return len(bookIDs)
 }
 
 // runInputConverters runs input converter plugins on discovered files.

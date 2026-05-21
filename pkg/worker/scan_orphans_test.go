@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -289,6 +290,94 @@ func TestCleanupOrphanedFiles_MissingParentBookWithScannedMainFileDeletesAllRows
 	assert.Empty(t, tc.listBooks())
 	assert.Empty(t, tc.listFiles())
 	assertNoRowsForColumn(tc.ctx, t, tc.db, "chapters", "file_id", keepFile.ID)
+	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+}
+
+func TestProcessScanJob_MissingParentBookWithScannedMainFileRecreatesLiveFile(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Rescan")
+	testgen.GenerateEPUB(t, bookDir, "keep.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Rescan",
+		Authors: []string{"Author"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "remove.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Rescan",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 2)
+
+	book := tc.listBooks()[0]
+	files := tc.listFiles()
+
+	var keepPath, removePath string
+	for _, file := range files {
+		switch filepath.Base(file.Filepath) {
+		case "keep.epub":
+			keepPath = file.Filepath
+		case "remove.epub":
+			removePath = file.Filepath
+		}
+	}
+	require.NotEmpty(t, keepPath)
+	require.NotEmpty(t, removePath)
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, os.Remove(removePath))
+
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 1)
+	assert.Equal(t, keepPath, filesAfter[0].Filepath)
+	assert.Equal(t, booksAfter[0].ID, filesAfter[0].BookID)
+	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+}
+
+func TestProcessScanJob_MissingParentBookAllMainFilesStillOnDiskRecreatesBook(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Healthy Files")
+	testgen.GenerateEPUB(t, bookDir, "first.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Healthy Files",
+		Authors: []string{"Author"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "second.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Healthy Files",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 2)
+
+	book := tc.listBooks()[0]
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 2)
+	for _, file := range filesAfter {
+		assert.Equal(t, booksAfter[0].ID, file.BookID)
+	}
 	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
 }
 

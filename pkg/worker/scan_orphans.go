@@ -77,7 +77,10 @@ func (w *Worker) cleanupOrphanedFiles(
 			continue
 		}
 		if errors.Is(err, errcodes.NotFound("Book")) {
-			w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
+			for _, file := range orphansByBook[bookID] {
+				orphanDirs[filepath.Dir(file.Filepath)] = struct{}{}
+			}
+			_ = w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
 			missingBookIDs[bookID] = struct{}{}
 		}
 	}
@@ -142,6 +145,9 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	for bookID, orphans := range orphansByBook {
+		if _, missing := missingBookIDs[bookID]; missing {
+			continue
+		}
 		if len(orphans) < totalFilesByBook[bookID] {
 			continue // Already handled as partial orphan
 		}
@@ -154,7 +160,7 @@ func (w *Worker) cleanupOrphanedFiles(
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 		if err != nil {
 			if errors.Is(err, errcodes.NotFound("Book")) {
-				w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
+				_ = w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
 				continue
 			}
 			jobLog.Warn("failed to retrieve orphaned book", logger.Data{"book_id": bookID, "error": err.Error()})
@@ -270,7 +276,7 @@ func (w *Worker) cleanupOrphanedFiles(
 	})
 }
 
-func (w *Worker) cleanupMissingBookOrphans(ctx context.Context, bookID int, jobLog *joblogs.JobLogger) {
+func (w *Worker) cleanupMissingBookOrphans(ctx context.Context, bookID int, jobLog *joblogs.JobLogger) error {
 	if w.searchService != nil {
 		if err := w.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
 			jobLog.Warn("failed to remove missing orphaned book from search index", logger.Data{"book_id": bookID, "error": err.Error()})
@@ -278,7 +284,8 @@ func (w *Worker) cleanupMissingBookOrphans(ctx context.Context, bookID int, jobL
 	}
 	if err := w.bookService.DeleteOrphanedRowsForMissingBook(ctx, bookID); err != nil {
 		jobLog.Warn("failed to cleanup orphan rows for missing book", logger.Data{"book_id": bookID, "error": err.Error()})
-	} else {
-		jobLog.Info("cleaned orphan rows for missing book", logger.Data{"book_id": bookID})
+		return err
 	}
+	jobLog.Info("cleaned orphan rows for missing book", logger.Data{"book_id": bookID})
+	return nil
 }
