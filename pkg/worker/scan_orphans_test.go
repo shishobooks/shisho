@@ -436,6 +436,56 @@ func TestProcessScanJob_MissingParentBookWithLiveScannableSupplementPreservesRol
 	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
+func TestProcessScanJob_MissingParentBookWithOnlyLiveScannableSupplementRecreatesBook(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Supplement Only")
+	testgen.GenerateEPUB(t, bookDir, "main.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Supplement Only",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	mainPath := tc.listFiles()[0].Filepath
+
+	supplementPath := filepath.Join(bookDir, "supplement.epub")
+	testgen.GenerateEPUB(t, bookDir, "supplement.epub", testgen.EPUBOptions{
+		Title:   "Recovered Supplement",
+		Authors: []string{"Author"},
+	})
+	supplement := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		Filepath:      supplementPath,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 123,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplement))
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, os.Remove(mainPath))
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 1)
+	assert.Equal(t, supplementPath, filesAfter[0].Filepath)
+	assert.Equal(t, models.FileRoleMain, filesAfter[0].FileRole)
+	assert.Equal(t, booksAfter[0].ID, filesAfter[0].BookID)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
+}
+
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

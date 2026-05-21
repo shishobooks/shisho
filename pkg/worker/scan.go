@@ -374,7 +374,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
 		} else {
-			allFiles, deferredSupplements = w.repairMissingParentFilesBeforeScan(ctx, library.ID, allFiles, jobLog)
+			allFiles, deferredSupplements = w.repairMissingParentFilesBeforeScan(ctx, library, allFiles, jobLog)
 			cache.LoadKnownFiles(allFiles)
 			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
 		}
@@ -659,13 +659,13 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 func (w *Worker) repairMissingParentFilesBeforeScan(
 	ctx context.Context,
-	libraryID int,
+	library *models.Library,
 	allFiles []*models.File,
 	jobLog *joblogs.JobLogger,
 ) ([]*models.File, map[string]*models.File) {
-	missingParentFiles, err := w.bookService.ListFilesWithMissingBooksForLibrary(ctx, libraryID)
+	missingParentFiles, err := w.bookService.ListFilesWithMissingBooksForLibrary(ctx, library.ID)
 	if err != nil {
-		jobLog.Warn("failed to detect files with missing parent books", logger.Data{"library_id": libraryID, "error": err.Error()})
+		jobLog.Warn("failed to detect files with missing parent books", logger.Data{"library_id": library.ID, "error": err.Error()})
 		return allFiles, nil
 	}
 	if len(missingParentFiles) == 0 {
@@ -673,7 +673,7 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 	}
 
 	jobLog.Warn("repairing files with missing parent books before scan", logger.Data{
-		"library_id":     libraryID,
+		"library_id":     library.ID,
 		"book_count":     countDistinctBookIDs(missingParentFiles),
 		"orphaned_files": len(missingParentFiles),
 	})
@@ -697,6 +697,8 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 		return allFiles, nil
 	}
 
+	w.cleanupMissingParentDirectories(missingParentFiles, cleanedBookIDs, library, jobLog)
+
 	filtered := make([]*models.File, 0, len(allFiles))
 	for _, file := range allFiles {
 		if _, cleaned := cleanedBookIDs[file.BookID]; cleaned {
@@ -714,6 +716,39 @@ func countDistinctBookIDs(files []*models.File) int {
 		bookIDs[file.BookID] = struct{}{}
 	}
 	return len(bookIDs)
+}
+
+func (w *Worker) cleanupMissingParentDirectories(
+	missingParentFiles []*models.File,
+	cleanedBookIDs map[int]struct{},
+	library *models.Library,
+	jobLog *joblogs.JobLogger,
+) {
+	dirs := make(map[string]struct{})
+	for _, file := range missingParentFiles {
+		if _, cleaned := cleanedBookIDs[file.BookID]; !cleaned {
+			continue
+		}
+		dirs[filepath.Dir(file.Filepath)] = struct{}{}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+
+	cleanupIgnoredPatterns := make([]string, 0, len(fileutils.ShishoSpecialFilePatterns)+len(w.config.SupplementExcludePatterns))
+	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, fileutils.ShishoSpecialFilePatterns...)
+	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, w.config.SupplementExcludePatterns...)
+
+	for dir := range dirs {
+		for _, libPath := range library.LibraryPaths {
+			if strings.HasPrefix(dir, libPath.Filepath) {
+				if err := fileutils.CleanupEmptyParentDirectories(dir, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
+					jobLog.Warn("failed to cleanup empty directories after missing-parent repair", logger.Data{"path": dir, "error": err.Error()})
+				}
+				break
+			}
+		}
+	}
 }
 
 func (w *Worker) restoreDeferredSupplements(
@@ -742,6 +777,19 @@ func (w *Worker) restoreDeferredSupplements(
 			jobLog.Warn("failed to restore deferred supplement", logger.Data{"path": path, "error": err.Error()})
 			continue
 		}
+
+		if result == nil || result.File == nil {
+			result, err = w.scanInternal(ctx, ScanOptions{
+				FilePath:  path,
+				LibraryID: library.ID,
+				JobLog:    jobLog,
+			}, cache)
+			if err != nil {
+				jobLog.Warn("failed to recreate deferred supplement as a main file", logger.Data{"path": path, "error": err.Error()})
+				continue
+			}
+		}
+
 		if result != nil && result.File != nil {
 			jobLog.Info("restored deferred supplement", logger.Data{"path": path, "file_id": result.File.ID, "previous_file_id": file.ID})
 		}
