@@ -105,6 +105,13 @@ export function MetadataMergeDialog({
     onSearch(value);
   };
 
+  const resetDialogState = () => {
+    setSelectedId(null);
+    setSearch("");
+    onSearch("");
+    if (setChildConfig) setAction("merge");
+  };
+
   const handleConfirm = async () => {
     if (!selectedId) return;
     if (action === "set-child" && setChildConfig) {
@@ -112,16 +119,12 @@ export function MetadataMergeDialog({
     } else {
       await onMerge(selectedId);
     }
-    setSelectedId(null);
-    setSearch("");
-    if (setChildConfig) setAction("merge");
+    resetDialogState();
   };
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
-      setSelectedId(null);
-      setSearch("");
-      if (setChildConfig) setAction("merge");
+      resetDialogState();
     }
     onOpenChange(isOpen);
   };

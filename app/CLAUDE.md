@@ -51,6 +51,7 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 **IMPORTANT - List Limits:**
 - **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
 - **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
+- **Metadata merge search should clear immediately** - Merge dialogs reset their search when they close or complete. Use `useDebouncedSearch` for that query state instead of `useDebounce` so clearing to `""` updates the server-side search immediately and fast reopen cycles do not show stale filtered results.
 
 ### React Query Cache Invalidation
 
