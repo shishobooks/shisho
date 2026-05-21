@@ -134,9 +134,27 @@ export const useUpdatePublisher = () => {
       );
     },
     onSuccess: (_data, variables) => {
+      const previousParentId = queryClient.getQueryData<PublisherDetail>([
+        QueryKey.RetrievePublisher,
+        variables.publisherId,
+      ])?.parent_id;
+
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
       });
+      if ("parent_id" in variables.payload) {
+        const affectedParentIds = new Set(
+          [previousParentId, variables.payload.parent_id].filter(
+            (id): id is number => id != null,
+          ),
+        );
+
+        affectedParentIds.forEach((parentId) => {
+          queryClient.invalidateQueries({
+            queryKey: [QueryKey.RetrievePublisher, parentId],
+          });
+        });
+      }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
