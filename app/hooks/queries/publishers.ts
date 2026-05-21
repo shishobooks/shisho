@@ -2,6 +2,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
@@ -45,6 +46,11 @@ export enum QueryKey {
   RetrievePublisher = "RetrievePublisher",
   PublisherFiles = "PublisherFiles",
 }
+
+const invalidatePublisherHierarchyQueries = (queryClient: QueryClient) => {
+  queryClient.invalidateQueries({ queryKey: [QueryKey.RetrievePublisher] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.PublisherFiles] });
+};
 
 export const usePublishersList = (
   query: ListPublishersQuery = {},
@@ -134,9 +140,13 @@ export const useUpdatePublisher = () => {
       );
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
-      });
+      if (variables.payload.parent_id !== undefined) {
+        invalidatePublisherHierarchyQueries(queryClient);
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
+        });
+      }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
@@ -207,17 +217,9 @@ export const useSetChildPublisher = () => {
         child_id: childId,
       });
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.parentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.childId],
-      });
+    onSuccess: () => {
+      invalidatePublisherHierarchyQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PublisherFiles, variables.parentId],
-      });
     },
   });
 };

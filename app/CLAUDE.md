@@ -58,6 +58,8 @@ When a mutation modifies a resource (update/delete/merge), invalidate related qu
 
 **Cross-resource invalidation is required**: When metadata entities (genres, tags, series, people, publishers) are modified, also invalidate `ListBooks` and `RetrieveBook` queries since books display this metadata.
 
+**Hierarchy changes must invalidate publisher detail + file query families**: For hierarchical metadata such as publishers, mutations that reparent a node (`parent_id` edits, "set child" actions) affect descendant-inclusive detail/file data for the moved node, both sides of the move, and any cached ancestors. Invalidate the `RetrievePublisher` and `PublisherFiles` query families for hierarchy changes rather than only the edited node.
+
 **Pattern:**
 ```typescript
 import { QueryKey as BooksQueryKey } from "./books";

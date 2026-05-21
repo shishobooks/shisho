@@ -119,13 +119,17 @@ const PublisherDetail = () => {
 
   const handleEdit = async (data: PublisherEditData) => {
     if (!publisherId) return;
+    const payload: PublisherEditData = {
+      name: data.name,
+      aliases: data.aliases,
+    };
+    if (data.parent_id !== undefined) {
+      payload.parent_id = data.parent_id;
+    }
+
     await updatePublisherMutation.mutateAsync({
       publisherId,
-      payload: {
-        name: data.name,
-        aliases: data.aliases,
-        parent_id: data.parent_id,
-      },
+      payload,
     });
   };
 
