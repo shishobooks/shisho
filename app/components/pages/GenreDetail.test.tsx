@@ -56,16 +56,10 @@ vi.mock("@/hooks/queries/genres", () => ({
     isLoading: false,
     isSuccess: true,
   }),
-  useGenresList: ({
-    search,
-  }: {
-    search?: string;
-  }) => ({
+  useGenresList: ({ search }: { search?: string }) => ({
     data: {
       items: allGenres.filter((genre) =>
-        search
-          ? genre.name.toLowerCase().includes(search.toLowerCase())
-          : true,
+        search ? genre.name.toLowerCase().includes(search.toLowerCase()) : true,
       ),
     },
     isLoading: false,
