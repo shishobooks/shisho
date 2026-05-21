@@ -1,8 +1,10 @@
 package worker
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -10,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func TestCleanupOrphanedFiles_PartialOrphan(t *testing.T) {
@@ -115,6 +118,116 @@ func TestCleanupOrphanedFiles_FullOrphan_NoSupplements(t *testing.T) {
 	// Book and file should both be deleted
 	assert.Empty(t, tc.listBooks())
 	assert.Empty(t, tc.listFiles())
+}
+
+func TestCleanupOrphanedFiles_MissingParentBookDeletesOrphanedRows(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent")
+	testgen.GenerateEPUB(t, bookDir, "orphan.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	file := tc.listFiles()[0]
+	now := time.Now()
+
+	person := &models.Person{
+		LibraryID:      book.LibraryID,
+		Name:           "Dangling Author",
+		SortName:       "Author, Dangling",
+		SortNameSource: models.DataSourceFilepath,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	_, err = tc.db.NewInsert().Model(person).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	author := &models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}
+	_, err = tc.db.NewInsert().Model(author).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	genre := &models.Genre{LibraryID: book.LibraryID, Name: "Dangling Genre", CreatedAt: now, UpdatedAt: now}
+	_, err = tc.db.NewInsert().Model(genre).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.NewInsert().Model(&models.BookGenre{BookID: book.ID, GenreID: genre.ID}).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	tag := &models.Tag{LibraryID: book.LibraryID, Name: "dangling-tag", CreatedAt: now, UpdatedAt: now}
+	_, err = tc.db.NewInsert().Model(tag).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.NewInsert().Model(&models.BookTag{BookID: book.ID, TagID: tag.ID}).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	series := &models.Series{
+		LibraryID:      book.LibraryID,
+		Name:           "Dangling Series",
+		NameSource:     models.DataSourceFilepath,
+		SortName:       "Dangling Series",
+		SortNameSource: models.DataSourceFilepath,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	_, err = tc.db.NewInsert().Model(series).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.NewInsert().Model(&models.BookSeries{BookID: book.ID, SeriesID: series.ID, SortOrder: 1}).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	chapter := &models.Chapter{FileID: file.ID, Title: "Dangling Chapter", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	_, err = tc.db.NewInsert().Model(chapter).Exec(tc.ctx)
+	require.NoError(t, err)
+	identifier := &models.FileIdentifier{
+		FileID:    file.ID,
+		Type:      models.IdentifierTypeISBN13,
+		Value:     "9781234567890",
+		Source:    models.DataSourceFileMetadata,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_, err = tc.db.NewInsert().Model(identifier).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.NewInsert().Model(&models.FileFingerprint{
+		FileID:    file.ID,
+		Algorithm: models.FingerprintAlgorithmSHA256,
+		Value:     "dangling-fingerprint",
+		CreatedAt: now,
+	}).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	assert.Positive(t, foreignKeyViolationCount(tc.ctx, t, tc.db))
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, book.LibraryID)
+	require.NoError(t, err)
+	require.Len(t, existingFiles, 1)
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: &book.LibraryID})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, map[string]struct{}{}, library, jobLog)
+
+	assert.Empty(t, tc.listBooks())
+	assert.Empty(t, tc.listFiles())
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "chapters", "file_id", file.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "file_identifiers", "file_id", file.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "file_fingerprints", "file_id", file.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "authors", "book_id", book.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_genres", "book_id", book.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_tags", "book_id", book.ID)
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_series", "book_id", book.ID)
+	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
 }
 
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
@@ -277,4 +390,55 @@ func TestCleanupOrphanedFiles_FullOrphan_NewMainFileAddedDuringScan(t *testing.T
 
 func intPtr(i int) *int {
 	return &i
+}
+
+func deleteBookWithoutCascades(ctx context.Context, db *bun.DB, bookID int) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, "DELETE FROM books WHERE id = ?", bookID); err != nil {
+		return err
+	}
+	_, err = conn.ExecContext(ctx, "PRAGMA foreign_keys = ON")
+	return err
+}
+
+func assertNoRowsForColumn(ctx context.Context, t *testing.T, db *bun.DB, table, column string, value int) {
+	t.Helper()
+
+	var count int
+	err := db.NewSelect().
+		TableExpr(table).
+		Where("? = ?", bun.Ident(column), value).
+		ColumnExpr("count(*)").
+		Scan(ctx, &count)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+}
+
+func assertForeignKeyViolationCount(ctx context.Context, t *testing.T, db *bun.DB, expected int) {
+	t.Helper()
+
+	assert.Equal(t, expected, foreignKeyViolationCount(ctx, t, db))
+}
+
+func foreignKeyViolationCount(ctx context.Context, t *testing.T, db *bun.DB) int {
+	t.Helper()
+
+	rows, err := db.QueryContext(ctx, "PRAGMA foreign_key_check")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	require.NoError(t, rows.Err())
+	return count
 }

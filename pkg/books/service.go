@@ -1747,6 +1747,88 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 	return errors.WithStack(err)
 }
 
+// DeleteOrphanedRowsForMissingBook removes rows that reference a book row that
+// no longer exists. It is intentionally explicit instead of relying on cascades
+// from books, because the parent book row is already gone.
+func (svc *Service) DeleteOrphanedRowsForMissingBook(ctx context.Context, bookID int) error {
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var fileIDs []int
+		if err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			Column("id").
+			Where("book_id = ?", bookID).
+			Scan(ctx, &fileIDs); err != nil {
+			return errors.WithStack(err)
+		}
+
+		if len(fileIDs) > 0 {
+			if _, err := tx.NewDelete().
+				Model((*models.Chapter)(nil)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+			if _, err := tx.NewDelete().
+				Model((*models.Narrator)(nil)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+			if _, err := tx.NewDelete().
+				Model((*models.FileIdentifier)(nil)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+			if _, err := tx.NewDelete().
+				Model((*models.FileFingerprint)(nil)).
+				Where("file_id IN (?)", bun.List(fileIDs)).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+			if _, err := tx.NewDelete().
+				Model((*models.File)(nil)).
+				Where("id IN (?)", bun.List(fileIDs)).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		if _, err := tx.NewDelete().
+			Model((*models.ListBook)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := tx.NewDelete().
+			Model((*models.Author)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := tx.NewDelete().
+			Model((*models.BookGenre)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := tx.NewDelete().
+			Model((*models.BookTag)(nil)).
+			Where("book_id = ?", bookID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	})
+}
+
 // PromoteNextPrimaryFile selects the best remaining file for a book and sets it as
 // primary_file_id. Main files are preferred over supplements; among equal roles,
 // the oldest file (by created_at) wins. If no files remain, primary_file_id is set

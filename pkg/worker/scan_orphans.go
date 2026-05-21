@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -133,6 +135,19 @@ func (w *Worker) cleanupOrphanedFiles(
 		// The parallel scan may have added new files to this book since existingFiles was loaded.
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 		if err != nil {
+			if errors.Is(err, errcodes.NotFound("Book")) {
+				if w.searchService != nil {
+					if err := w.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
+						jobLog.Warn("failed to remove missing orphaned book from search index", logger.Data{"book_id": bookID, "error": err.Error()})
+					}
+				}
+				if err := w.bookService.DeleteOrphanedRowsForMissingBook(ctx, bookID); err != nil {
+					jobLog.Warn("failed to cleanup orphan rows for missing book", logger.Data{"book_id": bookID, "error": err.Error()})
+				} else {
+					jobLog.Info("cleaned orphan rows for missing book", logger.Data{"book_id": bookID})
+				}
+				continue
+			}
 			jobLog.Warn("failed to retrieve orphaned book", logger.Data{"book_id": bookID, "error": err.Error()})
 			continue
 		}
