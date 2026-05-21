@@ -47,20 +47,9 @@ export enum QueryKey {
   PublisherFiles = "PublisherFiles",
 }
 
-const invalidateAffectedPublisherParents = (
-  queryClient: QueryClient,
-  previousParentId?: number | null,
-  nextParentId?: number | null,
-) => {
-  const affectedParentIds = new Set(
-    [previousParentId, nextParentId].filter((id): id is number => id != null),
-  );
-
-  affectedParentIds.forEach((parentId) => {
-    queryClient.invalidateQueries({
-      queryKey: [QueryKey.RetrievePublisher, parentId],
-    });
-  });
+const invalidatePublisherHierarchyQueries = (queryClient: QueryClient) => {
+  queryClient.invalidateQueries({ queryKey: [QueryKey.RetrievePublisher] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.PublisherFiles] });
 };
 
 export const usePublishersList = (
@@ -151,20 +140,12 @@ export const useUpdatePublisher = () => {
       );
     },
     onSuccess: (_data, variables) => {
-      const previousParentId = queryClient.getQueryData<PublisherDetail>([
-        QueryKey.RetrievePublisher,
-        variables.publisherId,
-      ])?.parent_id;
-
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
-      });
       if (variables.payload.parent_id !== undefined) {
-        invalidateAffectedPublisherParents(
-          queryClient,
-          previousParentId,
-          variables.payload.parent_id,
-        );
+        invalidatePublisherHierarchyQueries(queryClient);
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
+        });
       }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
@@ -236,24 +217,9 @@ export const useSetChildPublisher = () => {
         child_id: childId,
       });
     },
-    onSuccess: (_data, variables) => {
-      const previousParentId = queryClient.getQueryData<PublisherDetail>([
-        QueryKey.RetrievePublisher,
-        variables.childId,
-      ])?.parent_id;
-
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.childId],
-      });
-      invalidateAffectedPublisherParents(
-        queryClient,
-        previousParentId,
-        variables.parentId,
-      );
+    onSuccess: () => {
+      invalidatePublisherHierarchyQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PublisherFiles, variables.parentId],
-      });
     },
   });
 };
