@@ -2,6 +2,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
@@ -45,6 +46,22 @@ export enum QueryKey {
   RetrievePublisher = "RetrievePublisher",
   PublisherFiles = "PublisherFiles",
 }
+
+const invalidateAffectedPublisherParents = (
+  queryClient: QueryClient,
+  previousParentId?: number | null,
+  nextParentId?: number | null,
+) => {
+  const affectedParentIds = new Set(
+    [previousParentId, nextParentId].filter((id): id is number => id != null),
+  );
+
+  affectedParentIds.forEach((parentId) => {
+    queryClient.invalidateQueries({
+      queryKey: [QueryKey.RetrievePublisher, parentId],
+    });
+  });
+};
 
 export const usePublishersList = (
   query: ListPublishersQuery = {},
@@ -142,18 +159,12 @@ export const useUpdatePublisher = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
       });
-      if ("parent_id" in variables.payload) {
-        const affectedParentIds = new Set(
-          [previousParentId, variables.payload.parent_id].filter(
-            (id): id is number => id != null,
-          ),
+      if (variables.payload.parent_id !== undefined) {
+        invalidateAffectedPublisherParents(
+          queryClient,
+          previousParentId,
+          variables.payload.parent_id,
         );
-
-        affectedParentIds.forEach((parentId) => {
-          queryClient.invalidateQueries({
-            queryKey: [QueryKey.RetrievePublisher, parentId],
-          });
-        });
       }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
@@ -226,12 +237,19 @@ export const useSetChildPublisher = () => {
       });
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.parentId],
-      });
+      const previousParentId = queryClient.getQueryData<PublisherDetail>([
+        QueryKey.RetrievePublisher,
+        variables.childId,
+      ])?.parent_id;
+
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrievePublisher, variables.childId],
       });
+      invalidateAffectedPublisherParents(
+        queryClient,
+        previousParentId,
+        variables.parentId,
+      );
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PublisherFiles, variables.parentId],

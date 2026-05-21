@@ -4,7 +4,12 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { QueryKey as BooksQueryKey } from "./books";
-import { QueryKey, useMergePublisher, useUpdatePublisher } from "./publishers";
+import {
+  QueryKey,
+  useMergePublisher,
+  useSetChildPublisher,
+  useUpdatePublisher,
+} from "./publishers";
 
 vi.mock("@/libraries/api", async () => {
   const actual = await vi.importActual<object>("@/libraries/api");
@@ -89,6 +94,41 @@ describe("useMergePublisher", () => {
 });
 
 describe("useUpdatePublisher", () => {
+  it("does not invalidate parent publisher detail queries when parent_id is unchanged", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    client.setQueryData([QueryKey.RetrievePublisher, 1], {
+      id: 1,
+      parent_id: 2,
+    });
+    client.setQueryData([QueryKey.RetrievePublisher, 2], {
+      id: 2,
+      children: [{ id: 1, name: "Child", file_count: 0 }],
+    });
+
+    const { result } = renderHook(() => useUpdatePublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        publisherId: 1,
+        payload: { name: "Updated name", parent_id: undefined },
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.RetrievePublisher, 1])?.isInvalidated,
+      ).toBe(true);
+    });
+    expect(
+      client.getQueryState([QueryKey.RetrievePublisher, 2])?.isInvalidated,
+    ).not.toBe(true);
+  });
+
   it("invalidates the new parent publisher detail query when parent_id is set", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -188,6 +228,50 @@ describe("useUpdatePublisher", () => {
     await waitFor(() => {
       expect(
         client.getQueryState([QueryKey.RetrievePublisher, 2])?.isInvalidated,
+      ).toBe(true);
+    });
+  });
+});
+
+describe("useSetChildPublisher", () => {
+  it("invalidates the previous and new parent publisher detail queries when reparenting a child", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    client.setQueryData([QueryKey.RetrievePublisher, 1], {
+      id: 1,
+      children: [],
+    });
+    client.setQueryData([QueryKey.RetrievePublisher, 2], {
+      id: 2,
+      children: [{ id: 3, name: "Child", file_count: 0 }],
+    });
+    client.setQueryData([QueryKey.RetrievePublisher, 3], {
+      id: 3,
+      parent_id: 2,
+    });
+
+    const { result } = renderHook(() => useSetChildPublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        parentId: 1,
+        childId: 3,
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.RetrievePublisher, 1])?.isInvalidated,
+      ).toBe(true);
+      expect(
+        client.getQueryState([QueryKey.RetrievePublisher, 2])?.isInvalidated,
+      ).toBe(true);
+      expect(
+        client.getQueryState([QueryKey.RetrievePublisher, 3])?.isInvalidated,
       ).toBe(true);
     });
   });
