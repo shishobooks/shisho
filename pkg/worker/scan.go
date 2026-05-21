@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -369,7 +371,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// recreate it as a main file and hitting UNIQUE(filepath, library_id).
 		cache := NewScanCache()
 		cache.SetAliasLister(NewAliasServiceAdapter(w.aliasService))
-		deferredSupplements := make(map[string]*models.File)
+		deferredSupplements := make(map[int]*deferredSupplementGroup)
 		allFiles, err := w.bookService.ListAllFilesForLibrary(ctx, library.ID)
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
@@ -406,7 +408,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 				}
 				// TODO: support having cover.jpg and cover_audiobook.jpg
 				ext := filepath.Ext(path)
-				if _, deferred := deferredSupplements[path]; deferred {
+				if isDeferredSupplementPath(deferredSupplements, path) {
 					return nil
 				}
 				expectedMimeTypes, ok := extensionsToScan[ext]
@@ -664,7 +666,7 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 	library *models.Library,
 	allFiles []*models.File,
 	jobLog *joblogs.JobLogger,
-) ([]*models.File, map[string]*models.File) {
+) ([]*models.File, map[int]*deferredSupplementGroup) {
 	missingParentFiles, err := w.bookService.ListFilesWithMissingBooksForLibrary(ctx, library.ID)
 	if err != nil {
 		jobLog.Warn("failed to detect files with missing parent books", logger.Data{"library_id": library.ID, "error": err.Error()})
@@ -681,22 +683,33 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 	})
 
 	cleanedBookIDs := make(map[int]struct{})
-	deferredSupplements := make(map[string]*models.File)
+	deferredSupplements := make(map[int]*deferredSupplementGroup)
 	for _, file := range missingParentFiles {
 		if _, seen := cleanedBookIDs[file.BookID]; seen {
 			continue
 		}
 		if err := w.cleanupMissingBookOrphans(ctx, file.BookID, jobLog); err == nil {
 			cleanedBookIDs[file.BookID] = struct{}{}
-			for _, missingFile := range missingParentFiles {
-				if missingFile.BookID == file.BookID && missingFile.FileRole == models.FileRoleSupplement {
-					deferredSupplements[missingFile.Filepath] = missingFile
-				}
-			}
 		}
 	}
 	if len(cleanedBookIDs) == 0 {
 		return allFiles, nil
+	}
+
+	for _, file := range missingParentFiles {
+		if _, cleaned := cleanedBookIDs[file.BookID]; !cleaned {
+			continue
+		}
+		group := deferredSupplements[file.BookID]
+		if group == nil {
+			group = &deferredSupplementGroup{}
+			deferredSupplements[file.BookID] = group
+		}
+		if file.FileRole == models.FileRoleSupplement {
+			group.Supplements = append(group.Supplements, file)
+		} else {
+			group.MainFiles = append(group.MainFiles, file)
+		}
 	}
 
 	w.cleanupMissingParentDirectories(missingParentFiles, cleanedBookIDs, library, jobLog)
@@ -718,6 +731,11 @@ func countDistinctBookIDs(files []*models.File) int {
 		bookIDs[file.BookID] = struct{}{}
 	}
 	return len(bookIDs)
+}
+
+type deferredSupplementGroup struct {
+	MainFiles   []*models.File
+	Supplements []*models.File
 }
 
 func (w *Worker) cleanupMissingParentDirectories(
@@ -756,51 +774,113 @@ func (w *Worker) cleanupMissingParentDirectories(
 func (w *Worker) restoreDeferredSupplements(
 	ctx context.Context,
 	library *models.Library,
-	deferredSupplements map[string]*models.File,
+	deferredSupplements map[int]*deferredSupplementGroup,
 	jobLog *joblogs.JobLogger,
 	cache *ScanCache,
 ) map[int]struct{} {
 	affectedBookIDs := make(map[int]struct{})
-	for path, file := range deferredSupplements {
-		if _, err := os.Stat(path); err != nil {
-			if os.IsNotExist(err) {
+	bookIDs := make([]int, 0, len(deferredSupplements))
+	for bookID := range deferredSupplements {
+		bookIDs = append(bookIDs, bookID)
+	}
+	sort.Ints(bookIDs)
+
+	for _, oldBookID := range bookIDs {
+		group := deferredSupplements[oldBookID]
+		sortFilesForDeterministicRecovery(group.MainFiles)
+		sortFilesForDeterministicRecovery(group.Supplements)
+
+		targetBookID := w.findRecoveredBookForDeferredGroup(ctx, library.ID, group, jobLog)
+		for _, file := range group.Supplements {
+			if _, err := os.Stat(file.Filepath); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				jobLog.Warn("failed to stat deferred supplement", logger.Data{"path": file.Filepath, "error": err.Error()})
 				continue
 			}
-			jobLog.Warn("failed to stat deferred supplement", logger.Data{"path": path, "error": err.Error()})
-			continue
-		}
 
-		result, err := w.scanInternal(ctx, ScanOptions{
-			FilePath:        path,
-			LibraryID:       library.ID,
-			ForceSupplement: true,
-			JobLog:          jobLog,
-		}, cache)
-		if err != nil {
-			jobLog.Warn("failed to restore deferred supplement", logger.Data{"path": path, "error": err.Error()})
-			continue
-		}
+			opts := ScanOptions{
+				FilePath:        file.Filepath,
+				LibraryID:       library.ID,
+				ForceSupplement: targetBookID != 0,
+				ParentBookID:    targetBookID,
+				JobLog:          jobLog,
+			}
 
-		if result == nil || result.File == nil {
-			result, err = w.scanInternal(ctx, ScanOptions{
-				FilePath:  path,
-				LibraryID: library.ID,
-				JobLog:    jobLog,
-			}, cache)
+			result, err := w.scanInternal(ctx, opts, cache)
 			if err != nil {
-				jobLog.Warn("failed to recreate deferred supplement as a main file", logger.Data{"path": path, "error": err.Error()})
+				jobLog.Warn("failed to restore deferred supplement", logger.Data{"path": file.Filepath, "error": err.Error()})
 				continue
 			}
-		}
 
-		if result != nil && result.File != nil {
-			if result.Book != nil {
-				affectedBookIDs[result.Book.ID] = struct{}{}
+			if result == nil || result.File == nil {
+				result, err = w.scanInternal(ctx, ScanOptions{
+					FilePath:  file.Filepath,
+					LibraryID: library.ID,
+					JobLog:    jobLog,
+				}, cache)
+				if err != nil {
+					jobLog.Warn("failed to recreate deferred supplement as a main file", logger.Data{"path": file.Filepath, "error": err.Error()})
+					continue
+				}
 			}
-			jobLog.Info("restored deferred supplement", logger.Data{"path": path, "file_id": result.File.ID, "previous_file_id": file.ID})
+
+			if result != nil && result.File != nil {
+				if result.Book != nil {
+					targetBookID = result.Book.ID
+					affectedBookIDs[result.Book.ID] = struct{}{}
+				}
+				jobLog.Info("restored deferred supplement", logger.Data{"path": file.Filepath, "file_id": result.File.ID, "previous_file_id": file.ID, "old_book_id": oldBookID})
+			}
 		}
 	}
 	return affectedBookIDs
+}
+
+func (w *Worker) findRecoveredBookForDeferredGroup(
+	ctx context.Context,
+	libraryID int,
+	group *deferredSupplementGroup,
+	jobLog *joblogs.JobLogger,
+) int {
+	for _, file := range group.MainFiles {
+		if _, err := os.Stat(file.Filepath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			jobLog.Warn("failed to stat recovered main file candidate", logger.Data{"path": file.Filepath, "error": err.Error()})
+			continue
+		}
+		book, err := w.bookService.RetrieveBookByFilePath(ctx, file.Filepath, libraryID)
+		if err == nil && book != nil {
+			return book.ID
+		}
+		if err != nil && !errors.Is(err, errcodes.NotFound("Book")) {
+			jobLog.Warn("failed to resolve recovered parent book", logger.Data{"path": file.Filepath, "error": err.Error()})
+		}
+	}
+	return 0
+}
+
+func sortFilesForDeterministicRecovery(files []*models.File) {
+	sort.Slice(files, func(i, j int) bool {
+		if !files[i].CreatedAt.Equal(files[j].CreatedAt) {
+			return files[i].CreatedAt.Before(files[j].CreatedAt)
+		}
+		return files[i].Filepath < files[j].Filepath
+	})
+}
+
+func isDeferredSupplementPath(groups map[int]*deferredSupplementGroup, path string) bool {
+	for _, group := range groups {
+		for _, file := range group.Supplements {
+			if file.Filepath == path {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // runInputConverters runs input converter plugins on discovered files.

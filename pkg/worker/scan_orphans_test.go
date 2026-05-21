@@ -543,6 +543,144 @@ func TestProcessScanJob_MissingParentBookWithOnlyLiveScannableSupplementOrganize
 	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
+func TestProcessScanJob_MissingParentRootLevelBookWithLiveScannableSupplementPreservesRole(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	mainPath := filepath.Join(libraryPath, "main.epub")
+	testgen.GenerateEPUB(t, libraryPath, "main.epub", testgen.EPUBOptions{
+		Title:   "Root Level Main",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	supplementPath := filepath.Join(libraryPath, "bonus.epub")
+	testgen.GenerateEPUB(t, libraryPath, "bonus.epub", testgen.EPUBOptions{
+		Title:   "Different Bonus Title",
+		Authors: []string{"Author"},
+	})
+	now := time.Now()
+	supplement := &models.File{
+		LibraryID:      book.LibraryID,
+		BookID:         book.ID,
+		Filepath:       supplementPath,
+		FileType:       models.FileTypeEPUB,
+		FileRole:       models.FileRoleSupplement,
+		FilesizeBytes:  123,
+		CreatedAt:      now.Add(time.Hour),
+		FileModifiedAt: &now,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplement))
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 2)
+
+	rolesByPath := make(map[string]string, len(filesAfter))
+	bookIDsByPath := make(map[string]int, len(filesAfter))
+	for _, file := range filesAfter {
+		rolesByPath[file.Filepath] = file.FileRole
+		bookIDsByPath[file.Filepath] = file.BookID
+	}
+
+	assert.Equal(t, models.FileRoleMain, rolesByPath[mainPath])
+	assert.Equal(t, models.FileRoleSupplement, rolesByPath[supplementPath])
+	assert.Equal(t, booksAfter[0].ID, bookIDsByPath[mainPath])
+	assert.Equal(t, booksAfter[0].ID, bookIDsByPath[supplementPath])
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
+}
+
+func TestProcessScanJob_MissingParentRootLevelBookWithOnlyLiveScannableSupplementsPromotesOldestDeterministically(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	mainPath := filepath.Join(libraryPath, "main.epub")
+	testgen.GenerateEPUB(t, libraryPath, "main.epub", testgen.EPUBOptions{
+		Title:   "Root Level Deterministic",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	now := time.Now()
+
+	firstSupplementPath := filepath.Join(libraryPath, "first-bonus.epub")
+	secondSupplementPath := filepath.Join(libraryPath, "second-bonus.epub")
+	testgen.GenerateEPUB(t, libraryPath, "first-bonus.epub", testgen.EPUBOptions{
+		Title:   "First Bonus",
+		Authors: []string{"Author"},
+	})
+	testgen.GenerateEPUB(t, libraryPath, "second-bonus.epub", testgen.EPUBOptions{
+		Title:   "Second Bonus",
+		Authors: []string{"Author"},
+	})
+
+	firstSupplement := &models.File{
+		LibraryID:      book.LibraryID,
+		BookID:         book.ID,
+		Filepath:       firstSupplementPath,
+		FileType:       models.FileTypeEPUB,
+		FileRole:       models.FileRoleSupplement,
+		FilesizeBytes:  123,
+		CreatedAt:      now,
+		FileModifiedAt: &now,
+	}
+	secondCreatedAt := now.Add(time.Hour)
+	secondSupplement := &models.File{
+		LibraryID:      book.LibraryID,
+		BookID:         book.ID,
+		Filepath:       secondSupplementPath,
+		FileType:       models.FileTypeEPUB,
+		FileRole:       models.FileRoleSupplement,
+		FilesizeBytes:  123,
+		CreatedAt:      secondCreatedAt,
+		FileModifiedAt: &secondCreatedAt,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, firstSupplement))
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, secondSupplement))
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, os.Remove(mainPath))
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 2)
+
+	rolesByPath := make(map[string]string, len(filesAfter))
+	bookIDsByPath := make(map[string]int, len(filesAfter))
+	for _, file := range filesAfter {
+		rolesByPath[file.Filepath] = file.FileRole
+		bookIDsByPath[file.Filepath] = file.BookID
+	}
+
+	assert.Equal(t, models.FileRoleMain, rolesByPath[firstSupplementPath])
+	assert.Equal(t, models.FileRoleSupplement, rolesByPath[secondSupplementPath])
+	assert.Equal(t, booksAfter[0].ID, bookIDsByPath[firstSupplementPath])
+	assert.Equal(t, booksAfter[0].ID, bookIDsByPath[secondSupplementPath])
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
+}
+
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

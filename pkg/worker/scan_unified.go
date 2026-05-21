@@ -129,6 +129,7 @@ type ScanOptions struct {
 	// Behavior
 	ForceRefresh    bool // Bypass priority checks, overwrite all metadata
 	ForceSupplement bool // Recreate this path as a supplement without the main-file heuristics
+	ParentBookID    int  // Attach a new path-scanned file to this existing book
 	SkipPlugins     bool // Skip enricher plugins, use only file-embedded metadata
 	Reset           bool // Wipe all metadata before scanning (reset to file-only state)
 	BookResetDone   bool // Book-level wipe already done by scanBook (skip in scanFileByID)
@@ -2339,13 +2340,22 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		defer unlock()
 	}
 
-	// Check if a book already exists for this path
-	existingBook, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
-		Filepath:  &bookPath,
-		LibraryID: &opts.LibraryID,
-	})
-	if err != nil && !errors.Is(err, errcodes.NotFound("Book")) {
-		return nil, errors.Wrap(err, "failed to check for existing book")
+	// Check if a book already exists for this path, or use an explicitly provided parent.
+	var existingBook *models.Book
+	if opts.ParentBookID != 0 {
+		existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &opts.ParentBookID})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to retrieve explicit parent book")
+		}
+		bookPath = existingBook.Filepath
+	} else {
+		existingBook, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
+			Filepath:  &bookPath,
+			LibraryID: &opts.LibraryID,
+		})
+		if err != nil && !errors.Is(err, errcodes.NotFound("Book")) {
+			return nil, errors.Wrap(err, "failed to check for existing book")
+		}
 	}
 
 	// Create or reuse book
