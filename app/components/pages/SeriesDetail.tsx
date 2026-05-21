@@ -26,7 +26,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { useDebounce } from "@/hooks/useDebounce";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
@@ -94,7 +94,7 @@ const SeriesDetail = () => {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [mergeSearch, setMergeSearch] = useState("");
-  const debouncedMergeSearch = useDebounce(mergeSearch, 200);
+  const debouncedMergeSearch = useDebouncedSearch(mergeSearch, 200);
 
   const updateSeriesMutation = useUpdateSeries();
   const mergeSeriesMutation = useMergeSeries();

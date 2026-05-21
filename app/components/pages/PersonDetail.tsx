@@ -22,7 +22,7 @@ import {
   useUpdatePerson,
 } from "@/hooks/queries/people";
 import { useUserSettings } from "@/hooks/queries/settings";
-import { useDebounce } from "@/hooks/useDebounce";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
@@ -78,7 +78,7 @@ const PersonDetail = () => {
   const deletePersonMutation = useDeletePerson();
 
   const [mergeSearchRaw, setMergeSearchRaw] = useState("");
-  const mergeSearch = useDebounce(mergeSearchRaw, 200);
+  const mergeSearch = useDebouncedSearch(mergeSearchRaw, 200);
 
   const peopleListQuery = usePeopleList(
     {
