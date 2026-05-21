@@ -486,6 +486,63 @@ func TestProcessScanJob_MissingParentBookWithOnlyLiveScannableSupplementRecreate
 	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
+func TestProcessScanJob_MissingParentBookWithOnlyLiveScannableSupplementOrganizesRecoveredBook(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibraryWithOptions([]string{libraryPath}, true)
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Organized Supplement")
+	testgen.GenerateEPUB(t, bookDir, "main.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Organized Supplement",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	mainPath := tc.listFiles()[0].Filepath
+
+	supplementPath := filepath.Join(bookDir, "supplement.epub")
+	testgen.GenerateEPUB(t, bookDir, "supplement.epub", testgen.EPUBOptions{
+		Title:   "Recovered Organized Supplement",
+		Authors: []string{"Author"},
+	})
+	supplement := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		Filepath:      supplementPath,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 123,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplement))
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, os.Remove(mainPath))
+	require.NoError(t, tc.runScan())
+
+	organizedDir := filepath.Join(libraryPath, "[Author] Missing Parent Organized Supplement")
+	organizedFile := filepath.Join(organizedDir, "Recovered Organized Supplement.epub")
+
+	assert.True(t, testgen.FileExists(organizedDir))
+	assert.True(t, testgen.FileExists(organizedFile))
+	assert.False(t, testgen.FileExists(supplementPath))
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+	assert.Equal(t, organizedDir, booksAfter[0].Filepath)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 1)
+	assert.Equal(t, organizedFile, filesAfter[0].Filepath)
+	assert.Equal(t, models.FileRoleMain, filesAfter[0].FileRole)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
+}
+
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

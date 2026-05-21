@@ -606,7 +606,9 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		}
 
 		if len(deferredSupplements) > 0 {
-			w.restoreDeferredSupplements(ctx, library, deferredSupplements, jobLog, cache)
+			for bookID := range w.restoreDeferredSupplements(ctx, library, deferredSupplements, jobLog, cache) {
+				booksToOrganize[bookID] = struct{}{}
+			}
 		}
 
 		// Organize files after all scanning is complete
@@ -757,7 +759,8 @@ func (w *Worker) restoreDeferredSupplements(
 	deferredSupplements map[string]*models.File,
 	jobLog *joblogs.JobLogger,
 	cache *ScanCache,
-) {
+) map[int]struct{} {
+	affectedBookIDs := make(map[int]struct{})
 	for path, file := range deferredSupplements {
 		if _, err := os.Stat(path); err != nil {
 			if os.IsNotExist(err) {
@@ -791,9 +794,13 @@ func (w *Worker) restoreDeferredSupplements(
 		}
 
 		if result != nil && result.File != nil {
+			if result.Book != nil {
+				affectedBookIDs[result.Book.ID] = struct{}{}
+			}
 			jobLog.Info("restored deferred supplement", logger.Data{"path": path, "file_id": result.File.ID, "previous_file_id": file.ID})
 		}
 	}
+	return affectedBookIDs
 }
 
 // runInputConverters runs input converter plugins on discovered files.
