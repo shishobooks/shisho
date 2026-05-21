@@ -48,6 +48,46 @@ describe("MetadataMergeDialog", () => {
     expect(onSearch).toHaveBeenLastCalledWith("");
   });
 
+  it("clears parent search state after setting a child", async () => {
+    const user = createUser();
+    const onSetChild = vi.fn().mockResolvedValue(undefined);
+    const onSearch = vi.fn();
+
+    render(
+      <MetadataMergeDialog
+        entities={entities}
+        entityType="publisher"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={onSearch}
+        open={true}
+        setChildConfig={{
+          disabledIds: [],
+          isPending: false,
+          onSetChild,
+        }}
+        targetId={1}
+        targetName="Penguin"
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(
+      screen.getByPlaceholderText("Search publishers..."),
+      "Dutton",
+    );
+    await user.click(screen.getByText("Dutton"));
+    await user.click(screen.getByRole("radio", { name: /Set as child/i }));
+    await user.click(screen.getByRole("button", { name: /Set as child/i }));
+
+    await waitFor(() => {
+      expect(onSetChild).toHaveBeenCalledWith(10);
+    });
+    expect(onSearch).toHaveBeenLastCalledWith("");
+  });
+
   it("clears parent search state when the dialog closes", async () => {
     const user = createUser();
     const onOpenChange = vi.fn();
