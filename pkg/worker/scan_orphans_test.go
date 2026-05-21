@@ -230,6 +230,68 @@ func TestCleanupOrphanedFiles_MissingParentBookDeletesOrphanedRows(t *testing.T)
 	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
 }
 
+func TestCleanupOrphanedFiles_MissingParentBookWithScannedMainFileDeletesAllRows(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Mixed")
+	testgen.GenerateEPUB(t, bookDir, "keep.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Mixed",
+		Authors: []string{"Author"},
+	})
+	testgen.GenerateEPUB(t, bookDir, "remove.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Mixed",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 2)
+
+	book := tc.listBooks()[0]
+	files := tc.listFiles()
+
+	var keepFile, removeFile *models.File
+	for _, file := range files {
+		switch filepath.Base(file.Filepath) {
+		case "keep.epub":
+			keepFile = file
+		case "remove.epub":
+			removeFile = file
+		}
+	}
+	require.NotNil(t, keepFile)
+	require.NotNil(t, removeFile)
+
+	now := time.Now()
+	chapter := &models.Chapter{FileID: keepFile.ID, Title: "Still Scanned", SortOrder: 0, CreatedAt: now, UpdatedAt: now}
+	_, err = tc.db.NewInsert().Model(chapter).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	assert.Positive(t, foreignKeyViolationCount(tc.ctx, t, tc.db))
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, book.LibraryID)
+	require.NoError(t, err)
+	require.Len(t, existingFiles, 2)
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: &book.LibraryID})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, map[string]struct{}{keepFile.Filepath: {}}, library, jobLog)
+
+	assert.Empty(t, tc.listBooks())
+	assert.Empty(t, tc.listFiles())
+	assertNoRowsForColumn(tc.ctx, t, tc.db, "chapters", "file_id", keepFile.ID)
+	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+}
+
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

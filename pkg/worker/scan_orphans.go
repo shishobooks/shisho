@@ -68,6 +68,20 @@ func (w *Worker) cleanupOrphanedFiles(
 	// Collect directories for cleanup at the end
 	orphanDirs := make(map[string]struct{})
 
+	// If the parent book row is already gone, clean up every dangling row
+	// before classifying the book as partial vs full orphan.
+	missingBookIDs := make(map[int]struct{})
+	for bookID := range orphansByBook {
+		_, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, errcodes.NotFound("Book")) {
+			w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
+			missingBookIDs[bookID] = struct{}{}
+		}
+	}
+
 	// Step 2 & 3: Handle partial orphan books.
 	// Collect file IDs from books where only SOME main files are orphaned.
 	var partialOrphanFileIDs []int
@@ -80,6 +94,10 @@ func (w *Worker) cleanupOrphanedFiles(
 	var bookIDsToDelete []int
 
 	for bookID, orphans := range orphansByBook {
+		if _, missing := missingBookIDs[bookID]; missing {
+			continue
+		}
+
 		// Track directories for all orphans
 		for _, f := range orphans {
 			orphanDirs[filepath.Dir(f.Filepath)] = struct{}{}
@@ -136,16 +154,7 @@ func (w *Worker) cleanupOrphanedFiles(
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 		if err != nil {
 			if errors.Is(err, errcodes.NotFound("Book")) {
-				if w.searchService != nil {
-					if err := w.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
-						jobLog.Warn("failed to remove missing orphaned book from search index", logger.Data{"book_id": bookID, "error": err.Error()})
-					}
-				}
-				if err := w.bookService.DeleteOrphanedRowsForMissingBook(ctx, bookID); err != nil {
-					jobLog.Warn("failed to cleanup orphan rows for missing book", logger.Data{"book_id": bookID, "error": err.Error()})
-				} else {
-					jobLog.Info("cleaned orphan rows for missing book", logger.Data{"book_id": bookID})
-				}
+				w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
 				continue
 			}
 			jobLog.Warn("failed to retrieve orphaned book", logger.Data{"book_id": bookID, "error": err.Error()})
@@ -259,4 +268,17 @@ func (w *Worker) cleanupOrphanedFiles(
 		"promoted_files_attempted": len(promotedBookOrphanFileIDs),
 		"books_attempted":          len(bookIDsToDelete),
 	})
+}
+
+func (w *Worker) cleanupMissingBookOrphans(ctx context.Context, bookID int, jobLog *joblogs.JobLogger) {
+	if w.searchService != nil {
+		if err := w.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
+			jobLog.Warn("failed to remove missing orphaned book from search index", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
+	}
+	if err := w.bookService.DeleteOrphanedRowsForMissingBook(ctx, bookID); err != nil {
+		jobLog.Warn("failed to cleanup orphan rows for missing book", logger.Data{"book_id": bookID, "error": err.Error()})
+	} else {
+		jobLog.Info("cleaned orphan rows for missing book", logger.Data{"book_id": bookID})
+	}
 }
