@@ -127,10 +127,11 @@ type ScanOptions struct {
 	LibraryID int
 
 	// Behavior
-	ForceRefresh  bool // Bypass priority checks, overwrite all metadata
-	SkipPlugins   bool // Skip enricher plugins, use only file-embedded metadata
-	Reset         bool // Wipe all metadata before scanning (reset to file-only state)
-	BookResetDone bool // Book-level wipe already done by scanBook (skip in scanFileByID)
+	ForceRefresh    bool // Bypass priority checks, overwrite all metadata
+	ForceSupplement bool // Recreate this path as a supplement without the main-file heuristics
+	SkipPlugins     bool // Skip enricher plugins, use only file-embedded metadata
+	Reset           bool // Wipe all metadata before scanning (reset to file-only state)
+	BookResetDone   bool // Book-level wipe already done by scanBook (skip in scanFileByID)
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -2353,6 +2354,10 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		logInfo("using existing book for new file", logger.Data{"book_id": existingBook.ID, "path": path})
 		book = existingBook
 	} else {
+		if opts.ForceSupplement {
+			logWarn("skipping deferred supplement restore without a recreated parent book", logger.Data{"path": path, "book_path": bookPath})
+			return nil, nil
+		}
 		// Derive initial title from filepath or metadata
 		title, _ := deriveInitialTitle(path, isRootLevelFile, metadata)
 		titleSource := models.DataSourceFilepath
@@ -2382,8 +2387,8 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	// books — root-level PDFs always stay main here. Root-level supplement
 	// linking is handled later in the function via discoverRootLevelSupplements
 	// (basename-prefix matching against the main file).
-	classifyAsSupplement := false
-	if fileType == models.FileTypePDF && !isRootLevelFile && looksLikePDFSupplement(filepath.Base(path), w.config.PDFSupplementFilenames) {
+	classifyAsSupplement := opts.ForceSupplement
+	if !classifyAsSupplement && fileType == models.FileTypePDF && !isRootLevelFile && looksLikePDFSupplement(filepath.Base(path), w.config.PDFSupplementFilenames) {
 		// Reuse-existing-book optimization: if a book row already lives at
 		// this bookPath, another file in this directory was already imported.
 		// scanFileCreateNew only runs for files not yet in the DB, so the

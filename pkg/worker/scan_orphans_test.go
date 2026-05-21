@@ -228,7 +228,7 @@ func TestCleanupOrphanedFiles_MissingParentBookDeletesOrphanedRows(t *testing.T)
 	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_genres", "book_id", book.ID)
 	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_tags", "book_id", book.ID)
 	assertNoRowsForColumn(tc.ctx, t, tc.db, "book_series", "book_id", book.ID)
-	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
 func TestCleanupOrphanedFiles_MissingParentBookWithScannedMainFileDeletesAllRows(t *testing.T) {
@@ -290,7 +290,7 @@ func TestCleanupOrphanedFiles_MissingParentBookWithScannedMainFileDeletesAllRows
 	assert.Empty(t, tc.listBooks())
 	assert.Empty(t, tc.listFiles())
 	assertNoRowsForColumn(tc.ctx, t, tc.db, "chapters", "file_id", keepFile.ID)
-	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
 func TestProcessScanJob_MissingParentBookWithScannedMainFileRecreatesLiveFile(t *testing.T) {
@@ -341,7 +341,7 @@ func TestProcessScanJob_MissingParentBookWithScannedMainFileRecreatesLiveFile(t 
 	require.Len(t, filesAfter, 1)
 	assert.Equal(t, keepPath, filesAfter[0].Filepath)
 	assert.Equal(t, booksAfter[0].ID, filesAfter[0].BookID)
-	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
 func TestProcessScanJob_MissingParentBookAllMainFilesStillOnDiskRecreatesBook(t *testing.T) {
@@ -378,7 +378,62 @@ func TestProcessScanJob_MissingParentBookAllMainFilesStillOnDiskRecreatesBook(t 
 	for _, file := range filesAfter {
 		assert.Equal(t, booksAfter[0].ID, file.BookID)
 	}
-	assertForeignKeyViolationCount(tc.ctx, t, tc.db, 0)
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
+}
+
+func TestProcessScanJob_MissingParentBookWithLiveScannableSupplementPreservesRole(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Missing Parent Supplement")
+	testgen.GenerateEPUB(t, bookDir, "main.epub", testgen.EPUBOptions{
+		Title:   "Missing Parent Supplement",
+		Authors: []string{"Author"},
+	})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	book := tc.listBooks()[0]
+	mainFile := tc.listFiles()[0]
+
+	supplementPath := filepath.Join(bookDir, "supplement.epub")
+	testgen.GenerateEPUB(t, bookDir, "supplement.epub", testgen.EPUBOptions{
+		Title:   "Supplement Payload",
+		Authors: []string{"Author"},
+	})
+	supplement := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		Filepath:      supplementPath,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleSupplement,
+		FilesizeBytes: 123,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, supplement))
+
+	require.NoError(t, deleteBookWithoutCascades(tc.ctx, tc.db, book.ID))
+	require.NoError(t, tc.runScan())
+
+	booksAfter := tc.listBooks()
+	require.Len(t, booksAfter, 1)
+
+	filesAfter := tc.listFiles()
+	require.Len(t, filesAfter, 2)
+
+	rolesByPath := make(map[string]string, len(filesAfter))
+	for _, file := range filesAfter {
+		assert.Equal(t, booksAfter[0].ID, file.BookID)
+		rolesByPath[file.Filepath] = file.FileRole
+	}
+
+	assert.Equal(t, models.FileRoleMain, rolesByPath[mainFile.Filepath])
+	assert.Equal(t, models.FileRoleSupplement, rolesByPath[supplementPath])
+	assertNoForeignKeyViolations(tc.ctx, t, tc.db)
 }
 
 func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
@@ -573,10 +628,10 @@ func assertNoRowsForColumn(ctx context.Context, t *testing.T, db *bun.DB, table,
 	assert.Zero(t, count)
 }
 
-func assertForeignKeyViolationCount(ctx context.Context, t *testing.T, db *bun.DB, expected int) {
+func assertNoForeignKeyViolations(ctx context.Context, t *testing.T, db *bun.DB) {
 	t.Helper()
 
-	assert.Equal(t, expected, foreignKeyViolationCount(ctx, t, db))
+	assert.Zero(t, foreignKeyViolationCount(ctx, t, db))
 }
 
 func foreignKeyViolationCount(ctx context.Context, t *testing.T, db *bun.DB) int {

@@ -369,11 +369,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// recreate it as a main file and hitting UNIQUE(filepath, library_id).
 		cache := NewScanCache()
 		cache.SetAliasLister(NewAliasServiceAdapter(w.aliasService))
+		deferredSupplements := make(map[string]*models.File)
 		allFiles, err := w.bookService.ListAllFilesForLibrary(ctx, library.ID)
 		if err != nil {
 			jobLog.Warn("failed to pre-load files", logger.Data{"error": err.Error()})
 		} else {
-			allFiles = w.repairMissingParentFilesBeforeScan(ctx, library.ID, allFiles, jobLog)
+			allFiles, deferredSupplements = w.repairMissingParentFilesBeforeScan(ctx, library.ID, allFiles, jobLog)
 			cache.LoadKnownFiles(allFiles)
 			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
 		}
@@ -405,6 +406,9 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 				}
 				// TODO: support having cover.jpg and cover_audiobook.jpg
 				ext := filepath.Ext(path)
+				if _, deferred := deferredSupplements[path]; deferred {
+					return nil
+				}
 				expectedMimeTypes, ok := extensionsToScan[ext]
 				if !ok {
 					// Check plugin-registered extensions (file parsers and converter source types)
@@ -601,6 +605,10 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			w.cleanupOrphanedFiles(ctx, existingFiles, scannedPaths, library, jobLog, cache)
 		}
 
+		if len(deferredSupplements) > 0 {
+			w.restoreDeferredSupplements(ctx, library, deferredSupplements, jobLog, cache)
+		}
+
 		// Organize files after all scanning is complete
 		if library.OrganizeFileStructure && len(booksToOrganize) > 0 {
 			jobLog.Info("organizing books after scan", logger.Data{"count": len(booksToOrganize)})
@@ -654,14 +662,14 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 	libraryID int,
 	allFiles []*models.File,
 	jobLog *joblogs.JobLogger,
-) []*models.File {
+) ([]*models.File, map[string]*models.File) {
 	missingParentFiles, err := w.bookService.ListFilesWithMissingBooksForLibrary(ctx, libraryID)
 	if err != nil {
 		jobLog.Warn("failed to detect files with missing parent books", logger.Data{"library_id": libraryID, "error": err.Error()})
-		return allFiles
+		return allFiles, nil
 	}
 	if len(missingParentFiles) == 0 {
-		return allFiles
+		return allFiles, nil
 	}
 
 	jobLog.Warn("repairing files with missing parent books before scan", logger.Data{
@@ -671,16 +679,22 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 	})
 
 	cleanedBookIDs := make(map[int]struct{})
+	deferredSupplements := make(map[string]*models.File)
 	for _, file := range missingParentFiles {
 		if _, seen := cleanedBookIDs[file.BookID]; seen {
 			continue
 		}
 		if err := w.cleanupMissingBookOrphans(ctx, file.BookID, jobLog); err == nil {
 			cleanedBookIDs[file.BookID] = struct{}{}
+			for _, missingFile := range missingParentFiles {
+				if missingFile.BookID == file.BookID && missingFile.FileRole == models.FileRoleSupplement {
+					deferredSupplements[missingFile.Filepath] = missingFile
+				}
+			}
 		}
 	}
 	if len(cleanedBookIDs) == 0 {
-		return allFiles
+		return allFiles, nil
 	}
 
 	filtered := make([]*models.File, 0, len(allFiles))
@@ -691,7 +705,7 @@ func (w *Worker) repairMissingParentFilesBeforeScan(
 		filtered = append(filtered, file)
 	}
 
-	return filtered
+	return filtered, deferredSupplements
 }
 
 func countDistinctBookIDs(files []*models.File) int {
@@ -700,6 +714,38 @@ func countDistinctBookIDs(files []*models.File) int {
 		bookIDs[file.BookID] = struct{}{}
 	}
 	return len(bookIDs)
+}
+
+func (w *Worker) restoreDeferredSupplements(
+	ctx context.Context,
+	library *models.Library,
+	deferredSupplements map[string]*models.File,
+	jobLog *joblogs.JobLogger,
+	cache *ScanCache,
+) {
+	for path, file := range deferredSupplements {
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			jobLog.Warn("failed to stat deferred supplement", logger.Data{"path": path, "error": err.Error()})
+			continue
+		}
+
+		result, err := w.scanInternal(ctx, ScanOptions{
+			FilePath:        path,
+			LibraryID:       library.ID,
+			ForceSupplement: true,
+			JobLog:          jobLog,
+		}, cache)
+		if err != nil {
+			jobLog.Warn("failed to restore deferred supplement", logger.Data{"path": path, "error": err.Error()})
+			continue
+		}
+		if result != nil && result.File != nil {
+			jobLog.Info("restored deferred supplement", logger.Data{"path": path, "file_id": result.File.ID, "previous_file_id": file.ID})
+		}
+	}
 }
 
 // runInputConverters runs input converter plugins on discovered files.

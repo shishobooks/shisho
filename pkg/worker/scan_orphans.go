@@ -80,8 +80,9 @@ func (w *Worker) cleanupOrphanedFiles(
 			for _, file := range orphansByBook[bookID] {
 				orphanDirs[filepath.Dir(file.Filepath)] = struct{}{}
 			}
-			_ = w.cleanupMissingBookOrphans(ctx, bookID, jobLog)
-			missingBookIDs[bookID] = struct{}{}
+			if err := w.cleanupMissingBookOrphans(ctx, bookID, jobLog); err == nil {
+				missingBookIDs[bookID] = struct{}{}
+			}
 		}
 	}
 
