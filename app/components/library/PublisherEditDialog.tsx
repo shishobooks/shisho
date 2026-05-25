@@ -25,6 +25,7 @@ export interface PublisherEditData {
   name: string;
   aliases?: string[];
   parent_id?: number | null;
+  parent_name?: string;
 }
 
 interface PublisherEditDialogProps {
@@ -53,8 +54,9 @@ export function PublisherEditDialog({
   const [name, setName] = useState(entityName);
   const [editAliases, setEditAliases] = useState<string[]>([]);
   const [aliasInput, setAliasInput] = useState("");
-  const [selectedParent, setSelectedParent] =
-    useState<PublisherIdOption | null>(null);
+  const [selectedParent, setSelectedParent] = useState<
+    PublisherIdOption | { __create: string } | null
+  >(null);
   const [parentCleared, setParentCleared] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [changesSaved, setChangesSaved] = useState(false);
@@ -155,10 +157,17 @@ export function PublisherEditDialog({
     }
   };
 
+  // Whether the selected parent is a new publisher to create by name
+  const isCreateParent = selectedParent != null && "__create" in selectedParent;
+
+  // The effective parent ID for change detection. A __create parent counts as
+  // "changed" because it's a new value distinct from any existing numeric ID.
   const currentParentId = parentCleared
     ? null
     : selectedParent
-      ? selectedParent.id
+      ? isCreateParent
+        ? -1 // sentinel: always differs from any real ID
+        : (selectedParent as PublisherIdOption).id
       : (parentId ?? null);
 
   const hasChanges = useMemo(() => {
@@ -180,9 +189,14 @@ export function PublisherEditDialog({
         name,
         aliases: editAliases,
       };
-      // Only send parent_id if it changed
+      // Only send parent change if it actually changed
       if (initialValues && currentParentId !== initialValues.parentId) {
-        data.parent_id = currentParentId;
+        if (isCreateParent) {
+          // Creating a new parent publisher by name
+          data.parent_name = (selectedParent as { __create: string }).__create;
+        } else {
+          data.parent_id = currentParentId;
+        }
       }
       await onSave(data);
       setChangesSaved(true);
@@ -219,7 +233,6 @@ export function PublisherEditDialog({
             <div className="flex items-center gap-2">
               <div className="flex-1">
                 <EntityCombobox<PublisherIdOption>
-                  canCreate={false}
                   getOptionDescription={(p) =>
                     `${p.file_count} ${p.file_count === 1 ? "file" : "files"}`
                   }
@@ -228,7 +241,6 @@ export function PublisherEditDialog({
                   hook={useParentSearch}
                   label="Publisher"
                   onChange={(next) => {
-                    if ("__create" in next) return;
                     setSelectedParent(next);
                     setParentCleared(false);
                   }}

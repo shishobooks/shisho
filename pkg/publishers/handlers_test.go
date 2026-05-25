@@ -917,3 +917,102 @@ func TestList_IncludesHierarchyCounts(t *testing.T) {
 	require.NotNil(t, childItem.ParentName)
 	assert.Equal(t, "Parent", *childItem.ParentName)
 }
+
+func TestUpdate_SetParentByName_CreatesNewPublisher(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child"}
+	_, err := db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	// Set parent by name — the parent publisher does not exist yet
+	e := newTestEcho(t)
+	body := `{"parent_name": "New Parent"}`
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(child.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify the parent was created and set
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID)
+
+	parent, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: updated.ParentID})
+	require.NoError(t, err)
+	assert.Equal(t, "New Parent", parent.Name)
+	assert.Equal(t, lib.ID, parent.LibraryID)
+}
+
+func TestUpdate_SetParentByName_ReusesExistingPublisher(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	existing := &models.Publisher{LibraryID: lib.ID, Name: "Existing Parent"}
+	_, err := db.NewInsert().Model(existing).Exec(ctx)
+	require.NoError(t, err)
+
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child"}
+	_, err = db.NewInsert().Model(child).Exec(ctx)
+	require.NoError(t, err)
+
+	// Set parent by name — the publisher already exists
+	e := newTestEcho(t)
+	body := `{"parent_name": "Existing Parent"}`
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(child.ID))
+
+	err = h.update(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify the existing publisher was reused
+	updated, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, existing.ID, *updated.ParentID)
+}
+
+func TestUpdate_SetParentByName_RejectsSelfReference(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Create a publisher named "Self"
+	pub := &models.Publisher{LibraryID: lib.ID, Name: "Self"}
+	_, err := db.NewInsert().Model(pub).Exec(ctx)
+	require.NoError(t, err)
+
+	// Try to set parent by the publisher's own name — should reject as cycle
+	e := newTestEcho(t)
+	body := `{"parent_name": "Self"}`
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(pub.ID))
+
+	err = h.update(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle")
+}

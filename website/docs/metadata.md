@@ -38,7 +38,7 @@ Genres and tags are simple labels attached to books. The distinction is semantic
 
 Publishers are attached at the **file level**, not the book level. This means different editions of the same book can have different publishers. A file references one publisher at whatever level of specificity is known from the source metadata.
 
-**Publisher hierarchy.** Publishers can be organized into a parent-child hierarchy to express relationships between imprints, divisions, and parent companies — they are all "publishers" at different levels of the tree. For example, "Dutton" might be a child of "Penguin Publishing Group", which is a child of "Penguin Random House". Set a parent publisher from the publisher edit dialog. The detail page displays the full ancestor chain as clickable breadcrumbs.
+**Publisher hierarchy.** Publishers can be organized into a parent-child hierarchy to express relationships between imprints, divisions, and parent companies — they are all "publishers" at different levels of the tree. For example, "Dutton" might be a child of "Penguin Publishing Group", which is a child of "Penguin Random House". Set a parent publisher from the publisher edit dialog — you can select an existing publisher or type a new name to create one on the fly. The detail page displays the full ancestor chain as clickable breadcrumbs.
 
 The hierarchy is **manually curated** — Shisho does not automatically infer parent-child relationships from metadata sources. You build the tree yourself through the edit dialog or the merge picker's "Set as child" action.
 

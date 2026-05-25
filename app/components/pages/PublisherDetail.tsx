@@ -125,7 +125,9 @@ const PublisherDetail = () => {
       name: data.name,
       aliases: data.aliases,
     };
-    if (data.parent_id !== undefined) {
+    if (data.parent_name !== undefined) {
+      payload.parent_name = data.parent_name;
+    } else if (data.parent_id !== undefined) {
       payload.parent_id = data.parent_id;
     }
 

@@ -208,6 +208,24 @@ func (h *handler) update(c echo.Context) error {
 			}
 			return errors.WithStack(err)
 		}
+	} else if params.ParentName != nil {
+		// Resolve parent by name: find or create a publisher with the given name
+		// in the same library, then set it as the parent.
+		parentPublisher, err := h.publisherService.FindOrCreatePublisher(ctx, *params.ParentName, publisher.LibraryID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		// Index the parent publisher in case it was just created
+		if indexErr := h.searchService.IndexPublisher(ctx, parentPublisher); indexErr != nil {
+			log := logger.FromContext(ctx)
+			log.Warn("failed to index new parent publisher", logger.Data{"publisher_id": parentPublisher.ID, "error": indexErr.Error()})
+		}
+		if err := h.publisherService.SetParent(ctx, id, &parentPublisher.ID); err != nil {
+			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
+				return errcodes.ValidationError(err.Error())
+			}
+			return errors.WithStack(err)
+		}
 	}
 
 	nameChanged := false
