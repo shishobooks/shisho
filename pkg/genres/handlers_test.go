@@ -86,7 +86,7 @@ func patchGenre(t *testing.T, h *handler, genreID int, payload UpdateGenrePayloa
 	return rec
 }
 
-func TestUpdateGenre_RenameAddsOldNameAsAlias(t *testing.T) {
+func TestUpdateGenre_RenameWithoutAliasesDoesNotAutoAdd(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -96,8 +96,30 @@ func TestUpdateGenre_RenameAddsOldNameAsAlias(t *testing.T) {
 	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
 	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
 
+	// Rename without sending aliases — backend should NOT auto-add old name
 	newName := "Sci-Fi"
 	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
+	require.NoError(t, err)
+	assert.Empty(t, aliasList, "backend should not auto-add old name as alias; frontend handles this")
+}
+
+func TestUpdateGenre_RenameWithAliasesIncludingOldName(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(t, db)
+
+	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
+	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
+
+	// Rename and send old name in aliases (as the frontend now does)
+	newName := "Sci-Fi"
+	aliasPayload := []string{"Science Fiction"}
+	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName, Aliases: aliasPayload})
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
@@ -105,7 +127,7 @@ func TestUpdateGenre_RenameAddsOldNameAsAlias(t *testing.T) {
 	assert.Contains(t, aliasList, "Science Fiction")
 }
 
-func TestUpdateGenre_RenamePreservesExistingAliases(t *testing.T) {
+func TestUpdateGenre_RenameWithAliasesPreservesExisting(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -121,17 +143,19 @@ func TestUpdateGenre_RenamePreservesExistingAliases(t *testing.T) {
 	).Exec(ctx)
 	require.NoError(t, err)
 
+	// Frontend sends full desired alias list including old name and existing aliases
 	newName := "Sci-Fi"
-	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName})
+	aliasPayload := []string{"SF", "Science Fiction"}
+	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName, Aliases: aliasPayload})
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
 	require.NoError(t, err)
-	assert.Contains(t, aliasList, "Science Fiction", "old name should be added as alias")
+	assert.Contains(t, aliasList, "Science Fiction", "old name should be in aliases")
 	assert.Contains(t, aliasList, "SF", "existing alias should be preserved")
 }
 
-func TestUpdateGenre_SequentialRenames_NoDuplicateAliases(t *testing.T) {
+func TestUpdateGenre_SequentialRenames_FrontendSendsAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -141,12 +165,14 @@ func TestUpdateGenre_SequentialRenames_NoDuplicateAliases(t *testing.T) {
 	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
 	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
 
+	// First rename: frontend sends old name as alias
 	nameB := "Sci-Fi"
-	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameB})
+	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameB, Aliases: []string{"Science Fiction"}})
 	require.Equal(t, http.StatusOK, rec.Code)
 
+	// Second rename: frontend sends both previous aliases
 	nameC := "SF"
-	rec = patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameC})
+	rec = patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &nameC, Aliases: []string{"Science Fiction", "Sci-Fi"}})
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
@@ -299,7 +325,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	assert.False(t, hasGenres, "list response must NOT use 'genres' key")
 }
 
-func TestUpdateGenre_RenameBackToOriginalName(t *testing.T) {
+func TestUpdateGenre_RenameBackToOriginalName_FrontendSendsAliases(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -309,14 +335,15 @@ func TestUpdateGenre_RenameBackToOriginalName(t *testing.T) {
 	genre := &models.Genre{LibraryID: lib.ID, Name: "Science Fiction"}
 	require.NoError(t, h.genreService.CreateGenre(ctx, genre))
 
-	// First rename: "Science Fiction" → "Sci-Fi"
+	// First rename: "Science Fiction" → "Sci-Fi", frontend adds old name as alias
 	newName := "Sci-Fi"
-	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName})
+	rec := patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &newName, Aliases: []string{"Science Fiction"}})
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	// Second rename back: "Sci-Fi" → "Science Fiction"
+	// Second rename back: "Sci-Fi" → "Science Fiction", frontend removes auto-added alias
+	// and adds "Sci-Fi" as new alias
 	originalName := "Science Fiction"
-	rec = patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &originalName})
+	rec = patchGenre(t, h, genre.ID, UpdateGenrePayload{Name: &originalName, Aliases: []string{"Sci-Fi"}})
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)

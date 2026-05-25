@@ -519,6 +519,215 @@ describe("MetadataEditDialog", () => {
     });
   });
 
+  describe("auto-alias on rename", () => {
+    it("should auto-add initial name as alias when name changes", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={[]}
+            entityName="Foobar"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+      });
+
+      // Change name to "Foo"
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+
+      // "Foobar" should auto-appear as an alias chip
+      expect(screen.getByText("Foobar")).toBeInTheDocument();
+    });
+
+    it("should remove auto-added alias when name changes back to initial", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={[]}
+            entityName="Foobar"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+      });
+
+      // Change name to "Foo" — auto-alias appears
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+      expect(screen.getByText("Foobar")).toBeInTheDocument();
+
+      // Change name back to "Foobar" — auto-alias should disappear
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foobar");
+
+      // The auto-alias "Foobar" should be removed
+      const chips = screen.queryAllByRole("button", {
+        name: /remove alias/i,
+      });
+      expect(chips).toHaveLength(0);
+    });
+
+    it("should not duplicate alias when initial name was already an existing alias", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Foobar"]}
+            entityName="Foobar"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Foobar")).toBeInTheDocument();
+      });
+
+      // Change name to "Foo" — should not add a duplicate "Foobar"
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+
+      // Should still have exactly one "Foobar" chip
+      const chips = screen.getAllByRole("button", { name: /remove alias/i });
+      expect(chips).toHaveLength(1);
+    });
+
+    it("should not remove pre-existing alias when name changes back to initial", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Foobar"]}
+            entityName="Foobar"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Foobar")).toBeInTheDocument();
+      });
+
+      // Change name to "Foo" then back to "Foobar"
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foobar");
+
+      // The pre-existing "Foobar" alias should still be there
+      expect(screen.getByText("Foobar")).toBeInTheDocument();
+    });
+
+    it("should include auto-added alias in save payload", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={[]}
+            entityName="Foobar"
+            entityType="series"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+      });
+
+      // Change name
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: "Foo",
+            aliases: ["Foobar"],
+          }),
+        );
+      });
+    });
+
+    it("should handle case-insensitive duplicate when auto-adding alias", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["foobar"]}
+            entityName="Foobar"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("foobar")).toBeInTheDocument();
+      });
+
+      // Change name to "Foo" — should not add "Foobar" since "foobar" exists (case-insensitive)
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foo");
+
+      const chips = screen.getAllByRole("button", { name: /remove alias/i });
+      expect(chips).toHaveLength(1);
+    });
+  });
+
   describe("hasChanges comparison against initial state", () => {
     it("should compute hasChanges against initial values, not live props", async () => {
       // This test exposes the bug: hasChanges compares form values against

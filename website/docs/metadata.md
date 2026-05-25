@@ -115,7 +115,7 @@ This resolution happens transparently in all contexts — library scans, plugin 
 
 **Automatic creation on merge.** When you merge two resources, the source resource's name automatically becomes an alias of the target. Any existing aliases on the source transfer to the target as well, so no previously-working name mappings are lost.
 
-**Automatic creation on rename.** When you rename a resource, the old name automatically becomes an alias. Future references to the old name still resolve to the renamed resource.
+**Automatic creation on rename.** When you rename a resource in the edit dialog, the old name automatically appears as an alias chip in the alias list. You can remove it before saving if you don't want to keep it. If you change the name back to the original, the auto-added alias is removed automatically. This ensures the old name is preserved for search by default, while giving you full control.
 
 ### Uniqueness Rules
 

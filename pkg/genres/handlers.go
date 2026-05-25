@@ -135,7 +135,6 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	nameChanged := false
-	var oldName string
 	if params.Name != nil && *params.Name != genre.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -174,8 +173,6 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
-		// Simple rename — capture old name before mutation
-		oldName = genre.Name
 		genre.Name = newName
 		opts := UpdateGenreOptions{Columns: []string{"name"}}
 		err = h.genreService.UpdateGenre(ctx, genre, opts)
@@ -187,18 +184,8 @@ func (h *handler) update(c echo.Context) error {
 
 	// Sync aliases if provided
 	if params.Aliases != nil {
-		syncList := params.Aliases
-		if nameChanged {
-			syncList = append(syncList, oldName)
-		}
-		if err := h.aliasService.SyncAliases(ctx, aliases.GenreConfig, id, genre.LibraryID, syncList); err != nil {
+		if err := h.aliasService.SyncAliases(ctx, aliases.GenreConfig, id, genre.LibraryID, params.Aliases); err != nil {
 			return errors.WithStack(err)
-		}
-	} else if nameChanged {
-		_ = h.aliasService.RemoveAlias(ctx, aliases.GenreConfig, id, genre.Name)
-		log := logger.FromContext(ctx)
-		if err := h.aliasService.AddAlias(ctx, aliases.GenreConfig, id, oldName, genre.LibraryID); err != nil {
-			log.Warn("failed to add old name as alias after rename", logger.Data{"genre_id": id, "old_name": oldName, "error": err.Error()})
 		}
 	}
 
