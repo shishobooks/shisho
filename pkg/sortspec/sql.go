@@ -80,13 +80,13 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 			out = append(out, nullsLast("b.created_at", l.Direction))
 
 		case FieldDateReleased:
-			out = append(out, nullsLast(primaryFileCoalesce("release_date"), l.Direction))
+			out = append(out, nullsLast(newestFileCoalesce("release_date"), l.Direction))
 
 		case FieldPageCount:
-			out = append(out, nullsLast(primaryFileCoalesce("page_count"), l.Direction))
+			out = append(out, nullsLast(newestFileCoalesce("page_count"), l.Direction))
 
 		case FieldDuration:
-			out = append(out, nullsLast(primaryFileCoalesce("audiobook_duration_seconds"), l.Direction))
+			out = append(out, nullsLast(newestFileCoalesce("audiobook_duration_seconds"), l.Direction))
 		}
 	}
 	return out
@@ -105,18 +105,19 @@ func nullsLast(expr string, dir Direction) OrderClause {
 	}
 }
 
-// primaryFileCoalesce returns an SQL snippet that reads `field` from
-// the book's primary file, falling back to any file on the book with
-// a non-NULL value for that field.
+// newestFileCoalesce returns an SQL snippet that reads `field` from
+// the book's newest file (by f.id DESC), falling back to any file on
+// the book with a non-NULL value for that field (also newest first).
+// Newer editions are more likely to have the metadata the user cares about.
 //
 //	COALESCE(
-//	  (SELECT f.<field> FROM files f WHERE f.id = b.primary_file_id),
-//	  (SELECT f.<field> FROM files f WHERE f.book_id = b.id AND f.<field> IS NOT NULL ORDER BY f.id LIMIT 1)
+//	  (SELECT f.<field> FROM files f WHERE f.book_id = b.id ORDER BY f.id DESC LIMIT 1),
+//	  (SELECT f.<field> FROM files f WHERE f.book_id = b.id AND f.<field> IS NOT NULL ORDER BY f.id DESC LIMIT 1)
 //	)
-func primaryFileCoalesce(field string) string {
+func newestFileCoalesce(field string) string {
 	return fmt.Sprintf(
 		`COALESCE(
-            (SELECT f.%[1]s FROM files f WHERE f.id = b.primary_file_id),
-            (SELECT f.%[1]s FROM files f WHERE f.book_id = b.id AND f.%[1]s IS NOT NULL ORDER BY f.id LIMIT 1)
+            (SELECT f.%[1]s FROM files f WHERE f.book_id = b.id ORDER BY f.id DESC LIMIT 1),
+            (SELECT f.%[1]s FROM files f WHERE f.book_id = b.id AND f.%[1]s IS NOT NULL ORDER BY f.id DESC LIMIT 1)
         )`, field)
 }
