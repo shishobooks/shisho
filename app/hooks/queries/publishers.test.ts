@@ -92,6 +92,44 @@ describe("useMergePublisher", () => {
       client.getQueryState([BooksQueryKey.RetrieveBook, 10])?.isInvalidated,
     ).toBe(true);
   });
+
+  it("invalidates RetrievePublisher and PublisherFiles for non-target publishers on success", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    client.setQueryData([QueryKey.RetrievePublisher, 3], {
+      id: 3,
+      children: [{ id: 2, name: "Source", file_count: 5 }],
+      descendant_ids: [2],
+      descendant_file_count: 5,
+    });
+    client.setQueryData(
+      [QueryKey.PublisherFiles, 3, { limit: 50, offset: 0 }],
+      { items: [], total: 5 },
+    );
+
+    const { result } = renderHook(() => useMergePublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ targetId: 1, sourceId: 2 });
+    });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryState([QueryKey.RetrievePublisher, 3])?.isInvalidated,
+      ).toBe(true);
+      expect(
+        client.getQueryState([
+          QueryKey.PublisherFiles,
+          3,
+          { limit: 50, offset: 0 },
+        ])?.isInvalidated,
+      ).toBe(true);
+    });
+  });
 });
 
 describe("useUpdatePublisher", () => {
@@ -314,46 +352,6 @@ describe("useDeletePublisher", () => {
         client.getQueryState([
           QueryKey.PublisherFiles,
           2,
-          { limit: 50, offset: 0 },
-        ])?.isInvalidated,
-      ).toBe(true);
-    });
-  });
-});
-
-describe("useMergePublisher", () => {
-  it("invalidates RetrievePublisher and PublisherFiles for non-target publishers on success", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    client.setQueryData([QueryKey.RetrievePublisher, 3], {
-      id: 3,
-      children: [{ id: 2, name: "Source", file_count: 5 }],
-      descendant_ids: [2],
-      descendant_file_count: 5,
-    });
-    client.setQueryData(
-      [QueryKey.PublisherFiles, 3, { limit: 50, offset: 0 }],
-      { items: [], total: 5 },
-    );
-
-    const { result } = renderHook(() => useMergePublisher(), {
-      wrapper: makeWrapper(client),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ targetId: 1, sourceId: 2 });
-    });
-
-    await waitFor(() => {
-      expect(
-        client.getQueryState([QueryKey.RetrievePublisher, 3])?.isInvalidated,
-      ).toBe(true);
-      expect(
-        client.getQueryState([
-          QueryKey.PublisherFiles,
-          3,
           { limit: 50, offset: 0 },
         ])?.isInvalidated,
       ).toBe(true);
