@@ -25,11 +25,11 @@ A dot on the Sort button means your current sort differs from your saved default
 | Author | Primary author's name (books with no author sort to the end) |
 | Series | Primary series name, then series number within each series (the within-series order is always ascending — "Stormlight #1 before #2" — even when you pick **Series, descending**, which only flips the series-name ordering) |
 | Date added | When the book was first scanned into the library |
-| Date released | Release date from the primary file's metadata |
-| Page count | Page count from the primary file |
-| Duration | Audiobook duration from the primary file |
+| Date released | Release date from the newest file's metadata |
+| Page count | Page count from the newest file |
+| Duration | Audiobook duration from the newest file |
 
-For Date released, Page count, and Duration: if the primary file doesn't have a value, Shisho falls back to any other file on the book that does. Books with no value on any of their files sort to the end, regardless of ascending/descending.
+For Date released, Page count, and Duration: the value comes from the book's newest file (newer editions are more likely to have accurate metadata). If the newest file doesn't have a value, Shisho falls back to the newest file that does. Books with no value on any of their files sort to the end, regardless of ascending/descending.
 
 ## URL-addressable sorts
 
