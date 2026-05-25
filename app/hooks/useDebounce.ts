@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 
-/**
- * Hook that debounces a value by the specified delay.
- * Useful for search-as-you-type functionality to avoid overwhelming the server.
- *
- * @param value - The value to debounce
- * @param delay - The debounce delay in milliseconds (default: 300)
- * @returns The debounced value
- */
-export function useDebounce<T>(value: T, delay: number = 300): T {
+export function useDebounce<T>(
+  value: T,
+  delay: number = 300,
+  options?: { immediate?: (v: T) => boolean },
+): T {
+  const isImmediate = options?.immediate?.(value) ?? false;
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
+    if (isImmediate) {
+      setDebouncedValue(value);
+      return;
+    }
+
     const timer = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
@@ -19,7 +21,7 @@ export function useDebounce<T>(value: T, delay: number = 300): T {
     return () => {
       clearTimeout(timer);
     };
-  }, [value, delay]);
+  }, [value, delay, isImmediate]);
 
   return debouncedValue;
 }

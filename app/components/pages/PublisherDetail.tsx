@@ -26,7 +26,7 @@ import {
   useSetChildPublisher,
   useUpdatePublisher,
 } from "@/hooks/queries/publishers";
-import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const PublisherDetail = () => {
@@ -55,7 +55,9 @@ const PublisherDetail = () => {
   const deletePublisherMutation = useDeletePublisher();
 
   const [mergeSearchRaw, setMergeSearchRaw] = useState("");
-  const mergeSearch = useDebouncedSearch(mergeSearchRaw, 200);
+  const mergeSearch = useDebounce(mergeSearchRaw, 200, {
+    immediate: (v) => v === "",
+  });
 
   // Pre-fetch the publisher list as soon as library_id is available so the
   // merge dialog opens instantly without a loading flash.
