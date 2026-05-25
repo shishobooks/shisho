@@ -75,13 +75,10 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
 
     for (const bookId of selectedBookIds) {
       const book = allBooks.find((b) => b.id === bookId);
-      if (!book?.primary_file_id) continue;
-      const primaryFile = book.files?.find(
-        (f) => f.id === book.primary_file_id,
-      );
-      if (primaryFile) {
-        fileIds.push(primaryFile.id);
-        totalSize += primaryFile.filesize_bytes ?? 0;
+      const firstMain = book?.files?.find((f) => f.file_role === "main");
+      if (firstMain) {
+        fileIds.push(firstMain.id);
+        totalSize += firstMain.filesize_bytes ?? 0;
       }
     }
 

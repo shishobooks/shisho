@@ -65,7 +65,7 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatDuration, formatMetadataFieldLabel } from "@/utils/format";
-import { getPrimaryFileType } from "@/utils/primaryFile";
+import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
@@ -424,7 +424,7 @@ export function IdentifyReviewForm({
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const file = findFile(book, fileId);
-  const primaryFileType = getPrimaryFileType(book);
+  const anyCBZ = hasAnyCBZFile(book);
   const applyMutation = usePluginApply();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
@@ -1437,7 +1437,7 @@ export function IdentifyReviewForm({
                             (s) =>
                               `${s.name}${
                                 s.number
-                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.unit || null, primaryFileType)}`
+                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.unit || null, anyCBZ ? "cbz" : null)}`
                                   : ""
                               }`,
                           )
