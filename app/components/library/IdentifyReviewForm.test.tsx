@@ -14,6 +14,7 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import type { PluginSearchResult } from "@/hooks/queries/plugins";
 import {
+  DataSourceFilepath,
   DataSourceManual,
   FileRoleMain,
   FileTypeEPUB,
@@ -303,10 +304,11 @@ describe("IdentifyReviewForm component", () => {
   it("omits unchecked fields from the apply payload", async () => {
     const user = createUser();
     renderForm({
-      // Single-file book → primary, so book-changed defaults ON.
+      // Low-priority sources → book-changed defaults ON.
       book: makeBook({
         title: "Old Title",
-        // Authors are also "changed" because the result proposes a new author.
+        title_source: DataSourceFilepath,
+        author_source: DataSourceFilepath,
       }),
       result: makeResult({
         title: "New Title",
@@ -314,7 +316,7 @@ describe("IdentifyReviewForm component", () => {
       }),
     });
 
-    // Title checkbox should be checked by default (book-changed on primary).
+    // Title checkbox should be checked by default (low-priority source).
     const titleCheckbox = screen.getByRole("checkbox", {
       name: /apply title/i,
     });
@@ -334,18 +336,13 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.fields.authors).toEqual([{ name: "New Author" }]);
   });
 
-  it("defaults book-changed fields OFF on a non-primary file", async () => {
+  it("defaults book-changed fields OFF when source is high-priority", async () => {
     const user = createUser();
-    // Two main files, primary is the OTHER one.
-    const file1 = makeFile({ id: 1, filepath: "/test/book1.epub" });
-    const file2 = makeFile({ id: 2, filepath: "/test/book2.epub" });
     renderForm({
       book: makeBook({
         title: "Old Title",
-        primary_file_id: 1,
-        files: [file1, file2],
+        title_source: DataSourceManual, // high-priority → default OFF
       }),
-      fileId: 2, // identifying the non-primary file
       result: makeResult({ title: "New Title" }),
     });
 
@@ -361,16 +358,12 @@ describe("IdentifyReviewForm component", () => {
     expect(titleCheckbox).toHaveAttribute("data-state", "unchecked");
   });
 
-  it("defaults book-changed fields ON when identifying the primary file", () => {
-    const file1 = makeFile({ id: 1, filepath: "/test/book1.epub" });
-    const file2 = makeFile({ id: 2, filepath: "/test/book2.epub" });
+  it("defaults book-changed fields ON when source is low-priority", () => {
     renderForm({
       book: makeBook({
         title: "Old Title",
-        primary_file_id: 1,
-        files: [file1, file2],
+        title_source: DataSourceFilepath, // low-priority → default ON
       }),
-      fileId: 1,
       result: makeResult({ title: "New Title" }),
     });
 
@@ -380,16 +373,15 @@ describe("IdentifyReviewForm component", () => {
     expect(titleCheckbox).toHaveAttribute("data-state", "checked");
   });
 
-  it("defaults file-level fields ON regardless of primary status", () => {
-    const file1 = makeFile({ id: 1 });
-    const file2 = makeFile({
-      id: 2,
-      filepath: "/test/book2.epub",
-      release_date: "2020-01-01T00:00:00Z",
-    });
+  it("defaults file-level fields ON regardless of source", () => {
     renderForm({
-      book: makeBook({ primary_file_id: 1, files: [file1, file2] }),
-      fileId: 2, // non-primary
+      book: makeBook({
+        files: [
+          makeFile({
+            release_date: "2020-01-01T00:00:00Z",
+          }),
+        ],
+      }),
       result: makeResult({ release_date: "2024-06-15" }),
     });
 
@@ -402,7 +394,12 @@ describe("IdentifyReviewForm component", () => {
   it("section-level checkbox toggles all child rows", async () => {
     const user = createUser();
     renderForm({
-      book: makeBook({ title: "Old Title" }),
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath,
+        author_source: DataSourceFilepath,
+        genre_source: DataSourceFilepath,
+      }),
       result: makeResult({
         title: "New Title",
         authors: [{ name: "New Author" }],
@@ -417,9 +414,9 @@ describe("IdentifyReviewForm component", () => {
     const sectionCheckbox = screen.getByRole("checkbox", {
       name: /apply all book fields/i,
     });
-    // Title/authors/genres default ON, but other book fields (subtitle,
-    // series, tags, description) are unchanged → off. Aggregate is
-    // indeterminate. Clicking indeterminate sets all to true.
+    // Title/authors/genres default ON (low-priority source), but other book
+    // fields (subtitle, series, tags, description) are unchanged → off.
+    // Aggregate is indeterminate. Clicking indeterminate sets all to true.
     expect(sectionCheckbox).toHaveAttribute("data-state", "indeterminate");
     await user.click(sectionCheckbox);
     expect(sectionCheckbox).toHaveAttribute("data-state", "checked");
@@ -484,7 +481,11 @@ describe("IdentifyReviewForm component", () => {
   it("hides unchanged rows in the default Changed filter, shows them in All", async () => {
     const user = createUser();
     renderForm({
-      book: makeBook({ title: "Old Title", subtitle: "" }),
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath, // low-priority → defaults ON
+        subtitle: "",
+      }),
       result: makeResult({ title: "New Title" }),
     });
 
@@ -509,7 +510,10 @@ describe("IdentifyReviewForm component", () => {
   it("disables row inputs when the apply checkbox is unchecked", async () => {
     const user = createUser();
     renderForm({
-      book: makeBook({ title: "Old Title" }),
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath, // low-priority → defaults ON
+      }),
       result: makeResult({ title: "New Title" }),
     });
 
@@ -530,7 +534,10 @@ describe("IdentifyReviewForm component", () => {
   it("Restore suggestions resets the form", async () => {
     const user = createUser();
     renderForm({
-      book: makeBook({ title: "Old Title" }),
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath, // low-priority → defaults ON
+      }),
       result: makeResult({ title: "New Title" }),
     });
 
