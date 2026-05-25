@@ -55,22 +55,52 @@ func TestOrderClauses_SeriesExpandsToTwo(t *testing.T) {
 	assert.NotContains(t, got[1].Expression, "ORDER BY bs.series_number ASC, bs.id ASC")
 }
 
-func TestOrderClauses_PrimaryFileFallback(t *testing.T) {
+func TestOrderClauses_NewestFileFallback(t *testing.T) {
 	t.Parallel()
 
 	got := OrderClauses([]SortLevel{
 		{Field: FieldPageCount, Direction: DirAsc},
 	})
 
-	// page_count uses the COALESCE(primary file, any file with value)
-	// pattern. The generated SQL must reference b.primary_file_id and
-	// b.id as correlated subquery columns.
+	// page_count uses the COALESCE(newest file, any file with value)
+	// pattern. The generated SQL must prefer the newest file (f.id DESC)
+	// and must NOT reference b.primary_file_id.
 	assert.Len(t, got, 1)
 	assert.Contains(t, got[0].Expression, "COALESCE")
-	assert.Contains(t, got[0].Expression, "b.primary_file_id")
+	assert.NotContains(t, got[0].Expression, "primary_file_id")
+	assert.Contains(t, got[0].Expression, "f.id DESC")
 	assert.Contains(t, got[0].Expression, "b.id")
 	assert.Contains(t, got[0].Expression, "page_count")
 	assert.Contains(t, got[0].Expression, "ASC")
+}
+
+func TestOrderClauses_NewestFileCoalesce_AllFields(t *testing.T) {
+	t.Parallel()
+
+	// All file-level sort fields (date_released, page_count, duration)
+	// must use the newest-file coalesce and must not reference primary_file_id.
+	tests := []struct {
+		field   string
+		dbField string
+	}{
+		{FieldDateReleased, "release_date"},
+		{FieldPageCount, "page_count"},
+		{FieldDuration, "audiobook_duration_seconds"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			t.Parallel()
+			got := OrderClauses([]SortLevel{
+				{Field: tt.field, Direction: DirDesc},
+			})
+			assert.Len(t, got, 1)
+			assert.Contains(t, got[0].Expression, "COALESCE")
+			assert.NotContains(t, got[0].Expression, "primary_file_id")
+			assert.Contains(t, got[0].Expression, "f.id DESC")
+			assert.Contains(t, got[0].Expression, tt.dbField)
+		})
+	}
 }
 
 func TestOrderClauses_MultiLevel(t *testing.T) {
