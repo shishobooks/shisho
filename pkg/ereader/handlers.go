@@ -952,6 +952,9 @@ func fileDownloadEntry(baseURL, bookTitle string, f *models.File, isKobo bool) s
 	sb.WriteString(fmt.Sprintf(`<div style="font-weight: bold;">%s</div>`, displayName))
 	sb.WriteString(fmt.Sprintf(`<div style="font-size: 0.9em; color: #666; margin: 4px 0;">%s</div>`, strings.Join(metaParts, " • ")))
 	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, downloadURL, downloadFormat))
+	if f.FileType == models.FileTypeCBZ {
+		sb.WriteString(`<div style="font-size: 0.9em; color: #666; margin-top: 4px;"><i>Note: The download may take a moment while the file is being prepared.</i></div>`)
+	}
 	sb.WriteString(`</div>`)
 
 	return sb.String()

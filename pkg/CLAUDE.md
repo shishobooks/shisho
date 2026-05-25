@@ -83,7 +83,7 @@ Each book has an optional `PrimaryFileID` (`*int`) that designates which file is
 - `pkg/books/service.go` — Auto-promotion in `CreateFile` and `DeleteFile`
 - `pkg/books/merge.go` — Primary file handling during `MoveFilesToBook`
 - `pkg/kobo/service.go` — Syncs all Kobo-compatible main files (EPUB, CBZ) per book, not just the primary
-- `pkg/ereader/handlers.go` — Uses `PrimaryFileID` to select the default download file
+- `pkg/ereader/handlers.go` — Download page lists all main files; `getBookFileType` uses first main file for type filtering
 
 ### Cover Image System
 
