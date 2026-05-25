@@ -175,26 +175,6 @@ export function MetadataEditDialog({
     }
   };
 
-  const handleSubmit = async () => {
-    setServerError(null);
-    try {
-      const data: { name: string; sort_name?: string; aliases?: string[] } = {
-        name,
-      };
-      if (hasSortName) {
-        data.sort_name = editSortName;
-      }
-      data.aliases = resolvedAliases;
-      await onSave(data);
-      setChangesSaved(true);
-      requestClose();
-    } catch (err) {
-      if (err instanceof Error) {
-        setServerError(err.message);
-      }
-    }
-  };
-
   // Resolve pending alias input into the effective alias list for comparison
   const resolvedAliases = useMemo(
     () => resolveAliases(editAliases, aliasInput),
@@ -234,6 +214,26 @@ export function MetadataEditDialog({
   ]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
+
+  const handleSubmit = async () => {
+    setServerError(null);
+    try {
+      const data: { name: string; sort_name?: string; aliases?: string[] } = {
+        name,
+      };
+      if (hasSortName) {
+        data.sort_name = editSortName;
+      }
+      data.aliases = resolvedAliases;
+      await onSave(data);
+      setChangesSaved(true);
+      requestClose();
+    } catch (err) {
+      if (err instanceof Error) {
+        setServerError(err.message);
+      }
+    }
+  };
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
