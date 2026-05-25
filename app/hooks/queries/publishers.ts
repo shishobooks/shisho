@@ -163,6 +163,7 @@ export const useDeletePublisher = () => {
       return API.request<void>("DELETE", `/publishers/${publisherId}`);
     },
     onSuccess: () => {
+      invalidatePublisherHierarchyQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
@@ -186,15 +187,9 @@ export const useMergePublisher = () => {
         source_id: sourceId,
       });
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.RetrievePublisher, variables.targetId],
-      });
+    onSuccess: () => {
+      invalidatePublisherHierarchyQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
-      // Invalidate detail-page file list since files moved from source to target
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PublisherFiles, variables.targetId],
-      });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
