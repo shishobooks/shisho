@@ -47,7 +47,7 @@ If you don't see a `.kobo` folder, enable hidden files in your file manager. On 
 
 ## Sync Behavior
 
-- **Books with multiple files** — Only the [primary file](advanced/primary-file.md) is synced, so you won't get duplicate entries on the device
+- **Books with multiple files** — All Kobo-compatible files (EPUB and CBZ) are synced, so each edition gets its own entry on the device. Non-Kobo formats (M4B, PDF) and [supplement files](advanced/primary-file.md) are excluded
 - **Metadata changes** — If you update a book's title, authors, or cover in Shisho, those changes are picked up on the next sync
 - **Removed books** — Books removed from the sync scope are removed from the device on next sync
 

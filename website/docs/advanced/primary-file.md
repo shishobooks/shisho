@@ -4,11 +4,11 @@ sidebar_position: 1
 
 # Primary File
 
-When a book has multiple files — for example, an EPUB and a PDF, or multiple EPUB editions — Shisho designates one as the **primary file**. The primary file is the one used for syncing to devices (via Kobo sync) and for downloads from the eReader browser.
+When a book has multiple files — for example, an EPUB and a PDF, or multiple EPUB editions — Shisho designates one as the **primary file**. The primary file is the one used for downloads from the eReader browser.
 
 ## Why It Matters
 
-Without a primary file, a book with both an EPUB and a PDF would sync both to your e-reader, creating duplicate entries. The primary file system ensures only one file per book is sent to devices while keeping all editions accessible in the web UI.
+The primary file determines which file is used when a single file must be chosen — for example, when downloading a book from the eReader browser. Without a primary file, Shisho wouldn't know which edition to serve.
 
 ## Automatic Selection
 
@@ -33,5 +33,5 @@ The primary file is indicated with a star badge next to its name. This badge onl
 
 | Feature | Behavior |
 |---------|----------|
-| **Kobo sync** | Only the primary file is synced to Kobo e-readers |
+| **Kobo sync** | All Kobo-compatible files (EPUB, CBZ) are synced — the primary file is not used |
 | **eReader browser** | The primary file is used for downloads and determining the book's file type |
