@@ -450,20 +450,28 @@ export function IdentifyReviewForm({
 
   const [filterMode, setFilterMode] = useState<"changed" | "all">("changed");
 
-  // The "primary file" gate for book-level changed-field defaults. A book
-  // with no explicit primary_file_id and a single MAIN file is treated as
-  // primary; this avoids surprising "nothing applies" defaults on freshly
-  // scanned single-file books. Supplements never count toward this — a
-  // book with one main + one supplement is still effectively single-main.
-  const isPrimaryFile = useMemo(() => {
-    const mainCount = (book.files ?? []).filter(
-      (f) => f.file_role === "main",
-    ).length;
-    if (book.primary_file_id == null) {
-      return mainCount <= 1;
-    }
-    return file?.id === book.primary_file_id;
-  }, [book.primary_file_id, book.files, file?.id]);
+  // Map each book-level field key to its current data source on the book.
+  // Used by defaultDecision to determine whether the plugin value should
+  // default ON (low-priority source) or OFF (high-priority source).
+  const bookFieldSource: Record<BookFieldKey, string | undefined> = useMemo(
+    () => ({
+      title: book.title_source || undefined,
+      subtitle: book.subtitle_source ?? undefined,
+      authors: book.author_source || undefined,
+      series: undefined, // No series_source field on the book model.
+      genres: book.genre_source ?? undefined,
+      tags: book.tag_source ?? undefined,
+      description: book.description_source ?? undefined,
+    }),
+    [
+      book.title_source,
+      book.subtitle_source,
+      book.author_source,
+      book.genre_source,
+      book.tag_source,
+      book.description_source,
+    ],
+  );
 
   // ---- Extract current values ----
   const currentAuthors: AuthorEntry[] = useMemo(
@@ -855,17 +863,19 @@ export function IdentifyReviewForm({
         out[k] = false;
         continue;
       }
+      const scope = fieldScope(k);
       out[k] = defaultDecision({
-        scope: fieldScope(k),
+        scope,
         status: initialFieldStatus[k],
-        isPrimaryFile,
+        fieldSource:
+          scope === "book" ? bookFieldSource[k as BookFieldKey] : undefined,
       });
     }
     return out;
     // isDisabled is stable for the component's lifetime (closes over
     // disabledFieldsRaw which is derived from result.disabled_fields).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialFieldStatus, isPrimaryFile]);
+  }, [initialFieldStatus, bookFieldSource]);
 
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
@@ -888,7 +898,7 @@ export function IdentifyReviewForm({
       const desired = defaultDecision({
         scope: "file",
         status: initialFieldStatus.cover,
-        isPrimaryFile,
+        fieldSource: undefined,
       });
       setDecisions((prev) =>
         prev.cover === desired ? prev : { ...prev, cover: desired },
@@ -899,12 +909,7 @@ export function IdentifyReviewForm({
     // value at effect commit, which is what we want. Intentionally omitted
     // from deps to avoid re-running on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    hasCoverChoice,
-    initialFieldStatus.cover,
-    isPrimaryFile,
-    userCoverSelection,
-  ]);
+  }, [hasCoverChoice, initialFieldStatus.cover, userCoverSelection]);
 
   const setDecision = (k: FieldKey, v: boolean) => {
     if (isDisabled(k)) return;
