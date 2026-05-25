@@ -377,7 +377,7 @@ const BookItem = ({
           );
         })()}
       {book.files && (
-        <div className="mt-2 flex gap-2 text-xs">
+        <div className="mt-2 flex flex-wrap gap-2 text-xs">
           {uniqBy(book.files, "file_type").map((f) => (
             <Badge className="text-xs uppercase" key={f.id} variant="secondary">
               {f.file_type}
