@@ -576,35 +576,20 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.Forbidden("Access to this book is denied")
 	}
 
-	// Get the primary file from the book's files
-	var mainFile *models.File
+	// Collect main files (exclude supplements)
+	var mainFiles []*models.File
 	for _, f := range book.Files {
-		if book.PrimaryFileID != nil && f.ID == *book.PrimaryFileID {
-			mainFile = f
-			break
+		if f.FileRole == models.FileRoleMain {
+			mainFiles = append(mainFiles, f)
 		}
 	}
-	if mainFile == nil && len(book.Files) > 0 {
-		mainFile = book.Files[0] // Fallback to first file if no primary set
-	}
-	if mainFile == nil {
+	if len(mainFiles) == 0 {
 		return errcodes.NotFound("No files available for this book")
 	}
 
 	// Detect Kobo device from User-Agent
 	userAgent := c.Request().Header.Get("User-Agent")
 	isKobo := strings.Contains(strings.ToLower(userAgent), "kobo")
-
-	// Generate download link using eReader file download route (with API key auth)
-	var downloadURL string
-	supportsKepub := mainFile.FileType == models.FileTypeEPUB || mainFile.FileType == models.FileTypeCBZ
-	if isKobo && supportsKepub {
-		// Use KePub conversion for Kobo
-		downloadURL = fmt.Sprintf("%s/file/%d/kepub", baseURL, mainFile.ID)
-	} else {
-		// Use original file
-		downloadURL = fmt.Sprintf("%s/file/%d", baseURL, mainFile.ID)
-	}
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -635,55 +620,13 @@ func (h *handler) Download(c echo.Context) error {
 		}
 	}
 
-	// Show file metadata
-	var metaParts []string
-
-	// File size
-	if mainFile.FilesizeBytes > 0 {
-		metaParts = append(metaParts, formatFileSize(mainFile.FilesizeBytes))
-	}
-
-	// Page count (CBZ)
-	if mainFile.PageCount != nil && *mainFile.PageCount > 0 {
-		metaParts = append(metaParts, fmt.Sprintf("%d pages", *mainFile.PageCount))
-	}
-
-	// Duration (M4B audiobooks)
-	if mainFile.AudiobookDurationSeconds != nil && *mainFile.AudiobookDurationSeconds > 0 {
-		metaParts = append(metaParts, formatDuration(*mainFile.AudiobookDurationSeconds))
-	}
-
-	// Narrators (M4B audiobooks)
-	if len(mainFile.Narrators) > 0 {
-		var narratorNames []string
-		for _, n := range mainFile.Narrators {
-			if n.Person != nil {
-				narratorNames = append(narratorNames, n.Person.Name)
-			}
-		}
-		if len(narratorNames) > 0 {
-			metaParts = append(metaParts, "Narrated by: "+strings.Join(narratorNames, ", "))
-		}
-	}
-
-	if len(metaParts) > 0 {
-		content.WriteString(fmt.Sprintf("<p><i>%s</i></p>", strings.Join(metaParts, " • ")))
-	}
-
 	if book.Description != nil && *book.Description != "" {
 		content.WriteString(fmt.Sprintf("<p>%s</p>", *book.Description))
 	}
 
-	// Show appropriate format in download link (button style for easier tapping)
-	downloadFormat := strings.ToUpper(mainFile.FileType)
-	if isKobo && supportsKepub {
-		downloadFormat = "KePub"
-	}
-	content.WriteString(fmt.Sprintf(`<p><a href="%s" class="nav-btn" style="display: inline-block;">Download %s</a></p>`, downloadURL, downloadFormat))
-
-	// Note for CBZ files about conversion time
-	if mainFile.FileType == models.FileTypeCBZ {
-		content.WriteString(`<p style="font-size: 0.9em; color: #666;"><i>Note: The download may take a moment to start while the file is being prepared.</i></p>`)
+	// Render a download entry for each main file
+	for _, f := range mainFiles {
+		content.WriteString(fileDownloadEntry(baseURL, book.Title, f, isKobo))
 	}
 
 	return c.HTML(http.StatusOK, RenderPage(content.String()))
@@ -961,30 +904,57 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-// formatDuration formats seconds into hours and minutes.
-func formatDuration(seconds float64) string {
-	totalMinutes := int(seconds / 60)
-	hours := totalMinutes / 60
-	minutes := totalMinutes % 60
-	if hours > 0 {
-		return fmt.Sprintf("%dh %dm", hours, minutes)
-	}
-	return fmt.Sprintf("%dm", minutes)
-}
-
-// getBookFileType returns the primary file type for a book.
+// getBookFileType returns the file type of the first main file for a book.
+// Supplement files are skipped. Returns empty string if no main files exist.
 func getBookFileType(book *models.Book) string {
-	if book.PrimaryFileID != nil {
-		for _, f := range book.Files {
-			if f.ID == *book.PrimaryFileID {
-				return f.FileType
-			}
+	for _, f := range book.Files {
+		if f.FileRole == models.FileRoleMain {
+			return f.FileType
 		}
 	}
-	if len(book.Files) > 0 {
-		return book.Files[0].FileType
-	}
 	return ""
+}
+
+// fileDownloadEntry renders a single file's download block with file name,
+// type badge, file size, and download link. Uses block-level elements with
+// large tap targets for eReader compatibility (no flexbox).
+func fileDownloadEntry(baseURL, bookTitle string, f *models.File, isKobo bool) string {
+	// Determine display name: file name if set, otherwise book title
+	displayName := bookTitle
+	if f.Name != nil && *f.Name != "" {
+		displayName = *f.Name
+	}
+
+	// Build download URL (KePub for Kobo when applicable)
+	supportsKepub := f.FileType == models.FileTypeEPUB || f.FileType == models.FileTypeCBZ
+	var downloadURL string
+	if isKobo && supportsKepub {
+		downloadURL = fmt.Sprintf("%s/file/%d/kepub", baseURL, f.ID)
+	} else {
+		downloadURL = fmt.Sprintf("%s/file/%d", baseURL, f.ID)
+	}
+
+	// Format label
+	downloadFormat := strings.ToUpper(f.FileType)
+	if isKobo && supportsKepub {
+		downloadFormat = "KePub"
+	}
+
+	// Build metadata line: type badge + file size
+	var metaParts []string
+	metaParts = append(metaParts, strings.ToUpper(f.FileType))
+	if f.FilesizeBytes > 0 {
+		metaParts = append(metaParts, formatFileSize(f.FilesizeBytes))
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<div style="padding: 12px 0; border-bottom: 1px solid #ccc;">`)
+	sb.WriteString(fmt.Sprintf(`<div style="font-weight: bold;">%s</div>`, displayName))
+	sb.WriteString(fmt.Sprintf(`<div style="font-size: 0.9em; color: #666; margin: 4px 0;">%s</div>`, strings.Join(metaParts, " • ")))
+	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, downloadURL, downloadFormat))
+	sb.WriteString(`</div>`)
+
+	return sb.String()
 }
 
 // filterBooksByType filters books to only include those matching the specified type.
