@@ -1,5 +1,5 @@
 import { Loader2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   EntityCombobox,
@@ -64,6 +64,11 @@ export function PublisherEditDialog({
     parentId: number | null;
   } | null>(null);
 
+  // Track the name when the dialog opened and whether it was already an alias,
+  // so we can auto-add/remove it when the user renames the entity.
+  const initialNameRef = useRef("");
+  const initialNameWasAliasRef = useRef(false);
+
   const prevOpenRef = useRef(false);
 
   useEffect(() => {
@@ -92,7 +97,43 @@ export function PublisherEditDialog({
       aliases: [...initialAliases],
       parentId: parentId ?? null,
     });
+
+    // Store the initial name and whether it was already an alias
+    initialNameRef.current = initialName;
+    initialNameWasAliasRef.current = initialAliases.some(
+      (a) => a.toLowerCase() === initialName.toLowerCase(),
+    );
   }, [open, entityName, aliases, parentId, parentName]);
+
+  // Auto-add/remove the initial name as an alias when the name changes.
+  // When the user renames away from the initial name, the old name auto-appears
+  // as an alias so it's preserved for search. When they rename back, the
+  // auto-added alias is removed (but pre-existing aliases are kept).
+  const handleNameChange = useCallback((newName: string) => {
+    setName(newName);
+
+    const initName = initialNameRef.current;
+    if (!initName) return;
+
+    const nameMovedAway = newName.toLowerCase() !== initName.toLowerCase();
+    const nameMovedBack = !nameMovedAway;
+
+    setEditAliases((prev) => {
+      const alreadyPresent = prev.some(
+        (a) => a.toLowerCase() === initName.toLowerCase(),
+      );
+
+      if (nameMovedAway && !alreadyPresent) {
+        return [...prev, initName];
+      }
+
+      if (nameMovedBack && alreadyPresent && !initialNameWasAliasRef.current) {
+        return prev.filter((a) => a.toLowerCase() !== initName.toLowerCase());
+      }
+
+      return prev;
+    });
+  }, []);
 
   const handleAddAlias = () => {
     const trimmed = aliasInput.trim();
@@ -168,7 +209,7 @@ export function PublisherEditDialog({
             <Label htmlFor="publisher-name">Name</Label>
             <Input
               id="publisher-name"
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               value={name}
             />
           </div>

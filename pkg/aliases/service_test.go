@@ -363,6 +363,43 @@ func TestTransferAliasesOnMerge_NoAliases(t *testing.T) {
 	assert.Equal(t, []string{"Sci-Fi"}, aliases)
 }
 
+func TestSyncAliases_DuplicatesInDesiredList(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	genre := createTestGenre(t, db, "Science Fiction", lib.ID)
+
+	// Sync with duplicates in the desired list — should not error
+	err := svc.SyncAliases(ctx, GenreConfig, genre.ID, lib.ID, []string{"Sci-Fi", "Sci-Fi"})
+	require.NoError(t, err)
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, genre.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Sci-Fi"}, aliases)
+}
+
+func TestSyncAliases_DuplicatesInDesiredListCaseInsensitive(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	genre := createTestGenre(t, db, "Science Fiction", lib.ID)
+
+	// Sync with case-insensitive duplicates — should not error
+	err := svc.SyncAliases(ctx, GenreConfig, genre.ID, lib.ID, []string{"Sci-Fi", "sci-fi"})
+	require.NoError(t, err)
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, genre.ID)
+	require.NoError(t, err)
+	// Should have exactly one alias (the first occurrence wins)
+	assert.Len(t, aliases, 1)
+}
+
 func TestAddAlias_ReturnsValidationError(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

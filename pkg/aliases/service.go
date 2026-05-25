@@ -239,10 +239,12 @@ func (svc *Service) SyncAliases(ctx context.Context, cfg ResourceConfig, resourc
 		if trimmed == "" {
 			continue
 		}
-		if !currentSet[strings.ToLower(trimmed)] {
+		lower := strings.ToLower(trimmed)
+		if !currentSet[lower] {
 			if err := svc.AddAlias(ctx, cfg, resourceID, trimmed, libraryID); err != nil {
 				return err
 			}
+			currentSet[lower] = true
 		}
 	}
 
