@@ -58,6 +58,10 @@ Combining two resources of the same type into one, transferring all associations
 **Sidecar**:
 A `.metadata.json` file placed alongside a book or file that provides metadata overrides.
 
+**Preferred Cover**:
+A user-set flag on a file indicating that its cover should represent the book when selecting a cover from that file's type category (ebook or audiobook). At most one file per type category per book can be preferred. When no file is preferred, the default selection order applies.
+_Avoid_: primary cover, default cover, canonical cover
+
 ## Relationships
 
 - A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, and **Publishers**
