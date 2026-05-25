@@ -69,7 +69,7 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 
 ### Primary File System
 
-Each book has an optional `PrimaryFileID` (`*int`) that designates which file is the default for reading/downloading (used by Kobo sync and eReader browser).
+Each book has an optional `PrimaryFileID` (`*int`) that designates which file is the default for reading/downloading (used by eReader browser).
 
 **Auto-assignment rules:**
 - When the first file is created for a book (`CreateFile`), it becomes primary automatically
@@ -82,7 +82,7 @@ Each book has an optional `PrimaryFileID` (`*int`) that designates which file is
 - `pkg/books/handlers.go` — `setPrimaryFile` handler and `SetPrimaryFilePayload`
 - `pkg/books/service.go` — Auto-promotion in `CreateFile` and `DeleteFile`
 - `pkg/books/merge.go` — Primary file handling during `MoveFilesToBook`
-- `pkg/kobo/service.go` — Uses `primary_file_id` to determine which file to sync
+- `pkg/kobo/service.go` — Syncs all Kobo-compatible main files (EPUB, CBZ) per book, not just the primary
 - `pkg/ereader/handlers.go` — Uses `PrimaryFileID` to select the default download file
 
 ### Cover Image System

@@ -228,7 +228,10 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 	return changes, nil
 }
 
-// GetScopedFiles queries files in scope, filtered by library access and file type (epub/cbz).
+// GetScopedFiles queries all Kobo-compatible main files (EPUB, CBZ) in scope,
+// filtered by library access. Supplement files and non-Kobo formats (M4B, PDF)
+// are excluded. A book with multiple compatible files (e.g. two EPUBs) will
+// have all of them returned — each gets its own content ID on the device.
 func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncScope) ([]ScopedFile, error) {
 	// Load user with library access.
 	user := new(models.User)
@@ -241,7 +244,8 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 		return nil, errors.Wrap(err, "failed to load user")
 	}
 
-	// Query files with relations.
+	// Query all Kobo-compatible main files (EPUB, CBZ) — supplements are
+	// excluded so only real editions sync to the device.
 	var files []models.File
 	q := svc.db.NewSelect().
 		Model(&files).
@@ -253,8 +257,7 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 		Relation("Book.BookSeries.Series").
 		Relation("Publisher").
 		Where("f.file_type IN (?)", bun.List([]string{models.FileTypeEPUB, models.FileTypeCBZ})).
-		Join("JOIN books AS b ON b.id = f.book_id").
-		Where("f.id = b.primary_file_id")
+		Where("f.file_role = ?", models.FileRoleMain)
 
 	// Apply scope.
 	switch scope.Type {
