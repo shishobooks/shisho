@@ -184,7 +184,7 @@ export function MetadataEditDialog({
       if (hasSortName) {
         data.sort_name = editSortName;
       }
-      data.aliases = resolveAliases(editAliases, aliasInput);
+      data.aliases = resolvedAliases;
       await onSave(data);
       setChangesSaved(true);
       requestClose();

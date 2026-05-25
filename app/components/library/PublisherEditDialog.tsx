@@ -185,7 +185,7 @@ export function PublisherEditDialog({
     try {
       const data: PublisherEditData = {
         name,
-        aliases: resolveAliases(editAliases, aliasInput),
+        aliases: resolvedAliases,
       };
       // Only send parent_id if it changed
       if (initialValues && currentParentId !== initialValues.parentId) {
