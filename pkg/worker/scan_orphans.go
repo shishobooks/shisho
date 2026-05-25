@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -133,6 +135,22 @@ func (w *Worker) cleanupOrphanedFiles(
 		// The parallel scan may have added new files to this book since existingFiles was loaded.
 		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 		if err != nil {
+			// If the book row is already gone (e.g., deleted without FK cascade before
+			// FK enforcement was enabled), clean up the orphaned file rows and any
+			// remaining book-scoped children directly.
+			var errCode *errcodes.Error
+			if errors.As(err, &errCode) && errCode.Code == "not_found" {
+				jobLog.Info("book row already missing, cleaning up orphaned children", logger.Data{"book_id": bookID})
+				if w.searchService != nil {
+					if delErr := w.searchService.DeleteFromBookIndex(ctx, bookID); delErr != nil {
+						jobLog.Warn("failed to remove missing book from search index", logger.Data{"book_id": bookID, "error": delErr.Error()})
+					}
+				}
+				if delErr := w.bookService.DeleteOrphanedBookChildren(ctx, bookID); delErr != nil {
+					jobLog.Warn("failed to delete orphaned book children", logger.Data{"book_id": bookID, "error": delErr.Error()})
+				}
+				continue
+			}
 			jobLog.Warn("failed to retrieve orphaned book", logger.Data{"book_id": bookID, "error": err.Error()})
 			continue
 		}

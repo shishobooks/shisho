@@ -1747,6 +1747,44 @@ func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 	return errors.WithStack(err)
 }
 
+// DeleteOrphanedBookChildren removes all child rows (files, authors, book_series,
+// book_genres, book_tags, list_books) that reference a book_id whose book row no
+// longer exists. File-scoped children (narrators, identifiers, chapters, fingerprints)
+// cascade from file deletion via FK. This handles the case where a book row was
+// previously deleted without FK enforcement, leaving orphaned children behind.
+func (svc *Service) DeleteOrphanedBookChildren(ctx context.Context, bookID int) error {
+	// Delete files first — their FK children (narrators, identifiers, chapters,
+	// fingerprints) cascade automatically.
+	_, err := svc.db.NewDelete().
+		Model((*models.File)(nil)).
+		Where("book_id = ?", bookID).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Delete book-scoped join rows that may remain from before FK enforcement.
+	// With FK enforcement ON, deleting these rows with a non-existent book_id is
+	// safe — they are orphans by definition.
+	if _, err = svc.db.NewDelete().Model((*models.Author)(nil)).Where("book_id = ?", bookID).Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err = svc.db.NewDelete().Model((*models.BookSeries)(nil)).Where("book_id = ?", bookID).Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err = svc.db.NewDelete().Model((*models.BookGenre)(nil)).Where("book_id = ?", bookID).Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err = svc.db.NewDelete().Model((*models.BookTag)(nil)).Where("book_id = ?", bookID).Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err = svc.db.NewDelete().Model((*models.ListBook)(nil)).Where("book_id = ?", bookID).Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 // PromoteNextPrimaryFile selects the best remaining file for a book and sets it as
 // primary_file_id. Main files are preferred over supplements; among equal roles,
 // the oldest file (by created_at) wins. If no files remain, primary_file_id is set
