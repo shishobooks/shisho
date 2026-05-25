@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublisherIdOption } from "@/hooks/queries/entity-search";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { resolveAliases } from "@/utils/aliases";
 
 export interface PublisherEditData {
   name: string;
@@ -161,15 +162,21 @@ export function PublisherEditDialog({
       ? selectedParent.id
       : (parentId ?? null);
 
+  // Resolve pending alias input into the effective alias list for comparison
+  const resolvedAliases = useMemo(
+    () => resolveAliases(editAliases, aliasInput),
+    [editAliases, aliasInput],
+  );
+
   const hasChanges = useMemo(() => {
     if (changesSaved) return false;
     if (!initialValues) return false;
     const aliasesChanged =
-      editAliases.length !== initialValues.aliases.length ||
-      editAliases.some((a, i) => a !== initialValues.aliases[i]);
+      resolvedAliases.length !== initialValues.aliases.length ||
+      resolvedAliases.some((a, i) => a !== initialValues.aliases[i]);
     const parentChanged = currentParentId !== initialValues.parentId;
     return name !== initialValues.name || aliasesChanged || parentChanged;
-  }, [name, changesSaved, initialValues, editAliases, currentParentId]);
+  }, [name, changesSaved, initialValues, resolvedAliases, currentParentId]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
 
@@ -178,7 +185,7 @@ export function PublisherEditDialog({
     try {
       const data: PublisherEditData = {
         name,
-        aliases: editAliases,
+        aliases: resolveAliases(editAliases, aliasInput),
       };
       // Only send parent_id if it changed
       if (initialValues && currentParentId !== initialValues.parentId) {

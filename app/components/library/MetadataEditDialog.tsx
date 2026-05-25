@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { DataSourceManual, type DataSource } from "@/types";
+import { resolveAliases } from "@/utils/aliases";
 import { forPerson, forTitle } from "@/utils/sortname";
 
 export type EntityType = "person" | "series" | "genre" | "tag" | "publisher";
@@ -183,7 +184,7 @@ export function MetadataEditDialog({
       if (hasSortName) {
         data.sort_name = editSortName;
       }
-      data.aliases = editAliases;
+      data.aliases = resolveAliases(editAliases, aliasInput);
       await onSave(data);
       setChangesSaved(true);
       requestClose();
@@ -193,6 +194,12 @@ export function MetadataEditDialog({
       }
     }
   };
+
+  // Resolve pending alias input into the effective alias list for comparison
+  const resolvedAliases = useMemo(
+    () => resolveAliases(editAliases, aliasInput),
+    [editAliases, aliasInput],
+  );
 
   const hasChanges = useMemo(() => {
     if (changesSaved) return false;
@@ -208,8 +215,8 @@ export function MetadataEditDialog({
     const effectiveSortName =
       editSortName || (generateSort ? generateSort(name) : "");
     const aliasesChanged =
-      editAliases.length !== initialValues.aliases.length ||
-      editAliases.some((a, i) => a !== initialValues.aliases[i]);
+      resolvedAliases.length !== initialValues.aliases.length ||
+      resolvedAliases.some((a, i) => a !== initialValues.aliases[i]);
     // Compare against stored initial values, not live props
     return (
       name !== initialValues.name ||
@@ -223,7 +230,7 @@ export function MetadataEditDialog({
     changesSaved,
     initialValues,
     entityType,
-    editAliases,
+    resolvedAliases,
   ]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
