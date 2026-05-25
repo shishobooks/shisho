@@ -728,6 +728,221 @@ describe("MetadataEditDialog", () => {
     });
   });
 
+  describe("pending alias input on save (no Enter)", () => {
+    it("should include pending alias text in save payload without pressing Enter", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={[]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Name")).toBeInTheDocument();
+      });
+
+      // Type alias without pressing Enter
+      const aliasInput = screen.getByPlaceholderText(
+        "Type alias and press Enter",
+      );
+      await user.type(aliasInput, "Sci-Fi");
+
+      // Save button should be enabled because pending alias counts as a change
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith({
+          name: "Science Fiction",
+          aliases: ["Sci-Fi"],
+        });
+      });
+    });
+
+    it("should include pending alias alongside existing aliases on save", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Sci-Fi"]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
+      });
+
+      // Type another alias without pressing Enter
+      const aliasInput = screen.getByPlaceholderText("Add another...");
+      await user.type(aliasInput, "SF");
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith({
+          name: "Science Fiction",
+          aliases: ["Sci-Fi", "SF"],
+        });
+      });
+    });
+
+    it("should ignore whitespace-only pending alias on save", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Sci-Fi"]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
+      });
+
+      // Type whitespace in alias input
+      const aliasInput = screen.getByPlaceholderText("Add another...");
+      await user.type(aliasInput, "   ");
+
+      // Change name to make save possible
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Sci-Fi Genre");
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            aliases: expect.not.arrayContaining(["   "]),
+          }),
+        );
+      });
+    });
+
+    it("should not duplicate existing alias on save (case-insensitive)", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Sci-Fi"]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
+      });
+
+      // Type duplicate alias (different case) without pressing Enter
+      const aliasInput = screen.getByPlaceholderText("Add another...");
+      await user.type(aliasInput, "sci-fi");
+
+      // Change name to make save possible (since duplicate alias won't count as change).
+      // Renaming away from "Science Fiction" auto-adds it as an alias.
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Sci-Fi Genre");
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalled();
+        const savedAliases = onSave.mock.calls[0][0].aliases;
+        // "Sci-Fi" (original) + "Science Fiction" (auto-added on rename) = 2 aliases.
+        // Pending "sci-fi" should NOT be added as a third (case-insensitive duplicate).
+        expect(savedAliases).toEqual(["Sci-Fi", "Science Fiction"]);
+      });
+    });
+
+    it("should enable Save when only pending alias input is the change", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={[]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Name")).toBeInTheDocument();
+      });
+
+      // Save should be disabled initially
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      expect(saveButton).toBeDisabled();
+
+      // Type alias text without Enter
+      const aliasInput = screen.getByPlaceholderText(
+        "Type alias and press Enter",
+      );
+      await user.type(aliasInput, "Sci-Fi");
+
+      // Save should now be enabled
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+    });
+  });
+
   describe("hasChanges comparison against initial state", () => {
     it("should compute hasChanges against initial values, not live props", async () => {
       // This test exposes the bug: hasChanges compares form values against

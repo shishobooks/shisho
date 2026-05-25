@@ -3,10 +3,11 @@
  *
  * Covers:
  * 1. Adding aliases via the edit dialog — persists and is visible on reopen.
- * 2. Removing an alias via the edit dialog — no longer present after save.
- * 3. Merging two series — source name becomes alias of the target.
- * 4. Renaming a series — old name becomes alias.
- * 5. Autocomplete search matches aliases — searching by alias in the book
+ * 2. Saving an alias without pressing Enter — pending input is folded in on save.
+ * 3. Removing an alias via the edit dialog — no longer present after save.
+ * 4. Merging two series — source name becomes alias of the target.
+ * 5. Renaming a series — old name becomes alias.
+ * 6. Autocomplete search matches aliases — searching by alias in the book
  *    edit dialog returns the canonical resource.
  *
  * Running:
@@ -126,6 +127,59 @@ test.describe("Alias workflows", () => {
     const data = (await resp.json()) as { aliases: string[] };
     expect(data.aliases).toContain("FS");
     expect(data.aliases).toContain("The Fantasy Saga");
+  });
+
+  test("saving alias without pressing Enter persists the alias", async ({
+    page,
+    apiContext,
+  }) => {
+    // Create a series via test API.
+    const seriesResp = await apiContext.post("/test/series", {
+      data: { libraryId: testData.libraryId, name: "No-Enter Alias Test" },
+    });
+    const series = (await seriesResp.json()) as { id: number };
+
+    await login(page);
+    await page.goto(`/libraries/${testData.libraryId}/series/${series.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.locator("h1").filter({ hasText: "No-Enter Alias Test" }),
+    ).toBeVisible();
+
+    // Open edit dialog.
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: "Edit Series" }),
+    ).toBeVisible();
+
+    // Type an alias but do NOT press Enter — just click Save directly.
+    await dialog.getByLabel("Aliases").fill("No Enter Alias");
+
+    // Save — wait for the PATCH response.
+    await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes(`/api/series/${series.id}`) &&
+          r.request().method() === "PATCH" &&
+          r.ok(),
+      ),
+      dialog.getByRole("button", { name: "Save" }).click(),
+    ]);
+
+    // Reopen the edit dialog to verify alias persisted.
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog2 = page.getByRole("dialog");
+    await expect(
+      dialog2.getByRole("heading", { name: "Edit Series" }),
+    ).toBeVisible();
+    await expect(dialog2.getByText("No Enter Alias")).toBeVisible();
+
+    // Also verify via API.
+    const resp = await page.request.get(`/api/series/${series.id}`);
+    const data = (await resp.json()) as { aliases: string[] };
+    expect(data.aliases).toContain("No Enter Alias");
   });
 
   test("removing an alias via edit dialog removes it", async ({

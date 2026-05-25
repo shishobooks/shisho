@@ -111,7 +111,7 @@ This resolution happens transparently in all contexts — library scans, plugin 
 
 ### Managing Aliases
 
-**Edit dialog.** Open the edit dialog for any resource (person, series, genre, tag, or publisher). Below the name field, a chip input lets you add and remove aliases. Type a name and press Enter to add it; click the × on a chip to remove it.
+**Edit dialog.** Open the edit dialog for any resource (person, series, genre, tag, or publisher). Below the name field, a chip input lets you add and remove aliases. Type a name and press Enter to add it as a chip, or simply click Save — any text still in the alias input is automatically included when you save. Click the × on a chip to remove it.
 
 **Automatic creation on merge.** When you merge two resources, the source resource's name automatically becomes an alias of the target. Any existing aliases on the source transfer to the target as well, so no previously-working name mappings are lost.
 

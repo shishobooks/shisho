@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { DataSourceManual, type DataSource } from "@/types";
+import { resolveAliases } from "@/utils/aliases";
 import { forPerson, forTitle } from "@/utils/sortname";
 
 export type EntityType = "person" | "series" | "genre" | "tag" | "publisher";
@@ -174,25 +175,11 @@ export function MetadataEditDialog({
     }
   };
 
-  const handleSubmit = async () => {
-    setServerError(null);
-    try {
-      const data: { name: string; sort_name?: string; aliases?: string[] } = {
-        name,
-      };
-      if (hasSortName) {
-        data.sort_name = editSortName;
-      }
-      data.aliases = editAliases;
-      await onSave(data);
-      setChangesSaved(true);
-      requestClose();
-    } catch (err) {
-      if (err instanceof Error) {
-        setServerError(err.message);
-      }
-    }
-  };
+  // Resolve pending alias input into the effective alias list for comparison
+  const resolvedAliases = useMemo(
+    () => resolveAliases(editAliases, aliasInput),
+    [editAliases, aliasInput],
+  );
 
   const hasChanges = useMemo(() => {
     if (changesSaved) return false;
@@ -208,8 +195,8 @@ export function MetadataEditDialog({
     const effectiveSortName =
       editSortName || (generateSort ? generateSort(name) : "");
     const aliasesChanged =
-      editAliases.length !== initialValues.aliases.length ||
-      editAliases.some((a, i) => a !== initialValues.aliases[i]);
+      resolvedAliases.length !== initialValues.aliases.length ||
+      resolvedAliases.some((a, i) => a !== initialValues.aliases[i]);
     // Compare against stored initial values, not live props
     return (
       name !== initialValues.name ||
@@ -223,10 +210,30 @@ export function MetadataEditDialog({
     changesSaved,
     initialValues,
     entityType,
-    editAliases,
+    resolvedAliases,
   ]);
 
   const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
+
+  const handleSubmit = async () => {
+    setServerError(null);
+    try {
+      const data: { name: string; sort_name?: string; aliases?: string[] } = {
+        name,
+      };
+      if (hasSortName) {
+        data.sort_name = editSortName;
+      }
+      data.aliases = resolvedAliases;
+      await onSave(data);
+      setChangesSaved(true);
+      requestClose();
+    } catch (err) {
+      if (err instanceof Error) {
+        setServerError(err.message);
+      }
+    }
+  };
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
