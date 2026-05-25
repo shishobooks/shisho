@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -273,6 +274,135 @@ func TestCleanupOrphanedFiles_FullOrphan_NewMainFileAddedDuringScan(t *testing.T
 	require.Len(t, remainingFiles, 1)
 	assert.Equal(t, newFile.ID, remainingFiles[0].ID)
 	assert.Equal(t, models.FileRoleMain, remainingFiles[0].FileRole)
+}
+
+func TestCleanupOrphanedFiles_MissingBookRow(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book directory with one EPUB (so we get a book, file, and author)
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Ghost Book")
+	testgen.GenerateEPUB(t, bookDir, "ghost.epub", testgen.EPUBOptions{
+		Title:   "Ghost Book",
+		Authors: []string{"Author"},
+	})
+
+	// Run initial scan to populate book, file, author rows
+	err := tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	fileID := files[0].ID
+
+	// Verify authors exist for this book
+	var authorCount int
+	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
+	require.NoError(t, err)
+	require.Positive(t, authorCount, "book should have authors after scan")
+
+	// Simulate the orphaned state: delete the book row WITHOUT cascade
+	// (FK off prevents cascade from firing, leaving file and author rows orphaned)
+	_, err = tc.db.Exec("PRAGMA foreign_keys = OFF")
+	require.NoError(t, err)
+	_, err = tc.db.NewDelete().Model((*models.Book)(nil)).Where("id = ?", bookID).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	// Verify the orphaned state: file still exists, book is gone
+	remainingFiles := tc.listFiles()
+	require.Len(t, remainingFiles, 1, "file should remain after non-cascading book delete")
+	remainingBooks := tc.listBooks()
+	require.Empty(t, remainingBooks, "book should be gone")
+
+	// Build existingFiles from the orphaned file row
+	existingFiles := []*models.File{remainingFiles[0]}
+
+	// No files in scannedPaths = all orphaned (simulates file deleted from disk)
+	scannedPaths := map[string]struct{}{}
+
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: intPtr(1)})
+	require.NoError(t, err)
+
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, log)
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, scannedPaths, library, jobLog)
+
+	// Assert: orphaned file row should be deleted
+	afterFiles := tc.listFiles()
+	assert.Empty(t, afterFiles, "orphaned file row should be deleted when parent book is missing")
+
+	// Assert: file-scoped children should also be gone (narrators, identifiers cascade from file delete)
+	var narratorCount int
+	narratorCount, err = tc.db.NewSelect().TableExpr("narrators").Where("file_id = ?", fileID).Count(tc.ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, narratorCount, "narrators for orphaned file should be gone")
+
+	// Assert: book-scoped children should also be gone
+	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, authorCount, "authors for missing book should be cleaned up")
+}
+
+func TestCleanupOrphanedFiles_MissingBookRow_SubsequentScanIsClean(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	// Create a book with a file
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Author] Vanished Book")
+	testgen.GenerateEPUB(t, bookDir, "vanished.epub", testgen.EPUBOptions{
+		Title:   "Vanished Book",
+		Authors: []string{"Author"},
+	})
+
+	err := tc.runScan()
+	require.NoError(t, err)
+	require.Len(t, tc.listBooks(), 1)
+	require.Len(t, tc.listFiles(), 1)
+
+	bookID := tc.listBooks()[0].ID
+
+	// Delete book row without cascade, AND remove the file from disk
+	// (simulates the state where a previous scan or bug deleted the book row
+	// but left the file row, and the file is also no longer on disk)
+	_, err = tc.db.Exec("PRAGMA foreign_keys = OFF")
+	require.NoError(t, err)
+	_, err = tc.db.NewDelete().Model((*models.Book)(nil)).Where("id = ?", bookID).Exec(tc.ctx)
+	require.NoError(t, err)
+	_, err = tc.db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	// Remove the file from disk so the scan doesn't try to recreate it
+	require.NoError(t, os.RemoveAll(bookDir))
+
+	// First scan should clean up the orphan
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	assert.Empty(t, tc.listFiles(), "orphaned file should be cleaned up by scan")
+
+	// Second scan should be completely clean (no orphans to process)
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	assert.Empty(t, tc.listFiles(), "no files should remain after second scan")
+
+	// Verify no FK violations remain
+	var authorCount int
+	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, authorCount, "no orphaned authors should remain")
 }
 
 func intPtr(i int) *int {
