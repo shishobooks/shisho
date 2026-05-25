@@ -44,6 +44,10 @@ _Avoid_: synonym, alternate name, variant
 The canonical display name of a resource, shown in the UI and used as the authoritative label.
 _Avoid_: canonical name, display name
 
+**Preferred Cover**:
+A per-file designation that prioritizes one file's cover over others in the same format category (ebook or audiobook) when representing the book. At most one file per category per book can be preferred.
+_Avoid_: primary cover, default cover, canonical cover
+
 ### Workflows
 
 **Scan**:
