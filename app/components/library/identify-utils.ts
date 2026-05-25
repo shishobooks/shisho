@@ -14,8 +14,7 @@ export interface IdentifierEntry {
  *
  * 1. If some main files are reviewed and others aren't, prefer a non-reviewed
  *    one (`reviewed !== true` covers both `false` and `undefined`).
- * 2. Otherwise prefer the book's primary file if set.
- * 3. Otherwise the first main file.
+ * 2. Otherwise the first main file.
  *
  * Returns `undefined` when there are no main files. */
 export function pickInitialFile(book: Book): File | undefined {
@@ -26,10 +25,6 @@ export function pickInitialFile(book: Book): File | undefined {
   if (hasReviewed && hasNonReviewed) {
     const nonReviewed = mains.find((f) => f.reviewed !== true);
     if (nonReviewed) return nonReviewed;
-  }
-  if (book.primary_file_id != null) {
-    const primary = mains.find((f) => f.id === book.primary_file_id);
-    if (primary) return primary;
   }
   return mains[0];
 }

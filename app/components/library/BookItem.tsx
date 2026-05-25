@@ -49,7 +49,7 @@ import {
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
-import { getPrimaryFileType } from "@/utils/primaryFile";
+import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -107,7 +107,7 @@ const BookItem = ({
     : undefined;
   const seriesNumber = seriesEntry?.series_number;
   const seriesNumberUnit = seriesEntry?.series_number_unit;
-  const primaryFileType = getPrimaryFileType(book);
+  const anyCBZ = hasAnyCBZFile(book);
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
   const coverUrl = cacheKey
@@ -306,7 +306,7 @@ const BookItem = ({
                   {formatSeriesNumber(
                     seriesNumber,
                     seriesNumberUnit,
-                    primaryFileType,
+                    anyCBZ ? "cbz" : null,
                   )}
                 </span>
               )}

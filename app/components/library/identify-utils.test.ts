@@ -240,7 +240,6 @@ describe("pickInitialFile", () => {
   it("returns undefined when there are no main files", () => {
     const result = pickInitialFile({
       files: [file(1, { file_role: "supplement" })],
-      primary_file_id: undefined,
     } as unknown as Book);
     expect(result).toBeUndefined();
   });
@@ -251,37 +250,21 @@ describe("pickInitialFile", () => {
       file(2, { reviewed: false }),
       file(3, { reviewed: true }),
     ];
-    expect(
-      pickInitialFile({ files, primary_file_id: 1 } as unknown as Book)?.id,
-    ).toBe(2);
+    expect(pickInitialFile({ files } as unknown as Book)?.id).toBe(2);
   });
 
   it("treats reviewed=undefined as non-reviewed", () => {
     const files = [file(1, { reviewed: true }), file(2)];
-    expect(
-      pickInitialFile({ files, primary_file_id: 1 } as unknown as Book)?.id,
-    ).toBe(2);
+    expect(pickInitialFile({ files } as unknown as Book)?.id).toBe(2);
   });
 
-  it("prefers primary when all reviewed equal", () => {
+  it("falls back to first when all reviewed equal", () => {
     const files = [file(1), file(2), file(3)];
-    expect(
-      pickInitialFile({ files, primary_file_id: 2 } as unknown as Book)?.id,
-    ).toBe(2);
+    expect(pickInitialFile({ files } as unknown as Book)?.id).toBe(1);
   });
 
-  it("falls back to first when primary not set", () => {
+  it("falls back to first when all are reviewed", () => {
     const files = [file(10, { reviewed: true }), file(20, { reviewed: true })];
-    expect(
-      pickInitialFile({ files, primary_file_id: undefined } as unknown as Book)
-        ?.id,
-    ).toBe(10);
-  });
-
-  it("falls back to first when primary id does not match any main file", () => {
-    const files = [file(1), file(2)];
-    expect(
-      pickInitialFile({ files, primary_file_id: 99 } as unknown as Book)?.id,
-    ).toBe(1);
+    expect(pickInitialFile({ files } as unknown as Book)?.id).toBe(10);
   });
 });
