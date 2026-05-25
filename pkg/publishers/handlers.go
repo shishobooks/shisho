@@ -199,10 +199,36 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	// Handle parent_id update before name-change/merge so that the parent_id
-	// change applies even when a rename triggers a merge (which returns early).
+	// Handle parent update before name-change/merge so that the parent change
+	// applies even when a rename triggers a merge (which returns early).
+	// resolvedParentID tracks the parent ID resolved from either path so the
+	// merge-transfer block below can use it.
+	var resolvedParentID *int
+	var parentWasSet bool
 	if params.ParentID.Set {
+		resolvedParentID = params.ParentID.Value
+		parentWasSet = true
 		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
+			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
+				return errcodes.ValidationError(err.Error())
+			}
+			return errors.WithStack(err)
+		}
+	} else if params.ParentName != nil {
+		// Resolve parent by name: find or create a publisher with the given name
+		// in the same library, then set it as the parent.
+		parentPublisher, err := h.publisherService.FindOrCreatePublisher(ctx, *params.ParentName, publisher.LibraryID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		resolvedParentID = &parentPublisher.ID
+		parentWasSet = true
+		// Index the parent publisher in case it was just created
+		if indexErr := h.searchService.IndexPublisher(ctx, parentPublisher); indexErr != nil {
+			log := logger.FromContext(ctx)
+			log.Warn("failed to index new parent publisher", logger.Data{"publisher_id": parentPublisher.ID, "error": indexErr.Error()})
+		}
+		if err := h.publisherService.SetParent(ctx, id, &parentPublisher.ID); err != nil {
 			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
 				return errcodes.ValidationError(err.Error())
 			}
@@ -222,10 +248,10 @@ func (h *handler) update(c echo.Context) error {
 			LibraryID: &publisher.LibraryID,
 		})
 		if err == nil && existing.ID != id {
-			// If parent_id was set on the source publisher above, transfer it to the
-			// merge target so the intent is preserved.
-			if params.ParentID.Set {
-				if err := h.publisherService.SetParent(ctx, existing.ID, params.ParentID.Value); err != nil {
+			// If a parent was set on the source publisher above, transfer it to
+			// the merge target so the intent is preserved.
+			if parentWasSet {
+				if err := h.publisherService.SetParent(ctx, existing.ID, resolvedParentID); err != nil {
 					// Non-fatal: merge succeeded, log and continue
 					log := logger.FromContext(ctx)
 					log.Warn("failed to set parent on merge target", logger.Data{"publisher_id": existing.ID, "error": err.Error()})

@@ -41,9 +41,10 @@ func (n *NullableInt) UnmarshalJSON(data []byte) error {
 // UpdatePublisherPayload is the request body for PATCH /publishers/:id.
 // tstype is applied to the generated TypeScript type.
 type UpdatePublisherPayload struct {
-	Name     *string     `json:"name,omitempty" validate:"omitempty,min=1,max=300"`
-	Aliases  []string    `json:"aliases,omitempty" validate:"omitempty,dive,min=1,max=300"`
-	ParentID NullableInt `json:"parent_id,omitempty" tstype:"number | null"`
+	Name       *string     `json:"name,omitempty" validate:"omitempty,min=1,max=300"`
+	Aliases    []string    `json:"aliases,omitempty" validate:"omitempty,dive,min=1,max=300"`
+	ParentID   NullableInt `json:"parent_id,omitempty" tstype:"number | null"`
+	ParentName *string     `json:"parent_name,omitempty" validate:"omitempty,min=1,max=300"`
 }
 
 type MergePublishersPayload struct {

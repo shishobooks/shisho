@@ -140,7 +140,10 @@ export const useUpdatePublisher = () => {
       );
     },
     onSuccess: (_data, variables) => {
-      if (variables.payload.parent_id !== undefined) {
+      if (
+        variables.payload.parent_id !== undefined ||
+        variables.payload.parent_name !== undefined
+      ) {
         invalidatePublisherHierarchyQueries(queryClient);
       } else {
         queryClient.invalidateQueries({

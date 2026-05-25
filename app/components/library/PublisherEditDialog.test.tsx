@@ -18,9 +18,15 @@ vi.mock("@/hooks/useFormDialogClose", () => ({
   }),
 }));
 
-// Mock EntityCombobox to avoid complex dependency chain
+// Mock EntityCombobox to capture onChange and simulate selections.
+// The mock renders buttons that tests can click to trigger onChange with
+// either an existing option or a __create payload.
+let capturedOnChange: ((next: unknown) => void) | null = null;
 vi.mock("@/components/common/EntityCombobox", () => ({
-  EntityCombobox: () => <div data-testid="entity-combobox" />,
+  EntityCombobox: ({ onChange }: { onChange: (next: unknown) => void }) => {
+    capturedOnChange = onChange;
+    return <div data-testid="entity-combobox" />;
+  },
 }));
 
 describe("PublisherEditDialog", () => {
@@ -175,6 +181,78 @@ describe("PublisherEditDialog", () => {
           }),
         );
       });
+    });
+  });
+
+  describe("create parent publisher", () => {
+    it("should send parent_name when creating a new parent publisher", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PublisherEditDialog {...defaultProps} onSave={onSave} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+      });
+
+      // Simulate selecting a __create option from the combobox
+      expect(capturedOnChange).not.toBeNull();
+      capturedOnChange!({ __create: "New Parent Corp" });
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: "Foobar",
+            parent_name: "New Parent Corp",
+          }),
+        );
+      });
+      // Should NOT include parent_id when creating by name
+      const callArgs = onSave.mock.calls[0][0];
+      expect(callArgs.parent_id).toBeUndefined();
+    });
+
+    it("should send parent_id when selecting an existing parent", async () => {
+      const user = createUser();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PublisherEditDialog {...defaultProps} onSave={onSave} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+      });
+
+      // Simulate selecting an existing publisher
+      expect(capturedOnChange).not.toBeNull();
+      capturedOnChange!({ id: 42, name: "Existing Parent", file_count: 5 });
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: "Foobar",
+            parent_id: 42,
+          }),
+        );
+      });
+      // Should NOT include parent_name when selecting an existing parent
+      const callArgs = onSave.mock.calls[0][0];
+      expect(callArgs.parent_name).toBeUndefined();
     });
   });
 });
