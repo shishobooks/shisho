@@ -169,7 +169,14 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
       {file.publisher && (
         <div className="text-sm">
           <p className="font-semibold">Publisher</p>
-          <p className="text-muted-foreground">{file.publisher.name}</p>
+          <p>
+            <Link
+              className="text-muted-foreground hover:underline"
+              to={`/libraries/${libraryId}/publishers/${file.publisher.id}`}
+            >
+              {file.publisher.name}
+            </Link>
+          </p>
         </div>
       )}
 

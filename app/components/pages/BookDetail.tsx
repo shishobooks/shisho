@@ -597,7 +597,12 @@ const FileRow = ({
               {file.publisher && (
                 <>
                   <span className="text-muted-foreground">Publisher</span>
-                  <span>{file.publisher.name}</span>
+                  <Link
+                    className="hover:underline"
+                    to={`/libraries/${libraryId}/publishers/${file.publisher.id}`}
+                  >
+                    {file.publisher.name}
+                  </Link>
                 </>
               )}
               {file.release_date && (
