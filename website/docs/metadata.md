@@ -52,8 +52,6 @@ The hierarchy is **manually curated** — Shisho does not automatically infer pa
 
 The merge picker on a publisher's detail page offers two actions after selecting another publisher: **Merge** (moves files, adds an alias, deletes the source) and **Set as child** (makes the selected publisher a child of the current one without moving files or deleting either publisher). The "Set as child" option is disabled when it would create a cycle.
 
-When you close a metadata merge picker or complete a merge/set-child action, its search resets immediately. Reopening the picker starts from the full server-side result list instead of keeping the previous filtered query.
-
 ### Identifiers
 
 Identifiers (ISBN, ASIN, etc.) are also file-level. Each file can have multiple identifiers of **different** types: `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and custom types registered by [plugins](./plugins/overview).

@@ -16,7 +16,7 @@ import {
   useUpdateGenre,
 } from "@/hooks/queries/genres";
 import { useUserSettings } from "@/hooks/queries/settings";
-import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
@@ -59,7 +59,9 @@ const GenreDetail = () => {
   const deleteGenreMutation = useDeleteGenre();
 
   const [mergeSearchRaw, setMergeSearchRaw] = useState("");
-  const mergeSearch = useDebouncedSearch(mergeSearchRaw, 200);
+  const mergeSearch = useDebounce(mergeSearchRaw, 200, {
+    immediate: (v) => v === "",
+  });
 
   // Fires as soon as library_id is available rather than waiting for the merge
   // dialog to open. The query is cheap (50 items, single index scan) and

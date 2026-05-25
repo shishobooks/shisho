@@ -26,7 +26,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
@@ -94,19 +94,23 @@ const SeriesDetail = () => {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [mergeSearch, setMergeSearch] = useState("");
-  const debouncedMergeSearch = useDebouncedSearch(mergeSearch, 200);
+  const debouncedMergeSearch = useDebounce(mergeSearch, 200, {
+    immediate: (v) => v === "",
+  });
 
   const updateSeriesMutation = useUpdateSeries();
   const mergeSeriesMutation = useMergeSeries();
   const deleteSeriesMutation = useDeleteSeries();
 
+  // Pre-fetch the series list as soon as library_id is available so the
+  // merge dialog opens instantly without a loading flash.
   const seriesListQuery = useSeriesList(
     {
       library_id: seriesQuery.data?.library_id,
       limit: 50,
       search: debouncedMergeSearch || undefined,
     },
-    { enabled: mergeOpen && !!seriesQuery.data?.library_id },
+    { enabled: !!seriesQuery.data?.library_id },
   );
 
   const handleEdit = async (data: {
