@@ -736,8 +736,8 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 	}
 
 	// Dublin Core metadata. OPDS entries are per-book but language/publisher
-	// are file-level in our model. Use the first main file (by ID) that
-	// has a non-empty value for each field.
+	// are file-level in our model. Use the first main file (ordered by
+	// file_type via the query) that has a non-empty value for each field.
 	// Supplements don't represent the book — exclude them from the
 	// priority chain so a stray supplement-level Language or Publisher
 	// can't leak into the OPDS entry's book-level metadata.
