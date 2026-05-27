@@ -11,18 +11,20 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { useBooks, useDeleteBooks } from "@/hooks/queries/books";
 import { useCreateJob } from "@/hooks/queries/jobs";
 import {
@@ -34,6 +36,10 @@ import { useBulkSetReview } from "@/hooks/queries/review";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import type { CreateListPayload, Library, ReviewOverride } from "@/types";
+import {
+  collectDownloadFiles,
+  getAvailableFileTypes,
+} from "@/utils/downloadFiles";
 import { formatFileSize } from "@/utils/format";
 
 interface SelectionToolbarProps {
@@ -60,30 +66,52 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const deleteBooksMutation = useDeleteBooks();
   const bulkSetReviewMutation = useBulkSetReview();
 
+  const [downloadPopoverOpen, setDownloadPopoverOpen] = useState(false);
+  const [selectedDownloadTypes, setSelectedDownloadTypes] = useState<string[]>(
+    [],
+  );
+
   // Fetch all selected books (not just current page) for download info and delete dialog
   const allSelectedBooksQuery = useBooks(
     { ids: selectedBookIds },
     { enabled: selectedBookIds.length > 0 },
   );
 
+  const allBooks = useMemo(
+    () => allSelectedBooksQuery.data?.items ?? [],
+    [allSelectedBooksQuery.data?.items],
+  );
+
+  // Distinct file types available across main files of selected books.
+  // Sorted and joined into a stable key so the effect below doesn't loop
+  // when upstream hooks return fresh array references with identical contents.
+  const availableFileTypes = useMemo(
+    () => getAvailableFileTypes(allBooks, selectedBookIds).sort(),
+    [allBooks, selectedBookIds],
+  );
+  const availableFileTypesKey = availableFileTypes.join(",");
+
+  // Auto-select all available types when the set of available types changes
+  useEffect(() => {
+    setSelectedDownloadTypes(availableFileTypesKey.split(",").filter(Boolean));
+  }, [availableFileTypesKey]);
+
   const downloadInfo = useMemo(() => {
-    const allBooks = allSelectedBooksQuery.data?.items;
-    if (!allBooks || selectedBookIds.length === 0) return null;
+    if (allBooks.length === 0 || selectedBookIds.length === 0) return null;
+    return collectDownloadFiles(
+      allBooks,
+      selectedBookIds,
+      selectedDownloadTypes,
+    );
+  }, [allBooks, selectedBookIds, selectedDownloadTypes]);
 
-    const fileIds: number[] = [];
-    let totalSize = 0;
-
-    for (const bookId of selectedBookIds) {
-      const book = allBooks.find((b) => b.id === bookId);
-      const firstMain = book?.files?.find((f) => f.file_role === "main");
-      if (firstMain) {
-        fileIds.push(firstMain.id);
-        totalSize += firstMain.filesize_bytes ?? 0;
-      }
-    }
-
-    return { fileIds, totalSize };
-  }, [allSelectedBooksQuery.data?.items, selectedBookIds]);
+  const toggleDownloadType = (fileType: string) => {
+    setSelectedDownloadTypes((prev) =>
+      prev.includes(fileType)
+        ? prev.filter((t) => t !== fileType)
+        : [...prev, fileType],
+    );
+  };
 
   const handleDownload = async () => {
     if (!downloadInfo || downloadInfo.fileIds.length === 0) return;
@@ -210,6 +238,66 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const bookLabel =
     selectedBookIds.length === 1 ? `1 book` : `${selectedBookIds.length} books`;
 
+  const downloadContent = (onDownloadClick: () => void) => (
+    <div className="p-3 space-y-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        File types to include
+      </p>
+      <div className="space-y-2">
+        {FILE_TYPE_OPTIONS.map((option) => {
+          const isAvailable = availableFileTypes.includes(
+            option.value as never,
+          );
+          const isChecked =
+            isAvailable && selectedDownloadTypes.includes(option.value);
+          return (
+            <label
+              className="flex items-center gap-2 text-sm cursor-pointer"
+              key={option.value}
+            >
+              <Checkbox
+                checked={isChecked}
+                disabled={!isAvailable}
+                onCheckedChange={() => toggleDownloadType(option.value)}
+              />
+              <span
+                className={
+                  isAvailable ? "" : "text-muted-foreground opacity-50"
+                }
+              >
+                {option.label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {downloadInfo && downloadInfo.totalSize > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {downloadInfo.fileIds.length}{" "}
+          {downloadInfo.fileIds.length === 1 ? "file" : "files"} &middot;{" "}
+          {formatFileSize(downloadInfo.totalSize)}
+        </p>
+      )}
+      <Button
+        className="w-full"
+        disabled={
+          !downloadInfo ||
+          downloadInfo.fileIds.length === 0 ||
+          createJobMutation.isPending
+        }
+        onClick={onDownloadClick}
+        size="sm"
+      >
+        {createJobMutation.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+        Download
+      </Button>
+    </div>
+  );
+
   const addToListContent = (
     <>
       <p className="text-xs font-medium text-muted-foreground px-3 py-2">
@@ -312,36 +400,14 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             </Button>
           </div>
 
-          <div className="border-t p-1">
-            <Button
-              className="w-full justify-start gap-2 font-normal"
-              disabled={
-                !downloadInfo ||
-                downloadInfo.fileIds.length === 0 ||
-                createJobMutation.isPending
-              }
-              onClick={() => {
-                setActionsPopoverOpen(false);
-                handleDownload();
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              {createJobMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              ) : (
-                <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              <span className="truncate">
-                Download
-                {downloadInfo && downloadInfo.totalSize > 0 && (
-                  <span className="text-xs opacity-75 ml-1">
-                    ({formatFileSize(downloadInfo.totalSize)})
-                  </span>
-                )}
-              </span>
-            </Button>
+          <div className="border-t">
+            {downloadContent(() => {
+              setActionsPopoverOpen(false);
+              handleDownload();
+            })}
+          </div>
 
+          <div className="border-t p-1">
             {selectedBookIds.length >= 2 && library && (
               <Button
                 className="w-full justify-start gap-2 font-normal"
@@ -387,28 +453,28 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           </PopoverContent>
         </Popover>
 
-        <Button
-          disabled={
-            !downloadInfo ||
-            downloadInfo.fileIds.length === 0 ||
-            createJobMutation.isPending
-          }
-          onClick={handleDownload}
-          size="sm"
-          variant="default"
+        <Popover
+          onOpenChange={setDownloadPopoverOpen}
+          open={downloadPopoverOpen}
         >
-          {createJobMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Download
-          {downloadInfo && downloadInfo.totalSize > 0 && (
-            <span className="text-xs opacity-75">
-              ({formatFileSize(downloadInfo.totalSize)})
-            </span>
-          )}
-        </Button>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="default">
+              <Download className="h-4 w-4" />
+              Download
+              {downloadInfo && downloadInfo.totalSize > 0 && (
+                <span className="text-xs opacity-75">
+                  ({formatFileSize(downloadInfo.totalSize)})
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="center" className="w-56 p-0" side="top">
+            {downloadContent(() => {
+              setDownloadPopoverOpen(false);
+              handleDownload();
+            })}
+          </PopoverContent>
+        </Popover>
 
         {selectedBookIds.length >= 2 && library && (
           <Button
