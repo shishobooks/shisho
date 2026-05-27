@@ -58,7 +58,7 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 			expectedPublisher: "Audible",
 		},
 		{
-			name: "primary file is preferred over other files",
+			name: "uses first file by ID, ignoring primary file",
 			files: []*models.File{
 				{
 					ID:        1,
@@ -74,8 +74,8 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 				},
 			},
 			primaryFileID:     intPtr(2),
-			expectedLanguage:  "en-US",
-			expectedPublisher: "Audible",
+			expectedLanguage:  "fr",
+			expectedPublisher: "Gallimard",
 		},
 		{
 			name: "no files with metadata leaves fields empty",
