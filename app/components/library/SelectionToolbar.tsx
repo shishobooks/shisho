@@ -35,7 +35,12 @@ import {
 import { useBulkSetReview } from "@/hooks/queries/review";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
-import type { CreateListPayload, Library, ReviewOverride } from "@/types";
+import type {
+  CreateListPayload,
+  FileType,
+  Library,
+  ReviewOverride,
+} from "@/types";
 import {
   collectDownloadFiles,
   getAvailableFileTypes,
@@ -246,7 +251,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       <div className="space-y-2">
         {FILE_TYPE_OPTIONS.map((option) => {
           const isAvailable = availableFileTypes.includes(
-            option.value as never,
+            option.value as FileType,
           );
           const isChecked =
             isAvailable && selectedDownloadTypes.includes(option.value);
