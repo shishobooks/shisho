@@ -486,9 +486,8 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 	var resp deleteAllEReaderDataResponse
 
 	// Temporarily disable FK enforcement for bulk cleanup.
-	// Several tables have non-cascading FKs and circular references
-	// (books.primary_file_id → files, files.book_id → books) that
-	// make ordered deletion fragile. Safe in tests (workers=1).
+	// Several tables have non-cascading FKs that make ordered
+	// deletion fragile. Safe in tests (workers=1).
 	_, _ = h.db.Exec("PRAGMA foreign_keys = OFF")
 	defer h.db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
 

@@ -71,7 +71,6 @@ func (w *Worker) cleanupOrphanedFiles(
 	// Step 2 & 3: Handle partial orphan books.
 	// Collect file IDs from books where only SOME main files are orphaned.
 	var partialOrphanFileIDs []int
-	partialOrphanBookIDs := make(map[int]struct{}) // books that need primary file check
 
 	// Also collect file IDs from full-orphan books where a supplement was promoted
 	var promotedBookOrphanFileIDs []int
@@ -91,7 +90,6 @@ func (w *Worker) cleanupOrphanedFiles(
 				partialOrphanFileIDs = append(partialOrphanFileIDs, f.ID)
 				jobLog.Info("orphaned file (partial)", logger.Data{"file_id": f.ID, "filepath": f.Filepath})
 			}
-			partialOrphanBookIDs[bookID] = struct{}{}
 		}
 	}
 
@@ -99,13 +97,6 @@ func (w *Worker) cleanupOrphanedFiles(
 	if len(partialOrphanFileIDs) > 0 {
 		if err := w.bookService.DeleteFilesByIDs(ctx, partialOrphanFileIDs); err != nil {
 			jobLog.Warn("failed to batch-delete partial orphan files", logger.Data{"error": err.Error()})
-		} else {
-			// Promote primary file for affected books
-			for bookID := range partialOrphanBookIDs {
-				if err := w.bookService.PromoteNextPrimaryFile(ctx, bookID); err != nil {
-					jobLog.Warn("failed to promote primary file", logger.Data{"book_id": bookID, "error": err.Error()})
-				}
-			}
 		}
 	}
 
@@ -175,9 +166,6 @@ func (w *Worker) cleanupOrphanedFiles(
 				promotedBookOrphanFileIDs = append(promotedBookOrphanFileIDs, f.ID)
 				jobLog.Info("orphaned file (scan-updated book)", logger.Data{"file_id": f.ID, "filepath": f.Filepath})
 			}
-			if err := w.bookService.PromoteNextPrimaryFile(ctx, bookID); err != nil {
-				jobLog.Warn("failed to promote primary file", logger.Data{"book_id": bookID, "error": err.Error()})
-			}
 			continue
 		}
 
@@ -207,10 +195,6 @@ func (w *Worker) cleanupOrphanedFiles(
 			// Delete only the orphaned main files; book and supplements survive
 			for _, f := range orphans {
 				promotedBookOrphanFileIDs = append(promotedBookOrphanFileIDs, f.ID)
-			}
-			// Promote primary file to the newly promoted supplement
-			if err := w.bookService.PromoteNextPrimaryFile(ctx, bookID); err != nil {
-				jobLog.Warn("failed to promote primary file after supplement promotion", logger.Data{"book_id": bookID, "error": err.Error()})
 			}
 		} else {
 			// No promotable supplement — delete the entire book

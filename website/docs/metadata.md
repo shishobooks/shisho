@@ -179,7 +179,7 @@ When you identify a book against a metadata plugin, the review screen splits the
 
 - **File-level fields** default ON whenever there's something to apply. Each file owns its own copy, so applying the plugin's value can't trample shared metadata.
 - **Book-level _new_ fields** (the book has no value, plugin proposes one) default ON.
-- **Book-level _changed_ fields** (book and plugin disagree) default ON only when you're identifying the book's primary file. On a non-primary file (a "second-identify" against a different edition), they default OFF — the canonical book metadata stays put unless you opt in.
+- **Book-level _changed_ fields** (book and plugin disagree) default ON only when you're identifying the book's first file. On a non-first file (a "second-identify" against a different edition), they default OFF — the canonical book metadata stays put unless you opt in.
 - **Unchanged fields** (book and plugin already match) default OFF.
 
 A Book / File section banner sits sticky above each section with its own select-all checkbox and a live "X of Y selected" count. The global **Apply all** at the top of the body toggles every checkbox in the dialog.

@@ -63,8 +63,7 @@ func TestOrderClauses_NewestFileFallback(t *testing.T) {
 	})
 
 	// page_count uses the COALESCE(newest file, any file with value)
-	// pattern. The generated SQL must prefer the newest file (f.id DESC)
-	// and must NOT reference b.primary_file_id.
+	// pattern. The generated SQL must prefer the newest file (f.id DESC).
 	assert.Len(t, got, 1)
 	assert.Contains(t, got[0].Expression, "COALESCE")
 	assert.NotContains(t, got[0].Expression, "primary_file_id")
@@ -78,7 +77,7 @@ func TestOrderClauses_NewestFileCoalesce_AllFields(t *testing.T) {
 	t.Parallel()
 
 	// All file-level sort fields (date_released, page_count, duration)
-	// must use the newest-file coalesce and must not reference primary_file_id.
+	// must use the newest-file coalesce.
 	tests := []struct {
 		field   string
 		dbField string

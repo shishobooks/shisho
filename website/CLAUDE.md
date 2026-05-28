@@ -32,7 +32,7 @@ website/
 │   │   └── overview.md
 │   └── advanced/
 │       ├── _category_.json
-│       └── primary-file.md
+│       └── bulk-download.md
 ├── versioned_docs/          # Snapshots per release (auto-generated)
 ├── versioned_sidebars/      # Sidebar snapshots per release
 ├── versions.json            # Released version list

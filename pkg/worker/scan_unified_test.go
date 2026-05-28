@@ -427,9 +427,8 @@ func TestScanFileByID_MissingFile_LastMainFile_PromotesSupplement(t *testing.T) 
 	assert.Equal(t, models.FileRoleMain, updatedBook.Files[0].FileRole)
 	assert.Equal(t, supplementFile.ID, updatedBook.Files[0].ID)
 
-	// Verify primary_file_id points to the promoted file
-	require.NotNil(t, updatedBook.PrimaryFileID, "primary_file_id should be set")
-	assert.Equal(t, supplementFile.ID, *updatedBook.PrimaryFileID, "primary_file_id should point to promoted supplement")
+	// Verify the promoted supplement is now the sole file
+	assert.Equal(t, supplementFile.ID, updatedBook.Files[0].ID, "remaining file should be the promoted supplement")
 }
 
 func TestScanFileByID_MissingFile_LastMainFile_NoPromotableSupplement_DeletesBook(t *testing.T) {
@@ -4911,8 +4910,6 @@ func TestResetBookFileState_PreservesIdentityFields(t *testing.T) {
 	fileRole := allFiles[0].FileRole
 	fileLibraryID := allFiles[0].LibraryID
 	fileBookID := allFiles[0].BookID
-	primaryFileID := allBooks[0].PrimaryFileID
-
 	// Load fresh copies
 	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
 	require.NoError(t, err)
@@ -4937,7 +4934,6 @@ func TestResetBookFileState_PreservesIdentityFields(t *testing.T) {
 	assert.Equal(t, fileRole, file.FileRole, "file_role should be unchanged")
 	assert.Equal(t, fileLibraryID, file.LibraryID, "library_id should be unchanged")
 	assert.Equal(t, fileBookID, file.BookID, "book_id should be unchanged")
-	assert.Equal(t, primaryFileID, book.PrimaryFileID, "primary_file_id should be unchanged")
 }
 
 // =============================================================================

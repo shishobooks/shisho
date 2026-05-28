@@ -140,12 +140,6 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 		}
 		_, err = db.NewInsert().Model(f).Exec(ctx)
 		require.NoError(t, err)
-		_, err = db.NewUpdate().
-			Model((*models.Book)(nil)).
-			Set("primary_file_id = ?", f.ID).
-			Where("id = ?", b.ID).
-			Exec(ctx)
-		require.NoError(t, err)
 	}
 
 	for i := 0; i < 3; i++ {
