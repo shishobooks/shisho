@@ -38,20 +38,30 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 		}
 	}
 
+	// Within each bucket, prefer a file with IsPreferredCover set.
+	pickFirst := func(files []*models.File) *models.File {
+		for _, f := range files {
+			if f.IsPreferredCover {
+				return f
+			}
+		}
+		return files[0]
+	}
+
 	switch coverAspectRatio {
 	case "audiobook", "audiobook_fallback_book":
 		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
+			return pickFirst(audiobookFiles)
 		}
 		if len(bookFiles) > 0 {
-			return bookFiles[0]
+			return pickFirst(bookFiles)
 		}
 	default: // "book", "book_fallback_audiobook", or any other value
 		if len(bookFiles) > 0 {
-			return bookFiles[0]
+			return pickFirst(bookFiles)
 		}
 		if len(audiobookFiles) > 0 {
-			return audiobookFiles[0]
+			return pickFirst(audiobookFiles)
 		}
 	}
 	return nil

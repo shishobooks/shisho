@@ -22,6 +22,19 @@ Each book contains one or more files. Files hold format-specific metadata that m
 
 **File-level fields:** name, narrators (M4B only), publisher, release date, URL, identifiers, chapters, language, abridged
 
+#### Preferred Cover
+
+When a book has multiple main files of the same type (e.g., two EPUB editions), the library's cover aspect ratio setting determines which *category* (ebook or audiobook) provides the book cover, but within that category the first file wins by default. The **Preferred cover** option lets you override which file's cover represents the book within its category.
+
+Open the file edit dialog for any main file. When 2+ main files of the same type category exist on the book, a checkbox appears near the cover section:
+
+- **Preferred ebook cover** — for EPUB, CBZ, and PDF files
+- **Preferred audiobook cover** — for M4B files
+
+Setting a file as preferred automatically clears the flag on other files of the same category in the same book. Setting preferred on an M4B does not affect EPUB/CBZ/PDF preferences, and vice versa.
+
+The file must have a cover image to be marked as preferred. This preference is not included in [sidecar files](./sidecar-files.md) — it is a per-book display preference, not intrinsic file metadata. Rescanning the library preserves preferred cover selections.
+
 ### People
 
 People represent both **authors** and **narrators**. The same person record is shared across both roles, so renaming an author automatically updates everywhere they appear.

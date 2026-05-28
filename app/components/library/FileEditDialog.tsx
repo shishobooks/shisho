@@ -145,6 +145,9 @@ export function FileEditDialog({
   const [abridged, setAbridged] = useState<string>(
     file.abridged === true ? "true" : "",
   );
+  const [isPreferredCover, setIsPreferredCover] = useState(
+    file.is_preferred_cover ?? false,
+  );
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
@@ -222,6 +225,7 @@ export function FileEditDialog({
     coverPage: number | null;
     language: string;
     abridged: string;
+    isPreferredCover: boolean;
     /** null means "auto" — no explicit override on the file. */
     reviewOverride: ReviewOverride | null;
   } | null>(null);
@@ -266,6 +270,7 @@ export function FileEditDialog({
     // null = "auto" (no explicit override).
     const initialReviewOverride: ReviewOverride | null =
       file.review_override ?? null;
+    const initialIsPreferredCover = file.is_preferred_cover ?? false;
 
     setNarrators(initialNarrators);
     setName(initialName);
@@ -281,6 +286,7 @@ export function FileEditDialog({
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
     setDraftReviewOverride(initialReviewOverride);
+    setIsPreferredCover(initialIsPreferredCover);
 
     // Store initial values for comparison
     setInitialValues({
@@ -294,6 +300,7 @@ export function FileEditDialog({
       coverPage: file.cover_page ?? null,
       language: initialLanguage,
       abridged: initialAbridged,
+      isPreferredCover: initialIsPreferredCover,
       reviewOverride: initialReviewOverride,
     });
   }, [open, file, updatePendingCoverPreview]);
@@ -314,6 +321,7 @@ export function FileEditDialog({
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
         pendingCoverPage !== initialValues.coverPage) ||
+      isPreferredCover !== initialValues.isPreferredCover ||
       draftReviewOverride !== initialValues.reviewOverride
     );
   }, [
@@ -328,6 +336,7 @@ export function FileEditDialog({
     abridged,
     pendingCoverFile,
     pendingCoverPage,
+    isPreferredCover,
     draftReviewOverride,
     initialValues,
   ]);
@@ -367,6 +376,7 @@ export function FileEditDialog({
       language?: string;
       abridged?: string;
       identifiers?: Array<{ type: string; value: string }>;
+      is_preferred_cover?: boolean;
     } = {};
 
     // Check if file role changed
@@ -426,6 +436,11 @@ export function FileEditDialog({
       file.identifiers?.map((id) => ({ type: id.type, value: id.value })) || [];
     if (JSON.stringify(identifiers) !== JSON.stringify(originalIdentifiers)) {
       payload.identifiers = identifiers;
+    }
+
+    // Check if preferred cover changed
+    if (isPreferredCover !== initialValues?.isPreferredCover) {
+      payload.is_preferred_cover = isPreferredCover;
     }
 
     // Only submit if something changed
@@ -512,6 +527,7 @@ export function FileEditDialog({
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
       language: canonicalLanguage,
       abridged: canonicalAbridged,
+      isPreferredCover,
       reviewOverride: draftReviewOverride,
     });
     requestClose();
@@ -532,6 +548,23 @@ export function FileEditDialog({
     FileTypeM4B,
     FileTypePDF,
   ].includes(file.file_type as typeof FileTypeCBZ);
+
+  // Determine if the preferred cover checkbox should be shown:
+  // only when 2+ main (non-supplement) files of the same type category exist.
+  const isEbookCategory = (ft: string) =>
+    ft === FileTypeEPUB || ft === FileTypeCBZ || ft === FileTypePDF;
+  const isAudiobookCategory = (ft: string) => ft === FileTypeM4B;
+  const showPreferredCover = useMemo(() => {
+    if (!book?.files) return false;
+    const mainFiles = book.files.filter((f) => f.file_role === FileRoleMain);
+    const sameCategoryCount = mainFiles.filter((f) =>
+      isM4b ? isAudiobookCategory(f.file_type) : isEbookCategory(f.file_type),
+    ).length;
+    return sameCategoryCount >= 2;
+  }, [book?.files, isM4b]);
+  const preferredCoverLabel = isM4b
+    ? "Preferred audiobook cover"
+    : "Preferred ebook cover";
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
@@ -758,6 +791,28 @@ export function FileEditDialog({
                   pageCount={file.page_count}
                   title="Select Cover Page"
                 />
+              )}
+
+              {/* Preferred cover checkbox — only when 2+ main files of the
+                  same type category exist on the book */}
+              {showPreferredCover && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={isPreferredCover}
+                      id="preferred-cover"
+                      onCheckedChange={(checked) =>
+                        setIsPreferredCover(Boolean(checked))
+                      }
+                    />
+                    <Label
+                      className="cursor-pointer font-normal text-muted-foreground"
+                      htmlFor="preferred-cover"
+                    >
+                      {preferredCoverLabel}
+                    </Label>
+                  </div>
+                </div>
               )}
 
               {/* Narrators (only for M4B files) */}

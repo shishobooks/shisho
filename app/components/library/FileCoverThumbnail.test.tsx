@@ -17,6 +17,7 @@ function makeFile(overrides: Partial<File> = {}): File {
     file_role: "main",
     filesize_bytes: 1000,
     cover_image_filename: "cover.jpg",
+    is_preferred_cover: false,
     ...overrides,
   };
 }

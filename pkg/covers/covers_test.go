@@ -32,6 +32,11 @@ func TestSelectFile(t *testing.T) {
 		f.FileRole = models.FileRoleSupplement
 		return f
 	}
+	preferredWithCover := func(id int, fileType, cover string) *models.File {
+		f := withCover(id, fileType, cover)
+		f.IsPreferredCover = true
+		return f
+	}
 
 	epub := withCover(1, models.FileTypeEPUB, "epub.cover.jpg")
 	cbz := withCover(2, models.FileTypeCBZ, "cbz.cover.jpg")
@@ -41,6 +46,8 @@ func TestSelectFile(t *testing.T) {
 	audioNoCover := withCover(6, models.FileTypeM4B, "")
 	pdfSupplement := supplementWithCover(7, models.FileTypePDF, "supp.cover.jpg")
 	epubSupplement := supplementWithCover(8, models.FileTypeEPUB, "supp.cover.jpg")
+	preferredCBZ := preferredWithCover(9, models.FileTypeCBZ, "cbz2.cover.jpg")
+	preferredM4B := preferredWithCover(10, models.FileTypeM4B, "m4b2.cover.jpg")
 
 	tests := []struct {
 		name           string
@@ -143,6 +150,37 @@ func TestSelectFile(t *testing.T) {
 			files:          []*models.File{pdfSupplement, m4b},
 			aspectRatio:    "audiobook",
 			expectedFileID: m4b.ID,
+		},
+		// Preferred cover tests
+		{
+			name:           "preferred ebook file wins over first in bucket",
+			files:          []*models.File{epub, preferredCBZ},
+			aspectRatio:    "book",
+			expectedFileID: preferredCBZ.ID,
+		},
+		{
+			name:           "preferred audiobook file wins over first in bucket",
+			files:          []*models.File{m4b, preferredM4B},
+			aspectRatio:    "audiobook",
+			expectedFileID: preferredM4B.ID,
+		},
+		{
+			name:           "preferred ebook in non-selected bucket does not affect audiobook selection",
+			files:          []*models.File{epub, preferredCBZ, m4b},
+			aspectRatio:    "audiobook",
+			expectedFileID: m4b.ID,
+		},
+		{
+			name:           "preferred audiobook in non-selected bucket does not affect ebook selection",
+			files:          []*models.File{epub, cbz, preferredM4B},
+			aspectRatio:    "book",
+			expectedFileID: epub.ID,
+		},
+		{
+			name:           "no preferred falls back to first file (existing behavior)",
+			files:          []*models.File{epub, cbz},
+			aspectRatio:    "book",
+			expectedFileID: epub.ID,
 		},
 	}
 

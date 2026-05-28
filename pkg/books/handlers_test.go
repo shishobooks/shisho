@@ -2100,6 +2100,218 @@ func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
 	require.Empty(t, stored)
 }
 
+func TestUpdateFile_IsPreferredCover_SetsAndClearsSiblings(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	dir := t.TempDir()
+
+	// Create two EPUB files (same type category = ebook)
+	epub1Path := filepath.Join(dir, "file1.epub")
+	require.NoError(t, os.WriteFile(epub1Path, []byte("epub1"), 0o644))
+	coverName1 := "file1.epub.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, coverName1), []byte("cover1"), 0o644))
+
+	epub2Path := filepath.Join(dir, "file2.epub")
+	require.NoError(t, os.WriteFile(epub2Path, []byte("epub2"), 0o644))
+	coverName2 := "file2.epub.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, coverName2), []byte("cover2"), 0o644))
+
+	file1 := &models.File{
+		LibraryID:          book.LibraryID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           epub1Path,
+		FilesizeBytes:      5,
+		CoverImageFilename: &coverName1,
+	}
+	_, err := db.NewInsert().Model(file1).Exec(ctx)
+	require.NoError(t, err)
+
+	file2 := &models.File{
+		LibraryID:          book.LibraryID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           epub2Path,
+		FilesizeBytes:      5,
+		CoverImageFilename: &coverName2,
+	}
+	_, err = db.NewInsert().Model(file2).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	// Set file2 as preferred
+	body := `{"is_preferred_cover": true}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file2.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Verify file2 is preferred
+	var f2 models.File
+	require.NoError(t, db.NewSelect().Model(&f2).Where("id = ?", file2.ID).Scan(ctx))
+	assert.True(t, f2.IsPreferredCover)
+
+	// Verify file1 is NOT preferred
+	var f1 models.File
+	require.NoError(t, db.NewSelect().Model(&f1).Where("id = ?", file1.ID).Scan(ctx))
+	assert.False(t, f1.IsPreferredCover)
+
+	// Now set file1 as preferred — file2 should be cleared
+	body = `{"is_preferred_cover": true}`
+	req = httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file1.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr = executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	require.NoError(t, db.NewSelect().Model(&f1).Where("id = ?", file1.ID).Scan(ctx))
+	assert.True(t, f1.IsPreferredCover)
+	require.NoError(t, db.NewSelect().Model(&f2).Where("id = ?", file2.ID).Scan(ctx))
+	assert.False(t, f2.IsPreferredCover, "file2 should be cleared when file1 becomes preferred")
+}
+
+func TestUpdateFile_IsPreferredCover_RejectsFileWithNoCover(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+
+	library, book := setupTestLibraryAndBook(t, db)
+	dir := t.TempDir()
+
+	epubPath := filepath.Join(dir, "file.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0o644))
+
+	file := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      epubPath,
+		FilesizeBytes: 4,
+		// No cover
+	}
+	_, err := db.NewInsert().Model(file).Exec(context.Background())
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	body := `{"is_preferred_cover": true}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	assert.Equal(t, http.StatusBadRequest, rr.Code, "response body: %s", rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "cover")
+}
+
+func TestUpdateFile_IsPreferredCover_DifferentCategoriesIndependent(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	dir := t.TempDir()
+
+	epubPath := filepath.Join(dir, "file.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0o644))
+	epubCover := "file.epub.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, epubCover), []byte("cover"), 0o644))
+
+	m4bPath := filepath.Join(dir, "file.m4b")
+	require.NoError(t, os.WriteFile(m4bPath, []byte("m4b"), 0o644))
+	m4bCover := "file.m4b.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, m4bCover), []byte("cover"), 0o644))
+
+	epubFile := &models.File{
+		LibraryID:          book.LibraryID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           epubPath,
+		FilesizeBytes:      4,
+		CoverImageFilename: &epubCover,
+		IsPreferredCover:   true, // Already preferred ebook
+	}
+	_, err := db.NewInsert().Model(epubFile).Exec(ctx)
+	require.NoError(t, err)
+
+	m4bFile := &models.File{
+		LibraryID:          book.LibraryID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeM4B,
+		FileRole:           models.FileRoleMain,
+		Filepath:           m4bPath,
+		FilesizeBytes:      3,
+		CoverImageFilename: &m4bCover,
+	}
+	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	// Set M4B as preferred — should NOT clear the EPUB preferred
+	body := `{"is_preferred_cover": true}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(m4bFile.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var epub models.File
+	require.NoError(t, db.NewSelect().Model(&epub).Where("id = ?", epubFile.ID).Scan(ctx))
+	assert.True(t, epub.IsPreferredCover, "EPUB preferred should be preserved when M4B becomes preferred")
+
+	var m4b models.File
+	require.NoError(t, db.NewSelect().Model(&m4b).Where("id = ?", m4bFile.ID).Scan(ctx))
+	assert.True(t, m4b.IsPreferredCover)
+}
+
+func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	dir := t.TempDir()
+
+	epubPath := filepath.Join(dir, "file.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0o644))
+	epubCover := "file.epub.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, epubCover), []byte("cover"), 0o644))
+
+	file := &models.File{
+		LibraryID:          book.LibraryID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           epubPath,
+		FilesizeBytes:      4,
+		CoverImageFilename: &epubCover,
+		IsPreferredCover:   true,
+	}
+	_, err := db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	// Clear preferred
+	body := `{"is_preferred_cover": false}`
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var f models.File
+	require.NoError(t, db.NewSelect().Model(&f).Where("id = ?", file.ID).Scan(ctx))
+	assert.False(t, f.IsPreferredCover, "preferred should be cleared")
+}
+
 func TestUpdateBook_SeriesNumberUnit_StoresChapterUnit(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

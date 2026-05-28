@@ -57,6 +57,7 @@ describe("FileChaptersTab - Play Promise handling", () => {
     filepath: "/test/book.m4b",
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600,
+    is_preferred_cover: false,
   };
 
   const mockChapters: Chapter[] = [
@@ -178,6 +179,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     filepath: "/test/book.m4b",
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600, // 1 hour
+    is_preferred_cover: false,
   };
 
   const mockChapters: Chapter[] = [
@@ -464,6 +466,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
     filepath: "/test/book.m4b",
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600,
+    is_preferred_cover: false,
   };
 
   const mockChapters: Chapter[] = [
@@ -636,6 +639,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     filepath: "/test/book.pdf",
     filesize_bytes: 1000000,
     page_count: 100,
+    is_preferred_cover: false,
   };
 
   const mockChapters: Chapter[] = [

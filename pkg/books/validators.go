@@ -49,15 +49,16 @@ type IdentifierPayload struct {
 
 // UpdateFilePayload is the payload for updating a file's metadata.
 type UpdateFilePayload struct {
-	FileRole    *string              `json:"file_role,omitempty" validate:"omitempty,oneof=main supplement"`
-	Name        *string              `json:"name,omitempty" mod:"trim" validate:"omitempty,max=500"`
-	Narrators   []string             `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
-	URL         *string              `json:"url,omitempty" validate:"omitempty,max=500,url"`
-	Publisher   *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
-	ReleaseDate *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
-	Language    *string              `json:"language,omitempty" validate:"omitempty,max=35"`
-	Abridged    *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
-	Identifiers *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
+	FileRole         *string              `json:"file_role,omitempty" validate:"omitempty,oneof=main supplement"`
+	Name             *string              `json:"name,omitempty" mod:"trim" validate:"omitempty,max=500"`
+	Narrators        []string             `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
+	URL              *string              `json:"url,omitempty" validate:"omitempty,max=500,url"`
+	Publisher        *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
+	ReleaseDate      *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
+	Language         *string              `json:"language,omitempty" validate:"omitempty,max=35"`
+	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
+	Identifiers      *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
+	IsPreferredCover *bool                `json:"is_preferred_cover,omitempty"`
 }
 
 // ResyncPayload contains the request parameters for resync operations.
