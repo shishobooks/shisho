@@ -51,6 +51,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
+  FileTypePDF,
   ReviewOverrideReviewed,
   type Book,
   type File,
@@ -524,10 +525,13 @@ export function FileEditDialog({
   const isSupplement = file.file_role === FileRoleSupplement;
   const isM4b = file.file_type === FileTypeM4B;
 
-  // Check if file type can be a main file (only cbz, epub, m4b are supported)
-  const canBeMainFile = [FileTypeCBZ, FileTypeEPUB, FileTypeM4B].includes(
-    file.file_type as typeof FileTypeCBZ,
-  );
+  // Check if file type can be a main file (cbz, epub, m4b, pdf are supported)
+  const canBeMainFile = [
+    FileTypeCBZ,
+    FileTypeEPUB,
+    FileTypeM4B,
+    FileTypePDF,
+  ].includes(file.file_type as typeof FileTypeCBZ);
 
   return (
     <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
@@ -596,7 +600,7 @@ export function FileEditDialog({
             {isSupplement && !canBeMainFile && (
               <p className="text-sm text-muted-foreground">
                 This file type ({file.file_type}) cannot be upgraded to a main
-                file. Only cbz, epub, and m4b files can be main files.
+                file.
               </p>
             )}
           </div>

@@ -817,9 +817,10 @@ func (h *handler) updateFile(c echo.Context) error {
 				models.FileTypeCBZ:  true,
 				models.FileTypeEPUB: true,
 				models.FileTypeM4B:  true,
+				models.FileTypePDF:  true,
 			}
 			if !supportedTypes[file.FileType] {
-				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("cannot upgrade to main file: file type '%s' is not supported as a main file (only cbz, epub, m4b)", file.FileType))
+				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("cannot upgrade to main file: file type '%s' is not supported as a main file", file.FileType))
 			}
 		}
 
@@ -2535,6 +2536,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 	if h.pluginManager != nil {
 		for ext := range h.pluginManager.RegisteredFileExtensions() {
