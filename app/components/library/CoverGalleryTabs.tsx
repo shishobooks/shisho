@@ -14,12 +14,6 @@ import { getFilename } from "@/utils/format";
 interface CoverGalleryTabsProps {
   files: File[];
   className?: string;
-  /**
-   * Forces the <img> to remount (and thus re-request) when this value changes.
-   * Typically set to a React Query `dataUpdatedAt` so cover updates triggered
-   * by mutations on this page flow through HTTP revalidation.
-   */
-  cacheKey?: number;
 }
 
 interface FileWithLabel extends File {
@@ -61,11 +55,7 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
  * Allows switching between different file covers when a book has multiple files.
  * Only renders when there are 2+ files.
  */
-function CoverGalleryTabs({
-  files,
-  className,
-  cacheKey,
-}: CoverGalleryTabsProps) {
+function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -85,9 +75,10 @@ function CoverGalleryTabs({
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
   const hasCover = selectedFile?.cover_image_filename && !coverError;
+  const fileCacheKey = selectedFile?.updated_at;
   const coverUrl = selectedFile
-    ? cacheKey
-      ? `/api/books/files/${selectedFile.id}/cover?v=${cacheKey}`
+    ? fileCacheKey
+      ? `/api/books/files/${selectedFile.id}/cover?v=${fileCacheKey}`
       : `/api/books/files/${selectedFile.id}/cover`
     : null;
 
@@ -104,13 +95,9 @@ function CoverGalleryTabs({
     setCoverLoaded(false);
   }, [selectedFileId]);
 
-  // Reset the error flag whenever the URL changes (tab switch) or when the
-  // cacheKey bumps (cover mutation). If we only reset on tab change, a
-  // previously-failed cover stays unmounted even after the underlying file
-  // gets a valid cover.
   useEffect(() => {
     setCoverError(false);
-  }, [coverUrl, cacheKey]);
+  }, [coverUrl]);
 
   const handleCoverLoad = () => {
     if (coverUrl) {
@@ -155,7 +142,7 @@ function CoverGalleryTabs({
               "absolute inset-0 w-full h-full object-cover",
               !coverLoaded && "opacity-0",
             )}
-            key={`${selectedFile?.id}-${cacheKey ?? 0}`}
+            key={`${selectedFile?.id}-${fileCacheKey ?? ""}`}
             onError={() => setCoverError(true)}
             onLoad={handleCoverLoad}
             src={coverUrl}

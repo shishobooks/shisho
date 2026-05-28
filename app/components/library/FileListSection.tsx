@@ -125,7 +125,7 @@ export function FileListSection({
           >
             <div className="w-12 shrink-0">
               <FileCoverThumbnail
-                cacheKey={query.dataUpdatedAt}
+                cacheKey={file.updated_at}
                 className="w-full"
                 file={file}
                 interactive={false}

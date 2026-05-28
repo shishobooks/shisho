@@ -579,6 +579,7 @@ describe("FileEditDialog", () => {
       sort_title: "Test Book",
       sort_title_source: DataSourceManual,
       author_source: DataSourceManual,
+      cover_cache_key: "",
       files: [],
     };
 

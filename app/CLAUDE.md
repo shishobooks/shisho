@@ -314,34 +314,39 @@ Center and constrain cover images on mobile:
 </div>
 ```
 
-## Cover Image Freshness
+## Cover Image Caching
 
-Cover URLs include a `?v=${cacheKey}` query parameter that bumps whenever the underlying data is refetched. The backend emits `Cache-Control: private, no-cache` + `Last-Modified` and returns `304 Not Modified` on conditional GET, but the query-param is the primary freshness mechanism. Both layers together give reliable updates across browsers.
+API cover endpoints use `Cache-Control: private, max-age=31536000, immutable` — the browser caches the response forever. Freshness is driven by changing the URL via `?v=${cacheKey}`, where `cacheKey` is a backend-computed `cover_cache_key` field (format `"<fileId>-<updatedAt.Unix()>"`) that only changes when the actual cover changes. This is much better than the old `dataUpdatedAt` approach, which changed on every TanStack Query refetch and defeated caching.
 
-### Why URL-based busting is required
+### Cache key sources by endpoint
 
-Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of available images") that is **separate from the HTTP cache**. When an `<img>` element's `src` matches a URL previously rendered in the session, the browser serves the cached decoded bitmap without hitting HTTP — bypassing `Cache-Control: no-cache` entirely. Stable URLs + `Cache-Control` alone are insufficient.
+| Endpoint | Cache key source |
+|----------|-----------------|
+| `/api/books/:id/cover` | `book.cover_cache_key` from API response |
+| `/api/books/files/:id/cover` | `file.updated_at` from API response |
+| `/api/series/:id/cover` | `series.cover_cache_key` from API response |
 
-References:
-- [whatwg/fetch#1088](https://github.com/whatwg/fetch/issues/1088) — browsers reusing `no-cache` cached images
-- [Mozilla bug 1719583](https://bugzilla.mozilla.org/show_bug.cgi?id=1719583) — Firefox image cache persists across `fetch({cache: 'reload'})`
+### Why URL-based busting is still required
+
+Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of available images") that is **separate from the HTTP cache**. When an `<img>` element's `src` matches a URL previously rendered in the session, the browser serves the cached decoded bitmap without hitting HTTP — even with `immutable`. Changing the `?v=` param changes the URL, forcing a new network fetch.
 
 ### Rules
 
-- **Append `?v=${cacheKey}`** to cover URLs. `cacheKey` must be a value that changes when the underlying data is refetched (e.g., `bookQuery.dataUpdatedAt`), **not** `entity.updated_at` (which doesn't bump on file-cover changes).
+- **Append `?v=${cacheKey}`** to cover URLs where `cacheKey` comes from the backend (`book.cover_cache_key`, `series.cover_cache_key`, or `file.updated_at`).
 - **For pages that mutate covers** (BookDetail, FileEditDialog), also add `key={cacheKey}` to the `<img>` tag. React remounting combined with URL change gives reliable refresh.
-- **For child components that render covers**, accept a `cacheKey?: number` prop. Parents pass their query's `dataUpdatedAt` or the relevant entity's `updated_at` (for file covers, since `file.updated_at` bumps reliably on cover mutations).
-- **Source selection by endpoint:**
-  - `/api/books/:id/cover` (book cover, selected from files) — parent book query's `dataUpdatedAt` (or a cascaded `cacheKey` prop).
-  - `/api/books/files/:id/cover` (specific file's cover) — `file.updated_at` (reliable) or the parent query's `dataUpdatedAt`.
-  - `/api/series/:id/cover` (series cover, from first book) — parent series query's `dataUpdatedAt`.
+- **For child components that render covers**, accept a `cacheKey?: string` prop. Parents pass the appropriate cache key from the API response.
+
+### Exceptions (no change needed)
+
+- `GlobalSearch.tsx` — keep `searchQuery.dataUpdatedAt` (search results don't include `cover_cache_key`, small number of covers)
+- `FileEditDialog.tsx` — keep `Date.now()` for immediate preview after cover mutation
+- `IdentifyReviewForm.tsx` — keep `file.updated_at`
 
 ### Checklist for new cover components
 
-- [ ] Cover URL includes `?v=${cacheKey}` with a value that bumps when data is refetched
-- [ ] `cacheKey` source is reliable (`query.dataUpdatedAt` or `file.updated_at` — NOT `book.updated_at` for cover purposes)
+- [ ] Cover URL includes `?v=${cacheKey}` with the appropriate backend-provided cache key
 - [ ] For mutation-capable pages, `<img key={cacheKey}>` for React remount
-- [ ] Cover-mutating mutations invalidate the query whose `dataUpdatedAt` drives the key
+- [ ] Cover-mutating mutations invalidate the query whose data drives the key
 
 ### Breadcrumbs
 

@@ -3,6 +3,7 @@ package series
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -26,11 +29,21 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
+func newTestEchoSeries(t *testing.T) *echo.Echo {
+	t.Helper()
+	e := echo.New()
+	b, err := binder.New()
+	require.NoError(t, err)
+	e.Binder = b
+	return e
+}
+
 func setupSeriesTestDB(t *testing.T) *bun.DB {
 	t.Helper()
 
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
+	sqldb.SetMaxOpenConns(1)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
@@ -122,6 +135,181 @@ func seedSeriesWithCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	return seriesRecord.ID
 }
 
+func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
+	t.Parallel()
+
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "CoverKeyLib",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	series1 := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Series A",
+		NameSource:     string(models.DataSourceFilepath),
+		SortName:       "Series A",
+		SortNameSource: string(models.DataSourceFilepath),
+	}
+	_, err = db.NewInsert().Model(series1).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book 1",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book 1",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	sn := 1.0
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID: book.ID, SeriesID: series1.ID, SeriesNumber: &sn, SortOrder: 1,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	coverFilename := "test.cover.jpg"
+	mimeType := "image/jpeg"
+	file := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           filepath.Join(book.Filepath, "test.epub"),
+		FilesizeBytes:      1000,
+		CoverImageFilename: &coverFilename,
+		CoverMimeType:      &mimeType,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	h := &handler{
+		seriesService:  NewService(db),
+		bookService:    books.NewService(db),
+		libraryService: libraries.NewService(db),
+		aliasService:   aliases.NewService(db),
+	}
+
+	e := newTestEchoSeries(t)
+	req := httptest.NewRequest(http.MethodGet, "/series?limit=10&offset=0", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, h.list(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []struct {
+			ID            int    `json:"id"`
+			CoverCacheKey string `json:"cover_cache_key"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 1)
+
+	reloaded := &models.File{}
+	require.NoError(t, db.NewSelect().Model(reloaded).Where("f.id = ?", file.ID).Scan(ctx))
+
+	expected := fmt.Sprintf("%d-%d", file.ID, reloaded.UpdatedAt.Unix())
+	assert.Equal(t, expected, resp.Items[0].CoverCacheKey)
+}
+
+func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
+	t.Parallel()
+
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "RetrieveCoverLib",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	series1 := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "My Series",
+		NameSource:     string(models.DataSourceFilepath),
+		SortName:       "My Series",
+		SortNameSource: string(models.DataSourceFilepath),
+	}
+	_, err = db.NewInsert().Model(series1).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Book A",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book A",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	sn := 1.0
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID: book.ID, SeriesID: series1.ID, SeriesNumber: &sn, SortOrder: 1,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	coverFilename := "test.cover.jpg"
+	mimeType := "image/jpeg"
+	file := &models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           filepath.Join(book.Filepath, "test.epub"),
+		FilesizeBytes:      1000,
+		CoverImageFilename: &coverFilename,
+		CoverMimeType:      &mimeType,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	h := &handler{
+		seriesService:  NewService(db),
+		bookService:    books.NewService(db),
+		libraryService: libraries.NewService(db),
+		aliasService:   aliases.NewService(db),
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(series1.ID))
+
+	require.NoError(t, h.retrieve(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		ID            int    `json:"id"`
+		CoverCacheKey string `json:"cover_cache_key"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	reloaded := &models.File{}
+	require.NoError(t, db.NewSelect().Model(reloaded).Where("f.id = ?", file.ID).Scan(ctx))
+
+	expected := fmt.Sprintf("%d-%d", file.ID, reloaded.UpdatedAt.Unix())
+	assert.Equal(t, expected, resp.CoverCacheKey)
+}
+
 func TestSeriesCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	t.Parallel()
 
@@ -145,7 +333,7 @@ func TestSeriesCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, h.seriesCover(c))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("ETag"))
 	// Last-Modified is intentionally NOT emitted: it would re-enable IMS-based
 	// revalidation inside http.ServeContent, which can return stale 304s when
@@ -190,7 +378,7 @@ func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
 	assert.Equal(t, etag, rec2.Header().Get("ETag"))
-	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec2.Header().Get("Cache-Control"))
 }
 
 func TestSeriesCover_Returns200WhenIfNoneMatchMismatches(t *testing.T) {

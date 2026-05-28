@@ -860,7 +860,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio)
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlNoCache)
 }
 
 // isKOReader returns true when the request comes from KOReader's OPDS client.

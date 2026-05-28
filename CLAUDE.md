@@ -86,12 +86,12 @@ file.CoverImageFilename = &filename
 
 ### Frontend
 
-**Cover images require both URL cache-busting AND HTTP revalidation** — Browsers maintain an in-memory image cache independent from the HTTP cache, so `Cache-Control: no-cache` alone doesn't force a fresh fetch on `<img>` remount with the same src. Cover URLs must include `?v=${cacheKey}` where `cacheKey` reliably bumps on data refetches (e.g., `bookQuery.dataUpdatedAt`). See `app/CLAUDE.md` for details.
+**Cover images require URL-based cache busting** — API cover endpoints use `Cache-Control: immutable` so browsers cache forever. Cover URLs must include `?v=${cacheKey}` where `cacheKey` is a backend-computed `cover_cache_key` (for books/series) or `file.updated_at` (for file covers) that only changes when the actual cover changes. See `app/CLAUDE.md` for details.
 
 ```tsx
 <img
-  key={bookQuery.dataUpdatedAt}
-  src={`/api/books/${id}/cover?v=${bookQuery.dataUpdatedAt}`}
+  key={book.cover_cache_key}
+  src={`/api/books/${id}/cover?v=${book.cover_cache_key}`}
 />
 ```
 

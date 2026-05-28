@@ -50,7 +50,7 @@ interface SeriesCardProps {
   libraryId: string;
   aspectClass: string;
   isAudiobook: boolean;
-  cacheKey?: number;
+  cacheKey?: string;
   gallerySize?: GallerySize;
 }
 
@@ -238,7 +238,7 @@ const SeriesList = () => {
     return (
       <SeriesCard
         aspectClass={aspectClass}
-        cacheKey={seriesQuery.dataUpdatedAt}
+        cacheKey={seriesItem.cover_cache_key}
         gallerySize={effectiveSize}
         isAudiobook={isAudiobook}
         key={seriesItem.id}

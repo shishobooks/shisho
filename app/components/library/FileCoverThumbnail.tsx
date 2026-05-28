@@ -8,11 +8,7 @@ interface FileCoverThumbnailProps {
   file: File;
   className?: string;
   onClick?: () => void;
-  /**
-   * Forces the <img> to remount (and thus re-request) when this value changes.
-   * Typically a React Query `dataUpdatedAt` from a mutation-aware query.
-   */
-  cacheKey?: number;
+  cacheKey?: string;
   /**
    * Whether to apply interactive styles (cursor-pointer, hover:scale, hover:shadow).
    * Defaults to true. Pass false for non-interactive contexts like file list rows.
@@ -81,7 +77,7 @@ function FileCoverThumbnail({
             "absolute inset-0 w-full h-full object-cover",
             !imageLoaded && "opacity-0",
           )}
-          key={`${file.id}-${cacheKey ?? 0}`}
+          key={`${file.id}-${cacheKey ?? ""}`}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoaded(true)}
           src={coverUrl}

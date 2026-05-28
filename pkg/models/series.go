@@ -29,6 +29,7 @@ type Series struct {
 	Aliases            []*SeriesAlias `bun:"rel:has-many,join:id=series_id" json:"aliases" tstype:"SeriesAlias[]"`
 	BookSeries         []*BookSeries  `bun:"rel:has-many" json:"book_series,omitempty" tstype:"BookSeries[]"`
 	BookCount          int            `bun:",scanonly" json:"book_count"`
+	CoverCacheKey      string         `bun:"-" json:"cover_cache_key"`
 }
 
 type BookSeries struct {

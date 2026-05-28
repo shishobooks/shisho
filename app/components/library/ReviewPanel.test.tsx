@@ -61,6 +61,7 @@ const baseBook: Book = {
   sort_title: "Test Book",
   sort_title_source: "manual",
   author_source: "manual",
+  cover_cache_key: "",
   files: [],
   authors: [
     { id: 1, book_id: 1, person_id: 1, sort_order: 0, role: undefined },

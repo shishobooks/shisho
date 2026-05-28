@@ -172,7 +172,6 @@ describe("BookGallerySection", () => {
             data: { items: [], total: 0 },
             isLoading: true,
             isSuccess: false,
-            dataUpdatedAt: 0,
           }}
           title="Books"
         />,

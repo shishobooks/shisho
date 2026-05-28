@@ -36,7 +36,6 @@ interface DraggableBookItemProps {
   addedByUsername?: string;
   isDragOverlay?: boolean;
   insertPosition?: InsertPosition;
-  cacheKey?: number;
   gallerySize?: GallerySize;
 }
 
@@ -45,7 +44,6 @@ const DraggableBookItem = ({
   addedByUsername,
   isDragOverlay = false,
   insertPosition = null,
-  cacheKey,
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: DraggableBookItemProps) => {
   const {
@@ -76,7 +74,7 @@ const DraggableBookItem = ({
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
-          cacheKey={cacheKey}
+          cacheKey={listBook.book.cover_cache_key}
           libraryId={listBook.book.library_id.toString()}
         />
       </div>
@@ -104,7 +102,7 @@ const DraggableBookItem = ({
       <BookItem
         addedByUsername={addedByUsername}
         book={listBook.book}
-        cacheKey={cacheKey}
+        cacheKey={listBook.book.cover_cache_key}
         libraryId={listBook.book.library_id.toString()}
       />
     </div>
@@ -115,7 +113,6 @@ interface DraggableBookListProps {
   books: ListBook[];
   isOwner: boolean;
   onReorder: (bookIds: number[]) => void;
-  cacheKey?: number;
   gallerySize?: GallerySize;
 }
 
@@ -123,7 +120,6 @@ export const DraggableBookList = ({
   books,
   isOwner,
   onReorder,
-  cacheKey,
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: DraggableBookListProps) => {
   const [items, setItems] = useState(books);
@@ -239,7 +235,6 @@ export const DraggableBookList = ({
               addedByUsername={
                 !isOwner ? listBook.added_by_user?.username : undefined
               }
-              cacheKey={cacheKey}
               gallerySize={gallerySize}
               insertPosition={getInsertPosition(listBook.book_id)}
               key={listBook.id}
@@ -254,7 +249,6 @@ export const DraggableBookList = ({
             addedByUsername={
               !isOwner ? activeItem.added_by_user?.username : undefined
             }
-            cacheKey={cacheKey}
             gallerySize={gallerySize}
             isDragOverlay
             listBook={activeItem}

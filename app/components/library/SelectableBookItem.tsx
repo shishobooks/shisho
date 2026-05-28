@@ -10,7 +10,7 @@ interface SelectableBookItemProps {
   coverAspectRatio?: string;
   addedByUsername?: string;
   pageBookIds: number[];
-  cacheKey?: number;
+  cacheKey?: string;
   gallerySize?: GallerySize;
 }
 

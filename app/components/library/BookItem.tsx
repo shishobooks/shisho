@@ -62,7 +62,7 @@ interface BookItemProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onShiftSelect?: () => void;
-  cacheKey?: number;
+  cacheKey?: string;
   gallerySize?: GallerySize;
 }
 
