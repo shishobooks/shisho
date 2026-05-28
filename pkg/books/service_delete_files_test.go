@@ -20,7 +20,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	// Create library and book
 	_, book := setupTestLibraryAndBook(t, db)
 
-	// Create two files using CreateFile (which also sets the primary file)
+	// Create two files using CreateFile
 	file1 := &models.File{
 		LibraryID:     book.LibraryID,
 		BookID:        book.ID,
