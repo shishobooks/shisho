@@ -44,7 +44,7 @@ const PublishersList = () => {
         return {
           name: publisher.name,
           secondaryText: publisher.parent_name ?? undefined,
-          aliases: publisher.aliases.map((a) => a.name),
+          aliases: publisher.aliases as unknown as string[],
           badges,
         };
       }}
