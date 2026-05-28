@@ -66,13 +66,11 @@ function makeQueryResult(
   data: ResourceListResponse<Book>;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 } {
   return {
     data: { items: books, total },
     isLoading: false,
     isSuccess: true,
-    dataUpdatedAt: Date.now(),
   };
 }
 

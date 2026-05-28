@@ -708,6 +708,12 @@ func (h *handler) update(c echo.Context) error {
 	// any *_source column, so UpdateBook short-circuits its own recompute).
 	h.bookService.RecomputeReviewedForBook(ctx, book.ID)
 
+	aspectRatio := ""
+	if book.Library != nil {
+		aspectRatio = book.Library.CoverAspectRatio
+	}
+	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
+
 	return errors.WithStack(c.JSON(http.StatusOK, book))
 }
 
