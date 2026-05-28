@@ -1021,6 +1021,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 
 	// Delete the main file
@@ -1318,6 +1319,7 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 
 	// Delete the main file
