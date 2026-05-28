@@ -1021,6 +1021,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 
 	// Delete the main file
@@ -1093,15 +1094,15 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 	_, err = db.NewInsert().Model(mainFile).Exec(ctx)
 	require.NoError(t, err)
 
-	// Create supplement file (pdf - NOT a supported type)
-	supplementFilePath := filepath.Join(tmpDir, "supplement.pdf")
+	// Create supplement file (txt - NOT a supported type)
+	supplementFilePath := filepath.Join(tmpDir, "supplement.txt")
 	err = os.WriteFile(supplementFilePath, []byte("supplement content"), 0644)
 	require.NoError(t, err)
 
 	supplementFile := &models.File{
 		LibraryID:     library.ID,
 		BookID:        book.ID,
-		FileType:      "pdf",
+		FileType:      "txt",
 		FileRole:      models.FileRoleSupplement,
 		Filepath:      supplementFilePath,
 		FilesizeBytes: 18,
@@ -1109,11 +1110,12 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 	_, err = db.NewInsert().Model(supplementFile).Exec(ctx)
 	require.NoError(t, err)
 
-	// Define supported types (native types only - pdf NOT included)
+	// Define supported types (native types)
 	supportedTypes := map[string]struct{}{
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 
 	// Delete the main file
@@ -1137,6 +1139,100 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 	// Verify supplement file is deleted from disk
 	_, err = os.Stat(supplementFilePath)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	// Create library
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create book
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        tmpDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create main file (epub)
+	mainFilePath := filepath.Join(tmpDir, "book.epub")
+	err = os.WriteFile(mainFilePath, []byte("main content"), 0644)
+	require.NoError(t, err)
+
+	mainFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      mainFilePath,
+		FilesizeBytes: 12,
+	}
+	_, err = db.NewInsert().Model(mainFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Create supplement file (pdf - a supported type for promotion)
+	supplementFilePath := filepath.Join(tmpDir, "supplement.pdf")
+	err = os.WriteFile(supplementFilePath, []byte("supplement content"), 0644)
+	require.NoError(t, err)
+
+	supplementFile := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypePDF,
+		FileRole:      models.FileRoleSupplement,
+		Filepath:      supplementFilePath,
+		FilesizeBytes: 18,
+	}
+	_, err = db.NewInsert().Model(supplementFile).Exec(ctx)
+	require.NoError(t, err)
+
+	// Define supported types (native types including PDF)
+	supportedTypes := map[string]struct{}{
+		models.FileTypeEPUB: {},
+		models.FileTypeCBZ:  {},
+		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
+	}
+
+	// Delete the main file
+	bookSvc := NewService(db)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes, nil)
+	require.NoError(t, err)
+
+	// Book should NOT be deleted (PDF supplement was promoted)
+	assert.False(t, result.BookDeleted, "book should not be deleted when PDF supplement can be promoted")
+
+	// Verify main file is deleted from DB
+	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", mainFile.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Verify book still exists
+	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Verify PDF supplement was promoted to main
+	var updatedSupplement models.File
+	err = db.NewSelect().Model(&updatedSupplement).Where("id = ?", supplementFile.ID).Scan(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, models.FileRoleMain, updatedSupplement.FileRole)
 }
 
 func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
@@ -1223,6 +1319,7 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 		models.FileTypeEPUB: {},
 		models.FileTypeCBZ:  {},
 		models.FileTypeM4B:  {},
+		models.FileTypePDF:  {},
 	}
 
 	// Delete the main file
