@@ -70,6 +70,7 @@ type File struct {
 	ReviewOverride           *string           `json:"review_override" tstype:"ReviewOverride"`
 	ReviewOverriddenAt       *time.Time        `json:"review_overridden_at"`
 	Reviewed                 *bool             `json:"reviewed"`
+	IsPreferredCover         bool              `bun:",default:false" json:"is_preferred_cover"`
 }
 
 func (f *File) CoverExtension() string {

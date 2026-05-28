@@ -251,6 +251,7 @@ describe("FileEditDialog", () => {
     updated_at: "2024-01-01",
     narrators: [],
     identifiers: [],
+    is_preferred_cover: false,
   };
 
   const renderDialog = (props = {}) => {

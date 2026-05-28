@@ -57,6 +57,18 @@ const epubSupplement = file({
   file_role: "supplement",
   cover_image_filename: "supp.cover.jpg",
 });
+const preferredCBZ = file({
+  id: 9,
+  file_type: "cbz",
+  cover_image_filename: "cbz2.cover.jpg",
+  is_preferred_cover: true,
+});
+const preferredM4B = file({
+  id: 10,
+  file_type: "m4b",
+  cover_image_filename: "m4b2.cover.jpg",
+  is_preferred_cover: true,
+});
 
 describe("selectCoverFile", () => {
   it("prefers book file in default mode", () => {
@@ -124,6 +136,35 @@ describe("selectCoverFile", () => {
 
   it("unknown aspect ratio falls through to default", () => {
     expect(selectCoverFile([m4bMain, epubMain], "weird")?.id).toBe(epubMain.id);
+  });
+
+  // Preferred cover tests
+  it("preferred ebook file wins over first in bucket", () => {
+    expect(selectCoverFile([epubMain, preferredCBZ], "book")?.id).toBe(
+      preferredCBZ.id,
+    );
+  });
+
+  it("preferred audiobook file wins over first in bucket", () => {
+    expect(selectCoverFile([m4bMain, preferredM4B], "audiobook")?.id).toBe(
+      preferredM4B.id,
+    );
+  });
+
+  it("preferred ebook in non-selected bucket does not affect audiobook selection", () => {
+    expect(
+      selectCoverFile([epubMain, preferredCBZ, m4bMain], "audiobook")?.id,
+    ).toBe(m4bMain.id);
+  });
+
+  it("preferred audiobook in non-selected bucket does not affect ebook selection", () => {
+    expect(selectCoverFile([epubMain, cbzMain, preferredM4B], "book")?.id).toBe(
+      epubMain.id,
+    );
+  });
+
+  it("no preferred falls back to first file (existing behavior)", () => {
+    expect(selectCoverFile([epubMain, cbzMain], "book")?.id).toBe(epubMain.id);
   });
 });
 

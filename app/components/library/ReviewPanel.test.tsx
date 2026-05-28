@@ -84,6 +84,7 @@ const baseFile: File = {
   review_override: undefined,
   review_overridden_at: undefined,
   cover_image_filename: "book.epub.cover.jpg",
+  is_preferred_cover: false,
 };
 
 describe("ReviewPanel", () => {

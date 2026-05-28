@@ -9,11 +9,16 @@ const isAudiobookFile = (f: File): boolean => f.file_type === "m4b";
 
 const hasCover = (f: File): boolean => Boolean(f.cover_image_filename);
 
+/** Pick the preferred file from a bucket, falling back to the first entry. */
+const pickFirst = (bucket: File[]): File =>
+  bucket.find((f) => f.is_preferred_cover) ?? bucket[0];
+
 /**
  * Picks which file's cover should represent a book based on the library's
  * preferred cover_aspect_ratio setting. Mirrors the backend's
  * pkg/covers.SelectFile logic. Supplements are excluded — they don't
- * represent the book.
+ * represent the book. Within each bucket (ebook / audiobook), a file with
+ * is_preferred_cover takes priority.
  */
 export const selectCoverFile = (
   files: File[] | undefined,
@@ -30,12 +35,12 @@ export const selectCoverFile = (
   switch (coverAspectRatio) {
     case "audiobook":
     case "audiobook_fallback_book":
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
-      if (bookFiles.length > 0) return bookFiles[0];
+      if (audiobookFiles.length > 0) return pickFirst(audiobookFiles);
+      if (bookFiles.length > 0) return pickFirst(bookFiles);
       break;
     default:
-      if (bookFiles.length > 0) return bookFiles[0];
-      if (audiobookFiles.length > 0) return audiobookFiles[0];
+      if (bookFiles.length > 0) return pickFirst(bookFiles);
+      if (audiobookFiles.length > 0) return pickFirst(audiobookFiles);
   }
   return null;
 };

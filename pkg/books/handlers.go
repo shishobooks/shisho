@@ -39,6 +39,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/shishobooks/shisho/pkg/tags"
+	"github.com/uptrace/bun"
 )
 
 // ScanOptions configures a scan operation.
@@ -787,7 +788,8 @@ func (h *handler) updateFile(c echo.Context) error {
 			file.CoverMimeType = nil
 			file.CoverSource = nil
 			file.CoverPage = nil
-			opts.Columns = append(opts.Columns, "cover_image_filename", "cover_mime_type", "cover_source", "cover_page")
+			file.IsPreferredCover = false
+			opts.Columns = append(opts.Columns, "cover_image_filename", "cover_mime_type", "cover_source", "cover_page", "is_preferred_cover")
 
 			// Clear audiobook fields
 			file.AudiobookDurationSeconds = nil
@@ -1103,6 +1105,41 @@ func (h *handler) updateFile(c echo.Context) error {
 		}
 		file.IdentifierSource = strPtr(models.DataSourceManual)
 		opts.Columns = append(opts.Columns, "identifier_source")
+	}
+
+	// Handle is_preferred_cover
+	if params.IsPreferredCover != nil {
+		if *params.IsPreferredCover {
+			// Validate file has a cover
+			if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "cannot set preferred cover: file has no cover image")
+			}
+			// Clear is_preferred_cover on other files of the same type category
+			// in the same book. EPUB/CBZ/PDF = ebook, M4B = audiobook.
+			var sameCategory []string
+			switch file.FileType {
+			case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
+				sameCategory = []string{models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF}
+			case models.FileTypeM4B:
+				sameCategory = []string{models.FileTypeM4B}
+			}
+			if len(sameCategory) > 0 {
+				_, err := h.bookService.DB().NewUpdate().
+					TableExpr("files").
+					Set("is_preferred_cover = ?", false).
+					Where("book_id = ?", file.BookID).
+					Where("id != ?", file.ID).
+					Where("file_type IN (?)", bun.List(sameCategory)).
+					Exec(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+			file.IsPreferredCover = true
+		} else {
+			file.IsPreferredCover = false
+		}
+		opts.Columns = append(opts.Columns, "is_preferred_cover")
 	}
 
 	// Update the file
