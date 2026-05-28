@@ -13,7 +13,7 @@ const GenresList = () => {
         const bookCount = genre.book_count ?? 0;
         return {
           name: genre.name,
-          aliases: genre.aliases as unknown as string[],
+          aliases: (genre.aliases as unknown as string[]) ?? [],
           badges: [
             {
               label: bookCount === 1 ? "book" : "books",

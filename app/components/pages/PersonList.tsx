@@ -41,7 +41,7 @@ const PersonList = () => {
           name: person.name,
           secondaryText:
             person.sort_name !== person.name ? person.sort_name : undefined,
-          aliases: person.aliases as unknown as string[],
+          aliases: (person.aliases as unknown as string[]) ?? [],
           badges,
         };
       }}

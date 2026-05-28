@@ -13,7 +13,7 @@ const TagsList = () => {
         const bookCount = tag.book_count ?? 0;
         return {
           name: tag.name,
-          aliases: tag.aliases as unknown as string[],
+          aliases: (tag.aliases as unknown as string[]) ?? [],
           badges: [
             {
               label: bookCount === 1 ? "book" : "books",
