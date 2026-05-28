@@ -377,7 +377,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		fileDir := filepath.Dir(file.Filepath)
 		bookPath := book.Filepath
 
-		// Delete the file record (this also handles primary_file_id promotion)
+		// Delete the file record
 		if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
 			return nil, errors.Wrap(err, "failed to delete file record")
 		}
@@ -3969,7 +3969,7 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 
 // resetBookState wipes book-level scanned metadata and all associated
 // authors, series, genres, and tags. Identity fields (ID, filepath,
-// library_id, primary_file_id) are preserved. Title and SortTitle values
+// library_id) are preserved. Title and SortTitle values
 // are preserved (NOT NULL) but their source fields are reset to
 // DataSourceFilepath so scanFileCore can set the correct source from
 // the re-scanned metadata.
@@ -4018,7 +4018,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 
 // resetBookFileState wipes all scanned metadata from a book and its file,
 // preparing them for a fresh scan. It preserves identity fields (IDs, filepath,
-// file_type, file_role, library_id, book_id, primary_file_id, filesize, duration,
+// file_type, file_role, library_id, book_id, filesize, duration,
 // bitrate, codec, page_count).
 //
 // When skipBookWipe is true, only file-level state is reset. This is used by

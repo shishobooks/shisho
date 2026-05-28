@@ -187,17 +187,6 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
-
-			// Set the first file as the primary file
-			book.PrimaryFileID = &book.Files[0].ID
-			_, err = tx.NewUpdate().
-				Model(book).
-				Column("primary_file_id").
-				Where("id = ?", book.ID).
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
 		}
 
 		// Note: Narrators are created separately via CreateNarrator after person creation
@@ -580,28 +569,6 @@ func (svc *Service) CreateFile(ctx context.Context, file *models.File) error {
 		Exec(ctx)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	// If this is the first file for the book, set it as primary
-	var book models.Book
-	err = svc.db.NewSelect().
-		Model(&book).
-		Where("id = ?", file.BookID).
-		Scan(ctx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	if book.PrimaryFileID == nil {
-		book.PrimaryFileID = &file.ID
-		_, err = svc.db.NewUpdate().
-			Model(&book).
-			Column("primary_file_id").
-			Where("id = ?", book.ID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
 	}
 
 	// Note: FileNarrators are created separately via CreateFileNarrator after person creation
@@ -1609,75 +1576,21 @@ func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (i
 }
 
 // DeleteFile deletes a file and its associated records (narrators, identifiers, chapters cascade via FK).
-// If the deleted file was the book's primary file (auto-nulled via ON DELETE SET NULL), promotes another.
 func (svc *Service) DeleteFile(ctx context.Context, fileID int) error {
-	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		// Get the file to find its book_id and check if it's the primary
-		var file models.File
-		err := tx.NewSelect().
-			Model(&file).
-			Where("id = ?", fileID).
-			Scan(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Check if this file is the book's primary before deleting
-		var book models.Book
-		err = tx.NewSelect().Model(&book).
-			Column("primary_file_id").
-			Where("id = ?", file.BookID).
-			Scan(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		wasPrimary := book.PrimaryFileID != nil && *book.PrimaryFileID == fileID
-
-		// Delete the file — narrators, identifiers, and chapters cascade via FK.
-		// books.primary_file_id is auto-nulled via ON DELETE SET NULL.
-		_, err = tx.NewDelete().
-			Model((*models.File)(nil)).
-			Where("id = ?", fileID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Promote a new primary file only if we just deleted the primary
-		if wasPrimary {
-			var newPrimary models.File
-			err = tx.NewSelect().
-				Model(&newPrimary).
-				Where("book_id = ?", file.BookID).
-				OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
-				Order("created_at ASC").
-				Limit(1).
-				Scan(ctx)
-			if err == nil {
-				_, err = tx.NewUpdate().
-					Model((*models.Book)(nil)).
-					Set("primary_file_id = ?", newPrimary.ID).
-					Where("id = ?", file.BookID).
-					Exec(ctx)
-				if err != nil {
-					return errors.WithStack(err)
-				}
-			}
-		}
-
-		return nil
-	})
+	_, err := svc.db.NewDelete().
+		Model((*models.File)(nil)).
+		Where("id = ?", fileID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // DeleteFilesByIDs batch-deletes files and their associated records (cascade via FK).
-// Unlike DeleteFile, it does NOT handle primary file promotion — the caller manages that separately.
 // Returns nil if fileIDs is empty.
 func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 	if len(fileIDs) == 0 {
 		return nil
 	}
 	// Narrators, identifiers, chapters cascade via FK.
-	// books.primary_file_id is auto-nulled via ON DELETE SET NULL.
 	_, err := svc.db.NewDelete().
 		Model((*models.File)(nil)).
 		Where("id IN (?)", bun.List(fileIDs)).
@@ -1783,43 +1696,6 @@ func (svc *Service) DeleteOrphanedBookChildren(ctx context.Context, bookID int) 
 	}
 
 	return nil
-}
-
-// PromoteNextPrimaryFile selects the best remaining file for a book and sets it as
-// primary_file_id. Main files are preferred over supplements; among equal roles,
-// the oldest file (by created_at) wins. If no files remain, primary_file_id is set
-// to NULL. This is called after a batch file deletion completes its transaction.
-func (svc *Service) PromoteNextPrimaryFile(ctx context.Context, bookID int) error {
-	// Find the best candidate: prefer main over supplement, then oldest first.
-	var candidate models.File
-	err := svc.db.NewSelect().
-		Model(&candidate).
-		Where("book_id = ?", bookID).
-		OrderExpr("CASE WHEN file_role = ? THEN 0 ELSE 1 END", models.FileRoleMain).
-		Order("created_at ASC").
-		Limit(1).
-		Scan(ctx)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return errors.WithStack(err)
-	}
-
-	if err == nil {
-		// Found a candidate — promote it.
-		_, err = svc.db.NewUpdate().
-			Model((*models.Book)(nil)).
-			Set("primary_file_id = ?", candidate.ID).
-			Where("id = ?", bookID).
-			Exec(ctx)
-		return errors.WithStack(err)
-	}
-
-	// No files remain — clear the primary pointer.
-	_, err = svc.db.NewUpdate().
-		Model((*models.Book)(nil)).
-		Set("primary_file_id = NULL").
-		Where("id = ?", bookID).
-		Exec(ctx)
-	return errors.WithStack(err)
 }
 
 // DeleteBookAndFilesResult contains the results of deleting a book and its files.

@@ -20,7 +20,7 @@ import (
 
 // TestGetBookFileType_UsesFirstMainFile confirms that getBookFileType
 // returns the type of the first main file (by order in the slice),
-// ignoring PrimaryFileID and supplement files.
+// ignoring supplement files.
 func TestGetBookFileType_UsesFirstMainFile(t *testing.T) {
 	t.Parallel()
 
@@ -57,17 +57,6 @@ func TestGetBookFileType_UsesFirstMainFile(t *testing.T) {
 				},
 			},
 			want: models.FileTypeM4B,
-		},
-		{
-			name: "ignores PrimaryFileID",
-			book: &models.Book{
-				PrimaryFileID: intPtr(2),
-				Files: []*models.File{
-					{ID: 1, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
-					{ID: 2, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				},
-			},
-			want: models.FileTypeCBZ,
 		},
 		{
 			name: "no files returns empty",

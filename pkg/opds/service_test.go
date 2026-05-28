@@ -18,7 +18,6 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 	tests := []struct {
 		name              string
 		files             []*models.File
-		primaryFileID     *int
 		expectedLanguage  string
 		expectedPublisher string
 	}{
@@ -58,7 +57,7 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 			expectedPublisher: "Audible",
 		},
 		{
-			name: "uses first file by ID, ignoring primary file",
+			name: "uses first file by ID",
 			files: []*models.File{
 				{
 					ID:        1,
@@ -73,7 +72,6 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 					Publisher: &models.Publisher{Name: "Audible"},
 				},
 			},
-			primaryFileID:     intPtr(2),
 			expectedLanguage:  "fr",
 			expectedPublisher: "Gallimard",
 		},
@@ -117,20 +115,15 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			book := &models.Book{
-				ID:            1,
-				Title:         "Test Book",
-				Files:         tt.files,
-				PrimaryFileID: tt.primaryFileID,
+				ID:    1,
+				Title: "Test Book",
+				Files: tt.files,
 			}
 			entry := svc.bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
 			assert.Equal(t, tt.expectedLanguage, entry.Language)
 			assert.Equal(t, tt.expectedPublisher, entry.Publisher)
 		})
 	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 // TestBookToEntry_CoverLinkUsesOPDSPath verifies that the cover image link

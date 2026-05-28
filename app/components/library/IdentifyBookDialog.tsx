@@ -92,7 +92,7 @@ export function IdentifyBookDialog({
       const initialAuthor = book.authors?.[0]?.person?.name ?? "";
       // Only thread an explicit fileId through search when the book has more
       // than one main file — single-file books leave fileId undefined so the
-      // backend uses the primary file (matches prior behavior).
+      // backend uses the first file.
       const initialFileId = mainFiles.length > 1 ? initialFile?.id : undefined;
       const initialIds = (initialFile?.identifiers ?? []).map((id) => ({
         type: id.type,
