@@ -140,7 +140,7 @@ export function MetadataMergeDialog({
             Select a {entityType} to merge into this one.{" "}
             {setChildConfig
               ? "Then choose to merge or set as a child."
-              : `All associated books will be transferred and the selected ${entityType} will be deleted.`}
+              : `All associated books will be transferred, the ${entityType} name will be added as an alias, and the selected ${entityType} will be deleted.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -221,9 +221,10 @@ export function MetadataMergeDialog({
 
           {selectedEntity && !setChildConfig && (
             <p className="mt-4 text-sm text-muted-foreground">
-              This will move all {selectedEntity.count} book
+              Move all {selectedEntity.count} book
               {selectedEntity.count !== 1 ? "s" : ""} from "
-              {selectedEntity.name}" to "{targetName}" and delete "
+              {selectedEntity.name}" to "{targetName}", add "
+              {selectedEntity.name}" as an alias, and delete "
               {selectedEntity.name}".
             </p>
           )}
