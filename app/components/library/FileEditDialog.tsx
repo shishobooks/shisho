@@ -909,7 +909,7 @@ export function FileEditDialog({
           {/* Review Panel — controlled (deferred to Save button).
               When draftReviewOverride is null (auto), pass undefined so the
               panel falls back to the file-derived `reviewed` state. */}
-          {(book ?? file.book) && (
+          {(book ?? file.book) && fileRole !== FileRoleSupplement && (
             <ReviewPanel
               book={(book ?? file.book)!}
               files={[file]}

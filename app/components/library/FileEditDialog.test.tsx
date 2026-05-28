@@ -11,7 +11,13 @@ import {
   vi,
 } from "vitest";
 
-import { FileRoleMain, FileTypeCBZ, type File } from "@/types";
+import {
+  DataSourceManual,
+  FileRoleMain,
+  FileTypeCBZ,
+  type Book,
+  type File,
+} from "@/types";
 
 import { FileEditDialog } from "./FileEditDialog";
 
@@ -59,6 +65,14 @@ vi.mock("@/hooks/queries/entity-search", () => ({
 
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
+}));
+
+vi.mock("@/hooks/queries/review", () => ({
+  useReviewCriteria: () => ({ data: { book_fields: [], audio_fields: [] } }),
+  useSetFileReview: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 // Mock PagePicker
@@ -549,6 +563,106 @@ describe("FileEditDialog", () => {
       });
       const call = mockUpdateFile.mock.calls[0][0];
       expect(call.payload.release_date).toBe("");
+    });
+  });
+
+  describe("review panel visibility when changing file role", () => {
+    const mockBook: Book = {
+      id: 1,
+      created_at: "2024-01-01",
+      updated_at: "2024-01-01",
+      library_id: 1,
+      filepath: "/test/book",
+      title: "Test Book",
+      title_source: DataSourceManual,
+      sort_title: "Test Book",
+      sort_title_source: DataSourceManual,
+      author_source: DataSourceManual,
+      files: [],
+    };
+
+    it("hides ReviewPanel when file role is changed to supplement", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <FileEditDialog
+            book={mockBook}
+            file={mockFile}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      // ReviewPanel should be visible initially (file is main, book exists)
+      await waitFor(() => {
+        expect(screen.getByLabelText("Reviewed")).toBeInTheDocument();
+      });
+
+      // Change file role to Supplement via the Select.
+      // Multiple comboboxes exist, so find the File Role one by its text.
+      const roleSelect = screen.getByText("Main File").closest("button")!;
+      await user.click(roleSelect);
+      const supplementOption = await screen.findByRole("option", {
+        name: /supplement/i,
+      });
+      await user.click(supplementOption);
+
+      // ReviewPanel should disappear immediately (without saving)
+      await waitFor(() => {
+        expect(screen.queryByLabelText("Reviewed")).not.toBeInTheDocument();
+      });
+    });
+
+    it("shows ReviewPanel again when file role is changed back to main", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <FileEditDialog
+            book={mockBook}
+            file={mockFile}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      // Confirm ReviewPanel is visible
+      await waitFor(() => {
+        expect(screen.getByLabelText("Reviewed")).toBeInTheDocument();
+      });
+
+      // Change to Supplement
+      const roleSelect = screen.getByText("Main File").closest("button")!;
+      await user.click(roleSelect);
+      const supplementOption = await screen.findByRole("option", {
+        name: /supplement/i,
+      });
+      await user.click(supplementOption);
+
+      // Confirm hidden
+      await waitFor(() => {
+        expect(screen.queryByLabelText("Reviewed")).not.toBeInTheDocument();
+      });
+
+      // Change back to Main — the select now shows "Supplement"
+      const updatedRoleSelect = screen
+        .getByText("Supplement")
+        .closest("button")!;
+      await user.click(updatedRoleSelect);
+      const mainOption = await screen.findByRole("option", {
+        name: /main file/i,
+      });
+      await user.click(mainOption);
+
+      // ReviewPanel should reappear
+      await waitFor(() => {
+        expect(screen.getByLabelText("Reviewed")).toBeInTheDocument();
+      });
     });
   });
 });
