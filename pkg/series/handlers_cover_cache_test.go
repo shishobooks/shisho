@@ -310,7 +310,7 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 	assert.Equal(t, expected, resp.CoverCacheKey)
 }
 
-func TestSeriesCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+func TestSeriesCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
 	db := setupSeriesTestDB(t)

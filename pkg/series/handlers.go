@@ -280,6 +280,14 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	for _, b := range booksList {
+		aspectRatio := ""
+		if b.Library != nil {
+			aspectRatio = b.Library.CoverAspectRatio
+		}
+		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
+	}
+
 	return errors.WithStack(c.JSON(http.StatusOK, booksList))
 }
 

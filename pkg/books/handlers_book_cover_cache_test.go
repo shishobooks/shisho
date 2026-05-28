@@ -14,7 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 )
 
-func TestBookCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)

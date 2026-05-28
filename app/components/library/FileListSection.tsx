@@ -13,7 +13,6 @@ interface FileListQuery {
   data: ResourceListResponse<File> | undefined;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 }
 
 interface FileListSectionProps {

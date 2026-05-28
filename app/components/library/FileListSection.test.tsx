@@ -68,13 +68,11 @@ function makeQueryResult(
   data: ResourceListResponse<File>;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 } {
   return {
     data: { items: files, total },
     isLoading: false,
     isSuccess: true,
-    dataUpdatedAt: Date.now(),
   };
 }
 
@@ -250,7 +248,6 @@ describe("FileListSection", () => {
             data: { items: [], total: 0 },
             isLoading: true,
             isSuccess: false,
-            dataUpdatedAt: 0,
           }}
           title="Files"
         />,

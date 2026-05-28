@@ -74,7 +74,7 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	return file.ID
 }
 
-func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)

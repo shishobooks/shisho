@@ -817,10 +817,10 @@ func (svc *Service) GetFirstBooksFilesForSeries(ctx context.Context, seriesIDs [
 	}
 
 	bookIDs := make([]int, len(rows))
-	bookToSeries := make(map[int]int, len(rows))
+	bookToSeries := make(map[int][]int, len(rows))
 	for i, r := range rows {
 		bookIDs[i] = r.BookID
-		bookToSeries[r.BookID] = r.SeriesID
+		bookToSeries[r.BookID] = append(bookToSeries[r.BookID], r.SeriesID)
 	}
 
 	var files []*models.File
@@ -834,7 +834,7 @@ func (svc *Service) GetFirstBooksFilesForSeries(ctx context.Context, seriesIDs [
 
 	result := make(map[int][]*models.File, len(rows))
 	for _, f := range files {
-		if sid, ok := bookToSeries[f.BookID]; ok {
+		for _, sid := range bookToSeries[f.BookID] {
 			result[sid] = append(result[sid], f)
 		}
 	}
