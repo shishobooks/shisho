@@ -127,7 +127,7 @@ interface FileRowProps {
   isFileSelected?: boolean;
   onToggleSelect?: () => void;
   onMoveFile?: () => void;
-  cacheKey?: number;
+  cacheKey?: string;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
 }
@@ -740,10 +740,7 @@ const BookDetail = () => {
     );
   };
 
-  // Key source for cover images — used as <img key> so React remounts the
-  // element (triggering revalidation) when data is refreshed. Also included
-  // in the URL as ?v= to bypass the browser's in-memory image cache.
-  const coverCacheKey = bookQuery.dataUpdatedAt;
+  const coverCacheKey = bookQuery.data?.cover_cache_key;
   const coverUrl = bookQuery.data?.id
     ? coverCacheKey
       ? `/api/books/${bookQuery.data.id}/cover?v=${coverCacheKey}`
@@ -993,7 +990,7 @@ const BookDetail = () => {
         <div className="lg:col-span-1 space-y-4 md:space-y-6">
           {mainFiles.length > 1 ? (
             /* Multiple files - show cover gallery with tabs */
-            <CoverGalleryTabs cacheKey={coverCacheKey} files={mainFiles} />
+            <CoverGalleryTabs files={mainFiles} />
           ) : (
             /* Single file - show book cover directly */
             <div
@@ -1309,7 +1306,7 @@ const BookDetail = () => {
               <div className="space-y-2">
                 {mainFiles.map((file) => (
                   <FileRow
-                    cacheKey={coverCacheKey}
+                    cacheKey={file.updated_at}
                     file={file}
                     hasExpandableMetadata={hasExpandableMetadata(file)}
                     isDeletingFile={deletingFileId === file.id}
@@ -1352,7 +1349,7 @@ const BookDetail = () => {
                   <div className="space-y-2">
                     {supplements.map((file) => (
                       <FileRow
-                        cacheKey={coverCacheKey}
+                        cacheKey={file.updated_at}
                         file={file}
                         hasExpandableMetadata={hasExpandableMetadata(file)}
                         isDeletingFile={deletingFileId === file.id}

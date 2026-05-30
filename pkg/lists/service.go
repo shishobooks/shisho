@@ -327,6 +327,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		Relation("Book.BookSeries").
 		Relation("Book.BookSeries.Series").
 		Relation("Book.Files").
+		Relation("Book.Library").
 		Relation("AddedByUser").
 		Where("lb.list_id = ?", opts.ListID)
 

@@ -31,4 +31,5 @@ type Book struct {
 	BookTags          []*BookTag    `bun:"rel:has-many,join:id=book_id" json:"book_tags,omitempty" tstype:"BookTag[]"`
 	TagSource         *string       `json:"tag_source" tstype:"DataSource"`
 	Files             []*File       `bun:"rel:has-many" json:"files" tstype:"File[]"`
+	CoverCacheKey     string        `bun:"-" json:"cover_cache_key"`
 }

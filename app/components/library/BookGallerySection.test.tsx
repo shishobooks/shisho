@@ -66,13 +66,11 @@ function makeQueryResult(
   data: ResourceListResponse<Book>;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 } {
   return {
     data: { items: books, total },
     isLoading: false,
     isSuccess: true,
-    dataUpdatedAt: Date.now(),
   };
 }
 
@@ -172,7 +170,6 @@ describe("BookGallerySection", () => {
             data: { items: [], total: 0 },
             isLoading: true,
             isSuccess: false,
-            dataUpdatedAt: 0,
           }}
           title="Books"
         />,

@@ -13,7 +13,6 @@ interface FileListQuery {
   data: ResourceListResponse<File> | undefined;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 }
 
 interface FileListSectionProps {
@@ -125,7 +124,7 @@ export function FileListSection({
           >
             <div className="w-12 shrink-0">
               <FileCoverThumbnail
-                cacheKey={query.dataUpdatedAt}
+                cacheKey={file.updated_at}
                 className="w-full"
                 file={file}
                 interactive={false}

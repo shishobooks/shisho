@@ -111,6 +111,12 @@ func (h *handler) retrieve(c echo.Context) error {
 		}
 	}
 
+	aspectRatio := ""
+	if book.Library != nil {
+		aspectRatio = book.Library.CoverAspectRatio
+	}
+	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
+
 	return errors.WithStack(c.JSON(http.StatusOK, book))
 }
 
@@ -188,6 +194,14 @@ func (h *handler) list(c echo.Context) error {
 	books, total, err := h.bookService.ListBooksWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	for _, b := range books {
+		aspectRatio := ""
+		if b.Library != nil {
+			aspectRatio = b.Library.CoverAspectRatio
+		}
+		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
 	}
 
 	resp := struct {
@@ -693,6 +707,12 @@ func (h *handler) update(c echo.Context) error {
 	// changed but no source column did (e.g. series-only edits don't touch
 	// any *_source column, so UpdateBook short-circuits its own recompute).
 	h.bookService.RecomputeReviewedForBook(ctx, book.ID)
+
+	aspectRatio := ""
+	if book.Library != nil {
+		aspectRatio = book.Library.CoverAspectRatio
+	}
+	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
 
 	return errors.WithStack(c.JSON(http.StatusOK, book))
 }
@@ -1453,7 +1473,7 @@ func (h *handler) fileCover(c echo.Context) error {
 	// root-level files. The cover always lives alongside the file.
 	coverPath := filepath.Join(filepath.Dir(file.Filepath), coverFilename)
 
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
 	return errors.WithStack(c.File(coverPath))
 }
 
@@ -1645,7 +1665,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio)
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable)
 }
 
 // downloadFile handles downloading a file with generated metadata embedded.

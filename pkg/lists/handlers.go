@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -296,6 +297,16 @@ func (h *handler) listBooks(c echo.Context) error {
 	listBooks, total, err := h.listsService.ListBooksWithTotal(ctx, opts)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	for _, lb := range listBooks {
+		if lb.Book != nil {
+			aspectRatio := ""
+			if lb.Book.Library != nil {
+				aspectRatio = lb.Book.Library.CoverAspectRatio
+			}
+			lb.Book.CoverCacheKey = covers.CacheKey(lb.Book.Files, aspectRatio)
+		}
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, echo.Map{

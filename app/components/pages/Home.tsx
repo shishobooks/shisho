@@ -525,7 +525,7 @@ const HomeContent = () => {
   const renderBookItem = (book: Book) => (
     <SelectableBookItem
       book={book}
-      cacheKey={booksQuery.dataUpdatedAt}
+      cacheKey={book.cover_cache_key}
       coverAspectRatio={coverAspectRatio}
       gallerySize={effectiveSize}
       key={book.id}

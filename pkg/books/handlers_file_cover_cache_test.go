@@ -74,7 +74,7 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	return file.ID
 }
 
-func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)
@@ -93,7 +93,7 @@ func TestFileCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, h.fileCover(c))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("Last-Modified"))
 	assert.NotEmpty(t, rec.Body.Bytes())
 }
@@ -129,5 +129,5 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
-	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec2.Header().Get("Cache-Control"))
 }

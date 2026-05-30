@@ -19,7 +19,6 @@ interface BookGalleryQuery {
   data: ResourceListResponse<Book> | undefined;
   isLoading: boolean;
   isSuccess: boolean;
-  dataUpdatedAt: number;
 }
 
 interface BookGallerySectionProps {
@@ -149,7 +148,7 @@ export function BookGallerySection({
         {query.data?.items.map((book) => (
           <BookItem
             book={book}
-            cacheKey={query.dataUpdatedAt}
+            cacheKey={book.cover_cache_key}
             gallerySize={effectiveSize}
             key={book.id}
             libraryId={libraryId}

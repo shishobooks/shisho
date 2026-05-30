@@ -16,6 +16,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+const (
+	CacheControlImmutable = "private, max-age=31536000, immutable"
+	CacheControlNoCache   = "private, no-cache"
+)
+
 // SelectFile picks the file whose cover should represent a book based on the
 // library's preferred cover aspect ratio. It always falls back across types
 // when the preferred kind has no covers — a book-only library still gets a
@@ -67,6 +72,18 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 	return nil
 }
 
+// CacheKey returns a stable cache key for the cover that would be served for
+// the given files and aspect ratio. The key only changes when the selected
+// cover file changes (different file selected, or the file's UpdatedAt bumps
+// after a cover upload/regeneration). Returns "" when no cover exists.
+func CacheKey(files []*models.File, coverAspectRatio string) string {
+	f := SelectFile(files, coverAspectRatio)
+	if f == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d", f.ID, f.UpdatedAt.Unix())
+}
+
 // ServeBookCover selects the cover file from `files` using the library's
 // preferred aspect ratio and serves it. Callers must perform any auth and
 // library-access checks before calling. Returns errcodes.NotFound when no
@@ -76,6 +93,10 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 // filepath because book.Filepath can be a synthetic organized-folder path that
 // never exists on disk for root-level books.
 //
+// cacheControl sets the Cache-Control header. API callers should pass
+// CacheControlImmutable (the frontend uses ?v=cover_cache_key to bust cache);
+// external callers (OPDS, eReader, Kobo) should pass CacheControlNoCache.
+//
 // Conditional GET uses an ETag of `"<file_id>-<mtime_unix>"` and intentionally
 // omits Last-Modified. SelectFile's choice depends on the library's
 // CoverAspectRatio and which files belong to the book, so the served file's
@@ -84,7 +105,7 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 // served, and the new cover may have an older mtime than the previously-served
 // one. Mtime-only revalidation would return stale 304s in that case; baking
 // the file ID into the validator ensures it bumps whenever selection changes.
-func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio string) error {
+func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio string, cacheControl string) error {
 	coverFile := SelectFile(files, coverAspectRatio)
 	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
 		return errcodes.NotFound("Cover")
@@ -105,7 +126,7 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio strin
 
 	etag := fmt.Sprintf(`"%d-%d"`, coverFile.ID, modTime.Unix())
 
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	c.Response().Header().Set("Cache-Control", cacheControl)
 	c.Response().Header().Set("ETag", etag)
 
 	if inm := c.Request().Header.Get("If-None-Match"); inm != "" && inm == etag {

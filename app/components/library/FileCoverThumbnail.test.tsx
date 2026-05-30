@@ -42,7 +42,7 @@ describe("FileCoverThumbnail", () => {
   it("re-mounts the img when cacheKey bumps after an error", () => {
     const file = makeFile();
     const { container, rerender } = render(
-      <FileCoverThumbnail cacheKey={111} file={file} />,
+      <FileCoverThumbnail cacheKey="111" file={file} />,
     );
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
@@ -53,7 +53,7 @@ describe("FileCoverThumbnail", () => {
     fireEvent.error(firstImg!);
     expect(container.querySelector("img")).toBeNull();
 
-    rerender(<FileCoverThumbnail cacheKey={222} file={file} />);
+    rerender(<FileCoverThumbnail cacheKey="222" file={file} />);
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(

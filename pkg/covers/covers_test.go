@@ -211,7 +211,7 @@ func TestServeBookCover_NotFoundWhenNoCover(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, CoverImageFilename: nil},
 	}
 
-	err := ServeBookCover(c, files, "book")
+	err := ServeBookCover(c, files, "book", CacheControlNoCache)
 	require.Error(t, err)
 	var ecErr *errcodes.Error
 	require.ErrorAs(t, err, &ecErr)
@@ -237,7 +237,7 @@ func TestServeBookCover_ServesCoverFile(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	require.NoError(t, ServeBookCover(c, files, "book"))
+	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache))
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("ETag"))
@@ -272,7 +272,7 @@ func TestServeBookCover_ETagIncludesFileIDAndMtime(t *testing.T) {
 		{ID: 42, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	require.NoError(t, ServeBookCover(c, files, "book"))
+	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache))
 	assert.Equal(t, fmt.Sprintf(`"%d-%d"`, 42, pinned.Unix()), rec.Header().Get("ETag"))
 }
 
@@ -295,7 +295,7 @@ func TestServeBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
-	require.NoError(t, ServeBookCover(c1, files, "book"))
+	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache))
 	etag := rec1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
 
@@ -305,7 +305,7 @@ func TestServeBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
 
-	require.NoError(t, ServeBookCover(c2, files, "book"))
+	require.NoError(t, ServeBookCover(c2, files, "book", CacheControlNoCache))
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
 	assert.Equal(t, etag, rec2.Header().Get("ETag"))
@@ -353,7 +353,7 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
-	require.NoError(t, ServeBookCover(c1, files, "book"))
+	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache))
 	require.Equal(t, http.StatusOK, rec1.Code)
 	assert.Equal(t, []byte("epub-cover"), rec1.Body.Bytes())
 	etagEPUB := rec1.Header().Get("ETag")
@@ -368,7 +368,7 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	req2.Header.Set("If-None-Match", etagEPUB)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, ServeBookCover(c2, files, "audiobook"))
+	require.NoError(t, ServeBookCover(c2, files, "audiobook", CacheControlNoCache))
 	assert.Equal(t, http.StatusOK, rec2.Code,
 		"expected 200 after aspect-ratio change (ETag must change with file identity, not just mtime)")
 	etagM4B := rec2.Header().Get("ETag")
@@ -377,6 +377,76 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	assert.True(t, strings.HasPrefix(etagM4B, `"22-`),
 		"ETag should encode the M4B file ID (22) in <id-mtime> format, got %q", etagM4B)
 	assert.Equal(t, []byte("m4b-cover"), rec2.Body.Bytes())
+}
+
+func TestCacheKey_ReturnsFileIDAndUpdatedAt(t *testing.T) {
+	t.Parallel()
+
+	updatedAt := time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)
+	cover := "book.epub.cover.jpg"
+	files := []*models.File{
+		{ID: 42, FileType: models.FileTypeEPUB, CoverImageFilename: &cover, UpdatedAt: updatedAt},
+	}
+
+	got := CacheKey(files, "book")
+	assert.Equal(t, fmt.Sprintf("%d-%d", 42, updatedAt.Unix()), got)
+}
+
+func TestCacheKey_ReturnsEmptyWhenNoCover(t *testing.T) {
+	t.Parallel()
+
+	files := []*models.File{
+		{ID: 1, FileType: models.FileTypeEPUB, CoverImageFilename: nil},
+	}
+
+	assert.Empty(t, CacheKey(files, "book"))
+}
+
+func TestCacheKey_ReturnsEmptyForNilFiles(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, CacheKey(nil, "book"))
+}
+
+func TestCacheKey_RespectsAspectRatio(t *testing.T) {
+	t.Parallel()
+
+	epubCover := "epub.cover.jpg"
+	m4bCover := "m4b.cover.jpg"
+	epubTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	m4bTime := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	files := []*models.File{
+		{ID: 10, FileType: models.FileTypeEPUB, CoverImageFilename: &epubCover, UpdatedAt: epubTime},
+		{ID: 20, FileType: models.FileTypeM4B, CoverImageFilename: &m4bCover, UpdatedAt: m4bTime},
+	}
+
+	bookKey := CacheKey(files, "book")
+	audioKey := CacheKey(files, "audiobook")
+
+	assert.Equal(t, fmt.Sprintf("%d-%d", 10, epubTime.Unix()), bookKey)
+	assert.Equal(t, fmt.Sprintf("%d-%d", 20, m4bTime.Unix()), audioKey)
+	assert.NotEqual(t, bookKey, audioKey)
+}
+
+func TestServeBookCover_UsesCacheControlParam(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bookPath := filepath.Join(dir, "book.epub")
+	require.NoError(t, os.WriteFile(bookPath, []byte("epub"), 0o644))
+	coverName := "book.epub.cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, coverName), []byte("jpeg"), 0o644))
+
+	files := []*models.File{
+		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, ServeBookCover(c, files, "book", "private, max-age=31536000, immutable"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 }
 
 func TestServeBookCover_NotFoundWhenCoverFileMissingOnDisk(t *testing.T) {
@@ -398,7 +468,7 @@ func TestServeBookCover_NotFoundWhenCoverFileMissingOnDisk(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	err := ServeBookCover(c, files, "book")
+	err := ServeBookCover(c, files, "book", CacheControlNoCache)
 	require.Error(t, err)
 	var ecErr *errcodes.Error
 	require.ErrorAs(t, err, &ecErr)

@@ -14,7 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 )
 
-func TestBookCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
 	db := setupTestDB(t)
@@ -39,7 +39,7 @@ func TestBookCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, h.bookCover(c))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("ETag"))
 	// Last-Modified is intentionally NOT emitted: the served file's identity
 	// can change (hybrid book + aspect-ratio change, file removed) without any
@@ -85,5 +85,5 @@ func TestBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
 	assert.Equal(t, etag, rec2.Header().Get("ETag"))
-	assert.Equal(t, "private, no-cache", rec2.Header().Get("Cache-Control"))
+	assert.Equal(t, "private, max-age=31536000, immutable", rec2.Header().Get("Cache-Control"))
 }

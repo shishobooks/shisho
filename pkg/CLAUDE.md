@@ -105,11 +105,12 @@ All file-serving endpoints must include a `Cache-Control` header to prevent reve
 
 | Endpoint Category | Header | Reason |
 |---|---|---|
-| **Cover endpoints** (`/cover`) | `Cache-Control: private, no-cache` | Allows conditional revalidation via `Last-Modified`/`ETag` |
+| **API cover endpoints** (`/api/*/cover`) | `Cache-Control: private, max-age=31536000, immutable` | Browser caches forever; URL changes via `?v=cover_cache_key` when cover changes |
+| **External cover endpoints** (OPDS, eReader, Kobo) | `Cache-Control: private, no-cache` | External clients don't use `?v=` cache-busting; revalidation via `Last-Modified`/`ETag` |
 | **Download/stream endpoints** (`/download`, `/stream`) | `Cache-Control: private, no-store` | No proxy caching at all — generated files can change without the URL changing |
 | **Page endpoint** (`getPage`) | `Cache-Control: public, max-age=31536000, immutable` | Rendered pages are immutable per fileID+pageNum |
 
-When adding a new endpoint that serves files via `c.File()` or `c.Stream()`, set the appropriate `Cache-Control` header before the call:
+When adding a new endpoint that serves files via `c.File()` or `c.Stream()`, set the appropriate `Cache-Control` header before the call. Cover endpoints should use the constants in `pkg/covers/covers.go` (`covers.CacheControlImmutable` for API endpoints, `covers.CacheControlNoCache` for external):
 
 ```go
 c.Response().Header().Set("Cache-Control", "private, no-store")

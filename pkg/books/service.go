@@ -776,6 +776,71 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 	return &book, nil
 }
 
+// GetFirstBooksFilesForSeries returns the files of each series' first book,
+// keyed by series ID. Uses two queries regardless of input size: one window-
+// function query to find the first book per series, then one query to load
+// files for those books. The first-book ordering matches GetFirstBookInSeriesByID
+// (whole numbers before fractions, then series_number, then title).
+func (svc *Service) GetFirstBooksFilesForSeries(ctx context.Context, seriesIDs []int) (map[int][]*models.File, error) {
+	if len(seriesIDs) == 0 {
+		return nil, nil
+	}
+
+	type row struct {
+		SeriesID int `bun:"series_id"`
+		BookID   int `bun:"book_id"`
+	}
+	var rows []row
+	err := svc.db.NewRaw(`
+		SELECT series_id, book_id FROM (
+			SELECT
+				bs.series_id,
+				bs.book_id,
+				ROW_NUMBER() OVER (
+					PARTITION BY bs.series_id
+					ORDER BY
+						CASE WHEN bs.series_number = CAST(bs.series_number AS INTEGER) THEN 0 ELSE 1 END ASC,
+						bs.series_number ASC,
+						b.title ASC
+				) AS rn
+			FROM book_series bs
+			INNER JOIN books b ON b.id = bs.book_id
+			WHERE bs.series_id IN (?)
+		) WHERE rn = 1
+	`, bun.List(seriesIDs)).Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	bookIDs := make([]int, len(rows))
+	bookToSeries := make(map[int][]int, len(rows))
+	for i, r := range rows {
+		bookIDs[i] = r.BookID
+		bookToSeries[r.BookID] = append(bookToSeries[r.BookID], r.SeriesID)
+	}
+
+	var files []*models.File
+	err = svc.db.NewSelect().
+		Model(&files).
+		Where("f.book_id IN (?)", bun.List(bookIDs)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	result := make(map[int][]*models.File, len(rows))
+	for _, f := range files {
+		for _, sid := range bookToSeries[f.BookID] {
+			result[sid] = append(result[sid], f)
+		}
+	}
+	return result, nil
+}
+
 // OrganizeBookFiles is the public entry point for triggering file organization.
 // It checks the library's OrganizeFileStructure setting internally and returns
 // early if disabled.

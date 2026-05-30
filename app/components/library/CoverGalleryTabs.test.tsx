@@ -23,7 +23,7 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("CoverGalleryTabs", () => {
-  it("renders cover image with stable URL when no cacheKey is provided", () => {
+  it("renders cover image with cache key from file updated_at", () => {
     const files = [
       makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
       makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
@@ -33,60 +33,83 @@ describe("CoverGalleryTabs", () => {
 
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
-    expect(img?.getAttribute("src")).toBe("/api/books/files/1/cover");
+    expect(img?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
+    );
   });
 
-  it("re-mounts cover image when cacheKey changes", () => {
+  it("re-mounts cover image when file updated_at changes", () => {
     const files = [
-      makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
+      makeFile({
+        id: 1,
+        file_type: "epub",
+        filepath: "/library/a.epub",
+        updated_at: "2024-01-01T00:00:00Z",
+      }),
       makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
     ];
 
-    const { container, rerender } = render(
-      <CoverGalleryTabs cacheKey={111} files={files} />,
-    );
+    const { container, rerender } = render(<CoverGalleryTabs files={files} />);
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=111",
+      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
     );
 
-    // Simulate an error first so the img is unmounted, then a cacheKey bump
-    // should cause it to re-mount (simulating a "retry" after the cover was
-    // fixed on disk — equivalent to the old cacheBuster-driven retry flow).
     fireEvent.error(firstImg!);
     expect(container.querySelector("img")).toBeNull();
 
-    rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
+    const updatedFiles = [
+      makeFile({
+        id: 1,
+        file_type: "epub",
+        filepath: "/library/a.epub",
+        updated_at: "2024-06-01T00:00:00Z",
+      }),
+      makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
+    ];
+    rerender(<CoverGalleryTabs files={updatedFiles} />);
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=222",
+      "/api/books/files/1/cover?v=2024-06-01T00:00:00Z",
     );
   });
 
-  it("mounts a fresh <img> element when cacheKey changes (even without error)", () => {
+  it("mounts a fresh <img> element when file updated_at changes (even without error)", () => {
     const files = [
-      makeFile({ id: 1, file_type: "epub", filepath: "/library/a.epub" }),
+      makeFile({
+        id: 1,
+        file_type: "epub",
+        filepath: "/library/a.epub",
+        updated_at: "2024-01-01T00:00:00Z",
+      }),
       makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
     ];
 
-    const { container, rerender } = render(
-      <CoverGalleryTabs cacheKey={111} files={files} />,
-    );
+    const { container, rerender } = render(<CoverGalleryTabs files={files} />);
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=111",
+      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
     );
 
-    rerender(<CoverGalleryTabs cacheKey={222} files={files} />);
+    const updatedFiles = [
+      makeFile({
+        id: 1,
+        file_type: "epub",
+        filepath: "/library/a.epub",
+        updated_at: "2024-06-01T00:00:00Z",
+      }),
+      makeFile({ id: 2, file_type: "m4b", filepath: "/library/b.m4b" }),
+    ];
+    rerender(<CoverGalleryTabs files={updatedFiles} />);
     const secondImg = container.querySelector("img");
 
     expect(secondImg).not.toBeNull();
-    expect(secondImg).not.toBe(firstImg); // Different DOM node — React remounted
+    expect(secondImg).not.toBe(firstImg);
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=222",
+      "/api/books/files/1/cover?v=2024-06-01T00:00:00Z",
     );
   });
 });

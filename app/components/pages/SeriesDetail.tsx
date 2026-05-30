@@ -258,7 +258,7 @@ const SeriesDetail = () => {
               {seriesBooksQuery.data.map((book) => (
                 <BookItem
                   book={book}
-                  cacheKey={seriesBooksQuery.dataUpdatedAt}
+                  cacheKey={book.cover_cache_key}
                   gallerySize={effectiveSize}
                   key={book.id}
                   libraryId={libraryId!}

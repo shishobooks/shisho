@@ -58,6 +58,13 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
 
+	seriesFiles, _ := h.bookService.GetFirstBooksFilesForSeries(ctx, []int{id})
+	aspectRatio := ""
+	if series.Library != nil {
+		aspectRatio = series.Library.CoverAspectRatio
+	}
+	series.CoverCacheKey = covers.CacheKey(seriesFiles[id], aspectRatio)
+
 	response := struct {
 		*models.Series
 		BookCount int      `json:"book_count"`
@@ -95,7 +102,14 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts and aliases
+	// Batch-load cover cache keys for all series.
+	seriesIDs := make([]int, len(seriesList))
+	for i, s := range seriesList {
+		seriesIDs[i] = s.ID
+	}
+	seriesFiles, _ := h.bookService.GetFirstBooksFilesForSeries(ctx, seriesIDs)
+
+	// Augment with book counts, aliases, and cover cache keys.
 	type SeriesWithCount struct {
 		*models.Series
 		BookCount int      `json:"book_count"`
@@ -105,6 +119,11 @@ func (h *handler) list(c echo.Context) error {
 	for i, s := range seriesList {
 		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, s.ID)
+		aspectRatio := ""
+		if s.Library != nil {
+			aspectRatio = s.Library.CoverAspectRatio
+		}
+		s.CoverCacheKey = covers.CacheKey(seriesFiles[s.ID], aspectRatio)
 		result[i] = SeriesWithCount{s, count, aliasList}
 	}
 
@@ -261,6 +280,14 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	for _, b := range booksList {
+		aspectRatio := ""
+		if b.Library != nil {
+			aspectRatio = b.Library.CoverAspectRatio
+		}
+		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
+	}
+
 	return errors.WithStack(c.JSON(http.StatusOK, booksList))
 }
 
@@ -321,7 +348,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 	// cover happens to have an older mtime than the previous first book's cover.
 	etag := fmt.Sprintf(`"%d-%d"`, coverFile.ID, modTime.Unix())
 
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
 	c.Response().Header().Set("ETag", etag)
 
 	// Conditional GET uses ETag only. If-Modified-Since is intentionally not
