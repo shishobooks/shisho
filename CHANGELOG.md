@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-05-30
+
+### Features
+- Add backend-computed cover_cache_key for immutable cover caching (#338)
+- Add per-file preferred cover selection (#337)
+- Remove primary file concept from backend and database (#335)
+- Mention alias creation in merge dialogs (#332)
+- Add file-type selection to batch download (#331)
+- Remove primary-file metadata priority from OPDS entries (#330)
+- Show all main files on eReader book download page (#329)
+- Remove primary file concept from frontend (#328)
+- Sync all Kobo-compatible files per book instead of just the primary (#327)
+- Replace isPrimaryFile gate with source-priority check in identify review defaults (#326)
+- Use newest file instead of primary file for sort coalesce queries (#325)
+- Allow creating new parent publisher from edit dialog (#319)
+- Make publisher name a clickable link in file detail views (#318)
+- Consolidate useDebouncedSearch into useDebounce with immediate option (#313)
+- Show author names instead of book title in file list subtitle (#280)
+- Redesign publisher merge dialog with radio button selection (#279)
+
+### Bug Fixes
+- Add PDF to supplement-to-main-file promotion paths (#334)
+- Hide ReviewPanel when file role is changed to supplement in edit dialog (#333)
+- Fold pending alias input into save payload without requiring Enter (#321)
+- Clean up orphaned file and book children when parent book row is missing (#317)
+- Move alias auto-add-on-rename to frontend and fix SyncAliases duplicate conflict (#316)
+- File type badges overflow instead of wrapping on book cards (#311)
+- Invalidate publisher hierarchy cache on delete and merge mutations (#310)
+- Mark migrations applied after success (#300)
+
+### Documentation
+- Add Preferred Cover term to domain glossary (#323)
+- Add ADR 0003: remove primary file concept (#299)
+
+### Testing
+- Parallelize pkg/plugins tests to fix CI timeout flake (#276)
+
+### Other
+- Bump the minor-and-patch group across 1 directory with 9 updates (#312)
+- Bump the minor-and-patch group with 4 updates (#307)
+- Bump qs from 6.15.1 to 6.15.2 (#309)
+- Fix #277: MetadataMergeDialog doesn't reset parent search state after merge (#304)
+- Fix #285: Changing a publisher's parent leaves cached parent children stale (#305)
+- Bump ws from 8.20.0 to 8.20.1 (#284)
+- Bump webpack-dev-server from 5.2.3 to 5.2.4 (#282)
+
+
 ## [0.0.45] - 2026-05-17
 
 ### Features
