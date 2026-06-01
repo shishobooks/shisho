@@ -132,14 +132,29 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
 
   return [
     {
-      // Use `mise e2e:api` (build + `exec` the binary), NOT `mise start:api`
-      // (= `go run ./cmd/api`). `go run` does not forward SIGTERM to the api
-      // binary it spawns, so on Playwright webServer teardown the api process
-      // is orphaned, keeps this command's stdout pipe open, and Playwright
-      // hangs after the tests finish. `mise e2e:api` execs the binary as
-      // mise's direct child, so teardown signals reach it and it shuts down
-      // cleanly. See the `e2e:api` task in .mise.toml.
-      command: "mise e2e:api",
+      // Build the API binary and `exec` it directly. Do NOT route this through
+      // `mise start:api` (= `go run ./cmd/api`) or any other wrapper.
+      //
+      // Playwright spawns the webServer with `detached: true` (its own process
+      // group) and, on teardown, force-kills it with `process.kill(-pid,
+      // "SIGKILL")` — a process-GROUP kill. For that to reap the API, the API
+      // must live in the process group whose leader is the PID Playwright
+      // spawned. Two things break that:
+      //   1. `go run` spawns the real api binary as a child and does not
+      //      forward signals to it, so the binary is orphaned.
+      //   2. `mise <task>` (a Go program) puts the task subprocess in a
+      //      separate process group on Linux, so it escapes the group kill
+      //      even when the task itself execs the binary.
+      // Either way the orphaned api keeps this command's stdout pipe open and
+      // Playwright hangs after the tests finish, until the CI step times out.
+      //
+      // Inlining `sh -c "go build … && exec …"` fixes both: `exec` replaces the
+      // shell with the api binary, so the binary IS the process-group leader
+      // Playwright tracks. The group SIGKILL reaches it (and during the build
+      // phase the kill still reaches the shell + go build in the same group).
+      // Per-browser binary names avoid any concurrent-build race when chromium
+      // and firefox build in parallel (local `mise test:e2e`).
+      command: `go build -o ./build/api/api-e2e-${config.browser} ./cmd/api && exec ./build/api/api-e2e-${config.browser}`,
       url: `http://localhost:${config.apiPort}/health`,
       reuseExistingServer,
       timeout: 60000,

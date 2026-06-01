@@ -224,9 +224,16 @@ playwright test e2e/login.spec.ts          # Run specific test file
 
 Playwright auto-starts servers via `webServer` config. When using `--project`, only that browser's servers start.
 
-### webServer API command: use `mise e2e:api`, never `go run`
+### webServer API command: inline `go build … && exec …`, never a wrapper
 
-The API webServer command is `mise e2e:api`, which builds the binary and `exec`s it. Do NOT change it back to `mise start:api` (= `go run ./cmd/api`). `go run` spawns the compiled binary as a separate child and does not forward SIGTERM/SIGINT to it. On teardown Playwright signals the PID it launched, so with `go run` the real api process is orphaned, keeps the webServer stdout pipe open, and Playwright hangs after the tests finish (the run never exits, it just sits until CI kills it). `exec` collapses the chain so the tracked PID is the api binary itself, which handles signals via its graceful shutdown (`cmd/api/main.go`). The binary is built to `./build/api/api-e2e` (gitignored); concurrent chromium+firefox runs building to the same path is safe (Go uses atomic rename and the output is identical).
+The API webServer command (`playwright.config.ts`) inlines `go build -o ./build/api/api-e2e-<browser> ./cmd/api && exec ./build/api/api-e2e-<browser>`. Do NOT route it through `mise start:api` (= `go run ./cmd/api`) or a `mise` task wrapper.
+
+Why: Playwright spawns the webServer with `detached: true` (its own process group) and, on teardown, force-kills it with `process.kill(-pid, "SIGKILL")` — a process-GROUP kill. For that to reap the API, the API must be in the process group led by the PID Playwright spawned. Two wrappers break that:
+
+- `go run` spawns the api binary as a child and does not forward signals to it, so the binary is orphaned.
+- `mise <task>` (a Go program) puts the task subprocess in a separate process group on Linux, so the binary escapes the group kill even if the task execs it. (This passes on macOS, where mise keeps the same group, which is why it must be tested against CI, not just locally.)
+
+When the API is orphaned it keeps the webServer's stdout pipe open, so Playwright hangs after the tests finish until the CI step times out. Inlining `sh -c "go build … && exec …"` fixes it: `exec` replaces the shell with the api binary, so the binary IS the process-group leader Playwright tracks, and the group SIGKILL reaches it. The api binary's own graceful shutdown lives in `cmd/api/main.go`. Binaries are built per-browser to `./build/api/api-e2e-<browser>` (gitignored) to avoid a concurrent-build race when chromium and firefox build in parallel under `mise test:e2e`.
 
 ## Key Files
 

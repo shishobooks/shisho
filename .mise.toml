@@ -132,19 +132,6 @@ run = "mkdir -p ./tmp && pnpm e2e:chromium"
 description = "Run E2E tests in Firefox"
 run = "mkdir -p ./tmp && pnpm e2e:firefox"
 
-[tasks."e2e:api"]
-description = "Build and run the API for E2E tests (used by Playwright webServer)"
-# Build the binary, then `exec` it so the api process REPLACES the shell that
-# Playwright spawned. This is critical: Playwright tracks the PID of the
-# command it launches and signals that PID on teardown. With `mise start:api`
-# (= `go run ./cmd/api`), `go run` spawns the real api binary as a separate
-# child and does NOT forward SIGTERM/SIGINT to it, so on teardown the api
-# process is orphaned, keeps the webServer stdout pipe open, and Playwright
-# hangs forever waiting for the pipe to close. `exec` collapses the chain so
-# the tracked PID IS the api binary, which handles signals and shuts down
-# cleanly (see cmd/api/main.go graceful shutdown).
-run = "go build -o ./build/api/api-e2e ./cmd/api && exec ./build/api/api-e2e"
-
 [tasks."test:cover"]
 description = "Open coverage report in browser"
 run = "go tool cover -html=coverage.out"
