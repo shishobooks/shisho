@@ -75,7 +75,7 @@ export interface ResourceListResponse<T> {
 }
 
 // Delete operation types
-// TODO: Move these to validators.go and regenerate via tygo
+// TODO: Move these to types.go and regenerate via tygo
 export interface DeleteBookResponse {
   files_deleted: number;
 }

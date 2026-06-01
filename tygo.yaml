@@ -7,7 +7,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/config"
     output_path: "app/types/generated/config.ts"
     include_files:
@@ -17,55 +17,55 @@ packages:
     frontmatter: |
       import { JobBulkDownloadData, JobExportData, JobRecomputeReviewData, JobScanData } from "@/types";
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/joblogs"
     output_path: "app/types/generated/joblogs.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/libraries"
     output_path: "app/types/generated/libraries.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/filesystem"
     output_path: "app/types/generated/filesystem.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/auth"
     output_path: "app/types/generated/auth.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/users"
     output_path: "app/types/generated/users.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/roles"
     output_path: "app/types/generated/roles.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/search"
     output_path: "app/types/generated/search.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/series"
     output_path: "app/types/generated/series.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/people"
     output_path: "app/types/generated/people.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/genres"
     output_path: "app/types/generated/genres.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/tags"
     output_path: "app/types/generated/tags.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/publishers"
     output_path: "app/types/generated/publishers.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/apikeys"
     output_path: "app/types/generated/apikeys.ts"
     include_files:
@@ -73,15 +73,15 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/chapters"
     output_path: "app/types/generated/chapters.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/lists"
     output_path: "app/types/generated/lists.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/settings"
     output_path: "app/types/generated/settings.ts"
     include_files:
-      - validators.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/cache"
     output_path: "app/types/generated/cache.ts"
     include_files:
