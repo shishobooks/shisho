@@ -1,8 +1,10 @@
-# 4. Generate API types from Go via tygo
+# Generate API types from Go via tygo
 
 ## Status
 
-Accepted
+Accepted. This records the decision; the implementation is tracked in PRD #341
+and its slices (#342 onward), so the codebase reaches the described state
+incrementally rather than all at once.
 
 ## Context
 
@@ -43,8 +45,10 @@ by tygo, so the generated `Person.aliases` stayed `PersonAlias[]` (the model
 relation). The frontend extended `Person`, inherited `PersonAlias[]`, and called
 `.map((a) => a.name)` on values that were actually strings. The detail pages
 papered over the same mismatch with `as unknown as string[]` casts. PR #336
-spread that cast to the list pages instead of fixing the root cause; this ADR
-supersedes that approach.
+proposed extending that cast to the list pages rather than fixing the root
+cause, and was closed in favor of the approach in this ADR. The alias and
+publisher-hierarchy relations this reshapes are the subject of ADR 0001
+(per-resource alias tables) and ADR 0002 (unified publisher hierarchy).
 
 Alternatives considered and rejected:
 
@@ -114,17 +118,19 @@ TypeScript duplicates. Concretely:
 
 - The frontend's generated types become trustworthy. Removing the manual
   duplicates means a backend shape change surfaces as a TypeScript error rather
-  than silent drift. Concretely, #324's `aliases` mismatch becomes a compile
-  error that forces the correct pass-through, and the nine `as unknown as
-  string[]` casts across the list and detail pages are deleted.
+  than silent drift. Concretely, #324's `aliases` mismatch turns into a compile
+  error that forces the correct pass-through, and the nine alias workarounds
+  across the list and detail pages (the five `as unknown as string[]` casts on
+  the detail pages plus the four `.map((a) => a.name)` calls on the list pages)
+  can be removed.
 - Embedding with `tstype:",extends"` keeps the responses DRY, at the cost of a
   `frontmatter` import per package and the discipline of marking reshaped model
   relations `tstype:"-"`. A future reshape of a model relation must check for
   object consumers before excluding it.
 - The convention must be enforced to avoid re-eroding. The root and
-  subdirectory `CLAUDE.md` files document the rule (no anonymous responses, no
-  manual TS duplicates, `tstype` on enum fields, embed-with-extends for
-  responses), and reviewers treat violations as review failures.
+  subdirectory `CLAUDE.md` files will document the rule (no anonymous responses,
+  no manual TS duplicates, `tstype` on enum fields, embed-with-extends for
+  responses) so reviewers can treat violations as review failures.
 - Some responses legitimately have no body. Endpoints that previously returned a
   cosmetic `{"message": "..."}` now return `204`, and the frontend relies on the
   status, not the body.
