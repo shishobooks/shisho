@@ -73,9 +73,9 @@ The API type boundary is generated from Go via tygo, with no hand-maintained
 TypeScript duplicates. Concretely:
 
 1. **Every request and response payload is a named, exported Go struct** living
-   in the package's `types.go` (renamed from the older `validators.go`, which
-   undersold its role now that it holds request, response, query, and enum
-   types). No handler returns an anonymous struct, `echo.Map`, or
+   in the package's `types.go` (to be renamed from the older `validators.go`,
+   which undersells its role now that it holds request, response, query, and
+   enum types). No handler returns an anonymous struct, `echo.Map`, or
    `map[string]any`.
 
 2. **Response structs reuse the model by embedding it with `tstype:",extends"`,
@@ -131,8 +131,8 @@ TypeScript duplicates. Concretely:
   subdirectory `CLAUDE.md` files will document the rule (no anonymous responses,
   no manual TS duplicates, `tstype` on enum fields, embed-with-extends for
   responses) so reviewers can treat violations as review failures.
-- Some responses legitimately have no body. Endpoints that previously returned a
-  cosmetic `{"message": "..."}` now return `204`, and the frontend relies on the
-  status, not the body.
+- Some responses legitimately have no body. Endpoints that return a cosmetic
+  `{"message": "..."}` move to `204`, and the frontend relies on the status, not
+  the body.
 - A genuinely new shared shape still requires a Go struct first. Reaching for a
   quick `echo.Map` is no longer acceptable even for one-off responses.
