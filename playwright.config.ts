@@ -132,7 +132,14 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
 
   return [
     {
-      command: "mise start:api",
+      // Use `mise e2e:api` (build + `exec` the binary), NOT `mise start:api`
+      // (= `go run ./cmd/api`). `go run` does not forward SIGTERM to the api
+      // binary it spawns, so on Playwright webServer teardown the api process
+      // is orphaned, keeps this command's stdout pipe open, and Playwright
+      // hangs after the tests finish. `mise e2e:api` execs the binary as
+      // mise's direct child, so teardown signals reach it and it shuts down
+      // cleanly. See the `e2e:api` task in .mise.toml.
+      command: "mise e2e:api",
       url: `http://localhost:${config.apiPort}/health`,
       reuseExistingServer,
       timeout: 60000,

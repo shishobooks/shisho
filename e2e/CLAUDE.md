@@ -224,6 +224,10 @@ playwright test e2e/login.spec.ts          # Run specific test file
 
 Playwright auto-starts servers via `webServer` config. When using `--project`, only that browser's servers start.
 
+### webServer API command: use `mise e2e:api`, never `go run`
+
+The API webServer command is `mise e2e:api`, which builds the binary and `exec`s it. Do NOT change it back to `mise start:api` (= `go run ./cmd/api`). `go run` spawns the compiled binary as a separate child and does not forward SIGTERM/SIGINT to it. On teardown Playwright signals the PID it launched, so with `go run` the real api process is orphaned, keeps the webServer stdout pipe open, and Playwright hangs after the tests finish (the run never exits, it just sits until CI kills it). `exec` collapses the chain so the tracked PID is the api binary itself, which handles signals via its graceful shutdown (`cmd/api/main.go`). The binary is built to `./build/api/api-e2e` (gitignored); concurrent chromium+firefox runs building to the same path is safe (Go uses atomic rename and the output is identical).
+
 ## Key Files
 
 | Purpose | Location |
