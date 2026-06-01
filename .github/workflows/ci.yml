@@ -170,5 +170,17 @@ jobs:
       - run: mise tygo
       - run: pnpm test:unit
       - run: mise build
-      - run: pnpm e2e:chromium
-      - run: pnpm e2e:firefox
+      - name: Run Chromium E2E
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 6
+          max_attempts: 2
+          retry_on: timeout
+          command: pnpm e2e:chromium
+      - name: Run Firefox E2E
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 6
+          max_attempts: 2
+          retry_on: timeout
+          command: pnpm e2e:firefox

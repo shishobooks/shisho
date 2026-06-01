@@ -4,4 +4,4 @@ layout:
     - command: "claude --dangerously-skip-permissions"
     - command: "mise start"
       run: false
-    - command: ""
+    - command: "mise setup"
