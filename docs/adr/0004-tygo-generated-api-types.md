@@ -73,9 +73,8 @@ The API type boundary is generated from Go via tygo, with no hand-maintained
 TypeScript duplicates. Concretely:
 
 1. **Every request and response payload is a named, exported Go struct** living
-   in the package's `types.go` (to be renamed from the older `validators.go`,
-   which undersells its role now that it holds request, response, query, and
-   enum types). No handler returns an anonymous struct, `echo.Map`, or
+   in the package's `types.go` (which holds request, response, query, and enum
+   types). No handler returns an anonymous struct, `echo.Map`, or
    `map[string]any`.
 
 2. **Response structs reuse the model by embedding it with `tstype:",extends"`,

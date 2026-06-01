@@ -21,7 +21,7 @@ Each domain (books, jobs, libraries, chapters) has:
 - `handlers.go` - HTTP request/response logic
 - `routes.go` - HTTP endpoint registration
 - `service.go` - Business logic and database operations
-- `validators.go` - Request/response schemas
+- `types.go` - Request/response schemas
 
 ### Database Models (`pkg/models/`)
 
@@ -287,7 +287,7 @@ var payload setOrderPayload
 if err := c.Bind(&payload); err != nil { ... }
 ```
 
-- **Slice fields need `mod:"dive"` for inner modifiers to fire**: `mold/v4` (used by the binder for `mod:"trim"` etc.) treats slice/array/map/pointer-to-slice fields as opaque single values by default. If a payload field is shaped like `[]Inner` or `*[]Inner` and `Inner` has any `mod:"..."` tags on its fields, the parent slice field must carry `mod:"dive"` — otherwise the inner modifiers are silently no-ops. This mirrors `validator/v10`'s `dive`, but the two are independent: both tags are required on the same field when both validation and modification need to traverse. Reference: `UpdateFilePayload.Identifiers *[]IdentifierPayload` in `pkg/books/validators.go` (carries `mod:"dive" validate:"omitempty,dive"`); regression test in `pkg/binder/binder_test.go` (`TestBind_DiveRequiredForSliceModTraversal`).
+- **Slice fields need `mod:"dive"` for inner modifiers to fire**: `mold/v4` (used by the binder for `mod:"trim"` etc.) treats slice/array/map/pointer-to-slice fields as opaque single values by default. If a payload field is shaped like `[]Inner` or `*[]Inner` and `Inner` has any `mod:"..."` tags on its fields, the parent slice field must carry `mod:"dive"` — otherwise the inner modifiers are silently no-ops. This mirrors `validator/v10`'s `dive`, but the two are independent: both tags are required on the same field when both validation and modification need to traverse. Reference: `UpdateFilePayload.Identifiers *[]IdentifierPayload` in `pkg/books/types.go` (carries `mod:"dive" validate:"omitempty,dive"`); regression test in `pkg/binder/binder_test.go` (`TestBind_DiveRequiredForSliceModTraversal`).
 
 - **Bun table aliases in WHERE/ORDER clauses**: Bun auto-aliases tables using the first letter of the table name (e.g., `books` → `b`, `files` → `f`, `persons` → `p`). Always use these aliases in `Where()`, `Order()`, and other SQL clauses — never use the full table name:
 
