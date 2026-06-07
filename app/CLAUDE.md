@@ -48,6 +48,10 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 - Query hooks in `app/hooks/queries/` wrap API calls with Tanstack Query
 - TypeScript types auto-imported from `app/types/generated/`
 
+**Never hand-define a type that has a Go counterpart.** Every API request and response shape is generated from a Go struct via tygo into `app/types/generated/` (re-exported from `@/types`). The frontend imports those types; it does not restate them. If a needed type is missing or wrong, fix the Go struct in the package's `types.go` and run `mise tygo`, do not write it in TypeScript. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`).
+
+- **Response types are `{Entity}Response`, list responses are `ResourceListResponse<{Entity}Response>`.** Query hooks type their return as the generated response type, not the bare model. A response struct embeds the model (TS `extends Genre`) and may reshape a relation: e.g. `GenreResponse` carries `aliases: string[]`, not the model `Genre`'s relation. Consume the response field directly (`genre.aliases`), never cast it (`as unknown as string[]`) and never call `.map((a) => a.name)` expecting relation objects. Reference: `useGenresList`/`useGenre`/`useUpdateGenre` in `app/hooks/queries/genres.ts` (typed `GenreResponse`), and `GenresList.tsx`/`GenreDetail.tsx` reading `aliases` as `string[]`.
+
 **IMPORTANT - List Limits:**
 - **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
 - **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.

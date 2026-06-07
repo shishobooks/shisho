@@ -1,19 +1,19 @@
 import ResourceList from "@/components/library/ResourceList";
 import { useGenresList } from "@/hooks/queries/genres";
 import { useResourceListState } from "@/hooks/useResourceListState";
-import type { Genre } from "@/types";
+import type { GenreResponse } from "@/types";
 
 const GenresList = () => {
   const state = useResourceListState();
   const query = useGenresList(state.queryParams);
 
   return (
-    <ResourceList<Genre>
+    <ResourceList<GenreResponse>
       itemConfig={(genre) => {
         const bookCount = genre.book_count ?? 0;
         return {
           name: genre.name,
-          aliases: genre.aliases.map((a) => a.name),
+          aliases: genre.aliases,
           badges: [
             {
               label: bookCount === 1 ? "book" : "books",

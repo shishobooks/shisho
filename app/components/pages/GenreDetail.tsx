@@ -76,7 +76,7 @@ const GenreDetail = () => {
   );
 
   const genre = genreQuery.data;
-  const aliases = genre ? ((genre.aliases as unknown as string[]) ?? []) : [];
+  const aliases = genre?.aliases ?? [];
   const bookCount = genre?.book_count ?? 0;
 
   const handleEdit = async (data: { name: string; aliases?: string[] }) => {

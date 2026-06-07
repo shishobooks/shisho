@@ -272,6 +272,15 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
 
 - **JSON field naming**: All JSON request and response payloads use `snake_case` for field names (e.g., `created_at`, `last_accessed_at`, not `createdAt`)
 - Go struct tags should use `json:"snake_case_name"` format
+
+- **Response shapes are named Go structs generated to TS via tygo (no anonymous responses).** Go is the single source of truth for every request and response shape; the frontend imports the generated type and never restates it. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`). Rules:
+  - Every request/response payload is a named, exported struct in the package's `types.go`. No handler returns an anonymous struct, `echo.Map`, or `map[string]any`. A response carrying nothing the client cannot derive returns `204 No Content`.
+  - **Reuse the model by embedding it with `tstype:",extends"`** instead of re-listing fields. Embed by **value** (`models.Genre`), not pointer: a pointer embed (`*models.Genre`) generates `extends Partial<Genre>` in TS, which is wrong for a response that always carries those fields. Shadowing fields (same `json` tag) keep the wire format byte-identical to a hand-built struct.
+  - **A value embed needs two `tygo.yaml` additions** for the package entry: a `frontmatter` import of the model (e.g. `import { Genre } from "@/types";`), and a `type_mappings` entry mapping the package-qualified selector to the bare interface name (e.g. `models.Genre: "Genre"`). Without the mapping, tygo emits `extends models.Genre` (an unresolved reference); without the frontmatter, `Genre` is undefined.
+  - **Reshaped model relations get `tstype:"-"` on the model field.** When a response returns a relation in a different shape than the model (e.g. `aliases []string` vs the model's `Aliases []*GenreAlias`), exclude the model's relation from TS generation with `tstype:"-"` (keep the `json` tag, the Go wire format is unchanged) so the generated `Entity` interface drops the relation and the response's `extends` does not collide. Only safe when no consumer reads that relation as objects.
+  - **Naming**: single-resource `{Entity}Response`; list envelope `List{Entities}Response` shaped `{ items, total }`; a list-item shape that genuinely differs from the single-resource shape `{Entity}ListItem`.
+
+  Reference implementation: `pkg/genres/types.go` (`GenreResponse`, `ListGenresResponse`), `pkg/models/genre.go` (`Aliases` field tagged `tstype:"-"`), and the genres entry in `tygo.yaml`. The wire-level regression net is `TestList_ResponseAliasesSerializeAsStringArray` in `pkg/genres/handlers_test.go`.
 - **Request binding must use structs**: The custom binder (`pkg/binder/`) uses mold (conform) and validator, which only work with structs. Never bind directly to a slice/array — wrap it in a struct:
 
 ```go

@@ -39,6 +39,8 @@ export * from "./generated/search";
 export * from "./generated/series";
 export * from "./generated/people";
 export {
+  type GenreResponse,
+  type ListGenresResponse,
   type ListGenresQuery,
   type UpdateGenrePayload,
   type MergeGenresPayload,

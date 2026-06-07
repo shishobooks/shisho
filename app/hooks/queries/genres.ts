@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, Genre, ResourceListResponse } from "@/types";
+import type { Book, GenreResponse, ResourceListResponse } from "@/types";
 import type {
   ListGenresQuery,
   UpdateGenrePayload,
@@ -20,7 +20,7 @@ export enum QueryKey {
   GenreBooks = "GenreBooks",
 }
 
-export type ListGenresData = ResourceListResponse<Genre>;
+export type ListGenresData = ResourceListResponse<GenreResponse>;
 
 export const useGenresList = (
   query: ListGenresQuery = {},
@@ -41,11 +41,11 @@ export const useGenresList = (
 export const useGenre = (
   genreId?: number,
   options: Omit<
-    UseQueryOptions<Genre, ShishoAPIError>,
+    UseQueryOptions<GenreResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Genre, ShishoAPIError>({
+  return useQuery<GenreResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(genreId),
     ...options,
     queryKey: [QueryKey.RetrieveGenre, genreId],
@@ -95,7 +95,7 @@ export const useUpdateGenre = () => {
       genreId: number;
       payload: UpdateGenrePayload;
     }) => {
-      return API.request<Genre>("PATCH", `/genres/${genreId}`, payload);
+      return API.request<GenreResponse>("PATCH", `/genres/${genreId}`, payload);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
