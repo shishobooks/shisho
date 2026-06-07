@@ -14,7 +14,7 @@ type Genre struct {
 	UpdatedAt time.Time     `json:"updated_at"`
 	LibraryID int           `bun:",nullzero" json:"library_id"`
 	Name      string        `bun:",nullzero" json:"name"`
-	Aliases   []*GenreAlias `bun:"rel:has-many,join:id=genre_id" json:"aliases" tstype:"GenreAlias[]"`
+	Aliases   []*GenreAlias `bun:"rel:has-many,join:id=genre_id" json:"aliases" tstype:"-"`
 	BookCount int           `bun:",scanonly" json:"book_count"`
 }
 

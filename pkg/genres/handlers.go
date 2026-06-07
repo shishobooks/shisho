@@ -49,11 +49,7 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
 
-	response := struct {
-		*models.Genre
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{genre, bookCount, aliasList}
+	response := GenreResponse{Genre: *genre, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -87,22 +83,14 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	// Augment with book counts and aliases
-	type GenreWithCount struct {
-		*models.Genre
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}
-	result := make([]GenreWithCount, len(genres))
+	result := make([]GenreResponse, len(genres))
 	for i, g := range genres {
 		bookCount, _ := h.genreService.GetBookCount(ctx, g.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, g.ID)
-		result[i] = GenreWithCount{g, bookCount, aliasList}
+		result[i] = GenreResponse{Genre: *g, BookCount: bookCount, Aliases: aliasList}
 	}
 
-	response := map[string]any{
-		"items": result,
-		"total": total,
-	}
+	response := ListGenresResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -165,11 +153,7 @@ func (h *handler) update(c echo.Context) error {
 			// Return the target genre
 			bookCount, _ := h.genreService.GetBookCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, existing.ID)
-			response := struct {
-				*models.Genre
-				BookCount int      `json:"book_count"`
-				Aliases   []string `json:"aliases"`
-			}{existing, bookCount, aliasList}
+			response := GenreResponse{Genre: *existing, BookCount: bookCount, Aliases: aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -204,11 +188,7 @@ func (h *handler) update(c echo.Context) error {
 
 	bookCount, _ := h.genreService.GetBookCount(ctx, id)
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
-	response := struct {
-		*models.Genre
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{genre, bookCount, aliasList}
+	response := GenreResponse{Genre: *genre, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

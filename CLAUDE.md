@@ -82,6 +82,15 @@ file.CoverImageFilename = &filename
 
 **JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`.
 
+**API types are generated from Go via tygo (no anonymous responses, no hand-written TS).** Go is the single source of truth for every request and response shape. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`) for the rationale. The rules:
+- Every request and response payload is a named, exported Go struct in the package's `types.go`. No handler returns an anonymous struct, `echo.Map`, or `map[string]any`. A response that conveys nothing the client cannot already derive returns `204 No Content` instead of a body.
+- Response structs reuse the model by embedding it with `tstype:",extends"` rather than re-listing fields. Embed by VALUE (`models.Genre`), not pointer (`*models.Genre`); a pointer embed generates `extends Partial<Genre>`. This requires a `frontmatter` import of the model in the package's `tygo.yaml` entry, plus a `type_mappings` entry mapping the package-qualified selector to the bare name (e.g. `models.Genre: "Genre"`) so the generated `extends` matches the import.
+- When a response reshapes a model relation (e.g. returns `aliases` as `[]string` instead of the model's `GenreAlias[]`), exclude the model's relation field from generation with `tstype:"-"` so the response's field is the only one and `extends` does not collide. Only safe when no consumer reads that relation as objects.
+- Naming: single-resource is `{Entity}Response`; list endpoints return a `List{Entities}Response` envelope shaped `{ items, total }`; a list-item shape that genuinely differs from the single-resource shape is `{Entity}ListItem`.
+- The frontend never hand-defines a type that has a Go counterpart. If a type is missing, add or fix the Go struct and run `mise tygo`, do not write it in TypeScript.
+
+The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the reference implementation. See `pkg/CLAUDE.md` (backend mechanics) and `app/CLAUDE.md` (frontend consumption).
+
 **Self password reset route must not require users permissions** — `/users/:id/reset-password` should only require authentication. The handler enforces that self-reset is allowed and resetting another user requires `users:write`. Adding `users:read`/`users:write` middleware to the route breaks self-service password changes for roles like Viewer, including forced password reset flows.
 
 ### Frontend
