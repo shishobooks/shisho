@@ -50,7 +50,11 @@ All PDF authors have an empty role (generic author, same as EPUB).
 
 ### Thread Safety
 
-pdfcpu's `NewDefaultConfiguration()` initializes global state (config files, font caches) that is not thread-safe. Call `pdf.EnsurePdfcpuInit()` before any concurrent use of `NewDefaultConfiguration()`. This is a shared `sync.Once` guard used by both the parser and the file generator.
+pdfcpu's `NewDefaultConfiguration()` reads/creates a shared per-user config file at `$HOME/.config/pdfcpu/config.yml` (plus a font dir and cert dir). This is **not safe across processes**: `go test` runs package binaries concurrently, and more than one package initializes pdfcpu (`pkg/pdf`, `pkg/filegen`). On a fresh machine where the file doesn't exist yet, one process can read it mid-write from another, and pdfcpu 0.12.x panics with `config problem: EOF` (it calls `fault.Fail` on any config load error rather than returning it).
+
+The package `init()` in `pdf.go` sets `model.ConfigPath = "disable"`, which makes `NewDefaultConfiguration()` return its in-memory defaults and never touch the shared file. We rely on nothing the on-disk config provides: `ValidationMode` is set explicitly at each call site, and we never fill PDF forms (the bundled Roboto font) or validate signatures (the EU certs), which are the only other things the config dir bootstraps.
+
+`pdf.EnsurePdfcpuInit()` (a shared `sync.Once` used by both the parser and the file generator) remains as belt-and-suspenders for the in-process case, but with the on-disk config disabled `NewDefaultConfiguration()` is already pure.
 
 ## Cover Extraction
 

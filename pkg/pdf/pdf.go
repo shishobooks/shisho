@@ -14,9 +14,28 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+func init() {
+	// Disable pdfcpu's on-disk config so NewDefaultConfiguration() returns its
+	// in-memory defaults instead of reading/creating $HOME/.config/pdfcpu/config.yml.
+	//
+	// That shared file is the source of a cross-process race: `go test` runs
+	// package binaries concurrently, and more than one package initializes pdfcpu
+	// (pkg/pdf, pkg/filegen). On a fresh runner where the file doesn't exist yet,
+	// one process can read it mid-write from another and pdfcpu panics with
+	// "config problem: EOF" (it calls fault.Fail on any config load error in
+	// 0.12.x). A per-process sync.Once can't guard a file shared across processes.
+	//
+	// We don't use anything the on-disk config provides: ValidationMode is set
+	// explicitly at each call site, and we never fill PDF forms (Roboto font) or
+	// validate signatures (EU certs), which are the only other things the config
+	// dir bootstraps. Setting this in init() guarantees it runs before any
+	// NewDefaultConfiguration() call in the process.
+	model.ConfigPath = "disable"
+}
+
 // pdfcpuInit ensures pdfcpu's global configuration is initialized exactly once.
-// pdfcpu's NewDefaultConfiguration() writes global state (config file, font cache)
-// that is not thread-safe, so we initialize it before any concurrent access.
+// With the on-disk config disabled (see init), NewDefaultConfiguration() is pure
+// and this Once is belt-and-suspenders, but it remains cheap and harmless.
 var pdfcpuInit sync.Once
 
 // EnsurePdfcpuInit initializes pdfcpu's global state exactly once. This must be
