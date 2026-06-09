@@ -20,7 +20,7 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
   const { data, isLoading } = useLatestScanJob(libraryId);
   const createJob = useCreateJob();
 
-  const latestJob = data?.jobs[0];
+  const latestJob = data?.items[0];
   const isActive =
     latestJob?.status === "pending" || latestJob?.status === "in_progress";
   const isFailed = latestJob?.status === "failed";

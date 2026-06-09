@@ -129,7 +129,7 @@ const AdminJobs = () => {
     );
   }
 
-  const jobs = data?.jobs ?? [];
+  const jobs = data?.items ?? [];
 
   return (
     <div>

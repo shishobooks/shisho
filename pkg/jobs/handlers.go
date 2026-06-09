@@ -131,10 +131,7 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	resp := struct {
-		Jobs  []*models.Job `json:"jobs"`
-		Total int           `json:"total"`
-	}{jobs, total}
+	resp := ListJobsResponse{Items: jobs, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }

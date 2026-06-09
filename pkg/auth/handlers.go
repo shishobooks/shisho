@@ -92,7 +92,7 @@ func (h *handler) logout(c echo.Context) error {
 	}
 	c.SetCookie(cookie)
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
+	return c.NoContent(http.StatusNoContent)
 }
 
 // me returns the current authenticated user's info.

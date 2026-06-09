@@ -36,9 +36,7 @@ func (h *handler) listLogs(c echo.Context) error {
 
 	entries := h.buffer.Query(level, search, limit, afterID)
 
-	resp := struct {
-		Entries []LogEntry `json:"entries"`
-	}{Entries: entries}
+	resp := ListLogsResponse{Items: entries, Total: len(entries)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }

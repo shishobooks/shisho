@@ -6,7 +6,13 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { CreateJobPayload, Job, JobLog, ListJobsQuery } from "@/types";
+import type {
+  CreateJobPayload,
+  Job,
+  ListJobLogsResponse,
+  ListJobsQuery,
+  ListJobsResponse,
+} from "@/types";
 
 export enum QueryKey {
   RetrieveJob = "RetrieveJob",
@@ -15,10 +21,24 @@ export enum QueryKey {
   LatestScanJob = "LatestScanJob",
 }
 
-interface ListJobsData {
-  jobs: Job[];
-  total: number;
-}
+type ListJobsData = ListJobsResponse;
+
+export const useJob = (
+  jobId?: string,
+  options: Omit<
+    UseQueryOptions<Job, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<Job, ShishoAPIError>({
+    enabled: options.enabled !== undefined ? options.enabled : Boolean(jobId),
+    ...options,
+    queryKey: [QueryKey.RetrieveJob, jobId],
+    queryFn: ({ signal }) => {
+      return API.request("GET", `/jobs/${jobId}`, null, null, signal);
+    },
+  });
+};
 
 export const useJobs = (
   query: ListJobsQuery = {},
@@ -56,10 +76,7 @@ export const useLatestScanJob = (libraryId: number | undefined) => {
   });
 };
 
-interface ListJobLogsData {
-  logs: JobLog[];
-  job: Job;
-}
+type ListJobLogsData = ListJobLogsResponse;
 
 interface UseJobLogsOptions {
   afterId?: number;

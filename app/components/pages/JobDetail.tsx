@@ -14,25 +14,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useJobLogs } from "@/hooks/queries/jobs";
+import { useJob, useJobLogs } from "@/hooks/queries/jobs";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import {
-  JobLogLevelError,
-  JobLogLevelFatal,
-  JobLogLevelInfo,
-  JobLogLevelWarn,
   JobStatusInProgress,
+  LogLevelError,
+  LogLevelFatal,
+  LogLevelInfo,
+  LogLevelWarn,
 } from "@/types";
 
 const getLevelColor = (level: string) => {
   switch (level) {
-    case JobLogLevelInfo:
+    case LogLevelInfo:
       return "bg-blue-500/20 text-blue-400";
-    case JobLogLevelWarn:
+    case LogLevelWarn:
       return "bg-yellow-500/20 text-yellow-400";
-    case JobLogLevelError:
+    case LogLevelError:
       return "bg-red-500/20 text-red-400";
-    case JobLogLevelFatal:
+    case LogLevelFatal:
       return "bg-red-700/30 text-red-300";
     default:
       return "bg-muted text-muted-foreground";
@@ -80,13 +80,20 @@ const JobDetail = () => {
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
   const [pluginFilter, setPluginFilter] = useState<string>("");
 
-  const { data, isLoading, error } = useJobLogs(id, {
+  const { data: job, isLoading: isJobLoading, error: jobError } = useJob(id);
+
+  const {
+    data: logsData,
+    isLoading: isLogsLoading,
+    error: logsError,
+  } = useJobLogs(id, {
     level: levelFilter.length > 0 ? levelFilter : undefined,
     plugin: pluginFilter || undefined,
   });
 
-  const job = data?.job;
-  const logs = useMemo(() => data?.logs ?? [], [data?.logs]);
+  const isLoading = isJobLoading || isLogsLoading;
+  const error = jobError ?? logsError;
+  const logs = useMemo(() => logsData?.items ?? [], [logsData?.items]);
 
   // Extract unique plugin names from log data
   const pluginNames = useMemo(() => {
@@ -206,24 +213,21 @@ const JobDetail = () => {
           value={searchTerm}
         />
         <div className="flex items-center gap-2">
-          {[
-            JobLogLevelInfo,
-            JobLogLevelWarn,
-            JobLogLevelError,
-            JobLogLevelFatal,
-          ].map((level) => (
-            <Button
-              className={
-                levelFilter.includes(level) ? getLevelColor(level) : ""
-              }
-              key={level}
-              onClick={() => toggleLevelFilter(level)}
-              size="sm"
-              variant={levelFilter.includes(level) ? "secondary" : "outline"}
-            >
-              {level}
-            </Button>
-          ))}
+          {[LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelFatal].map(
+            (level) => (
+              <Button
+                className={
+                  levelFilter.includes(level) ? getLevelColor(level) : ""
+                }
+                key={level}
+                onClick={() => toggleLevelFilter(level)}
+                size="sm"
+                variant={levelFilter.includes(level) ? "secondary" : "outline"}
+              >
+                {level}
+              </Button>
+            ),
+          )}
         </div>
         {pluginNames.length > 0 && (
           <Select

@@ -1,23 +1,13 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import type { ListLogsResponse } from "@/types";
 
 export enum QueryKey {
   ListLogs = "ListLogs",
 }
 
-export interface LogEntry {
-  id: number;
-  level: string;
-  timestamp: string;
-  message: string;
-  data?: Record<string, unknown>;
-  error?: string;
-}
-
-interface ListLogsData {
-  entries: LogEntry[];
-}
+type ListLogsData = ListLogsResponse;
 
 interface UseLogsOptions {
   level?: string;
