@@ -18,7 +18,7 @@ const LibraryListPicker = () => {
 
   // Load all libraries for the switcher
   const librariesQuery = useLibraries({});
-  const libraries = librariesQuery.data?.libraries || [];
+  const libraries = librariesQuery.data?.items || [];
 
   // Load lists for sidebar navigation
   const listsQuery = useListLists();

@@ -789,7 +789,7 @@ function KoboSetupDialog({
                   <SelectValue placeholder="Select a library..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {librariesData.libraries.map((lib) => (
+                  {librariesData.items.map((lib) => (
                     <SelectItem key={lib.id} value={String(lib.id)}>
                       {lib.name}
                     </SelectItem>

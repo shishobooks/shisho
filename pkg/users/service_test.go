@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -17,7 +18,12 @@ import (
 func newTestDB(t *testing.T) *bun.DB {
 	t.Helper()
 
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	// Shared-cache in-memory DSN (keyed on the test name) so every pooled
+	// connection sees the same DB. A bare ":memory:" gives each connection its
+	// own empty database, which breaks handler tests that issue queries on a
+	// different connection than the one that ran migrations.
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
 	require.NoError(t, err)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())

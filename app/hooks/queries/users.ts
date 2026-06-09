@@ -6,7 +6,14 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { PermissionInput, Role, User } from "@/types";
+import type {
+  CreateRolePayload,
+  ListRolesResponse,
+  ListUsersResponse,
+  Role,
+  UpdateRolePayload,
+  User,
+} from "@/types";
 
 export enum QueryKey {
   RetrieveUser = "RetrieveUser",
@@ -36,19 +43,14 @@ interface ListUsersQuery {
   offset?: number;
 }
 
-interface ListUsersData {
-  users: User[];
-  total: number;
-}
-
 export const useUsers = (
   query: ListUsersQuery = {},
   options: Omit<
-    UseQueryOptions<ListUsersData, ShishoAPIError>,
+    UseQueryOptions<ListUsersResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ListUsersData, ShishoAPIError>({
+  return useQuery<ListUsersResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.ListUsers, query],
     queryFn: ({ signal }) => {
@@ -142,18 +144,13 @@ export const useDeactivateUser = () => {
 
 // Roles
 
-interface ListRolesData {
-  roles: Role[];
-  total: number;
-}
-
 export const useRoles = (
   options: Omit<
-    UseQueryOptions<ListRolesData, ShishoAPIError>,
+    UseQueryOptions<ListRolesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ListRolesData, ShishoAPIError>({
+  return useQuery<ListRolesResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.ListRoles],
     queryFn: ({ signal }) => {
@@ -161,11 +158,6 @@ export const useRoles = (
     },
   });
 };
-
-interface CreateRolePayload {
-  name: string;
-  permissions: PermissionInput[];
-}
 
 export const useCreateRole = () => {
   const queryClient = useQueryClient();
@@ -179,11 +171,6 @@ export const useCreateRole = () => {
     },
   });
 };
-
-interface UpdateRolePayload {
-  name?: string;
-  permissions?: PermissionInput[];
-}
 
 interface UpdateRoleVariables {
   id: number;

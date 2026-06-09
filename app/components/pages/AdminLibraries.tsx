@@ -90,7 +90,7 @@ const AdminLibraries = () => {
     );
   }
 
-  const libraries = data?.libraries ?? [];
+  const libraries = data?.items ?? [];
 
   return (
     <div>

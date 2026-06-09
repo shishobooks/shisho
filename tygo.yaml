@@ -8,11 +8,16 @@ type_mappings:
   models.Tag: "Tag"
   models.Series: "Series"
   models.Person: "Person"
+  models.Library: "Library"
   # A model returned by name (not embedded, not field-level `tstype`-overridden)
   # also needs a mapping so tygo emits the bare interface name instead of `any`.
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
   models.Book: "Book"
   models.Publisher: "Publisher"
+  # Models referenced by name in list envelopes (`tstype:"User[]"` etc.) need a
+  # mapping so the generated type resolves to the bare interface, not `any`.
+  models.User: "User"
+  models.Role: "Role"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"
@@ -39,6 +44,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/libraries"
     output_path: "app/types/generated/libraries.ts"
+    frontmatter: |
+      import { CoverAspectRatio, DownloadFormat, Library } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/filesystem"
@@ -51,10 +58,14 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/users"
     output_path: "app/types/generated/users.ts"
+    frontmatter: |
+      import { User } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/roles"
     output_path: "app/types/generated/roles.ts"
+    frontmatter: |
+      import { Role } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/search"

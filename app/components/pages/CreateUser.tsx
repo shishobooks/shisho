@@ -144,8 +144,8 @@ const CreateUser = () => {
     }
   };
 
-  const roles = sortRoles(rolesData?.roles ?? []);
-  const libraries = librariesData?.libraries ?? [];
+  const roles = sortRoles(rolesData?.items ?? []);
+  const libraries = librariesData?.items ?? [];
 
   return (
     <div>

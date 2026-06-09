@@ -36,7 +36,7 @@ const LibraryRedirect = () => {
     );
   }
 
-  const libraries = librariesQuery.data?.libraries || [];
+  const libraries = librariesQuery.data?.items || [];
 
   // If no libraries, redirect to settings/libraries to create one
   if (libraries.length === 0) {

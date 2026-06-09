@@ -8,8 +8,9 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateLibraryPayload,
-  Library,
+  LibraryResponse,
   ListLibrariesQuery,
+  ListLibrariesResponse,
   UpdateLibraryPayload,
 } from "@/types";
 
@@ -25,11 +26,11 @@ export enum QueryKey {
 export const useLibrary = (
   id?: string,
   options: Omit<
-    UseQueryOptions<Library, ShishoAPIError>,
+    UseQueryOptions<LibraryResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Library, ShishoAPIError>({
+  return useQuery<LibraryResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
     ...options,
     queryKey: [QueryKey.RetrieveLibrary, id],
@@ -39,19 +40,14 @@ export const useLibrary = (
   });
 };
 
-interface ListLibrariesData {
-  libraries: Library[];
-  total: number;
-}
-
 export const useLibraries = (
   query: ListLibrariesQuery = {},
   options: Omit<
-    UseQueryOptions<ListLibrariesData, ShishoAPIError>,
+    UseQueryOptions<ListLibrariesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ListLibrariesData, ShishoAPIError>({
+  return useQuery<ListLibrariesResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.ListLibraries, query],
     queryFn: ({ signal }) => {
@@ -67,11 +63,15 @@ interface CreateLibraryMutationVariables {
 export const useCreateLibrary = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<Library, ShishoAPIError, CreateLibraryMutationVariables>({
+  return useMutation<
+    LibraryResponse,
+    ShishoAPIError,
+    CreateLibraryMutationVariables
+  >({
     mutationFn: ({ payload }) => {
       return API.request("POST", "/libraries", payload, null);
     },
-    onSuccess: (data: Library) => {
+    onSuccess: (data: LibraryResponse) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.setQueryData(
         [QueryKey.RetrieveLibrary, String(data.id)],
@@ -89,11 +89,15 @@ interface UpdateLibraryMutationVariables {
 export const useUpdateLibrary = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<Library, ShishoAPIError, UpdateLibraryMutationVariables>({
+  return useMutation<
+    LibraryResponse,
+    ShishoAPIError,
+    UpdateLibraryMutationVariables
+  >({
     mutationFn: ({ id, payload }) => {
       return API.request("POST", `/libraries/${id}`, payload, null);
     },
-    onSuccess: (data: Library) => {
+    onSuccess: (data: LibraryResponse) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.setQueryData(
         [QueryKey.RetrieveLibrary, String(data.id)],

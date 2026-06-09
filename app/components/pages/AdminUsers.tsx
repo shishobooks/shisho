@@ -121,8 +121,8 @@ const AdminUsers = () => {
     );
   }
 
-  const users = usersData?.users ?? [];
-  const roles = sortRoles(rolesData?.roles ?? []);
+  const users = usersData?.items ?? [];
+  const roles = sortRoles(rolesData?.items ?? []);
 
   return (
     <div className="space-y-12">
