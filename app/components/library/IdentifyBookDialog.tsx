@@ -88,7 +88,7 @@ export function IdentifyBookDialog({
 
   // Submit a search. Setting a new (distinct) snapshot supersedes any in-flight
   // query and aborts it. For an identical re-submit (same snapshot) the query
-  // key is unchanged, so explicitly refetch — pressing Search/Enter must always
+  // key is unchanged, so explicitly refetch. Pressing Search/Enter must always
   // produce visible loading feedback rather than being a silent no-op, while
   // distinct keys (and dialog re-opens) still benefit from caching.
   const submitSearch = (params: PluginSearchParams) => {
@@ -160,7 +160,7 @@ export function IdentifyBookDialog({
   };
 
   // isFetching is true across new-key loads, identical-resubmit refetches, and
-  // stale-key background refetches — the full set of "a search is running"
+  // stale-key background refetches: the full set of "a search is running"
   // states. It drives the loading indicator and the dimming/disabling of any
   // results kept on screen via keepPreviousData.
   const isSearching = searchQuery.isFetching;

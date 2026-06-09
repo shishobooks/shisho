@@ -707,8 +707,8 @@ export interface PluginSearchParams {
 }
 
 // usePluginSearch models the Identify search as a query (not a mutation): the
-// backend POST /plugins/search performs no writes to Shisho state — it only
-// fans out to plugins — so it's semantically a read. As a query it gets request
+// backend POST /plugins/search performs no writes to Shisho state (it only
+// fans out to plugins), so it's semantically a read. As a query it gets request
 // sequencing and an AbortSignal for free (a mutation's mutationFn gets neither
 // in TanStack Query v5). The POST method and request payload shape are
 // unchanged. `params` is null until a search has been submitted; the query is
@@ -716,7 +716,7 @@ export interface PluginSearchParams {
 //
 // `placeholderData: keepPreviousData` keeps the previous key's results mounted
 // while a new search loads, avoiding a dialog resize. Loading/dimming is driven
-// off `isFetching` by the caller, not `isPlaceholderData` — `isFetching` is
+// off `isFetching` by the caller, not `isPlaceholderData`. `isFetching` is
 // true across new-key loads, identical-resubmit refetches, and stale-key
 // background refetches, whereas `isPlaceholderData` misses the latter two.
 export const usePluginSearch = (params: PluginSearchParams | null) => {

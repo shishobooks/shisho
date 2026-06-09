@@ -210,12 +210,12 @@ type enricherRuntime interface {
 // aggregates the results, per-plugin errors, and file-type skips.
 //
 // It checks the request context for cancellation before invoking each plugin
-// and stops early when the client has gone away — there is no point fanning
-// out to the remaining plugins (and their outbound API calls) for a search the
-// client has already superseded. A per-plugin failure that is itself caused by
-// client cancellation (context.Canceled) is dropped rather than reported as a
-// plugin failure or logged as a warning; a genuine per-plugin timeout
-// (context.DeadlineExceeded) is still reported.
+// and stops early when the client has gone away, since there is no point
+// fanning out to the remaining plugins (and their outbound API calls) for a
+// search the client has already superseded. A per-plugin failure that is
+// itself caused by client cancellation (context.Canceled) is dropped rather
+// than reported as a plugin failure or logged as a warning; a genuine
+// per-plugin timeout (context.DeadlineExceeded) is still reported.
 func aggregateEnricherSearches[T enricherRuntime](
 	ctx context.Context,
 	runtimes []T,
@@ -259,7 +259,7 @@ func aggregateEnricherSearches[T enricherRuntime](
 		resp, sErr := runSearch(ctx, rt)
 		if sErr != nil {
 			// Don't report a per-plugin failure that's just the client
-			// cancelling the request — it's not a plugin malfunction, and
+			// cancelling the request, since it's not a plugin malfunction, and
 			// logging it would be noise. A genuine deadline timeout is a real
 			// failure and is still reported.
 			if errors.Is(sErr, context.Canceled) {
