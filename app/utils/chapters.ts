@@ -59,6 +59,24 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
 
 /**
+ * Computes a skip seek target by offsetting the current time by `deltaSeconds`
+ * (negative to skip back, positive to skip forward) and clamping the result to
+ * the playable range `[0, durationSeconds]`. The single source of truth for
+ * skip math, shared by the memoized playback state and the keyboard handler so
+ * both clamp identically. When the duration is not yet known (<= 0), the upper
+ * bound is left open so a forward skip still advances rather than snapping to 0.
+ */
+export function resolveSkipTarget(
+  currentTimeSeconds: number,
+  deltaSeconds: number,
+  durationSeconds: number,
+): number {
+  const target = currentTimeSeconds + deltaSeconds;
+  const upperBound = durationSeconds > 0 ? durationSeconds : Infinity;
+  return clamp(target, 0, upperBound);
+}
+
+/**
  * Resolves a list of model chapters into absolute second boundaries.
  *
  * Defensive against real-world data: chapters may arrive unsorted or missing a
@@ -134,14 +152,14 @@ export function resolvePlayback(
   currentTimeSeconds: number,
   durationSeconds: number,
 ): PlaybackState {
-  const skipBackTarget = clamp(
-    currentTimeSeconds - SKIP_SECONDS,
-    0,
+  const skipBackTarget = resolveSkipTarget(
+    currentTimeSeconds,
+    -SKIP_SECONDS,
     durationSeconds,
   );
-  const skipForwardTarget = clamp(
-    currentTimeSeconds + SKIP_SECONDS,
-    0,
+  const skipForwardTarget = resolveSkipTarget(
+    currentTimeSeconds,
+    SKIP_SECONDS,
     durationSeconds,
   );
 

@@ -6,6 +6,7 @@ import {
   PREVIOUS_CHAPTER_RESTART_THRESHOLD_SECONDS,
   resolveChapters,
   resolvePlayback,
+  resolveSkipTarget,
   SKIP_SECONDS,
 } from "./chapters";
 
@@ -206,5 +207,33 @@ describe("resolvePlayback", () => {
       expect(result.skipBackTarget).toBe(0);
       expect(result.skipForwardTarget).toBe(10 + SKIP_SECONDS);
     });
+  });
+});
+
+describe("resolveSkipTarget", () => {
+  it("skips forward by the delta", () => {
+    expect(resolveSkipTarget(100, SKIP_SECONDS, 180)).toBe(100 + SKIP_SECONDS);
+  });
+
+  it("skips backward by a negative delta", () => {
+    expect(resolveSkipTarget(100, -SKIP_SECONDS, 180)).toBe(100 - SKIP_SECONDS);
+  });
+
+  it("clamps a backward skip to 0", () => {
+    expect(resolveSkipTarget(10, -SKIP_SECONDS, 180)).toBe(0);
+  });
+
+  it("clamps a forward skip to the duration", () => {
+    expect(resolveSkipTarget(170, SKIP_SECONDS, 180)).toBe(180);
+  });
+
+  it("leaves the upper bound open while the duration is unknown so a forward skip still advances", () => {
+    // Duration not yet loaded (0): the forward skip must advance rather than
+    // snapping back to 0.
+    expect(resolveSkipTarget(100, SKIP_SECONDS, 0)).toBe(100 + SKIP_SECONDS);
+  });
+
+  it("still clamps a backward skip to 0 when the duration is unknown", () => {
+    expect(resolveSkipTarget(10, -SKIP_SECONDS, 0)).toBe(0);
   });
 });

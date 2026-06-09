@@ -26,6 +26,7 @@ import type { Book, File } from "@/types";
 import {
   resolveChapters,
   resolvePlayback,
+  resolveSkipTarget,
   SKIP_SECONDS,
 } from "@/utils/chapters";
 import { formatPlayerTime } from "@/utils/format";
@@ -161,18 +162,24 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        const target = Math.max(currentTimeRef.current - SKIP_SECONDS, 0);
-        seekTo(target);
+        seekTo(
+          resolveSkipTarget(
+            currentTimeRef.current,
+            -SKIP_SECONDS,
+            durationRef.current,
+          ),
+        );
         return;
       }
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        const max = durationRef.current;
-        const target = Math.min(
-          currentTimeRef.current + SKIP_SECONDS,
-          max > 0 ? max : currentTimeRef.current + SKIP_SECONDS,
+        seekTo(
+          resolveSkipTarget(
+            currentTimeRef.current,
+            SKIP_SECONDS,
+            durationRef.current,
+          ),
         );
-        seekTo(target);
         return;
       }
     };
