@@ -27,7 +27,7 @@ import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import { cn } from "@/libraries/utils";
-import type { GallerySize, Series } from "@/types";
+import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 // For series, we don't have access to the underlying files, so we use the
@@ -46,7 +46,7 @@ const getSeriesAspectRatioClass = (coverAspectRatio: string): string => {
 };
 
 interface SeriesCardProps {
-  seriesItem: Series;
+  seriesItem: SeriesResponse;
   libraryId: string;
   aspectClass: string;
   isAudiobook: boolean;
@@ -231,7 +231,7 @@ const SeriesList = () => {
   const isStaleData =
     confirmedSearch !== null && debouncedSearch !== confirmedSearch;
 
-  const renderSeriesItem = (seriesItem: Series) => {
+  const renderSeriesItem = (seriesItem: SeriesResponse) => {
     const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
     const isAudiobook = coverAspectRatio.startsWith("audiobook");
 
