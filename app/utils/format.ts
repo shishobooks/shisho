@@ -25,6 +25,29 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /**
+ * Formats a number of seconds into a clock-style media player timestamp.
+ * Uses M:SS for durations under an hour and H:MM:SS for longer ones, with
+ * seconds truncated (not rounded). Non-finite, NaN, and negative inputs clamp
+ * to "0:00" so the player never shows garbage while metadata is loading.
+ * @example formatPlayerTime(185) // "3:05"
+ * @example formatPlayerTime(3661) // "1:01:01"
+ */
+export const formatPlayerTime = (seconds: number): string => {
+  const total =
+    Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  const ss = String(secs).padStart(2, "0");
+  if (hours > 0) {
+    const mm = String(minutes).padStart(2, "0");
+    return `${hours}:${mm}:${ss}`;
+  }
+  return `${minutes}:${ss}`;
+};
+
+/**
  * Formats an ISO date string into a localized date string.
  * @example formatDate("2024-01-15T12:00:00Z") // "Jan 15, 2024" (locale-dependent)
  */

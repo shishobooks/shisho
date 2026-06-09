@@ -7,6 +7,7 @@ import {
   Download,
   Edit,
   GitMerge,
+  Headphones,
   List,
   Loader2,
   MoreVertical,
@@ -78,7 +79,6 @@ import {
   DownloadFormatKepub,
   FileTypeCBZ,
   FileTypeEPUB,
-  FileTypePDF,
   type File,
 } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
@@ -94,6 +94,7 @@ import {
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { getReadingAction } from "@/utils/readingAction";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface DownloadError {
@@ -317,23 +318,32 @@ const FileRow = ({
               </Tooltip>
             )}
 
-            {/* Read button - CBZ, PDF, and EPUB */}
-            {(file.file_type === FileTypeCBZ ||
-              file.file_type === FileTypePDF ||
-              file.file_type === FileTypeEPUB) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
-                  >
-                    <Button size="sm" variant="ghost">
-                      <BookOpen className="h-3 w-3" />
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent>Read</TooltipContent>
-              </Tooltip>
-            )}
+            {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
+            {(() => {
+              const action = getReadingAction(file.file_type);
+              if (!action) return null;
+              const isListen = action === "listen";
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                    >
+                      <Button size="sm" variant="ghost">
+                        {isListen ? (
+                          <Headphones className="h-3 w-3" />
+                        ) : (
+                          <BookOpen className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isListen ? "Listen" : "Read"}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })()}
 
             {/* Actions dropdown */}
             <DropdownMenu>
@@ -462,23 +472,30 @@ const FileRow = ({
             </Tooltip>
           )}
 
-          {/* Read button - CBZ, PDF, and EPUB */}
-          {(file.file_type === FileTypeCBZ ||
-            file.file_type === FileTypePDF ||
-            file.file_type === FileTypeEPUB) && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
-                >
-                  <Button size="sm" variant="ghost">
-                    <BookOpen className="h-3 w-3" />
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>Read</TooltipContent>
-            </Tooltip>
-          )}
+          {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
+          {(() => {
+            const action = getReadingAction(file.file_type);
+            if (!action) return null;
+            const isListen = action === "listen";
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+                  >
+                    <Button size="sm" variant="ghost">
+                      {isListen ? (
+                        <Headphones className="h-3 w-3" />
+                      ) : (
+                        <BookOpen className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>{isListen ? "Listen" : "Read"}</TooltipContent>
+              </Tooltip>
+            );
+          })()}
 
           {/* Actions dropdown */}
           <DropdownMenu>

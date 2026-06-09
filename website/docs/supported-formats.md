@@ -18,7 +18,7 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Audiobooks
 
-- **M4B** — Full [metadata extraction](./metadata#m4b) including title, authors, narrators, series, chapters, cover art, language, and abridged status
+- **M4B** — Full [metadata extraction](./metadata#m4b) including title, authors, narrators, series, chapters, cover art, language, and abridged status. Includes an in-app player with play/pause, a draggable seek bar, and elapsed/total time, showing the cover, title, author, and narrator
 
 ## Comics
 
