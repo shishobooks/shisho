@@ -18,7 +18,7 @@ fingerprints (cover pHash, text SimHash, etc.) — see
 
 ## Audiobooks
 
-- **M4B** — Full [metadata extraction](./metadata#m4b) including title, authors, narrators, series, chapters, cover art, language, and abridged status. Includes an in-app player with play/pause, a draggable seek bar, and elapsed/total time, showing the cover, title, author, and narrator
+- **M4B** — Full [metadata extraction](./metadata#m4b) including title, authors, narrators, series, chapters, cover art, language, and abridged status. Includes an in-app player with play/pause, a draggable seek bar, and elapsed/total time, showing the cover, title, author, and narrator. When the file has chapters, the player adds chapter navigation: a dropdown that jumps to a chapter's start, chapter markers along the seek bar, the current chapter shown and updated live as playback crosses a boundary, and previous/next chapter buttons (previous restarts the current chapter when more than about 5 seconds in, otherwise jumps to the prior chapter). It also has skip back and forward buttons (30 seconds), mapped to the left and right arrow keys. A file with no chapters plays normally with chapter navigation absent
 
 ## Comics
 

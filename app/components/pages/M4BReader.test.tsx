@@ -42,6 +42,27 @@ const file = {
   narrators: [{ id: 1, file_id: 42, person_id: 9, person: narratorPerson }],
 } as unknown as File;
 
+// A file with three chapters spanning a 3600s book: 0–1200, 1200–2400, 2400–end.
+// Chapter starts are in MILLISECONDS on the model.
+const fileWithChapters = {
+  ...file,
+  chapters: [
+    { id: 1, title: "Chapter One", start_timestamp_ms: 0, sort_order: 0 },
+    {
+      id: 2,
+      title: "Chapter Two",
+      start_timestamp_ms: 1200000,
+      sort_order: 1,
+    },
+    {
+      id: 3,
+      title: "Chapter Three",
+      start_timestamp_ms: 2400000,
+      sort_order: 2,
+    },
+  ],
+} as unknown as File;
+
 const book = {
   id: 7,
   title: "The Test Audiobook",
@@ -187,5 +208,176 @@ describe("M4BReader", () => {
     fireEvent.loadedMetadata(audio);
     // 125s => 2:05
     expect(screen.getByText("2:05")).toBeInTheDocument();
+  });
+
+  describe("chapter navigation", () => {
+    it("renders a chapter dropdown that jumps to the selected chapter's start", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      await user.click(screen.getByRole("combobox", { name: /chapter/i }));
+      await user.click(
+        await screen.findByRole("option", { name: /chapter three/i }),
+      );
+      // Chapter Three starts at 2400000ms => 2400s.
+      expect(audio.currentTime).toBe(2400);
+    });
+
+    it("shows the current chapter title and updates it as playback crosses a boundary", () => {
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+      const combobox = screen.getByRole("combobox", { name: /chapter/i });
+
+      // Start of the file: first chapter is the displayed/selected chapter.
+      expect(combobox).toHaveTextContent("Chapter One");
+
+      // Advance past the second chapter boundary (1200s).
+      audio.currentTime = 1300;
+      fireEvent.timeUpdate(audio);
+      expect(combobox).toHaveTextContent("Chapter Two");
+      expect(combobox).not.toHaveTextContent("Chapter One");
+    });
+
+    it("renders chapter markers along the seek bar at the correct positions", () => {
+      const { container } = renderReader({ file: fileWithChapters });
+      // The first chapter starts at 0 (no marker); the two later chapters get
+      // markers positioned by start/duration.
+      const markers = container.querySelectorAll(
+        '[aria-hidden="true"][style*="left"]',
+      );
+      const lefts = Array.from(markers).map(
+        (m) => (m as HTMLElement).style.left,
+      );
+      // 1200/3600 => 33.33%, 2400/3600 => 66.66%
+      expect(lefts).toHaveLength(2);
+      expect(lefts[0]).toMatch(/^33\.33/);
+      expect(lefts[1]).toMatch(/^66\.66/);
+    });
+
+    it("advances to the next chapter with the next button", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      await user.click(screen.getByRole("button", { name: /next chapter/i }));
+      // From 0 (chapter one), next chapter starts at 1200s.
+      expect(audio.currentTime).toBe(1200);
+    });
+
+    it("restarts the current chapter with previous when more than ~5s in", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      // Move to 1300s (well into chapter two, which starts at 1200s).
+      audio.currentTime = 1300;
+      fireEvent.timeUpdate(audio);
+      await user.click(
+        screen.getByRole("button", { name: /previous chapter/i }),
+      );
+      // More than 5s in => restart current chapter (1200s).
+      expect(audio.currentTime).toBe(1200);
+    });
+
+    it("goes to the prior chapter with previous when within ~5s of the start", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      // Move to 1203s (just 3s into chapter two).
+      audio.currentTime = 1203;
+      fireEvent.timeUpdate(audio);
+      await user.click(
+        screen.getByRole("button", { name: /previous chapter/i }),
+      );
+      // Within 5s => go to prior chapter (chapter one, start 0).
+      expect(audio.currentTime).toBe(0);
+    });
+
+    it("skips forward and back by 30 seconds with the skip buttons", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      audio.currentTime = 100;
+      fireEvent.timeUpdate(audio);
+
+      await user.click(
+        screen.getByRole("button", { name: /skip forward 30 seconds/i }),
+      );
+      expect(audio.currentTime).toBe(130);
+
+      await user.click(
+        screen.getByRole("button", { name: /skip back 30 seconds/i }),
+      );
+      expect(audio.currentTime).toBe(100);
+    });
+
+    it("skips with the left and right arrow keys", () => {
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+      audio.currentTime = 100;
+      fireEvent.timeUpdate(audio);
+
+      const right = new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+        cancelable: true,
+      });
+      const rightPrevented = !document.dispatchEvent(right);
+      expect(audio.currentTime).toBe(130);
+      expect(rightPrevented).toBe(true);
+
+      const left = new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        bubbles: true,
+        cancelable: true,
+      });
+      const leftPrevented = !document.dispatchEvent(left);
+      expect(audio.currentTime).toBe(100);
+      expect(leftPrevented).toBe(true);
+    });
+
+    it("clamps arrow-key skips to the start and end of the file", () => {
+      renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      // Near the start: skip back clamps to 0.
+      audio.currentTime = 10;
+      fireEvent.timeUpdate(audio);
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+      );
+      expect(audio.currentTime).toBe(0);
+
+      // Near the end: skip forward clamps to the duration (3600s).
+      audio.currentTime = 3590;
+      fireEvent.timeUpdate(audio);
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      expect(audio.currentTime).toBe(3600);
+    });
+
+    it("renders the player with chapter navigation absent for a file with no chapters", () => {
+      renderReader({ file });
+      // No chapter controls when there are no chapters.
+      expect(
+        screen.queryByRole("combobox", { name: /chapter/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /next chapter/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /previous chapter/i }),
+      ).not.toBeInTheDocument();
+      // The player itself still works.
+      expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
+      // Plain skip controls remain available even without chapters.
+      expect(
+        screen.getByRole("button", { name: /skip forward 30 seconds/i }),
+      ).toBeInTheDocument();
+    });
   });
 });
