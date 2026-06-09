@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
@@ -224,4 +225,61 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
+}
+
+func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	ctx := context.Background()
+	e := newTestEcho(t)
+	lib := createTestLibrary(t, db)
+	tag := seedTagWithBooks(t, db, lib, "Science Fiction", []string{"Book1"})
+	h := newTestHandler(db)
+
+	// Seed two aliases for the tag so we can assert they round-trip as strings.
+	_, err := db.NewRaw(
+		"INSERT INTO tag_aliases (created_at, tag_id, name, library_id) VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
+		time.Now(), tag.ID, "SciFi", lib.ID,
+		time.Now(), tag.ID, "SF", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err = h.list(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Top-level envelope must be { items, total } only.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	assert.True(t, hasItems, "list response must have 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+
+	// Each item's aliases must serialize as a JSON array of strings (the #324 fix
+	// at the wire level), and book_count must be present.
+	var resp struct {
+		Items []struct {
+			ID        int             `json:"id"`
+			Name      string          `json:"name"`
+			BookCount int             `json:"book_count"`
+			Aliases   json.RawMessage `json:"aliases"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, "Science Fiction", resp.Items[0].Name)
+	assert.Equal(t, 1, resp.Items[0].BookCount)
+
+	// aliases must be a JSON array whose elements are strings, not objects.
+	var aliasStrings []string
+	require.NoError(t, json.Unmarshal(resp.Items[0].Aliases, &aliasStrings),
+		"aliases must unmarshal into []string, proving it is a JSON array of strings")
+	assert.ElementsMatch(t, []string{"SciFi", "SF"}, aliasStrings)
 }

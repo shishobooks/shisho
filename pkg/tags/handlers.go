@@ -48,11 +48,7 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
 
-	response := struct {
-		*models.Tag
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{tag, bookCount, aliasList}
+	response := TagResponse{Tag: *tag, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -84,22 +80,14 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	type TagWithCount struct {
-		*models.Tag
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}
-	result := make([]TagWithCount, len(tags))
+	result := make([]TagResponse, len(tags))
 	for i, t := range tags {
 		bookCount, _ := h.tagService.GetBookCount(ctx, t.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, t.ID)
-		result[i] = TagWithCount{t, bookCount, aliasList}
+		result[i] = TagResponse{Tag: *t, BookCount: bookCount, Aliases: aliasList}
 	}
 
-	response := map[string]any{
-		"items": result,
-		"total": total,
-	}
+	response := ListTagsResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -156,11 +144,7 @@ func (h *handler) update(c echo.Context) error {
 
 			bookCount, _ := h.tagService.GetBookCount(ctx, existing.ID)
 			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, existing.ID)
-			response := struct {
-				*models.Tag
-				BookCount int      `json:"book_count"`
-				Aliases   []string `json:"aliases"`
-			}{existing, bookCount, aliasList}
+			response := TagResponse{Tag: *existing, BookCount: bookCount, Aliases: aliasList}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -193,11 +177,7 @@ func (h *handler) update(c echo.Context) error {
 
 	bookCount, _ := h.tagService.GetBookCount(ctx, id)
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
-	response := struct {
-		*models.Tag
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{tag, bookCount, aliasList}
+	response := TagResponse{Tag: *tag, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -232,10 +212,7 @@ func (h *handler) books(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	response := map[string]any{
-		"items": books,
-		"total": total,
-	}
+	response := ListTagBooksResponse{Items: books, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

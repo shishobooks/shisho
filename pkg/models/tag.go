@@ -14,7 +14,7 @@ type Tag struct {
 	UpdatedAt time.Time   `json:"updated_at"`
 	LibraryID int         `bun:",nullzero" json:"library_id"`
 	Name      string      `bun:",nullzero" json:"name"`
-	Aliases   []*TagAlias `bun:"rel:has-many,join:id=tag_id" json:"aliases" tstype:"TagAlias[]"`
+	Aliases   []*TagAlias `bun:"rel:has-many,join:id=tag_id" json:"aliases" tstype:"-"`
 	BookCount int         `bun:",scanonly" json:"book_count"`
 }
 
