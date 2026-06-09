@@ -1,6 +1,7 @@
 package publishers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,9 +21,58 @@ type handler struct {
 	searchService    *search.Service
 }
 
-type ancestorResponse struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+// buildPublisherResponse assembles the full single-publisher API response
+// (PublisherResponse) for the given publisher: rolled-up file counts, aliases
+// as a flat []string, the ancestor chain, descendant ids, and flattened direct
+// children. retrieve, update, and merge all use this so a mutation returns the
+// same full shape the detail page reads (enabling setQueryData on the client).
+func (h *handler) buildPublisherResponse(ctx context.Context, publisher *models.Publisher) (PublisherResponse, error) {
+	id := publisher.ID
+
+	fileCount, err := h.publisherService.GetFileCount(ctx, id)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
+
+	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
+
+	ancestors, err := h.publisherService.GetAncestors(ctx, id)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
+	ancestorList := make([]AncestorResponse, len(ancestors))
+	for i, a := range ancestors {
+		ancestorList[i] = AncestorResponse{ID: a.ID, Name: a.Name}
+	}
+
+	descendantIDs, err := h.publisherService.GetDescendantIDs(ctx, id)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
+
+	children, err := h.publisherService.GetChildren(ctx, id)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
+	childList := make([]ChildResponse, len(children))
+	for i, ch := range children {
+		childList[i] = ChildResponse{ID: ch.ID, Name: ch.Name, FileCount: ch.FileCount}
+	}
+
+	descendantFileCount, err := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
+
+	return PublisherResponse{
+		Publisher:           *publisher,
+		FileCount:           fileCount,
+		DescendantFileCount: descendantFileCount,
+		Aliases:             aliasList,
+		Ancestors:           ancestorList,
+		DescendantIDs:       descendantIDs,
+		Children:            childList,
+	}, nil
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -45,56 +95,10 @@ func (h *handler) retrieve(c echo.Context) error {
 		}
 	}
 
-	fileCount, err := h.publisherService.GetFileCount(ctx, id)
+	response, err := h.buildPublisherResponse(ctx, publisher)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
-
-	ancestors, err := h.publisherService.GetAncestors(ctx, id)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	ancestorList := make([]ancestorResponse, len(ancestors))
-	for i, a := range ancestors {
-		ancestorList[i] = ancestorResponse{ID: a.ID, Name: a.Name}
-	}
-
-	descendantIDs, err := h.publisherService.GetDescendantIDs(ctx, id)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	children, err := h.publisherService.GetChildren(ctx, id)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	type childResponse struct {
-		ID        int    `json:"id"`
-		Name      string `json:"name"`
-		FileCount int    `json:"file_count"`
-	}
-	childList := make([]childResponse, len(children))
-	for i, ch := range children {
-		childList[i] = childResponse{ID: ch.ID, Name: ch.Name, FileCount: ch.FileCount}
-	}
-
-	descendantFileCount, err := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	response := struct {
-		*models.Publisher
-		FileCount           int                `json:"file_count"`
-		DescendantFileCount int                `json:"descendant_file_count"`
-		Aliases             []string           `json:"aliases"`
-		Ancestors           []ancestorResponse `json:"ancestors"`
-		DescendantIDs       []int              `json:"descendant_ids"`
-		Children            []childResponse    `json:"children"`
-	}{publisher, fileCount, descendantFileCount, aliasList, ancestorList, descendantIDs, childList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -127,22 +131,13 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	type PublisherWithCount struct {
-		*models.Publisher
-		FileCount                int      `json:"file_count"`
-		DescendantFileCount      int      `json:"descendant_file_count"`
-		DescendantPublisherCount int      `json:"descendant_publisher_count"`
-		ParentName               *string  `json:"parent_name"`
-		Aliases                  []string `json:"aliases"`
-	}
-
 	// Build a lookup map of publisher ID -> name for parent resolution
 	publisherNameMap := make(map[int]string, len(publishers))
 	for _, p := range publishers {
 		publisherNameMap[p.ID] = p.Name
 	}
 
-	result := make([]PublisherWithCount, len(publishers))
+	result := make([]PublisherListItem, len(publishers))
 	for i, p := range publishers {
 		fileCount, _ := h.publisherService.GetFileCount(ctx, p.ID)
 		descendantIDs, _ := h.publisherService.GetDescendantIDs(ctx, p.ID)
@@ -163,13 +158,17 @@ func (h *handler) list(c echo.Context) error {
 			}
 		}
 
-		result[i] = PublisherWithCount{p, fileCount, descendantFileCount, descendantPublisherCount, parentName, aliasList}
+		result[i] = PublisherListItem{
+			Publisher:                *p,
+			FileCount:                fileCount,
+			DescendantFileCount:      descendantFileCount,
+			DescendantPublisherCount: descendantPublisherCount,
+			ParentName:               parentName,
+			Aliases:                  aliasList,
+		}
 	}
 
-	response := map[string]any{
-		"items": result,
-		"total": total,
-	}
+	response := ListPublishersResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -273,13 +272,10 @@ func (h *handler) update(c echo.Context) error {
 
 			// Re-retrieve to pick up parent_id change
 			existing, _ = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
-			fileCount, _ := h.publisherService.GetFileCount(ctx, existing.ID)
-			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, existing.ID)
-			response := struct {
-				*models.Publisher
-				FileCount int      `json:"file_count"`
-				Aliases   []string `json:"aliases"`
-			}{existing, fileCount, aliasList}
+			response, err := h.buildPublisherResponse(ctx, existing)
+			if err != nil {
+				return err
+			}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -310,13 +306,10 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	fileCount, _ := h.publisherService.GetFileCount(ctx, id)
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
-	response := struct {
-		*models.Publisher
-		FileCount int      `json:"file_count"`
-		Aliases   []string `json:"aliases"`
-	}{publisher, fileCount, aliasList}
+	response, err := h.buildPublisherResponse(ctx, publisher)
+	if err != nil {
+		return err
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -351,10 +344,7 @@ func (h *handler) files(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	response := map[string]any{
-		"items": files,
-		"total": total,
-	}
+	response := ListPublisherFilesResponse{Items: files, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

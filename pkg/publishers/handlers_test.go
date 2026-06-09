@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
@@ -102,6 +103,109 @@ func seedPublisherWithFiles(t *testing.T, db *bun.DB, lib *models.Library, pubNa
 	}
 
 	return publisher
+}
+
+func TestBuildPublisherResponse_FullHierarchy(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	// Build a 3-level hierarchy: root -> middle -> leaf, plus a second child of
+	// middle (sibling) so children flattening and descendant ids are non-trivial.
+	root := &models.Publisher{LibraryID: lib.ID, Name: "Root"}
+	_, err := db.NewInsert().Model(root).Exec(ctx)
+	require.NoError(t, err)
+
+	middle := &models.Publisher{LibraryID: lib.ID, Name: "Middle", ParentID: &root.ID}
+	_, err = db.NewInsert().Model(middle).Exec(ctx)
+	require.NoError(t, err)
+
+	childA := &models.Publisher{LibraryID: lib.ID, Name: "ChildA", ParentID: &middle.ID}
+	_, err = db.NewInsert().Model(childA).Exec(ctx)
+	require.NoError(t, err)
+
+	childB := &models.Publisher{LibraryID: lib.ID, Name: "ChildB", ParentID: &middle.ID}
+	_, err = db.NewInsert().Model(childB).Exec(ctx)
+	require.NoError(t, err)
+
+	// Aliases on the middle publisher (the one we build the response for).
+	_, err = db.NewRaw(
+		"INSERT INTO publisher_aliases (created_at, publisher_id, name, library_id) VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
+		time.Now(), middle.ID, "Mid Imprint", lib.ID,
+		time.Now(), middle.ID, "MI", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	// Files: 1 direct on middle, 2 on childA, 1 on childB.
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	insertFile := func(pubID int, path string) {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      path,
+			FilesizeBytes: 1,
+			PublisherID:   &pubID,
+		}
+		_, ferr := db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, ferr)
+	}
+	insertFile(middle.ID, "/tmp/mid.epub")
+	insertFile(childA.ID, "/tmp/childA-1.epub")
+	insertFile(childA.ID, "/tmp/childA-2.epub")
+	insertFile(childB.ID, "/tmp/childB-1.epub")
+
+	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &middle.ID})
+	require.NoError(t, err)
+
+	resp, err := h.buildPublisherResponse(ctx, publisher)
+	require.NoError(t, err)
+
+	// Counts: file_count includes middle's subtree (1 + 2 + 1 = 4); descendant
+	// file count excludes middle's own direct file (2 + 1 = 3).
+	assert.Equal(t, 4, resp.FileCount, "file_count should include the publisher's whole subtree")
+	assert.Equal(t, 3, resp.DescendantFileCount, "descendant_file_count should exclude the publisher's own direct files")
+
+	// Aliases serialize as a flat []string.
+	assert.ElementsMatch(t, []string{"Mid Imprint", "MI"}, resp.Aliases)
+
+	// Ancestors: immediate parent (Root) only, ordered parent -> root.
+	require.Len(t, resp.Ancestors, 1)
+	assert.Equal(t, root.ID, resp.Ancestors[0].ID)
+	assert.Equal(t, "Root", resp.Ancestors[0].Name)
+
+	// Descendant ids: childA and childB.
+	assert.ElementsMatch(t, []int{childA.ID, childB.ID}, resp.DescendantIDs)
+
+	// Children: flattened direct children (ChildA, ChildB) with their direct file
+	// counts, ordered by name.
+	require.Len(t, resp.Children, 2)
+	assert.Equal(t, "ChildA", resp.Children[0].Name)
+	assert.Equal(t, childA.ID, resp.Children[0].ID)
+	assert.Equal(t, 2, resp.Children[0].FileCount)
+	assert.Equal(t, "ChildB", resp.Children[1].Name)
+	assert.Equal(t, childB.ID, resp.Children[1].ID)
+	assert.Equal(t, 1, resp.Children[1].FileCount)
+
+	// The embedded model carries identity fields.
+	assert.Equal(t, middle.ID, resp.ID)
+	assert.Equal(t, "Middle", resp.Name)
+	require.NotNil(t, resp.ParentID)
+	assert.Equal(t, root.ID, *resp.ParentID)
 }
 
 func TestFiles_DefaultPagination(t *testing.T) {
@@ -387,6 +491,97 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
+}
+
+func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	pub := seedPublisherWithFiles(t, db, lib, "Penguin", []string{"f1"})
+
+	// Seed two aliases so we can assert they round-trip as a JSON array of strings.
+	_, err := db.NewRaw(
+		"INSERT INTO publisher_aliases (created_at, publisher_id, name, library_id) VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
+		time.Now(), pub.ID, "Penguin Books", lib.ID,
+		time.Now(), pub.ID, "PRH", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err = h.list(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Top-level envelope must be { items, total } only.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+	assert.Contains(t, raw, "items")
+	assert.Contains(t, raw, "total")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+
+	// Each item's aliases must serialize as a JSON array of strings, not objects.
+	var resp struct {
+		Items []struct {
+			ID        int             `json:"id"`
+			Name      string          `json:"name"`
+			FileCount int             `json:"file_count"`
+			Aliases   json.RawMessage `json:"aliases"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, "Penguin", resp.Items[0].Name)
+	assert.Equal(t, 1, resp.Items[0].FileCount)
+
+	var aliasStrings []string
+	require.NoError(t, json.Unmarshal(resp.Items[0].Aliases, &aliasStrings),
+		"aliases must unmarshal into []string, proving it is a JSON array of strings")
+	assert.ElementsMatch(t, []string{"Penguin Books", "PRH"}, aliasStrings)
+}
+
+func TestRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+	ctx := context.Background()
+
+	pub := seedPublisherWithFiles(t, db, lib, "Tor", []string{"f1"})
+
+	_, err := db.NewRaw(
+		"INSERT INTO publisher_aliases (created_at, publisher_id, name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), pub.ID, "Tor Books", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(pub.ID))
+
+	err = h.retrieve(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Aliases json.RawMessage `json:"aliases"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	var aliasStrings []string
+	require.NoError(t, json.Unmarshal(resp.Aliases, &aliasStrings),
+		"retrieve aliases must unmarshal into []string")
+	assert.ElementsMatch(t, []string{"Tor Books"}, aliasStrings)
 }
 
 func TestFiles_IncludesDescendantPublisherFiles(t *testing.T) {

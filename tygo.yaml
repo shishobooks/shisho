@@ -12,6 +12,7 @@ type_mappings:
   # also needs a mapping so tygo emits the bare interface name instead of `any`.
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
   models.Book: "Book"
+  models.Publisher: "Publisher"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"
@@ -86,6 +87,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/publishers"
     output_path: "app/types/generated/publishers.ts"
+    frontmatter: |
+      import { File, Publisher } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/apikeys"

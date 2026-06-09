@@ -50,7 +50,6 @@ describe("FileDetailsTab", () => {
           updated_at: "2024-01-01T00:00:00Z",
           library_id: 1,
           name: "Penguin Books",
-          aliases: [],
           file_count: 5,
         },
       });
