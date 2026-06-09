@@ -2,14 +2,14 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { API } from "@/libraries/api";
-import type { AuthorInput } from "@/types";
+import type { AuthorInput, PersonResponse } from "@/types";
 
 import {
   QueryKey as GenresQueryKey,
   useGenresList,
   type ListGenresData,
 } from "./genres";
-import { usePeopleList, type PersonWithCounts } from "./people";
+import { usePeopleList } from "./people";
 import { usePublishersList } from "./publishers";
 import { useSeriesList } from "./series";
 import {
@@ -51,7 +51,7 @@ export function usePeopleSearch(
     },
     { enabled: enabled && !!libraryId },
   );
-  const adapted = data?.items.map((p: PersonWithCounts) => ({
+  const adapted = data?.items.map((p: PersonResponse) => ({
     name: p.name,
     id: p.id,
     authored_book_count: p.authored_book_count,

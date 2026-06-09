@@ -1,13 +1,14 @@
 import ResourceList from "@/components/library/ResourceList";
-import { usePeopleList, type PersonWithCounts } from "@/hooks/queries/people";
+import { usePeopleList } from "@/hooks/queries/people";
 import { useResourceListState } from "@/hooks/useResourceListState";
+import type { PersonResponse } from "@/types";
 
 const PersonList = () => {
   const state = useResourceListState();
   const query = usePeopleList(state.queryParams);
 
   return (
-    <ResourceList<PersonWithCounts>
+    <ResourceList<PersonResponse>
       itemConfig={(person) => {
         const badges = [];
         if (person.authored_book_count > 0) {
@@ -41,7 +42,7 @@ const PersonList = () => {
           name: person.name,
           secondaryText:
             person.sort_name !== person.name ? person.sort_name : undefined,
-          aliases: person.aliases.map((a) => a.name),
+          aliases: person.aliases,
           badges,
         };
       }}

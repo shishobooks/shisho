@@ -7,12 +7,19 @@ type_mappings:
   models.Genre: "Genre"
   models.Tag: "Tag"
   models.Series: "Series"
+  models.Person: "Person"
+  # A model returned by name (not embedded, not field-level `tstype`-overridden)
+  # also needs a mapping so tygo emits the bare interface name instead of `any`.
+  # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
+  models.Book: "Book"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"
     output_path: "app/types/generated/models.ts"
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
+    frontmatter: |
+      import { Book } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/config"
@@ -61,6 +68,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/people"
     output_path: "app/types/generated/people.ts"
+    frontmatter: |
+      import { Book, File, Person } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/genres"

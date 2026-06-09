@@ -16,7 +16,7 @@ type Person struct {
 	Name           string         `bun:",nullzero" json:"name"`
 	SortName       string         `bun:",notnull" json:"sort_name"`
 	SortNameSource string         `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
-	Aliases        []*PersonAlias `bun:"rel:has-many,join:id=person_id" json:"aliases" tstype:"PersonAlias[]"`
+	Aliases        []*PersonAlias `bun:"rel:has-many,join:id=person_id" json:"aliases" tstype:"-"`
 }
 
 // Author role constants for CBZ ComicInfo.xml creator types.

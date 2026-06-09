@@ -6,8 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, File, Person, ResourceListResponse } from "@/types";
-import type { UpdatePersonPayload } from "@/types/generated/people";
+import type { Book, File, PersonResponse, ResourceListResponse } from "@/types";
+import type {
+  ListPeopleQuery,
+  UpdatePersonPayload,
+} from "@/types/generated/people";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { QueryKey as SearchQueryKey } from "./search";
@@ -19,19 +22,7 @@ export enum QueryKey {
   PersonNarratedFiles = "PersonNarratedFiles",
 }
 
-export interface ListPeopleQuery {
-  limit?: number;
-  offset?: number;
-  library_id?: number;
-  search?: string;
-}
-
-export interface PersonWithCounts extends Person {
-  authored_book_count: number;
-  narrated_file_count: number;
-}
-
-export type ListPeopleData = ResourceListResponse<PersonWithCounts>;
+export type ListPeopleData = ResourceListResponse<PersonResponse>;
 
 export const usePeopleList = (
   query: ListPeopleQuery = {},
@@ -52,11 +43,11 @@ export const usePeopleList = (
 export const usePerson = (
   personId?: number,
   options: Omit<
-    UseQueryOptions<PersonWithCounts, ShishoAPIError>,
+    UseQueryOptions<PersonResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<PersonWithCounts, ShishoAPIError>({
+  return useQuery<PersonResponse, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
@@ -133,7 +124,7 @@ export const useUpdatePerson = () => {
       personId: number;
       payload: UpdatePersonPayload;
     }) => {
-      return API.request<PersonWithCounts>(
+      return API.request<PersonResponse>(
         "PATCH",
         `/people/${personId}`,
         payload,

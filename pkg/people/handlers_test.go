@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
@@ -394,4 +395,63 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
+}
+
+func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	ctx := context.Background()
+	lib := createTestLibrary(t, db)
+	h := newTestHandler(db)
+
+	person := seedPersonWithAuthoredBooks(t, db, lib, "Brandon Sanderson", []string{"Book1"})
+
+	// Seed two aliases so we can assert they round-trip as JSON strings.
+	_, err := db.NewRaw(
+		"INSERT INTO person_aliases (created_at, person_id, name, library_id) VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
+		time.Now(), person.ID, "B. Sanderson", lib.ID,
+		time.Now(), person.ID, "Brandon S.", lib.ID,
+	).Exec(ctx)
+	require.NoError(t, err)
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err = h.list(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Top-level envelope must be { items, total } only.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	assert.True(t, hasItems, "list response must have 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+
+	// Each item's aliases must serialize as a JSON array of strings (the #324 fix
+	// at the wire level), and the counts must be present.
+	var resp struct {
+		Items []struct {
+			ID                int             `json:"id"`
+			Name              string          `json:"name"`
+			AuthoredBookCount int             `json:"authored_book_count"`
+			NarratedFileCount int             `json:"narrated_file_count"`
+			Aliases           json.RawMessage `json:"aliases"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, "Brandon Sanderson", resp.Items[0].Name)
+	assert.Equal(t, 1, resp.Items[0].AuthoredBookCount)
+
+	// aliases must be a JSON array whose elements are strings, not objects.
+	var aliasStrings []string
+	require.NoError(t, json.Unmarshal(resp.Items[0].Aliases, &aliasStrings),
+		"aliases must unmarshal into []string, proving it is a JSON array of strings")
+	assert.ElementsMatch(t, []string{"B. Sanderson", "Brandon S."}, aliasStrings)
 }
