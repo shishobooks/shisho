@@ -125,12 +125,16 @@ func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOption
 		q = q.Offset(*opts.Offset)
 	}
 
+	// Count first (when requested), then Scan. We deliberately avoid bun's
+	// ScanAndCount: it runs the count and scan concurrently, and on a query
+	// with relations both goroutines mutate the shared relation-join state, a
+	// data race the -race detector flags in CI.
 	if opts.includeTotal {
-		total, err = q.ScanAndCount(ctx)
-	} else {
-		err = q.Scan(ctx)
+		if total, err = q.Count(ctx); err != nil {
+			return nil, 0, errors.WithStack(err)
+		}
 	}
-	if err != nil {
+	if err = q.Scan(ctx); err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 
@@ -362,12 +366,15 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Offset(*opts.Offset)
 	}
 
+	// Count first (when requested), then Scan, rather than bun's concurrent
+	// ScanAndCount, which races on shared relation-join state (see
+	// listListsWithTotal).
 	if opts.includeTotal {
-		total, err = q.ScanAndCount(ctx)
-	} else {
-		err = q.Scan(ctx)
+		if total, err = q.Count(ctx); err != nil {
+			return nil, 0, errors.WithStack(err)
+		}
 	}
-	if err != nil {
+	if err = q.Scan(ctx); err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 

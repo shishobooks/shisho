@@ -206,26 +206,28 @@ func TestService_Pagination(t *testing.T) {
 	assert.Equal(t, 3, total)
 	assert.Len(t, lists, 3)
 
-	// Test limit using ListLists (not ListListsWithTotal)
-	// Note: There's a known bug with bun's ScanAndCount + Limit in SQLite in-memory tests,
-	// so we use ListLists which uses Scan instead of ScanAndCount.
+	// With a limit, total still reflects all matching rows while the returned
+	// page respects the limit. ListListsWithTotal counts then scans (it no
+	// longer uses bun's concurrent ScanAndCount).
 	limit := 1
-	lists, err = svc.ListLists(ctx, ListListsOptions{
+	lists, total, err = svc.ListListsWithTotal(ctx, ListListsOptions{
 		UserID: user.ID,
 		Limit:  &limit,
 	})
 	require.NoError(t, err)
+	assert.Equal(t, 3, total, "total should count all lists, ignoring the limit")
 	assert.Len(t, lists, 1, "should return only 1 list with limit=1")
 
-	// Test offset using ListLists
+	// Limit + offset pages correctly while total still counts all rows.
 	limit = 2
 	offset := 1
-	lists, err = svc.ListLists(ctx, ListListsOptions{
+	lists, total, err = svc.ListListsWithTotal(ctx, ListListsOptions{
 		UserID: user.ID,
 		Limit:  &limit,
 		Offset: &offset,
 	})
 	require.NoError(t, err)
+	assert.Equal(t, 3, total, "total should count all lists, ignoring limit/offset")
 	assert.Len(t, lists, 2, "should return 2 lists with limit=2 offset=1")
 }
 
