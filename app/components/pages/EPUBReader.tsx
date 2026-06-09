@@ -19,12 +19,11 @@ import { useEpubBlob } from "@/hooks/queries/epub";
 import {
   useUpdateUserSettings,
   useUserSettings,
-  type UpdateUserSettingsVariables,
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
-import type { File } from "@/types";
+import type { File, UserSettingsPayload } from "@/types";
 
 import "@/libraries/foliate/view.js";
 
@@ -92,7 +91,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   }, [fontSize]);
 
   const commitSettings = useCallback(
-    (partial: UpdateUserSettingsVariables) => {
+    (partial: UserSettingsPayload) => {
       updateSettings.mutate(partial);
     },
     [updateSettings],
