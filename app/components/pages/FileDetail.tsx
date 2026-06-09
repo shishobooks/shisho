@@ -1,4 +1,4 @@
-import { BookOpen, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Headphones, Pencil, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -20,8 +20,9 @@ import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { FileTypeCBZ, FileTypeEPUB, FileTypePDF, type File } from "@/types";
+import { type File } from "@/types";
 import { getFilename } from "@/utils/format";
+import { getReadingAction } from "@/utils/readingAction";
 
 const validTabs = ["details", "chapters"] as const;
 type TabValue = (typeof validTabs)[number];
@@ -190,19 +191,28 @@ const FileDetail = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-semibold">{filename}</h1>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Read button for CBZ, EPUB, and PDF files */}
-          {(file.file_type === FileTypeCBZ ||
-            file.file_type === FileTypeEPUB ||
-            file.file_type === FileTypePDF) && (
-            <Button asChild size="sm">
-              <Link
-                to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}
-              >
-                <BookOpen className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Read</span>
-              </Link>
-            </Button>
-          )}
+          {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
+          {(() => {
+            const action = getReadingAction(file.file_type);
+            if (!action) return null;
+            const isListen = action === "listen";
+            return (
+              <Button asChild size="sm">
+                <Link
+                  to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}
+                >
+                  {isListen ? (
+                    <Headphones className="h-4 w-4 sm:mr-2" />
+                  ) : (
+                    <BookOpen className="h-4 w-4 sm:mr-2" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isListen ? "Listen" : "Read"}
+                  </span>
+                </Link>
+              </Button>
+            );
+          })()}
 
           {activeTab === "chapters" && isEditingChapters ? (
             <>
