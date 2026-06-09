@@ -26,7 +26,7 @@ import {
   useCreateList,
   useListLists,
   useUpdateBookLists,
-  type ListWithCount,
+  type ListResponse,
 } from "@/hooks/queries/lists";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import type { CreateListPayload } from "@/types";
@@ -57,8 +57,8 @@ export const AddToListDialog = ({
   const createListMutation = useCreateList();
 
   const lists = useMemo(
-    () => listsQuery.data?.lists ?? [],
-    [listsQuery.data?.lists],
+    () => listsQuery.data?.items ?? [],
+    [listsQuery.data?.items],
   );
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
 
@@ -107,7 +107,7 @@ export const AddToListDialog = ({
     );
   }, [lists, search]);
 
-  const handleToggle = (list: ListWithCount) => {
+  const handleToggle = (list: ListResponse) => {
     // Viewer-only lists can't be toggled
     if (list.permission === "viewer") return;
 

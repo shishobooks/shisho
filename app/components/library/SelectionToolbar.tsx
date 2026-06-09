@@ -144,7 +144,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     }
   };
 
-  const lists = listsQuery.data?.lists ?? [];
+  const lists = listsQuery.data?.items ?? [];
   const editableLists = lists.filter((list) => list.permission !== "viewer");
 
   const handleAddToList = async (listId: number, listName: string) => {

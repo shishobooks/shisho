@@ -11,12 +11,16 @@ import type {
   CreateListPayload,
   CreateSharePayload,
   List,
-  ListBook,
   ListBooksInListQuery,
+  ListListBooksResponse,
   ListListsQuery,
+  ListListsResponse,
+  ListResponse,
   ListShare,
+  ListTemplate,
   RemoveBooksPayload,
   ReorderBooksPayload,
+  RetrieveListResponse,
   UpdateListPayload,
   UpdateSharePayload,
 } from "@/types";
@@ -30,36 +34,12 @@ export enum QueryKey {
   BookLists = "BookLists",
 }
 
-export interface ListWithCount extends List {
-  book_count: number;
-  permission: "owner" | "manager" | "editor" | "viewer";
-}
-
-export interface ListListsData {
-  lists: ListWithCount[];
-  total: number;
-}
-
-export interface ListBooksData {
-  books: ListBook[];
-  total: number;
-}
-
-export interface RetrieveListData {
-  list: List;
-  book_count: number;
-  permission: "owner" | "manager" | "editor" | "viewer";
-}
-
-export interface ListTemplate {
-  name: string;
-  display_name: string;
-  description: string;
-  is_ordered: boolean;
-  default_sort: string;
-}
-
-export type { ListListsQuery, ListBooksInListQuery };
+export type {
+  ListListsQuery,
+  ListBooksInListQuery,
+  ListResponse,
+  ListTemplate,
+};
 
 // ============================================================================
 // Query Hooks
@@ -68,11 +48,11 @@ export type { ListListsQuery, ListBooksInListQuery };
 export const useListLists = (
   query: ListListsQuery = {},
   options: Omit<
-    UseQueryOptions<ListListsData, ShishoAPIError>,
+    UseQueryOptions<ListListsResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ListListsData, ShishoAPIError>({
+  return useQuery<ListListsResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.ListLists, query],
     queryFn: ({ signal }) => {
@@ -84,11 +64,11 @@ export const useListLists = (
 export const useList = (
   listId?: number,
   options: Omit<
-    UseQueryOptions<RetrieveListData, ShishoAPIError>,
+    UseQueryOptions<RetrieveListResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<RetrieveListData, ShishoAPIError>({
+  return useQuery<RetrieveListResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(listId),
     ...options,
     queryKey: [QueryKey.RetrieveList, listId],
@@ -102,11 +82,11 @@ export const useListBooks = (
   listId?: number,
   query: ListBooksInListQuery = {},
   options: Omit<
-    UseQueryOptions<ListBooksData, ShishoAPIError>,
+    UseQueryOptions<ListListBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ListBooksData, ShishoAPIError>({
+  return useQuery<ListListBooksResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(listId),
     ...options,
     queryKey: [QueryKey.ListBooks, listId, query],

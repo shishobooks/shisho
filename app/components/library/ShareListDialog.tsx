@@ -32,6 +32,7 @@ import {
   ListPermissionEditor,
   ListPermissionManager,
   ListPermissionViewer,
+  type ListPermission,
 } from "@/types";
 
 interface ShareListDialogProps {
@@ -66,7 +67,7 @@ export function ShareListDialog({
 }: ShareListDialogProps) {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedPermission, setSelectedPermission] =
-    useState<string>(ListPermissionViewer);
+    useState<ListPermission>(ListPermissionViewer);
 
   const { user: currentUser } = useAuth();
   const listQuery = useList(listId, { enabled: open });
@@ -79,7 +80,7 @@ export function ShareListDialog({
 
   const shares = sharesQuery.data ?? [];
   const users = usersQuery.data?.items ?? [];
-  const listOwnerId = listQuery.data?.list.user_id;
+  const listOwnerId = listQuery.data?.user_id;
 
   // Filter out users who already have access (shares, owner, or self)
   const availableUsers = users.filter(
@@ -112,7 +113,7 @@ export function ShareListDialog({
 
   const handleUpdatePermission = async (
     shareId: number,
-    permission: string,
+    permission: ListPermission,
   ) => {
     try {
       await updateShareMutation.mutateAsync({
@@ -183,7 +184,9 @@ export function ShareListDialog({
               </Select>
 
               <Select
-                onValueChange={setSelectedPermission}
+                onValueChange={(value) =>
+                  setSelectedPermission(value as ListPermission)
+                }
                 value={selectedPermission}
               >
                 <SelectTrigger className="w-28">
@@ -252,7 +255,10 @@ export function ShareListDialog({
                       <Select
                         disabled={isPending}
                         onValueChange={(value) =>
-                          handleUpdatePermission(share.id, value)
+                          handleUpdatePermission(
+                            share.id,
+                            value as ListPermission,
+                          )
                         }
                         value={share.permission}
                       >

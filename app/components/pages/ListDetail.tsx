@@ -48,6 +48,7 @@ import {
   ListSortTitleDesc,
   type GallerySize,
   type ListBook,
+  type ListSort,
   type UpdateListPayload,
 } from "@/types";
 
@@ -115,14 +116,14 @@ const ListDetail = () => {
     );
   };
 
-  const [sort, setSort] = useState<string | undefined>(undefined);
+  const [sort, setSort] = useState<ListSort | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
 
-  usePageTitle(listQuery.data?.list?.name ?? "List");
+  usePageTitle(listQuery.data?.name ?? "List");
   const listBooksQuery = useListBooks(
     listId,
     { sort, limit, offset },
@@ -202,9 +203,9 @@ const ListDetail = () => {
     );
   }
 
-  const list = listQuery.data.list;
+  const list = listQuery.data;
   const bookCount = listQuery.data.book_count;
-  const books = listBooksQuery.data?.books ?? [];
+  const books = listBooksQuery.data?.items ?? [];
 
   return (
     <div>
@@ -276,7 +277,7 @@ const ListDetail = () => {
           <div className="mb-6 flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Sort by:</span>
             <Select
-              onValueChange={setSort}
+              onValueChange={(value) => setSort(value as ListSort)}
               value={sort ?? list.default_sort ?? ListSortAddedAtDesc}
             >
               <SelectTrigger className="w-48">

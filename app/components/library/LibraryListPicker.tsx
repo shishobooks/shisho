@@ -22,7 +22,7 @@ const LibraryListPicker = () => {
 
   // Load lists for sidebar navigation
   const listsQuery = useListLists();
-  const lists = listsQuery.data?.lists || [];
+  const lists = listsQuery.data?.items || [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   // Check if we're currently viewing a list

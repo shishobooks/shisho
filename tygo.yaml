@@ -9,6 +9,7 @@ type_mappings:
   models.Series: "Series"
   models.Person: "Person"
   models.Library: "Library"
+  models.List: "List"
   # A model returned by name (not embedded, not field-level `tstype`-overridden)
   # also needs a mapping so tygo emits the bare interface name instead of `any`.
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
@@ -120,6 +121,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/lists"
     output_path: "app/types/generated/lists.ts"
+    frontmatter: |
+      import { List, ListBook, ListPermission, ListSort } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/settings"
