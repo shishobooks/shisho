@@ -68,6 +68,13 @@ export {
   type UpdateBookListsPayload,
   type ListListsQuery,
   type ListBooksQuery as ListBooksInListQuery,
+  type ListResponse,
+  type ListResponsePermission,
+  type ListListsResponse,
+  type ListListBooksResponse,
+  type RetrieveListResponse,
+  type CheckVisibilityResponse,
+  type ListTemplate,
 } from "./generated/lists";
 
 export type { UserSettings } from "@/hooks/queries/settings";

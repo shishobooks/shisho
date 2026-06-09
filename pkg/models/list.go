@@ -8,6 +8,7 @@ import (
 
 // List permission levels.
 const (
+	//tygo:emit export type ListPermission = typeof ListPermissionViewer | typeof ListPermissionEditor | typeof ListPermissionManager;
 	ListPermissionViewer  = "viewer"
 	ListPermissionEditor  = "editor"
 	ListPermissionManager = "manager"
@@ -15,6 +16,7 @@ const (
 
 // List default sort options.
 const (
+	//tygo:emit export type ListSort = typeof ListSortManual | typeof ListSortAddedAtDesc | typeof ListSortAddedAtAsc | typeof ListSortTitleAsc | typeof ListSortTitleDesc | typeof ListSortAuthorAsc | typeof ListSortAuthorDesc;
 	ListSortAddedAtDesc = "added_at_desc"
 	ListSortAddedAtAsc  = "added_at_asc"
 	ListSortTitleAsc    = "title_asc"
@@ -35,7 +37,7 @@ type List struct {
 	Name        string    `bun:",nullzero" json:"name"`
 	Description *string   `json:"description"`
 	IsOrdered   bool      `json:"is_ordered"`
-	DefaultSort string    `bun:",nullzero" json:"default_sort"`
+	DefaultSort string    `bun:",nullzero" json:"default_sort" tstype:"ListSort"`
 
 	// Relations
 	ListBooks  []*ListBook  `bun:"rel:has-many,join:id=list_id" json:"list_books,omitempty" tstype:"ListBook[]"`
@@ -64,7 +66,7 @@ type ListShare struct {
 	List           *List     `bun:"rel:belongs-to,join:list_id=id" json:"list,omitempty" tstype:"List"`
 	UserID         int       `bun:",nullzero" json:"user_id"`
 	User           *User     `bun:"rel:belongs-to,join:user_id=id" json:"user,omitempty" tstype:"User"`
-	Permission     string    `bun:",nullzero" json:"permission"`
+	Permission     string    `bun:",nullzero" json:"permission" tstype:"ListPermission"`
 	CreatedAt      time.Time `json:"created_at"`
 	SharedByUserID *int      `json:"shared_by_user_id"`
 	SharedByUser   *User     `bun:"rel:belongs-to,join:shared_by_user_id=id" json:"shared_by_user,omitempty" tstype:"User"`

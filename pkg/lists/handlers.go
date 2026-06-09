@@ -1,6 +1,7 @@
 package lists
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -40,35 +41,37 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	// Augment with book counts
-	type ListWithCount struct {
-		*models.List
-		BookCount  int    `json:"book_count"`
-		Permission string `json:"permission"` // owner, manager, editor, viewer
-	}
-
-	result := make([]ListWithCount, len(lists))
+	result := make([]ListResponse, len(lists))
 	libraryIDs := user.GetAccessibleLibraryIDs()
 
 	for i, l := range lists {
 		count, _ := h.listsService.GetListBookCount(ctx, l.ID, libraryIDs)
-
-		// Determine permission level
-		permission := "viewer"
-		if l.UserID == user.ID {
-			permission = "owner"
-		} else if canManage, _ := h.listsService.CanManage(ctx, l.ID, user.ID); canManage {
-			permission = "manager"
-		} else if canEdit, _ := h.listsService.CanEdit(ctx, l.ID, user.ID); canEdit {
-			permission = "editor"
+		result[i] = ListResponse{
+			List:       *l,
+			BookCount:  count,
+			Permission: h.effectivePermission(ctx, l.ID, l.UserID, user.ID),
 		}
-
-		result[i] = ListWithCount{l, count, permission}
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, echo.Map{
-		"lists": result,
-		"total": total,
-	}))
+	response := ListListsResponse{Items: result, Total: total}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+// effectivePermission returns the requesting user's effective permission on a
+// list: "owner" if they own it, otherwise the highest share grant (manager >
+// editor > viewer).
+func (h *handler) effectivePermission(ctx context.Context, listID, ownerID, userID int) string {
+	if ownerID == userID {
+		return PermissionOwner
+	}
+	if canManage, _ := h.listsService.CanManage(ctx, listID, userID); canManage {
+		return models.ListPermissionManager
+	}
+	if canEdit, _ := h.listsService.CanEdit(ctx, listID, userID); canEdit {
+		return models.ListPermissionEditor
+	}
+	return models.ListPermissionViewer
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -102,21 +105,13 @@ func (h *handler) retrieve(c echo.Context) error {
 	libraryIDs := user.GetAccessibleLibraryIDs()
 	bookCount, _ := h.listsService.GetListBookCount(ctx, id, libraryIDs)
 
-	// Determine permission
-	permission := "viewer"
-	if list.UserID == user.ID {
-		permission = "owner"
-	} else if canManage, _ := h.listsService.CanManage(ctx, id, user.ID); canManage {
-		permission = "manager"
-	} else if canEdit, _ := h.listsService.CanEdit(ctx, id, user.ID); canEdit {
-		permission = "editor"
+	response := RetrieveListResponse{
+		List:       *list,
+		BookCount:  bookCount,
+		Permission: h.effectivePermission(ctx, id, list.UserID, user.ID),
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, echo.Map{
-		"list":       list,
-		"book_count": bookCount,
-		"permission": permission,
-	}))
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) create(c echo.Context) error {
@@ -309,10 +304,9 @@ func (h *handler) listBooks(c echo.Context) error {
 		}
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, echo.Map{
-		"books": listBooks,
-		"total": total,
-	}))
+	response := ListListBooksResponse{Items: listBooks, Total: total}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) addBooks(c echo.Context) error {
@@ -659,10 +653,9 @@ func (h *handler) checkVisibility(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, echo.Map{
-		"visible": visible,
-		"total":   total,
-	}))
+	response := CheckVisibilityResponse{Visible: visible, Total: total}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 // Template handlers
@@ -711,20 +704,20 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 }
 
 func (h *handler) templates(c echo.Context) error {
-	templates := []map[string]interface{}{
+	templates := []ListTemplate{
 		{
-			"name":         "tbr",
-			"display_name": "To Be Read",
-			"description":  "Books I want to read next",
-			"is_ordered":   true,
-			"default_sort": models.ListSortManual,
+			Name:        "tbr",
+			DisplayName: "To Be Read",
+			Description: "Books I want to read next",
+			IsOrdered:   true,
+			DefaultSort: models.ListSortManual,
 		},
 		{
-			"name":         "favorites",
-			"display_name": "Favorites",
-			"description":  "My favorite books",
-			"is_ordered":   false,
-			"default_sort": models.ListSortAddedAtDesc,
+			Name:        "favorites",
+			DisplayName: "Favorites",
+			Description: "My favorite books",
+			IsOrdered:   false,
+			DefaultSort: models.ListSortAddedAtDesc,
 		},
 	}
 

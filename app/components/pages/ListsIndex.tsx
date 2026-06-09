@@ -12,11 +12,9 @@ import {
   useCreateListFromTemplate,
   useListLists,
   useListTemplates,
-  type ListTemplate,
-  type ListWithCount,
 } from "@/hooks/queries/lists";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { CreateListPayload } from "@/types";
+import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
 
 const ListsIndex = () => {
   usePageTitle("Lists");
@@ -28,7 +26,7 @@ const ListsIndex = () => {
   const createListMutation = useCreateList();
   const createFromTemplateMutation = useCreateListFromTemplate();
 
-  const lists = listsQuery.data?.lists ?? [];
+  const lists = listsQuery.data?.items ?? [];
   const templates = templatesQuery.data ?? [];
   const hasLists = lists.length > 0;
 
@@ -61,7 +59,7 @@ const ListsIndex = () => {
     }
   };
 
-  const renderListCard = (list: ListWithCount) => {
+  const renderListCard = (list: ListResponse) => {
     const bookCount = list.book_count ?? 0;
 
     return (

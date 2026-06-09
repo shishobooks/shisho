@@ -17,9 +17,8 @@ import {
   useCreateList,
   useListLists,
   useRemoveBooksFromList,
-  type ListWithCount,
 } from "@/hooks/queries/lists";
-import type { CreateListPayload } from "@/types";
+import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListPopoverProps {
   bookId: number;
@@ -51,7 +50,7 @@ const AddToListPopover = ({
   const removeMutation = useRemoveBooksFromList();
   const createListMutation = useCreateList();
 
-  const lists = listsQuery.data?.lists ?? [];
+  const lists = listsQuery.data?.items ?? [];
   const bookListIds = new Set(
     (bookListsQuery.data ?? []).map((list) => list.id),
   );
@@ -59,7 +58,7 @@ const AddToListPopover = ({
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
   const hasLists = lists.length > 0;
 
-  const handleToggle = async (list: ListWithCount) => {
+  const handleToggle = async (list: ListResponse) => {
     const isInList = bookListIds.has(list.id);
     setMutatingListId(list.id);
 

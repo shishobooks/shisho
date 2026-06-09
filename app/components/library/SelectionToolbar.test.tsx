@@ -99,7 +99,7 @@ vi.mock("@/hooks/queries/jobs", () => ({
 }));
 
 vi.mock("@/hooks/queries/lists", () => ({
-  useListLists: () => ({ data: { lists: [] }, isLoading: false }),
+  useListLists: () => ({ data: { items: [] }, isLoading: false }),
   useAddBooksToList: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateList: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));

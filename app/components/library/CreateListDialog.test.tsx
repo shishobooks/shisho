@@ -37,7 +37,7 @@ describe("CreateListDialog", () => {
     created_at: "2024-01-01",
     updated_at: "2024-01-01",
     user_id: 1,
-    default_sort: "title",
+    default_sort: "title_asc",
   };
 
   describe("initialization and state preservation (edit mode)", () => {
@@ -250,7 +250,7 @@ describe("CreateListDialog", () => {
         created_at: "2024-01-01",
         updated_at: "2024-01-01",
         user_id: 1,
-        default_sort: "title",
+        default_sort: "title_asc",
       };
 
       rerender(

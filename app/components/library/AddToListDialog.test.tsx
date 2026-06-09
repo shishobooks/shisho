@@ -26,14 +26,14 @@ let mockBookLists: List[] = [
     created_at: "",
     updated_at: "",
     user_id: 1,
-    default_sort: "title",
+    default_sort: "title_asc",
   },
 ];
 
 // Mock the list hooks
 vi.mock("@/hooks/queries/lists", () => ({
   useListLists: () => ({
-    data: { lists: mockLists },
+    data: { items: mockLists },
     isLoading: false,
   }),
   useBookLists: () => ({
@@ -79,7 +79,7 @@ describe("AddToListDialog", () => {
         created_at: "",
         updated_at: "",
         user_id: 1,
-        default_sort: "title",
+        default_sort: "title_asc",
       },
     ];
   });
@@ -144,7 +144,7 @@ describe("AddToListDialog", () => {
           created_at: "",
           updated_at: "",
           user_id: 1,
-          default_sort: "title",
+          default_sort: "title_asc",
         },
       ];
 
@@ -337,7 +337,7 @@ describe("AddToListDialog", () => {
           created_at: "",
           updated_at: "",
           user_id: 1,
-          default_sort: "title",
+          default_sort: "title_asc",
         },
       ];
 
@@ -379,7 +379,7 @@ describe("AddToListDialog", () => {
           created_at: "",
           updated_at: "",
           user_id: 1,
-          default_sort: "title",
+          default_sort: "title_asc",
         },
         {
           id: 2,
@@ -388,7 +388,7 @@ describe("AddToListDialog", () => {
           created_at: "",
           updated_at: "",
           user_id: 1,
-          default_sort: "title",
+          default_sort: "title_asc",
         },
       ];
 

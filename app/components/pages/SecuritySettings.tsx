@@ -803,7 +803,7 @@ function KoboSetupDialog({
                   <SelectValue placeholder="Select a list..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {listsData.lists.map((list) => (
+                  {listsData.items.map((list) => (
                     <SelectItem key={list.id} value={String(list.id)}>
                       {list.name}
                     </SelectItem>
