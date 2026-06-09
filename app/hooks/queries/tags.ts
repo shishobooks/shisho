@@ -6,7 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, ResourceListResponse, Tag } from "@/types";
+import type {
+  ListTagBooksResponse,
+  ResourceListResponse,
+  TagResponse,
+} from "@/types";
 import type { ListTagsQuery, UpdateTagPayload } from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
@@ -17,7 +21,7 @@ export enum QueryKey {
   TagBooks = "TagBooks",
 }
 
-export type ListTagsData = ResourceListResponse<Tag>;
+export type ListTagsData = ResourceListResponse<TagResponse>;
 
 export const useTagsList = (
   query: ListTagsQuery = {},
@@ -38,11 +42,11 @@ export const useTagsList = (
 export const useTag = (
   tagId?: number,
   options: Omit<
-    UseQueryOptions<Tag, ShishoAPIError>,
+    UseQueryOptions<TagResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Tag, ShishoAPIError>({
+  return useQuery<TagResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(tagId),
     ...options,
     queryKey: [QueryKey.RetrieveTag, tagId],
@@ -61,11 +65,11 @@ export const useTagBooks = (
   tagId?: number,
   query: TagBooksQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
+    UseQueryOptions<ListTagBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
+  return useQuery<ListTagBooksResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(tagId),
     ...options,
     queryKey: [QueryKey.TagBooks, tagId, query],
@@ -86,7 +90,7 @@ export const useUpdateTag = () => {
       tagId: number;
       payload: UpdateTagPayload;
     }) => {
-      return API.request<Tag>("PATCH", `/tags/${tagId}`, payload);
+      return API.request<TagResponse>("PATCH", `/tags/${tagId}`, payload);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({

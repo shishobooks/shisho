@@ -76,7 +76,7 @@ const TagDetail = () => {
   );
 
   const tag = tagQuery.data;
-  const aliases = tag ? ((tag.aliases as unknown as string[]) ?? []) : [];
+  const aliases = tag?.aliases ?? [];
   const bookCount = tag?.book_count ?? 0;
 
   const handleEdit = async (data: { name: string; aliases?: string[] }) => {

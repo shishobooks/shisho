@@ -46,6 +46,9 @@ export {
   type MergeGenresPayload,
 } from "./generated/genres";
 export {
+  type TagResponse,
+  type ListTagsResponse,
+  type ListTagBooksResponse,
   type ListTagsQuery,
   type UpdateTagPayload,
   type MergeTagsPayload,

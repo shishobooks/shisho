@@ -1,19 +1,19 @@
 import ResourceList from "@/components/library/ResourceList";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useResourceListState } from "@/hooks/useResourceListState";
-import type { Tag } from "@/types";
+import type { TagResponse } from "@/types";
 
 const TagsList = () => {
   const state = useResourceListState();
   const query = useTagsList(state.queryParams);
 
   return (
-    <ResourceList<Tag>
+    <ResourceList<TagResponse>
       itemConfig={(tag) => {
         const bookCount = tag.book_count ?? 0;
         return {
           name: tag.name,
-          aliases: tag.aliases.map((a) => a.name),
+          aliases: tag.aliases,
           badges: [
             {
               label: bookCount === 1 ? "book" : "books",

@@ -5,6 +5,7 @@ type_mappings:
   # bare interface name so the generated `extends` matches the `import { Genre }`
   # frontmatter. Add one entry per embedded model used in a response struct.
   models.Genre: "Genre"
+  models.Tag: "Tag"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"
@@ -67,6 +68,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/tags"
     output_path: "app/types/generated/tags.ts"
+    frontmatter: |
+      import { Book, Tag } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/publishers"
