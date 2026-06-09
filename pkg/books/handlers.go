@@ -204,10 +204,7 @@ func (h *handler) list(c echo.Context) error {
 		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
 	}
 
-	resp := struct {
-		Items []*models.Book `json:"items"`
-		Total int            `json:"total"`
-	}{books, total}
+	resp := ListBooksResponse{Items: books, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
@@ -1896,9 +1893,9 @@ func (h *handler) resyncFile(c echo.Context) error {
 
 	// Handle deletion case
 	if result.FileDeleted {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"file_deleted": true,
-			"book_deleted": result.BookDeleted,
+		return c.JSON(http.StatusOK, ResyncFileResponse{
+			FileDeleted: true,
+			BookDeleted: result.BookDeleted,
 		})
 	}
 
@@ -1950,8 +1947,8 @@ func (h *handler) resyncBook(c echo.Context) error {
 
 	// Handle deletion case
 	if result.BookDeleted {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"book_deleted": true,
+		return c.JSON(http.StatusOK, ResyncBookResponse{
+			BookDeleted: true,
 		})
 	}
 
@@ -2387,27 +2384,6 @@ func (h *handler) mergeBooks(c echo.Context) error {
 	})
 }
 
-// DeleteBooksRequest is the request body for bulk book deletion.
-type DeleteBooksRequest struct {
-	BookIDs []int `json:"book_ids"`
-}
-
-// DeleteBooksResponse is the response for bulk book deletion.
-type DeleteBooksResponse struct {
-	BooksDeleted int `json:"books_deleted"`
-	FilesDeleted int `json:"files_deleted"`
-}
-
-// DeleteBookResponse is the response for deleting a book.
-type DeleteBookResponse struct {
-	FilesDeleted int `json:"files_deleted"`
-}
-
-// DeleteFileResponse is the response for deleting a file.
-type DeleteFileResponse struct {
-	BookDeleted bool `json:"book_deleted"`
-}
-
 // deleteBook handles DELETE /books/:id.
 func (h *handler) deleteBook(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -2618,7 +2594,7 @@ func (h *handler) deleteBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	var req DeleteBooksRequest
+	var req DeleteBooksPayload
 	if err := c.Bind(&req); err != nil {
 		return errcodes.ValidationError("Invalid request body")
 	}

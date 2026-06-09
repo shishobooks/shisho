@@ -44,7 +44,7 @@ import {
   sortSpecsEqual,
   type SortLevel,
 } from "@/libraries/sortSpec";
-import type { Book, GallerySize, Genre, Tag } from "@/types";
+import type { Book, GallerySize, Genre, ReviewedFilter, Tag } from "@/types";
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -450,7 +450,7 @@ const HomeContent = () => {
 
   // Add reviewed filter if present
   if (reviewedFilterParam && reviewedFilterParam !== "all") {
-    booksQueryParams.reviewed_filter = reviewedFilterParam;
+    booksQueryParams.reviewed_filter = reviewedFilterParam as ReviewedFilter;
   }
 
   // Sort: serialize only the effective (possibly resolved-from-default) sort.

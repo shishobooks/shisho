@@ -14,7 +14,13 @@ type ListBooksQuery struct {
 	Language       *string  `query:"language" json:"language,omitempty" validate:"omitempty,max=35" tstype:"string"` // Filter by language tag
 	IDs            []int    `query:"ids" json:"ids,omitempty"`                                                       // Filter by specific book IDs
 	Sort           string   `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
-	ReviewedFilter string   `query:"reviewed_filter" json:"reviewed_filter,omitempty" validate:"omitempty,oneof=all needs_review reviewed"` // "" or "all" = all books, "needs_review", "reviewed"
+	ReviewedFilter string   `query:"reviewed_filter" json:"reviewed_filter,omitempty" validate:"omitempty,oneof=all needs_review reviewed" tstype:"ReviewedFilter"` // "" or "all" = all books, "needs_review", "reviewed"
+}
+
+// ListBooksResponse is the list-endpoint envelope for books.
+type ListBooksResponse struct {
+	Items []*models.Book `json:"items" tstype:"Book[]"`
+	Total int            `json:"total"`
 }
 
 type UpdateBookPayload struct {
@@ -31,14 +37,14 @@ type UpdateBookPayload struct {
 // AuthorInput represents an author with an optional role (for CBZ files).
 type AuthorInput struct {
 	Name string  `json:"name" validate:"required,max=200"`
-	Role *string `json:"role,omitempty" validate:"omitempty,oneof=writer penciller inker colorist letterer cover_artist editor translator"`
+	Role *string `json:"role,omitempty" validate:"omitempty,oneof=writer penciller inker colorist letterer cover_artist editor translator" tstype:"AuthorRole"`
 }
 
 // SeriesInput represents a series association with optional number.
 type SeriesInput struct {
 	Name             string   `json:"name" validate:"required,max=200"`
 	Number           *float64 `json:"number,omitempty"`
-	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" validate:"omitempty,oneof=volume chapter"`
+	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" validate:"omitempty,oneof=volume chapter" tstype:"SeriesNumberUnit"`
 }
 
 // IdentifierPayload represents an identifier in update requests.
@@ -49,7 +55,7 @@ type IdentifierPayload struct {
 
 // UpdateFilePayload is the payload for updating a file's metadata.
 type UpdateFilePayload struct {
-	FileRole         *string              `json:"file_role,omitempty" validate:"omitempty,oneof=main supplement"`
+	FileRole         *string              `json:"file_role,omitempty" validate:"omitempty,oneof=main supplement" tstype:"FileRole"`
 	Name             *string              `json:"name,omitempty" mod:"trim" validate:"omitempty,max=500"`
 	Narrators        []string             `json:"narrators,omitempty" validate:"omitempty,dive,max=200"`
 	URL              *string              `json:"url,omitempty" validate:"omitempty,max=500,url"`
@@ -92,7 +98,7 @@ type MoveFilesPayload struct {
 
 // MoveFilesResponse is the response from a move files operation.
 type MoveFilesResponse struct {
-	TargetBook        *models.Book `json:"target_book"`
+	TargetBook        *models.Book `json:"target_book" tstype:"Book"`
 	FilesMoved        int          `json:"files_moved"`
 	SourceBookDeleted bool         `json:"source_book_deleted"`
 }
@@ -105,7 +111,48 @@ type MergeBooksPayload struct {
 
 // MergeBooksResponse is the response from a merge books operation.
 type MergeBooksResponse struct {
-	TargetBook   *models.Book `json:"target_book"`
+	TargetBook   *models.Book `json:"target_book" tstype:"Book"`
 	FilesMoved   int          `json:"files_moved"`
 	BooksDeleted int          `json:"books_deleted"`
+}
+
+// DeleteBooksPayload is the request body for bulk book deletion.
+type DeleteBooksPayload struct {
+	BookIDs []int `json:"book_ids"`
+}
+
+// DeleteBooksResponse is the response for bulk book deletion. It reports the
+// cascade consequences (counts of deleted books and files).
+type DeleteBooksResponse struct {
+	BooksDeleted int `json:"books_deleted"`
+	FilesDeleted int `json:"files_deleted"`
+}
+
+// DeleteBookResponse is the response for deleting a single book. It reports the
+// number of files that cascaded with the book.
+type DeleteBookResponse struct {
+	FilesDeleted int `json:"files_deleted"`
+}
+
+// DeleteFileResponse is the response for deleting a single file. It reports
+// whether deleting the file's last file also deleted the parent book.
+type DeleteFileResponse struct {
+	BookDeleted bool `json:"book_deleted"`
+}
+
+// ResyncFileResponse is returned by the file resync endpoint when the resync
+// determined the file no longer exists on disk. It reports the cascade
+// consequences (the file was deleted, and possibly its parent book). When the
+// file still exists, the endpoint returns the refreshed File model instead.
+type ResyncFileResponse struct {
+	FileDeleted bool `json:"file_deleted"`
+	BookDeleted bool `json:"book_deleted"`
+}
+
+// ResyncBookResponse is returned by the book resync endpoint when the resync
+// determined the book no longer exists on disk. It reports the cascade
+// consequence (the book was deleted). When the book still exists, the endpoint
+// returns the refreshed Book model instead.
+type ResyncBookResponse struct {
+	BookDeleted bool `json:"book_deleted"`
 }

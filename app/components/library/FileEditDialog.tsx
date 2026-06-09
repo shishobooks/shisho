@@ -366,7 +366,7 @@ export function FileEditDialog({
 
   const handleSubmit = async () => {
     const payload: {
-      file_role?: string;
+      file_role?: FileRole;
       name?: string;
       narrators?: string[];
       url?: string;

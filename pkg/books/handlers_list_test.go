@@ -212,6 +212,50 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	assert.Equal(t, apple.ID, resp.Items[1].ID)
 }
 
+// TestListHandler_ResponseEnvelope asserts the list endpoint returns exactly
+// the { items, total } envelope (the ListBooksResponse shape, ADR 0004), with
+// no extra top-level keys.
+func TestListHandler_ResponseEnvelope(t *testing.T) {
+	t.Parallel()
+
+	db := setupBooksTestDB(t)
+	lib := seedLibrary(t, db, "EnvelopeLib")
+	user := seedUserWithLibAccess(t, db, "grace", lib)
+
+	now := time.Now()
+	apple := seedBook(t, db, lib, "Apple", "Apple", now)
+
+	h := &handler{bookService: NewService(db), settingsService: settings.NewService(db)}
+	e := newTestEchoBooks(t)
+	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	require.NoError(t, h.list(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Top-level envelope must be { items, total } only.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	assert.True(t, hasItems, "list response must have 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+
+	var resp struct {
+		Items []struct {
+			ID int `json:"id"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, apple.ID, resp.Items[0].ID)
+	assert.Equal(t, 1, resp.Total)
+}
+
 func seedFile(t *testing.T, db *bun.DB, book *models.Book, fileType string, hasCover bool) *models.File {
 	t.Helper()
 	f := &models.File{

@@ -21,6 +21,7 @@ type Person struct {
 
 // Author role constants for CBZ ComicInfo.xml creator types.
 const (
+	//tygo:emit export type AuthorRole = typeof AuthorRoleWriter | typeof AuthorRolePenciller | typeof AuthorRoleInker | typeof AuthorRoleColorist | typeof AuthorRoleLetterer | typeof AuthorRoleCoverArtist | typeof AuthorRoleEditor | typeof AuthorRoleTranslator;
 	AuthorRoleWriter      = "writer"
 	AuthorRolePenciller   = "penciller"
 	AuthorRoleInker       = "inker"
@@ -39,7 +40,7 @@ type Author struct {
 	PersonID  int     `bun:",nullzero" json:"person_id"`
 	Person    *Person `bun:"rel:belongs-to,join:person_id=id" json:"person,omitempty" tstype:"Person"`
 	SortOrder int     `bun:",nullzero" json:"sort_order"`
-	Role      *string `json:"role"` // CBZ creator role: writer, penciller, inker, etc. NULL for generic author
+	Role      *string `json:"role" tstype:"AuthorRole"` // CBZ creator role: writer, penciller, inker, etc. NULL for generic author
 }
 
 type Narrator struct {
