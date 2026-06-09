@@ -36,7 +36,7 @@ const AdminLogs = () => {
 
   const entries: LogViewerEntry[] = useMemo(
     () =>
-      (data?.entries ?? []).map((e) => ({
+      (data?.items ?? []).map((e) => ({
         id: e.id,
         level: e.level,
         timestamp: e.timestamp,

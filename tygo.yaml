@@ -35,11 +35,19 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/jobs"
     output_path: "app/types/generated/jobs.ts"
     frontmatter: |
-      import { JobBulkDownloadData, JobExportData, JobRecomputeReviewData, JobScanData } from "@/types";
+      import { Job, JobBulkDownloadData, JobExportData, JobRecomputeReviewData, JobScanData, JobStatus, JobType } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/joblogs"
     output_path: "app/types/generated/joblogs.ts"
+    frontmatter: |
+      import { JobLog, LogLevel } from "@/types";
+    include_files:
+      - types.go
+  - path: "github.com/shishobooks/shisho/pkg/logs"
+    output_path: "app/types/generated/logs.ts"
+    frontmatter: |
+      import { LogLevel } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/libraries"

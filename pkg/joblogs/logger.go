@@ -32,20 +32,20 @@ func (svc *Service) NewJobLogger(ctx context.Context, jobID int, log logger.Logg
 // Info logs an info-level message.
 func (l *JobLogger) Info(msg string, data logger.Data) {
 	l.log.Info(msg, data)
-	l.persist(models.JobLogLevelInfo, msg, data, nil)
+	l.persist(models.LogLevelInfo, msg, data, nil)
 }
 
 // Warn logs a warning-level message.
 func (l *JobLogger) Warn(msg string, data logger.Data) {
 	l.log.Warn(msg, data)
-	l.persist(models.JobLogLevelWarn, msg, data, nil)
+	l.persist(models.LogLevelWarn, msg, data, nil)
 }
 
 // Error logs an error-level message with automatic stack trace.
 func (l *JobLogger) Error(msg string, err error, data logger.Data) {
 	l.log.Err(err).Error(msg, data)
 	stack := string(debug.Stack())
-	l.persist(models.JobLogLevelError, msg, data, &stack)
+	l.persist(models.LogLevelError, msg, data, &stack)
 }
 
 // Fatal logs a fatal-level message with automatic stack trace (for panics).
@@ -58,7 +58,7 @@ func (l *JobLogger) Fatal(msg string, err error, data logger.Data) {
 	}
 	l.log.Error(msg, data)
 	stack := string(debug.Stack())
-	l.persist(models.JobLogLevelFatal, msg, data, &stack)
+	l.persist(models.LogLevelFatal, msg, data, &stack)
 }
 
 func (l *JobLogger) persist(level, msg string, data logger.Data, stackTrace *string) {

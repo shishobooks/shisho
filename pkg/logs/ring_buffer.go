@@ -13,16 +13,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/events"
 )
 
-// LogEntry represents a parsed log entry stored in the ring buffer.
-type LogEntry struct {
-	ID        uint64         `json:"id"`
-	Level     string         `json:"level"`
-	Timestamp time.Time      `json:"timestamp"`
-	Message   string         `json:"message"`
-	Data      map[string]any `json:"data,omitempty"`
-	Error     *string        `json:"error,omitempty"`
-}
-
 // levelSeverity maps level strings to numeric severity for filtering.
 var levelSeverity = map[string]int{
 	"debug": 0,

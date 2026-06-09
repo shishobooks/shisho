@@ -316,6 +316,10 @@ q.Where("b.id = ?", id)
 
 Check existing queries in `pkg/books/service.go` for reference. Common aliases: `b` (books), `f` (files), `a` (authors), `p` (persons), `s` (series), `bs` (book_series), `ch` (chapters), `n` (narrators).
 
+- **Unified `LogLevel` enum (`pkg/models/log_level.go`)**: A single `LogLevel` (`debug`, `info`, `warn`, `error`, `fatal`) is the canonical log-severity enum, shared by `models.JobLog.Level` (job logs) and `logs.LogEntry.Level` (app/server logs). There is no separate `JobLogLevel` — use `models.LogLevel*` consts everywhere, and `tstype:"LogLevel"` on level fields / `tstype:"LogLevel[]"` on level query filters. Both level query validators (`joblogs.ListJobLogsQuery.Level`, `logs.ListLogsQuery.Level`) carry the full `oneof=debug info warn error fatal`. The frontend imports `LogLevel*` from `@/types` (generated into `models.ts`).
+
+- **Jobs / job logs / app logs follow the `{ items, total }` envelope** like every other list endpoint: `jobs.ListJobsResponse` (`items: Job[]`), `joblogs.ListJobLogsResponse` (`items: JobLog[]`), and `logs.ListLogsResponse` (`items: LogEntry[]`). The foreign-model slices use a field-level `tstype:"Job[]"` / `tstype:"JobLog[]"` override plus a frontmatter import (the publishers `ListPublisherFilesResponse` pattern) so tygo emits a clean `Job[]` rather than `(any | undefined)[]`. **The joblogs list response no longer bundles the `job`** — the handler only does an existence check (404 on unknown job); the client fetches the job separately via `GET /jobs/:id` (the `useJob` hook). `POST /auth/logout` returns `204 No Content` (pure acknowledgment), not a JSON message body.
+
 ### Config
 
 - Self-hosted app with config file-based configuration

@@ -23,11 +23,11 @@ func (h *handler) listLogs(c echo.Context) error {
 		return errcodes.NotFound("Job")
 	}
 
-	// Verify job exists
-	job, err := h.jobService.RetrieveJob(ctx, jobs.RetrieveJobOptions{
+	// Verify job exists. The job itself is fetched separately by the client via
+	// GET /jobs/:id; this is purely an existence check so unknown jobs 404.
+	if _, err := h.jobService.RetrieveJob(ctx, jobs.RetrieveJobOptions{
 		ID: &jobID,
-	})
-	if err != nil {
+	}); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -48,10 +48,7 @@ func (h *handler) listLogs(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	resp := struct {
-		Logs interface{} `json:"logs"`
-		Job  interface{} `json:"job"`
-	}{logs, job}
+	resp := ListJobLogsResponse{Items: logs, Total: len(logs)}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }

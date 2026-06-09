@@ -27,6 +27,11 @@ func newTestDB(t *testing.T) *bun.DB {
 
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
+	// A bare :memory: DSN gives each pooled connection its own empty database, so
+	// data written on one connection is invisible to the next. Pin the pool to a
+	// single connection (matching pkg/database for :memory:) so multi-step tests
+	// that write then read see a consistent database.
+	sqldb.SetMaxOpenConns(1)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 

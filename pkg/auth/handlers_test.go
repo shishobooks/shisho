@@ -129,6 +129,32 @@ func TestHandler_Setup_RejectsWhenUsersExist(t *testing.T) {
 	assert.Contains(t, errResp.Message, "Setup has already been completed")
 }
 
+func TestHandler_Logout_Returns204NoContent(t *testing.T) {
+	t.Parallel()
+
+	db := setupTestDB(t)
+	svc := NewService(db, "test-jwt-secret", 30*24*time.Hour)
+	h := &handler{authService: svc}
+
+	c, rr := newTestContext(t, "", http.MethodPost, "/auth/logout")
+
+	err := h.logout(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Empty(t, rr.Body.String(), "logout response body must be empty")
+
+	// The session cookie must still be cleared (MaxAge < 0).
+	require.NotEmpty(t, rr.Result().Cookies())
+	var sessionCookie *http.Cookie
+	for _, ck := range rr.Result().Cookies() {
+		if ck.Name == CookieName {
+			sessionCookie = ck
+		}
+	}
+	require.NotNil(t, sessionCookie, "logout must set the session cookie")
+	assert.Negative(t, sessionCookie.MaxAge, "logout must expire the session cookie")
+}
+
 func TestHandler_Login_ReturnsMustChangePassword(t *testing.T) {
 	t.Parallel()
 
