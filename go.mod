@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/abema/go-mp4 v1.6.0
-	github.com/andybalholm/cascadia v1.3.3
+	github.com/andybalholm/cascadia v1.3.4
 	github.com/creasty/defaults v1.8.0
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/fsnotify/fsnotify v1.10.1
@@ -22,7 +22,7 @@ require (
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
-	github.com/knadh/koanf/v2 v2.3.4
+	github.com/knadh/koanf/v2 v2.3.5
 	github.com/labstack/echo/v4 v4.15.2
 	github.com/pdfcpu/pdfcpu v0.12.1
 	github.com/pkg/errors v0.9.1
