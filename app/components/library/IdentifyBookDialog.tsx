@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -19,6 +20,7 @@ import {
   usePluginIdentifierTypes,
   usePluginOrder,
   usePluginSearch,
+  type PluginSearchParams,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn } from "@/libraries/utils";
@@ -60,12 +62,17 @@ export function IdentifyBookDialog({
     undefined,
   );
   const [reviewHasChanges, setReviewHasChanges] = useState(false);
-  const searchMutation = usePluginSearch();
+  // The submitted-search snapshot, distinct from the live input fields above.
+  // Every trigger point (auto-search on open, Enter/click, file selector) sets
+  // this rather than imperatively firing a request; the query is keyed on it so
+  // a new submission supersedes (and aborts) any in-flight search.
+  const [submittedParams, setSubmittedParams] =
+    useState<PluginSearchParams | null>(null);
+  const searchQuery = usePluginSearch(submittedParams);
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
   const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasSearchedRef = useRef(false);
   const queryUserTouched = useRef(false);
 
   const mainFiles = useMemo(
@@ -79,12 +86,25 @@ export function IdentifyBookDialog({
     : pickInitialFile(book);
   const isAudiobook = selectedFile?.file_type === "m4b";
 
+  // Submit a search. Setting a new (distinct) snapshot supersedes any in-flight
+  // query and aborts it. For an identical re-submit (same snapshot) the query
+  // key is unchanged, so explicitly refetch — pressing Search/Enter must always
+  // produce visible loading feedback rather than being a silent no-op, while
+  // distinct keys (and dialog re-opens) still benefit from caching.
+  const submitSearch = (params: PluginSearchParams) => {
+    setSelectedResult(null);
+    if (equal(params, submittedParams)) {
+      searchQuery.refetch();
+    } else {
+      setSubmittedParams(params);
+    }
+  };
+
   // Pre-fill form and auto-search when dialog opens
   useEffect(() => {
     if (open) {
       setStep("search");
       setSelectedResult(null);
-      hasSearchedRef.current = false;
       queryUserTouched.current = false;
 
       const initialFile = pickInitialFile(book);
@@ -104,24 +124,27 @@ export function IdentifyBookDialog({
       setIdentifiers(initialIds);
       setSelectedFileId(initialFileId);
 
-      if (initialQuery) {
-        hasSearchedRef.current = true;
-        searchMutation.mutate({
-          query: initialQuery,
-          bookId: book.id,
-          fileId: initialFileId,
-          author: initialAuthor || undefined,
-          identifiers: initialIds.length > 0 ? initialIds : undefined,
-        });
-      }
+      // Setting the snapshot drives the query; a structurally-equal snapshot
+      // from a previous open hits the cache (same query key) instead of
+      // refetching.
+      setSubmittedParams(
+        initialQuery
+          ? {
+              query: initialQuery,
+              bookId: book.id,
+              fileId: initialFileId,
+              author: initialAuthor || undefined,
+              identifiers: initialIds.length > 0 ? initialIds : undefined,
+            }
+          : null,
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, book.title, book.authors, book.files, mainFiles]);
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    setSelectedResult(null);
-    searchMutation.mutate({
+    submitSearch({
       query: query.trim(),
       bookId: book.id,
       fileId: selectedFileId,
@@ -131,20 +154,25 @@ export function IdentifyBookDialog({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !searchMutation.isPending) {
+    if (e.key === "Enter") {
       handleSearch();
     }
   };
 
-  const results = searchMutation.data?.results ?? [];
-  const pluginErrors = searchMutation.data?.errors ?? [];
-  const skippedPlugins = searchMutation.data?.skipped_plugins ?? [];
-  const totalPlugins = searchMutation.data?.total_plugins ?? 0;
+  // isFetching is true across new-key loads, identical-resubmit refetches, and
+  // stale-key background refetches — the full set of "a search is running"
+  // states. It drives the loading indicator and the dimming/disabling of any
+  // results kept on screen via keepPreviousData.
+  const isSearching = searchQuery.isFetching;
+  const results = searchQuery.data?.results ?? [];
+  const pluginErrors = searchQuery.data?.errors ?? [];
+  const skippedPlugins = searchQuery.data?.skipped_plugins ?? [];
+  const totalPlugins = searchQuery.data?.total_plugins ?? 0;
   const selectedFileType = selectedFile?.file_type;
 
   // Detect plugin IDs that appear under multiple scopes
   const ambiguousIds = useMemo(() => {
-    const items = searchMutation.data?.results ?? [];
+    const items = searchQuery.data?.results ?? [];
     const scopesByPluginId = new Map<string, Set<string>>();
     for (const r of items) {
       const scopes = scopesByPluginId.get(r.plugin_id) ?? new Set();
@@ -156,7 +184,7 @@ export function IdentifyBookDialog({
       if (scopes.size > 1) ids.add(id);
     }
     return ids;
-  }, [searchMutation.data?.results]);
+  }, [searchQuery.data?.results]);
 
   const pluginLabel = (result: PluginSearchResult) =>
     ambiguousIds.has(result.plugin_id)
@@ -233,9 +261,7 @@ export function IdentifyBookDialog({
                           const fileTitle =
                             file.name || getFilename(file.filepath);
                           setQuery(fileTitle);
-                          setSelectedResult(null);
-                          searchMutation.reset();
-                          searchMutation.mutate({
+                          submitSearch({
                             query: fileTitle,
                             bookId: book.id,
                             fileId: file.id,
@@ -295,11 +321,11 @@ export function IdentifyBookDialog({
                 value={query}
               />
               <Button
-                disabled={searchMutation.isPending || !query.trim()}
+                disabled={!query.trim()}
                 onClick={handleSearch}
                 variant="outline"
               >
-                {searchMutation.isPending ? (
+                {isSearching ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Search className="h-4 w-4" />
@@ -356,218 +382,253 @@ export function IdentifyBookDialog({
               )}
             </div>
 
-            {/* Results */}
-            <div className="min-h-[200px] max-h-[60vh] overflow-y-auto">
-              {searchMutation.isPending && (
+            {/* Results. While a search is in flight, any prior results stay
+                mounted (keepPreviousData) but are dimmed and made
+                non-interactive, with a loading indicator pinned to a stable
+                spot, so a stale result can't be selected mid-search. The very
+                first search has no prior data, so it shows the centered spinner
+                alone. */}
+            <div className="relative min-h-[200px] max-h-[60vh] overflow-y-auto">
+              {isSearching && !searchQuery.data && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {searchMutation.isSuccess && pluginErrors.length > 0 && (
-                <div className="mb-3 space-y-2">
-                  {pluginErrors.map((err) => (
-                    <div
-                      className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-xs"
-                      key={`${err.plugin_scope}-${err.plugin_id}`}
-                    >
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-destructive">
-                          {err.plugin_name || err.plugin_id} failed
-                        </p>
-                        <p
-                          className="text-muted-foreground break-words"
-                          title={err.message}
-                        >
-                          {err.message}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+              {isSearching && searchQuery.data && (
+                <div className="pointer-events-none sticky top-0 z-10 flex items-center justify-center py-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {searchMutation.isSuccess &&
-                results.length === 0 &&
-                pluginErrors.length === 0 &&
-                (() => {
-                  const message = computeIdentifyEmptyState({
-                    hasEnricherPlugins,
-                    totalPlugins,
-                    skippedPlugins,
-                    fileType: selectedFileType,
-                  });
-                  return (
-                    <div className="text-center py-12 text-muted-foreground space-y-2">
-                      <p>No results found.</p>
-                      <p className="text-xs">{message.primary}</p>
-                      {message.secondary && (
-                        <p className="text-xs">{message.secondary}</p>
-                      )}
-                    </div>
-                  );
-                })()}
+              <div
+                className={cn(
+                  isSearching &&
+                    searchQuery.data &&
+                    "pointer-events-none opacity-50",
+                )}
+              >
+                {searchQuery.isSuccess && pluginErrors.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {pluginErrors.map((err) => (
+                      <div
+                        className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-xs"
+                        key={`${err.plugin_scope}-${err.plugin_id}`}
+                      >
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-destructive">
+                            {err.plugin_name || err.plugin_id} failed
+                          </p>
+                          <p
+                            className="text-muted-foreground break-words"
+                            title={err.message}
+                          >
+                            {err.message}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              {searchMutation.isSuccess && results.length > 0 && (
-                <div className="space-y-2">
-                  {results.map((result, index) => (
-                    <button
-                      className={cn(
-                        "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
-                        "hover:bg-muted/50",
-                        selectedResult === result
-                          ? "border-primary bg-primary/5"
-                          : "border-border",
-                      )}
-                      key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
-                      onClick={() => handleSelectResult(result)}
-                      type="button"
-                    >
-                      <div className="flex gap-3">
-                        {/* Cover thumbnail */}
-                        <ResultCoverThumbnail
-                          coverPage={result.cover_page}
-                          coverUrl={result.cover_url}
-                          isAudiobook={isAudiobook}
-                          previewFileId={selectedFileId ?? selectedFile?.id}
-                          previewFileType={selectedFileType}
-                          previewPageCount={selectedFile?.page_count}
-                        />
+                {searchQuery.isSuccess &&
+                  results.length === 0 &&
+                  pluginErrors.length === 0 &&
+                  (() => {
+                    const message = computeIdentifyEmptyState({
+                      hasEnricherPlugins,
+                      totalPlugins,
+                      skippedPlugins,
+                      fileType: selectedFileType,
+                    });
+                    return (
+                      <div className="text-center py-12 text-muted-foreground space-y-2">
+                        <p>No results found.</p>
+                        <p className="text-xs">{message.primary}</p>
+                        {message.secondary && (
+                          <p className="text-xs">{message.secondary}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                        {/* Details */}
-                        <div className="flex-1 min-w-0">
-                          {/* Zone 1: Identity */}
-                          <div>
-                            {/* Title + subtitle + badges */}
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium leading-tight">
-                                  {result.title}
-                                </p>
-                                {result.subtitle && (
-                                  <p className="text-sm text-muted-foreground/80 leading-tight mt-0.5">
-                                    {result.subtitle}
+                {searchQuery.isSuccess && results.length > 0 && (
+                  <div className="space-y-2">
+                    {results.map((result, index) => (
+                      <button
+                        className={cn(
+                          "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
+                          "hover:bg-muted/50",
+                          selectedResult === result
+                            ? "border-primary bg-primary/5"
+                            : "border-border",
+                        )}
+                        key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
+                        onClick={() => handleSelectResult(result)}
+                        type="button"
+                      >
+                        <div className="flex gap-3">
+                          {/* Cover thumbnail */}
+                          <ResultCoverThumbnail
+                            coverPage={result.cover_page}
+                            coverUrl={result.cover_url}
+                            isAudiobook={isAudiobook}
+                            previewFileId={selectedFileId ?? selectedFile?.id}
+                            previewFileType={selectedFileType}
+                            previewPageCount={selectedFile?.page_count}
+                          />
+
+                          {/* Details */}
+                          <div className="flex-1 min-w-0">
+                            {/* Zone 1: Identity */}
+                            <div>
+                              {/* Title + subtitle + badges */}
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium leading-tight">
+                                    {result.title}
                                   </p>
-                                )}
-                                {result.series && (
-                                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                                    {result.series}
-                                    {result.series_number != null &&
-                                      ` ${formatSeriesNumber(result.series_number, result.series_number_unit, selectedFileType)}`}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {result.confidence != null && (
-                                  <Badge
-                                    className={cn(
-                                      "text-xs",
-                                      result.confidence >= 0.9
-                                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                        : result.confidence >= 0.7
-                                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-                                    )}
-                                    variant="secondary"
-                                  >
-                                    {Math.round(result.confidence * 100)}%
+                                  {result.subtitle && (
+                                    <p className="text-sm text-muted-foreground/80 leading-tight mt-0.5">
+                                      {result.subtitle}
+                                    </p>
+                                  )}
+                                  {result.series && (
+                                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                                      {result.series}
+                                      {result.series_number != null &&
+                                        ` ${formatSeriesNumber(result.series_number, result.series_number_unit, selectedFileType)}`}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {result.confidence != null && (
+                                    <Badge
+                                      className={cn(
+                                        "text-xs",
+                                        result.confidence >= 0.9
+                                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                          : result.confidence >= 0.7
+                                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                                      )}
+                                      variant="secondary"
+                                    >
+                                      {Math.round(result.confidence * 100)}%
+                                    </Badge>
+                                  )}
+                                  <Badge className="text-xs" variant="outline">
+                                    {pluginLabel(result)}
                                   </Badge>
-                                )}
-                                <Badge className="text-xs" variant="outline">
-                                  {pluginLabel(result)}
-                                </Badge>
+                                </div>
                               </div>
+
+                              {/* People */}
+                              {(() => {
+                                const authors = resolveAuthors(result);
+                                const narrators = result.narrators;
+                                const hasAuthors =
+                                  authors && authors.length > 0;
+                                const hasNarrators =
+                                  narrators && narrators.length > 0;
+                                return hasAuthors || hasNarrators ? (
+                                  <div className="mt-2 space-y-0.5">
+                                    {hasAuthors && (
+                                      <p className="text-sm text-muted-foreground">
+                                        {authors}
+                                      </p>
+                                    )}
+                                    {hasNarrators && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Narrated by {narrators.join(", ")}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : null;
+                              })()}
+
+                              {/* Date + publisher + language + abridged */}
+                              {(() => {
+                                const metaItems: string[] = [];
+                                if (result.release_date) {
+                                  metaItems.push(
+                                    formatDate(result.release_date),
+                                  );
+                                }
+                                if (result.publisher) {
+                                  metaItems.push(result.publisher);
+                                }
+                                if (result.language) {
+                                  metaItems.push(
+                                    getLanguageName(result.language) ||
+                                      result.language,
+                                  );
+                                }
+                                if (result.abridged != null) {
+                                  metaItems.push(
+                                    result.abridged ? "Abridged" : "Unabridged",
+                                  );
+                                }
+                                return metaItems.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
+                                    {metaItems.map((item, i) => (
+                                      <span
+                                        className="flex items-center gap-x-2"
+                                        key={`${i}-${item}`}
+                                      >
+                                        {i > 0 && (
+                                          <span className="text-muted-foreground/50">
+                                            ·
+                                          </span>
+                                        )}
+                                        <span>{item}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null;
+                              })()}
                             </div>
 
-                            {/* People */}
-                            {(() => {
-                              const authors = resolveAuthors(result);
-                              const narrators = result.narrators;
-                              const hasAuthors = authors && authors.length > 0;
-                              const hasNarrators =
-                                narrators && narrators.length > 0;
-                              return hasAuthors || hasNarrators ? (
-                                <div className="mt-2 space-y-0.5">
-                                  {hasAuthors && (
-                                    <p className="text-sm text-muted-foreground">
-                                      {authors}
-                                    </p>
-                                  )}
-                                  {hasNarrators && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Narrated by {narrators.join(", ")}
-                                    </p>
-                                  )}
-                                </div>
-                              ) : null;
-                            })()}
-
-                            {/* Date + publisher + language + abridged */}
-                            {(() => {
-                              const metaItems: string[] = [];
-                              if (result.release_date) {
-                                metaItems.push(formatDate(result.release_date));
-                              }
-                              if (result.publisher) {
-                                metaItems.push(result.publisher);
-                              }
-                              if (result.language) {
-                                metaItems.push(
-                                  getLanguageName(result.language) ||
-                                    result.language,
-                                );
-                              }
-                              if (result.abridged != null) {
-                                metaItems.push(
-                                  result.abridged ? "Abridged" : "Unabridged",
-                                );
-                              }
-                              return metaItems.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/80 mt-2">
-                                  {metaItems.map((item, i) => (
-                                    <span
-                                      className="flex items-center gap-x-2"
-                                      key={`${i}-${item}`}
-                                    >
-                                      {i > 0 && (
-                                        <span className="text-muted-foreground/50">
-                                          ·
-                                        </span>
-                                      )}
-                                      <span>{item}</span>
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
-
-                          {/* Zone 2: Identifiers */}
-                          {result.identifiers &&
-                            result.identifiers.filter(
-                              (id) => id.type && id.value,
-                            ).length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2.5">
-                                {result.identifiers
-                                  .filter((id) => id.type && id.value)
-                                  .map((id) => {
-                                    const url = getIdentifierUrl(
-                                      id.type,
-                                      id.value,
-                                      pluginIdentifierTypes,
-                                    );
-                                    return url ? (
-                                      <a
-                                        className="inline-flex"
-                                        href={url}
-                                        key={`${id.type}-${id.value}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                        rel="noopener noreferrer"
-                                        target="_blank"
-                                      >
+                            {/* Zone 2: Identifiers */}
+                            {result.identifiers &&
+                              result.identifiers.filter(
+                                (id) => id.type && id.value,
+                              ).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2.5">
+                                  {result.identifiers
+                                    .filter((id) => id.type && id.value)
+                                    .map((id) => {
+                                      const url = getIdentifierUrl(
+                                        id.type,
+                                        id.value,
+                                        pluginIdentifierTypes,
+                                      );
+                                      return url ? (
+                                        <a
+                                          className="inline-flex"
+                                          href={url}
+                                          key={`${id.type}-${id.value}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          rel="noopener noreferrer"
+                                          target="_blank"
+                                        >
+                                          <Badge
+                                            className="text-xs hover:bg-primary/20 transition-colors"
+                                            variant="secondary"
+                                          >
+                                            {formatIdentifierType(
+                                              id.type,
+                                              pluginIdentifierTypes,
+                                            )}
+                                            : {id.value}
+                                            <ExternalLink className="h-3 w-3 ml-1 shrink-0" />
+                                          </Badge>
+                                        </a>
+                                      ) : (
                                         <Badge
-                                          className="text-xs hover:bg-primary/20 transition-colors"
+                                          className="text-xs"
+                                          key={`${id.type}-${id.value}`}
                                           variant="secondary"
                                         >
                                           {formatIdentifierType(
@@ -575,86 +636,73 @@ export function IdentifyBookDialog({
                                             pluginIdentifierTypes,
                                           )}
                                           : {id.value}
-                                          <ExternalLink className="h-3 w-3 ml-1 shrink-0" />
                                         </Badge>
-                                      </a>
-                                    ) : (
-                                      <Badge
-                                        className="text-xs"
-                                        key={`${id.type}-${id.value}`}
-                                        variant="secondary"
-                                      >
-                                        {formatIdentifierType(
-                                          id.type,
-                                          pluginIdentifierTypes,
-                                        )}
-                                        : {id.value}
-                                      </Badge>
-                                    );
-                                  })}
-                              </div>
+                                      );
+                                    })}
+                                </div>
+                              )}
+
+                            {/* Zone 3: Taxonomy */}
+                            {(() => {
+                              const genres = result.genres ?? [];
+                              const tags = result.tags ?? [];
+                              return genres.length > 0 || tags.length > 0 ? (
+                                <div className="mt-2.5 space-y-1">
+                                  {genres.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                        Genres
+                                      </span>
+                                      {genres.map((g) => (
+                                        <Badge
+                                          className="text-xs"
+                                          key={`genre-${g}`}
+                                          variant="outline"
+                                        >
+                                          {g}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {tags.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
+                                        Tags
+                                      </span>
+                                      {tags.map((tag) => (
+                                        <Badge
+                                          className="text-xs"
+                                          key={`tag-${tag}`}
+                                          variant="outline"
+                                        >
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Zone 4: Description */}
+                            {result.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-line mt-2.5">
+                                {result.description}
+                              </p>
                             )}
-
-                          {/* Zone 3: Taxonomy */}
-                          {(() => {
-                            const genres = result.genres ?? [];
-                            const tags = result.tags ?? [];
-                            return genres.length > 0 || tags.length > 0 ? (
-                              <div className="mt-2.5 space-y-1">
-                                {genres.length > 0 && (
-                                  <div className="flex flex-wrap items-center gap-1">
-                                    <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
-                                      Genres
-                                    </span>
-                                    {genres.map((g) => (
-                                      <Badge
-                                        className="text-xs"
-                                        key={`genre-${g}`}
-                                        variant="outline"
-                                      >
-                                        {g}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                                {tags.length > 0 && (
-                                  <div className="flex flex-wrap items-center gap-1">
-                                    <span className="text-[0.65rem] uppercase tracking-wide font-medium text-muted-foreground/50 mr-1">
-                                      Tags
-                                    </span>
-                                    {tags.map((tag) => (
-                                      <Badge
-                                        className="text-xs"
-                                        key={`tag-${tag}`}
-                                        variant="outline"
-                                      >
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ) : null;
-                          })()}
-
-                          {/* Zone 4: Description */}
-                          {result.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-line mt-2.5">
-                              {result.description}
-                            </p>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-              {searchMutation.isError && (
-                <div className="text-center py-12 text-destructive">
-                  Search failed. Please try again.
-                </div>
-              )}
+                {searchQuery.isError && (
+                  <div className="text-center py-12 text-destructive">
+                    Search failed. Please try again.
+                  </div>
+                )}
+              </div>
             </div>
           </DialogBody>
         )}
