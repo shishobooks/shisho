@@ -26,6 +26,16 @@ const (
 	ReviewOverrideUnreviewed = "unreviewed"
 )
 
+// ReviewedFilter values for the book list endpoint's reviewed_filter query
+// param. "" and "all" both mean "all books"; the other two scope to
+// needs-review or reviewed books respectively.
+const (
+	//tygo:emit export type ReviewedFilter = typeof ReviewedFilterAll | typeof ReviewedFilterNeedsReview | typeof ReviewedFilterReviewed;
+	ReviewedFilterAll         = "all"
+	ReviewedFilterNeedsReview = "needs_review"
+	ReviewedFilterReviewed    = "reviewed"
+)
+
 type File struct {
 	bun.BaseModel `bun:"table:files,alias:f" tstype:"-"`
 

@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { API } from "@/libraries/api";
-import { Book, File } from "@/types";
+import {
+  Book,
+  File,
+  type ResyncBookResponse,
+  type ResyncFileResponse,
+} from "@/types";
 
 import { QueryKey } from "./books";
 import { QueryKey as ChaptersQueryKey } from "./chapters";
@@ -10,15 +15,6 @@ export type RescanMode = "scan" | "refresh" | "reset";
 
 export interface ResyncPayload {
   mode: RescanMode;
-}
-
-export interface ResyncFileResult {
-  file_deleted?: boolean;
-  book_deleted?: boolean;
-}
-
-export interface ResyncBookResult {
-  book_deleted?: boolean;
 }
 
 export const useResyncFile = () => {
@@ -31,8 +27,8 @@ export const useResyncFile = () => {
     }: {
       fileId: number;
       payload: ResyncPayload;
-    }): Promise<File | ResyncFileResult> => {
-      return API.request<File | ResyncFileResult>(
+    }): Promise<File | ResyncFileResponse> => {
+      return API.request<File | ResyncFileResponse>(
         "POST",
         `/books/files/${fileId}/resync`,
         payload,
@@ -64,8 +60,8 @@ export const useResyncBook = () => {
     }: {
       bookId: number;
       payload: ResyncPayload;
-    }): Promise<Book | ResyncBookResult> => {
-      return API.request<Book | ResyncBookResult>(
+    }): Promise<Book | ResyncBookResponse> => {
+      return API.request<Book | ResyncBookResponse>(
         "POST",
         `/books/${bookId}/resync`,
         payload,

@@ -46,6 +46,7 @@ import {
   FileTypeCBZ,
   ReviewOverrideReviewed,
   type AuthorInput,
+  type AuthorRole,
   type Book,
   type ReviewOverride,
   type SeriesInput,
@@ -236,7 +237,10 @@ export function BookEditDialog({
     setAuthors(authors.filter((_, i) => i !== index));
   };
 
-  const handleAuthorRoleChange = (index: number, role: string | undefined) => {
+  const handleAuthorRoleChange = (
+    index: number,
+    role: AuthorRole | undefined,
+  ) => {
     const updated = [...authors];
     updated[index].role = role;
     setAuthors(updated);
@@ -504,7 +508,9 @@ export function BookEditDialog({
                           onValueChange={(value) =>
                             handleAuthorRoleChange(
                               idx,
-                              value === "none" ? undefined : value,
+                              value === "none"
+                                ? undefined
+                                : (value as AuthorRole),
                             )
                           }
                           value={author.role || "none"}

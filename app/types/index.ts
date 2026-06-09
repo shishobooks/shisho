@@ -1,33 +1,24 @@
 export * from "./generated/models";
 export {
   type AuthorInput,
+  type DeleteBookResponse,
+  type DeleteBooksPayload,
+  type DeleteBooksResponse,
+  type DeleteFileResponse,
   type IdentifierPayload,
+  type ListBooksQuery,
+  type ListBooksResponse,
   type MergeBooksPayload,
   type MergeBooksResponse,
   type MoveFilesPayload,
   type MoveFilesResponse,
+  type ResyncBookResponse,
+  type ResyncFileResponse,
   type ResyncPayload,
   type SeriesInput,
   type UpdateBookPayload,
   type UpdateFilePayload,
-  type ListBooksQuery as GeneratedListBooksQuery,
 } from "./generated/books";
-
-// Extended ListBooksQuery with ids filter for bulk operations
-export interface ListBooksQuery {
-  limit?: number;
-  offset?: number;
-  library_id?: number;
-  series_id?: number;
-  search?: string;
-  file_types?: string[];
-  genre_ids?: number[];
-  tag_ids?: number[];
-  language?: string;
-  ids?: number[];
-  sort?: string;
-  reviewed_filter?: string; // "" or "all" = all books, "needs_review", "reviewed"
-}
 export * from "./generated/filesystem";
 export * from "./generated/jobs";
 export * from "./generated/joblogs";
@@ -83,23 +74,4 @@ export type { UserSettings } from "@/hooks/queries/settings";
 export interface ResourceListResponse<T> {
   items: T[];
   total: number;
-}
-
-// Delete operation types
-// TODO: Move these to types.go and regenerate via tygo
-export interface DeleteBookResponse {
-  files_deleted: number;
-}
-
-export interface DeleteFileResponse {
-  book_deleted: boolean;
-}
-
-export interface DeleteBooksPayload {
-  book_ids: number[];
-}
-
-export interface DeleteBooksResponse {
-  books_deleted: number;
-  files_deleted: number;
 }
