@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useMutation,
   useQueries,
   useQuery,
@@ -106,6 +107,7 @@ export enum QueryKey {
   PluginOrder = "PluginOrder",
   PluginRepositories = "PluginRepositories",
   PluginIdentifierTypes = "PluginIdentifierTypes",
+  PluginSearch = "PluginSearch",
 }
 
 // --- Queries ---
@@ -691,27 +693,54 @@ export interface PluginSearchResponse {
   total_plugins?: number;
 }
 
-export const usePluginSearch = () => {
-  return useMutation<
-    PluginSearchResponse,
-    ShishoAPIError,
-    {
-      query: string;
-      bookId: number;
-      fileId?: number;
-      author?: string;
-      identifiers?: Array<{ type: string; value: string }>;
-    }
-  >({
-    mutationFn: ({ query, bookId, fileId, author, identifiers }) => {
-      return API.request<PluginSearchResponse>("POST", "/plugins/search", {
-        query,
-        book_id: bookId,
-        file_id: fileId,
-        author: author || undefined,
-        identifiers: identifiers?.length ? identifiers : undefined,
-      });
+// PluginSearchParams is the immutable snapshot of a submitted Identify search.
+// The dialog holds one of these (distinct from the live input fields) and the
+// query is keyed on it, so submitting a new search supersedes any in-flight
+// one: TanStack Query aborts the previous query's request (via its signal) and
+// the displayed results are always those of the most recently submitted key.
+export interface PluginSearchParams {
+  query: string;
+  bookId: number;
+  fileId?: number;
+  author?: string;
+  identifiers?: Array<{ type: string; value: string }>;
+}
+
+// usePluginSearch models the Identify search as a query (not a mutation): the
+// backend POST /plugins/search performs no writes to Shisho state (it only
+// fans out to plugins), so it's semantically a read. As a query it gets request
+// sequencing and an AbortSignal for free (a mutation's mutationFn gets neither
+// in TanStack Query v5). The POST method and request payload shape are
+// unchanged. `params` is null until a search has been submitted; the query is
+// disabled until there's a non-empty query string.
+//
+// `placeholderData: keepPreviousData` keeps the previous key's results mounted
+// while a new search loads, avoiding a dialog resize. Loading/dimming is driven
+// off `isFetching` by the caller, not `isPlaceholderData`. `isFetching` is
+// true across new-key loads, identical-resubmit refetches, and stale-key
+// background refetches, whereas `isPlaceholderData` misses the latter two.
+export const usePluginSearch = (params: PluginSearchParams | null) => {
+  return useQuery<PluginSearchResponse, ShishoAPIError>({
+    enabled: Boolean(params && params.query),
+    queryKey: [QueryKey.PluginSearch, params],
+    queryFn: ({ signal }) => {
+      // params is non-null here because the query is disabled otherwise.
+      const p = params as PluginSearchParams;
+      return API.request<PluginSearchResponse>(
+        "POST",
+        "/plugins/search",
+        {
+          query: p.query,
+          book_id: p.bookId,
+          file_id: p.fileId,
+          author: p.author || undefined,
+          identifiers: p.identifiers?.length ? p.identifiers : undefined,
+        },
+        null,
+        signal,
+      );
     },
+    placeholderData: keepPreviousData,
   });
 };
 

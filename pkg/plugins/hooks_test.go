@@ -842,10 +842,96 @@ func installCancelTestPlugin(t *testing.T, pluginID, parseBody string) (*Manager
 	return manager, rt
 }
 
-// runWithDeadline runs fn and enforces that it returns within budget; otherwise
-// it fails the test instead of deadlocking the whole suite.
-func runWithDeadline(t *testing.T, budget time.Duration, fn func() error) error {
+// installCancelTestEnricher installs an enricher plugin whose search() hook
+// runs the given JS body, so cancellation/interrupt behaviour can be tested
+// against a real Goja runtime.
+func installCancelTestEnricher(t *testing.T, pluginID, searchBody string) (*Manager, *Runtime) {
 	t.Helper()
+
+	db := setupTestDB(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	destDir := filepath.Join(pluginDir, "test", pluginID)
+	require.NoError(t, os.MkdirAll(destDir, 0755))
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "` + pluginID + `",
+  "name": "Cancel Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Cancel test enricher",
+      "fileTypes": ["epub"],
+      "fields": ["title"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(context) { ` + searchBody + ` }
+    }
+  };
+})();`
+
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644))
+
+	manager := NewManager(service, pluginDir, "")
+	plugin := &models.Plugin{
+		Scope:       "test",
+		ID:          pluginID,
+		Name:        "Cancel Enricher",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}
+	require.NoError(t, service.InstallPlugin(context.Background(), plugin))
+	require.NoError(t, manager.LoadPlugin(context.Background(), "test", pluginID))
+
+	rt := manager.GetRuntime("test", pluginID)
+	require.NotNil(t, rt)
+	return manager, rt
+}
+
+// TestRunMetadataSearch_ParentCancelUnwrapsToContextCanceled proves that when
+// the *parent* request context is cancelled mid-search, the error returned by
+// RunMetadataSearch unwraps to context.Canceled. The search aggregation loop
+// (aggregateEnricherSearches) relies on errors.Is(err, context.Canceled) to
+// distinguish a client-cancelled search (drop it, no log noise) from a genuine
+// per-plugin timeout (context.DeadlineExceeded, still reported).
+func TestRunMetadataSearch_ParentCancelUnwrapsToContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	mgr, rt := installCancelTestEnricher(t, "sleep-enricher", "shisho.sleep(3000); return { results: [{ title: \"done\" }] };")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel shortly after the search starts sleeping.
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+	}()
+
+	searchCtx := map[string]interface{}{"query": "anything"}
+	err := runWithDeadline(t, func() error {
+		_, e := mgr.RunMetadataSearch(ctx, rt, searchCtx, "")
+		return e
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, context.Canceled),
+		"parent cancellation must unwrap to context.Canceled, got %T: %v", err, err)
+	assert.False(t, errors.Is(err, context.DeadlineExceeded),
+		"a parent cancel is not a deadline timeout")
+}
+
+// runWithDeadline runs fn and enforces that it returns within a fixed budget;
+// otherwise it fails the test instead of deadlocking the whole suite.
+func runWithDeadline(t *testing.T, fn func() error) error {
+	t.Helper()
+	const budget = 5 * time.Second
 	ch := make(chan error, 1)
 	go func() { ch <- fn() }()
 	select {
@@ -871,7 +957,7 @@ func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := runWithDeadline(t, 5*time.Second, func() error {
+	err := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
 		return e
 	})
@@ -888,7 +974,7 @@ func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel2()
 	start2 := time.Now()
-	err2 := runWithDeadline(t, 5*time.Second, func() error {
+	err2 := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx2, rt, "/some/file.bin", "bin")
 		return e
 	})
@@ -911,7 +997,7 @@ func TestRunFileParser_InterruptsLongSleep(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := runWithDeadline(t, 5*time.Second, func() error {
+	err := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
 		return e
 	})

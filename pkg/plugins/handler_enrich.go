@@ -165,12 +165,75 @@ func (h *handler) searchMetadata(c echo.Context) error {
 	}
 
 	log := logger.FromContext(ctx)
-	allResults := make([]EnrichSearchResult, 0)
-	var pluginErrors []PluginSearchError
-	var skippedPlugins []PluginSearchSkipped
-	for _, rt := range runtimes {
+	runSearch := func(ctx context.Context, rt *Runtime) (*SearchResponse, error) {
+		return h.manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath)
+	}
+	disabledFields := func(ctx context.Context, rt *Runtime) []string {
 		manifest := rt.Manifest()
-		// Skip plugins that don't handle this file type
+		if manifest.Capabilities.MetadataEnricher == nil {
+			return nil
+		}
+		declaredFields := manifest.Capabilities.MetadataEnricher.Fields
+		effectiveSettings, fErr := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
+		if fErr != nil {
+			return nil
+		}
+		var out []string
+		for field, enabled := range effectiveSettings {
+			if !enabled {
+				out = append(out, field)
+			}
+		}
+		return out
+	}
+
+	allResults, pluginErrors, skippedPlugins := aggregateEnricherSearches(ctx, runtimes, fileType, runSearch, disabledFields, log)
+
+	return c.JSON(http.StatusOK, PluginSearchResponse{
+		Results:        allResults,
+		Errors:         pluginErrors,
+		SkippedPlugins: skippedPlugins,
+		TotalPlugins:   len(runtimes),
+	})
+}
+
+// enricherRuntime is the subset of *Runtime that aggregateEnricherSearches
+// needs. It exists so the aggregation loop can be unit-tested with a fake
+// runtime instead of a full Goja VM.
+type enricherRuntime interface {
+	Scope() string
+	PluginID() string
+	Manifest() *Manifest
+}
+
+// aggregateEnricherSearches runs each enricher's search() hook in order and
+// aggregates the results, per-plugin errors, and file-type skips.
+//
+// It checks the request context for cancellation before invoking each plugin
+// and stops early when the client has gone away, since there is no point
+// fanning out to the remaining plugins (and their outbound API calls) for a
+// search the client has already superseded. A per-plugin failure that is
+// itself caused by client cancellation (context.Canceled) is dropped rather
+// than reported as a plugin failure or logged as a warning; a genuine
+// per-plugin timeout (context.DeadlineExceeded) is still reported.
+func aggregateEnricherSearches[T enricherRuntime](
+	ctx context.Context,
+	runtimes []T,
+	fileType string,
+	runSearch func(context.Context, T) (*SearchResponse, error),
+	disabledFields func(context.Context, T) []string,
+	log logger.Logger,
+) (results []EnrichSearchResult, pluginErrors []PluginSearchError, skippedPlugins []PluginSearchSkipped) {
+	results = make([]EnrichSearchResult, 0)
+	for _, rt := range runtimes {
+		// Stop early if the client has cancelled the request. Continuing would
+		// fan out to plugins (and their external APIs) for a superseded search.
+		if ctx.Err() != nil {
+			break
+		}
+
+		manifest := rt.Manifest()
+		// Skip plugins that don't handle this file type.
 		if fileType != "" {
 			enricherCap := manifest.Capabilities.MetadataEnricher
 			if enricherCap == nil {
@@ -193,8 +256,15 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			}
 		}
 
-		resp, sErr := h.manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath)
+		resp, sErr := runSearch(ctx, rt)
 		if sErr != nil {
+			// Don't report a per-plugin failure that's just the client
+			// cancelling the request, since it's not a plugin malfunction, and
+			// logging it would be noise. A genuine deadline timeout is a real
+			// failure and is still reported.
+			if errors.Is(sErr, context.Canceled) {
+				continue
+			}
 			log.Warn("enricher search failed", logger.Data{
 				"scope":  rt.Scope(),
 				"plugin": rt.PluginID(),
@@ -212,36 +282,17 @@ func (h *handler) searchMetadata(c echo.Context) error {
 			continue
 		}
 
-		// Compute disabled fields for this plugin
-		var disabledFields []string
-		if manifest.Capabilities.MetadataEnricher != nil {
-			declaredFields := manifest.Capabilities.MetadataEnricher.Fields
-			effectiveSettings, fErr := h.service.GetEffectiveFieldSettings(ctx, book.LibraryID, rt.Scope(), rt.PluginID(), declaredFields)
-			if fErr == nil {
-				for field, enabled := range effectiveSettings {
-					if !enabled {
-						disabledFields = append(disabledFields, field)
-					}
-				}
-			}
-		}
-
+		df := disabledFields(ctx, rt)
 		for _, md := range resp.Results {
-			allResults = append(allResults, EnrichSearchResult{
+			results = append(results, EnrichSearchResult{
 				ParsedMetadata: md,
 				PluginScope:    md.PluginScope,
 				PluginID:       md.PluginID,
-				DisabledFields: disabledFields,
+				DisabledFields: df,
 			})
 		}
 	}
-
-	return c.JSON(http.StatusOK, PluginSearchResponse{
-		Results:        allResults,
-		Errors:         pluginErrors,
-		SkippedPlugins: skippedPlugins,
-		TotalPlugins:   len(runtimes),
-	})
+	return results, pluginErrors, skippedPlugins
 }
 
 // DownloadCoverFromURL fetches a cover image from a URL and populates md.CoverData and md.CoverMimeType.
