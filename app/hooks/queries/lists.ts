@@ -15,7 +15,6 @@ import type {
   ListListBooksResponse,
   ListListsQuery,
   ListListsResponse,
-  ListResponse,
   ListShare,
   ListTemplate,
   RemoveBooksPayload,
@@ -34,12 +33,7 @@ export enum QueryKey {
   BookLists = "BookLists",
 }
 
-export type {
-  ListListsQuery,
-  ListBooksInListQuery,
-  ListResponse,
-  ListTemplate,
-};
+export type { ListListsQuery, ListBooksInListQuery };
 
 // ============================================================================
 // Query Hooks

@@ -17,9 +17,8 @@ import {
   useCreateList,
   useListLists,
   useRemoveBooksFromList,
-  type ListResponse,
 } from "@/hooks/queries/lists";
-import type { CreateListPayload } from "@/types";
+import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListPopoverProps {
   bookId: number;

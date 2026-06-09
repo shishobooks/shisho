@@ -12,11 +12,9 @@ import {
   useCreateListFromTemplate,
   useListLists,
   useListTemplates,
-  type ListResponse,
-  type ListTemplate,
 } from "@/hooks/queries/lists";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { CreateListPayload } from "@/types";
+import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
 
 const ListsIndex = () => {
   usePageTitle("Lists");

@@ -26,10 +26,9 @@ import {
   useCreateList,
   useListLists,
   useUpdateBookLists,
-  type ListResponse,
 } from "@/hooks/queries/lists";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import type { CreateListPayload } from "@/types";
+import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListDialogProps {
   bookId: number;
