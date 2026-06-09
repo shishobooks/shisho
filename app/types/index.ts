@@ -61,8 +61,6 @@ export {
 export {
   type UserSettingsResponse,
   type UserSettingsPayload,
-  type LibrarySettingsResponse,
-  type UpdateLibrarySettingsPayload,
   type ReviewCriteriaResponse,
   type PutReviewCriteriaPayload,
 } from "./generated/settings";

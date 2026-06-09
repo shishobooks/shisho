@@ -24,7 +24,7 @@ type ListBooksResponse struct {
 }
 
 // SetReviewPayload is the request body for the file and book review-override
-// endpoints (PATCH /books/files/:id/review, POST /books/:id/review).
+// endpoints (PATCH /books/files/:id/review, PATCH /books/:id/review).
 type SetReviewPayload struct {
 	Override *string `json:"override" validate:"omitempty,oneof=reviewed unreviewed" tstype:"ReviewOverride"`
 }
