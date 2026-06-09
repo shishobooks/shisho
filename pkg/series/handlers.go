@@ -65,11 +65,7 @@ func (h *handler) retrieve(c echo.Context) error {
 	}
 	series.CoverCacheKey = covers.CacheKey(seriesFiles[id], aspectRatio)
 
-	response := struct {
-		*models.Series
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{series, bookCount, aliasList}
+	response := SeriesResponse{Series: *series, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -110,12 +106,7 @@ func (h *handler) list(c echo.Context) error {
 	seriesFiles, _ := h.bookService.GetFirstBooksFilesForSeries(ctx, seriesIDs)
 
 	// Augment with book counts, aliases, and cover cache keys.
-	type SeriesWithCount struct {
-		*models.Series
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}
-	result := make([]SeriesWithCount, len(seriesList))
+	result := make([]SeriesResponse, len(seriesList))
 	for i, s := range seriesList {
 		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, s.ID)
@@ -124,13 +115,10 @@ func (h *handler) list(c echo.Context) error {
 			aspectRatio = s.Library.CoverAspectRatio
 		}
 		s.CoverCacheKey = covers.CacheKey(seriesFiles[s.ID], aspectRatio)
-		result[i] = SeriesWithCount{s, count, aliasList}
+		result[i] = SeriesResponse{Series: *s, BookCount: count, Aliases: aliasList}
 	}
 
-	response := map[string]any{
-		"items": result,
-		"total": total,
-	}
+	response := ListSeriesResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -242,11 +230,7 @@ func (h *handler) update(c echo.Context) error {
 	bookCount, _ := h.seriesService.GetSeriesBookCount(ctx, id)
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
 
-	response := struct {
-		*models.Series
-		BookCount int      `json:"book_count"`
-		Aliases   []string `json:"aliases"`
-	}{series, bookCount, aliasList}
+	response := SeriesResponse{Series: *series, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

@@ -6,6 +6,7 @@ type_mappings:
   # frontmatter. Add one entry per embedded model used in a response struct.
   models.Genre: "Genre"
   models.Tag: "Tag"
+  models.Series: "Series"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"
@@ -54,6 +55,8 @@ packages:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/series"
     output_path: "app/types/generated/series.ts"
+    frontmatter: |
+      import { Series } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/people"

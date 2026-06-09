@@ -26,7 +26,7 @@ type Series struct {
 	SortNameSource     string         `bun:",notnull" json:"sort_name_source" tstype:"DataSource"`
 	Description        *string        `json:"description,omitempty"`
 	CoverImageFilename *string        `json:"cover_image_filename,omitempty"`
-	Aliases            []*SeriesAlias `bun:"rel:has-many,join:id=series_id" json:"aliases" tstype:"SeriesAlias[]"`
+	Aliases            []*SeriesAlias `bun:"rel:has-many,join:id=series_id" json:"aliases" tstype:"-"`
 	BookSeries         []*BookSeries  `bun:"rel:has-many" json:"book_series,omitempty" tstype:"BookSeries[]"`
 	BookCount          int            `bun:",scanonly" json:"book_count"`
 	CoverCacheKey      string         `bun:"-" json:"cover_cache_key"`

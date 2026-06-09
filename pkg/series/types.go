@@ -1,5 +1,30 @@
 package series
 
+import "github.com/shishobooks/shisho/pkg/models"
+
+// SeriesResponse is the single-series API response. It embeds the Series model
+// by value (so tygo emits `extends Series`) and reshapes the aliases relation
+// into a flat []string. BookCount and Aliases shadow the embedded model's
+// same-json-tag fields, so the wire format is byte-identical to the previous
+// anonymous struct. The name follows the project-wide {Entity}Response
+// convention (ADR 0004); the revive "stutter" warning is a false positive
+// because the entity is itself named "Series".
+//
+//nolint:revive // SeriesResponse name is mandated by the {Entity}Response convention (ADR 0004)
+type SeriesResponse struct {
+	models.Series `tstype:",extends"`
+	BookCount     int      `json:"book_count"`
+	Aliases       []string `json:"aliases"`
+}
+
+// ListSeriesResponse is the list-endpoint envelope.
+//
+//nolint:revive // ListSeriesResponse name is mandated by the List{Entities}Response convention (ADR 0004)
+type ListSeriesResponse struct {
+	Items []SeriesResponse `json:"items"`
+	Total int              `json:"total"`
+}
+
 type ListSeriesQuery struct {
 	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`

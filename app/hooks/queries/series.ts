@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, ResourceListResponse, Series } from "@/types";
+import type { Book, ResourceListResponse, SeriesResponse } from "@/types";
 import type {
   ListSeriesQuery,
   UpdateSeriesPayload,
@@ -21,13 +21,9 @@ export enum QueryKey {
   SeriesBooks = "SeriesBooks",
 }
 
-export interface SeriesWithCount extends Series {
-  book_count: number;
-}
-
 export type { ListSeriesQuery };
 
-export type ListSeriesData = ResourceListResponse<Series>;
+export type ListSeriesData = ResourceListResponse<SeriesResponse>;
 
 export const useSeriesList = (
   query: ListSeriesQuery = {},
@@ -48,11 +44,11 @@ export const useSeriesList = (
 export const useSeries = (
   seriesId?: number,
   options: Omit<
-    UseQueryOptions<SeriesWithCount, ShishoAPIError>,
+    UseQueryOptions<SeriesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<SeriesWithCount, ShishoAPIError>({
+  return useQuery<SeriesResponse, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
@@ -98,7 +94,7 @@ export const useUpdateSeries = () => {
       seriesId: number;
       payload: UpdateSeriesPayload;
     }) => {
-      return API.request<SeriesWithCount>(
+      return API.request<SeriesResponse>(
         "PATCH",
         `/series/${seriesId}`,
         payload,

@@ -169,7 +169,7 @@ const SeriesDetail = () => {
   }
 
   const series = seriesQuery.data;
-  const aliases = (series.aliases as unknown as string[]) ?? [];
+  const aliases = series.aliases ?? [];
   const canDelete = series.book_count === 0;
 
   return (
