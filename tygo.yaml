@@ -8,11 +8,10 @@ type_mappings:
   models.Tag: "Tag"
   models.Series: "Series"
   models.Person: "Person"
-  # Models referenced by name (not embedded) in a package's response structs also
-  # need a mapping so tygo emits the bare interface name instead of `any`. The
-  # people sub-resource envelopes return []*models.Book / []*models.File.
+  # A model returned by name (not embedded, not field-level `tstype`-overridden)
+  # also needs a mapping so tygo emits the bare interface name instead of `any`.
+  # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
   models.Book: "Book"
-  models.File: "File"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"

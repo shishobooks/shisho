@@ -22,13 +22,13 @@ type ListPeopleResponse struct {
 
 // ListAuthoredBooksResponse is the authored-books sub-resource envelope.
 type ListAuthoredBooksResponse struct {
-	Items []*models.Book `json:"items"`
+	Items []*models.Book `json:"items" tstype:"Book[]"`
 	Total int            `json:"total"`
 }
 
 // ListNarratedFilesResponse is the narrated-files sub-resource envelope.
 type ListNarratedFilesResponse struct {
-	Items []*models.File `json:"items"`
+	Items []*models.File `json:"items" tstype:"File[]"`
 	Total int            `json:"total"`
 }
 
