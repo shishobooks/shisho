@@ -8,10 +8,9 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
-  File,
+  ListPublisherFilesResponse,
   ListPublishersResponse,
   PublisherResponse,
-  ResourceListResponse,
 } from "@/types";
 import type {
   ListPublishersQuery,
@@ -82,11 +81,11 @@ export const usePublisherFiles = (
   publisherId?: number,
   query: PublisherFilesQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<File>, ShishoAPIError>,
+    UseQueryOptions<ListPublisherFilesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<File>, ShishoAPIError>({
+  return useQuery<ListPublisherFilesResponse, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,

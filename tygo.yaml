@@ -13,10 +13,6 @@ type_mappings:
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
   models.Book: "Book"
   models.Publisher: "Publisher"
-  # The publishers files sub-resource envelope returns []*models.File; map the
-  # selector to the bare File interface (imported via the publishers frontmatter)
-  # so the generated items type is File[] rather than an unresolved reference.
-  models.File: "File"
 
 packages:
   - path: "github.com/shishobooks/shisho/pkg/models"

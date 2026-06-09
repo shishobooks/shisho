@@ -57,6 +57,7 @@ export {
   type PublisherResponse,
   type PublisherListItem,
   type ListPublishersResponse,
+  type ListPublisherFilesResponse,
   type AncestorResponse,
   type ChildResponse,
   type ListPublishersQuery,

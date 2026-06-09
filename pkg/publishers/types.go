@@ -58,9 +58,11 @@ type ListPublishersResponse struct {
 	Total int                 `json:"total"`
 }
 
-// ListPublisherFilesResponse is the envelope for the files sub-resource.
+// ListPublisherFilesResponse is the envelope for the files sub-resource. The
+// tstype:"File[]" override makes tygo emit `File[]` (imported via the publishers
+// frontmatter) instead of `(File | undefined)[]` for the []*models.File slice.
 type ListPublisherFilesResponse struct {
-	Items []*models.File `json:"items"`
+	Items []*models.File `json:"items" tstype:"File[]"`
 	Total int            `json:"total"`
 }
 
