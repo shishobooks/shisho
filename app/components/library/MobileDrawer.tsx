@@ -55,7 +55,7 @@ const MobileDrawer = () => {
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
   const librariesQuery = useLibraries({});
-  const libraries = librariesQuery.data?.libraries || [];
+  const libraries = librariesQuery.data?.items || [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const listsQuery = useListLists();

@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -15,6 +16,112 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHandlerList_ResponseUsesItemsKey(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	h := &handler{userService: NewService(db)}
+	ctx := context.Background()
+
+	_, err := h.userService.Create(ctx, CreateUserOptions{
+		Username:         "listme",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess: true,
+	})
+	require.NoError(t, err)
+
+	e := echo.New()
+	b, err := binder.New()
+	require.NoError(t, err)
+	e.Binder = b
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+	c := e.NewContext(req, rr)
+
+	require.NoError(t, h.list(c))
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
+
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	_, hasUsers := raw["users"]
+	assert.True(t, hasItems, "list response must use 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.False(t, hasUsers, "list response must NOT use 'users' key")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+}
+
+func TestHandlerDeactivate_Returns204NoContent(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	h := &handler{userService: NewService(db)}
+	ctx := context.Background()
+
+	target, err := h.userService.Create(ctx, CreateUserOptions{
+		Username:         "deactivateme",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess: true,
+	})
+	require.NoError(t, err)
+
+	admin, err := h.userService.Create(ctx, CreateUserOptions{
+		Username:         "deactivator",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleAdmin),
+		AllLibraryAccess: true,
+	})
+	require.NoError(t, err)
+
+	c, rr := newUsersTestContext(t, "", "/users/"+strconv.Itoa(target.ID))
+	c.SetPath("/users/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(target.ID))
+	c.Set("user_id", admin.ID)
+
+	require.NoError(t, h.deactivate(c))
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Empty(t, rr.Body.String(), "204 response must have an empty body")
+
+	updated, err := h.userService.Retrieve(ctx, target.ID)
+	require.NoError(t, err)
+	assert.False(t, updated.IsActive, "user should be deactivated")
+}
+
+func TestHandlerResetPassword_Returns204NoContent(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	h := &handler{userService: NewService(db)}
+	ctx := context.Background()
+
+	user, err := h.userService.Create(ctx, CreateUserOptions{
+		Username:             "resetme204",
+		Password:             "password123",
+		RoleID:               getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess:     true,
+		RequirePasswordReset: true,
+	})
+	require.NoError(t, err)
+
+	c, rr := newUsersTestContext(t, `{"new_password":"newpassword123"}`, "/users/"+strconv.Itoa(user.ID)+"/reset-password")
+	c.SetPath("/users/:id/reset-password")
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(user.ID))
+	c.Set("user_id", user.ID)
+	c.Set("user", &models.User{ID: user.ID, MustChangePassword: true})
+
+	require.NoError(t, h.resetPassword(c))
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Empty(t, rr.Body.String(), "204 response must have an empty body")
+}
 
 func newUsersTestContext(t *testing.T, payload, path string) (echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
@@ -56,7 +163,7 @@ func TestHandlerResetPassword_SelfForcedReset_DoesNotRequireCurrentPassword(t *t
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
 
 	updatedUser, err := h.userService.Retrieve(ctx, user.ID)
 	require.NoError(t, err)
@@ -141,7 +248,7 @@ func TestHandlerResetPassword_AdminResetsOtherUser_WithRequirePasswordReset(t *t
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
 
 	// Verify the flag was set on the target user
 	updatedUser, err := h.userService.Retrieve(ctx, targetUser.ID)
@@ -228,7 +335,7 @@ func TestHandlerResetPassword_SelfResetIgnoresRequirePasswordResetParam(t *testi
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
 
 	// Flag should be cleared despite the param being true
 	updatedUser, err := h.userService.Retrieve(ctx, user.ID)

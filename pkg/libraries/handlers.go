@@ -83,7 +83,7 @@ func (h *handler) create(c echo.Context) error {
 		h.onLibraryChanged()
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, library))
+	return errors.WithStack(c.JSON(http.StatusOK, LibraryResponse{Library: *library}))
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -100,7 +100,7 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, library))
+	return errors.WithStack(c.JSON(http.StatusOK, LibraryResponse{Library: *library}))
 }
 
 func (h *handler) list(c echo.Context) error {
@@ -130,10 +130,7 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	resp := struct {
-		Libraries []*models.Library `json:"libraries"`
-		Total     int               `json:"total"`
-	}{libraries, total}
+	resp := ListLibrariesResponse{Items: libraries, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
@@ -206,7 +203,7 @@ func (h *handler) update(c echo.Context) error {
 		h.onLibraryChanged()
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, library))
+	return errors.WithStack(c.JSON(http.StatusOK, LibraryResponse{Library: *library}))
 }
 
 func (h *handler) delete(c echo.Context) error {

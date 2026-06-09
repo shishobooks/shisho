@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
@@ -59,10 +58,7 @@ func (h *handler) list(c echo.Context) error {
 		return err
 	}
 
-	resp := struct {
-		Roles []*models.Role `json:"roles"`
-		Total int            `json:"total"`
-	}{roles, total}
+	resp := ListRolesResponse{Items: roles, Total: total}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -106,5 +102,5 @@ func (h *handler) delete(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Role deleted successfully"})
+	return c.NoContent(http.StatusNoContent)
 }

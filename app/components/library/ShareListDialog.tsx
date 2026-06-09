@@ -78,7 +78,7 @@ export function ShareListDialog({
   const deleteShareMutation = useDeleteShare();
 
   const shares = sharesQuery.data ?? [];
-  const users = usersQuery.data?.users ?? [];
+  const users = usersQuery.data?.items ?? [];
   const listOwnerId = listQuery.data?.list.user_id;
 
   // Filter out users who already have access (shares, owner, or self)

@@ -2,6 +2,7 @@ package libraries
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -17,6 +18,49 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
+
+// newListTestContext wires up an Echo context for the list handler with the
+// libraries service backed by a real DB.
+func newListTestContext(t *testing.T, db *bun.DB) (*handler, echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+
+	e := echo.New()
+	b, err := binder.New()
+	require.NoError(t, err)
+	e.Binder = b
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+
+	req := httptest.NewRequest(http.MethodGet, "/libraries", nil)
+	rr := httptest.NewRecorder()
+	c := e.NewContext(req, rr)
+
+	h := &handler{libraryService: NewService(db)}
+	return h, c, rr
+}
+
+func TestListLibrariesHandler_ResponseUsesItemsKey(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	_ = seedLibraryWithContent(ctx, t, db, "Alpha")
+
+	h, c, rr := newListTestContext(t, db)
+	require.NoError(t, h.list(c))
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
+
+	_, hasItems := raw["items"]
+	_, hasTotal := raw["total"]
+	_, hasLibraries := raw["libraries"]
+	assert.True(t, hasItems, "list response must use 'items' key")
+	assert.True(t, hasTotal, "list response must have 'total' key")
+	assert.False(t, hasLibraries, "list response must NOT use 'libraries' key")
+	assert.Len(t, raw, 2, "list response must have exactly 'items' and 'total' keys")
+}
 
 // newDeleteTestServer wires up the libraries DELETE route against a real DB
 // and a stubbed auth middleware that injects the provided user into the

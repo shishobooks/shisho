@@ -26,6 +26,7 @@ import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import type { CoverAspectRatio, DownloadFormat } from "@/types";
 import {
   DownloadFormatAsk,
   DownloadFormatKepub,
@@ -47,10 +48,10 @@ const LibrarySettings = () => {
 
   const [name, setName] = useState("");
   const [organizeFileStructure, setOrganizeFileStructure] = useState(true);
-  const [coverAspectRatio, setCoverAspectRatio] = useState("book");
-  const [downloadFormatPreference, setDownloadFormatPreference] = useState(
-    DownloadFormatOriginal,
-  );
+  const [coverAspectRatio, setCoverAspectRatio] =
+    useState<CoverAspectRatio>("book");
+  const [downloadFormatPreference, setDownloadFormatPreference] =
+    useState<DownloadFormat>(DownloadFormatOriginal);
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [pluginsHaveChanges, setPluginsHaveChanges] = useState(false);
@@ -64,8 +65,8 @@ const LibrarySettings = () => {
   const [initialValues, setInitialValues] = useState<{
     name: string;
     organizeFileStructure: boolean;
-    coverAspectRatio: string;
-    downloadFormatPreference: string;
+    coverAspectRatio: CoverAspectRatio;
+    downloadFormatPreference: DownloadFormat;
     libraryPaths: string[];
   } | null>(null);
 
@@ -342,7 +343,12 @@ const LibrarySettings = () => {
           <p className="text-sm text-muted-foreground">
             How book and series covers should be displayed in gallery views
           </p>
-          <Select onValueChange={setCoverAspectRatio} value={coverAspectRatio}>
+          <Select
+            onValueChange={(value) =>
+              setCoverAspectRatio(value as CoverAspectRatio)
+            }
+            value={coverAspectRatio}
+          >
             <SelectTrigger className="w-full" id="cover-aspect-ratio">
               <SelectValue />
             </SelectTrigger>
@@ -368,7 +374,9 @@ const LibrarySettings = () => {
             How EPUB and CBZ files should be downloaded for e-readers
           </p>
           <Select
-            onValueChange={setDownloadFormatPreference}
+            onValueChange={(value) =>
+              setDownloadFormatPreference(value as DownloadFormat)
+            }
             value={downloadFormatPreference}
           >
             <SelectTrigger className="w-full" id="download-format">

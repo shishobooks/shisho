@@ -59,10 +59,7 @@ func (h *handler) list(c echo.Context) error {
 		return err
 	}
 
-	resp := struct {
-		Users []*models.User `json:"users"`
-		Total int            `json:"total"`
-	}{users, total}
+	resp := ListUsersResponse{Items: users, Total: total}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -189,7 +186,7 @@ func (h *handler) resetPassword(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Password reset successfully"})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *handler) deactivate(c echo.Context) error {
@@ -211,5 +208,5 @@ func (h *handler) deactivate(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "User deactivated successfully"})
+	return c.NoContent(http.StatusNoContent)
 }

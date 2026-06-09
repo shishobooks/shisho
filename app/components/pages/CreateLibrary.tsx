@@ -21,7 +21,9 @@ import { useCreateLibrary } from "@/hooks/queries/libraries";
 import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import type { CoverAspectRatio, DownloadFormat } from "@/types";
 import {
+  CoverAspectRatioBook,
   DownloadFormatAsk,
   DownloadFormatKepub,
   DownloadFormatOriginal,
@@ -31,8 +33,8 @@ import {
 const INITIAL_VALUES = {
   name: "",
   organizeFileStructure: true,
-  coverAspectRatio: "book",
-  downloadFormatPreference: DownloadFormatOriginal,
+  coverAspectRatio: CoverAspectRatioBook as CoverAspectRatio,
+  downloadFormatPreference: DownloadFormatOriginal as DownloadFormat,
   libraryPaths: [""],
 };
 
@@ -45,12 +47,11 @@ const CreateLibrary = () => {
   const [organizeFileStructure, setOrganizeFileStructure] = useState(
     INITIAL_VALUES.organizeFileStructure,
   );
-  const [coverAspectRatio, setCoverAspectRatio] = useState(
+  const [coverAspectRatio, setCoverAspectRatio] = useState<CoverAspectRatio>(
     INITIAL_VALUES.coverAspectRatio,
   );
-  const [downloadFormatPreference, setDownloadFormatPreference] = useState(
-    INITIAL_VALUES.downloadFormatPreference,
-  );
+  const [downloadFormatPreference, setDownloadFormatPreference] =
+    useState<DownloadFormat>(INITIAL_VALUES.downloadFormatPreference);
   const [libraryPaths, setLibraryPaths] = useState<string[]>([
     ...INITIAL_VALUES.libraryPaths,
   ]);
@@ -266,7 +267,9 @@ const CreateLibrary = () => {
               How book and series covers should be displayed in gallery views
             </p>
             <Select
-              onValueChange={setCoverAspectRatio}
+              onValueChange={(value) =>
+                setCoverAspectRatio(value as CoverAspectRatio)
+              }
               value={coverAspectRatio}
             >
               <SelectTrigger className="w-full" id="cover-aspect-ratio">
@@ -294,7 +297,9 @@ const CreateLibrary = () => {
               How EPUB and CBZ files should be downloaded for e-readers
             </p>
             <Select
-              onValueChange={setDownloadFormatPreference}
+              onValueChange={(value) =>
+                setDownloadFormatPreference(value as DownloadFormat)
+              }
               value={downloadFormatPreference}
             >
               <SelectTrigger className="w-full" id="download-format">

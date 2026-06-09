@@ -1,5 +1,13 @@
 package users
 
+import "github.com/shishobooks/shisho/pkg/models"
+
+// ListUsersResponse is the list-endpoint envelope.
+type ListUsersResponse struct {
+	Items []*models.User `json:"items" tstype:"User[]"`
+	Total int            `json:"total"`
+}
+
 // CreateUserPayload represents the request body for creating a user.
 type CreateUserPayload struct {
 	Username             string  `json:"username" validate:"required,min=3,max=50"`
