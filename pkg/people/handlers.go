@@ -72,12 +72,12 @@ func (h *handler) retrieve(c echo.Context) error {
 
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
 
-	response := struct {
-		*models.Person
-		AuthoredBookCount int      `json:"authored_book_count"`
-		NarratedFileCount int      `json:"narrated_file_count"`
-		Aliases           []string `json:"aliases"`
-	}{person, authoredCount, narratedCount, aliasList}
+	response := PersonResponse{
+		Person:            *person,
+		AuthoredBookCount: authoredCount,
+		NarratedFileCount: narratedCount,
+		Aliases:           aliasList,
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -111,24 +111,20 @@ func (h *handler) list(c echo.Context) error {
 	}
 
 	// Augment with counts and aliases
-	type PersonWithCounts struct {
-		*models.Person
-		AuthoredBookCount int      `json:"authored_book_count"`
-		NarratedFileCount int      `json:"narrated_file_count"`
-		Aliases           []string `json:"aliases"`
-	}
-	result := make([]PersonWithCounts, len(people))
+	result := make([]PersonResponse, len(people))
 	for i, p := range people {
 		authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, p.ID)
 		narratedCount, _ := h.personService.GetNarratedFileCount(ctx, p.ID)
 		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, p.ID)
-		result[i] = PersonWithCounts{p, authoredCount, narratedCount, aliasList}
+		result[i] = PersonResponse{
+			Person:            *p,
+			AuthoredBookCount: authoredCount,
+			NarratedFileCount: narratedCount,
+			Aliases:           aliasList,
+		}
 	}
 
-	response := map[string]any{
-		"items": result,
-		"total": total,
-	}
+	response := ListPeopleResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -302,12 +298,12 @@ func (h *handler) update(c echo.Context) error {
 	narratedCount, _ := h.personService.GetNarratedFileCount(ctx, id)
 	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
 
-	response := struct {
-		*models.Person
-		AuthoredBookCount int      `json:"authored_book_count"`
-		NarratedFileCount int      `json:"narrated_file_count"`
-		Aliases           []string `json:"aliases"`
-	}{person, authoredCount, narratedCount, aliasList}
+	response := PersonResponse{
+		Person:            *person,
+		AuthoredBookCount: authoredCount,
+		NarratedFileCount: narratedCount,
+		Aliases:           aliasList,
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -344,10 +340,7 @@ func (h *handler) authoredBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	response := map[string]any{
-		"items": books,
-		"total": total,
-	}
+	response := ListAuthoredBooksResponse{Items: books, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -384,10 +377,7 @@ func (h *handler) narratedFiles(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	response := map[string]any{
-		"items": files,
-		"total": total,
-	}
+	response := ListNarratedFilesResponse{Items: files, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

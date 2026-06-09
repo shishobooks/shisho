@@ -92,7 +92,7 @@ const PersonDetail = () => {
   );
 
   const person = personQuery.data;
-  const aliases = person ? ((person.aliases as unknown as string[]) ?? []) : [];
+  const aliases = person?.aliases ?? [];
   const bookCount = person?.authored_book_count ?? 0;
   const narratedFileCount = person?.narrated_file_count ?? 0;
 
