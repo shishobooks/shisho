@@ -7,7 +7,6 @@ export {
   type DeleteFileResponse,
   type IdentifierPayload,
   type ListBooksQuery,
-  type ListBooksResponse,
   type MergeBooksPayload,
   type MergeBooksResponse,
   type MoveFilesPayload,
@@ -32,14 +31,12 @@ export * from "./generated/series";
 export * from "./generated/people";
 export {
   type GenreResponse,
-  type ListGenresResponse,
   type ListGenresQuery,
   type UpdateGenrePayload,
   type MergeGenresPayload,
 } from "./generated/genres";
 export {
   type TagResponse,
-  type ListTagsResponse,
   type ListTagBooksResponse,
   type ListTagsQuery,
   type UpdateTagPayload,
@@ -57,6 +54,10 @@ export {
   type MergePublishersPayload,
 } from "./generated/publishers";
 export * from "./generated/chapters";
+export {
+  type UserSettingsResponse,
+  type UserSettingsPayload,
+} from "./generated/settings";
 export {
   type CreateListPayload,
   type UpdateListPayload,
@@ -76,8 +77,6 @@ export {
   type CheckVisibilityResponse,
   type ListTemplate,
 } from "./generated/lists";
-
-export type { UserSettings } from "@/hooks/queries/settings";
 
 export interface ResourceListResponse<T> {
   items: T[];

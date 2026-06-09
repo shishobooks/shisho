@@ -13,22 +13,22 @@ import "github.com/shishobooks/shisho/pkg/models"
 // `UserSettingsUpdate(payload)`. Drifting either one breaks that cast.
 type UserSettingsPayload struct {
 	PreloadCount *int    `json:"preload_count,omitempty"`
-	FitMode      *string `json:"fit_mode,omitempty"`
+	FitMode      *string `json:"fit_mode,omitempty" tstype:"FitMode"`
 	EpubFontSize *int    `json:"viewer_epub_font_size,omitempty"`
-	EpubTheme    *string `json:"viewer_epub_theme,omitempty"`
-	EpubFlow     *string `json:"viewer_epub_flow,omitempty"`
-	GallerySize  *string `json:"gallery_size,omitempty"`
+	EpubTheme    *string `json:"viewer_epub_theme,omitempty" tstype:"EpubTheme"`
+	EpubFlow     *string `json:"viewer_epub_flow,omitempty" tstype:"EpubFlow"`
+	GallerySize  *string `json:"gallery_size,omitempty" tstype:"GallerySize"`
 	HideChrome   *bool   `json:"viewer_hide_chrome,omitempty"`
 }
 
 // UserSettingsResponse is the response for user settings.
 type UserSettingsResponse struct {
 	PreloadCount int    `json:"preload_count"`
-	FitMode      string `json:"fit_mode"`
+	FitMode      string `json:"fit_mode" tstype:"FitMode"`
 	EpubFontSize int    `json:"viewer_epub_font_size"`
-	EpubTheme    string `json:"viewer_epub_theme"`
-	EpubFlow     string `json:"viewer_epub_flow"`
-	GallerySize  string `json:"gallery_size"`
+	EpubTheme    string `json:"viewer_epub_theme" tstype:"EpubTheme"`
+	EpubFlow     string `json:"viewer_epub_flow" tstype:"EpubFlow"`
+	GallerySize  string `json:"gallery_size" tstype:"GallerySize"`
 	HideChrome   bool   `json:"viewer_hide_chrome"`
 }
 

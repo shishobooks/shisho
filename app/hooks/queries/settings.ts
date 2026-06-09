@@ -6,17 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { EpubFlow, EpubTheme, FitMode, GallerySize } from "@/types";
-
-export interface UserSettings {
-  preload_count: number;
-  fit_mode: FitMode;
-  viewer_epub_font_size: number;
-  viewer_epub_theme: EpubTheme;
-  viewer_epub_flow: EpubFlow;
-  gallery_size: GallerySize;
-  viewer_hide_chrome: boolean;
-}
+import type { UserSettingsPayload, UserSettingsResponse } from "@/types";
 
 export enum QueryKey {
   UserSettings = "UserSettings",
@@ -24,11 +14,11 @@ export enum QueryKey {
 
 export const useUserSettings = (
   options: Omit<
-    UseQueryOptions<UserSettings, ShishoAPIError>,
+    UseQueryOptions<UserSettingsResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<UserSettings, ShishoAPIError>({
+  return useQuery<UserSettingsResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.UserSettings],
     queryFn: ({ signal }) => {
@@ -37,23 +27,14 @@ export const useUserSettings = (
   });
 };
 
-// Partial update: callers send only the fields they want to change. Omitted
-// (or undefined) fields are left untouched on the server. Mirrors the backend
-// UserSettingsPayload shape, which has all fields as omitempty pointers.
-export interface UpdateUserSettingsVariables {
-  preload_count?: number;
-  fit_mode?: FitMode;
-  viewer_epub_font_size?: number;
-  viewer_epub_theme?: EpubTheme;
-  viewer_epub_flow?: EpubFlow;
-  gallery_size?: GallerySize;
-  viewer_hide_chrome?: boolean;
-}
-
 export const useUpdateUserSettings = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<UserSettings, ShishoAPIError, UpdateUserSettingsVariables>(
+  // Partial update: callers send only the fields they want to change. Omitted
+  // (or undefined) fields are left untouched on the server. The generated
+  // UserSettingsPayload has all fields as optional, mirroring the backend's
+  // omitempty pointers.
+  return useMutation<UserSettingsResponse, ShishoAPIError, UserSettingsPayload>(
     {
       mutationFn: (payload) => {
         return API.request("PUT", "/settings/user", payload, null);

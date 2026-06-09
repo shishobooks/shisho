@@ -5,14 +5,14 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
-import {
-  useGlobalSearch,
-  type BookSearchResult,
-  type PersonSearchResult,
-  type SeriesSearchResult,
-} from "@/hooks/queries/search";
+import { useGlobalSearch } from "@/hooks/queries/search";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
+import type {
+  BookSearchResult,
+  PersonSearchResult,
+  SeriesSearchResult,
+} from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 
 const getSearchThumbnailClasses = (variant: "book" | "audiobook"): string => {
