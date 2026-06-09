@@ -71,9 +71,7 @@ const PublisherDetail = () => {
   );
 
   const publisher = publisherQuery.data;
-  const aliases = publisher
-    ? ((publisher.aliases as unknown as string[]) ?? [])
-    : [];
+  const aliases = publisher?.aliases ?? [];
   const fileCount = publisher?.file_count ?? 0;
   const descendantFileCount = publisher?.descendant_file_count ?? 0;
   const children = publisher?.children ?? [];

@@ -1,6 +1,68 @@
 package publishers
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/shishobooks/shisho/pkg/models"
+)
+
+// AncestorResponse is a lightweight ancestor node in a publisher's hierarchy
+// chain, ordered from immediate parent to root in PublisherResponse.Ancestors.
+type AncestorResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// ChildResponse is a flattened direct child of a publisher, carrying its own
+// direct file count. It replaces the model's Children []*Publisher relation in
+// API responses.
+type ChildResponse struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	FileCount int    `json:"file_count"`
+}
+
+// PublisherResponse is the full single-publisher API response used by retrieve,
+// update, and merge. It embeds the Publisher model by value (so tygo emits
+// `extends Publisher`) and reshapes the hierarchy: aliases as a flat []string,
+// ancestors and flattened children, and descendant ids. FileCount and Aliases
+// shadow the embedded model's same-json-tag fields, keeping the wire format
+// byte-identical to the previous anonymous struct.
+type PublisherResponse struct {
+	models.Publisher    `tstype:",extends"`
+	FileCount           int                `json:"file_count"`
+	DescendantFileCount int                `json:"descendant_file_count"`
+	Aliases             []string           `json:"aliases"`
+	Ancestors           []AncestorResponse `json:"ancestors"`
+	DescendantIDs       []int              `json:"descendant_ids"`
+	Children            []ChildResponse    `json:"children"`
+}
+
+// PublisherListItem is the light list-row shape returned by GET /publishers. It
+// deliberately omits the full hierarchy (ancestors, flattened children,
+// descendant ids) — computing those per row would be an N+1 — and instead
+// carries the parent's name and rolled-up counts. It embeds the Publisher model
+// by value (so tygo emits `extends Publisher`) and reshapes aliases to []string.
+type PublisherListItem struct {
+	models.Publisher         `tstype:",extends"`
+	FileCount                int      `json:"file_count"`
+	DescendantFileCount      int      `json:"descendant_file_count"`
+	DescendantPublisherCount int      `json:"descendant_publisher_count"`
+	ParentName               *string  `json:"parent_name"`
+	Aliases                  []string `json:"aliases"`
+}
+
+// ListPublishersResponse is the list-endpoint envelope.
+type ListPublishersResponse struct {
+	Items []PublisherListItem `json:"items"`
+	Total int                 `json:"total"`
+}
+
+// ListPublisherFilesResponse is the envelope for the files sub-resource.
+type ListPublisherFilesResponse struct {
+	Items []*models.File `json:"items"`
+	Total int            `json:"total"`
+}
 
 type ListPublishersQuery struct {
 	Limit      int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`

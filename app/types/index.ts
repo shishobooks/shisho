@@ -54,6 +54,11 @@ export {
   type MergeTagsPayload,
 } from "./generated/tags";
 export {
+  type PublisherResponse,
+  type PublisherListItem,
+  type ListPublishersResponse,
+  type AncestorResponse,
+  type ChildResponse,
   type ListPublishersQuery,
   type UpdatePublisherPayload,
   type MergePublishersPayload,

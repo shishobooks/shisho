@@ -1,9 +1,7 @@
 import ResourceList from "@/components/library/ResourceList";
-import {
-  usePublishersList,
-  type PublisherListItem,
-} from "@/hooks/queries/publishers";
+import { usePublishersList } from "@/hooks/queries/publishers";
 import { useResourceListState } from "@/hooks/useResourceListState";
+import type { PublisherListItem } from "@/types";
 
 const PublishersList = () => {
   const state = useResourceListState();
@@ -44,7 +42,7 @@ const PublishersList = () => {
         return {
           name: publisher.name,
           secondaryText: publisher.parent_name ?? undefined,
-          aliases: publisher.aliases.map((a) => a.name),
+          aliases: publisher.aliases,
           badges,
         };
       }}

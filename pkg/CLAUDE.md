@@ -281,6 +281,12 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
   - **Naming**: single-resource `{Entity}Response`; list envelope `List{Entities}Response` shaped `{ items, total }`; a list-item shape that genuinely differs from the single-resource shape `{Entity}ListItem`.
 
   Reference implementation: `pkg/genres/types.go` (`GenreResponse`, `ListGenresResponse`), `pkg/models/genre.go` (`Aliases` field tagged `tstype:"-"`), and the genres entry in `tygo.yaml`. The wire-level regression net is `TestList_ResponseAliasesSerializeAsStringArray` in `pkg/genres/handlers_test.go`.
+
+  **Hierarchical / multi-shape reference: `pkg/publishers/`.** Publishers extend the genres pattern with a distinct list-item vs detail shape and a hierarchy:
+  - **List item differs from detail**, so it's a `PublisherListItem` (light: `file_count`, `descendant_file_count`, `descendant_publisher_count`, `parent_name`, `aliases []string`) returned in `ListPublishersResponse`; the full `PublisherResponse` adds `ancestors`, `descendant_ids`, and flattened `children`. Computing the full hierarchy per list row would be an N+1, which is exactly why the two shapes exist.
+  - **Two reshaped relations get `tstype:"-"`**: `Publisher.Aliases` (→ `[]string`) AND `Publisher.Children` (→ flattened `ChildResponse`, not `Publisher[]`). `Parent` stays as `Publisher` (not reshaped).
+  - **Shared builder**: `buildPublisherResponse(ctx, publisher)` (a `*handler` method) assembles the full `PublisherResponse` and is called by retrieve, update, AND merge so every mutation returns the same full shape (enabling client `setQueryData`). When adding a mutation that returns the entity, route it through this helper rather than hand-building a partial struct. Its unit test is `TestBuildPublisherResponse_FullHierarchy` in `pkg/publishers/handlers_test.go`.
+  - **Sub-resource list of a foreign model**: the files sub-resource returns `ListPublisherFilesResponse` with `Items []*models.File`. A `[]*models.File` referenced from another package's `types.go` needs both the `frontmatter` import of `File` and a `type_mappings` entry `models.File: "File"`, otherwise tygo emits `(any /* models.File */ | undefined)[]`. `type_mappings` is global, so one `models.File: "File"` entry covers every package that returns files.
 - **Request binding must use structs**: The custom binder (`pkg/binder/`) uses mold (conform) and validator, which only work with structs. Never bind directly to a slice/array — wrap it in a struct:
 
 ```go

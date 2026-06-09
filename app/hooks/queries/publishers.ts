@@ -7,7 +7,12 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { File, Publisher, ResourceListResponse } from "@/types";
+import type {
+  File,
+  ListPublishersResponse,
+  PublisherResponse,
+  ResourceListResponse,
+} from "@/types";
 import type {
   ListPublishersQuery,
   UpdatePublisherPayload,
@@ -15,31 +20,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 
-export interface PublisherAncestor {
-  id: number;
-  name: string;
-}
-
-export interface PublisherChild {
-  id: number;
-  name: string;
-  file_count: number;
-}
-
-export interface PublisherDetail extends Omit<Publisher, "children"> {
-  ancestors: PublisherAncestor[];
-  descendant_ids: number[];
-  children: PublisherChild[];
-  descendant_file_count: number;
-}
-
-export interface PublisherListItem extends Publisher {
-  descendant_file_count: number;
-  descendant_publisher_count: number;
-  parent_name: string | null;
-}
-
-export type ListPublishersData = ResourceListResponse<PublisherListItem>;
+export type ListPublishersData = ListPublishersResponse;
 
 export enum QueryKey {
   ListPublishers = "ListPublishers",
@@ -71,11 +52,11 @@ export const usePublishersList = (
 export const usePublisher = (
   publisherId?: number,
   options: Omit<
-    UseQueryOptions<PublisherDetail, ShishoAPIError>,
+    UseQueryOptions<PublisherResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<PublisherDetail, ShishoAPIError>({
+  return useQuery<PublisherResponse, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,
@@ -133,7 +114,7 @@ export const useUpdatePublisher = () => {
       publisherId: number;
       payload: UpdatePublisherPayload;
     }) => {
-      return API.request<Publisher>(
+      return API.request<PublisherResponse>(
         "PATCH",
         `/publishers/${publisherId}`,
         payload,
