@@ -7,10 +7,11 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
+  CreateRolePayload,
   ListRolesResponse,
   ListUsersResponse,
-  PermissionInput,
   Role,
+  UpdateRolePayload,
   User,
 } from "@/types";
 
@@ -158,11 +159,6 @@ export const useRoles = (
   });
 };
 
-interface CreateRolePayload {
-  name: string;
-  permissions: PermissionInput[];
-}
-
 export const useCreateRole = () => {
   const queryClient = useQueryClient();
 
@@ -175,11 +171,6 @@ export const useCreateRole = () => {
     },
   });
 };
-
-interface UpdateRolePayload {
-  name?: string;
-  permissions?: PermissionInput[];
-}
 
 interface UpdateRoleVariables {
   id: number;
