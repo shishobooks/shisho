@@ -18,6 +18,12 @@ type ListGenresResponse struct {
 	Total int             `json:"total"`
 }
 
+// ListGenreBooksResponse is the envelope for the genre books sub-resource.
+type ListGenreBooksResponse struct {
+	Items []*models.Book `json:"items" tstype:"Book[]"`
+	Total int            `json:"total"`
+}
+
 type ListGenresQuery struct {
 	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`

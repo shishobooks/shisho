@@ -6,14 +6,10 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Chapter, ChapterInput } from "@/types";
+import type { Chapter, ChapterInput, ChaptersResponse } from "@/types";
 
 export enum QueryKey {
   FileChapters = "FileChapters",
-}
-
-interface ChaptersResponse {
-  chapters: Chapter[];
 }
 
 export const useFileChapters = (

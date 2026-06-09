@@ -5,23 +5,20 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import type { LoginPayload, MeResponse, StatusResponse } from "@/types";
 
 export enum QueryKey {
   AuthStatus = "AuthStatus",
   AuthMe = "AuthMe",
 }
 
-interface AuthStatusResponse {
-  needs_setup: boolean;
-}
-
 export const useAuthStatus = (
   options: Omit<
-    UseQueryOptions<AuthStatusResponse, ShishoAPIError>,
+    UseQueryOptions<StatusResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<AuthStatusResponse, ShishoAPIError>({
+  return useQuery<StatusResponse, ShishoAPIError>({
     ...options,
     queryKey: [QueryKey.AuthStatus],
     queryFn: ({ signal }) => {
@@ -30,23 +27,8 @@ export const useAuthStatus = (
   });
 };
 
-interface LoginPayload {
-  username: string;
-  password: string;
-}
-
-interface LoginResponse {
-  id: number;
-  username: string;
-  email?: string;
-  role_id: number;
-  role_name: string;
-  permissions: string[];
-  must_change_password: boolean;
-}
-
 export const useLogin = () => {
-  return useMutation<LoginResponse, ShishoAPIError, LoginPayload>({
+  return useMutation<MeResponse, ShishoAPIError, LoginPayload>({
     mutationFn: (payload) => {
       return API.request("POST", "/auth/login", payload);
     },

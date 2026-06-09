@@ -129,7 +129,7 @@ const CreateUser = () => {
         role_id: roleId,
         require_password_reset: requirePasswordReset,
         all_library_access: allLibraryAccess,
-        library_ids: allLibraryAccess ? undefined : selectedLibraries,
+        library_ids: allLibraryAccess ? [] : selectedLibraries,
       });
 
       toast.success("User created successfully!");
