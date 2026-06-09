@@ -1,13 +1,33 @@
-import { ArrowLeft, Pause, Play } from "lucide-react";
+import {
+  ArrowLeft,
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  SkipBack,
+  SkipForward,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type { Book, File } from "@/types";
+import {
+  resolveChapters,
+  resolvePlayback,
+  SKIP_SECONDS,
+} from "@/utils/chapters";
 import { formatPlayerTime } from "@/utils/format";
 
 interface M4BReaderProps {
@@ -53,6 +73,16 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Keep the live time and duration in refs so the stable keydown handler can
+  // compute skip targets from the latest values without resubscribing on every
+  // timeupdate — and, crucially, without lagging a render behind, so successive
+  // synchronous arrow presses each build on the prior one's seek.
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(duration);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
   // While the user is dragging the seek bar we follow the pending scrub value
   // instead of the audio's reported time, so timeupdate events don't fight the
   // thumb. On commit we seek the element and resume following timeupdate.
@@ -60,6 +90,40 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const [scrubValue, setScrubValue] = useState(0);
 
   const [coverError, setCoverError] = useState(false);
+
+  // Resolve the file's chapters into absolute second boundaries once. The pure
+  // module handles unit conversion (ms -> s), sorting, and dropping chapters
+  // without a start. A file with no usable chapters yields an empty list and
+  // chapter navigation is simply absent.
+  const chapters = useMemo(
+    () => resolveChapters(file.chapters, duration),
+    [file.chapters, duration],
+  );
+  const hasChapters = chapters.length > 0;
+
+  // The displayed/effective time follows the scrub value while dragging so the
+  // chapter readout and dropdown track the thumb, otherwise the audio's time.
+  const displayTime = isScrubbing ? scrubValue : currentTime;
+
+  // Derive all playback-relative targets (current chapter, prev/next, skips)
+  // from the pure module. Recomputed as time/chapters/duration change.
+  const playback = useMemo(
+    () => resolvePlayback(chapters, displayTime, duration),
+    [chapters, displayTime, duration],
+  );
+
+  // Seek the audio element and keep our currentTime in sync. Centralized so the
+  // buttons, dropdown, and keyboard shortcuts all go through one path. Writes
+  // the time ref eagerly (before the state update flushes) so the keydown
+  // handler always reads the freshest position.
+  const seekTo = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = seconds;
+    }
+    currentTimeRef.current = seconds;
+    setCurrentTime(seconds);
+  }, []);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -75,41 +139,59 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     }
   }, []);
 
-  // Space toggles play/pause. Handle at the document level and preventDefault
-  // so the page doesn't scroll. Ignore the key when focus is in a text input
-  // (none today, but keeps the behavior robust) and when modifier keys are
-  // held so we don't hijack browser shortcuts.
+  // Space toggles play/pause; Left/Right arrows skip back/forward by 30s. Handle
+  // at the document level and preventDefault so the page doesn't scroll. Ignore
+  // the keys when focus is in a text input or when modifier keys are held so we
+  // don't hijack browser shortcuts. The chapter dropdown (a Radix Select), while
+  // open, handles its own arrow-key navigation and stops propagation, so its
+  // keys never reach this document-level listener.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== " " && e.key !== "Spacebar") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
         return;
       }
-      e.preventDefault();
-      togglePlay();
+
+      if (e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const target = Math.max(currentTimeRef.current - SKIP_SECONDS, 0);
+        seekTo(target);
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const max = durationRef.current;
+        const target = Math.min(
+          currentTimeRef.current + SKIP_SECONDS,
+          max > 0 ? max : currentTimeRef.current + SKIP_SECONDS,
+        );
+        seekTo(target);
+        return;
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay]);
+  }, [togglePlay, seekTo]);
 
   const handleSeekChange = useCallback(([value]: number[]) => {
     setIsScrubbing(true);
     setScrubValue(value);
   }, []);
 
-  const handleSeekCommit = useCallback(([value]: number[]) => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = value;
-    }
-    setCurrentTime(value);
-    setIsScrubbing(false);
-  }, []);
-
-  const displayTime = isScrubbing ? scrubValue : currentTime;
+  const handleSeekCommit = useCallback(
+    ([value]: number[]) => {
+      seekTo(value);
+      setIsScrubbing(false);
+    },
+    [seekTo],
+  );
 
   const authorNames = joinNames(book?.authors);
   const narratorNames = joinNames(file.narrators);
@@ -121,6 +203,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
         ? `/api/books/${book.id}/cover?v=${coverCacheKey}`
         : `/api/books/${book.id}/cover`
       : null;
+
+  const sliderMax = duration > 0 ? duration : 1;
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
@@ -186,20 +270,92 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       {/* Player controls — always visible, no auto-hide */}
       <footer className="border-t bg-background px-4 py-4 md:px-8">
         <div className="mx-auto max-w-2xl space-y-3">
-          <Slider
-            max={duration > 0 ? duration : 1}
-            min={0}
-            onValueChange={handleSeekChange}
-            onValueCommit={handleSeekCommit}
-            step={1}
-            thumbLabel="Seek"
-            value={[Math.min(displayTime, duration > 0 ? duration : 1)]}
-          />
+          {/* Chapter dropdown (only with chapters). Its trigger doubles as the
+              current chapter title, kept in sync with playback via `value`. */}
+          {hasChapters && (
+            <Select
+              onValueChange={(value) => {
+                const chapter = chapters[Number(value)];
+                if (chapter) seekTo(chapter.startSeconds);
+              }}
+              value={
+                playback.currentChapterIndex != null
+                  ? String(playback.currentChapterIndex)
+                  : undefined
+              }
+            >
+              <SelectTrigger aria-label="Chapter" className="w-full min-w-0">
+                <SelectValue placeholder="Select chapter" />
+              </SelectTrigger>
+              <SelectContent>
+                {chapters.map((chapter) => (
+                  <SelectItem key={chapter.index} value={String(chapter.index)}>
+                    <span className="truncate" title={chapter.title}>
+                      {chapter.title}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="relative">
+            <Slider
+              max={sliderMax}
+              min={0}
+              onValueChange={handleSeekChange}
+              onValueCommit={handleSeekCommit}
+              step={1}
+              thumbLabel="Seek"
+              value={[Math.min(displayTime, sliderMax)]}
+            />
+            {/* Chapter markers along the seek bar, positioned by start/duration.
+                Skip the first marker at 0 (it sits under the thumb origin). */}
+            {hasChapters &&
+              duration > 0 &&
+              chapters.map((chapter) =>
+                chapter.startSeconds <= 0 ? null : (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 bg-primary/40"
+                    key={chapter.index}
+                    style={{
+                      left: `${(chapter.startSeconds / duration) * 100}%`,
+                    }}
+                  />
+                ),
+              )}
+          </div>
+
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">
             <span>{formatPlayerTime(displayTime)}</span>
             <span>{formatPlayerTime(duration)}</span>
           </div>
-          <div className="flex items-center justify-center">
+
+          <div className="flex items-center justify-center gap-2 sm:gap-4">
+            {hasChapters && (
+              <Button
+                aria-label="Previous chapter"
+                disabled={playback.previousChapterTarget == null}
+                onClick={() => {
+                  if (playback.previousChapterTarget != null) {
+                    seekTo(playback.previousChapterTarget);
+                  }
+                }}
+                size="icon"
+                variant="ghost"
+              >
+                <SkipBack className="h-5 w-5" />
+              </Button>
+            )}
+            <Button
+              aria-label="Skip back 30 seconds"
+              onClick={() => seekTo(playback.skipBackTarget)}
+              size="icon"
+              variant="ghost"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </Button>
             <Button
               aria-label={isPlaying ? "Pause" : "Play"}
               className={cn("h-14 w-14 rounded-full")}
@@ -212,6 +368,29 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
                 <Play className="h-6 w-6" />
               )}
             </Button>
+            <Button
+              aria-label="Skip forward 30 seconds"
+              onClick={() => seekTo(playback.skipForwardTarget)}
+              size="icon"
+              variant="ghost"
+            >
+              <RotateCw className="h-5 w-5" />
+            </Button>
+            {hasChapters && (
+              <Button
+                aria-label="Next chapter"
+                disabled={playback.nextChapterTarget == null}
+                onClick={() => {
+                  if (playback.nextChapterTarget != null) {
+                    seekTo(playback.nextChapterTarget);
+                  }
+                }}
+                size="icon"
+                variant="ghost"
+              >
+                <SkipForward className="h-5 w-5" />
+              </Button>
+            )}
           </div>
         </div>
       </footer>
@@ -228,7 +407,9 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
         onPlay={() => setIsPlaying(true)}
         onTimeUpdate={(e) => {
           if (isScrubbing) return;
-          setCurrentTime(e.currentTarget.currentTime);
+          const time = e.currentTarget.currentTime;
+          currentTimeRef.current = time;
+          setCurrentTime(time);
         }}
         preload="metadata"
         ref={audioRef}
