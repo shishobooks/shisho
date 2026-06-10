@@ -12,24 +12,26 @@ import "github.com/shishobooks/shisho/pkg/models"
 // same types, same order) — the handler converts between them with
 // `UserSettingsUpdate(payload)`. Drifting either one breaks that cast.
 type UserSettingsPayload struct {
-	PreloadCount *int    `json:"preload_count,omitempty"`
-	FitMode      *string `json:"fit_mode,omitempty" tstype:"FitMode"`
-	EpubFontSize *int    `json:"viewer_epub_font_size,omitempty"`
-	EpubTheme    *string `json:"viewer_epub_theme,omitempty" tstype:"EpubTheme"`
-	EpubFlow     *string `json:"viewer_epub_flow,omitempty" tstype:"EpubFlow"`
-	GallerySize  *string `json:"gallery_size,omitempty" tstype:"GallerySize"`
-	HideChrome   *bool   `json:"viewer_hide_chrome,omitempty"`
+	PreloadCount  *int     `json:"preload_count,omitempty"`
+	FitMode       *string  `json:"fit_mode,omitempty" tstype:"FitMode"`
+	EpubFontSize  *int     `json:"viewer_epub_font_size,omitempty"`
+	EpubTheme     *string  `json:"viewer_epub_theme,omitempty" tstype:"EpubTheme"`
+	EpubFlow      *string  `json:"viewer_epub_flow,omitempty" tstype:"EpubFlow"`
+	GallerySize   *string  `json:"gallery_size,omitempty" tstype:"GallerySize"`
+	HideChrome    *bool    `json:"viewer_hide_chrome,omitempty"`
+	PlaybackSpeed *float64 `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
 }
 
 // UserSettingsResponse is the response for user settings.
 type UserSettingsResponse struct {
-	PreloadCount int    `json:"preload_count"`
-	FitMode      string `json:"fit_mode" tstype:"FitMode"`
-	EpubFontSize int    `json:"viewer_epub_font_size"`
-	EpubTheme    string `json:"viewer_epub_theme" tstype:"EpubTheme"`
-	EpubFlow     string `json:"viewer_epub_flow" tstype:"EpubFlow"`
-	GallerySize  string `json:"gallery_size" tstype:"GallerySize"`
-	HideChrome   bool   `json:"viewer_hide_chrome"`
+	PreloadCount  int     `json:"preload_count"`
+	FitMode       string  `json:"fit_mode" tstype:"FitMode"`
+	EpubFontSize  int     `json:"viewer_epub_font_size"`
+	EpubTheme     string  `json:"viewer_epub_theme" tstype:"EpubTheme"`
+	EpubFlow      string  `json:"viewer_epub_flow" tstype:"EpubFlow"`
+	GallerySize   string  `json:"gallery_size" tstype:"GallerySize"`
+	HideChrome    bool    `json:"viewer_hide_chrome"`
+	PlaybackSpeed float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -61,6 +63,20 @@ func IsValidEpubFlow(flow string) bool {
 	switch flow {
 	case models.EpubFlowPaginated, models.EpubFlowScrolled:
 		return true
+	}
+	return false
+}
+
+// IsValidPlaybackSpeed returns true if the speed is one of the allowed
+// discrete playback speed steps. Exact float comparison is safe here: every
+// allowed step is a multiple of 0.25, which is exactly representable in
+// binary floating point, so a JSON-decoded step compares equal to the
+// constant.
+func IsValidPlaybackSpeed(speed float64) bool {
+	for _, valid := range models.PlaybackSpeeds {
+		if speed == valid {
+			return true
+		}
 	}
 	return false
 }

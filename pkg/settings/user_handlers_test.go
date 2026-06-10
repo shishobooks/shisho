@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -175,6 +176,78 @@ func TestUpdateUserSettings_RejectsInvalidGallerySize(t *testing.T) {
 	err := h.updateUserSettings(c)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gallery_size")
+}
+
+func TestUpdateUserSettings_AcceptsValidPlaybackSpeeds(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "speedy-valid")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	for _, speed := range []string{"0.5", "0.75", "1", "1.25", "1.5", "1.75", "2", "2.5", "3"} {
+		body := `{"viewer_playback_speed": ` + speed + `}`
+		req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user", user)
+
+		require.NoError(t, h.updateUserSettings(c), "speed %s should be accepted", speed)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp UserSettingsResponse
+		require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
+		expected, err := strconv.ParseFloat(speed, 64)
+		require.NoError(t, err)
+		assert.InDelta(t, expected, resp.PlaybackSpeed, 0)
+	}
+}
+
+func TestUpdateUserSettings_RejectsInvalidPlaybackSpeeds(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "speedy-bad")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	// Out-of-range values and in-range values that aren't one of the
+	// discrete steps must both be rejected.
+	for _, speed := range []string{"0", "-1", "0.25", "1.1", "1.999", "3.5", "10"} {
+		body := `{"viewer_playback_speed": ` + speed + `}`
+		req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user", user)
+
+		err := h.updateUserSettings(c)
+		require.Error(t, err, "speed %s should be rejected", speed)
+		assert.Contains(t, err.Error(), "viewer_playback_speed")
+	}
+}
+
+func TestGetUserSettings_DefaultsToNormalPlaybackSpeed(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "speedy-default")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/user", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", user)
+
+	require.NoError(t, h.getUserSettings(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp UserSettingsResponse
+	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
+	assert.InDelta(t, 1.0, resp.PlaybackSpeed, 0)
 }
 
 func TestGetUserSettings_DefaultsToMediumGallerySize(t *testing.T) {

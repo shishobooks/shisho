@@ -3,15 +3,29 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import type { Book, File } from "@/types";
 
 import M4BReader from "./M4BReader";
+
+// The player reads/writes the persisted playback speed through the
+// user-settings hooks; mock them so tests control the stored speed and can
+// assert on the persistence call without a QueryClient or network.
+vi.mock("@/hooks/queries/settings", () => ({
+  useUserSettings: vi.fn(),
+  useUpdateUserSettings: vi.fn(),
+}));
 
 // jsdom does not implement the HTMLMediaElement playback pipeline. Stub the
 // methods so the component can call them, and let tests drive currentTime /
 // duration / paused manually plus dispatch the media events they assert on.
 let playSpy: ReturnType<typeof vi.spyOn>;
 let pauseSpy: ReturnType<typeof vi.spyOn>;
+
+let updateSettingsMutate: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   playSpy = vi
@@ -23,6 +37,15 @@ beforeEach(() => {
   vi.spyOn(window.HTMLMediaElement.prototype, "load").mockImplementation(
     () => {},
   );
+
+  updateSettingsMutate = vi.fn();
+  vi.mocked(useUserSettings).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+  } as never);
+  vi.mocked(useUpdateUserSettings).mockReturnValue({
+    mutate: updateSettingsMutate,
+  } as never);
 });
 
 afterEach(() => {
@@ -208,6 +231,94 @@ describe("M4BReader", () => {
     fireEvent.loadedMetadata(audio);
     // 125s => 2:05
     expect(screen.getByText("2:05")).toBeInTheDocument();
+  });
+
+  describe("playback speed", () => {
+    it("defaults to 1x when no speed has been persisted", () => {
+      renderReader();
+      const combobox = screen.getByRole("combobox", {
+        name: /playback speed/i,
+      });
+      expect(combobox).toHaveTextContent("1x");
+      expect(getAudio().playbackRate).toBe(1);
+    });
+
+    it("applies the persisted speed from user settings to the audio element", () => {
+      vi.mocked(useUserSettings).mockReturnValue({
+        data: { viewer_playback_speed: 1.5 },
+        isLoading: false,
+      } as never);
+      renderReader();
+      expect(getAudio().playbackRate).toBe(1.5);
+      expect(
+        screen.getByRole("combobox", { name: /playback speed/i }),
+      ).toHaveTextContent("1.5x");
+    });
+
+    it("re-applies the speed after the media load resets the rate", () => {
+      vi.mocked(useUserSettings).mockReturnValue({
+        data: { viewer_playback_speed: 2.5 },
+        isLoading: false,
+      } as never);
+      renderReader();
+      const audio = getAudio();
+
+      // The HTML media load algorithm resets playbackRate to the default
+      // (1) as part of loading the resource, which can land after the
+      // component applied the persisted speed. Simulate the reset, then the
+      // metadata arriving.
+      audio.playbackRate = 1;
+      fireEvent.loadedMetadata(audio);
+
+      expect(audio.playbackRate).toBe(2.5);
+    });
+
+    it("changes the playback rate immediately when a speed is chosen", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+
+      await user.click(
+        screen.getByRole("combobox", { name: /playback speed/i }),
+      );
+      await user.click(await screen.findByRole("option", { name: "2x" }));
+
+      expect(getAudio().playbackRate).toBe(2);
+    });
+
+    it("persists the chosen speed through the user-settings mutation", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+
+      await user.click(
+        screen.getByRole("combobox", { name: /playback speed/i }),
+      );
+      await user.click(await screen.findByRole("option", { name: "0.75x" }));
+
+      expect(updateSettingsMutate).toHaveBeenCalledWith({
+        viewer_playback_speed: 0.75,
+      });
+    });
+
+    it("offers every discrete step from 0.5x to 3x", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+
+      await user.click(
+        screen.getByRole("combobox", { name: /playback speed/i }),
+      );
+      const options = await screen.findAllByRole("option");
+      expect(options.map((o) => o.textContent)).toEqual([
+        "0.5x",
+        "0.75x",
+        "1x",
+        "1.25x",
+        "1.5x",
+        "1.75x",
+        "2x",
+        "2.5x",
+        "3x",
+      ]);
+    });
   });
 
   describe("chapter navigation", () => {
