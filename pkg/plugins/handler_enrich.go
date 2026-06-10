@@ -17,60 +17,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-type searchPayload struct {
-	Query       string                       `json:"query" validate:"required"`
-	BookID      int                          `json:"book_id" validate:"required"`
-	FileID      *int                         `json:"file_id"`
-	Author      string                       `json:"author"`
-	Identifiers []mediafile.ParsedIdentifier `json:"identifiers"`
-}
-
-// EnrichSearchResult wraps ParsedMetadata with server-added fields for the
-// search HTTP response (sent to the frontend, not used by plugins).
-type EnrichSearchResult struct {
-	mediafile.ParsedMetadata
-	PluginScope    string   `json:"plugin_scope"`
-	PluginID       string   `json:"plugin_id"`
-	DisabledFields []string `json:"disabled_fields,omitempty"`
-}
-
-// PluginSearchError reports a plugin whose search() hook failed so the
-// frontend can surface it to the user instead of silently dropping it.
-type PluginSearchError struct {
-	PluginScope string `json:"plugin_scope"`
-	PluginID    string `json:"plugin_id"`
-	PluginName  string `json:"plugin_name"`
-	Message     string `json:"message"`
-}
-
-// PluginSearchSkipped reports an enricher that was skipped because it does
-// not declare support for the target file type. The frontend uses this to
-// distinguish "no plugins handle this file type" from "plugins ran and
-// returned nothing".
-type PluginSearchSkipped struct {
-	PluginScope string `json:"plugin_scope"`
-	PluginID    string `json:"plugin_id"`
-	PluginName  string `json:"plugin_name"`
-}
-
-// PluginSearchResponse is the HTTP response body for POST /plugins/search.
-// TotalPlugins is the number of candidate enricher runtimes considered for
-// this search (after library + mode filtering but before file-type skipping),
-// which lets the frontend distinguish "every enricher was skipped" from
-// "some enrichers ran and returned nothing".
-type PluginSearchResponse struct {
-	Results        []EnrichSearchResult  `json:"results"`
-	Errors         []PluginSearchError   `json:"errors,omitempty"`
-	SkippedPlugins []PluginSearchSkipped `json:"skipped_plugins,omitempty"`
-	TotalPlugins   int                   `json:"total_plugins"`
-}
-
 // searchMetadata runs search() across all enricher plugins available for manual invocation
 // and returns aggregated results.
 func (h *handler) searchMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var payload searchPayload
+	var payload PluginSearchPayload
 	if err := c.Bind(&payload); err != nil {
 		return errcodes.ValidationError(err.Error())
 	}

@@ -5,7 +5,10 @@ import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AvailablePlugin } from "@/hooks/queries/plugins";
+import type {
+  AvailablePlugin,
+  PluginCapabilities,
+} from "@/hooks/queries/plugins";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 import { filterPlugins } from "./discoverFilters";
@@ -37,6 +40,21 @@ vi.mock("sonner", () => ({
 
 // --- Test data ---
 
+// The generated capability types mirror Go's parsed-manifest structs, so
+// every field is present; these helpers fill the boilerplate.
+const enricherCaps = (fileTypes: string[]): PluginCapabilities => ({
+  identifierTypes: [],
+  metadataEnricher: { description: "", fields: [], fileTypes },
+});
+
+const converterCaps = (
+  sourceTypes: string[],
+  targetType: string,
+): PluginCapabilities => ({
+  identifierTypes: [],
+  inputConverter: { description: "", mimeTypes: [], sourceTypes, targetType },
+});
+
 const makePlugin = (
   overrides: Partial<AvailablePlugin> = {},
 ): AvailablePlugin => ({
@@ -51,7 +69,7 @@ const makePlugin = (
   scope: "shisho",
   versions: [
     {
-      capabilities: { metadataEnricher: { fileTypes: ["epub"] } },
+      capabilities: enricherCaps(["epub"]),
       changelog: "",
       compatible: true,
       downloadUrl: "",
@@ -115,7 +133,7 @@ describe("DiscoverTab", () => {
     const p = makePlugin({
       versions: [
         {
-          capabilities: { metadataEnricher: { fileTypes: ["epub"] } },
+          capabilities: enricherCaps(["epub"]),
           changelog: "",
           compatible: true,
           downloadUrl: "",
@@ -236,7 +254,7 @@ describe("DiscoverTab", () => {
       name: "Enricher Plugin",
       versions: [
         {
-          capabilities: { metadataEnricher: { fileTypes: ["epub"] } },
+          capabilities: enricherCaps(["epub"]),
           changelog: "",
           compatible: true,
           downloadUrl: "",
@@ -253,9 +271,7 @@ describe("DiscoverTab", () => {
       name: "Converter Plugin",
       versions: [
         {
-          capabilities: {
-            inputConverter: { sourceTypes: ["epub"], targetType: "pdf" },
-          },
+          capabilities: converterCaps(["epub"], "pdf"),
           changelog: "",
           compatible: true,
           downloadUrl: "",
@@ -286,9 +302,7 @@ describe("DiscoverTab", () => {
       name: "Converter Plugin",
       versions: [
         {
-          capabilities: {
-            inputConverter: { sourceTypes: ["epub"], targetType: "pdf" },
-          },
+          capabilities: converterCaps(["epub"], "pdf"),
           changelog: "",
           compatible: true,
           downloadUrl: "",

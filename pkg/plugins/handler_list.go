@@ -8,20 +8,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
-// availablePluginResponse is the response format for available plugins.
-type availablePluginResponse struct {
-	Scope       string                   `json:"scope"`
-	ID          string                   `json:"id"`
-	Name        string                   `json:"name"`
-	Overview    string                   `json:"overview"`
-	Description string                   `json:"description"`
-	Homepage    string                   `json:"homepage"`
-	ImageURL    string                   `json:"imageUrl"`
-	IsOfficial  bool                     `json:"is_official"`
-	Versions    []AnnotatedPluginVersion `json:"versions"`
-	Compatible  bool                     `json:"compatible"`
-}
-
 func (h *handler) listIdentifierTypes(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -53,7 +39,7 @@ func (h *handler) listAvailable(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	var result []availablePluginResponse
+	var result []AvailablePluginResponse
 
 	for _, repo := range repos {
 		if !repo.Enabled {
@@ -80,7 +66,7 @@ func (h *handler) listAvailable(c echo.Context) error {
 				}
 			}
 
-			result = append(result, availablePluginResponse{
+			result = append(result, AvailablePluginResponse{
 				Scope:       manifest.Scope,
 				ID:          p.ID,
 				Name:        p.Name,
@@ -96,7 +82,7 @@ func (h *handler) listAvailable(c echo.Context) error {
 	}
 
 	if result == nil {
-		result = []availablePluginResponse{}
+		result = []AvailablePluginResponse{}
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, result))
@@ -143,7 +129,7 @@ func (h *handler) retrieveAvailable(c echo.Context) error {
 				}
 			}
 
-			return errors.WithStack(c.JSON(http.StatusOK, availablePluginResponse{
+			return errors.WithStack(c.JSON(http.StatusOK, AvailablePluginResponse{
 				Scope:       manifest.Scope,
 				ID:          p.ID,
 				Name:        p.Name,

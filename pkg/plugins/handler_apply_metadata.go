@@ -11,22 +11,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-type applyPayload struct {
-	BookID         int            `json:"book_id" validate:"required"`
-	FileID         *int           `json:"file_id"`
-	Fields         map[string]any `json:"fields" validate:"required"`
-	FileName       *string        `json:"file_name"`
-	FileNameSource *string        `json:"file_name_source"`
-	PluginScope    string         `json:"plugin_scope" validate:"required"`
-	PluginID       string         `json:"plugin_id" validate:"required"`
-}
-
 func (h *handler) applyMetadata(c echo.Context) error {
 	if h.enrich == nil {
 		return errors.New("enrichment dependencies not available")
 	}
 
-	var payload applyPayload
+	var payload PluginApplyPayload
 	if err := c.Bind(&payload); err != nil {
 		return errcodes.ValidationError(err.Error())
 	}
@@ -73,9 +63,9 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// FileName specifically — file_name_source on its own is a no-op
 	// (there's nothing to source) and would be wasted state if it
 	// triggered the persist-side write block.
-	var overrides *applyOverrides
+	var overrides *ApplyOverrides
 	if payload.FileName != nil && *payload.FileName != "" {
-		overrides = &applyOverrides{
+		overrides = &ApplyOverrides{
 			FileName:       payload.FileName,
 			FileNameSource: payload.FileNameSource,
 		}
@@ -84,7 +74,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Extract multi-series entries from fields (array format from identify form).
 	if seriesEntries := extractSeriesEntries(payload.Fields); seriesEntries != nil {
 		if overrides == nil {
-			overrides = &applyOverrides{}
+			overrides = &ApplyOverrides{}
 		}
 		overrides.SeriesEntries = seriesEntries
 	}

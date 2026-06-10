@@ -102,7 +102,7 @@ func newApplyTestHandlerWithFinders(store *stubBookStoreForApply, pub *stubPubli
 // newApplyEchoContext creates an Echo context with the given fields payload and an all-access user.
 func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 	t.Helper()
-	payload := applyPayload{
+	payload := PluginApplyPayload{
 		BookID:      1,
 		Fields:      fields,
 		PluginScope: "test",
@@ -374,7 +374,7 @@ func TestApplyMetadata_ExplicitFileName_AppliesToSupplement(t *testing.T) {
 	// Build a payload that pins file_id at the supplement and explicitly
 	// sets file_name. newApplyEchoContextWithFileName doesn't carry file_id,
 	// so build the request inline.
-	payload := applyPayload{
+	payload := PluginApplyPayload{
 		BookID:      book.ID,
 		FileID:      &supplementID,
 		Fields:      map[string]any{},
@@ -497,7 +497,7 @@ func TestApplyMetadata_TrimsPublisherURL(t *testing.T) {
 // file_name_source — the new Phase 1 wire signal.
 func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileName string, fileNameSource string) echo.Context {
 	t.Helper()
-	payload := applyPayload{
+	payload := PluginApplyPayload{
 		BookID:      1,
 		Fields:      fields,
 		PluginScope: "test",

@@ -14,91 +14,62 @@ import { QueryKey as SeriesQueryKey } from "@/hooks/queries/series";
 import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
+  AddPluginRepositoryPayload,
+  AvailablePlugin,
+  InstallPluginPayload,
+  LibraryPluginOrderResponse,
   Plugin,
+  PluginApplyPayload,
+  PluginConfigResponse,
   PluginHookConfig,
   PluginIdentifierType,
   PluginRepository,
-  SeriesNumberUnit,
-} from "@/types/generated/models";
+  PluginSearchPayload,
+  PluginSearchResponse,
+  SetLibraryPluginOrderPayload,
+  SetPluginFieldSettingsPayload,
+  SetPluginOrderPayload,
+  SyncRepositoryResponse,
+  UpdatePluginPayload,
+} from "@/types";
 
-// Re-export generated types so consumers can import from this module
-// PluginHookConfig is re-exported as PluginOrder for backward compatibility
+// Re-export generated types so consumers can import from this module.
+// PluginHookConfig is re-exported as PluginOrder for backward compatibility.
+// The wire types (AvailablePlugin, PluginSearchResult, ...) are generated
+// from Go via tygo and re-exported (aliased) from @/types — never hand-define
+// them here (ADR 0004).
 export type {
+  AvailablePlugin,
+  ConfigField,
+  ConfigSchema,
+  InstallPluginPayload,
+  LibraryPluginOrderPlugin,
+  LibraryPluginOrderResponse,
   Plugin,
+  PluginApplyPayload,
+  PluginCapabilities,
+  PluginConfigResponse,
   PluginHookConfig as PluginOrder,
   PluginHookType,
+  PluginMode,
   PluginRepository,
+  PluginSearchError,
+  PluginSearchResponse,
+  PluginSearchResult,
+  PluginSearchSkipped,
   PluginStatus,
-} from "@/types/generated/models";
+  PluginVersion,
+  SyncRepositoryResponse,
+  UpdatePluginPayload,
+} from "@/types";
 export {
   PluginStatusActive,
   PluginStatusDisabled,
   PluginStatusMalfunctioned,
   PluginStatusNotSupported,
-} from "@/types/generated/models";
-
-export interface PluginCapabilities {
-  metadataEnricher?: { fileTypes?: string[]; fields?: string[] };
-  inputConverter?: { sourceTypes?: string[]; targetType?: string };
-  fileParser?: { types?: string[] };
-  outputGenerator?: { sourceTypes?: string[]; name?: string };
-  httpAccess?: { domains?: string[] };
-  fileAccess?: { level?: string };
-  ffmpegAccess?: Record<string, never>;
-  shellAccess?: { commands?: string[] };
-}
-
-export interface PluginVersion {
-  version: string;
-  minShishoVersion: string;
-  downloadUrl: string;
-  compatible: boolean;
-  changelog: string;
-  sha256: string;
-  manifestVersion: number;
-  releaseDate: string;
-  // Optional full URL to this version's release page (e.g. a GitHub release
-  // URL). When unset, the version card does not show a release link.
-  releaseUrl?: string;
-  capabilities?: PluginCapabilities;
-}
-
-export interface AvailablePlugin {
-  scope: string;
-  id: string;
-  name: string;
-  overview: string;
-  description: string;
-  homepage: string;
-  imageUrl: string;
-  is_official: boolean;
-  versions: PluginVersion[];
-  compatible: boolean;
-}
+} from "@/types";
 
 // --- Query Keys ---
-
-export interface ConfigField {
-  type: "string" | "boolean" | "number" | "select" | "textarea";
-  label: string;
-  description: string;
-  required: boolean;
-  secret: boolean;
-  default?: unknown;
-  min?: number | null;
-  max?: number | null;
-  options?: { value: string; label: string }[] | null;
-}
-
-export type ConfigSchema = Record<string, ConfigField>;
-
-export interface PluginConfigResponse {
-  schema: ConfigSchema;
-  values: Record<string, unknown>;
-  declaredFields?: string[];
-  fieldSettings?: Record<string, boolean>;
-  confidence_threshold?: number | null;
-}
 
 export enum QueryKey {
   PluginsInstalled = "PluginsInstalled",
@@ -217,15 +188,6 @@ export const usePluginIdentifierTypes = () => {
 
 // --- Mutations ---
 
-export interface InstallPluginPayload {
-  scope: string;
-  id: string;
-  name?: string;
-  version?: string;
-  download_url?: string;
-  sha256?: string;
-}
-
 export const useInstallPlugin = () => {
   const queryClient = useQueryClient();
 
@@ -289,11 +251,6 @@ export const useUninstallPlugin = () => {
     },
   });
 };
-
-export interface UpdatePluginPayload {
-  enabled?: boolean;
-  config?: Record<string, string>;
-}
 
 export const useUpdatePlugin = () => {
   const queryClient = useQueryClient();
@@ -400,10 +357,11 @@ export const useSetPluginOrder = () => {
   return useMutation<
     void,
     ShishoAPIError,
-    { hookType: string; order: { scope: string; id: string; mode: string }[] }
+    { hookType: string; order: SetPluginOrderPayload["order"] }
   >({
     mutationFn: ({ hookType, order }) => {
-      return API.request("PUT", `/plugins/order/${hookType}`, { order });
+      const payload: SetPluginOrderPayload = { order };
+      return API.request("PUT", `/plugins/order/${hookType}`, payload);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -416,7 +374,7 @@ export const useSetPluginOrder = () => {
 export const useAddRepository = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, ShishoAPIError, { url: string; scope: string }>({
+  return useMutation<void, ShishoAPIError, AddPluginRepositoryPayload>({
     mutationFn: (payload) => {
       return API.request("POST", "/plugins/repositories", payload);
     },
@@ -455,18 +413,20 @@ export const useSavePluginConfig = () => {
       config,
       confidence_threshold,
       clear_confidence_threshold,
-    }: {
-      scope: string;
-      id: string;
-      config: Record<string, string>;
-      confidence_threshold?: number | null;
-      clear_confidence_threshold?: boolean;
-    }) => {
-      return API.request<Plugin>("PATCH", `/plugins/installed/${scope}/${id}`, {
+    }: { scope: string; id: string } & Pick<
+      UpdatePluginPayload,
+      "config" | "confidence_threshold" | "clear_confidence_threshold"
+    >) => {
+      const payload: UpdatePluginPayload = {
         config,
         confidence_threshold,
         clear_confidence_threshold,
-      });
+      };
+      return API.request<Plugin>(
+        "PATCH",
+        `/plugins/installed/${scope}/${id}`,
+        payload,
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -489,11 +449,14 @@ export const useSavePluginFieldSettings = () => {
     }: {
       scope: string;
       id: string;
-      fields: Record<string, boolean>;
+      fields: SetPluginFieldSettingsPayload["fields"];
     }) => {
-      return API.request("PUT", `/plugins/installed/${scope}/${id}/fields`, {
-        fields,
-      });
+      const payload: SetPluginFieldSettingsPayload = { fields };
+      return API.request(
+        "PUT",
+        `/plugins/installed/${scope}/${id}/fields`,
+        payload,
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -514,10 +477,6 @@ export const useScanPlugins = () => {
     },
   });
 };
-
-export interface SyncRepositoryResponse extends PluginRepository {
-  update_refresh_error?: string;
-}
 
 export const useSyncRepository = () => {
   const queryClient = useQueryClient();
@@ -545,23 +504,7 @@ export const useSyncRepository = () => {
   );
 };
 
-// --- Plugin Mode ---
-
-export type PluginMode = "enabled" | "manual_only" | "disabled";
-
 // --- Per-Library Plugin Order ---
-
-export interface LibraryPluginOrderPlugin {
-  scope: string;
-  id: string;
-  name: string;
-  mode: PluginMode;
-}
-
-export interface LibraryPluginOrderResponse {
-  customized: boolean;
-  plugins: LibraryPluginOrderPlugin[];
-}
 
 export const useLibraryPluginOrder = (
   libraryId: string | undefined,
@@ -590,14 +533,15 @@ export const useSetLibraryPluginOrder = () => {
     {
       libraryId: string;
       hookType: string;
-      plugins: { scope: string; id: string; mode: string }[];
+      plugins: SetLibraryPluginOrderPayload["plugins"];
     }
   >({
     mutationFn: ({ libraryId, hookType, plugins }) => {
+      const payload: SetLibraryPluginOrderPayload = { plugins };
       return API.request(
         "PUT",
         `/libraries/${libraryId}/plugins/order/${hookType}`,
-        { plugins },
+        payload,
       );
     },
     onSuccess: (_, variables) => {
@@ -648,51 +592,6 @@ export const useResetAllLibraryPluginOrders = () => {
 
 // --- Metadata Search & Apply ---
 
-export interface PluginSearchResult {
-  title: string;
-  authors?: Array<{ name: string; role?: string }>;
-  description?: string;
-  release_date?: string;
-  publisher?: string;
-  subtitle?: string;
-  series?: string;
-  series_number?: number;
-  series_number_unit?: SeriesNumberUnit;
-  genres?: string[];
-  tags?: string[];
-  narrators?: string[];
-  identifiers?: Array<{ type: string; value: string }>;
-  url?: string;
-  language?: string;
-  abridged?: boolean;
-  cover_url?: string;
-  cover_page?: number;
-  plugin_scope: string;
-  plugin_id: string;
-  disabled_fields?: string[];
-  confidence?: number;
-}
-
-export interface PluginSearchError {
-  plugin_scope: string;
-  plugin_id: string;
-  plugin_name: string;
-  message: string;
-}
-
-export interface PluginSearchSkipped {
-  plugin_scope: string;
-  plugin_id: string;
-  plugin_name: string;
-}
-
-export interface PluginSearchResponse {
-  results: PluginSearchResult[];
-  errors?: PluginSearchError[];
-  skipped_plugins?: PluginSearchSkipped[];
-  total_plugins?: number;
-}
-
 // PluginSearchParams is the immutable snapshot of a submitted Identify search.
 // The dialog holds one of these (distinct from the live input fields) and the
 // query is keyed on it, so submitting a new search supersedes any in-flight
@@ -726,16 +625,17 @@ export const usePluginSearch = (params: PluginSearchParams | null) => {
     queryFn: ({ signal }) => {
       // params is non-null here because the query is disabled otherwise.
       const p = params as PluginSearchParams;
+      const payload: PluginSearchPayload = {
+        query: p.query,
+        book_id: p.bookId,
+        file_id: p.fileId,
+        author: p.author || undefined,
+        identifiers: p.identifiers?.length ? p.identifiers : undefined,
+      };
       return API.request<PluginSearchResponse>(
         "POST",
         "/plugins/search",
-        {
-          query: p.query,
-          book_id: p.bookId,
-          file_id: p.fileId,
-          author: p.author || undefined,
-          identifiers: p.identifiers?.length ? p.identifiers : undefined,
-        },
+        payload,
         null,
         signal,
       );
@@ -743,21 +643,6 @@ export const usePluginSearch = (params: PluginSearchParams | null) => {
     placeholderData: keepPreviousData,
   });
 };
-
-export interface PluginApplyPayload {
-  book_id: number;
-  file_id?: number;
-  fields: Record<string, unknown>;
-  /** Optional override for `file.Name`. Phase 1 backend treats an empty
-   * string as absent; only set when the user explicitly opts the Name
-   * field into the apply payload. */
-  file_name?: string;
-  /** Source attribution for `file.Name`. `"plugin"` when the saved value
-   * matches the plugin's proposal, `"user"` when the user edited it. */
-  file_name_source?: "plugin" | "user";
-  plugin_scope: string;
-  plugin_id: string;
-}
 
 export const usePluginApply = () => {
   const queryClient = useQueryClient();

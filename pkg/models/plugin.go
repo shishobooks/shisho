@@ -31,6 +31,7 @@ const (
 
 // Plugin mode constants for hook config entries.
 const (
+	//tygo:emit export type PluginMode = typeof PluginModeEnabled | typeof PluginModeManualOnly | typeof PluginModeDisabled;
 	PluginModeEnabled    = "enabled"
 	PluginModeManualOnly = "manual_only"
 	PluginModeDisabled   = "disabled"
@@ -95,7 +96,7 @@ type PluginHookConfig struct {
 	Scope    string `bun:",pk" json:"scope"`
 	PluginID string `bun:",pk" json:"plugin_id"`
 	Position int    `bun:",notnull" json:"position"`
-	Mode     string `bun:",notnull,default:'enabled'" json:"mode"`
+	Mode     string `bun:",notnull,default:'enabled'" json:"mode" tstype:"PluginMode"`
 }
 
 type LibraryPluginCustomization struct {
@@ -113,7 +114,7 @@ type LibraryPluginHookConfig struct {
 	Scope     string `bun:",pk" json:"scope"`
 	PluginID  string `bun:",pk" json:"plugin_id"`
 	Position  int    `bun:",notnull" json:"position"`
-	Mode      string `bun:",notnull,default:'enabled'" json:"mode"`
+	Mode      string `bun:",notnull,default:'enabled'" json:"mode" tstype:"PluginMode"`
 }
 
 // PluginFieldSetting stores global field enable/disable settings for a plugin.

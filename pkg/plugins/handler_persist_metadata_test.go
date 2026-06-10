@@ -863,7 +863,7 @@ func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
 }
 
 // TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent locks in
-// the boundary invariant that an `applyOverrides` with an empty FileName does
+// the boundary invariant that an `ApplyOverrides` with an empty FileName does
 // not write through to file.Name, even when paired with a non-empty
 // FileNameSource. The applyMetadata wire layer already guards on
 // `payload.FileName != ""`, but persistMetadata is also reachable from
@@ -901,7 +901,7 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testin
 
 	emptyName := ""
 	manualSource := "manual"
-	overrides := &applyOverrides{
+	overrides := &ApplyOverrides{
 		FileName:       &emptyName,
 		FileNameSource: &manualSource,
 	}

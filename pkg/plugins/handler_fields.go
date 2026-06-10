@@ -9,22 +9,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
-// setFieldSettingsPayload is the payload for setting field settings.
-type setFieldSettingsPayload struct {
-	Fields map[string]bool `json:"fields" validate:"required"`
-}
-
-// fieldSettingsResponse is the response for field settings endpoints.
-type fieldSettingsResponse struct {
-	Fields map[string]bool `json:"fields"`
-}
-
-// libraryFieldSettingsResponse is the response for library field settings endpoints.
-type libraryFieldSettingsResponse struct {
-	Fields     map[string]bool `json:"fields"`
-	Customized bool            `json:"customized"`
-}
-
 func (h *handler) getFieldSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 	scope := c.Param("scope")
@@ -37,7 +21,7 @@ func (h *handler) getFieldSettings(c echo.Context) error {
 	}
 	if rt.Manifest().Capabilities.MetadataEnricher == nil {
 		// Not an enricher - return empty response
-		return c.JSON(http.StatusOK, fieldSettingsResponse{Fields: nil})
+		return c.JSON(http.StatusOK, FieldSettingsResponse{Fields: nil})
 	}
 
 	settings, err := h.service.GetFieldSettings(ctx, scope, id)
@@ -45,7 +29,7 @@ func (h *handler) getFieldSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, fieldSettingsResponse{
+	return c.JSON(http.StatusOK, FieldSettingsResponse{
 		Fields: settings,
 	})
 }
@@ -67,7 +51,7 @@ func (h *handler) setFieldSettings(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "plugin is not a metadata enricher")
 	}
 
-	var payload setFieldSettingsPayload
+	var payload SetFieldSettingsPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}
@@ -113,7 +97,7 @@ func (h *handler) getLibraryFieldSettings(c echo.Context) error {
 	}
 	if rt.Manifest().Capabilities.MetadataEnricher == nil {
 		// Not an enricher - return empty response
-		return c.JSON(http.StatusOK, libraryFieldSettingsResponse{Fields: nil, Customized: false})
+		return c.JSON(http.StatusOK, LibraryFieldSettingsResponse{Fields: nil, Customized: false})
 	}
 
 	settings, err := h.service.GetLibraryFieldSettings(ctx, libraryID, scope, pluginID)
@@ -123,7 +107,7 @@ func (h *handler) getLibraryFieldSettings(c echo.Context) error {
 
 	customized := len(settings) > 0
 
-	return c.JSON(http.StatusOK, libraryFieldSettingsResponse{
+	return c.JSON(http.StatusOK, LibraryFieldSettingsResponse{
 		Fields:     settings,
 		Customized: customized,
 	})
@@ -151,7 +135,7 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "plugin is not a metadata enricher")
 	}
 
-	var payload setFieldSettingsPayload
+	var payload SetFieldSettingsPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}

@@ -6,6 +6,7 @@ Shisho's plugin system allows third-party JavaScript to extend file parsing, met
 
 ```
 pkg/plugins/
+  types.go          - All HTTP API request/response types (tygo input, see below)
   manifest.go       - Manifest parsing and types
   runtime.go        - Goja VM wrapper, plugin loading
   manager.go        - Plugin lifecycle coordination
@@ -39,6 +40,41 @@ pkg/plugins/
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
+
+## HTTP API Types (types.go)
+
+Every request/response payload for the plugin HTTP API lives in `types.go` and
+is generated to TypeScript via tygo (ADR 0004 Plugin API surface amendment:
+**if it crosses the HTTP API, Go owns it**). The tygo entry includes
+`types.go`, `manifest.go`, and `repository.go` (the manifest-shaped structs the
+payloads reference) and outputs `app/types/generated/plugins.ts`;
+`pkg/mediafile` is also generated (for `ParsedMetadata`, which
+`EnrichSearchResult` embeds with `tstype:",extends"`).
+
+Conventions and gotchas specific to this surface:
+
+- **camelCase exemption**: manifest and repository-index passthrough fields
+  (`declaredFields`, `fieldSettings`, `imageUrl`, all of `ConfigField`,
+  `Capabilities`, `PluginVersion`) keep their camelCase wire format. Server-added
+  fields on the same responses use snake_case (`is_official`,
+  `confidence_threshold`). Do NOT snake_case the passthrough fields — that is a
+  breaking wire change.
+- **Naming**: the available-plugin HTTP response is `AvailablePluginResponse`;
+  the similarly-named `AvailablePlugin` (repository.go) is the repository-index
+  entry. The frontend barrel aliases the generated names to the established
+  frontend names (`AvailablePluginResponse as AvailablePlugin`,
+  `AnnotatedPluginVersion as PluginVersion`, `Capabilities as PluginCapabilities`,
+  `EnrichSearchResult as PluginSearchResult`) in `app/types/index.ts`.
+- **omitempty on request payloads is tygo-only**: optional non-pointer fields on
+  payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
+  tygo emits `?`; payloads are only unmarshaled server-side, so this never
+  affects the wire.
+- **`SeriesEntry` / `ApplyOverrides` are not wire types**: they're parsed out of
+  `PluginApplyPayload.Fields`' untyped map. Their generated TS mirrors are a
+  side effect the frontend never imports.
+- **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
+  the search and config responses (exact sorted-key assertions). Extend it when
+  adding fields to heavily-consumed responses.
 
 ## Plugin SDK (`@shisho/plugin-sdk`)
 
@@ -626,6 +662,14 @@ Repositories provide a `repository.json` manifest:
 **Mutations:** `useInstallPlugin()`, `useUninstallPlugin()`, `useUpdatePlugin()`, `useUpdatePluginVersion()`, `useSetPluginOrder()`, `useSavePluginConfig()`, `useSavePluginFieldSettings()`, `useScanPlugins()`, `useSyncRepository()`, `useAddRepository()`, `useRemoveRepository()`
 
 **Note:** `usePluginConfig` returns `declaredFields` and `fieldSettings` for enrichers, displayed in `PluginConfigDialog`.
+
+**Types:** all wire types consumed by these hooks (`AvailablePlugin`,
+`PluginVersion`, `PluginCapabilities`, `ConfigField`, `ConfigSchema`,
+`PluginConfigResponse`, `PluginSearchResult`, `PluginApplyPayload`, ...) are
+generated from `pkg/plugins/types.go` / `manifest.go` / `repository.go` and
+re-exported (aliased) through `app/types/index.ts`; the hooks file re-exports
+them for its consumers but never hand-defines them. View-models with no wire
+meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 
 ## Testing
 

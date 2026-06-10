@@ -131,11 +131,28 @@ function makeBook(overrides: Partial<Book> = {}): Book {
   } as Book;
 }
 
+// PluginSearchResult extends the generated ParsedMetadata, whose non-pointer
+// Go fields are always present on the wire; fill them with zero values here.
 function response(title: string): PluginSearchResponse {
   return {
     results: [
       {
         title,
+        subtitle: "",
+        authors: [],
+        narrators: [],
+        series: "",
+        genres: [],
+        tags: [],
+        description: "",
+        publisher: "",
+        url: "",
+        cover_mime_type: "",
+        cover_url: "",
+        duration: 0,
+        bitrate_bps: 0,
+        identifiers: [],
+        chapters: [],
         plugin_scope: "shisho",
         plugin_id: "test",
       },

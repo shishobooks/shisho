@@ -12,14 +12,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
-type pluginConfigResponse struct {
-	Schema              ConfigSchema           `json:"schema"`
-	Values              map[string]interface{} `json:"values"`
-	DeclaredFields      []string               `json:"declaredFields"`
-	FieldSettings       map[string]bool        `json:"fieldSettings"`
-	ConfidenceThreshold *float64               `json:"confidence_threshold"`
-}
-
 // getManifest returns the raw manifest.json for an installed plugin.
 func (h *handler) getManifest(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -95,7 +87,7 @@ func (h *handler) getConfig(c echo.Context) error {
 		confidenceThreshold = plugin.ConfidenceThreshold
 	}
 
-	return c.JSON(http.StatusOK, pluginConfigResponse{
+	return c.JSON(http.StatusOK, PluginConfigResponse{
 		Schema:              schema,
 		Values:              values,
 		DeclaredFields:      declaredFields,

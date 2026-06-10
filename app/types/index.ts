@@ -59,6 +59,44 @@ export {
   type Chapter as AudnexusChapter,
 } from "./generated/audnexus";
 export {
+  type ParsedAuthor,
+  type ParsedChapter,
+  type ParsedIdentifier,
+  type ParsedMetadata,
+} from "./generated/mediafile";
+// Plugin API surface (ADR 0004 amendment). Aliased where the Go name differs
+// from the established frontend name: the wire response for an available
+// plugin is AvailablePluginResponse (the bare AvailablePlugin in generated
+// plugins.ts is the repository-index entry, which the frontend never
+// consumes), versions arrive annotated with compatibility, search results are
+// EnrichSearchResult, and Capabilities is too generic a name to export bare.
+// The Set*/Add* payload names gain a Plugin qualifier because the bare Go
+// names (scoped by package plugins) are too generic for the global barrel.
+export {
+  type AddRepositoryPayload as AddPluginRepositoryPayload,
+  type AnnotatedPluginVersion as PluginVersion,
+  type AvailablePluginResponse as AvailablePlugin,
+  type Capabilities as PluginCapabilities,
+  type ConfigField,
+  type ConfigFieldType,
+  type ConfigSchema,
+  type EnrichSearchResult as PluginSearchResult,
+  type InstallPluginPayload,
+  type LibraryPluginOrderPlugin,
+  type LibraryPluginOrderResponse,
+  type PluginApplyPayload,
+  type PluginConfigResponse,
+  type PluginSearchError,
+  type PluginSearchPayload,
+  type PluginSearchResponse,
+  type PluginSearchSkipped,
+  type SetFieldSettingsPayload as SetPluginFieldSettingsPayload,
+  type SetLibraryOrderPayload as SetLibraryPluginOrderPayload,
+  type SetOrderPayload as SetPluginOrderPayload,
+  type SyncRepositoryResponse,
+  type UpdatePluginPayload,
+} from "./generated/plugins";
+export {
   type UserSettingsResponse,
   type UserSettingsPayload,
   type ReviewCriteriaResponse,

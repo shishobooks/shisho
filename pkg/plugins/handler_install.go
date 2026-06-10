@@ -13,19 +13,10 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-type installPayload struct {
-	Scope       string `json:"scope" validate:"required"`
-	ID          string `json:"id" validate:"required"`
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	DownloadURL string `json:"download_url"`
-	SHA256      string `json:"sha256"`
-}
-
 func (h *handler) install(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var payload installPayload
+	var payload InstallPluginPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}

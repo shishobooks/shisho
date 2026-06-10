@@ -1,5 +1,7 @@
 type_mappings:
   time.Time: "string /* RFC3339 */"
+  # time.Duration marshals as int64 nanoseconds (mediafile.ParsedMetadata.Duration).
+  time.Duration: "number /* nanoseconds */"
   # When a response struct embeds a model with `tstype:",extends"`, tygo emits
   # the package-qualified selector (e.g. `extends models.Genre`). Map it to the
   # bare interface name so the generated `extends` matches the `import { Genre }`
@@ -15,6 +17,10 @@ type_mappings:
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
   models.Book: "Book"
   models.Publisher: "Publisher"
+  # plugins.ts's SyncRepositoryResponse embeds the repository model;
+  # EnrichSearchResult embeds mediafile.ParsedMetadata.
+  models.PluginRepository: "PluginRepository"
+  mediafile.ParsedMetadata: "ParsedMetadata"
   # Models referenced by name in list envelopes (`tstype:"User[]"` etc.) need a
   # mapping so the generated type resolves to the bare interface, not `any`.
   models.User: "User"
@@ -141,3 +147,20 @@ packages:
     output_path: "app/types/generated/cache.ts"
     include_files:
       - handlers.go
+  - path: "github.com/shishobooks/shisho/pkg/mediafile"
+    output_path: "app/types/generated/mediafile.ts"
+    frontmatter: |
+      import { SeriesNumberUnit } from "@/types";
+    include_files:
+      - mediafile.go
+  # The plugin HTTP API surface (ADR 0004 amendment): types.go holds the
+  # request/response payloads; manifest.go and repository.go hold the
+  # manifest-shaped structs they reference (camelCase passthrough exemption).
+  - path: "github.com/shishobooks/shisho/pkg/plugins"
+    output_path: "app/types/generated/plugins.ts"
+    frontmatter: |
+      import { ParsedIdentifier, ParsedMetadata, PluginMode, PluginRepository } from "@/types";
+    include_files:
+      - types.go
+      - manifest.go
+      - repository.go

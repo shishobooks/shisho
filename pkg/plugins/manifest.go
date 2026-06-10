@@ -109,8 +109,13 @@ type ShellAccessCap struct {
 
 type ConfigSchema map[string]ConfigField
 
+// ConfigField describes one entry of a plugin's configSchema as parsed from
+// the manifest. Keys stay camelCase on the wire (manifest passthrough
+// exemption, ADR 0004).
+//
+//tygo:emit export type ConfigFieldType = "string" | "boolean" | "number" | "select" | "textarea";
 type ConfigField struct {
-	Type        string         `json:"type"` // string, boolean, number, select, textarea
+	Type        string         `json:"type" tstype:"ConfigFieldType"`
 	Label       string         `json:"label"`
 	Description string         `json:"description"`
 	Required    bool           `json:"required"`
