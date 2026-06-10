@@ -61,7 +61,7 @@ Combining two resources of the same type into one, transferring all associations
 
 **Resync**:
 Re-running the scan pipeline for an existing book or file, in one of three modes: scan (pick up new metadata without overwriting manual edits), refresh (re-scan as if new, re-enriching via plugins), or reset (clear all metadata including manual edits and re-scan from file metadata only, without plugins).
-_Avoid_: rescan (in code; UI copy may still say "Rescan")
+_Avoid_: rescan (in new code; some existing frontend identifiers and UI copy still say "Rescan")
 
 **Sidecar**:
 A `.metadata.json` file placed alongside a book or file that provides metadata overrides.

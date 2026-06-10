@@ -145,10 +145,15 @@ Alternatives considered for the manifest-shaped types:
   the existing "SDK must stay in sync with Go" rule; that is a separate
   boundary and is not changed by this decision.
 
-One documented exemption: manifest passthrough keeps its camelCase wire format
-rather than the project's snake_case JSON convention, because the manifest
-format itself is camelCase and changing the wire shape is a breaking change
-out of scope for type generation.
+One documented exemption: manifest and repository-index passthrough keeps its
+camelCase wire format rather than the project's snake_case JSON convention,
+because those source formats are camelCase and changing the wire shape is a
+breaking change out of scope for type generation. Server-added fields on the
+same responses keep snake_case (the available-plugin listing already mixes
+`imageUrl` with `is_official`).
+
+Implementation of this amendment is tracked in #383 (plugin API surface
+end-to-end through tygo) and #384 (remaining type-boundary stragglers).
 
 ## Consequences
 

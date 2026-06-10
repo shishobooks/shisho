@@ -80,7 +80,7 @@ filename := filepath.Base(fullPath)
 file.CoverImageFilename = &filename
 ```
 
-**JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`.
+**JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`. Exception: plugin manifest and repository-index passthrough fields keep their camelCase wire format (see the Plugin API surface amendment in ADR 0004).
 
 **API types are generated from Go via tygo (no anonymous responses, no hand-written TS).** Go is the single source of truth for every request and response shape. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`) for the rationale. The rules:
 - Every request and response payload is a named, exported Go struct in the package's `types.go`. No handler returns an anonymous struct, `echo.Map`, or `map[string]any`. A response that conveys nothing the client cannot already derive returns `204 No Content` instead of a body.
