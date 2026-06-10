@@ -34,11 +34,12 @@ const (
 )
 
 const (
-	// The tygo:emit lines mirror PlaybackSpeeds (below) into the generated
-	// TS (a const array plus a union type) so the player's speed menu and
-	// the backend validation share the same set of values. tygo only
-	// processes const/type declarations, so the directives live here rather
-	// than on the var. Keep the emitted list in sync with PlaybackSpeeds.
+	// The tygo:emit lines mirror the Go PlaybackSpeeds var into the
+	// generated TS (a const array plus a union type) so the player's speed
+	// menu and the backend validation share the same set of values. tygo
+	// only processes const/type declarations, so the directives live here
+	// rather than on the var. Keep the emitted list in sync with
+	// PlaybackSpeeds.
 	//
 	//tygo:emit export const PlaybackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
 	//tygo:emit export type PlaybackSpeed = (typeof PlaybackSpeeds)[number];

@@ -13,6 +13,22 @@ type handler struct {
 	settingsService *Service
 }
 
+// newUserSettingsResponse maps the settings model onto the wire shape.
+// Shared by get and update so the two endpoints can't drift as fields are
+// added.
+func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse {
+	return UserSettingsResponse{
+		PreloadCount:  settings.ViewerPreloadCount,
+		FitMode:       settings.ViewerFitMode,
+		EpubFontSize:  settings.EpubFontSize,
+		EpubTheme:     settings.EpubTheme,
+		EpubFlow:      settings.EpubFlow,
+		GallerySize:   settings.GallerySize,
+		HideChrome:    settings.ViewerHideChrome,
+		PlaybackSpeed: settings.PlaybackSpeed,
+	}
+}
+
 func (h *handler) getUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -26,16 +42,7 @@ func (h *handler) getUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, UserSettingsResponse{
-		PreloadCount:  settings.ViewerPreloadCount,
-		FitMode:       settings.ViewerFitMode,
-		EpubFontSize:  settings.EpubFontSize,
-		EpubTheme:     settings.EpubTheme,
-		EpubFlow:      settings.EpubFlow,
-		GallerySize:   settings.GallerySize,
-		HideChrome:    settings.ViewerHideChrome,
-		PlaybackSpeed: settings.PlaybackSpeed,
-	})
+	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
 }
 
 func (h *handler) updateUserSettings(c echo.Context) error {
@@ -81,14 +88,5 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, UserSettingsResponse{
-		PreloadCount:  settings.ViewerPreloadCount,
-		FitMode:       settings.ViewerFitMode,
-		EpubFontSize:  settings.EpubFontSize,
-		EpubTheme:     settings.EpubTheme,
-		EpubFlow:      settings.EpubFlow,
-		GallerySize:   settings.GallerySize,
-		HideChrome:    settings.ViewerHideChrome,
-		PlaybackSpeed: settings.PlaybackSpeed,
-	})
+	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
 }

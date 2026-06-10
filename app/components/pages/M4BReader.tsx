@@ -109,7 +109,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const { data: settings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
   const persistedSpeed = settings?.viewer_playback_speed ?? 1;
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(persistedSpeed);
+  const [playbackSpeed, setPlaybackSpeed] =
+    useState<PlaybackSpeed>(persistedSpeed);
   useEffect(() => {
     setPlaybackSpeed(persistedSpeed);
   }, [persistedSpeed]);
