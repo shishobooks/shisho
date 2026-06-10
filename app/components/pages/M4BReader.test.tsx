@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import type { Book, File } from "@/types";
+import { SEEK_TIMEOUT_MS } from "@/utils/audioCodec";
 
 import M4BReader from "./M4BReader";
 
@@ -50,6 +51,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Remove any per-test userAgent override (own property) so the prototype
+  // getter is visible again for the next test.
+  delete (window.navigator as { userAgent?: string }).userAgent;
   document.title = "";
 });
 
@@ -93,6 +97,21 @@ const book = {
   authors: [{ id: 2, book_id: 7, person_id: 5, person: authorPerson }],
   files: [file],
 } as unknown as Book;
+
+// jsdom defines navigator.userAgent on the prototype; override it with an own
+// property so codec-compatibility tests can impersonate specific browsers.
+// vi.restoreAllMocks does not undo defineProperty, so remove it in afterEach.
+const setUserAgent = (ua: string) => {
+  Object.defineProperty(window.navigator, "userAgent", {
+    value: ua,
+    configurable: true,
+  });
+};
+
+const CHROME_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const SAFARI_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
 
 const renderReader = (props?: { book?: Book; file?: File }) =>
   render(
@@ -489,6 +508,176 @@ describe("M4BReader", () => {
       expect(
         screen.getByRole("button", { name: /skip forward 30 seconds/i }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("codec compatibility", () => {
+    const fileWithCodec = (codec: string | undefined): File =>
+      ({ ...file, audiobook_codec: codec }) as unknown as File;
+
+    it("shows a message recommending Safari when the stored codec is xHE-AAC and the browser cannot play it", () => {
+      setUserAgent(CHROME_UA);
+      renderReader({ file: fileWithCodec("xHE-AAC") });
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/xHE-AAC/);
+      expect(alert).toHaveTextContent(/Safari/);
+    });
+
+    it("shows no message for supported codecs", () => {
+      setUserAgent(CHROME_UA);
+      for (const codec of ["AAC-LC", "HE-AAC"]) {
+        const { unmount } = renderReader({ file: fileWithCodec(codec) });
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it("shows no message when the file has no stored codec", () => {
+      setUserAgent(CHROME_UA);
+      renderReader({ file: fileWithCodec(undefined) });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("shows no message for xHE-AAC in Safari, which can play it", () => {
+      setUserAgent(SAFARI_UA);
+      renderReader({ file: fileWithCodec("xHE-AAC") });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("leaves the player controls usable alongside the codec message", () => {
+      setUserAgent(CHROME_UA);
+      renderReader({ file: fileWithCodec("xHE-AAC") });
+      expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("runtime playback failure backstop", () => {
+    it("shows the failure message when the audio element errors, even for a codec believed supported", () => {
+      setUserAgent(CHROME_UA);
+      renderReader({
+        file: { ...file, audiobook_codec: "AAC-LC" } as unknown as File,
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      // jsdom leaves audio.error as null; the handler treats an error event
+      // without an attached MediaError as a failure.
+      fireEvent.error(getAudio());
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/AAC-LC/);
+      expect(alert).toHaveTextContent(/Safari/);
+    });
+
+    it("ignores an aborted media error (user-initiated, not a codec problem)", () => {
+      renderReader();
+      const audio = getAudio();
+      Object.defineProperty(audio, "error", {
+        value: { code: 1 }, // MEDIA_ERR_ABORTED
+        configurable: true,
+      });
+      fireEvent.error(audio);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("shows the failure message when the stream stalls before any data is decodable", () => {
+      renderReader();
+      const audio = getAudio();
+      // jsdom's readyState defaults to 0 (HAVE_NOTHING); the xHE-AAC stuck
+      // signature is a stall at readyState <= HAVE_METADATA.
+      fireEvent.stalled(audio);
+      expect(screen.getByRole("alert")).toHaveTextContent(/Safari/);
+    });
+
+    it("does not treat a stall after data became playable as a codec failure", () => {
+      renderReader();
+      const audio = getAudio();
+      Object.defineProperty(audio, "readyState", {
+        value: 3, // HAVE_FUTURE_DATA: ordinary buffering hiccup
+        configurable: true,
+      });
+      fireEvent.stalled(audio);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("clears the failure message when the stream subsequently becomes playable", () => {
+      renderReader();
+      const audio = getAudio();
+      // A transient stall on a slow first load looks like the stuck signature
+      // (readyState is still HAVE_NOTHING while bytes trickle in), so the
+      // message appears...
+      fireEvent.stalled(audio);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+
+      // ...but once enough data arrives that the element reports it can play,
+      // the failure was a false alarm and the message must go away.
+      fireEvent.canPlay(audio);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("seek timeout guard", () => {
+    const markSeekingForever = (audio: HTMLAudioElement) => {
+      Object.defineProperty(audio, "seeking", {
+        value: true,
+        configurable: true,
+      });
+    };
+
+    it("pauses and shows the failure message when a seek never completes", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      const audio = getAudio();
+      markSeekingForever(audio);
+
+      await user.click(
+        screen.getByRole("button", { name: /skip forward 30 seconds/i }),
+      );
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(SEEK_TIMEOUT_MS);
+      });
+
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent(/Safari/);
+    });
+
+    it("does not flag a seek that completes normally", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      // jsdom's audio.seeking is false: the seek "completed" by the time the
+      // guard fires, so nothing should happen.
+      await user.click(
+        screen.getByRole("button", { name: /skip forward 30 seconds/i }),
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(SEEK_TIMEOUT_MS);
+      });
+
+      expect(pauseSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("cancels the pending guard when the seeked event fires", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      const audio = getAudio();
+      // Even though the element still reports seeking (stale mock), a seeked
+      // event means the seek completed and the guard must be cancelled.
+      markSeekingForever(audio);
+
+      await user.click(
+        screen.getByRole("button", { name: /skip forward 30 seconds/i }),
+      );
+      fireEvent.seeked(audio);
+
+      act(() => {
+        vi.advanceTimersByTime(SEEK_TIMEOUT_MS);
+      });
+
+      expect(pauseSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 });
