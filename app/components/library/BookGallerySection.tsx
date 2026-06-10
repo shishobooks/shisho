@@ -26,6 +26,8 @@ interface BookGallerySectionProps {
   query: BookGalleryQuery;
   title: string;
   emptyMessage?: string;
+  /** Series context forwarded to BookItem so it shows the series number */
+  seriesId?: number;
   /** Called when pagination page changes */
   onPageChange?: (page: number) => void;
   /** Called when gallery size changes */
@@ -37,6 +39,7 @@ export function BookGallerySection({
   query,
   title,
   emptyMessage,
+  seriesId,
   onPageChange,
   onSizeChange,
 }: BookGallerySectionProps) {
@@ -152,6 +155,7 @@ export function BookGallerySection({
             gallerySize={effectiveSize}
             key={book.id}
             libraryId={libraryId}
+            seriesId={seriesId}
           />
         ))}
       </div>

@@ -25,11 +25,24 @@ type ListSeriesResponse struct {
 	Total int              `json:"total"`
 }
 
+// ListSeriesBooksResponse is the envelope for the series books sub-resource.
+//
+//nolint:revive // ListSeriesBooksResponse name is mandated by the List{Entities}Response convention (ADR 0004)
+type ListSeriesBooksResponse struct {
+	Items []*models.Book `json:"items" tstype:"Book[]"`
+	Total int            `json:"total"`
+}
+
 type ListSeriesQuery struct {
 	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	LibraryID *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
+}
+
+type SubResourceQuery struct {
+	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Offset int `query:"offset" json:"offset,omitempty" validate:"min=0"`
 }
 
 type UpdateSeriesPayload struct {

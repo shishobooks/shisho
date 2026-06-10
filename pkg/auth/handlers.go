@@ -102,18 +102,18 @@ func (h *handler) me(c echo.Context) error {
 	// Read the session cookie directly
 	cookie, err := c.Cookie(CookieName)
 	if err != nil || cookie.Value == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Not authenticated"})
+		return errcodes.Unauthorized("Not authenticated")
 	}
 
 	// Validate the token
 	claims, err := h.authService.ValidateToken(cookie.Value)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+		return errcodes.Unauthorized("Invalid or expired token")
 	}
 
 	user, err := h.authService.GetUserByID(ctx, claims.UserID)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found"})
+		return errcodes.Unauthorized("User not found")
 	}
 
 	return c.JSON(http.StatusOK, buildMeResponse(user))

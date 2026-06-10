@@ -103,12 +103,12 @@ func IsValidGallerySize(size string) bool {
 // a generous upper bound that still rejects pathological input before
 // it reaches sortspec.Parse.
 type UpdateLibrarySettingsPayload struct {
-	SortSpec *string `json:"sort_spec" validate:"omitempty,max=200"`
+	SortSpec *string `json:"sort_spec" validate:"omitempty,max=200" tstype:"string | null"`
 }
 
 // LibrarySettingsResponse is the response for GET/PUT /settings/libraries/:library_id.
 type LibrarySettingsResponse struct {
-	SortSpec *string `json:"sort_spec"`
+	SortSpec *string `json:"sort_spec" tstype:"string | null"`
 }
 
 // ReviewCriteriaResponse is the response for GET /settings/review-criteria.

@@ -13,6 +13,7 @@ export {
   type MoveFilesResponse,
   type ResyncBookResponse,
   type ResyncFileResponse,
+  type ResyncMode,
   type ResyncPayload,
   type SeriesInput,
   type UpdateBookPayload,
@@ -27,7 +28,12 @@ export * from "./generated/auth";
 export * from "./generated/users";
 export * from "./generated/roles";
 export * from "./generated/search";
-export * from "./generated/series";
+export {
+  type SeriesResponse,
+  type ListSeriesQuery,
+  type UpdateSeriesPayload,
+  type MergeSeriesPayload,
+} from "./generated/series";
 export * from "./generated/people";
 export {
   type GenreResponse,
@@ -99,6 +105,8 @@ export {
 export {
   type UserSettingsResponse,
   type UserSettingsPayload,
+  type LibrarySettingsResponse,
+  type UpdateLibrarySettingsPayload,
   type ReviewCriteriaResponse,
   type PutReviewCriteriaPayload,
 } from "./generated/settings";

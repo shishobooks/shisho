@@ -59,24 +59,30 @@ export const useSeries = (
   });
 };
 
+export interface SeriesBooksQuery {
+  limit?: number;
+  offset?: number;
+}
+
 export const useSeriesBooks = (
   seriesId?: number,
+  query: SeriesBooksQuery = {},
   options: Omit<
-    UseQueryOptions<Book[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Book[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
-    queryKey: [QueryKey.SeriesBooks, seriesId],
+    queryKey: [QueryKey.SeriesBooks, seriesId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/series/${seriesId}/books`,
         null,
-        null,
+        query,
         signal,
       );
     },

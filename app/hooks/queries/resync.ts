@@ -6,16 +6,11 @@ import {
   File,
   type ResyncBookResponse,
   type ResyncFileResponse,
+  type ResyncPayload,
 } from "@/types";
 
 import { QueryKey } from "./books";
 import { QueryKey as ChaptersQueryKey } from "./chapters";
-
-export type RescanMode = "scan" | "refresh" | "reset";
-
-export interface ResyncPayload {
-  mode: RescanMode;
-}
 
 export const useResyncFile = () => {
   const queryClient = useQueryClient();

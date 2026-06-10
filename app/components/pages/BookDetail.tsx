@@ -70,7 +70,6 @@ import {
 } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
-import { type RescanMode } from "@/hooks/queries/resync";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
@@ -80,6 +79,7 @@ import {
   FileTypeCBZ,
   FileTypeEPUB,
   type File,
+  type ResyncMode,
 } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -873,7 +873,7 @@ const BookDetail = () => {
     setDownloadingFileId(null);
   };
 
-  const handleRescanFile = async (fileId: number, mode: RescanMode) => {
+  const handleRescanFile = async (fileId: number, mode: ResyncMode) => {
     setResyncingFileId(fileId);
     try {
       const result = await resyncFileMutation.mutateAsync({
@@ -894,7 +894,7 @@ const BookDetail = () => {
     }
   };
 
-  const handleRescanBook = async (mode: RescanMode) => {
+  const handleRescanBook = async (mode: ResyncMode) => {
     if (!id) return;
     try {
       const result = await resyncBookMutation.mutateAsync({

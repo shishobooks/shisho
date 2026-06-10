@@ -13,18 +13,18 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { type RescanMode } from "@/hooks/queries/resync";
+import { type ResyncMode } from "@/types";
 
 interface RescanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entityType: "book" | "file";
   entityName: string;
-  onConfirm: (mode: RescanMode) => void;
+  onConfirm: (mode: ResyncMode) => void;
   isPending: boolean;
 }
 
-const modes: { value: RescanMode; label: string; description: string }[] = [
+const modes: { value: ResyncMode; label: string; description: string }[] = [
   {
     value: "scan",
     label: "Scan for new metadata",
@@ -53,7 +53,7 @@ export function RescanDialog({
   onConfirm,
   isPending,
 }: RescanDialogProps) {
-  const [selectedMode, setSelectedMode] = useState<RescanMode>("scan");
+  const [selectedMode, setSelectedMode] = useState<ResyncMode>("scan");
 
   return (
     <Dialog
@@ -77,7 +77,7 @@ export function RescanDialog({
         <DialogBody>
           <RadioGroup
             className="gap-3"
-            onValueChange={(value) => setSelectedMode(value as RescanMode)}
+            onValueChange={(value) => setSelectedMode(value as ResyncMode)}
             value={selectedMode}
           >
             {modes.map((mode) => (
