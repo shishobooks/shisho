@@ -123,8 +123,8 @@ TypeScript duplicates. Concretely:
 ### Plugin API surface (amendment, June 2026)
 
 PRD #341 originally excluded "Plugin SDK types" from this work, which left the
-plugin HTTP API (the largest remaining surface, roughly 15 hand-written types
-in `app/hooks/queries/plugins.ts`) outside the convention. The follow-up audit
+plugin HTTP API (the largest remaining surface, roughly 15 hand-written wire
+types in `app/hooks/queries/plugins.ts`) outside the convention. The follow-up audit
 resolved the boundary: **if it crosses the HTTP API, Go owns it and tygo
 generates it.** That includes manifest-shaped types (capabilities, config
 schema, available-plugin listings), which are generated from Go's parsed
