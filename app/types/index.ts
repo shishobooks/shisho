@@ -70,7 +70,10 @@ export {
 // plugins.ts is the repository-index entry, which the frontend never
 // consumes), versions arrive annotated with compatibility, search results are
 // EnrichSearchResult, and Capabilities is too generic a name to export bare.
+// The Set*/Add* payload names gain a Plugin qualifier because the bare Go
+// names (scoped by package plugins) are too generic for the global barrel.
 export {
+  type AddRepositoryPayload as AddPluginRepositoryPayload,
   type AnnotatedPluginVersion as PluginVersion,
   type AvailablePluginResponse as AvailablePlugin,
   type Capabilities as PluginCapabilities,
@@ -87,6 +90,9 @@ export {
   type PluginSearchPayload,
   type PluginSearchResponse,
   type PluginSearchSkipped,
+  type SetFieldSettingsPayload as SetPluginFieldSettingsPayload,
+  type SetLibraryOrderPayload as SetLibraryPluginOrderPayload,
+  type SetOrderPayload as SetPluginOrderPayload,
   type SyncRepositoryResponse,
   type UpdatePluginPayload,
 } from "./generated/plugins";

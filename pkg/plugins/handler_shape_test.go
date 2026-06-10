@@ -15,7 +15,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
 )
 
 // Wire-shape regression tests for the heavily-consumed plugin responses
@@ -27,7 +26,7 @@ import (
 
 // installShapeEnricher writes an enricher plugin to disk, records it in the
 // DB, and loads it into a fresh manager.
-func installShapeEnricher(t *testing.T, db *bun.DB, service *Service) *Manager {
+func installShapeEnricher(t *testing.T, service *Service) *Manager {
 	t.Helper()
 
 	pluginDir := t.TempDir()
@@ -83,7 +82,6 @@ func installShapeEnricher(t *testing.T, db *bun.DB, service *Service) *Manager {
 
 	mgr := NewManager(service, pluginDir, "")
 	require.NoError(t, mgr.LoadPlugin(t.Context(), scope, id))
-	_ = db // db is owned by the caller; kept in the signature for symmetry
 	return mgr
 }
 
@@ -106,7 +104,7 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := installShapeEnricher(t, db, service)
+	mgr := installShapeEnricher(t, service)
 
 	book, _ := newApplyTestBookWithFile(t, "Some Title", "epub")
 	h := &handler{
@@ -189,7 +187,7 @@ func TestGetConfig_ResponseWireShape(t *testing.T) {
 
 	db := setupTestDB(t)
 	service := NewService(db)
-	mgr := installShapeEnricher(t, db, service)
+	mgr := installShapeEnricher(t, service)
 	h := &handler{service: service, manager: mgr}
 
 	e := echo.New()

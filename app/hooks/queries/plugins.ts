@@ -14,6 +14,7 @@ import { QueryKey as SeriesQueryKey } from "@/hooks/queries/series";
 import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
+  AddPluginRepositoryPayload,
   AvailablePlugin,
   InstallPluginPayload,
   LibraryPluginOrderResponse,
@@ -25,6 +26,9 @@ import type {
   PluginRepository,
   PluginSearchPayload,
   PluginSearchResponse,
+  SetLibraryPluginOrderPayload,
+  SetPluginFieldSettingsPayload,
+  SetPluginOrderPayload,
   SyncRepositoryResponse,
   UpdatePluginPayload,
 } from "@/types";
@@ -353,10 +357,11 @@ export const useSetPluginOrder = () => {
   return useMutation<
     void,
     ShishoAPIError,
-    { hookType: string; order: { scope: string; id: string; mode: string }[] }
+    { hookType: string; order: SetPluginOrderPayload["order"] }
   >({
     mutationFn: ({ hookType, order }) => {
-      return API.request("PUT", `/plugins/order/${hookType}`, { order });
+      const payload: SetPluginOrderPayload = { order };
+      return API.request("PUT", `/plugins/order/${hookType}`, payload);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -369,7 +374,7 @@ export const useSetPluginOrder = () => {
 export const useAddRepository = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, ShishoAPIError, { url: string; scope: string }>({
+  return useMutation<void, ShishoAPIError, AddPluginRepositoryPayload>({
     mutationFn: (payload) => {
       return API.request("POST", "/plugins/repositories", payload);
     },
@@ -408,18 +413,20 @@ export const useSavePluginConfig = () => {
       config,
       confidence_threshold,
       clear_confidence_threshold,
-    }: {
-      scope: string;
-      id: string;
-      config: Record<string, string>;
-      confidence_threshold?: number | null;
-      clear_confidence_threshold?: boolean;
-    }) => {
-      return API.request<Plugin>("PATCH", `/plugins/installed/${scope}/${id}`, {
+    }: { scope: string; id: string } & Pick<
+      UpdatePluginPayload,
+      "config" | "confidence_threshold" | "clear_confidence_threshold"
+    >) => {
+      const payload: UpdatePluginPayload = {
         config,
         confidence_threshold,
         clear_confidence_threshold,
-      });
+      };
+      return API.request<Plugin>(
+        "PATCH",
+        `/plugins/installed/${scope}/${id}`,
+        payload,
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -442,11 +449,14 @@ export const useSavePluginFieldSettings = () => {
     }: {
       scope: string;
       id: string;
-      fields: Record<string, boolean>;
+      fields: SetPluginFieldSettingsPayload["fields"];
     }) => {
-      return API.request("PUT", `/plugins/installed/${scope}/${id}/fields`, {
-        fields,
-      });
+      const payload: SetPluginFieldSettingsPayload = { fields };
+      return API.request(
+        "PUT",
+        `/plugins/installed/${scope}/${id}/fields`,
+        payload,
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -523,14 +533,15 @@ export const useSetLibraryPluginOrder = () => {
     {
       libraryId: string;
       hookType: string;
-      plugins: { scope: string; id: string; mode: string }[];
+      plugins: SetLibraryPluginOrderPayload["plugins"];
     }
   >({
     mutationFn: ({ libraryId, hookType, plugins }) => {
+      const payload: SetLibraryPluginOrderPayload = { plugins };
       return API.request(
         "PUT",
         `/libraries/${libraryId}/plugins/order/${hookType}`,
-        { plugins },
+        payload,
       );
     },
     onSuccess: (_, variables) => {
