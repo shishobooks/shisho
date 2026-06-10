@@ -13,6 +13,22 @@ type handler struct {
 	settingsService *Service
 }
 
+// newUserSettingsResponse maps the settings model onto the wire shape.
+// Shared by get and update so the two endpoints can't drift as fields are
+// added.
+func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse {
+	return UserSettingsResponse{
+		PreloadCount:  settings.ViewerPreloadCount,
+		FitMode:       settings.ViewerFitMode,
+		EpubFontSize:  settings.EpubFontSize,
+		EpubTheme:     settings.EpubTheme,
+		EpubFlow:      settings.EpubFlow,
+		GallerySize:   settings.GallerySize,
+		HideChrome:    settings.ViewerHideChrome,
+		PlaybackSpeed: settings.PlaybackSpeed,
+	}
+}
+
 func (h *handler) getUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -26,15 +42,7 @@ func (h *handler) getUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, UserSettingsResponse{
-		PreloadCount: settings.ViewerPreloadCount,
-		FitMode:      settings.ViewerFitMode,
-		EpubFontSize: settings.EpubFontSize,
-		EpubTheme:    settings.EpubTheme,
-		EpubFlow:     settings.EpubFlow,
-		GallerySize:  settings.GallerySize,
-		HideChrome:   settings.ViewerHideChrome,
-	})
+	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
 }
 
 func (h *handler) updateUserSettings(c echo.Context) error {
@@ -70,6 +78,9 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 	if payload.GallerySize != nil && !IsValidGallerySize(*payload.GallerySize) {
 		return errcodes.ValidationError("gallery_size must be 's', 'm', 'l', or 'xl'")
 	}
+	if payload.PlaybackSpeed != nil && !IsValidPlaybackSpeed(*payload.PlaybackSpeed) {
+		return errcodes.ValidationError("viewer_playback_speed must be one of 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, or 3")
+	}
 
 	settings, err := h.settingsService.UpdateUserSettings(
 		ctx, user.ID, UserSettingsUpdate(payload))
@@ -77,13 +88,5 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, UserSettingsResponse{
-		PreloadCount: settings.ViewerPreloadCount,
-		FitMode:      settings.ViewerFitMode,
-		EpubFontSize: settings.EpubFontSize,
-		EpubTheme:    settings.EpubTheme,
-		EpubFlow:     settings.EpubFlow,
-		GallerySize:  settings.GallerySize,
-		HideChrome:   settings.ViewerHideChrome,
-	})
+	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
 }

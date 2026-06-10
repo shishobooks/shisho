@@ -134,7 +134,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/settings"
     output_path: "app/types/generated/settings.ts"
     frontmatter: |
-      import { EpubFlow, EpubTheme, FitMode, GallerySize } from "@/types";
+      import { EpubFlow, EpubTheme, FitMode, GallerySize, PlaybackSpeed } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/cache"

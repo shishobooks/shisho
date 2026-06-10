@@ -58,6 +58,38 @@ func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
 	assert.Equal(t, models.EpubFlowScrolled, reloaded.EpubFlow)
 }
 
+func TestGetUserSettings_DefaultsPlaybackSpeedToNormal(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "frank")
+	svc := NewService(db)
+
+	settings, err := svc.GetUserSettings(context.Background(), user.ID)
+	require.NoError(t, err)
+	assert.InDelta(t, 1.0, settings.PlaybackSpeed, 0)
+}
+
+func TestUpdateUserSettings_PersistsPlaybackSpeed(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	user := createTestUser(t, db, "grace")
+	svc := NewService(db)
+
+	speed := 1.5
+	updated, err := svc.UpdateUserSettings(
+		context.Background(),
+		user.ID,
+		UserSettingsUpdate{PlaybackSpeed: &speed},
+	)
+	require.NoError(t, err)
+	assert.InDelta(t, 1.5, updated.PlaybackSpeed, 0)
+
+	// Re-read to confirm persistence
+	reloaded, err := svc.GetUserSettings(context.Background(), user.ID)
+	require.NoError(t, err)
+	assert.InDelta(t, 1.5, reloaded.PlaybackSpeed, 0)
+}
+
 // TestUpdateUserSettings_PartialUpdateDoesNotClobber verifies the core
 // reason UserSettingsUpdate uses pointer fields: a client that only
 // changes one setting should leave others alone, not overwrite them with

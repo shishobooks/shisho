@@ -20,9 +20,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import {
+  useUpdateUserSettings,
+  useUserSettings,
+} from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
-import type { Book, File } from "@/types";
+import {
+  PlaybackSpeeds,
+  type Book,
+  type File,
+  type PlaybackSpeed,
+} from "@/types";
 import {
   resolveChapters,
   resolvePlayback,
@@ -91,6 +100,39 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const [scrubValue, setScrubValue] = useState(0);
 
   const [coverError, setCoverError] = useState(false);
+
+  // Playback speed is a per-user setting so the chosen rate follows the
+  // listener across sessions and devices. Local state applies the rate
+  // immediately on change; the mutation persists it through the standard
+  // user-settings endpoint, and the effect below re-syncs if the server
+  // value changes from elsewhere.
+  const { data: settings } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
+  const persistedSpeed = settings?.viewer_playback_speed ?? 1;
+  const [playbackSpeed, setPlaybackSpeed] =
+    useState<PlaybackSpeed>(persistedSpeed);
+  useEffect(() => {
+    setPlaybackSpeed(persistedSpeed);
+  }, [persistedSpeed]);
+
+  // Apply the rate to the audio element whenever it changes (including the
+  // initial render, restoring the persisted speed).
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
+
+  const handleSpeedChange = useCallback(
+    (value: string) => {
+      // Values come from the PlaybackSpeeds list, so the cast is safe.
+      const speed = Number(value) as PlaybackSpeed;
+      setPlaybackSpeed(speed);
+      updateSettings.mutate({ viewer_playback_speed: speed });
+    },
+    [updateSettings],
+  );
 
   // Resolve the file's chapters into absolute second boundaries once. The pure
   // module handles unit conversion (ms -> s), sorting, and dropping chapters
@@ -336,6 +378,26 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
 
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">
             <span>{formatPlayerTime(displayTime)}</span>
+            {/* Speed control sits between the time labels; it applies the
+                rate immediately and persists it as a per-user setting. */}
+            <Select
+              onValueChange={handleSpeedChange}
+              value={String(playbackSpeed)}
+            >
+              <SelectTrigger
+                aria-label="Playback speed"
+                className="h-7 w-auto min-w-0 gap-1 px-2 text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PlaybackSpeeds.map((speed) => (
+                  <SelectItem key={speed} value={String(speed)}>
+                    {speed}x
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span>{formatPlayerTime(duration)}</span>
           </div>
 
@@ -409,6 +471,10 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           if (Number.isFinite(el.duration) && el.duration > 0) {
             setMediaDuration(el.duration);
           }
+          // The media load algorithm resets playbackRate to the default as
+          // part of loading the resource, which can land after the effect
+          // applied the persisted speed. Re-apply it once metadata arrives.
+          el.playbackRate = playbackSpeed;
         }}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}

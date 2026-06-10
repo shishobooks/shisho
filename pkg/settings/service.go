@@ -44,13 +44,14 @@ func (svc *Service) GetUserSettings(ctx context.Context, userID int) (*models.Us
 // persisted. This lets clients change one setting without having to read
 // and echo every other setting first.
 type UserSettingsUpdate struct {
-	PreloadCount *int
-	FitMode      *string
-	EpubFontSize *int
-	EpubTheme    *string
-	EpubFlow     *string
-	GallerySize  *string
-	HideChrome   *bool
+	PreloadCount  *int
+	FitMode       *string
+	EpubFontSize  *int
+	EpubTheme     *string
+	EpubFlow      *string
+	GallerySize   *string
+	HideChrome    *bool
+	PlaybackSpeed *float64
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -103,6 +104,9 @@ func (svc *Service) UpdateUserSettings(
 		if update.HideChrome != nil {
 			current.ViewerHideChrome = *update.HideChrome
 		}
+		if update.PlaybackSpeed != nil {
+			current.PlaybackSpeed = *update.PlaybackSpeed
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -122,6 +126,7 @@ func (svc *Service) UpdateUserSettings(
 			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
 			Set("gallery_size = EXCLUDED.gallery_size").
 			Set("viewer_hide_chrome = EXCLUDED.viewer_hide_chrome").
+			Set("viewer_playback_speed = EXCLUDED.viewer_playback_speed").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {
