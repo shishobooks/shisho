@@ -120,6 +120,41 @@ TypeScript duplicates. Concretely:
    needed type is missing, the fix is to add or correct the Go struct and
    regenerate, not to write the type in TypeScript.
 
+### Plugin API surface (amendment, June 2026)
+
+PRD #341 originally excluded "Plugin SDK types" from this work, which left the
+plugin HTTP API (the largest remaining surface, roughly 15 hand-written wire
+types in `app/hooks/queries/plugins.ts`) outside the convention. The follow-up audit
+resolved the boundary: **if it crosses the HTTP API, Go owns it and tygo
+generates it.** That includes manifest-shaped types (capabilities, config
+schema, available-plugin listings), which are generated from Go's parsed
+representation of the manifest, not from the SDK.
+
+Alternatives considered for the manifest-shaped types:
+
+- **Keep hand-written mirrors in the frontend.** Preserves the drift mechanism
+  this ADR exists to eliminate, on the largest remaining surface. Rejected.
+- **Import them from `packages/plugin-sdk`.** Single-sources the types but
+  couples the app build to the plugin-author contract, which describes a
+  different boundary (plugin author to server) and includes constructs the
+  frontend never sees. The app has no dependency on the SDK today. Rejected.
+- **Generate from Go's parsed representation (chosen).** What the frontend
+  receives is the server's parsed, normalized form of the manifest, delivered
+  over the same HTTP API as every other response, so the same rule applies.
+  The SDK's `manifest.d.ts` remains the plugin-author contract, governed by
+  the existing "SDK must stay in sync with Go" rule; that is a separate
+  boundary and is not changed by this decision.
+
+One documented exemption: manifest and repository-index passthrough keeps its
+camelCase wire format rather than the project's snake_case JSON convention,
+because those source formats are camelCase and changing the wire shape is a
+breaking change out of scope for type generation. Server-added fields on the
+same responses keep snake_case (the available-plugin listing already mixes
+`imageUrl` with `is_official`).
+
+Implementation of this amendment is tracked in #383 (plugin API surface
+end-to-end through tygo) and #384 (remaining type-boundary stragglers).
+
 ## Consequences
 
 - The frontend's generated types become trustworthy. Removing the manual

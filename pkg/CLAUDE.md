@@ -270,7 +270,7 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
 
 ### API Conventions
 
-- **JSON field naming**: All JSON request and response payloads use `snake_case` for field names (e.g., `created_at`, `last_accessed_at`, not `createdAt`)
+- **JSON field naming**: All JSON request and response payloads use `snake_case` for field names (e.g., `created_at`, `last_accessed_at`, not `createdAt`). Exception: plugin manifest and repository-index passthrough fields keep their camelCase wire format (see the Plugin API surface amendment in ADR 0004)
 - Go struct tags should use `json:"snake_case_name"` format
 
 - **Response shapes are named Go structs generated to TS via tygo (no anonymous responses).** Go is the single source of truth for every request and response shape; the frontend imports the generated type and never restates it. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`). Rules:
