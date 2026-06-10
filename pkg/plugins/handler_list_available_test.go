@@ -13,7 +13,7 @@ import (
 func TestAvailablePluginResponse_JSONFields(t *testing.T) {
 	t.Parallel()
 
-	resp := availablePluginResponse{
+	resp := AvailablePluginResponse{
 		Scope:       "shisho",
 		ID:          "example",
 		Name:        "Example",

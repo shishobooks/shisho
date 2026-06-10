@@ -162,8 +162,8 @@ func FilterCompatibleVersions(versions []PluginVersion) []PluginVersion {
 
 // AnnotatedPluginVersion extends PluginVersion with a compatibility flag.
 type AnnotatedPluginVersion struct {
-	PluginVersion
-	Compatible bool `json:"compatible"`
+	PluginVersion `tstype:",extends"`
+	Compatible    bool `json:"compatible"`
 }
 
 // AnnotateVersionCompatibility annotates each version with whether it is

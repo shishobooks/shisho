@@ -15,20 +15,6 @@ import (
 
 const validRepoURLPrefix = "https://raw.githubusercontent.com/"
 
-type addRepoPayload struct {
-	URL   string `json:"url" validate:"required,url"`
-	Scope string `json:"scope" validate:"required"`
-}
-
-// syncRepositoryResponse is the JSON body returned from the sync endpoint.
-// Embeds the repository so its fields stay at the top level for
-// backwards-compat with clients reading them, and adds an optional
-// update_refresh_error populated when the post-sync update refresh failed.
-type syncRepositoryResponse struct {
-	*models.PluginRepository
-	UpdateRefreshError *string `json:"update_refresh_error,omitempty"`
-}
-
 func isValidRepoURL(url string) bool {
 	return strings.HasPrefix(url, validRepoURLPrefix)
 }
@@ -47,7 +33,7 @@ func (h *handler) listRepositories(c echo.Context) error {
 func (h *handler) addRepository(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var payload addRepoPayload
+	var payload AddRepositoryPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}
@@ -114,7 +100,7 @@ func (h *handler) syncRepository(c echo.Context) error {
 		if err := h.service.UpdateRepository(ctx, repo); err != nil {
 			return errors.WithStack(err)
 		}
-		return errors.WithStack(c.JSON(http.StatusOK, syncRepositoryResponse{PluginRepository: repo}))
+		return errors.WithStack(c.JSON(http.StatusOK, SyncRepositoryResponse{PluginRepository: *repo}))
 	}
 
 	// Update repository metadata from manifest
@@ -141,8 +127,8 @@ func (h *handler) syncRepository(c echo.Context) error {
 		}
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, syncRepositoryResponse{
-		PluginRepository:   repo,
+	return errors.WithStack(c.JSON(http.StatusOK, SyncRepositoryResponse{
+		PluginRepository:   *repo,
 		UpdateRefreshError: updateRefreshError,
 	}))
 }

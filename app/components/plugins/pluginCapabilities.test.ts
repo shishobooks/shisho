@@ -12,6 +12,25 @@ import {
   resolveInstalledPluginCapabilities,
 } from "./pluginCapabilities";
 
+// The generated Capabilities/cap types mirror Go's parsed-manifest structs,
+// so every field is present on the wire. These helpers fill the boilerplate
+// so tests can express just the capability mix they care about.
+const caps = (
+  partial: Partial<PluginCapabilities> = {},
+): PluginCapabilities => ({
+  identifierTypes: [],
+  ...partial,
+});
+const enricherCap = { description: "", fields: [], fileTypes: [] };
+const converterCap = {
+  description: "",
+  mimeTypes: [],
+  sourceTypes: [],
+  targetType: "",
+};
+const parserCap = { description: "", mimeTypes: [], types: [] };
+const generatorCap = { description: "", id: "", name: "", sourceTypes: [] };
+
 describe("deriveCapabilityLabels", () => {
   it("returns [] for null caps", () => {
     expect(deriveCapabilityLabels(null)).toEqual([]);
@@ -22,17 +41,17 @@ describe("deriveCapabilityLabels", () => {
   });
 
   it("returns [] for empty caps object", () => {
-    expect(deriveCapabilityLabels({})).toEqual([]);
+    expect(deriveCapabilityLabels(caps())).toEqual([]);
   });
 
   it("returns all four labels when all display-worthy capabilities are set", () => {
-    const caps: PluginCapabilities = {
-      metadataEnricher: {},
-      inputConverter: {},
-      fileParser: {},
-      outputGenerator: {},
-    };
-    expect(deriveCapabilityLabels(caps)).toEqual([
+    const all = caps({
+      metadataEnricher: enricherCap,
+      inputConverter: converterCap,
+      fileParser: parserCap,
+      outputGenerator: generatorCap,
+    });
+    expect(deriveCapabilityLabels(all)).toEqual([
       "Metadata enricher",
       "Input converter",
       "File parser",
@@ -41,22 +60,24 @@ describe("deriveCapabilityLabels", () => {
   });
 
   it("returns a single label for a single capability", () => {
-    expect(deriveCapabilityLabels({ metadataEnricher: {} })).toEqual([
-      "Metadata enricher",
+    expect(
+      deriveCapabilityLabels(caps({ metadataEnricher: enricherCap })),
+    ).toEqual(["Metadata enricher"]);
+    expect(deriveCapabilityLabels(caps({ fileParser: parserCap }))).toEqual([
+      "File parser",
     ]);
-    expect(deriveCapabilityLabels({ fileParser: {} })).toEqual(["File parser"]);
   });
 
   it("ignores capabilities that don't produce display labels (httpAccess, shellAccess, etc.)", () => {
     // Only metadataEnricher/inputConverter/fileParser/outputGenerator should
     // produce labels; access-style capabilities should not.
-    const caps: PluginCapabilities = {
-      httpAccess: { domains: ["example.com"] },
-      shellAccess: { commands: ["ls"] },
-      fileAccess: { level: "read" },
-      ffmpegAccess: {},
-    };
-    expect(deriveCapabilityLabels(caps)).toEqual([]);
+    const accessOnly = caps({
+      httpAccess: { description: "", domains: ["example.com"] },
+      shellAccess: { commands: ["ls"], description: "" },
+      fileAccess: { description: "", level: "read" },
+      ffmpegAccess: { description: "" },
+    });
+    expect(deriveCapabilityLabels(accessOnly)).toEqual([]);
   });
 });
 
@@ -106,21 +127,21 @@ describe("resolveInstalledPluginCapabilities", () => {
   });
 
   it("returns the capabilities for the version matching the installed plugin", () => {
-    const caps: PluginCapabilities = { metadataEnricher: {} };
+    const matched = caps({ metadataEnricher: enricherCap });
     const available = makeAvailable([
-      makeVersion("2.0.0", { fileParser: {} }),
-      makeVersion("1.0.0", caps),
+      makeVersion("2.0.0", caps({ fileParser: parserCap })),
+      makeVersion("1.0.0", matched),
     ]);
     expect(
       resolveInstalledPluginCapabilities(makePlugin("1.0.0"), available),
-    ).toBe(caps);
+    ).toBe(matched);
   });
 
   it("falls back to versions[0] capabilities when installed version is not in the list", () => {
-    const latestCaps: PluginCapabilities = { outputGenerator: {} };
+    const latestCaps = caps({ outputGenerator: generatorCap });
     const available = makeAvailable([
       makeVersion("2.0.0", latestCaps),
-      makeVersion("1.0.0", { fileParser: {} }),
+      makeVersion("1.0.0", caps({ fileParser: parserCap })),
     ]);
     expect(
       resolveInstalledPluginCapabilities(makePlugin("9.9.9"), available),
@@ -128,7 +149,7 @@ describe("resolveInstalledPluginCapabilities", () => {
   });
 
   it("falls back to versions[0] when the matched version has no capabilities field", () => {
-    const latestCaps: PluginCapabilities = { inputConverter: {} };
+    const latestCaps = caps({ inputConverter: converterCap });
     const available = makeAvailable([
       makeVersion("2.0.0", latestCaps),
       makeVersion("1.0.0"), // no capabilities

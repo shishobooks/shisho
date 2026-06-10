@@ -133,47 +133,20 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	return md
 }
 
-// SeriesEntry represents a single series association in the multi-series
-// apply payload. Used by the identify form which supports multiple series
-// per book, unlike the plugin SDK which models a single series.
-type SeriesEntry struct {
-	Name             string
-	Number           *float64
-	SeriesNumberUnit *string
-}
-
-// applyOverrides carries apply-path-only signals that don't belong on
-// mediafile.ParsedMetadata (which is part of the public plugin SDK
-// contract). These come exclusively from the identify apply payload —
-// plugins do not model them.
-type applyOverrides struct {
-	// FileName is the value to write to file.Name. Nil = no change.
-	// Empty string is treated as nil (treat absent or "" as no-op so
-	// callers don't need to special-case empty inputs).
-	FileName *string
-	// FileNameSource is the value to write to file.NameSource. Nil
-	// means "default to the plugin source for this apply call".
-	FileNameSource *string
-	// SeriesEntries, when non-nil, replaces the book's series associations
-	// with the provided list. An empty slice clears all series. Nil means
-	// "don't touch series" (the identify form's series checkbox was off).
-	SeriesEntries *[]SeriesEntry
-}
-
 // convertFieldsToOverrides extracts apply-path-only signals from the
 // untyped fields map. Returns nil when no overrides are present, so
 // callers can cheaply skip the explicit-write code path.
-func convertFieldsToOverrides(fields map[string]any) *applyOverrides {
-	var out *applyOverrides
+func convertFieldsToOverrides(fields map[string]any) *ApplyOverrides {
+	var out *ApplyOverrides
 	if v, ok := fields["file_name"].(string); ok && v != "" {
 		if out == nil {
-			out = &applyOverrides{}
+			out = &ApplyOverrides{}
 		}
 		out.FileName = &v
 	}
 	if v, ok := fields["file_name_source"].(string); ok && v != "" {
 		if out == nil {
-			out = &applyOverrides{}
+			out = &ApplyOverrides{}
 		}
 		out.FileNameSource = &v
 	}

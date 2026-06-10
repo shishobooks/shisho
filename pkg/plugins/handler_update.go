@@ -13,21 +13,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-type updatePayload struct {
-	Enabled                  *bool             `json:"enabled"`
-	AutoUpdate               *bool             `json:"auto_update"`
-	Config                   map[string]string `json:"config"`
-	ConfidenceThreshold      *float64          `json:"confidence_threshold"`
-	ClearConfidenceThreshold *bool             `json:"clear_confidence_threshold"`
-}
-
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	scope := c.Param("scope")
 	id := c.Param("id")
 
-	var payload updatePayload
+	var payload UpdatePluginPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}

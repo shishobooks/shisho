@@ -17,38 +17,6 @@ var validPluginModes = map[string]bool{
 	models.PluginModeDisabled:   true,
 }
 
-type orderEntry struct {
-	Scope string `json:"scope" validate:"required"`
-	ID    string `json:"id" validate:"required"`
-	Mode  string `json:"mode"`
-}
-
-type setOrderPayload struct {
-	Order []orderEntry `json:"order" validate:"required"`
-}
-
-type libraryOrderEntry struct {
-	Scope string `json:"scope" validate:"required"`
-	ID    string `json:"id" validate:"required"`
-	Mode  string `json:"mode"`
-}
-
-type setLibraryOrderPayload struct {
-	Plugins []libraryOrderEntry `json:"plugins" validate:"required"`
-}
-
-type libraryOrderResponse struct {
-	Customized bool                 `json:"customized"`
-	Plugins    []libraryOrderPlugin `json:"plugins"`
-}
-
-type libraryOrderPlugin struct {
-	Scope string `json:"scope"`
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Mode  string `json:"mode"`
-}
-
 func (h *handler) getOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -67,7 +35,7 @@ func (h *handler) setOrder(c echo.Context) error {
 
 	hookType := c.Param("hookType")
 
-	var payload setOrderPayload
+	var payload SetOrderPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}
@@ -109,7 +77,7 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	var plugins []libraryOrderPlugin
+	var plugins []LibraryPluginOrderPlugin
 
 	if customized {
 		entries, err := h.service.GetLibraryOrder(ctx, libraryID, hookType)
@@ -121,7 +89,7 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 			if p, _ := h.service.GetPlugin(ctx, entry.Scope, entry.PluginID); p != nil {
 				name = p.Name
 			}
-			plugins = append(plugins, libraryOrderPlugin{
+			plugins = append(plugins, LibraryPluginOrderPlugin{
 				Scope: entry.Scope,
 				ID:    entry.PluginID,
 				Name:  name,
@@ -138,7 +106,7 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 			if p, _ := h.service.GetPlugin(ctx, order.Scope, order.PluginID); p != nil {
 				name = p.Name
 			}
-			plugins = append(plugins, libraryOrderPlugin{
+			plugins = append(plugins, LibraryPluginOrderPlugin{
 				Scope: order.Scope,
 				ID:    order.PluginID,
 				Name:  name,
@@ -147,7 +115,7 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, libraryOrderResponse{
+	return c.JSON(http.StatusOK, LibraryPluginOrderResponse{
 		Customized: customized,
 		Plugins:    plugins,
 	})
@@ -162,7 +130,7 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 	}
 	hookType := c.Param("hookType")
 
-	var payload setLibraryOrderPayload
+	var payload SetLibraryOrderPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}

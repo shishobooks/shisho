@@ -32,7 +32,7 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // persistMetadata applies metadata to a book and its target file unconditionally (no field filtering).
 // Every non-empty field in md is persisted. pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
-func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *applyOverrides, log logger.Logger) error {
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	var columns []string
 

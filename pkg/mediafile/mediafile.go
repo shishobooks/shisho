@@ -39,7 +39,7 @@ type ParsedMetadata struct {
 	SeriesNumber *float64       `json:"series_number,omitempty"`
 	// SeriesNumberUnit indicates whether SeriesNumber refers to a volume or a
 	// chapter. CBZ-only — null for other formats. Valid values: "volume", "chapter".
-	SeriesNumberUnit *string    `json:"series_number_unit,omitempty"`
+	SeriesNumberUnit *string    `json:"series_number_unit,omitempty" tstype:"SeriesNumberUnit"`
 	Genres           []string   `json:"genres"` // Genre names from file metadata
 	Tags             []string   `json:"tags"`   // Tag names from file metadata
 	Description      string     `json:"description"`

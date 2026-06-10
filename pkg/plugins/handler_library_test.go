@@ -44,7 +44,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp libraryOrderResponse
+	var resp LibraryPluginOrderResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.False(t, resp.Customized)
@@ -96,7 +96,7 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp libraryOrderResponse
+	var resp LibraryPluginOrderResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.True(t, resp.Customized)

@@ -148,11 +148,29 @@ function makeBook(overrides: Partial<Book> = {}): Book {
   } as Book;
 }
 
+// PluginSearchResult extends the generated ParsedMetadata, whose non-pointer
+// Go fields are always present on the wire; fill them with zero values here so
+// tests only spell out what they assert on.
 function makeResult(
   overrides: Partial<PluginSearchResult> = {},
 ): PluginSearchResult {
   return {
     title: "Some Title",
+    subtitle: "",
+    authors: [],
+    narrators: [],
+    series: "",
+    genres: [],
+    tags: [],
+    description: "",
+    publisher: "",
+    url: "",
+    cover_mime_type: "",
+    cover_url: "",
+    duration: 0,
+    bitrate_bps: 0,
+    identifiers: [],
+    chapters: [],
     plugin_scope: "library",
     plugin_id: "test",
     ...overrides,
@@ -312,7 +330,7 @@ describe("IdentifyReviewForm component", () => {
       }),
       result: makeResult({
         title: "New Title",
-        authors: [{ name: "New Author" }],
+        authors: [{ name: "New Author", role: "" }],
       }),
     });
 
@@ -333,7 +351,7 @@ describe("IdentifyReviewForm component", () => {
     const payload = applyMock.mock.calls[0][0];
     expect(payload.fields.title).toBeUndefined();
     // Authors stays checked → still in the payload.
-    expect(payload.fields.authors).toEqual([{ name: "New Author" }]);
+    expect(payload.fields.authors).toEqual([{ name: "New Author", role: "" }]);
   });
 
   it("defaults book-changed fields OFF when source is high-priority", async () => {
@@ -402,7 +420,7 @@ describe("IdentifyReviewForm component", () => {
       }),
       result: makeResult({
         title: "New Title",
-        authors: [{ name: "New Author" }],
+        authors: [{ name: "New Author", role: "" }],
         genres: ["Fantasy"],
       }),
     });
