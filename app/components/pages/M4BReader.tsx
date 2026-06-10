@@ -526,6 +526,15 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       </footer>
 
       <audio
+        onCanPlay={() => {
+          // The runtime flag is a heuristic and can false-positive (e.g. a
+          // transient stall on a slow first load of a perfectly playable
+          // file). canplay means data is actually decodable, so any earlier
+          // runtime failure was a false alarm; clear it rather than leaving a
+          // wrong warning up for the rest of the session. A genuinely
+          // undecodable stream never fires canplay, so real failures stick.
+          setRuntimeFailed(false);
+        }}
         onEnded={() => setIsPlaying(false)}
         onError={(e) => {
           if (!shouldIgnoreMediaError(e.currentTarget.error?.code)) {

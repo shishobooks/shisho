@@ -598,6 +598,21 @@ describe("M4BReader", () => {
       fireEvent.stalled(audio);
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
+
+    it("clears the failure message when the stream subsequently becomes playable", () => {
+      renderReader();
+      const audio = getAudio();
+      // A transient stall on a slow first load looks like the stuck signature
+      // (readyState is still HAVE_NOTHING while bytes trickle in), so the
+      // message appears...
+      fireEvent.stalled(audio);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+
+      // ...but once enough data arrives that the element reports it can play,
+      // the failure was a false alarm and the message must go away.
+      fireEvent.canPlay(audio);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 
   describe("seek timeout guard", () => {
