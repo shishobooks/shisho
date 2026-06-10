@@ -410,7 +410,17 @@ profile=LC
 profile=xHE-AAC
 ```
 
-### Frontend Fix Pattern
+### In-App M4B Player Handling
+
+The full-page audiobook player (`app/components/pages/M4BReader.tsx`) handles codec incompatibility in three layers, with the decision logic in the pure module `app/utils/audioCodec.ts`:
+
+1. **Static detection from the stored codec.** `resolveCodecSupport(file.audiobook_codec, navigator.userAgent)` flags xHE-AAC up-front when the browser is not WebKit (Safari, or any iOS browser). The player shows a warning banner recommending Safari; controls stay usable since detection is a strong signal, not a hard block. AAC-LC and HE-AAC are always treated as playable.
+2. **Runtime backstop.** The audio element's `error` event (ignoring `MEDIA_ERR_ABORTED` via `shouldIgnoreMediaError`) and its `stalled` event (only at `readyState <= HAVE_METADATA`, the xHE-AAC stuck signature) set a runtime-failure flag that shows `resolveRuntimeFailureMessage(codec)`.
+3. **Seek timeout guard.** Every seek goes through one `seekTo` path that arms a `SEEK_TIMEOUT_MS` (5s) timer; if the element still reports `seeking` when it fires, the player pauses and surfaces the failure message instead of hanging. The `seeked` event cancels the pending guard.
+
+The user-facing caveat is documented in `website/docs/supported-formats.md` (xHE-AAC note under Audiobooks), which links back to this file.
+
+### Frontend Fix Pattern (Audio Preview)
 
 When implementing audio preview for M4B files, use timeouts to handle codec incompatibility gracefully:
 
@@ -478,9 +488,11 @@ const handleAudioPlay = (timestampMs: number) => {
 
 ### Implementation Reference
 
-See `app/components/files/FileChaptersTab.tsx`:
-- `handleAudioPlay` - Playback with timeout handling
-- `handleAudioStop` - Cleanup and state reset
+- `app/utils/audioCodec.ts` - Pure codec-support resolution, runtime failure messaging, seek timeout constant (unit-tested in `audioCodec.test.ts`)
+- `app/components/pages/M4BReader.tsx` - In-app player wiring: warning banner, error/stalled backstop, seek timeout guard
+- `app/components/files/FileChaptersTab.tsx`:
+  - `handleAudioPlay` - Preview playback with timeout handling
+  - `handleAudioStop` - Cleanup and state reset
 
 ## External chapter source
 

@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   Pause,
   Play,
@@ -32,6 +33,12 @@ import {
   type File,
   type PlaybackSpeed,
 } from "@/types";
+import {
+  resolveCodecSupport,
+  resolveRuntimeFailureMessage,
+  SEEK_TIMEOUT_MS,
+  shouldIgnoreMediaError,
+} from "@/utils/audioCodec";
 import {
   resolveChapters,
   resolvePlayback,
@@ -101,6 +108,22 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
 
   const [coverError, setCoverError] = useState(false);
 
+  // Codec compatibility. The File's stored audiobook codec is checked against
+  // the browser up-front (xHE-AAC does not play as a plain progressive stream
+  // outside WebKit); the audio element's error/stalled events and the seek
+  // timeout guard set the runtime flag as a backstop for anything the static
+  // check misses. The static message wins when both apply.
+  const codecSupport = useMemo(
+    () => resolveCodecSupport(file.audiobook_codec, navigator.userAgent),
+    [file.audiobook_codec],
+  );
+  const [runtimeFailed, setRuntimeFailed] = useState(false);
+  const playbackWarning = !codecSupport.playable
+    ? codecSupport.message
+    : runtimeFailed
+      ? resolveRuntimeFailureMessage(file.audiobook_codec)
+      : null;
+
   // Playback speed is a per-user setting so the chosen rate follows the
   // listener across sessions and devices. Local state applies the rate
   // immediately on change; the mutation persists it through the standard
@@ -155,18 +178,45 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     [chapters, displayTime, duration],
   );
 
+  // A seek into a stream the browser cannot decode never completes: the
+  // element reports `seeking: true` forever and the player would appear
+  // frozen. Guard every seek with a timeout; if the element is still seeking
+  // when it fires, pause and surface the runtime failure message instead of
+  // hanging. The guard is cancelled by the seeked event (or superseded by the
+  // next seek).
+  const seekGuardRef = useRef<number | null>(null);
+  const cancelSeekGuard = useCallback(() => {
+    if (seekGuardRef.current != null) {
+      window.clearTimeout(seekGuardRef.current);
+      seekGuardRef.current = null;
+    }
+  }, []);
+  useEffect(() => cancelSeekGuard, [cancelSeekGuard]);
+
   // Seek the audio element and keep our currentTime in sync. Centralized so the
   // buttons, dropdown, and keyboard shortcuts all go through one path. Writes
   // the time ref eagerly (before the state update flushes) so the keydown
   // handler always reads the freshest position.
-  const seekTo = useCallback((seconds: number) => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = seconds;
-    }
-    currentTimeRef.current = seconds;
-    setCurrentTime(seconds);
-  }, []);
+  const seekTo = useCallback(
+    (seconds: number) => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = seconds;
+        cancelSeekGuard();
+        seekGuardRef.current = window.setTimeout(() => {
+          seekGuardRef.current = null;
+          const el = audioRef.current;
+          if (el && el.seeking) {
+            el.pause();
+            setRuntimeFailed(true);
+          }
+        }, SEEK_TIMEOUT_MS);
+      }
+      currentTimeRef.current = seconds;
+      setCurrentTime(seconds);
+    },
+    [cancelSeekGuard],
+  );
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -319,6 +369,17 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       {/* Player controls — always visible, no auto-hide */}
       <footer className="border-t bg-background px-4 py-4 md:px-8">
         <div className="mx-auto max-w-2xl space-y-3">
+          {/* Codec/playback warning. Controls stay usable: the detection is a
+              strong signal, not a hard block. */}
+          {playbackWarning && (
+            <div
+              className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm"
+              role="alert"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <span>{playbackWarning}</span>
+            </div>
+          )}
           {/* Chapter dropdown (only with chapters). Its trigger doubles as the
               current chapter title, kept in sync with playback via `value`. */}
           {hasChapters && (
@@ -466,6 +527,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
 
       <audio
         onEnded={() => setIsPlaying(false)}
+        onError={(e) => {
+          if (!shouldIgnoreMediaError(e.currentTarget.error?.code)) {
+            setRuntimeFailed(true);
+          }
+        }}
         onLoadedMetadata={(e) => {
           const el = e.currentTarget;
           if (Number.isFinite(el.duration) && el.duration > 0) {
@@ -478,6 +544,17 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
         }}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
+        onSeeked={cancelSeekGuard}
+        onStalled={(e) => {
+          // Runtime backstop for undecodable streams: the xHE-AAC stuck
+          // signature is a stall while only metadata has loaded (readyState
+          // never reaches HAVE_CURRENT_DATA). A stall after data was
+          // decodable is ordinary buffering, not a codec failure.
+          const el = e.currentTarget;
+          if (el.readyState <= el.HAVE_METADATA) {
+            setRuntimeFailed(true);
+          }
+        }}
         onTimeUpdate={(e) => {
           if (isScrubbing) return;
           const time = e.currentTarget.currentTime;
