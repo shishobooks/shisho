@@ -194,7 +194,7 @@ const UserDetail = () => {
         payload: {
           current_password: isSelf ? currentPassword : undefined,
           new_password: newPassword,
-          require_password_reset: isSelf ? undefined : requirePasswordReset,
+          require_password_reset: isSelf ? false : requirePasswordReset,
         },
       });
       toast.success("Password reset successfully");

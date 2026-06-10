@@ -1,15 +1,10 @@
 import { createContext } from "react";
 
-export interface AuthUser {
-  id: number;
-  username: string;
-  email?: string;
-  role_id: number;
-  role_name: string;
-  permissions: string[];
-  library_access?: number[] | null; // null/undefined = all libraries, empty = none, populated = specific libraries
-  must_change_password: boolean;
-}
+import type { MeResponse } from "@/types";
+
+// The authenticated user is exactly the GET /auth/me response shape. Alias the
+// generated type rather than restate it so it can never drift from the backend.
+export type AuthUser = MeResponse;
 
 export interface AuthContextValue {
   user: AuthUser | null;

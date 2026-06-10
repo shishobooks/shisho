@@ -225,10 +225,7 @@ func (h *handler) books(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	response := map[string]any{
-		"items": books,
-		"total": total,
-	}
+	response := ListGenreBooksResponse{Items: books, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

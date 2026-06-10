@@ -55,8 +55,14 @@ export {
 } from "./generated/publishers";
 export * from "./generated/chapters";
 export {
+  type Response as AudnexusChaptersResponse,
+  type Chapter as AudnexusChapter,
+} from "./generated/audnexus";
+export {
   type UserSettingsResponse,
   type UserSettingsPayload,
+  type ReviewCriteriaResponse,
+  type PutReviewCriteriaPayload,
 } from "./generated/settings";
 export {
   type CreateListPayload,

@@ -23,6 +23,18 @@ type ListBooksResponse struct {
 	Total int            `json:"total"`
 }
 
+// SetReviewPayload is the request body for the file and book review-override
+// endpoints (PATCH /books/files/:id/review, PATCH /books/:id/review).
+type SetReviewPayload struct {
+	Override *string `json:"override" validate:"omitempty,oneof=reviewed unreviewed" tstype:"ReviewOverride"`
+}
+
+// BulkSetReviewPayload is the request body for POST /books/bulk/review.
+type BulkSetReviewPayload struct {
+	BookIDs  []int   `json:"book_ids" validate:"required,min=1,max=500"`
+	Override *string `json:"override" validate:"omitempty,oneof=reviewed unreviewed" tstype:"ReviewOverride"`
+}
+
 type UpdateBookPayload struct {
 	Title       *string       `json:"title,omitempty" mod:"trim" validate:"omitempty,min=1,max=300"`
 	SortTitle   *string       `json:"sort_title,omitempty" validate:"omitempty,max=300"`

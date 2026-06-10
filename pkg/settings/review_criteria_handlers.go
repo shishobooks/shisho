@@ -19,21 +19,6 @@ type reviewCriteriaHandler struct {
 	appSettingsService *appsettings.Service
 }
 
-type reviewCriteriaResponse struct {
-	BookFields          []string `json:"book_fields"`
-	AudioFields         []string `json:"audio_fields"`
-	UniversalCandidates []string `json:"universal_candidates"`
-	AudioCandidates     []string `json:"audio_candidates"`
-	OverrideCount       int      `json:"override_count"`
-	MainFileCount       int      `json:"main_file_count"`
-}
-
-type putReviewCriteriaPayload struct {
-	BookFields     []string `json:"book_fields" validate:"required"`
-	AudioFields    []string `json:"audio_fields" validate:"required"`
-	ClearOverrides bool     `json:"clear_overrides"`
-}
-
 func (h *reviewCriteriaHandler) getReviewCriteria(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -42,7 +27,7 @@ func (h *reviewCriteriaHandler) getReviewCriteria(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	resp := reviewCriteriaResponse{
+	resp := ReviewCriteriaResponse{
 		BookFields:          criteria.BookFields,
 		AudioFields:         criteria.AudioFields,
 		UniversalCandidates: review.UniversalCandidates,
@@ -69,7 +54,7 @@ func (h *reviewCriteriaHandler) getReviewCriteria(c echo.Context) error {
 }
 
 func (h *reviewCriteriaHandler) putReviewCriteria(c echo.Context) error {
-	var payload putReviewCriteriaPayload
+	var payload PutReviewCriteriaPayload
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}

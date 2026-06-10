@@ -1,5 +1,16 @@
 package chapters
 
+import "github.com/shishobooks/shisho/pkg/models"
+
+// ChaptersResponse is the response body for the chapter list and replace
+// endpoints. ListChapters returns a nested tree, so each chapter carries its
+// Children populated.
+//
+//nolint:revive // ChaptersResponse name follows the {Entity}Response convention (ADR 0004)
+type ChaptersResponse struct {
+	Chapters []*models.Chapter `json:"chapters" tstype:"Chapter[]"`
+}
+
 // ChapterInput represents a chapter in API requests.
 type ChapterInput struct {
 	Title            string         `json:"title"`

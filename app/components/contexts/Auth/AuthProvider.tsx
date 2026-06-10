@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { API } from "@/libraries/api";
+import type { StatusResponse } from "@/types";
 
 import { AuthContext, type AuthUser } from "./context";
 
 interface AuthProviderProps {
   children: ReactNode;
-}
-
-interface AuthStatusResponse {
-  needs_setup: boolean;
 }
 
 const AuthProvider = ({ children }: AuthProviderProps) => {
@@ -20,10 +17,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const checkAuthStatus = useCallback(async () => {
     try {
       // First check if setup is needed
-      const status = await API.request<AuthStatusResponse>(
-        "GET",
-        "/auth/status",
-      );
+      const status = await API.request<StatusResponse>("GET", "/auth/status");
       setNeedsSetup(status.needs_setup);
 
       if (status.needs_setup) {
@@ -77,7 +71,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     (libraryId: number) => {
       if (!user) return false;
       // If library_access is null/undefined, user has access to all libraries
-      if (user.library_access === null || user.library_access === undefined) {
+      if (!user.library_access) {
         return true;
       }
       // Otherwise, check if the library is in the access list

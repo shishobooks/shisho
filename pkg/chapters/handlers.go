@@ -43,9 +43,7 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, map[string]any{
-		"chapters": chapters,
-	}))
+	return errors.WithStack(c.JSON(http.StatusOK, ChaptersResponse{Chapters: chapters}))
 }
 
 func (h *handler) replace(c echo.Context) error {
@@ -103,9 +101,7 @@ func (h *handler) replace(c echo.Context) error {
 		_ = sidecar.WriteFileSidecarWithChapters(fileWithRelations, updatedChapters)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, map[string]any{
-		"chapters": updatedChapters,
-	}))
+	return errors.WithStack(c.JSON(http.StatusOK, ChaptersResponse{Chapters: updatedChapters}))
 }
 
 // validateChapters validates chapter data against file constraints.

@@ -26,7 +26,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
     frontmatter: |
-      import { AuthorRole, Book, FileRole, ReviewedFilter, SeriesNumberUnit } from "@/types";
+      import { AuthorRole, Book, FileRole, ReviewOverride, ReviewedFilter, SeriesNumberUnit } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/config"
@@ -96,7 +96,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/genres"
     output_path: "app/types/generated/genres.ts"
     frontmatter: |
-      import { Genre } from "@/types";
+      import { Book, Genre } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/tags"
@@ -117,6 +117,12 @@ packages:
       - model.go
   - path: "github.com/shishobooks/shisho/pkg/chapters"
     output_path: "app/types/generated/chapters.ts"
+    frontmatter: |
+      import { Chapter } from "@/types";
+    include_files:
+      - types.go
+  - path: "github.com/shishobooks/shisho/pkg/audnexus"
+    output_path: "app/types/generated/audnexus.ts"
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/lists"

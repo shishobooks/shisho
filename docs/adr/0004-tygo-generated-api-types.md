@@ -81,11 +81,18 @@ TypeScript duplicates. Concretely:
    not by re-listing fields.** tygo flattens such an embed into a TypeScript
    `extends`, so a response like `GenreResponse` carries every model field plus
    its computed extras (`book_count`, `aliases`) with no Go-side duplication.
-   This requires a `frontmatter` import of the embedded model in the package's
-   `tygo.yaml` entry. When a response **reshapes** a model relation (the metadata
-   entities return `aliases` as `[]string` rather than the model's
-   `PersonAlias[]`; publisher detail returns a flattened `children` rather than
-   the model's `Publisher[]`), the model's relation field is excluded from
+   The model must be embedded **by value** (`models.Genre`), not by pointer: a
+   pointer embed (`*models.Genre`) generates `extends Partial<Genre>`, which
+   wrongly marks every inherited field optional. The embed requires two
+   additions to the package's `tygo.yaml` entry: a `frontmatter` import of the
+   embedded model, and a `type_mappings` entry mapping the package-qualified
+   selector to the bare interface name (for example `models.Genre: "Genre"`).
+   Without the mapping tygo emits `extends models.Genre`, an unresolved
+   reference; without the frontmatter the bare name is undefined. When a
+   response **reshapes** a model relation (the metadata entities return
+   `aliases` as `[]string` rather than the model's `PersonAlias[]`; publisher
+   detail returns a flattened `children` rather than the model's `Publisher[]`),
+   the model's relation field is excluded from
    TypeScript generation with `tstype:"-"` so the response's field is the only
    one and the `extends` does not collide. This is verified safe only when no
    consumer reads that relation as objects; both `aliases` and publisher

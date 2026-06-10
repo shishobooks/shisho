@@ -38,6 +38,6 @@ type ResetPasswordPayload struct {
 
 // ListUsersQuery represents the query parameters for listing users.
 type ListUsersQuery struct {
-	Limit  int `query:"limit" default:"50"`
-	Offset int `query:"offset" default:"0"`
+	Limit  int `query:"limit" json:"limit,omitempty" default:"50"`
+	Offset int `query:"offset" json:"offset,omitempty" default:"0"`
 }

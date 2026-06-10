@@ -10,17 +10,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// SetReviewPayload is the request body for PATCH /books/files/:id/review.
-type SetReviewPayload struct {
-	Override *string `json:"override" validate:"omitempty,oneof=reviewed unreviewed"`
-}
-
-// BulkSetReviewPayload is the request body for POST /books/bulk/review.
-type BulkSetReviewPayload struct {
-	BookIDs  []int   `json:"book_ids" validate:"required,min=1,max=500"`
-	Override *string `json:"override" validate:"omitempty,oneof=reviewed unreviewed"`
-}
-
 // setFileReview sets or clears the review override for a single file.
 func (h *handler) setFileReview(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))

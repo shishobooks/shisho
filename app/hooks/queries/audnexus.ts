@@ -1,24 +1,14 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import type { AudnexusChapter, AudnexusChaptersResponse } from "@/types";
+
+// Re-exported so existing importers (audnexusChapterUtils, FetchChaptersDialog)
+// can keep importing these from the hook module.
+export type { AudnexusChapter, AudnexusChaptersResponse };
 
 export enum QueryKey {
   AudnexusChapters = "AudnexusChapters",
-}
-
-export interface AudnexusChapter {
-  title: string;
-  start_offset_ms: number;
-  length_ms: number;
-}
-
-export interface AudnexusChaptersResponse {
-  asin: string;
-  is_accurate: boolean;
-  runtime_length_ms: number;
-  brand_intro_duration_ms: number;
-  brand_outro_duration_ms: number;
-  chapters: AudnexusChapter[];
 }
 
 /**

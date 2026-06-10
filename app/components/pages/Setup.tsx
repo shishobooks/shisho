@@ -14,17 +14,7 @@ import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { API } from "@/libraries/api";
-
-interface SetupResponse {
-  id: number;
-  username: string;
-  email?: string;
-  role_id: number;
-  role_name: string;
-  permissions: string[];
-  library_access?: number[] | null;
-  must_change_password: boolean;
-}
+import type { MeResponse } from "@/types";
 
 // Initial values for the setup form - stored once to compare against
 const INITIAL_VALUES = {
@@ -97,7 +87,7 @@ const Setup = () => {
 
     setIsLoading(true);
     try {
-      const userData = await API.request<SetupResponse>("POST", "/auth/setup", {
+      const userData = await API.request<MeResponse>("POST", "/auth/setup", {
         username,
         email: email.trim() || null,
         password,
@@ -121,7 +111,7 @@ const Setup = () => {
   const handleCreateDevAdmin = async () => {
     setIsDevLoading(true);
     try {
-      const userData = await API.request<SetupResponse>("POST", "/auth/setup", {
+      const userData = await API.request<MeResponse>("POST", "/auth/setup", {
         username: "admin",
         email: null,
         password: "adminadmin",

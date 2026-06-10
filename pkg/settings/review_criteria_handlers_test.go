@@ -54,7 +54,7 @@ func TestGetReviewCriteria_ReturnsDefault(t *testing.T) {
 	require.NoError(t, h.getReviewCriteria(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var body reviewCriteriaResponse
+	var body ReviewCriteriaResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 
 	// Default criteria seeded by review.Default()

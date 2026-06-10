@@ -8,10 +8,14 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateRolePayload,
+  CreateUserPayload,
   ListRolesResponse,
+  ListUsersQuery,
   ListUsersResponse,
+  ResetPasswordPayload,
   Role,
   UpdateRolePayload,
+  UpdateUserPayload,
   User,
 } from "@/types";
 
@@ -38,11 +42,6 @@ export const useUser = (
   });
 };
 
-interface ListUsersQuery {
-  limit?: number;
-  offset?: number;
-}
-
 export const useUsers = (
   query: ListUsersQuery = {},
   options: Omit<
@@ -59,16 +58,6 @@ export const useUsers = (
   });
 };
 
-interface CreateUserPayload {
-  username: string;
-  email?: string;
-  password: string;
-  role_id: number;
-  library_ids?: number[];
-  all_library_access?: boolean;
-  require_password_reset?: boolean;
-}
-
 export const useCreateUser = () => {
   const queryClient = useQueryClient();
 
@@ -81,15 +70,6 @@ export const useCreateUser = () => {
     },
   });
 };
-
-interface UpdateUserPayload {
-  username?: string;
-  email?: string;
-  role_id?: number;
-  is_active?: boolean;
-  library_ids?: number[];
-  all_library_access?: boolean;
-}
 
 interface UpdateUserVariables {
   id: string;
@@ -109,12 +89,6 @@ export const useUpdateUser = () => {
     },
   });
 };
-
-interface ResetPasswordPayload {
-  current_password?: string;
-  new_password: string;
-  require_password_reset?: boolean;
-}
 
 interface ResetPasswordVariables {
   id: string;
