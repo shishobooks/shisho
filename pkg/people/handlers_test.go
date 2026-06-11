@@ -203,7 +203,7 @@ func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 24, "default limit must be 24")
+	require.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestAuthoredBooks_ExplicitLimitOffset(t *testing.T) {
@@ -304,7 +304,7 @@ func TestNarratedFiles_DefaultPagination(t *testing.T) {
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 24, "default limit must be 24")
+	require.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestNarratedFiles_ExplicitLimitOffset(t *testing.T) {

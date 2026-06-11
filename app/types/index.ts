@@ -34,7 +34,12 @@ export {
   type UpdateSeriesPayload,
   type MergeSeriesPayload,
 } from "./generated/series";
-export * from "./generated/people";
+export {
+  type PersonResponse,
+  type ListPeopleQuery,
+  type UpdatePersonPayload,
+  type MergePeoplePayload,
+} from "./generated/people";
 export {
   type GenreResponse,
   type ListGenresQuery,

@@ -133,7 +133,7 @@ func TestBooks_DefaultPagination(t *testing.T) {
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 24, "default limit must be 24")
+	require.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestBooks_ExplicitLimitOffset(t *testing.T) {

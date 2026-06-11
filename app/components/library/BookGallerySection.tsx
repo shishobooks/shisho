@@ -105,7 +105,7 @@ export function BookGallerySection({
     onPageChange?.(page);
   };
 
-  // Treat any unresolved query as loading — including a disabled query
+  // Treat any unresolved query as loading, including a disabled query
   // waiting on its `enabled` gate (isLoading is false there, since TanStack
   // only sets it while actually fetching). Without this, a series/genre/tag
   // with books briefly flashes the empty state before the query is enabled.
