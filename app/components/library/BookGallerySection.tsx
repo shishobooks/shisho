@@ -13,12 +13,13 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
 interface BookGalleryQuery {
   data: ResourceListResponse<Book> | undefined;
-  isLoading: boolean;
   isSuccess: boolean;
+  isError: boolean;
 }
 
 interface BookGallerySectionProps {
@@ -55,7 +56,7 @@ export function BookGallerySection({
   const effectiveSize: GallerySize = urlSize ?? savedSize;
   const isSizeDirty = urlSize !== null && urlSize !== savedSize;
 
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
   const offset = (currentPage - 1) * itemsPerPage;
@@ -104,7 +105,11 @@ export function BookGallerySection({
     onPageChange?.(page);
   };
 
-  if (query.isLoading) {
+  // Treat any unresolved query as loading — including a disabled query
+  // waiting on its `enabled` gate (isLoading is false there, since TanStack
+  // only sets it while actually fetching). Without this, a series/genre/tag
+  // with books briefly flashes the empty state before the query is enabled.
+  if (!query.isSuccess && !query.isError) {
     return (
       <section className="mb-10">
         <h2 className="text-xl font-semibold mb-4">{title}</h2>

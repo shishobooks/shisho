@@ -14,6 +14,7 @@ import type {
 } from "@/types";
 import type {
   ListPublishersQuery,
+  SubResourceQuery,
   UpdatePublisherPayload,
 } from "@/types/generated/publishers";
 
@@ -72,10 +73,10 @@ export const usePublisher = (
   });
 };
 
-export interface PublisherFilesQuery {
-  limit?: number;
-  offset?: number;
-}
+// Alias of the generated query type; imported directly from the generated
+// module because every sub-resource package emits a `SubResourceQuery` and
+// the barrel cannot re-export them all under one name.
+export type PublisherFilesQuery = SubResourceQuery;
 
 export const usePublisherFiles = (
   publisherId?: number,

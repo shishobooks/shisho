@@ -19,6 +19,7 @@ import {
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import type { GallerySize } from "@/types";
 
 const TagDetail = () => {
@@ -37,7 +38,7 @@ const TagDetail = () => {
   const savedSize: GallerySize =
     userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
   const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
   const tagQuery = useTag(tagId);

@@ -37,6 +37,7 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -54,7 +55,7 @@ const HomeContent = () => {
   usePageTitle(libraryQuery.data?.name ?? "Books");
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
     useBulkSelection();
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const seriesIdParam = searchParams.get("series_id");
   const searchQuery = searchParams.get("search") ?? "";
   const fileTypesParam = searchParams.get("file_types") ?? "";

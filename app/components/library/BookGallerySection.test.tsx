@@ -64,13 +64,13 @@ function makeQueryResult(
   total: number,
 ): {
   data: ResourceListResponse<Book>;
-  isLoading: boolean;
   isSuccess: boolean;
+  isError: boolean;
 } {
   return {
     data: { items: books, total },
-    isLoading: false,
     isSuccess: true,
+    isError: false,
   };
 }
 
@@ -167,14 +167,54 @@ describe("BookGallerySection", () => {
         <BookGallerySection
           libraryId="1"
           query={{
-            data: { items: [], total: 0 },
-            isLoading: true,
+            data: undefined,
             isSuccess: false,
+            isError: false,
           }}
           title="Books"
         />,
       ),
     );
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("renders loading spinner, not the empty state, while the query is disabled", () => {
+    // A disabled query (waiting on its `enabled` gate, e.g. user settings)
+    // is pending but not fetching: data undefined, isSuccess and isError
+    // both false. It must not flash the empty state.
+    render(
+      wrap(
+        <BookGallerySection
+          emptyMessage="No books here."
+          libraryId="1"
+          query={{
+            data: undefined,
+            isSuccess: false,
+            isError: false,
+          }}
+          title="Books"
+        />,
+      ),
+    );
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.queryByText("No books here.")).not.toBeInTheDocument();
+  });
+
+  it("renders empty state when the query errors", () => {
+    render(
+      wrap(
+        <BookGallerySection
+          emptyMessage="No books here."
+          libraryId="1"
+          query={{
+            data: undefined,
+            isSuccess: false,
+            isError: true,
+          }}
+          title="Books"
+        />,
+      ),
+    );
+    expect(screen.getByText("No books here.")).toBeInTheDocument();
   });
 });

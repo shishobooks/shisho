@@ -172,7 +172,13 @@ func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
-	person := seedPersonWithAuthoredBooks(t, db, lib, "Author A", []string{"B1", "B2", "B3"})
+	// Seed one more book than the default limit so the test pins the
+	// default-limit=24 contract instead of passing for any bind default.
+	titles := make([]string, 25)
+	for i := range titles {
+		titles[i] = fmt.Sprintf("Book %02d", i+1)
+	}
+	person := seedPersonWithAuthoredBooks(t, db, lib, "Author A", titles)
 
 	e := newTestEcho(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -192,12 +198,12 @@ func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 	var total int
 	err = json.Unmarshal(resp["total"], &total)
 	require.NoError(t, err)
-	assert.Equal(t, 3, total)
+	assert.Equal(t, 25, total)
 
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 3)
+	assert.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestAuthoredBooks_ExplicitLimitOffset(t *testing.T) {
@@ -267,7 +273,13 @@ func TestNarratedFiles_DefaultPagination(t *testing.T) {
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
-	person := seedPersonWithNarratedFiles(t, db, lib, "Narrator A", []string{"n1", "n2", "n3"})
+	// Seed one more file than the default limit so the test pins the
+	// default-limit=24 contract instead of passing for any bind default.
+	names := make([]string, 25)
+	for i := range names {
+		names[i] = fmt.Sprintf("n%02d", i+1)
+	}
+	person := seedPersonWithNarratedFiles(t, db, lib, "Narrator A", names)
 
 	e := newTestEcho(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -287,12 +299,12 @@ func TestNarratedFiles_DefaultPagination(t *testing.T) {
 	var total int
 	err = json.Unmarshal(resp["total"], &total)
 	require.NoError(t, err)
-	assert.Equal(t, 3, total)
+	assert.Equal(t, 25, total)
 
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 3)
+	assert.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestNarratedFiles_ExplicitLimitOffset(t *testing.T) {

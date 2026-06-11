@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import { parsePageParam } from "@/libraries/pagination";
 
 interface GalleryProps<T> {
   items: T[];
@@ -26,7 +27,7 @@ const Gallery = <T,>({
   emptyMessage,
 }: GalleryProps<T>) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
 
   const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;

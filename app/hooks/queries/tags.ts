@@ -11,7 +11,11 @@ import type {
   ResourceListResponse,
   TagResponse,
 } from "@/types";
-import type { ListTagsQuery, UpdateTagPayload } from "@/types/generated/tags";
+import type {
+  ListTagsQuery,
+  SubResourceQuery,
+  UpdateTagPayload,
+} from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
 
@@ -56,10 +60,10 @@ export const useTag = (
   });
 };
 
-export interface TagBooksQuery {
-  limit?: number;
-  offset?: number;
-}
+// Alias of the generated query type; imported directly from the generated
+// module because every sub-resource package emits a `SubResourceQuery` and
+// the barrel cannot re-export them all under one name.
+export type TagBooksQuery = SubResourceQuery;
 
 export const useTagBooks = (
   tagId?: number,

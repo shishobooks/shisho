@@ -3,6 +3,7 @@ package series
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -100,7 +101,13 @@ func TestSeriesBooks_ResponseShape(t *testing.T) {
 func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	t.Parallel()
 	db := setupSeriesTestDB(t)
-	seriesID := seedSeriesWithBooks(t, db, []string{"Alpha", "Beta", "Charlie"})
+	// Seed one more book than the default limit so the test pins the
+	// default-limit=24 contract instead of passing for any bind default.
+	titles := make([]string, 25)
+	for i := range titles {
+		titles[i] = fmt.Sprintf("Book %02d", i+1)
+	}
+	seriesID := seedSeriesWithBooks(t, db, titles)
 	h := newSeriesHandler(db)
 
 	rec := getSeriesBooks(t, h, seriesID, "")
@@ -112,9 +119,9 @@ func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
-	assert.Equal(t, 3, resp.Total)
-	require.Len(t, resp.Items, 3)
-	assert.Equal(t, "Alpha", resp.Items[0].Title, "books must be ordered by series number")
+	assert.Equal(t, 25, resp.Total)
+	require.Len(t, resp.Items, 24, "default limit must be 24")
+	assert.Equal(t, "Book 01", resp.Items[0].Title, "books must be ordered by series number")
 }
 
 func TestSeriesBooks_ExplicitLimitOffset(t *testing.T) {

@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
+import { parsePageParam } from "@/libraries/pagination";
+
 const ITEMS_PER_PAGE = 50;
 
 export interface ResourceListQuery {
@@ -14,7 +16,7 @@ export interface ResourceListQuery {
 export function useResourceListState() {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const searchQuery = searchParams.get("search") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);

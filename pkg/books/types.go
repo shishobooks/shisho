@@ -90,8 +90,10 @@ const (
 
 // ResyncPayload contains the request parameters for resync operations. An
 // invalid mode is rejected at bind time; an omitted mode defaults to "scan".
+// The json `omitempty` is purely for tygo optionality (`mode?: ResyncMode`)
+// since omission is a legal wire value; requests are never marshaled by us.
 type ResyncPayload struct {
-	Mode string `json:"mode" validate:"omitempty,oneof=scan refresh reset" tstype:"ResyncMode"`
+	Mode string `json:"mode,omitempty" validate:"omitempty,oneof=scan refresh reset" tstype:"ResyncMode"`
 }
 
 // resolveScanMode converts a ResyncPayload into ForceRefresh, SkipPlugins, and

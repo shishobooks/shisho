@@ -9,6 +9,7 @@ import { API, ShishoAPIError } from "@/libraries/api";
 import type { Book, ResourceListResponse, SeriesResponse } from "@/types";
 import type {
   ListSeriesQuery,
+  SubResourceQuery,
   UpdateSeriesPayload,
 } from "@/types/generated/series";
 
@@ -59,10 +60,10 @@ export const useSeries = (
   });
 };
 
-export interface SeriesBooksQuery {
-  limit?: number;
-  offset?: number;
-}
+// Alias of the generated query type; imported directly from the generated
+// module because every sub-resource package emits a `SubResourceQuery` and
+// the barrel cannot re-export them all under one name.
+export type SeriesBooksQuery = SubResourceQuery;
 
 export const useSeriesBooks = (
   seriesId?: number,

@@ -39,6 +39,7 @@ import {
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -83,7 +84,7 @@ const ListDetail = () => {
     userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
   // Get current page from URL
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
 

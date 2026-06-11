@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { parsePageParam } from "@/libraries/pagination";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 
 const JOBS_PER_PAGE = 20;
@@ -84,7 +85,7 @@ const AdminJobs = () => {
   usePageTitle("Background Jobs");
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
 
   const { hasPermission } = useAuth();
   const { data, isLoading, error, refetch } = useJobs({

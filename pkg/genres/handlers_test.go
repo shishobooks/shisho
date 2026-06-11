@@ -214,7 +214,13 @@ func TestBooks_DefaultPagination(t *testing.T) {
 	db := setupHandlerTestDB(t)
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
-	genre := seedGenreWithBooks(t, db, lib, "Fiction", []string{"Alpha", "Beta", "Charlie"})
+	// Seed one more book than the default limit so the test pins the
+	// default-limit=24 contract instead of passing for any bind default.
+	titles := make([]string, 25)
+	for i := range titles {
+		titles[i] = fmt.Sprintf("Book %02d", i+1)
+	}
+	genre := seedGenreWithBooks(t, db, lib, "Fiction", titles)
 	h := newTestHandler(t, db)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -234,9 +240,9 @@ func TestBooks_DefaultPagination(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, 3, resp.Total)
-	assert.Len(t, resp.Items, 3)
-	assert.Equal(t, "Alpha", resp.Items[0].Title)
+	assert.Equal(t, 25, resp.Total)
+	require.Len(t, resp.Items, 24, "default limit must be 24")
+	assert.Equal(t, "Book 01", resp.Items[0].Title)
 }
 
 func TestBooks_ExplicitLimitOffset(t *testing.T) {
