@@ -12,7 +12,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { parseGallerySize } from "@/libraries/gallerySize";
+import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
@@ -62,6 +62,10 @@ export function BookGallerySection({
   const offset = (currentPage - 1) * itemsPerPage;
 
   const applyGallerySize = (next: GallerySize) => {
+    // Jump to the page that contains the first item currently in view, so
+    // the user keeps their place when the page size changes (matches the
+    // documented behavior and the Home/SeriesList/ListDetail galleries).
+    const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (next === savedSize) {
@@ -69,12 +73,15 @@ export function BookGallerySection({
       } else {
         params.set("size", next);
       }
-      // Reset to page 1 on size change
-      params.delete("page");
+      if (newPage === 1) {
+        params.delete("page");
+      } else {
+        params.set("page", String(newPage));
+      }
       return params;
     });
     onSizeChange?.(next);
-    onPageChange?.(1);
+    onPageChange?.(newPage);
   };
 
   const handleSaveSizeAsDefault = () => {

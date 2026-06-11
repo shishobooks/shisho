@@ -139,7 +139,7 @@ describe("BookGallerySection", () => {
     expect(screen.getByRole("button", { name: /Size/ })).toBeInTheDocument();
   });
 
-  it("calls onPageChange with page 1 when size changes", async () => {
+  it("calls onPageChange with page 1 when size changes from the first page", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onPageChange = vi.fn();
     const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
@@ -159,6 +159,30 @@ describe("BookGallerySection", () => {
     await user.click(screen.getByRole("button", { name: /Size/ }));
     await user.click(screen.getByRole("button", { name: "L" }));
     expect(onPageChange).toHaveBeenCalledWith(1);
+  });
+
+  it("keeps the first visible item in view when size changes on a later page", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onPageChange = vi.fn();
+    const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
+    render(
+      wrap(
+        <BookGallerySection
+          libraryId="1"
+          onPageChange={onPageChange}
+          onSizeChange={vi.fn()}
+          query={makeQueryResult(books, 100)}
+          title="Books"
+        />,
+        ["/?page=3"],
+      ),
+    );
+
+    // Page 3 at size M (24/page) starts at offset 48; at size S (33/page)
+    // that item lives on page 2, not page 1.
+    await user.click(screen.getByRole("button", { name: /Size/ }));
+    await user.click(screen.getByRole("button", { name: "S" }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
   });
 
   it("renders loading spinner when loading", () => {
