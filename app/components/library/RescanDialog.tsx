@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { type ResyncMode } from "@/types";
+import {
+  ResyncModeRefresh,
+  ResyncModeReset,
+  ResyncModeScan,
+  type ResyncMode,
+} from "@/types";
 
 interface RescanDialogProps {
   open: boolean;
@@ -26,19 +31,19 @@ interface RescanDialogProps {
 
 const modes: { value: ResyncMode; label: string; description: string }[] = [
   {
-    value: "scan",
+    value: ResyncModeScan,
     label: "Scan for new metadata",
     description:
       "Pick up new metadata without overwriting manual edits. Use when file metadata has been updated externally.",
   },
   {
-    value: "refresh",
+    value: ResyncModeRefresh,
     label: "Refresh all metadata",
     description:
       "Re-scan as if this were the first time. Use after installing or updating plugins to re-enrich metadata.",
   },
   {
-    value: "reset",
+    value: ResyncModeReset,
     label: "Reset to file metadata",
     description:
       "Clear all metadata and re-scan as if this were a brand new file, without plugins. Manual edits and enricher data will be removed.",
@@ -53,12 +58,12 @@ export function RescanDialog({
   onConfirm,
   isPending,
 }: RescanDialogProps) {
-  const [selectedMode, setSelectedMode] = useState<ResyncMode>("scan");
+  const [selectedMode, setSelectedMode] = useState<ResyncMode>(ResyncModeScan);
 
   return (
     <Dialog
       onOpenChange={(newOpen) => {
-        if (!newOpen) setSelectedMode("scan");
+        if (!newOpen) setSelectedMode(ResyncModeScan);
         onOpenChange(newOpen);
       }}
       open={open}

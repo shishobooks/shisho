@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -35,6 +36,9 @@ func newTestEchoSeries(t *testing.T) *echo.Echo {
 	b, err := binder.New()
 	require.NoError(t, err)
 	e.Binder = b
+	// Render errors through the production handler so error-path assertions
+	// exercise the same status codes and envelope as the real server.
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	return e
 }
 
