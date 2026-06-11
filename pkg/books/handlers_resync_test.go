@@ -90,21 +90,23 @@ func TestResyncFile_InvalidModeRejected(t *testing.T) {
 	assert.False(t, scanner.called, "an invalid mode must be rejected before reaching the scanner")
 }
 
+// resyncModeCases is the shared mode-to-ScanOptions mapping table used by both
+// the book and file valid-mode route tests.
+var resyncModeCases = []struct {
+	mode             string
+	wantForceRefresh bool
+	wantSkipPlugins  bool
+	wantReset        bool
+}{
+	{mode: ResyncModeScan, wantForceRefresh: false, wantSkipPlugins: false, wantReset: false},
+	{mode: ResyncModeRefresh, wantForceRefresh: true, wantSkipPlugins: false, wantReset: false},
+	{mode: ResyncModeReset, wantForceRefresh: true, wantSkipPlugins: true, wantReset: true},
+}
+
 func TestResyncBook_ValidModesReachScanner(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		mode             string
-		wantForceRefresh bool
-		wantSkipPlugins  bool
-		wantReset        bool
-	}{
-		{mode: ResyncModeScan, wantForceRefresh: false, wantSkipPlugins: false, wantReset: false},
-		{mode: ResyncModeRefresh, wantForceRefresh: true, wantSkipPlugins: false, wantReset: false},
-		{mode: ResyncModeReset, wantForceRefresh: true, wantSkipPlugins: true, wantReset: true},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range resyncModeCases {
 		t.Run(tt.mode, func(t *testing.T) {
 			t.Parallel()
 			db := setupTestDB(t)
@@ -121,6 +123,35 @@ func TestResyncBook_ValidModesReachScanner(t *testing.T) {
 			assert.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
 			require.True(t, scanner.called, "a valid mode must reach the scanner")
 			assert.Equal(t, book.ID, scanner.opts.BookID)
+			assert.Equal(t, tt.wantForceRefresh, scanner.opts.ForceRefresh, "ForceRefresh")
+			assert.Equal(t, tt.wantSkipPlugins, scanner.opts.SkipPlugins, "SkipPlugins")
+			assert.Equal(t, tt.wantReset, scanner.opts.Reset, "Reset")
+		})
+	}
+}
+
+func TestResyncFile_ValidModesReachScanner(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range resyncModeCases {
+		t.Run(tt.mode, func(t *testing.T) {
+			t.Parallel()
+			db := setupTestDB(t)
+			library, book := setupTestLibraryAndBook(t, db)
+			file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
+			user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+			scanner := &recordingScanner{}
+			e := setupTestServerWithScanner(t, db, scanner)
+
+			req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID)+"/resync", strings.NewReader(`{"mode":"`+tt.mode+`"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rr := executeRequestWithUser(t, e, req, user)
+
+			assert.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+			require.True(t, scanner.called, "a valid mode must reach the scanner")
+			assert.Equal(t, file.ID, scanner.opts.FileID)
+			assert.Zero(t, scanner.opts.BookID, "file resync must use the FileID entry point")
 			assert.Equal(t, tt.wantForceRefresh, scanner.opts.ForceRefresh, "ForceRefresh")
 			assert.Equal(t, tt.wantSkipPlugins, scanner.opts.SkipPlugins, "SkipPlugins")
 			assert.Equal(t, tt.wantReset, scanner.opts.Reset, "Reset")
