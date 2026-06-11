@@ -26,6 +26,7 @@ import {
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -137,7 +138,7 @@ const SeriesList = () => {
 
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const searchQuery = searchParams.get("search") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);

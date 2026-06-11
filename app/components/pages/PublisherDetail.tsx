@@ -28,6 +28,7 @@ import {
 } from "@/hooks/queries/publishers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { parsePageParam } from "@/libraries/pagination";
 
 const PublisherDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -35,7 +36,7 @@ const PublisherDetail = () => {
   const [searchParams] = useSearchParams();
   const publisherId = id ? parseInt(id, 10) : undefined;
 
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
 
   const publisherQuery = usePublisher(publisherId);
   usePageTitle(publisherQuery.data?.name ?? "Publisher");

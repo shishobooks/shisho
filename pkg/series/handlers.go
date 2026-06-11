@@ -242,6 +242,11 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return errcodes.NotFound("Series")
 	}
 
+	params := SubResourceQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Fetch the series to check library access
 	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
 		ID: &id,
@@ -257,8 +262,10 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		}
 	}
 
-	booksList, err := h.bookService.ListBooks(ctx, books.ListBooksOptions{
+	booksList, total, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
 		SeriesID: &id,
+		Limit:    &params.Limit,
+		Offset:   &params.Offset,
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -272,7 +279,9 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, booksList))
+	response := ListSeriesBooksResponse{Items: booksList, Total: total}
+
+	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
 func (h *handler) seriesCover(c echo.Context) error {

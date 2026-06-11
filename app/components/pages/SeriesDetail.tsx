@@ -2,17 +2,19 @@ import { Edit, GitMerge, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import BookItem from "@/components/library/BookItem";
+import { BookGallerySection } from "@/components/library/BookGallerySection";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
 import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
-import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
+import {
+  DEFAULT_GALLERY_SIZE,
+  ITEMS_PER_PAGE_BY_SIZE,
+} from "@/constants/gallerySize";
 import { useLibrary } from "@/hooks/queries/libraries";
 import {
   useDeleteSeries,
@@ -22,23 +24,22 @@ import {
   useSeriesList,
   useUpdateSeries,
 } from "@/hooks/queries/series";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
+import { useUserSettings } from "@/hooks/queries/settings";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import type { GallerySize } from "@/types";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const seriesId = id ? parseInt(id, 10) : undefined;
 
   const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
+  const userSettingsResolved =
+    userSettingsQuery.isSuccess || userSettingsQuery.isError;
 
   const urlSize: GallerySize | null = parseGallerySize(
     searchParams.get("size"),
@@ -46,49 +47,23 @@ const SeriesDetail = () => {
   const savedSize: GallerySize =
     userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
   const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
-
-  // No page recalc here — this gallery is unpaginated (single unbounded
-  // fetch). The paginated pages (Home / SeriesList / ListDetail) call
-  // pageForSizeChange to preserve the user's first-visible book across
-  // size changes; that math is meaningless when there's only one page.
-  const applyGallerySize = (next: GallerySize) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      return params;
-    });
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
+  const currentPage = parsePageParam(searchParams.get("page"));
+  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
   const libraryQuery = useLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
-  const seriesBooksQuery = useSeriesBooks(seriesId, {
-    enabled: userSettingsResolved && Boolean(seriesId),
-  });
+  const seriesBooksQuery = useSeriesBooks(
+    seriesId,
+    {
+      limit: itemsPerPage,
+      offset: (currentPage - 1) * itemsPerPage,
+    },
+    {
+      enabled: userSettingsResolved && Boolean(seriesId),
+    },
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -237,45 +212,13 @@ const SeriesDetail = () => {
       </div>
 
       {/* Books in Series */}
-      {series.book_count > 0 && (
-        <section className="mb-10">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Books in Series</h2>
-            <div className="hidden sm:flex">
-              <SizePopover
-                effectiveSize={effectiveSize}
-                isSaving={updateUserSettings.isPending}
-                onChange={applyGallerySize}
-                onSaveAsDefault={handleSaveSizeAsDefault}
-                savedSize={savedSize}
-                trigger={<SizeButton isDirty={isSizeDirty} />}
-              />
-            </div>
-          </div>
-          {seriesBooksQuery.isLoading && <LoadingSpinner />}
-          {seriesBooksQuery.isSuccess && (
-            <div className="flex flex-wrap gap-4">
-              {seriesBooksQuery.data.map((book) => (
-                <BookItem
-                  book={book}
-                  cacheKey={book.cover_cache_key}
-                  gallerySize={effectiveSize}
-                  key={book.id}
-                  libraryId={libraryId!}
-                  seriesId={seriesId}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* No Books */}
-      {series.book_count === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          This series has no associated books.
-        </div>
-      )}
+      <BookGallerySection
+        emptyMessage="This series has no associated books."
+        libraryId={libraryId!}
+        query={seriesBooksQuery}
+        seriesId={seriesId}
+        title="Books in Series"
+      />
 
       <MetadataEditDialog
         aliases={aliases}

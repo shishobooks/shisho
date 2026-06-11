@@ -12,13 +12,14 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { parseGallerySize } from "@/libraries/gallerySize";
+import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import { parsePageParam } from "@/libraries/pagination";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
 interface BookGalleryQuery {
   data: ResourceListResponse<Book> | undefined;
-  isLoading: boolean;
   isSuccess: boolean;
+  isError: boolean;
 }
 
 interface BookGallerySectionProps {
@@ -26,6 +27,8 @@ interface BookGallerySectionProps {
   query: BookGalleryQuery;
   title: string;
   emptyMessage?: string;
+  /** Series context forwarded to BookItem so it shows the series number */
+  seriesId?: number;
   /** Called when pagination page changes */
   onPageChange?: (page: number) => void;
   /** Called when gallery size changes */
@@ -37,6 +40,7 @@ export function BookGallerySection({
   query,
   title,
   emptyMessage,
+  seriesId,
   onPageChange,
   onSizeChange,
 }: BookGallerySectionProps) {
@@ -52,12 +56,16 @@ export function BookGallerySection({
   const effectiveSize: GallerySize = urlSize ?? savedSize;
   const isSizeDirty = urlSize !== null && urlSize !== savedSize;
 
-  const currentPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
   const offset = (currentPage - 1) * itemsPerPage;
 
   const applyGallerySize = (next: GallerySize) => {
+    // Jump to the page that contains the first item currently in view, so
+    // the user keeps their place when the page size changes (matches the
+    // documented behavior and the Home/SeriesList/ListDetail galleries).
+    const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (next === savedSize) {
@@ -65,12 +73,15 @@ export function BookGallerySection({
       } else {
         params.set("size", next);
       }
-      // Reset to page 1 on size change
-      params.delete("page");
+      if (newPage === 1) {
+        params.delete("page");
+      } else {
+        params.set("page", String(newPage));
+      }
       return params;
     });
     onSizeChange?.(next);
-    onPageChange?.(1);
+    onPageChange?.(newPage);
   };
 
   const handleSaveSizeAsDefault = () => {
@@ -101,7 +112,11 @@ export function BookGallerySection({
     onPageChange?.(page);
   };
 
-  if (query.isLoading) {
+  // Treat any unresolved query as loading, including a disabled query
+  // waiting on its `enabled` gate (isLoading is false there, since TanStack
+  // only sets it while actually fetching). Without this, a series/genre/tag
+  // with books briefly flashes the empty state before the query is enabled.
+  if (!query.isSuccess && !query.isError) {
     return (
       <section className="mb-10">
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
@@ -152,6 +167,7 @@ export function BookGallerySection({
             gallerySize={effectiveSize}
             key={book.id}
             libraryId={libraryId}
+            seriesId={seriesId}
           />
         ))}
       </div>

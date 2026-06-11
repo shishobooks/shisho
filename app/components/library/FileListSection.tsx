@@ -4,6 +4,7 @@ import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
 import { Badge } from "@/components/ui/badge";
+import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
 import { formatDuration, getFilename } from "@/utils/format";
 
@@ -69,7 +70,7 @@ export function FileListSection({
 }: FileListSectionProps) {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const currentPage = parseInt(searchParams.get(pageParam) ?? "1", 10);
+  const currentPage = parsePageParam(searchParams.get(pageParam));
   const offset = (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE;
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / FILE_LIST_ITEMS_PER_PAGE);

@@ -115,7 +115,3 @@ type CheckVisibilityQuery struct {
 type MoveBookPositionPayload struct {
 	Position int `json:"position" validate:"required,min=1"`
 }
-
-type CreateFromTemplatePayload struct {
-	// No fields needed - template name comes from URL
-}

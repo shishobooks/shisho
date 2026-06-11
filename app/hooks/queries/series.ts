@@ -9,6 +9,7 @@ import { API, ShishoAPIError } from "@/libraries/api";
 import type { Book, ResourceListResponse, SeriesResponse } from "@/types";
 import type {
   ListSeriesQuery,
+  SubResourceQuery,
   UpdateSeriesPayload,
 } from "@/types/generated/series";
 
@@ -59,24 +60,30 @@ export const useSeries = (
   });
 };
 
+// Alias of the generated query type; imported directly from the generated
+// module because every sub-resource package emits a `SubResourceQuery` and
+// the barrel cannot re-export them all under one name.
+export type SeriesBooksQuery = SubResourceQuery;
+
 export const useSeriesBooks = (
   seriesId?: number,
+  query: SeriesBooksQuery = {},
   options: Omit<
-    UseQueryOptions<Book[], ShishoAPIError>,
+    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<Book[], ShishoAPIError>({
+  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
     enabled:
       options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
-    queryKey: [QueryKey.SeriesBooks, seriesId],
+    queryKey: [QueryKey.SeriesBooks, seriesId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         `/series/${seriesId}/books`,
         null,
-        null,
+        query,
         signal,
       );
     },

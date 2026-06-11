@@ -7,14 +7,10 @@ import {
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { API, ShishoAPIError } from "@/libraries/api";
-
-export interface LibrarySettings {
-  sort_spec: string | null;
-}
-
-export interface UpdateLibrarySettingsPayload {
-  sort_spec: string | null;
-}
+import {
+  type LibrarySettingsResponse,
+  type UpdateLibrarySettingsPayload,
+} from "@/types";
 
 export enum QueryKey {
   LibrarySettings = "LibrarySettings",
@@ -23,11 +19,11 @@ export enum QueryKey {
 export const useLibrarySettings = (
   libraryId: number,
   options: Omit<
-    UseQueryOptions<LibrarySettings, ShishoAPIError>,
+    UseQueryOptions<LibrarySettingsResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<LibrarySettings, ShishoAPIError>({
+  return useQuery<LibrarySettingsResponse, ShishoAPIError>({
     enabled: Boolean(libraryId),
     ...options,
     queryKey: [QueryKey.LibrarySettings, libraryId],
@@ -47,7 +43,7 @@ export const useUpdateLibrarySettings = (libraryId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation<
-    LibrarySettings,
+    LibrarySettingsResponse,
     ShishoAPIError,
     UpdateLibrarySettingsPayload
   >({

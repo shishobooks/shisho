@@ -35,7 +35,6 @@ import {
   DEFAULT_GALLERY_SIZE,
 } from "@/constants/gallerySize";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
-import { type RescanMode } from "@/hooks/queries/resync";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { cn } from "@/libraries/utils";
 import {
@@ -45,6 +44,7 @@ import {
   type Book,
   type File,
   type GallerySize,
+  type ResyncMode,
 } from "@/types";
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -129,7 +129,7 @@ const BookItem = ({
     setCoverLoaded(true);
   };
 
-  const handleRescan = async (mode: RescanMode) => {
+  const handleRescan = async (mode: ResyncMode) => {
     try {
       await resyncBookMutation.mutateAsync({
         bookId: book.id,

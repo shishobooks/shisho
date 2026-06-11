@@ -214,7 +214,13 @@ func TestFiles_DefaultPagination(t *testing.T) {
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
-	pub := seedPublisherWithFiles(t, db, lib, "Penguin", []string{"f1", "f2", "f3"})
+	// Seed one more file than the default limit so the test pins the
+	// default-limit=24 contract instead of passing for any bind default.
+	names := make([]string, 25)
+	for i := range names {
+		names[i] = fmt.Sprintf("f%02d", i+1)
+	}
+	pub := seedPublisherWithFiles(t, db, lib, "Penguin", names)
 
 	e := newTestEcho(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -234,12 +240,12 @@ func TestFiles_DefaultPagination(t *testing.T) {
 	var total int
 	err = json.Unmarshal(resp["total"], &total)
 	require.NoError(t, err)
-	assert.Equal(t, 3, total)
+	assert.Equal(t, 25, total)
 
 	var items []json.RawMessage
 	err = json.Unmarshal(resp["items"], &items)
 	require.NoError(t, err)
-	assert.Len(t, items, 3)
+	require.Len(t, items, 24, "default limit must be 24")
 }
 
 func TestFiles_ExplicitLimitOffset(t *testing.T) {

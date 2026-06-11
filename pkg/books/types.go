@@ -79,25 +79,32 @@ type UpdateFilePayload struct {
 	IsPreferredCover *bool                `json:"is_preferred_cover,omitempty"`
 }
 
-// ResyncPayload contains the request parameters for resync operations.
+// ResyncMode is the scan mode for resync operations: "scan" (default),
+// "refresh", or "reset".
+const (
+	//tygo:emit export type ResyncMode = typeof ResyncModeScan | typeof ResyncModeRefresh | typeof ResyncModeReset;
+	ResyncModeScan    = "scan"
+	ResyncModeRefresh = "refresh"
+	ResyncModeReset   = "reset"
+)
+
+// ResyncPayload contains the request parameters for resync operations. An
+// invalid mode is rejected at bind time; an omitted mode defaults to "scan".
+// The json `omitempty` is purely for tygo optionality (`mode?: ResyncMode`)
+// since omission is a legal wire value; requests are never marshaled by us.
 type ResyncPayload struct {
-	Mode    string `json:"mode"`
-	Refresh bool   `json:"refresh"` // Deprecated: kept for backwards compatibility
+	Mode string `json:"mode,omitempty" validate:"omitempty,oneof=scan refresh reset" tstype:"ResyncMode"`
 }
 
-// resolveScanMode converts a ResyncPayload into ForceRefresh, SkipPlugins, and Reset flags.
-// Supports three modes: "scan" (default), "refresh", and "reset".
-// Falls back to the deprecated Refresh boolean if Mode is empty.
+// resolveScanMode converts a ResyncPayload into ForceRefresh, SkipPlugins, and
+// Reset flags. Supports three modes: "scan" (default), "refresh", and "reset".
 func (p ResyncPayload) resolveScanMode() (forceRefresh, skipPlugins, reset bool) {
 	switch p.Mode {
-	case "refresh":
+	case ResyncModeRefresh:
 		return true, false, false
-	case "reset":
+	case ResyncModeReset:
 		return true, true, true
-	case "scan", "":
-		// For empty mode, check deprecated Refresh field for backwards compatibility
-		return p.Refresh, false, false
-	default:
+	default: // ResyncModeScan or empty
 		return false, false, false
 	}
 }

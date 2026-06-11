@@ -64,13 +64,13 @@ function makeQueryResult(
   total: number,
 ): {
   data: ResourceListResponse<Book>;
-  isLoading: boolean;
   isSuccess: boolean;
+  isError: boolean;
 } {
   return {
     data: { items: books, total },
-    isLoading: false,
     isSuccess: true,
+    isError: false,
   };
 }
 
@@ -139,7 +139,7 @@ describe("BookGallerySection", () => {
     expect(screen.getByRole("button", { name: /Size/ })).toBeInTheDocument();
   });
 
-  it("calls onPageChange with page 1 when size changes", async () => {
+  it("calls onPageChange with page 1 when size changes from the first page", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onPageChange = vi.fn();
     const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
@@ -161,20 +161,84 @@ describe("BookGallerySection", () => {
     expect(onPageChange).toHaveBeenCalledWith(1);
   });
 
+  it("keeps the first visible item in view when size changes on a later page", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onPageChange = vi.fn();
+    const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
+    render(
+      wrap(
+        <BookGallerySection
+          libraryId="1"
+          onPageChange={onPageChange}
+          onSizeChange={vi.fn()}
+          query={makeQueryResult(books, 100)}
+          title="Books"
+        />,
+        ["/?page=3"],
+      ),
+    );
+
+    // Page 3 at size M (24/page) starts at offset 48; at size S (33/page)
+    // that item lives on page 2, not page 1.
+    await user.click(screen.getByRole("button", { name: /Size/ }));
+    await user.click(screen.getByRole("button", { name: "S" }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
   it("renders loading spinner when loading", () => {
     render(
       wrap(
         <BookGallerySection
           libraryId="1"
           query={{
-            data: { items: [], total: 0 },
-            isLoading: true,
+            data: undefined,
             isSuccess: false,
+            isError: false,
           }}
           title="Books"
         />,
       ),
     );
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("renders loading spinner, not the empty state, while the query is disabled", () => {
+    // A disabled query (waiting on its `enabled` gate, e.g. user settings)
+    // is pending but not fetching: data undefined, isSuccess and isError
+    // both false. It must not flash the empty state.
+    render(
+      wrap(
+        <BookGallerySection
+          emptyMessage="No books here."
+          libraryId="1"
+          query={{
+            data: undefined,
+            isSuccess: false,
+            isError: false,
+          }}
+          title="Books"
+        />,
+      ),
+    );
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.queryByText("No books here.")).not.toBeInTheDocument();
+  });
+
+  it("renders empty state when the query errors", () => {
+    render(
+      wrap(
+        <BookGallerySection
+          emptyMessage="No books here."
+          libraryId="1"
+          query={{
+            data: undefined,
+            isSuccess: false,
+            isError: true,
+          }}
+          title="Books"
+        />,
+      ),
+    );
+    expect(screen.getByText("No books here.")).toBeInTheDocument();
   });
 });

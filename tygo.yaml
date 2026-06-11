@@ -90,7 +90,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/series"
     output_path: "app/types/generated/series.ts"
     frontmatter: |
-      import { Series } from "@/types";
+      import { Book, Series } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/people"
