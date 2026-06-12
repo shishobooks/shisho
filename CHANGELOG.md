@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-06-11
+
+### Features
+- Resolve tygo type-boundary stragglers from the #341 audit (#387)
+- Generate the plugin HTTP API surface from Go via tygo (#386)
+- Handle unplayable xHE-AAC audiobooks gracefully in the M4B player (#385)
+- Add persisted playback speed to the M4B player (#381)
+- Close remaining tygo type-boundary gaps from the #341 audit (#380)
+- Add chapter navigation to the M4B player (#379)
+- Add in-app M4B audiobook player with basic playback (#378)
+- Take settings and search response types end-to-end via tygo (#376)
+- Take Lists response types end-to-end via tygo (#374)
+- Take Jobs and logs response types end-to-end via tygo (#375)
+- Take Users, Roles, Libraries response types end-to-end via tygo (#373)
+- Take Books response types end-to-end via tygo (#372)
+- Take Publishers response types end-to-end via tygo (#371)
+- Take People response types end-to-end via tygo (#370)
+- Take Series response types end-to-end via tygo (#369)
+- Take Tags response types end-to-end via tygo (#368)
+- Take Genres response types end-to-end via tygo and establish the convention (#365)
+- Rename per-package validators.go files to types.go (#354)
+
+### Bug Fixes
+- Identify search cancels superseded requests so newest query wins (#377)
+- Disable pdfcpu on-disk config to stop cross-process CI race (#367)
+- Run e2e API via exec'd binary so Playwright can kill it (#356)
+
+### Documentation
+- Record plugin API surface decision in ADR 0004 and add Resync to glossary (#382)
+- Add ADR 0004 for tygo-generated API types (#353)
+
+### CI/CD
+- Add per-attempt timeout and hang retry to e2e steps (#355)
+
+### Other
+- Bump the minor-and-patch group with 26 updates (#359)
+- Bump the minor-and-patch group with 2 updates (#357)
+- Bump nick-fields/retry from 3 to 4 (#358)
+- Bump the minor-and-patch group with 4 updates (#340)
+- Bump github.com/go-playground/validator/v10 from 10.30.2 to 10.30.3 in the minor-and-patch group (#339)
+
+
 ## [0.0.46] - 2026-05-30
 
 ### Features
