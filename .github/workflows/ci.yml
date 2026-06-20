@@ -19,7 +19,7 @@ jobs:
     name: Go Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - run: mise lint
 
@@ -35,7 +35,7 @@ jobs:
       TZ: America/Chicago
       CI: "true"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - name: Restore test timing cache
         # Restore-only — saving is consolidated across shards in the
@@ -76,7 +76,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             tools/gotestsplit
@@ -119,7 +119,7 @@ jobs:
     name: JS Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - run: pnpm install --frozen-lockfile
       - run: mise tygo
@@ -134,7 +134,7 @@ jobs:
     name: Docs Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - run: pnpm install --frozen-lockfile
       - run: mise build:docs
@@ -143,7 +143,7 @@ jobs:
     name: JS Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - run: pnpm install --frozen-lockfile
 
