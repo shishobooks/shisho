@@ -3,6 +3,7 @@ package mp4_test
 import (
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,29 @@ func readChaptersWithFFprobe(t *testing.T, path string) []string {
 	return titles
 }
 
+// readChapterEndTimesWithFFprobe returns each chapter's end time (in seconds) in
+// order, as ffprobe reports them from the QuickTime chapter track.
+func readChapterEndTimesWithFFprobe(t *testing.T, path string) []float64 {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "ffprobe",
+		"-v", "error", "-show_chapters", "-of", "compact", path)
+	output, err := cmd.Output()
+	require.NoError(t, err)
+
+	var ends []float64
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		for _, field := range strings.Split(line, "|") {
+			const marker = "end_time="
+			if strings.HasPrefix(field, marker) {
+				v, perr := strconv.ParseFloat(field[len(marker):], 64)
+				require.NoError(t, perr)
+				ends = append(ends, v)
+			}
+		}
+	}
+	return ends
+}
+
 // TestWriteToFile_RewritesChapterTimestamps verifies the rebuilt chapter track
 // carries the DB timestamps, not the source's, so a user who re-timed chapters
 // sees the new boundaries.
@@ -168,6 +192,55 @@ func TestWriteToFile_RewritesChapterTimestamps(t *testing.T) {
 	assert.InDelta(t, 0, out.Chapters[0].Start.Milliseconds(), 50)
 	assert.InDelta(t, 2000, out.Chapters[1].Start.Milliseconds(), 50)
 	assert.InDelta(t, 6000, out.Chapters[2].Start.Milliseconds(), 50)
+}
+
+// TestWriteToFile_RewritesNonContiguousChapterTimestamps guards the timing math
+// for chapters that are not back-to-back. The rebuilt track's per-sample deltas
+// must come from the gaps between consecutive starts (so a reader accumulating
+// them reproduces the starts), not from each chapter's own End-Start span. A
+// regression to per-chapter End-Start would still pass the contiguous-chapter
+// tests but diverge here.
+func TestWriteToFile_RewritesNonContiguousChapterTimestamps(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-qtchapters-gap-*")
+
+	srcPath := testgen.GenerateM4B(t, dir, "src.m4b", testgen.M4BOptions{
+		Title:     "Bossypants",
+		Duration:  10.0,
+		Faststart: true,
+		Chapters: []testgen.M4BChapter{
+			{Title: "001", Start: 0.0},
+			{Title: "002", Start: 5.0},
+		},
+	})
+
+	meta, err := mp4.ParseFull(srcPath)
+	require.NoError(t, err)
+	// Gaps between chapters: End[i] != Start[i+1].
+	meta.Chapters = []mp4.Chapter{
+		{Title: "One", Start: 0, End: 1 * time.Second},
+		{Title: "Two", Start: 3 * time.Second, End: 5 * time.Second},
+		{Title: "Three", Start: 7 * time.Second, End: 10 * time.Second},
+	}
+
+	destPath := filepath.Join(dir, "dest.m4b")
+	require.NoError(t, mp4.WriteToFile(srcPath, destPath, meta))
+
+	out, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+	require.Len(t, out.Chapters, 3)
+	// Starts must be reproduced from the gap-based deltas. Under an End-Start
+	// regression these would come back as 0, 1000, 3000.
+	assert.InDelta(t, 0, out.Chapters[0].Start.Milliseconds(), 50)
+	assert.InDelta(t, 3000, out.Chapters[1].Start.Milliseconds(), 50)
+	assert.InDelta(t, 7000, out.Chapters[2].Start.Milliseconds(), 50)
+
+	// The final sample's delta comes from the last chapter's End, which ffprobe
+	// reports as the last chapter's end time.
+	ends := readChapterEndTimesWithFFprobe(t, destPath)
+	require.NotEmpty(t, ends)
+	assert.InDelta(t, 10.0, ends[len(ends)-1], 0.1, "last chapter must end at the final End time")
 }
 
 // TestWriteToFile_ChapterCountDiffersFromSource verifies the rebuilt track is

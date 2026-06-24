@@ -87,11 +87,31 @@ func rebuildChapterTextTrack(moovContent []byte, chapters []Chapter) (rebuiltCha
 		return rebuiltChapterTrack{}, false
 	}
 
+	// Identify the chapter track the same way the reader and players do: the
+	// track the audio track's tref/chap reference points at. Matching by track
+	// ID (rather than "first text-handler track") keeps the writer in agreement
+	// with the reader when a file carries more than one text track.
 	chapterIdx := -1
-	for i, b := range boxes {
-		if b.typ == "trak" && isChapterTextTrak(moovContent[b.start:b.end]) {
-			chapterIdx = i
-			break
+	if targetID, ok := chapterTrackIDFromTref(moovContent, boxes); ok {
+		for i, b := range boxes {
+			if b.typ != "trak" {
+				continue
+			}
+			trak := moovContent[b.start:b.end]
+			if id, idOK := tkhdTrackID(trak); idOK && id == targetID && isChapterTextTrak(trak) {
+				chapterIdx = i
+				break
+			}
+		}
+	}
+	// Fall back to the first text-handler track when there is no tref/chap
+	// reference to resolve.
+	if chapterIdx == -1 {
+		for i, b := range boxes {
+			if b.typ == "trak" && isChapterTextTrak(moovContent[b.start:b.end]) {
+				chapterIdx = i
+				break
+			}
 		}
 	}
 	if chapterIdx == -1 {
@@ -120,6 +140,71 @@ func rebuildChapterTextTrack(moovContent []byte, chapters []Chapter) (rebuiltCha
 		sampleData:      res.sampleData,
 		co64FieldOffset: co64FieldOffset,
 	}, true
+}
+
+// chapterTrackIDFromTref returns the track ID referenced by the first
+// tref/chap box found among the moov's traks (the audio track points at its
+// chapter track this way). Mirrors how readQuickTimeChapters locates the track.
+func chapterTrackIDFromTref(moovContent []byte, boxes []childBox) (uint32, bool) {
+	for _, b := range boxes {
+		if b.typ != "trak" {
+			continue
+		}
+		trak := moovContent[b.start:b.end]
+		tboxes, err := childBoxes(trak[8:])
+		if err != nil {
+			continue
+		}
+		for _, tb := range tboxes {
+			if tb.typ != "tref" {
+				continue
+			}
+			tref := trak[8+tb.start : 8+tb.end]
+			refs, err := childBoxes(tref[8:])
+			if err != nil {
+				continue
+			}
+			for _, rb := range refs {
+				if rb.typ == "chap" {
+					chap := tref[8+rb.start : 8+rb.end]
+					if len(chap) >= 12 {
+						return binary.BigEndian.Uint32(chap[8:12]), true
+					}
+				}
+			}
+		}
+	}
+	return 0, false
+}
+
+// tkhdTrackID extracts the track ID from a trak's tkhd box.
+// Layout: size(4) type(4) version(1) flags(3) then, for v0, creation(4)
+// modification(4) track_id(4); for v1, creation(8) modification(8) track_id(4).
+func tkhdTrackID(trak []byte) (uint32, bool) {
+	boxes, err := childBoxes(trak[8:])
+	if err != nil {
+		return 0, false
+	}
+	for _, b := range boxes {
+		if b.typ != "tkhd" {
+			continue
+		}
+		box := trak[8+b.start : 8+b.end]
+		if len(box) < 9 {
+			return 0, false
+		}
+		if box[8] == 1 {
+			if len(box) < 32 {
+				return 0, false
+			}
+			return binary.BigEndian.Uint32(box[28:32]), true
+		}
+		if len(box) < 24 {
+			return 0, false
+		}
+		return binary.BigEndian.Uint32(box[20:24]), true
+	}
+	return 0, false
 }
 
 // isChapterTextTrak reports whether a trak is a text track (mdia/hdlr handler
@@ -160,7 +245,7 @@ func hdlrHandlerType(box []byte) string {
 }
 
 // chapterRebuildResult is the common return of the per-box rebuild helpers: the
-// new box bytes, the chapter sample data discovered beneath it, and co64Rel —
+// new box bytes, the chapter sample data discovered beneath it, and co64Rel,
 // the offset of the chapter track's co64 value relative to the start of the
 // returned box.
 type chapterRebuildResult struct {

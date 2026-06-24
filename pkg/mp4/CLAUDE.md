@@ -214,23 +214,27 @@ play while lenient players may limp along.
   and `TestWriteToFile_MdatFirstLayoutLeavesChunkOffsetsUnchanged` (no
   over-shift) in `writer_chunkoffset_test.go`.
 
-**QuickTime chapter-track rebuild on write — CRITICAL.**
+**QuickTime chapter-track rebuild on write (CRITICAL).**
 M4B files store chapters in TWO places: a **QuickTime text chapter track** (an
 audio `trak` references a separate text `trak` via `tref/chap`) and a **Nero
 `chpl`** box. Players, ffprobe, and Shisho's own reader (`readChapters` tries
 QuickTime first) prefer the QuickTime track. So writing chapters only to `chpl`
 (the old behavior) left the user's edited titles/timings masked by the stale
-source titles still sitting in the QuickTime track — the visible "manual chapters
-don't show up in the downloaded audiobook" bug.
+source titles still sitting in the QuickTime track. That was the visible "manual
+chapters don't show up in the downloaded audiobook" bug.
 
 `writeMetadataToBytes` now rebuilds the QuickTime chapter text track from
 `metadata.Chapters` (in `writer_chapters.go`) in addition to writing `chpl`:
 
-- The existing chapter text `trak` is located by its media handler type
-  (`mdia/hdlr` == `text`). Its `tkhd`/`edts`/`mdhd`/`hdlr`/`stsd` are preserved
-  verbatim (so the audio track's `tref/chap` reference and the track ID stay
-  valid); only the `stts`/`stsc`/`stsz` tables are regenerated and the chunk
-  offset is emitted as a 64-bit `co64` (overflow-safe).
+- The existing chapter text `trak` is located the same way the reader does: by
+  resolving the audio track's `tref/chap` reference to a track ID and matching
+  the `tkhd` track ID (falling back to the first `mdia/hdlr` == `text` track when
+  there is no `tref/chap`). Matching by ID keeps the writer in agreement with the
+  reader when a file has more than one text track. Its `tkhd`/`edts`/`mdhd`/
+  `hdlr`/`stsd` are preserved verbatim (so the audio track's `tref/chap`
+  reference and the track ID stay valid); only the `stts`/`stsc`/`stsz` tables
+  are regenerated and the chunk offset is emitted as a 64-bit `co64`
+  (overflow-safe).
 - **The audio `mdat` is never touched.** The new chapter text samples
   (`[uint16 len][utf8 title][12-byte encd atom]`, matching ffmpeg/Apple) are
   written into a **new trailing `mdat` appended at EOF**. The original chapter

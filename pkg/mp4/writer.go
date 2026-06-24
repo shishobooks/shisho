@@ -172,6 +172,18 @@ func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
 	// Append the rebuilt chapter samples as a trailing mdat and point the
 	// chapter track's co64 at the sample data (after the mdat's 8-byte header).
 	if chapterMdat != nil {
+		// A box with a size-0 header means "extends to EOF" and is only legal as
+		// the last box. Appending the chapter mdat after one would make that box
+		// swallow it for strict parsers, so rewrite its size to a concrete value
+		// first. (The audio chunk offsets are unaffected: only the 4-byte size
+		// header changes, not any sample bytes.)
+		last := boxes[len(boxes)-1]
+		if binary.BigEndian.Uint32(input[last.offset:last.offset+4]) == 0 && last.size <= math.MaxUint32 {
+			lastOutputStart := len(outBytes) - last.size
+			// #nosec G115 -- last.size bounded by math.MaxUint32 above
+			binary.BigEndian.PutUint32(outBytes[lastOutputStart:lastOutputStart+4], uint32(last.size))
+		}
+
 		mdatBox := buildBox("mdat", chapterMdat.sampleData)
 		sampleDataOffset := len(outBytes) + 8
 		patchPos := moovOutputStart + 8 + chapterMdat.co64FieldOffset
