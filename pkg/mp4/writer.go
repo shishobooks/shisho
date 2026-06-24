@@ -3,12 +3,11 @@ package mp4
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 
-	gomp4 "github.com/abema/go-mp4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 )
@@ -87,69 +86,227 @@ func createBackup(path string) error {
 	return os.WriteFile(path+".bak", data, 0600)
 }
 
-// writeMetadataToBytes modifies the metadata in the MP4 data and returns the new bytes.
+// writeMetadataToBytes modifies the metadata in the MP4 data and returns the
+// new bytes.
+//
+// The moov box is rebuilt with the new metadata, which usually changes its size
+// (e.g. when cover art is added). When moov sits before mdat — the "faststart"
+// layout that Audible/Apple Books exports use — growing moov shifts mdat (and
+// every box after moov) down by the size delta. The stco/co64 chunk offset
+// tables inside moov hold absolute file offsets into mdat, so they must be
+// shifted by the same delta; otherwise they keep pointing at the old positions,
+// which now land inside the resized moov, and the audio becomes undecodable.
 func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
-	r := bytes.NewReader(input)
-	var output bytes.Buffer
-
-	// Track whether we've written the moov box
-	moovWritten := false
-
-	_, err := gomp4.ReadBoxStructure(r, func(h *gomp4.ReadHandle) (interface{}, error) {
-		switch h.BoxInfo.Type {
-		case BoxTypeMoov:
-			// Rebuild moov with new metadata
-			moovBytes, err := rebuildMoov(r, h, metadata)
-			if err != nil {
-				return nil, err
-			}
-			output.Write(moovBytes)
-			moovWritten = true
-			return nil, nil
-
-		default:
-			// Copy the box as-is
-			boxBytes := input[h.BoxInfo.Offset : h.BoxInfo.Offset+h.BoxInfo.Size]
-			output.Write(boxBytes)
-			return nil, nil
-		}
-	})
-
+	boxes, err := topLevelBoxes(input)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if !moovWritten {
+	var moov *topLevelBox
+	firstMdatOffset := 0
+	haveMdat := false
+	for i := range boxes {
+		switch boxes[i].typ {
+		case "moov":
+			moov = &boxes[i]
+		case "mdat":
+			if !haveMdat {
+				firstMdatOffset = boxes[i].offset
+				haveMdat = true
+			}
+		}
+	}
+	if moov == nil {
 		return nil, errors.New("moov box not found")
+	}
+
+	// Rebuild moov with the new metadata (find and replace udta/meta/ilst).
+	origContent := input[moov.offset+moov.headerSize : moov.offset+moov.size]
+	newMoov := buildBox("moov", replaceIlstInContent(origContent, metadata))
+
+	// Only when moov precedes mdat does rewriting moov relocate the audio.
+	if haveMdat && moov.offset < firstMdatOffset {
+		delta := int64(len(newMoov)) - int64(moov.size)
+		if delta != 0 {
+			if err := shiftChunkOffsets(newMoov, delta); err != nil {
+				return nil, errors.WithStack(err)
+			}
+		}
+	}
+
+	// Reassemble the file in original box order, substituting the rebuilt moov.
+	var output bytes.Buffer
+	for _, b := range boxes {
+		if b.offset == moov.offset {
+			output.Write(newMoov)
+		} else {
+			output.Write(input[b.offset : b.offset+b.size])
+		}
 	}
 
 	return output.Bytes(), nil
 }
 
-// rebuildMoov rebuilds the moov box with new metadata.
-func rebuildMoov(r *bytes.Reader, h *gomp4.ReadHandle, metadata *Metadata) ([]byte, error) {
-	// Read the original moov content
-	origStart := h.BoxInfo.Offset + h.BoxInfo.HeaderSize
-	origEnd := h.BoxInfo.Offset + h.BoxInfo.Size
+// topLevelBox describes a box at the root of the file.
+type topLevelBox struct {
+	typ        string
+	offset     int
+	size       int
+	headerSize int
+}
 
-	// Seek to moov content (safe conversion as file sizes are within int64 range)
-	if origStart > 1<<62 {
-		return nil, errors.New("file offset too large")
+// topLevelBoxes scans the root-level box structure of an MP4 file.
+func topLevelBoxes(input []byte) ([]topLevelBox, error) {
+	var boxes []topLevelBox
+	offset := 0
+	for offset+8 <= len(input) {
+		size := int(binary.BigEndian.Uint32(input[offset:]))
+		headerSize := 8
+		switch size {
+		case 1:
+			// 64-bit largesize follows the type field.
+			if offset+16 > len(input) {
+				return nil, errors.New("truncated 64-bit box header")
+			}
+			size64 := binary.BigEndian.Uint64(input[offset+8:])
+			if size64 > uint64(len(input)) {
+				return nil, errors.New("box size exceeds file length")
+			}
+			// #nosec G115 -- bounds checked against len(input) above
+			size = int(size64)
+			headerSize = 16
+		case 0:
+			// Box extends to EOF.
+			size = len(input) - offset
+		}
+		if size < headerSize || offset+size > len(input) {
+			return nil, errors.New("invalid box size")
+		}
+		boxes = append(boxes, topLevelBox{
+			typ:        string(input[offset+4 : offset+8]),
+			offset:     offset,
+			size:       size,
+			headerSize: headerSize,
+		})
+		offset += size
 	}
-	if _, err := r.Seek(int64(origStart), io.SeekStart); err != nil {
-		return nil, err
+	return boxes, nil
+}
+
+// chunkOffsetContainers are the box types on the path to the stco/co64 chunk
+// offset tables (trak → mdia → minf → stbl), plus edts which can sit between
+// trak and mdia. Only these are descended into when shifting offsets.
+var chunkOffsetContainers = map[string]bool{
+	"trak": true,
+	"mdia": true,
+	"minf": true,
+	"stbl": true,
+	"edts": true,
+}
+
+// shiftChunkOffsets adds delta to every stco/co64 chunk offset within the given
+// moov box (a complete box including its 8-byte header).
+func shiftChunkOffsets(moovBox []byte, delta int64) error {
+	if len(moovBox) < 8 {
+		return errors.New("moov box too small")
 	}
+	return shiftChunkOffsetsInChildren(moovBox[8:], delta)
+}
 
-	origContent := make([]byte, origEnd-origStart)
-	if _, err := io.ReadFull(r, origContent); err != nil {
-		return nil, err
+// shiftChunkOffsetsInChildren walks sibling boxes within a container's content,
+// recursing into known containers and patching stco/co64 tables.
+func shiftChunkOffsetsInChildren(buf []byte, delta int64) error {
+	offset := 0
+	for offset+8 <= len(buf) {
+		size := int(binary.BigEndian.Uint32(buf[offset:]))
+		headerSize := 8
+		switch size {
+		case 1:
+			if offset+16 > len(buf) {
+				return errors.New("truncated 64-bit box header in moov")
+			}
+			size64 := binary.BigEndian.Uint64(buf[offset+8:])
+			if size64 > uint64(len(buf)) {
+				return errors.New("box size exceeds moov length")
+			}
+			// #nosec G115 -- bounds checked against len(buf) above
+			size = int(size64)
+			headerSize = 16
+		case 0:
+			size = len(buf) - offset
+		}
+		if size < headerSize || offset+size > len(buf) {
+			return errors.New("invalid box size in moov")
+		}
+
+		typ := string(buf[offset+4 : offset+8])
+		switch {
+		case typ == "stco":
+			if err := shiftStco(buf[offset:offset+size], delta); err != nil {
+				return err
+			}
+		case typ == "co64":
+			if err := shiftCo64(buf[offset:offset+size], delta); err != nil {
+				return err
+			}
+		case chunkOffsetContainers[typ]:
+			if err := shiftChunkOffsetsInChildren(buf[offset+headerSize:offset+size], delta); err != nil {
+				return err
+			}
+		}
+		offset += size
 	}
+	return nil
+}
 
-	// Find and replace udta/meta/ilst within the moov content
-	newContent := replaceIlstInContent(origContent, metadata)
+// shiftStco adds delta to each 32-bit chunk offset in an stco box. It errors if
+// any shifted offset would not fit in a uint32 (which would require promoting
+// the table to 64-bit co64 entries — a rewrite this writer does not perform; it
+// only happens for files approaching 4 GiB).
+func shiftStco(box []byte, delta int64) error {
+	// box: size(4) + type(4) + version(1) + flags(3) + count(4) + entries(4 each)
+	if len(box) < 16 {
+		return errors.New("stco box too small")
+	}
+	count := int(binary.BigEndian.Uint32(box[12:16]))
+	pos := 16
+	for i := 0; i < count; i++ {
+		if pos+4 > len(box) {
+			return errors.New("stco box truncated")
+		}
+		shifted := int64(binary.BigEndian.Uint32(box[pos:pos+4])) + delta
+		if shifted < 0 || shifted > math.MaxUint32 {
+			return errors.New("chunk offset overflows uint32 after shift; co64 promotion not supported")
+		}
+		// #nosec G115 -- bounds checked against [0, math.MaxUint32] above
+		binary.BigEndian.PutUint32(box[pos:pos+4], uint32(shifted))
+		pos += 4
+	}
+	return nil
+}
 
-	// Build new moov box
-	return buildBox("moov", newContent), nil
+// shiftCo64 adds delta to each 64-bit chunk offset in a co64 box.
+func shiftCo64(box []byte, delta int64) error {
+	// box: size(4) + type(4) + version(1) + flags(3) + count(4) + entries(8 each)
+	if len(box) < 16 {
+		return errors.New("co64 box too small")
+	}
+	count := int(binary.BigEndian.Uint32(box[12:16]))
+	pos := 16
+	for i := 0; i < count; i++ {
+		if pos+8 > len(box) {
+			return errors.New("co64 box truncated")
+		}
+		// #nosec G115 -- chunk offsets are file positions, always within int64
+		shifted := int64(binary.BigEndian.Uint64(box[pos:pos+8])) + delta
+		if shifted < 0 {
+			return errors.New("chunk offset underflows below zero after shift")
+		}
+		// #nosec G115 -- shifted is guaranteed non-negative above
+		binary.BigEndian.PutUint64(box[pos:pos+8], uint64(shifted))
+		pos += 8
+	}
+	return nil
 }
 
 // replaceIlstInContent finds and replaces the ilst box within moov content.

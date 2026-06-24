@@ -186,6 +186,34 @@ Uses `mp4.WriteToFile()` for atomic writes.
 - Unknown atoms (e.g., `aART`, `cprt`)
 - All freeform atoms not explicitly overwritten
 
+**Chunk-offset patching on moov resize (faststart layout) — CRITICAL.**
+Rewriting metadata rebuilds the `moov` box, which almost always changes its size
+(adding cover art grows it by hundreds of KB). When the source file is laid out
+**faststart** (`moov` before `mdat` — the layout Audible and Apple Books export,
+and what ffmpeg produces with `-movflags +faststart`), growing `moov` shifts
+`mdat` (and every box after `moov`) down by the size delta. The `stco`/`co64`
+chunk-offset tables inside `moov`'s sample tables hold **absolute file offsets**
+into `mdat`, so `writeMetadataToBytes` (`writer.go`) shifts every `stco`/`co64`
+entry by that same delta. Without this, the offsets keep pointing at the old
+positions — now inside the resized `moov` — and the AAC decoder reads metadata as
+audio (`channel element ... is not allocated`), so Apple Books / Bound refuse to
+play while lenient players may limp along.
+
+- Only `stco`/`co64` are shifted (the only boxes holding absolute file offsets);
+  the walk descends `moov → trak → mdia → minf → stbl` (plus `edts`).
+- The shift is applied **only when `moov` precedes the first `mdat`**. In
+  `mdat`-first layout (ffmpeg's default, no faststart) `mdat` doesn't move, so
+  offsets are left untouched.
+- 32-bit `stco` entries that would exceed `uint32` after the shift return an
+  error rather than silently corrupting (would require promoting to `co64`; only
+  reachable for files approaching 4 GiB).
+- **Test fixtures must use faststart to exercise this.** `testgen.GenerateM4B`
+  takes a `Faststart bool` option (`-movflags +faststart`); the default ffmpeg
+  output is `mdat`-first and cannot reproduce the bug. Regression tests:
+  `TestWriteToFile_FaststartLayoutPreservesAudioChunkOffsets` (shifts correctly)
+  and `TestWriteToFile_MdatFirstLayoutLeavesChunkOffsetsUnchanged` (no
+  over-shift) in `writer_chunkoffset_test.go`.
+
 **Series Formatting:**
 - With number: `"Series Name #1"` or `"Series Name #1.5"`
 - Without number: `"Series Name"`
@@ -351,7 +379,8 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 ```
 
 **Overflow Safety:**
-- File offsets clamped to prevent int64 overflow
+- Box offsets and sizes are bounds-checked against the buffer length while scanning (`topLevelBoxes`, `shiftChunkOffsetsInChildren`); 64-bit largesize boxes are rejected when they exceed the file length
+- Chunk-offset shifts are range-checked: a 32-bit `stco` entry that would exceed `uint32` (or drop below zero) after the shift returns an error instead of wrapping
 - Box sizes limited to prevent allocation bombs
 - UTF-16 decoding includes null terminator handling
 

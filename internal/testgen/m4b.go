@@ -140,8 +140,16 @@ func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
 	args = append(args,
 		"-c:a", "aac",
 		"-b:a", "64k",
-		path,
 	)
+
+	// Faststart moves moov ahead of mdat. This is the layout that exposes the
+	// chunk-offset rewrite bug: growing moov shifts mdat, so stco/co64 offsets
+	// must be patched to follow the audio.
+	if opts.Faststart {
+		args = append(args, "-movflags", "+faststart")
+	}
+
+	args = append(args, path)
 
 	cmd := exec.CommandContext(t.Context(), "ffmpeg", args...)
 	output, err := cmd.CombinedOutput()
