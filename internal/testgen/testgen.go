@@ -60,6 +60,10 @@ type M4BOptions struct {
 	AlbumArtist string // Album artist (different from artist)
 	Comment     string // Comment/description
 	Chapters    []M4BChapter
+	// Faststart writes the file with `-movflags +faststart`, placing the moov
+	// box before mdat. This mirrors the layout Audible/Apple Books exports use
+	// and is required to exercise the chunk-offset rewrite path in mp4.Write.
+	Faststart bool
 }
 
 // TempDir creates a temporary directory for testing and registers cleanup.
