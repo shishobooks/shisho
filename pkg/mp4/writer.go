@@ -122,7 +122,29 @@ func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
 
 	// Rebuild moov with the new metadata (find and replace udta/meta/ilst).
 	origContent := input[moov.offset+moov.headerSize : moov.offset+moov.size]
-	newMoov := buildBox("moov", replaceIlstInContent(origContent, metadata))
+	moovContent := replaceIlstInContent(origContent, metadata)
+
+	// Rebuild the QuickTime chapter text track from the chapters so the user's
+	// edited titles/timings land in the track players read preferentially, not
+	// only the Nero chpl box. The new text samples go into a trailing mdat
+	// (appended below), leaving the audio mdat untouched; the chapter track's
+	// co64 offset is patched to that mdat once its position is known.
+	var chapterMdat *rebuiltChapterTrack
+	if len(metadata.Chapters) > 0 {
+		if rebuilt, ok := rebuildChapterTextTrack(moovContent, metadata.Chapters); ok {
+			moovContent = rebuilt.moovContent
+			chapterMdat = &rebuilt
+		}
+	}
+
+	newMoov := buildBox("moov", moovContent)
+
+	// Park a safe placeholder in the chapter track's co64 entry so the faststart
+	// shift below cannot underflow it; the real absolute offset is written after
+	// reassembly. len(input) exceeds any moov-resize delta in magnitude.
+	if chapterMdat != nil {
+		binary.BigEndian.PutUint64(newMoov[8+chapterMdat.co64FieldOffset:], uint64(len(input)))
+	}
 
 	// Only when moov precedes mdat does rewriting moov relocate the audio.
 	if haveMdat && moov.offset < firstMdatOffset {
@@ -136,15 +158,29 @@ func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
 
 	// Reassemble the file in original box order, substituting the rebuilt moov.
 	var output bytes.Buffer
+	moovOutputStart := 0
 	for _, b := range boxes {
 		if b.offset == moov.offset {
+			moovOutputStart = output.Len()
 			output.Write(newMoov)
 		} else {
 			output.Write(input[b.offset : b.offset+b.size])
 		}
 	}
+	outBytes := output.Bytes()
 
-	return output.Bytes(), nil
+	// Append the rebuilt chapter samples as a trailing mdat and point the
+	// chapter track's co64 at the sample data (after the mdat's 8-byte header).
+	if chapterMdat != nil {
+		mdatBox := buildBox("mdat", chapterMdat.sampleData)
+		sampleDataOffset := len(outBytes) + 8
+		patchPos := moovOutputStart + 8 + chapterMdat.co64FieldOffset
+		// #nosec G115 -- file offset is non-negative and within int64 range
+		binary.BigEndian.PutUint64(outBytes[patchPos:patchPos+8], uint64(sampleDataOffset))
+		outBytes = append(outBytes, mdatBox...)
+	}
+
+	return outBytes, nil
 }
 
 // topLevelBox describes a box at the root of the file.

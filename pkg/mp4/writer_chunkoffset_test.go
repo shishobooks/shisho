@@ -101,12 +101,15 @@ func TestWriteToFile_MdatFirstLayoutLeavesChunkOffsetsUnchanged(t *testing.T) {
 	assertChunkOffsetsLocateSameAudio(t, srcPath, destPath)
 }
 
-// TestWriteToFile_FaststartWithChaptersShiftsAllTrackOffsets covers the
-// realistic case: a real audiobook has a chapter track in addition to the audio
-// track, so the moov holds two stco tables, both pointing into mdat. Both must
-// be shifted on rewrite — a fix that only shifted the first track would still
-// corrupt the chapter track. The audio-only fixtures cannot catch that.
-func TestWriteToFile_FaststartWithChaptersShiftsAllTrackOffsets(t *testing.T) {
+// TestWriteToFile_FaststartWithChaptersPreservesAudioAndChapters covers the
+// realistic case: a real audiobook has a chapter text track in addition to the
+// audio track, so the moov holds two chunk-offset tables. On rewrite the audio
+// track's offsets must still be shifted to follow the audio when moov grows
+// (the #393 guarantee), while the chapter text track is rebuilt from the
+// chapters and relocated into a trailing mdat. A regression that failed to shift
+// the audio track would corrupt the audio; audio-only fixtures cannot catch the
+// two-table case.
+func TestWriteToFile_FaststartWithChaptersPreservesAudioAndChapters(t *testing.T) {
 	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)
 	dir := testgen.TempDir(t, "mp4-faststart-chapters-*")
@@ -143,7 +146,18 @@ func TestWriteToFile_FaststartWithChaptersShiftsAllTrackOffsets(t *testing.T) {
 	destMoov, _ := boxPositions(t, destPath)
 	require.Greater(t, destMoov.size, srcMoov.size, "moov must grow")
 
-	assertChunkOffsetsLocateSameAudio(t, srcPath, destPath)
+	// The audio track's chunk offsets must still locate the same audio bytes.
+	// The chapter track's offset is excluded because it is intentionally
+	// rebuilt and moved into a trailing mdat, not shifted in place.
+	assertAudioChunkOffsetsLocateSameAudio(t, srcPath, destPath)
+
+	// And the chapters must survive the rebuild, read back from the QuickTime
+	// track that players prefer.
+	out, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+	require.Len(t, out.Chapters, 2)
+	assert.Equal(t, "Chapter One", out.Chapters[0].Title)
+	assert.Equal(t, "Chapter Two", out.Chapters[1].Title)
 }
 
 type boxPos struct {
@@ -279,6 +293,10 @@ func countChunkOffsetTables(t *testing.T, data []byte) int {
 
 // assertChunkOffsetsLocateSameAudio verifies that every chunk offset in dest
 // points at the same audio bytes the corresponding source offset points at.
+// Use this only for fixtures with no chapter text track, where every offset
+// belongs to the audio track. With a chapter track present, use
+// assertAudioChunkOffsetsLocateSameAudio instead, since the chapter track is
+// deliberately rebuilt and relocated.
 func assertChunkOffsetsLocateSameAudio(t *testing.T, srcPath, destPath string) {
 	t.Helper()
 	src, err := os.ReadFile(srcPath)
@@ -289,6 +307,29 @@ func assertChunkOffsetsLocateSameAudio(t *testing.T, srcPath, destPath string) {
 	srcOffs := collectChunkOffsets(t, src)
 	destOffs := collectChunkOffsets(t, dest)
 	require.NotEmpty(t, srcOffs, "source must have chunk offsets")
+	assertOffsetsLocateSameBytes(t, src, dest, srcOffs, destOffs)
+}
+
+// assertAudioChunkOffsetsLocateSameAudio is the chapter-aware variant: it
+// compares only the offsets belonging to audio (handler "soun") tracks, so it
+// ignores the chapter text track that the writer rebuilds into a trailing mdat.
+func assertAudioChunkOffsetsLocateSameAudio(t *testing.T, srcPath, destPath string) {
+	t.Helper()
+	src, err := os.ReadFile(srcPath)
+	require.NoError(t, err)
+	dest, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+
+	srcOffs := audioChunkOffsets(t, src)
+	destOffs := audioChunkOffsets(t, dest)
+	require.NotEmpty(t, srcOffs, "source must have audio chunk offsets")
+	assertOffsetsLocateSameBytes(t, src, dest, srcOffs, destOffs)
+}
+
+// assertOffsetsLocateSameBytes checks that each dest offset points at the same
+// 64-byte window as the corresponding source offset.
+func assertOffsetsLocateSameBytes(t *testing.T, src, dest []byte, srcOffs, destOffs []uint64) {
+	t.Helper()
 	require.Len(t, destOffs, len(srcOffs), "chunk count must be preserved")
 
 	const window = 64
@@ -308,5 +349,107 @@ func assertChunkOffsetsLocateSameAudio(t *testing.T, srcPath, destPath string) {
 		assert.Equal(t, src[so:so+w], dest[do:do+w],
 			"chunk %d: rewritten offset %d does not point at the same audio bytes as source offset %d",
 			i, do, so)
+	}
+}
+
+// audioChunkOffsets returns the chunk offsets that belong to audio (handler
+// "soun") tracks, in document order.
+func audioChunkOffsets(t *testing.T, data []byte) []uint64 {
+	t.Helper()
+	var out []uint64
+	moov := firstBoxBody(data, "moov")
+	require.NotNil(t, moov, "moov box not found")
+	walkChildBoxes(moov, func(typ string, body []byte) {
+		if typ != "trak" {
+			return
+		}
+		if trackHandlerType(body) == "soun" {
+			collectStcoCo64Bodies(body, &out)
+		}
+	})
+	return out
+}
+
+// trackHandlerType returns a trak's media handler type (e.g. "soun", "text").
+// body is the trak box content (after the 8-byte box header).
+func trackHandlerType(body []byte) string {
+	mdia := firstBoxBody(body, "mdia")
+	if mdia == nil {
+		return ""
+	}
+	hdlr := firstBoxBody(mdia, "hdlr")
+	if len(hdlr) < 12 {
+		return ""
+	}
+	// hdlr content: version(1) flags(3) pre_defined(4) handler_type(4) ...
+	return string(hdlr[8:12])
+}
+
+// collectStcoCo64Bodies walks buf (a box content buffer) and appends every
+// stco/co64 chunk offset it finds, recursing into the usual sample-table
+// container boxes.
+func collectStcoCo64Bodies(buf []byte, out *[]uint64) {
+	walkChildBoxes(buf, func(typ string, body []byte) {
+		switch typ {
+		case "stco":
+			if len(body) < 8 {
+				return
+			}
+			count := int(binary.BigEndian.Uint32(body[4:8]))
+			p := 8
+			for i := 0; i < count && p+4 <= len(body); i++ {
+				*out = append(*out, uint64(binary.BigEndian.Uint32(body[p:p+4])))
+				p += 4
+			}
+		case "co64":
+			if len(body) < 8 {
+				return
+			}
+			count := int(binary.BigEndian.Uint32(body[4:8]))
+			p := 8
+			for i := 0; i < count && p+8 <= len(body); i++ {
+				*out = append(*out, binary.BigEndian.Uint64(body[p:p+8]))
+				p += 8
+			}
+		case "mdia", "minf", "stbl", "edts":
+			collectStcoCo64Bodies(body, out)
+		}
+	})
+}
+
+// firstBoxBody returns the content (after the header) of the first child box of
+// the given type within buf, or nil if absent.
+func firstBoxBody(buf []byte, typ string) []byte {
+	var found []byte
+	walkChildBoxes(buf, func(t string, body []byte) {
+		if found == nil && t == typ {
+			found = body
+		}
+	})
+	return found
+}
+
+// walkChildBoxes iterates the immediate child boxes of buf, calling fn with each
+// box's type and its content (after the box header).
+func walkChildBoxes(buf []byte, fn func(typ string, body []byte)) {
+	off := 0
+	for off+8 <= len(buf) {
+		size := int(binary.BigEndian.Uint32(buf[off:]))
+		hdr := 8
+		switch size {
+		case 1:
+			if off+16 > len(buf) {
+				return
+			}
+			size = int(binary.BigEndian.Uint64(buf[off+8:]))
+			hdr = 16
+		case 0:
+			size = len(buf) - off
+		}
+		if size < hdr || off+size > len(buf) {
+			return
+		}
+		fn(string(buf[off+4:off+8]), buf[off+hdr:off+size])
+		off += size
 	}
 }

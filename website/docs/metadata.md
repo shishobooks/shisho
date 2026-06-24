@@ -247,7 +247,7 @@ Extracted from iTunes-style MP4 atoms:
 - **Abridged**: from the Tone freeform atom `com.pilabor.tone:ABRIDGED` (`true`/`false`, or `1`/`0`)
 - **Technical**: duration, bitrate, codec from media stream data
 - **Cover**: from the `covr` atom
-- **Chapters**: from the `chpl` chapter list atom
+- **Chapters**: from the QuickTime chapter track (the `tref/chap` text track), falling back to the Nero `chpl` chapter list atom. Edited chapters are written back into downloaded M4B files to both stores (the QuickTime track that players such as Apple Books and Bound read, and the `chpl` atom) so your player's chapter navigation reflects your edits.
 
 ### PDF
 
