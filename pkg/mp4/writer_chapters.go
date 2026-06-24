@@ -440,7 +440,10 @@ func buildChapterTextSample(title string) []byte {
 // computeChapterDeltas converts chapter start/end times into per-sample
 // durations (in media timescale units). Deltas are taken from the gaps between
 // consecutive starts so that a reader accumulating them reproduces the start
-// times; the final sample runs to the last chapter's end.
+// times; the final sample runs to the last chapter's end. A QuickTime chapter
+// track tiles the timeline from 0, so a non-zero start on the first chapter is
+// absorbed (the first sample begins at 0); the Nero chpl box still carries the
+// absolute first timestamp.
 func computeChapterDeltas(chapters []Chapter, timescale uint32) []uint32 {
 	n := len(chapters)
 	deltas := make([]uint32, n)

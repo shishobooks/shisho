@@ -176,9 +176,12 @@ func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
 		// the last box. Appending the chapter mdat after one would make that box
 		// swallow it for strict parsers, so rewrite its size to a concrete value
 		// first. (The audio chunk offsets are unaffected: only the 4-byte size
-		// header changes, not any sample bytes.)
+		// header changes, not any sample bytes.) Skip moov: it was rebuilt to a
+		// different length than its source box, so len(outBytes)-last.size would
+		// not locate its start.
 		last := boxes[len(boxes)-1]
-		if binary.BigEndian.Uint32(input[last.offset:last.offset+4]) == 0 && last.size <= math.MaxUint32 {
+		if last.offset != moov.offset &&
+			binary.BigEndian.Uint32(input[last.offset:last.offset+4]) == 0 && last.size <= math.MaxUint32 {
 			lastOutputStart := len(outBytes) - last.size
 			// #nosec G115 -- last.size bounded by math.MaxUint32 above
 			binary.BigEndian.PutUint32(outBytes[lastOutputStart:lastOutputStart+4], uint32(last.size))
