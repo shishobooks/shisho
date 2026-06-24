@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.48] - 2026-06-24
+
+### Bug Fixes
+- Patch M4B chunk offsets when moov is rewritten ahead of mdat (#393)
+
+
 ## [0.0.47] - 2026-06-11
 
 ### Features
