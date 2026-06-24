@@ -379,7 +379,8 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 ```
 
 **Overflow Safety:**
-- File offsets clamped to prevent int64 overflow
+- Box offsets and sizes are bounds-checked against the buffer length while scanning (`topLevelBoxes`, `shiftChunkOffsetsInChildren`); 64-bit largesize boxes are rejected when they exceed the file length
+- Chunk-offset shifts are range-checked: a 32-bit `stco` entry that would exceed `uint32` (or drop below zero) after the shift returns an error instead of wrapping
 - Box sizes limited to prevent allocation bombs
 - UTF-16 decoding includes null terminator handling
 

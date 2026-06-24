@@ -101,6 +101,51 @@ func TestWriteToFile_MdatFirstLayoutLeavesChunkOffsetsUnchanged(t *testing.T) {
 	assertChunkOffsetsLocateSameAudio(t, srcPath, destPath)
 }
 
+// TestWriteToFile_FaststartWithChaptersShiftsAllTrackOffsets covers the
+// realistic case: a real audiobook has a chapter track in addition to the audio
+// track, so the moov holds two stco tables, both pointing into mdat. Both must
+// be shifted on rewrite — a fix that only shifted the first track would still
+// corrupt the chapter track. The audio-only fixtures cannot catch that.
+func TestWriteToFile_FaststartWithChaptersShiftsAllTrackOffsets(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-faststart-chapters-*")
+
+	srcPath := testgen.GenerateM4B(t, dir, "src.m4b", testgen.M4BOptions{
+		Title:     "Original Title",
+		Artist:    "Original Author",
+		Duration:  5.0,
+		Faststart: true,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Chapter One", Start: 0},
+			{Title: "Chapter Two", Start: 2.0},
+		},
+	})
+
+	srcMoov, srcMdat := boxPositions(t, srcPath)
+	require.Less(t, srcMoov.offset, srcMdat.offset, "fixture must be faststart")
+
+	// The fixture must actually contain more than one chunk-offset table,
+	// otherwise this degrades to the single-track case and proves nothing.
+	src, err := os.ReadFile(srcPath)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, countChunkOffsetTables(t, src), 2,
+		"fixture must have an audio track and a chapter track (two stco tables)")
+
+	meta, err := mp4.ParseFull(srcPath)
+	require.NoError(t, err)
+	meta.CoverData = bytes.Repeat([]byte{0xDE, 0xAD, 0xBE, 0xEF}, 128*1024) // 512 KB
+	meta.CoverMimeType = "image/jpeg"
+
+	destPath := filepath.Join(dir, "dest.m4b")
+	require.NoError(t, mp4.WriteToFile(srcPath, destPath, meta))
+
+	destMoov, _ := boxPositions(t, destPath)
+	require.Greater(t, destMoov.size, srcMoov.size, "moov must grow")
+
+	assertChunkOffsetsLocateSameAudio(t, srcPath, destPath)
+}
+
 type boxPos struct {
 	offset int
 	size   int
@@ -193,6 +238,43 @@ func collectChunkOffsets(t *testing.T, data []byte) []uint64 {
 	}
 	walk(data)
 	return out
+}
+
+// countChunkOffsetTables returns the number of stco/co64 boxes in the file.
+func countChunkOffsetTables(t *testing.T, data []byte) int {
+	t.Helper()
+	count := 0
+
+	var walk func(buf []byte)
+	walk = func(buf []byte) {
+		off := 0
+		for off+8 <= len(buf) {
+			size := int(binary.BigEndian.Uint32(buf[off:]))
+			hdr := 8
+			switch size {
+			case 1:
+				if off+16 > len(buf) {
+					return
+				}
+				size = int(binary.BigEndian.Uint64(buf[off+8:]))
+				hdr = 16
+			case 0:
+				size = len(buf) - off
+			}
+			if size < hdr || off+size > len(buf) {
+				return
+			}
+			switch string(buf[off+4 : off+8]) {
+			case "stco", "co64":
+				count++
+			case "moov", "trak", "mdia", "minf", "stbl", "edts":
+				walk(buf[off+hdr : off+size])
+			}
+			off += size
+		}
+	}
+	walk(data)
+	return count
 }
 
 // assertChunkOffsetsLocateSameAudio verifies that every chunk offset in dest
