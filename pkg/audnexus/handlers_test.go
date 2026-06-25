@@ -3,7 +3,6 @@ package audnexus
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,15 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestHandler(t *testing.T, upstreamStatus int, upstreamBody string) *handler {
-	t.Helper()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(upstreamStatus)
-		_, _ = io.WriteString(w, upstreamBody)
-	}))
-	t.Cleanup(upstream.Close)
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+// newTestHandler builds a handler whose service serves the given canned upstream
+// response through a stubbed transport (see stubService), avoiding a real socket
+// that can flake under CI load.
+func newTestHandler(upstreamStatus int, upstreamBody string) *handler {
+	svc := stubService(ServiceConfig{}, respondWith(upstreamStatus, upstreamBody))
 	return &handler{service: svc}
 }
 
@@ -41,7 +36,7 @@ func invokeHandler(t *testing.T, h *handler, asin string) (statusCode int, body 
 
 func TestHandler_GetChapters_Success(t *testing.T) {
 	t.Parallel()
-	h := newTestHandler(t, http.StatusOK, `{"asin":"B0036UC2LO","chapters":[{"title":"C1","startOffsetMs":0,"lengthMs":1000}]}`)
+	h := newTestHandler(http.StatusOK, `{"asin":"B0036UC2LO","chapters":[{"title":"C1","startOffsetMs":0,"lengthMs":1000}]}`)
 	status, body, err := invokeHandler(t, h, "B0036UC2LO")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, status)
@@ -55,7 +50,7 @@ func TestHandler_GetChapters_Success(t *testing.T) {
 
 func TestHandler_GetChapters_InvalidASIN(t *testing.T) {
 	t.Parallel()
-	h := newTestHandler(t, http.StatusOK, `{}`)
+	h := newTestHandler(http.StatusOK, `{}`)
 	_, _, err := invokeHandler(t, h, "short")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
@@ -64,7 +59,7 @@ func TestHandler_GetChapters_InvalidASIN(t *testing.T) {
 
 func TestHandler_GetChapters_NotFound(t *testing.T) {
 	t.Parallel()
-	h := newTestHandler(t, http.StatusNotFound, ``)
+	h := newTestHandler(http.StatusNotFound, ``)
 	_, _, err := invokeHandler(t, h, "B0036UC2LO")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
@@ -73,7 +68,7 @@ func TestHandler_GetChapters_NotFound(t *testing.T) {
 
 func TestHandler_GetChapters_UpstreamError(t *testing.T) {
 	t.Parallel()
-	h := newTestHandler(t, http.StatusInternalServerError, ``)
+	h := newTestHandler(http.StatusInternalServerError, ``)
 	_, _, err := invokeHandler(t, h, "B0036UC2LO")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
