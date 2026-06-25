@@ -163,17 +163,51 @@ func TestService_GetChapters_InvalidJSON(t *testing.T) {
 	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
 }
 
+// timeoutError reports a timeout without being context.DeadlineExceeded, so it
+// exercises the isTimeout (Timeout() bool) classification branch specifically.
+type timeoutError struct{}
+
+func (timeoutError) Error() string { return "simulated i/o timeout" }
+func (timeoutError) Timeout() bool { return true }
+
 func TestService_GetChapters_Timeout(t *testing.T) {
 	t.Parallel()
-	// http.Client.Timeout surfaces as a context.DeadlineExceeded from the
-	// transport; the service must classify that as a timeout rather than a
-	// generic upstream error.
+	// The service classifies a timeout via `errors.Is(err, DeadlineExceeded) ||
+	// isTimeout(err)`. Cover both disjuncts: http.Client.Timeout surfaces as a
+	// context.DeadlineExceeded, while a transport/dial timeout surfaces as a
+	// net.Error reporting Timeout() == true that is not DeadlineExceeded.
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"deadline_exceeded", context.DeadlineExceeded},
+		{"net_timeout", timeoutError{}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := stubService(ServiceConfig{}, func(*http.Request) (*http.Response, error) {
+				return nil, tc.err
+			})
+			_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+			require.Error(t, err)
+			assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
+		})
+	}
+}
+
+func TestService_GetChapters_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	// A canceled request must propagate as context.Canceled, not be reclassified
+	// as a timeout or upstream error, so callers (and the handler) can tell
+	// user-initiated cancellation apart from a real failure.
 	svc := stubService(ServiceConfig{}, func(*http.Request) (*http.Response, error) {
-		return nil, context.DeadlineExceeded
+		return nil, context.Canceled
 	})
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
-	require.Error(t, err)
-	assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, AsAudnexusError(err), "canceled error must not be wrapped as *Error")
 }
 
 func TestService_GetChapters_CacheHit(t *testing.T) {
