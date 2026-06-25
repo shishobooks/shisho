@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-06-25
+
+### Bug Fixes
+- Write edited M4B chapters to the QuickTime chapter track (#394)
+
+### Testing
+- Stub Audnexus HTTP transport to fix flaky service tests (#395)
+
+
 ## [0.0.48] - 2026-06-24
 
 ### Bug Fixes
