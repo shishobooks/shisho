@@ -178,11 +178,11 @@ Uses `mp4.WriteToFile()` for atomic writes.
 | URL | `com.shisho:url` | file.URL |
 | Cover | `covr` | Image with type flag (13=JPEG, 14=PNG) |
 | Media Type | `stik` | Always `2` (audiobook) |
+| Chapters | QuickTime `tref/chap` text track AND Nero `chpl` | `metadata.Chapters` (see below) |
 
 **Preserved from Source:**
 - Year, copyright, encoder
 - Duration, bitrate
-- Chapters
 - Unknown atoms (e.g., `aART`, `cprt`)
 - All freeform atoms not explicitly overwritten
 
@@ -213,6 +213,52 @@ play while lenient players may limp along.
   `TestWriteToFile_FaststartLayoutPreservesAudioChunkOffsets` (shifts correctly)
   and `TestWriteToFile_MdatFirstLayoutLeavesChunkOffsetsUnchanged` (no
   over-shift) in `writer_chunkoffset_test.go`.
+
+**QuickTime chapter-track rebuild on write (CRITICAL).**
+M4B files store chapters in TWO places: a **QuickTime text chapter track** (an
+audio `trak` references a separate text `trak` via `tref/chap`) and a **Nero
+`chpl`** box. Players, ffprobe, and Shisho's own reader (`readChapters` tries
+QuickTime first) prefer the QuickTime track. So writing chapters only to `chpl`
+(the old behavior) left the user's edited titles/timings masked by the stale
+source titles still sitting in the QuickTime track. That was the visible "manual
+chapters don't show up in the downloaded audiobook" bug.
+
+`writeMetadataToBytes` now rebuilds the QuickTime chapter text track from
+`metadata.Chapters` (in `writer_chapters.go`) in addition to writing `chpl`:
+
+- The existing chapter text `trak` is located the same way the reader does: by
+  resolving the audio track's `tref/chap` reference to a track ID and matching
+  the `tkhd` track ID (falling back to the first `mdia/hdlr` == `text` track when
+  there is no `tref/chap`). Matching by ID keeps the writer in agreement with the
+  reader when a file has more than one text track. Its `tkhd`/`edts`/`mdhd`/
+  `hdlr`/`stsd` are preserved verbatim (so the audio track's `tref/chap`
+  reference and the track ID stay valid); only the `stts`/`stsc`/`stsz` tables
+  are regenerated and the chunk offset is emitted as a 64-bit `co64`
+  (overflow-safe).
+- **The audio `mdat` is never touched.** The new chapter text samples
+  (`[uint16 len][utf8 title][12-byte encd atom]`, matching ffmpeg/Apple) are
+  written into a **new trailing `mdat` appended at EOF**. The original chapter
+  samples are left as harmless dead bytes inside the audio `mdat` (nothing
+  references them).
+- **Offset interaction with the faststart shift:** the chapter track's `co64`
+  points at the trailing `mdat`, a different base than the audio `stco` (which
+  the faststart shift moves by the moov delta). The writer parks a safe
+  placeholder in the `co64` so the shift cannot underflow it, then patches the
+  real absolute trailing-`mdat` offset after reassembly. So the audio offsets are
+  shifted by the moov delta; the chapter `co64` is set absolutely.
+- **Scope:** this rebuilds an *existing* chapter text track. A source with no
+  QuickTime track (only `chpl`, or no chapters) keeps the `chpl`-only path
+  (`rebuildChapterTextTrack` returns `ok=false`); `chpl` is the correct fallback
+  there since no stale QuickTime track masks it. Synthesizing a brand-new
+  QuickTime track from scratch (which would require editing the audio track's
+  `tref` and `mvhd` next-track-id) is intentionally out of scope.
+- **Note:** the rebuilt track's `tkhd`/`mdhd` durations are left as-is; players
+  derive chapter boundaries from the sample table (`stts`), so a stale track
+  duration is cosmetic. Validated against a real Audible export and via ffprobe.
+- Regression tests in `writer_chapters_test.go` (titles, timestamps, count
+  changes, mdat-first layout, ffprobe-visible + clean-decode) and the two-table
+  audio-integrity guard `TestWriteToFile_FaststartWithChaptersPreservesAudioAndChapters`
+  in `writer_chunkoffset_test.go`.
 
 **Series Formatting:**
 - With number: `"Series Name #1"` or `"Series Name #1.5"`

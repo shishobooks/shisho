@@ -855,6 +855,59 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Source Chapter 3", meta.Chapters[2].Title)
 	})
 
+	t.Run("download writes file chapters over a source QuickTime track", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		// A faststart source that already carries a QuickTime chapter track with
+		// its own titles, like a real Audible export. This is the path the
+		// download bug lived on: the QuickTime track masked the file's edited
+		// chapters because only chpl was rewritten.
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:     "Test Book",
+			Duration:  10.0,
+			Faststart: true,
+			Chapters: []testgen.M4BChapter{
+				{Title: "Source Chapter 1", Start: 0.0},
+				{Title: "Source Chapter 2", Start: 5.0},
+			},
+		})
+
+		destPath := filepath.Join(dir, "dest.m4b")
+
+		ts1 := int64(0)
+		ts2 := int64(3000)
+		ts3 := int64(7000)
+		book := &models.Book{
+			Title: "Test Book",
+			Authors: []*models.Author{
+				{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+			},
+		}
+		file := &models.File{
+			FileType: models.FileTypeM4B,
+			Chapters: []*models.Chapter{
+				{Title: "Edited One", SortOrder: 0, StartTimestampMs: &ts1},
+				{Title: "Edited Two", SortOrder: 1, StartTimestampMs: &ts2},
+				{Title: "Edited Three", SortOrder: 2, StartTimestampMs: &ts3},
+			},
+		}
+
+		gen := &M4BGenerator{}
+		require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
+
+		// ParseFull reads the QuickTime track preferentially, so reading back the
+		// edited titles (not the source's two) proves the QuickTime track was
+		// rebuilt through the whole download pipeline, not just chpl.
+		meta, err := mp4.ParseFull(destPath)
+		require.NoError(t, err)
+		require.Len(t, meta.Chapters, 3, "expected the 3 file-model chapters, not the source's 2")
+		assert.Equal(t, "Edited One", meta.Chapters[0].Title)
+		assert.Equal(t, "Edited Two", meta.Chapters[1].Title)
+		assert.Equal(t, "Edited Three", meta.Chapters[2].Title)
+	})
+
 	t.Run("chapter order follows StartTimestampMs when SortOrder disagrees", func(t *testing.T) {
 		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
