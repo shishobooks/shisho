@@ -2,8 +2,10 @@ package audnexus
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +13,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// roundTripFunc adapts a function to an http.RoundTripper so tests can serve
+// canned responses without a real socket. The live httptest servers this
+// replaced could flake under CI load: when the localhost connection raced the
+// response, http.Client.Do returned a connection error that the service maps to
+// upstream_error, instead of the status the test set (observed on the 503 case
+// of TestService_GetChapters_RateLimited).
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// stubService builds a Service whose HTTP client routes every request through
+// rt instead of the network.
+func stubService(cfg ServiceConfig, rt roundTripFunc) *Service {
+	cfg.HTTPClient = &http.Client{Transport: rt}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "http://audnexus.test"
+	}
+	return NewService(cfg)
+}
+
+// respondWith returns a transport that serves the given status and body.
+func respondWith(status int, body string) roundTripFunc {
+	return func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Header:     make(http.Header),
+			Request:    r,
+		}, nil
+	}
+}
 
 func TestService_GetChapters_InvalidASIN(t *testing.T) {
 	t.Parallel()
@@ -39,24 +74,24 @@ func TestService_GetChapters_InvalidASIN(t *testing.T) {
 
 func TestService_GetChapters_NormalizesASINToUppercase(t *testing.T) {
 	t.Parallel()
-	// Valid lowercase ASIN should pass validation (and would reach upstream,
-	// which we're not testing here — but it must not return invalid_asin).
-	svc := NewService(ServiceConfig{})
+	// A valid lowercase ASIN must pass validation and reach upstream rather than
+	// being rejected as invalid_asin. The transport asserts the ASIN arrived
+	// normalized to uppercase in the request path.
+	svc := stubService(ServiceConfig{}, func(r *http.Request) (*http.Response, error) {
+		assert.Equal(t, "/books/B0036UC2LO/chapters", r.URL.Path)
+		return respondWith(http.StatusOK, `{"asin":"B0036UC2LO","chapters":[]}`)(r)
+	})
 	_, err := svc.GetChapters(context.Background(), "b0036uc2lo")
-	if e := AsAudnexusError(err); e != nil {
-		assert.NotEqual(t, ErrCodeInvalidASIN, e.Code, "lowercase ASIN should normalize to valid")
-	}
+	require.NoError(t, err)
 }
 
 func TestService_GetChapters_HappyPath(t *testing.T) {
 	t.Parallel()
 
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	svc := stubService(ServiceConfig{UserAgent: "Shisho/test"}, func(r *http.Request) (*http.Response, error) {
 		assert.Equal(t, "/books/B0036UC2LO/chapters", r.URL.Path)
 		assert.Equal(t, "Shisho/test", r.Header.Get("User-Agent"))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{
+		return respondWith(http.StatusOK, `{
 			"asin": "B0036UC2LO",
 			"isAccurate": true,
 			"runtimeLengthMs": 163938000,
@@ -66,13 +101,7 @@ func TestService_GetChapters_HappyPath(t *testing.T) {
 				{"title": "Prelude", "startOffsetMs": 0, "lengthMs": 272000},
 				{"title": "Prologue", "startOffsetMs": 272000, "lengthMs": 1063000}
 			]
-		}`))
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{
-		BaseURL:   upstream.URL,
-		UserAgent: "Shisho/test",
+		}`)(r)
 	})
 
 	resp, err := svc.GetChapters(context.Background(), "B0036UC2LO")
@@ -91,12 +120,7 @@ func TestService_GetChapters_HappyPath(t *testing.T) {
 
 func TestService_GetChapters_NotFound(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	svc := stubService(ServiceConfig{}, respondWith(http.StatusNotFound, ""))
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
 	require.Error(t, err)
 	assert.Equal(t, ErrCodeNotFound, AsAudnexusError(err).Code)
@@ -104,12 +128,7 @@ func TestService_GetChapters_NotFound(t *testing.T) {
 
 func TestService_GetChapters_UpstreamError_5xx(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	svc := stubService(ServiceConfig{}, respondWith(http.StatusInternalServerError, ""))
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
 	require.Error(t, err)
 	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
@@ -128,12 +147,7 @@ func TestService_GetChapters_RateLimited(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(tc.status)
-			}))
-			defer upstream.Close()
-
-			svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+			svc := stubService(ServiceConfig{}, respondWith(tc.status, ""))
 			_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
 			require.Error(t, err)
 			assert.Equal(t, ErrCodeRateLimited, AsAudnexusError(err).Code)
@@ -143,46 +157,66 @@ func TestService_GetChapters_RateLimited(t *testing.T) {
 
 func TestService_GetChapters_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`not json`))
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL})
+	svc := stubService(ServiceConfig{}, respondWith(http.StatusOK, "not json"))
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
 	require.Error(t, err)
 	assert.Equal(t, ErrCodeUpstreamError, AsAudnexusError(err).Code)
 }
 
+// timeoutError reports a timeout without being context.DeadlineExceeded, so it
+// exercises the isTimeout (Timeout() bool) classification branch specifically.
+type timeoutError struct{}
+
+func (timeoutError) Error() string { return "simulated i/o timeout" }
+func (timeoutError) Timeout() bool { return true }
+
 func TestService_GetChapters_Timeout(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
+	// The service classifies a timeout via `errors.Is(err, DeadlineExceeded) ||
+	// isTimeout(err)`. Cover both disjuncts: http.Client.Timeout surfaces as a
+	// context.DeadlineExceeded, while a transport/dial timeout surfaces as a
+	// net.Error reporting Timeout() == true that is not DeadlineExceeded.
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"deadline_exceeded", context.DeadlineExceeded},
+		{"net_timeout", timeoutError{}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := stubService(ServiceConfig{}, func(*http.Request) (*http.Response, error) {
+				return nil, tc.err
+			})
+			_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
+			require.Error(t, err)
+			assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
+		})
+	}
+}
 
-	svc := NewService(ServiceConfig{
-		BaseURL:    upstream.URL,
-		HTTPClient: &http.Client{Timeout: 50 * time.Millisecond},
+func TestService_GetChapters_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	// A canceled request must propagate as context.Canceled, not be reclassified
+	// as a timeout or upstream error, so callers (and the handler) can tell
+	// user-initiated cancellation apart from a real failure.
+	svc := stubService(ServiceConfig{}, func(*http.Request) (*http.Response, error) {
+		return nil, context.Canceled
 	})
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
-	require.Error(t, err)
-	assert.Equal(t, ErrCodeTimeout, AsAudnexusError(err).Code)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, AsAudnexusError(err), "canceled error must not be wrapped as *Error")
 }
 
 func TestService_GetChapters_CacheHit(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	svc := stubService(ServiceConfig{CacheTTL: time.Hour}, func(r *http.Request) (*http.Response, error) {
 		atomic.AddInt32(&hits, 1)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: time.Hour})
+		return respondWith(http.StatusOK, `{"asin":"B0036UC2LO","chapters":[]}`)(r)
+	})
 
 	// First call hits upstream.
 	_, err := svc.GetChapters(context.Background(), "B0036UC2LO")
@@ -200,14 +234,10 @@ func TestService_GetChapters_CacheHit(t *testing.T) {
 func TestService_GetChapters_CacheExpires(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	svc := stubService(ServiceConfig{CacheTTL: 10 * time.Millisecond}, func(r *http.Request) (*http.Response, error) {
 		atomic.AddInt32(&hits, 1)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"asin":"B0036UC2LO","chapters":[]}`))
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: 10 * time.Millisecond})
+		return respondWith(http.StatusOK, `{"asin":"B0036UC2LO","chapters":[]}`)(r)
+	})
 
 	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
 	time.Sleep(20 * time.Millisecond)
@@ -219,13 +249,10 @@ func TestService_GetChapters_CacheExpires(t *testing.T) {
 func TestService_GetChapters_ErrorsNotCached(t *testing.T) {
 	t.Parallel()
 	var hits int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	svc := stubService(ServiceConfig{CacheTTL: time.Hour}, func(r *http.Request) (*http.Response, error) {
 		atomic.AddInt32(&hits, 1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-
-	svc := NewService(ServiceConfig{BaseURL: upstream.URL, CacheTTL: time.Hour})
+		return respondWith(http.StatusInternalServerError, "")(r)
+	})
 
 	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")
 	_, _ = svc.GetChapters(context.Background(), "B0036UC2LO")

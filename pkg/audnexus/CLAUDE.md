@@ -37,3 +37,7 @@ Uses `books:write` rather than `books:read` because the only legitimate use is s
 ## Caching
 
 In-memory `map[string]*cacheEntry` protected by `sync.RWMutex`, TTL 24h. No persistence across restarts. The cache is small (one entry per ASIN), and Audnexus data rarely changes, so there's no eviction beyond TTL.
+
+## Testing
+
+Tests inject a stubbed `http.RoundTripper` via `ServiceConfig.HTTPClient` (`stubService` + `respondWith` in `service_test.go`) to serve canned upstream responses. Do not use a live `httptest.NewServer` for the upstream: under CI load the localhost connection can race the response, so `http.Client.Do` returns a connection error that maps to `upstream_error` instead of the status the test set, making status-mapping tests (e.g. the 429/503 → `rate_limited` cases) flaky. `httptest.NewRequest`/`NewRecorder` for driving the Echo handler are fine; those don't open a socket.
