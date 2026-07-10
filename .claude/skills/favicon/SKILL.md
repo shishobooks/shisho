@@ -52,8 +52,11 @@ There are no 192/512 PNGs: nothing references them (no PWA manifest). If a manif
 
 Process:
 
-1. **Render PNGs with Playwright** (script pattern, using `playwright` from the repo's node_modules):
+1. **Render PNGs with Playwright** (run the script from the repo root, e.g. from a scratch file in `tmp/`, so `playwright` resolves from the repo's node_modules; all paths below assume cwd = repo root):
    ```js
+   import { chromium } from "playwright";
+   import { readFileSync } from "fs";
+
    const svg = readFileSync("public/favicon.svg", "utf8");
    const fullBleed = svg.replace('rx="32"', 'rx="0"');
    const targets = [
@@ -71,17 +74,18 @@ Process:
    }
    await browser.close();
    ```
-2. **Bundle the ICO with ImageMagick** (preserves alpha):
+2. **Bundle the ICO with ImageMagick** (preserves alpha; still cwd = repo root):
    ```bash
-   magick favicon-16.png favicon-32.png favicon.ico
+   magick public/favicon-16.png public/favicon-32.png public/favicon.ico
    ```
 3. **Verify transparency** before committing:
    ```bash
    # Corners of 16/32 PNGs and the ICO frames must be transparent or
-   # semi-transparent dark (srgba(23,23,23,...)), never opaque white/gray.
-   magick favicon-32.png -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
+   # semi-transparent dark (e.g. srgba(21,21,21,0.34) at 32px,
+   # srgba(23,23,23,0.75) at 16px), never opaque white/gray.
+   magick public/favicon-32.png -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
    # apple-touch-icon must be opaque #171717 in all four corners (full-bleed).
-   magick apple-touch-icon.png -format "TL: %[pixel:p{0,0}]\n" info:
+   magick public/apple-touch-icon.png -format "TL: %[pixel:p{0,0}]\n" info:
    ```
 
 ## HTML References
