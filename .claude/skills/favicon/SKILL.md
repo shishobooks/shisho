@@ -84,6 +84,9 @@ Process:
    # semi-transparent dark (e.g. srgba(21,21,21,0.34) at 32px,
    # srgba(23,23,23,0.75) at 16px), never opaque white/gray.
    magick public/favicon-32.png -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
+   magick public/favicon-16.png -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
+   magick "public/favicon.ico[0]" -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
+   magick "public/favicon.ico[1]" -format "alpha: %A, TL: %[pixel:p{0,0}]\n" info:
    # apple-touch-icon must be opaque #171717 in all four corners (full-bleed).
    magick public/apple-touch-icon.png -format "TL: %[pixel:p{0,0}]\n" info:
    ```
