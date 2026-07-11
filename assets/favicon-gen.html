@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <title>Favicon Generator</title>
     <style>
+      /* Dark background matching Chrome's dark tab strip so any opaque
+         white/gray corner fringing is immediately visible. */
       body {
         font-family: system-ui, sans-serif;
-        background: #fff;
+        background: #202124;
         padding: 40px;
         display: flex;
         flex-wrap: wrap;
@@ -19,12 +21,12 @@
         display: block;
         margin-top: 8px;
         font-size: 12px;
-        color: #666;
+        color: #999;
       }
     </style>
   </head>
   <body>
-    <!-- 512x512 -->
+    <!-- 512x512 (source preview) -->
     <div class="size">
       <svg
         width="512"
@@ -58,47 +60,10 @@
           />
         </g>
       </svg>
-      <span>512x512</span>
+      <span>512x512 (source)</span>
     </div>
 
-    <!-- 192x192 -->
-    <div class="size">
-      <svg
-        width="192"
-        height="192"
-        viewBox="0 0 512 512"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <rect width="512" height="512" rx="32" fill="#171717" />
-        <g transform="translate(36, 20) scale(9)">
-          <rect x="4" y="40" width="40" height="4" rx="1" fill="#c4b5fd" />
-          <rect x="8" y="12" width="7" height="28" rx="1" fill="#c4b5fd" />
-          <rect
-            x="17"
-            y="8"
-            width="6"
-            height="32"
-            rx="1"
-            fill="#c4b5fd"
-            opacity="0.7"
-          />
-          <rect x="25" y="16" width="8" height="24" rx="1" fill="#c4b5fd" />
-          <rect
-            x="35"
-            y="10"
-            width="5"
-            height="30"
-            rx="1"
-            fill="#c4b5fd"
-            opacity="0.7"
-          />
-        </g>
-      </svg>
-      <span>192x192</span>
-    </div>
-
-    <!-- 180x180 (Apple Touch) -->
+    <!-- 180x180 (Apple Touch, full-bleed: iOS applies its own corner mask) -->
     <div class="size">
       <svg
         width="180"
@@ -107,7 +72,7 @@
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <rect width="512" height="512" rx="32" fill="#171717" />
+        <rect width="512" height="512" rx="0" fill="#171717" />
         <g transform="translate(36, 20) scale(9)">
           <rect x="4" y="40" width="40" height="4" rx="1" fill="#c4b5fd" />
           <rect x="8" y="12" width="7" height="28" rx="1" fill="#c4b5fd" />
@@ -132,7 +97,7 @@
           />
         </g>
       </svg>
-      <span>180x180 (Apple)</span>
+      <span>180x180 (Apple, full-bleed)</span>
     </div>
 
     <!-- 32x32 -->
