@@ -392,8 +392,12 @@ const FileRow = ({
           </div>
         </div>
 
-        {/* Stats and actions - mobile only (separate row) */}
-        <div className="flex md:hidden items-center gap-2 text-xs text-muted-foreground">
+        {/* Stats and actions - mobile only (separate row).
+            Must wrap: audiobooks carry the widest stat payload (duration,
+            bitrate, codec, filesize) plus three action buttons, which would
+            otherwise overflow the content column and force page-level
+            horizontal scroll on narrow viewports. */}
+        <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-xs text-muted-foreground">
           {/* M4B stats */}
           {file.audiobook_duration_seconds && (
             <>
@@ -551,7 +555,7 @@ const FileRow = ({
           <div className="flex items-center gap-1 flex-wrap">
             <span className="text-xs text-muted-foreground">Narrated by</span>
             {file.narrators.map((narrator, index) => (
-              <span className="text-xs" key={narrator.id}>
+              <span className="text-xs min-w-0 break-words" key={narrator.id}>
                 <Link
                   className="hover:underline"
                   to={`/libraries/${libraryId}/people/${narrator.person_id}`}
@@ -568,12 +572,12 @@ const FileRow = ({
         {isExpanded && hasExpandableMetadata && (
           <div className="mt-2 bg-muted/50 rounded-md p-3 text-xs space-y-2">
             {/* Publisher, Released, URL */}
-            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
               {file.publisher && (
                 <>
                   <span className="text-muted-foreground">Publisher</span>
                   <Link
-                    className="hover:underline"
+                    className="hover:underline break-words"
                     to={`/libraries/${libraryId}/publishers/${file.publisher.id}`}
                   >
                     {file.publisher.name}
@@ -633,7 +637,7 @@ const FileRow = ({
             {/* Identifiers */}
             {file.identifiers && file.identifiers.length > 0 && (
               <div className="pt-2 border-t border-border/50">
-                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
                   {file.identifiers.map((id, idx) => {
                     const url = getIdentifierUrl(
                       id.type,
@@ -647,7 +651,7 @@ const FileRow = ({
                         </span>
                         {url ? (
                           <a
-                            className="font-mono select-all text-primary hover:underline"
+                            className="font-mono select-all text-primary hover:underline break-all"
                             href={url}
                             rel="noopener noreferrer"
                             target="_blank"
@@ -655,7 +659,7 @@ const FileRow = ({
                             {id.value}
                           </a>
                         ) : (
-                          <span className="font-mono select-all">
+                          <span className="font-mono select-all break-all">
                             {id.value}
                           </span>
                         )}
@@ -1051,7 +1055,9 @@ const BookDetail = () => {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
-              <h1 className="text-2xl font-semibold">{book.title}</h1>
+              <h1 className="text-2xl font-semibold min-w-0 break-words">
+                {book.title}
+              </h1>
               {/*
                 The relative wrapper exists so AddToListPopover can be opened
                 from the dropdown menu's "Add to list" item: its trigger is an
@@ -1126,15 +1132,17 @@ const BookDetail = () => {
               </div>
             </div>
             {book.sort_title && book.sort_title !== book.title && (
-              <p className="text-sm text-muted-foreground italic">
+              <p className="text-sm text-muted-foreground italic break-words">
                 Sort title: {book.sort_title}
               </p>
             )}
             {book.subtitle && (
-              <p className="text-lg text-muted-foreground">{book.subtitle}</p>
+              <p className="text-lg text-muted-foreground break-words">
+                {book.subtitle}
+              </p>
             )}
             {book.description && (
-              <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap">
+              <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap break-words">
                 {book.description}
               </p>
             )}
@@ -1276,13 +1284,13 @@ const BookDetail = () => {
               </div>
               <div>
                 <p className="font-semibold">Library</p>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground break-words">
                   {book.library?.name || `Library ${book.library_id}`}
                 </p>
               </div>
               <div>
                 <p className="font-semibold">File Path</p>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground break-words">
                   {book.filepath.split("/").map((segment, i, arr) => (
                     <React.Fragment key={i}>
                       {segment}

@@ -183,6 +183,13 @@ type createBookRequest struct {
 	SeriesID  *int   `json:"seriesId"` // Optional series
 	FileSize  *int64 `json:"fileSize"` // Optional file size in bytes
 	PageCount *int   `json:"pageCount"`
+	// Optional file name (the file-level title shown in the file row).
+	Name *string `json:"name"`
+	// Optional M4B audiobook stats. These drive the widest per-file stat
+	// payload in the book detail file row (duration, bitrate, codec).
+	AudiobookDurationSeconds *float64 `json:"audiobookDurationSeconds"`
+	AudiobookBitrateBps      *int     `json:"audiobookBitrateBps"`
+	AudiobookCodec           *string  `json:"audiobookCodec"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -242,15 +249,19 @@ func (h *handler) createBook(c echo.Context) error {
 	}
 
 	file := &models.File{
-		LibraryID:     req.LibraryID,
-		BookID:        book.ID,
-		Filepath:      filepath + "." + fileType,
-		FileType:      fileType,
-		FileRole:      models.FileRoleMain,
-		FilesizeBytes: fileSize,
-		PageCount:     req.PageCount,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		LibraryID:                req.LibraryID,
+		BookID:                   book.ID,
+		Filepath:                 filepath + "." + fileType,
+		FileType:                 fileType,
+		FileRole:                 models.FileRoleMain,
+		FilesizeBytes:            fileSize,
+		PageCount:                req.PageCount,
+		Name:                     req.Name,
+		AudiobookDurationSeconds: req.AudiobookDurationSeconds,
+		AudiobookBitrateBps:      req.AudiobookBitrateBps,
+		AudiobookCodec:           req.AudiobookCodec,
+		CreatedAt:                now,
+		UpdatedAt:                now,
 	}
 
 	_, err = h.db.NewInsert().Model(file).Exec(ctx)
