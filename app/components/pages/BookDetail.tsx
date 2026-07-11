@@ -397,7 +397,7 @@ const FileRow = ({
             bitrate, codec, filesize) plus three action buttons, which would
             otherwise overflow the content column and force page-level
             horizontal scroll on narrow viewports. */}
-        <div className="flex md:hidden flex-wrap items-center gap-2 gap-y-1 min-w-0 text-xs text-muted-foreground">
+        <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-xs text-muted-foreground">
           {/* M4B stats */}
           {file.audiobook_duration_seconds && (
             <>

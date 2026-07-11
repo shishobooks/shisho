@@ -12,7 +12,7 @@
  *
  * Running:
  *   pnpm e2e:chromium e2e/book-detail-overflow.spec.ts   # Chromium only
- *   mise test:e2e -- book-detail-overflow                # Both browsers
+ *   pnpm exec playwright test book-detail-overflow        # Both browsers
  */
 
 import type { Page } from "@playwright/test";
@@ -97,10 +97,18 @@ test.describe("Book detail overflow", () => {
       waitUntil: "domcontentloaded",
     });
 
-    // Wait for the file row to render — the Files heading only appears once the
+    // Wait for the file row to render. The Files heading only appears once the
     // book data resolves, which guarantees the stats/actions row is present.
     await expect(
-      page.getByRole("heading", { name: "Files (1)" }),
+      page.getByRole("heading", { name: "Files (1)", exact: true }),
+    ).toBeVisible();
+
+    // The audiobook stat payload must actually render. Otherwise the overflow
+    // check below could pass for the wrong reason (no stats means nothing wide
+    // enough to overflow). The mobile stats row renders the bitrate inline from
+    // audiobook_bitrate_bps, so assert the visible copy is present.
+    await expect(
+      page.getByText("128 kbps").filter({ visible: true }),
     ).toBeVisible();
 
     // The document must not be scrollable horizontally.

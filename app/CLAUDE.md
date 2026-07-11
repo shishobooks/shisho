@@ -287,7 +287,7 @@ For rows with multiple pieces of info (stats, actions), stack on mobile:
   </div>
 
   {/* Stats + actions row - must wrap (see below) */}
-  <div className="flex flex-wrap items-center gap-2 gap-y-1 min-w-0 text-xs text-muted-foreground pl-6">
+  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-xs text-muted-foreground pl-6">
     <span>8h 44m</span>
     <span className="text-muted-foreground/50">·</span>
     <span>64 kbps</span>
