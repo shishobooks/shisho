@@ -286,8 +286,8 @@ For rows with multiple pieces of info (stats, actions), stack on mobile:
     <span className="truncate min-w-0 flex-1">{name}</span>
   </div>
 
-  {/* Stats row - separate line gives name room to breathe */}
-  <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+  {/* Stats + actions row - must wrap (see below) */}
+  <div className="flex flex-wrap items-center gap-2 gap-y-1 min-w-0 text-xs text-muted-foreground pl-6">
     <span>8h 44m</span>
     <span className="text-muted-foreground/50">·</span>
     <span>64 kbps</span>
@@ -297,6 +297,8 @@ For rows with multiple pieces of info (stats, actions), stack on mobile:
   </div>
 </div>
 ```
+
+**Stat + action rows must wrap.** A single-line stats/actions row with no `flex-wrap` packs its widest content into one non-shrinking row. For audiobooks that is duration, bitrate, codec, and filesize plus the download/listen/more buttons, which exceeds the content column on a narrow viewport, bleeds past the container, and (because the shared `LibraryLayout` `<main>` has no `overflow-x-hidden`) becomes page-level horizontal scroll. Always give these rows `flex-wrap` plus `gap-y-1` (wrapped-row spacing) and `min-w-0` so the stats and buttons wrap instead of overflowing. This bit `BookDetail.tsx`'s mobile file row (issue #398). Prefer per-element wrapping/breaking (`break-words`, `break-all`, `min-w-0`, grid `minmax(0,1fr)` value tracks) over a blanket `overflow-x-hidden` clip, which can mask other bugs and clip popovers.
 
 ### Dot Separators for Stats
 
