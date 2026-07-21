@@ -16,7 +16,8 @@
     "start": "vite",
     "test:unit": "vitest run",
     "e2e:chromium": "playwright test --project=chromium",
-    "e2e:firefox": "playwright test --project=firefox"
+    "e2e:firefox": "playwright test --project=firefox",
+    "e2e:docs": "playwright test --config website.playwright.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

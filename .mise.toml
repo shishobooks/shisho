@@ -110,11 +110,11 @@ run = "go test -race ./pkg/... -coverprofile coverage.out"
 
 [tasks."test:js"]
 description = "Run all JS tests"
-depends = ["tygo", "test:unit", "test:e2e"]
+depends = ["tygo", "test:unit", "test:e2e", "e2e:docs"]
 
 [tasks."test:js:fast"]
 description = "Run JS tests with chromium e2e only (firefox runs in CI)"
-depends = ["tygo", "test:unit", "e2e:chromium"]
+depends = ["tygo", "test:unit", "e2e:chromium", "e2e:docs"]
 
 [tasks."test:unit"]
 description = "Run JS unit tests"
@@ -131,6 +131,10 @@ run = "mkdir -p ./tmp && pnpm e2e:chromium"
 [tasks."e2e:firefox"]
 description = "Run E2E tests in Firefox"
 run = "mkdir -p ./tmp && pnpm e2e:firefox"
+
+[tasks."e2e:docs"]
+description = "Run documentation theme E2E tests"
+run = "pnpm e2e:docs"
 
 [tasks."test:cover"]
 description = "Open coverage report in browser"
