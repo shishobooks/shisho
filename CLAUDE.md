@@ -136,7 +136,8 @@ The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the re
 - `mise test:js` - Run all JS tests (unit + E2E) in parallel
 - `mise test:js:fast` - Run JS tests with chromium e2e only (Firefox runs in CI); used by `mise check:quiet`
 - `mise test:unit` - Run JS unit tests only
-- `mise test:e2e` - Run E2E tests (Chromium + Firefox) in parallel
+- `mise test:e2e` - Run app E2E tests (Chromium + Firefox) in parallel
+- `mise e2e:docs` - Run documentation theme E2E tests in Chromium
 
 ### Database
 - `mise db:migrate` - Run all pending migrations
@@ -183,7 +184,8 @@ For detailed architecture information, see:
   - Frontend-only edits → `mise lint:js test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
   - Both → run both
   - Migrations → also `mise db:rollback && mise db:migrate`
-  - E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
+  - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
+  - Documentation theme flows → `mise e2e:docs`
 - **Run the full `mise check:quiet` once when the feature/fix is done, before pushing or opening a PR.** Concurrent runs from different worktrees serialize automatically via `flock` (install with `brew install flock` on macOS; built in on Linux), so you don't need to coordinate with other agents — just kick it off and it'll wait its turn if another is in flight. Avoid plain `mise check` — its parallel verbose output is hard to follow and tempts you to re-run it.
 - **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
