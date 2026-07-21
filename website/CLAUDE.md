@@ -128,6 +128,7 @@ The `baseUrl` is auto-detected: uses `DOCS_BASE_URL` env var if set, `/${project
 ## Theme Customization
 
 - **Dark mode only** — `colorMode.disableSwitch: true`
+- **Visual theme**: Aurora, a violet-only glow treatment with glass chrome, soft gradients, elevated cards, and pill-shaped controls
 - **Colors**: Violet palette using OKLCH in `custom.css` (`--shisho-violet-300`)
 - **Icons**: All default Docusaurus icons swizzled to use `lucide-react` components (in `src/theme/Icon/`)
 - **Admonition icons**: Custom icons for Note, Warning, Info, Danger, Tip (in `src/theme/Admonition/Icon/`)
