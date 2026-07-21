@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -286,6 +288,67 @@ func TestMergeEnrichedMetadata_ChaptersFallbackFromFile(t *testing.T) {
 	require.Len(t, enrichedMeta.Chapters, 1)
 	assert.Equal(t, "File Chapter 1", enrichedMeta.Chapters[0].Title)
 	assert.Equal(t, fileSource, enrichedMeta.FieldDataSources["chapters"])
+}
+
+func TestMergeEnrichedMetadata_SeriesNumberGroupIsAtomic(t *testing.T) {
+	t.Parallel()
+
+	volume := models.SeriesNumberUnitVolume
+	chapter := models.SeriesNumberUnitChapter
+	target := &mediafile.ParsedMetadata{
+		SeriesNumber:     pointerutil.Float64(1),
+		SeriesNumberUnit: &volume,
+	}
+	enrichment := &mediafile.ParsedMetadata{
+		SeriesNumber:     pointerutil.Float64(2),
+		SeriesNumberEnd:  pointerutil.Float64(4),
+		SeriesNumberUnit: &chapter,
+	}
+
+	mergeEnrichedMetadata(target, enrichment, "plugin:test/enricher")
+
+	assert.InDelta(t, 1.0, *target.SeriesNumber, 0.001)
+	assert.Nil(t, target.SeriesNumberEnd)
+	assert.Equal(t, volume, *target.SeriesNumberUnit)
+}
+
+func TestMergeEnrichedMetadata_CopiesCompleteSeriesNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	unit := models.SeriesNumberUnitVolume
+	target := &mediafile.ParsedMetadata{}
+	enrichment := &mediafile.ParsedMetadata{
+		SeriesNumber:     pointerutil.Float64(1),
+		SeriesNumberEnd:  pointerutil.Float64(3),
+		SeriesNumberUnit: &unit,
+	}
+
+	mergeEnrichedMetadata(target, enrichment, "plugin:test/enricher")
+
+	require.NotNil(t, target.SeriesNumber)
+	assert.InDelta(t, 1.0, *target.SeriesNumber, 0.001)
+	require.NotNil(t, target.SeriesNumberEnd)
+	assert.InDelta(t, 3.0, *target.SeriesNumberEnd, 0.001)
+	require.NotNil(t, target.SeriesNumberUnit)
+	assert.Equal(t, unit, *target.SeriesNumberUnit)
+}
+
+func TestMergeEnrichedMetadata_DiscardsMalformedSeriesNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	unit := models.SeriesNumberUnitVolume
+	tests := []mediafile.ParsedMetadata{
+		{SeriesNumberEnd: pointerutil.Float64(3), SeriesNumberUnit: &unit},
+		{SeriesNumber: pointerutil.Float64(3), SeriesNumberEnd: pointerutil.Float64(1), SeriesNumberUnit: &unit},
+		{SeriesNumber: pointerutil.Float64(math.Inf(1)), SeriesNumberUnit: &unit},
+	}
+	for _, enrichment := range tests {
+		target := &mediafile.ParsedMetadata{}
+		mergeEnrichedMetadata(target, &enrichment, "plugin:test/enricher")
+		assert.Nil(t, target.SeriesNumber)
+		assert.Nil(t, target.SeriesNumberEnd)
+		assert.Nil(t, target.SeriesNumberUnit)
+	}
 }
 
 // TestMergeEnrichedMetadata_AllFields verifies that all content fields are

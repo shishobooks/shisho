@@ -56,6 +56,7 @@ type AuthorInput struct {
 type SeriesInput struct {
 	Name             string   `json:"name" validate:"required,max=200"`
 	Number           *float64 `json:"number,omitempty"`
+	NumberEnd        *float64 `json:"number_end,omitempty"`
 	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" validate:"omitempty,oneof=volume chapter" tstype:"SeriesNumberUnit"`
 }
 

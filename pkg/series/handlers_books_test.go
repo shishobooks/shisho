@@ -124,6 +124,48 @@ func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	assert.Equal(t, "Book 01", resp.Items[0].Title, "books must be ordered by series number")
 }
 
+func TestSeriesBooks_OmnibusesSortAfterSinglesAndByEndpoint(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+	seriesID := seedSeriesWithBooks(t, db, []string{"Single One", "Omnibus Long", "Single Two", "Omnibus Short"})
+
+	updates := []struct {
+		title string
+		start float64
+		end   *float64
+	}{
+		{title: "Single One", start: 1},
+		{title: "Omnibus Long", start: 1, end: float64Pointer(4)},
+		{title: "Single Two", start: 2},
+		{title: "Omnibus Short", start: 1, end: float64Pointer(3)},
+	}
+	for _, update := range updates {
+		_, err := db.NewUpdate().
+			Table("book_series").
+			Set("series_number = ?", update.start).
+			Set("series_number_end = ?", update.end).
+			Where("book_id = (SELECT id FROM books WHERE title = ?)", update.title).
+			Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	h := newSeriesHandler(db)
+	rec := getSeriesBooks(t, h, seriesID, "")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []models.Book `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 4)
+	assert.Equal(t, []string{"Single One", "Single Two", "Omnibus Short", "Omnibus Long"}, []string{
+		resp.Items[0].Title, resp.Items[1].Title, resp.Items[2].Title, resp.Items[3].Title,
+	})
+}
+
+func float64Pointer(value float64) *float64 { return &value }
+
 func TestSeriesBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
 	db := setupSeriesTestDB(t)

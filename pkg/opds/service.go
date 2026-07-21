@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
@@ -724,7 +725,7 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		for _, bs := range book.BookSeries {
 			if bs.Series != nil {
 				if bs.SeriesNumber != nil {
-					seriesParts = append(seriesParts, fmt.Sprintf("%s #%.0f", bs.Series.Name, *bs.SeriesNumber))
+					seriesParts = append(seriesParts, fmt.Sprintf("%s #%s", bs.Series.Name, seriesnum.FormatRange(*bs.SeriesNumber, bs.SeriesNumberEnd)))
 				} else {
 					seriesParts = append(seriesParts, bs.Series.Name)
 				}

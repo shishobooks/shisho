@@ -9,8 +9,8 @@ import (
 // to q.OrderExpr(clause.Expression).
 //
 // Each user-visible sort level produces ONE OrderClause, except the
-// series level which expands to two (series sort name, then series
-// number ASC).
+// series level which expands to four (name, range discriminator, start,
+// and endpoint).
 //
 // Expressions are built from the whitelisted field branches in
 // OrderClauses and never embed user input, so no parameter args are
@@ -30,7 +30,7 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 		return nil
 	}
 
-	out := make([]OrderClause, 0, len(levels)+1) // +1 for the series expansion
+	out := make([]OrderClause, 0, len(levels)+3) // +3 for the series expansion
 	for _, l := range levels {
 		switch l.Field {
 		case FieldTitle:
@@ -49,31 +49,23 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 			out = append(out, nullsLast(expr, l.Direction))
 
 		case FieldSeries:
-			// Primary series sort name, then series number (always ASC
-			// within a series). Books with no series row sort last.
-			//
-			// "Primary" series is picked by bs.sort_order ASC (consistent
-			// with how pkg/books/service.go selects the primary series
-			// elsewhere). bs.series_number is the position *within* a
-			// specific series (e.g., "#3 in Stormlight") and is not
-			// meaningful for choosing which series is primary when a
-			// book belongs to multiple series. The outer-level sort still
-			// uses the primary series's series_number so that books in
-			// the same series sort by their position within it.
+			// Pick one primary membership by sort order, then sort by its
+			// series name and position. Omnibus ranges follow singles in the
+			// same series and use the endpoint as a final numeric tie-breaker.
 			nameExpr := `(SELECT s.sort_name
                           FROM book_series bs
                           JOIN series s ON s.id = bs.series_id
                           WHERE bs.book_id = b.id
                           ORDER BY bs.sort_order ASC, bs.id ASC
                           LIMIT 1)`
-			numExpr := `(SELECT bs.series_number
-                         FROM book_series bs
-                         WHERE bs.book_id = b.id
-                         ORDER BY bs.sort_order ASC, bs.id ASC
-                         LIMIT 1)`
+			rangeExpr := primarySeriesValue(`(bs.series_number_end IS NOT NULL)`)
+			startExpr := primarySeriesValue("bs.series_number")
+			endExpr := primarySeriesValue("COALESCE(bs.series_number_end, bs.series_number)")
 			out = append(out,
 				nullsLast(nameExpr, l.Direction),
-				nullsLast(numExpr, DirAsc),
+				nullsLast(rangeExpr, DirAsc),
+				nullsLast(startExpr, DirAsc),
+				nullsLast(endExpr, DirAsc),
 			)
 
 		case FieldDateAdded:
@@ -90,6 +82,14 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 		}
 	}
 	return out
+}
+
+func primarySeriesValue(valueExpr string) string {
+	return fmt.Sprintf(`(SELECT %s
+                         FROM book_series bs
+                         WHERE bs.book_id = b.id
+                         ORDER BY bs.sort_order ASC, bs.id ASC
+                         LIMIT 1)`, valueExpr)
 }
 
 // nullsLast wraps a column/expression with both the NULLS-LAST

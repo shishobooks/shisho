@@ -41,7 +41,11 @@ People represent both **authors** and **narrators**. The same person record is s
 
 ### Series
 
-A book can belong to multiple series, each with an optional series number. Series numbers support decimals (e.g., `1.5` for a side story between books 1 and 2).
+A book can belong to multiple series, each with an optional series number. Series numbers support decimals (for example, `1.5` for a side story between books 1 and 2) and contiguous omnibus ranges such as `1-3`. A range is stored as one series membership with a start and end, not as a separate membership for every covered number.
+
+In series listings, individually numbered books appear before omnibuses. Omnibuses are then ordered by their range start and end. Download filenames and OPDS descriptions display the complete range. Kobo sync and EPUB metadata use the range start because their numeric series fields cannot represent an end.
+
+The API and [book sidecars](./sidecar-files#book-sidecar-format) can set and preserve ranges. The current web book editor only exposes a single series number. An ordinary scan preserves a sidecar-backed range. Refresh and reset intentionally discard cached sidecars, so a format that only supplies the start can reduce the range to a single number.
 
 ### Genres and Tags
 
@@ -87,7 +91,7 @@ Searches by identifier accept any of the cosmetic variants above — you can pas
 | Relationship | Type | Notes |
 |-------------|------|-------|
 | Book &harr; Authors | Many-to-many | A book can have multiple authors; an author can appear on multiple books |
-| Book &harr; Series | Many-to-many | A book can be in multiple series, each with its own number |
+| Book &harr; Series | Many-to-many | A book can be in multiple series, each with its own single number or contiguous omnibus range |
 | Book &harr; Genres | Many-to-many | |
 | Book &harr; Tags | Many-to-many | |
 | Book &rarr; Files | One-to-many | A book has one or more files |

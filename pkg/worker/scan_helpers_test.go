@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -563,6 +564,54 @@ func TestShouldApplySidecarScalar(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldUpdateParsedSeries_NumberGroupUsesSourcePriority(t *testing.T) {
+	t.Parallel()
+
+	existing := []*models.BookSeries{{
+		Series:          &models.Series{Name: "Saga"},
+		SeriesNumber:    seriesFloatPtr(1),
+		SeriesNumberEnd: seriesFloatPtr(3),
+	}}
+	pluginRange := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(2), SeriesNumberEnd: seriesFloatPtr(4),
+		DataSource: models.DataSourcePlugin,
+	}
+	fileSingle := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(1), DataSource: models.DataSourceFileMetadata,
+	}
+	malformed := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(4), SeriesNumberEnd: seriesFloatPtr(2),
+		DataSource: models.DataSourcePlugin,
+	}
+
+	assert.True(t, shouldUpdateParsedSeries(pluginRange, existing, models.DataSourceFileMetadata, false))
+	assert.False(t, shouldUpdateParsedSeries(fileSingle, existing, models.DataSourceManual, false))
+	assert.False(t, shouldUpdateParsedSeries(malformed, existing, models.DataSourceFileMetadata, true))
+}
+
+func TestShouldApplySeriesSidecar_NumberGroupChanges(t *testing.T) {
+	t.Parallel()
+
+	unit := models.SeriesNumberUnitVolume
+	existing := []*models.BookSeries{{
+		Series:           &models.Series{Name: "Saga"},
+		SeriesNumber:     seriesFloatPtr(1),
+		SeriesNumberUnit: &unit,
+	}}
+	incoming := []sidecar.SeriesMetadata{{
+		Name:      "Saga",
+		Number:    seriesFloatPtr(1),
+		NumberEnd: seriesFloatPtr(3),
+		Unit:      &unit,
+	}}
+
+	assert.True(t, shouldApplySeriesSidecar(incoming, existing, models.DataSourceFileMetadata, false))
+	assert.False(t, shouldApplySeriesSidecar(incoming, existing, models.DataSourceManual, false))
+	assert.False(t, shouldApplySeriesSidecar(incoming, existing, models.DataSourceFileMetadata, true))
+}
+
+func seriesFloatPtr(value float64) *float64 { return &value }
 
 func TestShouldApplySidecarRelationship(t *testing.T) {
 	t.Parallel()

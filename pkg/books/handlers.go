@@ -223,6 +223,9 @@ func (h *handler) update(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
+	if err := validateSeriesInputs(params.Series); err != nil {
+		return errcodes.BadRequest(err.Error())
+	}
 
 	// Fetch the book.
 	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
@@ -435,6 +438,7 @@ func (h *handler) update(c echo.Context) error {
 				BookID:           book.ID,
 				SeriesID:         seriesRecord.ID,
 				SeriesNumber:     seriesInput.Number,
+				SeriesNumberEnd:  seriesInput.NumberEnd,
 				SeriesNumberUnit: seriesInput.SeriesNumberUnit,
 				SortOrder:        i + 1,
 			}

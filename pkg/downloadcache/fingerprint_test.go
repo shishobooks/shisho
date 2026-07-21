@@ -398,6 +398,24 @@ func TestFingerprintHash(t *testing.T) {
 		assert.NotEqual(t, hash1, hash2)
 	})
 
+	t.Run("different series number end produces different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:  "Test",
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(1), NumberEnd: pointerutil.Float64(3), SortOrder: 0}},
+		}
+		fp2 := &Fingerprint{
+			Title:  "Test",
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(1), NumberEnd: pointerutil.Float64(4), SortOrder: 0}},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
 	t.Run("different narrators produce different hash", func(t *testing.T) {
 		fp1 := &Fingerprint{
 			Title:     "Test",

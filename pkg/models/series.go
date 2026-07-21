@@ -40,6 +40,7 @@ type BookSeries struct {
 	SeriesID         int      `bun:",nullzero" json:"series_id"`
 	Series           *Series  `bun:"rel:belongs-to,join:series_id=id" json:"series,omitempty" tstype:"Series"`
 	SeriesNumber     *float64 `json:"series_number,omitempty"`
+	SeriesNumberEnd  *float64 `json:"series_number_end,omitempty"`
 	SeriesNumberUnit *string  `json:"series_number_unit,omitempty" tstype:"SeriesNumberUnit"`
 	SortOrder        int      `bun:",nullzero" json:"sort_order"`
 }

@@ -93,6 +93,17 @@ func TestFormatDownloadFilename(t *testing.T) {
 			expected: "[Author] Series #1.5 - Interlude.epub",
 		},
 		{
+			name: "omnibus series range",
+			book: &models.Book{
+				Title: "Collected Stories",
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), SeriesNumberEnd: pointerutil.Float64(3), Series: &models.Series{Name: "Series"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Series #1-3 - Collected Stories.epub",
+		},
+		{
 			name: "multiple authors - picks first by sort order",
 			book: &models.Book{
 				Title: "Collaboration",
