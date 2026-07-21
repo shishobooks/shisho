@@ -19,8 +19,16 @@ A top-level organizational unit that scopes all resources. Each resource belongs
 _Avoid_: collection, shelf
 
 **Series**:
-A named sequence of books (e.g., "Harry Potter"). A book can belong to multiple series with a position number.
+A named sequence of books (e.g., "Harry Potter"). A book belongs to a given series at most once, at a **series number** that is either a single position or a contiguous range (when the book is an **omnibus**).
 _Avoid_: sequence, collection
+
+**Series Number**:
+A book's position within a series. Usually a single number; for an **omnibus** it is a contiguous range with a start and an end (e.g., 1-3), where the start is also the value used to order the book within the series. For comic (CBZ) books it additionally carries a unit of volume or chapter.
+_Avoid_: series index, position (as a separate term)
+
+**Omnibus**:
+A single book that collects a contiguous run of a series' entries, recorded as one series membership whose **series number** spans a range (e.g., 1-3), not one membership per entry. Omnibuses are ordered after the individually-numbered books of the series. Non-contiguous bundles (e.g. books 1, 2, 10) are a distinct, out-of-scope concept.
+_Avoid_: bind-up, boxed set
 
 **Person**:
 An individual who participates in creating a book or narrating a file. A person can be an author (book-level) or narrator (file-level).
@@ -71,6 +79,7 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 - A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, and **Publishers**
 - A **Book** has one or more **Files**
 - A **Book** has many **Genres**, **Tags**, **Authors** (persons), and **Series**
+- A **Book** belongs to a given **Series** at most once, at a **series number** that is a single position or a contiguous range (an **omnibus**)
 - A **File** has at most one **Publisher** and many **Narrators** (persons)
 - A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
