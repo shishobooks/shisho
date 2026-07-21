@@ -197,6 +197,12 @@ func shouldApplySeriesSidecar(incoming []sidecar.SeriesMetadata, existing []*mod
 	if forceRefresh || len(incoming) == 0 {
 		return false
 	}
+	for _, membership := range incoming {
+		groupPresent := membership.Number != nil || membership.NumberEnd != nil || membership.Unit != nil
+		if groupPresent && !validSeriesNumberGroup(membership.Number, membership.NumberEnd, membership.Unit) {
+			return false
+		}
+	}
 	if seriesSidecarMatches(incoming, existing) {
 		return false
 	}
@@ -227,6 +233,17 @@ func equalFloatPointers(a, b *float64) bool {
 
 func equalStringPointers(a, b *string) bool {
 	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func applySeriesNumberUnit(metadata *mediafile.ParsedMetadata, unit, source string) {
+	if metadata == nil || unit == "" || metadata.SeriesNumber == nil || metadata.SeriesNumberUnit != nil {
+		return
+	}
+	if metadata.SourceForField("series") != source {
+		return
+	}
+	u := unit
+	metadata.SeriesNumberUnit = &u
 }
 
 // fileIdentifierKeys returns canonical comparison keys for a set of stored

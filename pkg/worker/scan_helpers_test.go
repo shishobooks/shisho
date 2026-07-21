@@ -611,6 +611,39 @@ func TestShouldApplySeriesSidecar_NumberGroupChanges(t *testing.T) {
 	assert.False(t, shouldApplySeriesSidecar(incoming, existing, models.DataSourceFileMetadata, true))
 }
 
+func TestShouldApplySeriesSidecar_RejectsMalformedNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	existing := []*models.BookSeries{{
+		Series:          &models.Series{Name: "Saga"},
+		SeriesNumber:    seriesFloatPtr(1),
+		SeriesNumberEnd: seriesFloatPtr(3),
+	}}
+	incoming := []sidecar.SeriesMetadata{{
+		Name:      "Saga",
+		Number:    seriesFloatPtr(4),
+		NumberEnd: seriesFloatPtr(2),
+	}}
+
+	assert.False(t, shouldApplySeriesSidecar(incoming, existing, models.DataSourceFileMetadata, false))
+}
+
+func TestApplySeriesNumberUnit_RequiresMatchingSource(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		SeriesNumber: seriesFloatPtr(1),
+		DataSource:   models.DataSourcePlugin,
+	}
+
+	applySeriesNumberUnit(metadata, models.SeriesNumberUnitVolume, models.DataSourceFilepath)
+	assert.Nil(t, metadata.SeriesNumberUnit)
+
+	applySeriesNumberUnit(metadata, models.SeriesNumberUnitVolume, models.DataSourcePlugin)
+	require.NotNil(t, metadata.SeriesNumberUnit)
+	assert.Equal(t, models.SeriesNumberUnitVolume, *metadata.SeriesNumberUnit)
+}
+
 func seriesFloatPtr(value float64) *float64 { return &value }
 
 func TestShouldApplySidecarRelationship(t *testing.T) {

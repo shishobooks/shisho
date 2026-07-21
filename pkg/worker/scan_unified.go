@@ -861,10 +861,7 @@ func (w *Worker) scanFileCore(
 		if models.GetDataSourcePriority(titleSource) >= models.DataSourceFileMetadataPriority {
 			if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, file.FileType); hasNumber {
 				title = normalizedTitle
-				if unit != "" && metadata.SeriesNumberUnit == nil {
-					u := unit
-					metadata.SeriesNumberUnit = &u
-				}
+				applySeriesNumberUnit(metadata, unit, titleSource)
 			}
 		}
 		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
@@ -2314,7 +2311,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		// For root-level files, compute the expected organized folder path so that
 		// multiple root-level files with the same title/author will share a book.
 		// This ensures "Wind and Truth.epub" and "Wind and Truth.m4b" become one book.
-		title, _ := deriveInitialTitle(path, isRootLevelFile, metadata)
+		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		var authorNames []string
 		for _, author := range metadata.Authors {
 			authorNames = append(authorNames, author.Name)
@@ -2353,7 +2350,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		book = existingBook
 	} else {
 		// Derive initial title from filepath or metadata
-		title, _ := deriveInitialTitle(path, isRootLevelFile, metadata)
+		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		titleSource := models.DataSourceFilepath
 		if metadata != nil && strings.TrimSpace(metadata.Title) != "" {
 			titleSource = metadata.SourceForField("title")
@@ -2643,18 +2640,17 @@ func (w *Worker) discoverAndCreateSupplements(
 // For CBZ files, series number indicators like "#007" are normalized to "v007"
 // and chapter indicators like "Ch.5" are normalized to "c005"; parenthesized
 // metadata like "(2020) (Digital) (group)" is removed.
-// Returns the derived title and the parsed series number unit ("volume", "chapter", or "").
-func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) (string, string) {
+func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) string {
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
 	// If metadata has a title, use it
 	if metadata != nil {
 		if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
 			// Normalize series number indicators in metadata title
-			if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(trimmedTitle, fileType); hasNumber {
-				return normalizedTitle, unit
+			if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(trimmedTitle, fileType); hasNumber {
+				return normalizedTitle
 			}
-			return trimmedTitle, ""
+			return trimmedTitle
 		}
 	}
 
@@ -2684,11 +2680,11 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	}
 
 	// Normalize series number indicators in filepath-based title
-	if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, fileType); hasNumber {
-		return normalizedTitle, unit
+	if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, fileType); hasNumber {
+		return normalizedTitle
 	}
 
-	return title, ""
+	return title
 }
 
 // removeFileSidecar deletes the file sidecar at filePath. ENOENT is silent;
@@ -2766,14 +2762,9 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 	// Title fallback
 	if strings.TrimSpace(metadata.Title) == "" {
 		// Pass nil metadata so deriveInitialTitle uses filepath only (we already confirmed Title is empty)
-		derivedTitle, derivedUnit := deriveInitialTitle(filePath, isRootLevelFile, nil)
+		derivedTitle := deriveInitialTitle(filePath, isRootLevelFile, nil)
 		metadata.Title = derivedTitle
 		setSource("title")
-		if derivedUnit != "" && metadata.SeriesNumberUnit == nil {
-			u := derivedUnit
-			metadata.SeriesNumberUnit = &u
-			setSource("series")
-		}
 	}
 
 	// Authors fallback

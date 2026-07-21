@@ -4805,6 +4805,21 @@ func TestApplyFilepathFallbacks_PopulatesSeriesFromTitle(t *testing.T) {
 	assert.NotEmpty(t, metadata.Series)
 }
 
+func TestApplyFilepathFallbacks_DoesNotMixUnitIntoPluginSeriesGroup(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		Series:       "Plugin Series",
+		SeriesNumber: seriesFloatPtr(1),
+		DataSource:   models.DataSourcePlugin,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/My Series v3.cbz", "/library/My Series v3", "cbz", true)
+
+	assert.Nil(t, metadata.SeriesNumberUnit)
+	assert.Equal(t, models.DataSourcePlugin, metadata.SourceForField("series"))
+}
+
 // =============================================================================
 // resetBookFileState tests
 // =============================================================================

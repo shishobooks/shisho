@@ -221,4 +221,5 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 	assert.NotNil(t, metadata.Series)
 	assert.Equal(t, "Test Series", metadata.Series.Name)
 	assert.InDelta(t, 3.0, metadata.Series.Number, 0.001, "Kobo numeric metadata uses the range start only")
+	assert.InDelta(t, 3.0, metadata.Series.NumberFloat, 0.001, "Kobo floating-point metadata uses the range start only")
 }

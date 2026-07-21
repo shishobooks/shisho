@@ -124,21 +124,28 @@ func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	assert.Equal(t, "Book 01", resp.Items[0].Title, "books must be ordered by series number")
 }
 
-func TestSeriesBooks_OmnibusesSortAfterSinglesAndByEndpoint(t *testing.T) {
+func TestSeriesBooks_OmnibusOrderingMatrix(t *testing.T) {
 	t.Parallel()
 	db := setupSeriesTestDB(t)
 	ctx := context.Background()
-	seriesID := seedSeriesWithBooks(t, db, []string{"Single One", "Omnibus Long", "Single Two", "Omnibus Short"})
+	titles := []string{
+		"Single One Beta", "Omnibus Long", "Single Two", "Omnibus Short",
+		"Fractional Prequel", "Unnumbered", "Single One Alpha",
+	}
+	seriesID := seedSeriesWithBooks(t, db, titles)
 
 	updates := []struct {
 		title string
-		start float64
+		start *float64
 		end   *float64
 	}{
-		{title: "Single One", start: 1},
-		{title: "Omnibus Long", start: 1, end: float64Pointer(4)},
-		{title: "Single Two", start: 2},
-		{title: "Omnibus Short", start: 1, end: float64Pointer(3)},
+		{title: "Single One Beta", start: float64Pointer(1)},
+		{title: "Omnibus Long", start: float64Pointer(1), end: float64Pointer(4)},
+		{title: "Single Two", start: float64Pointer(2)},
+		{title: "Omnibus Short", start: float64Pointer(1), end: float64Pointer(3)},
+		{title: "Fractional Prequel", start: float64Pointer(0.5)},
+		{title: "Unnumbered"},
+		{title: "Single One Alpha", start: float64Pointer(1)},
 	}
 	for _, update := range updates {
 		_, err := db.NewUpdate().
@@ -158,10 +165,15 @@ func TestSeriesBooks_OmnibusesSortAfterSinglesAndByEndpoint(t *testing.T) {
 		Items []models.Book `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Items, 4)
-	assert.Equal(t, []string{"Single One", "Single Two", "Omnibus Short", "Omnibus Long"}, []string{
-		resp.Items[0].Title, resp.Items[1].Title, resp.Items[2].Title, resp.Items[3].Title,
-	})
+	require.Len(t, resp.Items, len(titles))
+	got := make([]string, len(resp.Items))
+	for i := range resp.Items {
+		got[i] = resp.Items[i].Title
+	}
+	assert.Equal(t, []string{
+		"Unnumbered", "Fractional Prequel", "Single One Alpha", "Single One Beta",
+		"Single Two", "Omnibus Short", "Omnibus Long",
+	}, got)
 }
 
 func float64Pointer(value float64) *float64 { return &value }

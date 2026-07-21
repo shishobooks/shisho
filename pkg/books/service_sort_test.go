@@ -93,6 +93,47 @@ func TestListBooks_SortByTitleAsc(t *testing.T) {
 	assert.Equal(t, cheese.ID, got[2].ID)
 }
 
+func TestListBooks_SortByPrimarySeriesPlacesOmnibusesAfterSingles(t *testing.T) {
+	t.Parallel()
+
+	db := setupBooksTestDB(t)
+	svc := NewService(db)
+	lib := seedLibrary(t, db, "Books")
+	ctx := context.Background()
+	now := time.Now()
+
+	seriesRecord := &models.Series{
+		LibraryID:      lib.ID,
+		Name:           "Saga",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Saga",
+		SortNameSource: models.DataSourceManual,
+	}
+	_, err := db.NewInsert().Model(seriesRecord).Exec(ctx)
+	require.NoError(t, err)
+
+	single := seedBook(t, db, lib, "Single Two", "Single Two", now)
+	omnibus := seedBook(t, db, lib, "Omnibus One to Three", "Omnibus One to Three", now)
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID: single.ID, SeriesID: seriesRecord.ID, SeriesNumber: float64Pointer(2), SortOrder: 1,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID: omnibus.ID, SeriesID: seriesRecord.ID, SeriesNumber: float64Pointer(1),
+		SeriesNumberEnd: float64Pointer(3), SortOrder: 1,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	got, _, err := svc.ListBooksWithTotal(ctx, ListBooksOptions{
+		LibraryID: &lib.ID,
+		Sort:      []sortspec.SortLevel{{Field: sortspec.FieldSeries, Direction: sortspec.DirAsc}},
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, single.ID, got[0].ID)
+	assert.Equal(t, omnibus.ID, got[1].ID)
+}
+
 // TestListBooks_SortByDateAddedDesc confirms the primary use case for the
 // frontend's builtin default.
 func TestListBooks_SortByDateAddedDesc(t *testing.T) {
