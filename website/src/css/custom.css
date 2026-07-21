@@ -717,3 +717,274 @@ body {
     display: none;
   }
 }
+
+/* ---- AURORA THEME ----
+ * Modern violet glow with glass chrome, elevated cards, and soft gradients.
+ */
+html[data-theme="dark"] {
+  --radius: 0.875rem;
+  --background: oklch(0.14 0.012 293);
+  --foreground: oklch(0.96 0.004 293);
+  --card: oklch(0.175 0.015 293);
+  --card-foreground: oklch(0.96 0.004 293);
+  --muted-foreground: oklch(0.71 0.018 293);
+  --accent: oklch(0.22 0.02 293);
+  --accent-foreground: oklch(0.96 0.004 293);
+  --border: oklch(0.9 0.03 293 / 12%);
+  --ifm-navbar-background-color: oklch(0.14 0.012 293 / 60%);
+}
+
+/* ---- Chrome: glass navbar / footer ---- */
+html[data-theme="dark"] .navbar {
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  border-bottom: 1px solid oklch(0.9 0.03 293 / 10%);
+}
+
+html[data-theme="dark"] .footer.footer--dark {
+  background-color: oklch(0.125 0.01 293) !important;
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Headings ---- */
+html[data-theme="dark"] .theme-doc-markdown > h1 {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3 {
+  letter-spacing: -0.015em;
+}
+
+/* ---- Sidebar: soft glowing pills ---- */
+html[data-theme="dark"] .menu__link {
+  border-radius: 0.625rem;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+html[data-theme="dark"] .menu__link--active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--shisho-violet-300) 22%, transparent),
+    color-mix(in oklab, var(--shisho-violet-300) 8%, transparent)
+  );
+  border-color: color-mix(in oklab, var(--shisho-violet-300) 30%, transparent);
+  box-shadow: 0 0 16px
+    color-mix(in oklab, var(--shisho-violet-300) 16%, transparent);
+  color: var(--ifm-color-primary-lighter);
+}
+
+/* ---- Doc content details ---- */
+html[data-theme="dark"] .alert {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--ifm-alert-border-color);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 5%) inset;
+  color: var(--foreground);
+}
+
+html[data-theme="dark"] .theme-code-block,
+html[data-theme="dark"] .prism-code {
+  background-color: oklch(0.16 0.012 293) !important;
+}
+
+html[data-theme="dark"] .theme-code-block {
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 6%) inset,
+    0 8px 32px oklch(0 0 0 / 25%);
+}
+
+html[data-theme="dark"] .pagination-nav__link {
+  background: var(--card);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 5%) inset;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+html[data-theme="dark"] .pagination-nav__link:hover {
+  border-color: color-mix(in oklab, var(--shisho-violet-300) 45%, transparent);
+  box-shadow: 0 4px 24px
+    color-mix(in oklab, var(--shisho-violet-300) 18%, transparent);
+  transform: translateY(-2px);
+}
+
+html[data-theme="dark"] .theme-doc-version-badge {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--shisho-violet-300) 25%, transparent),
+    color-mix(in oklab, var(--shisho-violet-300) 10%, transparent)
+  );
+  border: 1px solid
+    color-mix(in oklab, var(--shisho-violet-300) 35%, transparent);
+  border-radius: 999px;
+  color: var(--ifm-color-primary-lighter);
+}
+
+/* ---- Homepage: aurora hero (violet range only) ---- */
+html[data-theme="dark"] .docs-home__hero::before {
+  background:
+    radial-gradient(
+      ellipse 55% 55% at 28% 0%,
+      color-mix(in oklch, oklch(0.6 0.17 288), transparent 72%),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 45% 45% at 75% 8%,
+      color-mix(in oklch, oklch(0.58 0.18 302), transparent 78%),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 35% 40% at 55% 0%,
+      color-mix(in oklch, oklch(0.7 0.12 275), transparent 86%),
+      transparent
+    );
+}
+
+html[data-theme="dark"] .docs-home__hero-inner {
+  padding: 7rem 1.5rem 5.5rem;
+}
+
+html[data-theme="dark"] .docs-home__eyebrow {
+  color: var(--ifm-color-primary-lighter);
+}
+
+html[data-theme="dark"] .docs-home__title {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+html[data-theme="dark"] .docs-home__title em {
+  background: linear-gradient(
+    100deg,
+    oklch(0.87 0.09 288),
+    oklch(0.7 0.16 300)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---- Homepage: glowing pill buttons ---- */
+html[data-theme="dark"] .docs-home__btn {
+  border-radius: 999px;
+}
+
+html[data-theme="dark"] .docs-home__btn--primary {
+  background: linear-gradient(
+    135deg,
+    oklch(0.68 0.15 288),
+    oklch(0.58 0.18 300)
+  );
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 25%) inset,
+    0 8px 32px color-mix(in oklab, var(--shisho-violet-300) 35%, transparent);
+  color: white;
+}
+
+html[data-theme="dark"] .docs-home__btn--primary:hover {
+  background: linear-gradient(
+    135deg,
+    oklch(0.72 0.15 288),
+    oklch(0.62 0.18 300)
+  );
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 25%) inset,
+    0 10px 40px color-mix(in oklab, var(--shisho-violet-300) 50%, transparent);
+  color: white;
+  transform: translateY(-1px);
+}
+
+html[data-theme="dark"] .docs-home__btn--ghost {
+  background: oklch(1 0 0 / 4%);
+  border-color: oklch(1 0 0 / 14%);
+}
+
+html[data-theme="dark"] .docs-home__btn--ghost:hover {
+  background: oklch(1 0 0 / 8%);
+  border-color: oklch(1 0 0 / 24%);
+}
+
+/* ---- Homepage: elevated cards ---- */
+html[data-theme="dark"] .docs-home__workflow-step,
+html[data-theme="dark"] .docs-home__feature {
+  background: linear-gradient(180deg, oklch(1 0 0 / 5%), oklch(1 0 0 / 1.5%));
+  border-color: oklch(1 0 0 / 10%);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 7%) inset;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+html[data-theme="dark"] .docs-home__feature:hover,
+html[data-theme="dark"] .docs-home__workflow-step:hover {
+  border-color: color-mix(in oklab, var(--shisho-violet-300) 40%, transparent);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 7%) inset,
+    0 8px 40px color-mix(in oklab, var(--shisho-violet-300) 15%, transparent);
+  transform: translateY(-2px);
+}
+
+html[data-theme="dark"] .docs-home__workflow-icon,
+html[data-theme="dark"] .docs-home__feature-icon {
+  background: linear-gradient(
+    135deg,
+    oklch(0.64 0.15 288),
+    oklch(0.54 0.17 300)
+  );
+  border-radius: 0.625rem;
+  box-shadow: 0 4px 16px
+    color-mix(in oklab, var(--shisho-violet-300) 30%, transparent);
+  color: white;
+}
+
+html[data-theme="dark"] .docs-home__section-heading {
+  letter-spacing: -0.025em;
+}
+
+html[data-theme="dark"] .docs-home__formats {
+  background: linear-gradient(180deg, oklch(1 0 0 / 4%), oklch(1 0 0 / 1%));
+  box-shadow: 0 1px 0 oklch(1 0 0 / 6%) inset;
+}
+
+html[data-theme="dark"] .docs-home__format-tag {
+  background: oklch(1 0 0 / 6%);
+  border-color: oklch(1 0 0 / 12%);
+  border-radius: 999px;
+}
+
+html[data-theme="dark"] .docs-home__quickstart-code {
+  background: oklch(0.16 0.012 293);
+  border-color: oklch(1 0 0 / 10%);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 7%) inset,
+    0 16px 60px oklch(0 0 0 / 35%),
+    0 8px 40px color-mix(in oklab, var(--shisho-violet-300) 12%, transparent);
+}
+
+html[data-theme="dark"] .docs-home__quickstart-step::before {
+  background: color-mix(in oklab, var(--shisho-violet-300) 24%, transparent);
+  color: var(--ifm-color-primary-lighter);
+}
+
+/* ---- Homepage: CTA with aurora wash ---- */
+html[data-theme="dark"] .docs-home__cta {
+  background:
+    radial-gradient(
+      ellipse 60% 90% at 50% -20%,
+      color-mix(in oklch, oklch(0.6 0.17 293), transparent 75%),
+      transparent
+    ),
+    linear-gradient(180deg, oklch(1 0 0 / 5%), oklch(1 0 0 / 1.5%));
+  border: 1px solid oklch(1 0 0 / 10%);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 7%) inset;
+  overflow: hidden;
+  position: relative;
+}
