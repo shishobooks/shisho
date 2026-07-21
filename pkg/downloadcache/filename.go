@@ -2,13 +2,12 @@ package downloadcache
 
 import (
 	"fmt"
-	"math"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // volumePattern matches volume indicators in titles (e.g., "v1", "V2", "vol. 3").
@@ -49,7 +48,7 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 	// Pad volume numbers for lexicographic sorting, then sanitize
 	title := sanitizeFilename(padVolumeNumber(titleSource))
 	author := getFirstAuthorName(book)
-	series, number := getFirstSeries(book)
+	series, number, numberEnd := getFirstSeries(book)
 	narrator := getFirstNarratorName(file)
 	ext := file.FileType
 
@@ -60,12 +59,13 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 		parts = append(parts, fmt.Sprintf("[%s]", sanitizeFilename(author)))
 	}
 
-	// Add series and number if available, unless title already has a volume number
+	// A title volume marker suppresses a redundant single position, but an
+	// omnibus still needs its complete range represented in the filename.
 	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && !titleHasVolume {
+	if series != "" && (!titleHasVolume || numberEnd != nil) {
 		seriesPart := sanitizeFilename(series)
 		if number != nil {
-			seriesPart += " #" + formatSeriesNumber(*number)
+			seriesPart += " #" + seriesnum.FormatRange(*number, numberEnd)
 		}
 		parts = append(parts, seriesPart)
 		parts = append(parts, "-")
@@ -126,11 +126,11 @@ func getFirstNarratorName(file *models.File) string {
 	return ""
 }
 
-// getFirstSeries returns the name and number of the first series by sort order.
-// Returns empty string and nil if no series.
-func getFirstSeries(book *models.Book) (string, *float64) {
+// getFirstSeries returns the name and number range of the first series by sort order.
+// Returns an empty name and nil numbers if there is no series.
+func getFirstSeries(book *models.Book) (string, *float64, *float64) {
 	if len(book.BookSeries) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 
 	// Sort series by SortOrder
@@ -142,19 +142,16 @@ func getFirstSeries(book *models.Book) (string, *float64) {
 
 	first := series[0]
 	if first.Series != nil {
-		return first.Series.Name, first.SeriesNumber
+		return first.Series.Name, first.SeriesNumber, first.SeriesNumberEnd
 	}
-	return "", nil
+	return "", nil, nil
 }
 
 // formatSeriesNumber formats a series number for display.
 // Whole numbers are displayed without decimal (e.g., "1").
 // Non-whole numbers keep their decimal (e.g., "1.5").
 func formatSeriesNumber(n float64) string {
-	if n == math.Floor(n) {
-		return strconv.Itoa(int(n))
-	}
-	return fmt.Sprintf("%g", n)
+	return seriesnum.FormatRange(n, nil)
 }
 
 // sanitizeFilename removes or replaces characters that are not valid in filenames.
@@ -217,7 +214,7 @@ func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
 	// Pad volume numbers for lexicographic sorting, then sanitize for Kobo
 	title := sanitizeKoboFilename(padVolumeNumber(titleSource))
 	author := sanitizeKoboFilename(getFirstAuthorName(book))
-	series, number := getFirstSeries(book)
+	series, number, numberEnd := getFirstSeries(book)
 
 	var parts []string
 
@@ -227,13 +224,14 @@ func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
 		parts = append(parts, "-")
 	}
 
-	// Add series and number if available, unless title already has a volume number
-	// Use plain number format instead of # (Kobo doesn't like #)
+	// A title volume marker suppresses a redundant single position, but an
+	// omnibus still needs its complete range represented in the filename.
+	// Use plain number format instead of # (Kobo doesn't like #).
 	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && !titleHasVolume {
+	if series != "" && (!titleHasVolume || numberEnd != nil) {
 		seriesPart := sanitizeKoboFilename(series)
 		if number != nil {
-			seriesPart += " " + formatSeriesNumber(*number)
+			seriesPart += " " + seriesnum.FormatRange(*number, numberEnd)
 		}
 		parts = append(parts, seriesPart)
 		parts = append(parts, "-")

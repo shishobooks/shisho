@@ -606,6 +606,7 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 				BookID:           book.ID,
 				SeriesID:         bs.SeriesID,
 				SeriesNumber:     bs.SeriesNumber,
+				SeriesNumberEnd:  bs.SeriesNumberEnd,
 				SeriesNumberUnit: bs.SeriesNumberUnit,
 				SortOrder:        bs.SortOrder,
 			}

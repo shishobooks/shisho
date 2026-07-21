@@ -617,23 +617,46 @@ func floatPtr(f float64) *float64 {
 	return &f
 }
 
-func TestSeriesMetadataUnitRoundTrip(t *testing.T) {
+func TestSeriesMetadataNumberGroupRoundTrip(t *testing.T) {
 	t.Parallel()
 	chapterUnit := "chapter"
 	original := SeriesMetadata{
-		Name:   "One Piece",
-		Number: floatPtr(42),
-		Unit:   &chapterUnit,
+		Name:      "One Piece",
+		Number:    floatPtr(42),
+		NumberEnd: floatPtr(45),
+		Unit:      &chapterUnit,
 	}
 
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
+	assert.Contains(t, string(data), `"number_end":45`)
 	assert.Contains(t, string(data), `"unit":"chapter"`)
 
 	var decoded SeriesMetadata
 	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.NotNil(t, decoded.Number)
+	assert.InDelta(t, 42.0, *decoded.Number, 0.001)
+	require.NotNil(t, decoded.NumberEnd)
+	assert.InDelta(t, 45.0, *decoded.NumberEnd, 0.001)
 	require.NotNil(t, decoded.Unit)
 	assert.Equal(t, "chapter", *decoded.Unit)
+}
+
+func TestBookSidecarFromModelPreservesSeriesNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	unit := "volume"
+	book := &models.Book{BookSeries: []*models.BookSeries{{
+		Series:           &models.Series{Name: "Saga"},
+		SeriesNumber:     floatPtr(1),
+		SeriesNumberEnd:  floatPtr(3),
+		SeriesNumberUnit: &unit,
+	}}}
+
+	got := BookSidecarFromModel(book)
+	require.Len(t, got.Series, 1)
+	require.NotNil(t, got.Series[0].NumberEnd)
+	assert.InDelta(t, 3.0, *got.Series[0].NumberEnd, 0.001)
 }
 
 // =============================================================================

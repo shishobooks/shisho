@@ -76,6 +76,7 @@ type FingerprintNarrator struct {
 type FingerprintSeries struct {
 	Name      string   `json:"name"`
 	Number    *float64 `json:"number,omitempty"`
+	NumberEnd *float64 `json:"number_end,omitempty"`
 	SortOrder int      `json:"sort_order"`
 }
 
@@ -272,6 +273,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 				fp.Series = append(fp.Series, FingerprintSeries{
 					Name:      s.Series.Name,
 					Number:    s.SeriesNumber,
+					NumberEnd: s.SeriesNumberEnd,
 					SortOrder: s.SortOrder,
 				})
 			}

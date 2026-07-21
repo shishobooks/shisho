@@ -45,7 +45,7 @@ type ListBooksOptions struct {
 	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
 
 	// Sort overrides the default ordering. When nil and SeriesID is set,
-	// books are ordered by series_number ASC + sort_title ASC. When nil
+	// single-numbered books precede ranges, then endpoints and sort title order. When nil
 	// and SeriesID is not set, the service falls back to
 	// sortspec.BuiltinDefault (date_added DESC) so all surfaces (REST,
 	// OPDS, eReader, gallery) share the same "newest first" default.
@@ -370,11 +370,12 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Order("b.id ASC")
 
 	case opts.SeriesID != nil:
-		// When filtering by series, order by series_number then sort_title.
-		// Series listings are a distinct use case from the general "newest
-		// first" fallback — readers of a series expect #1, #2, #3 order,
-		// not most-recently-added.
-		q = q.Order("bs_filter.series_number ASC", "b.sort_title ASC")
+		// Keep omnibus ranges after single-numbered books, then order each
+		// group by its start, endpoint, and title.
+		q = q.OrderExpr("(bs_filter.series_number_end IS NOT NULL) ASC").
+			Order("bs_filter.series_number ASC").
+			OrderExpr("COALESCE(bs_filter.series_number_end, bs_filter.series_number) ASC").
+			Order("b.sort_title ASC")
 
 	default:
 		// No explicit caller Sort, not a series listing, not the internal
@@ -763,7 +764,7 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 		Relation("Files").
 		Join("INNER JOIN book_series bs ON bs.book_id = b.id").
 		Where("bs.series_id = ?", seriesID).
-		OrderExpr("CASE WHEN bs.series_number = CAST(bs.series_number AS INTEGER) THEN 0 ELSE 1 END ASC, bs.series_number ASC, b.title ASC").
+		OrderExpr("(bs.series_number_end IS NOT NULL) ASC, CASE WHEN bs.series_number = CAST(bs.series_number AS INTEGER) THEN 0 ELSE 1 END ASC, bs.series_number ASC, COALESCE(bs.series_number_end, bs.series_number) ASC, b.title ASC").
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -779,8 +780,8 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 // GetFirstBooksFilesForSeries returns the files of each series' first book,
 // keyed by series ID. Uses two queries regardless of input size: one window-
 // function query to find the first book per series, then one query to load
-// files for those books. The first-book ordering matches GetFirstBookInSeriesByID
-// (whole numbers before fractions, then series_number, then title).
+// files for those books. The first-book ordering matches GetFirstBookInSeriesByID:
+// singles before ranges, then whole numbers, start, endpoint, and title.
 func (svc *Service) GetFirstBooksFilesForSeries(ctx context.Context, seriesIDs []int) (map[int][]*models.File, error) {
 	if len(seriesIDs) == 0 {
 		return nil, nil
@@ -799,8 +800,10 @@ func (svc *Service) GetFirstBooksFilesForSeries(ctx context.Context, seriesIDs [
 				ROW_NUMBER() OVER (
 					PARTITION BY bs.series_id
 					ORDER BY
+						(bs.series_number_end IS NOT NULL) ASC,
 						CASE WHEN bs.series_number = CAST(bs.series_number AS INTEGER) THEN 0 ELSE 1 END ASC,
 						bs.series_number ASC,
+						COALESCE(bs.series_number_end, bs.series_number) ASC,
 						b.title ASC
 				) AS rn
 			FROM book_series bs

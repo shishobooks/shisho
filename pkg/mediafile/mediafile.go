@@ -31,12 +31,13 @@ type ParsedChapter struct {
 }
 
 type ParsedMetadata struct {
-	Title        string         `json:"title"`
-	Subtitle     string         `json:"subtitle"` // from M4B freeform SUBTITLE atom
-	Authors      []ParsedAuthor `json:"authors"`
-	Narrators    []string       `json:"narrators"`
-	Series       string         `json:"series"`
-	SeriesNumber *float64       `json:"series_number,omitempty"`
+	Title           string         `json:"title"`
+	Subtitle        string         `json:"subtitle"` // from M4B freeform SUBTITLE atom
+	Authors         []ParsedAuthor `json:"authors"`
+	Narrators       []string       `json:"narrators"`
+	Series          string         `json:"series"`
+	SeriesNumber    *float64       `json:"series_number,omitempty"`
+	SeriesNumberEnd *float64       `json:"series_number_end,omitempty"`
 	// SeriesNumberUnit indicates whether SeriesNumber refers to a volume or a
 	// chapter. CBZ-only — null for other formats. Valid values: "volume", "chapter".
 	SeriesNumberUnit *string    `json:"series_number_unit,omitempty" tstype:"SeriesNumberUnit"`

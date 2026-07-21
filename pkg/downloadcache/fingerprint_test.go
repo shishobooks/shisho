@@ -278,6 +278,32 @@ func TestComputeFingerprint(t *testing.T) {
 	})
 }
 
+func TestComputeFingerprint_SeriesRangeEndChangesHash(t *testing.T) {
+	t.Parallel()
+
+	book := &models.Book{
+		Title: "Collected Stories",
+		BookSeries: []*models.BookSeries{{
+			Series:          &models.Series{Name: "Saga"},
+			SeriesNumber:    pointerutil.Float64(1),
+			SeriesNumberEnd: pointerutil.Float64(3),
+		}},
+	}
+	file := &models.File{}
+	first, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+	firstHash, err := first.Hash()
+	require.NoError(t, err)
+
+	book.BookSeries[0].SeriesNumberEnd = pointerutil.Float64(4)
+	second, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+	secondHash, err := second.Hash()
+	require.NoError(t, err)
+
+	assert.NotEqual(t, firstHash, secondHash)
+}
+
 func TestFingerprintHash(t *testing.T) {
 	t.Parallel()
 	t.Run("same fingerprint produces same hash", func(t *testing.T) {
@@ -388,6 +414,24 @@ func TestFingerprintHash(t *testing.T) {
 		fp2 := &Fingerprint{
 			Title:  "Test",
 			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(2), SortOrder: 0}},
+		}
+
+		hash1, err1 := fp1.Hash()
+		hash2, err2 := fp2.Hash()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("different series number end produces different hash", func(t *testing.T) {
+		fp1 := &Fingerprint{
+			Title:  "Test",
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(1), NumberEnd: pointerutil.Float64(3), SortOrder: 0}},
+		}
+		fp2 := &Fingerprint{
+			Title:  "Test",
+			Series: []FingerprintSeries{{Name: "Series", Number: pointerutil.Float64(1), NumberEnd: pointerutil.Float64(4), SortOrder: 0}},
 		}
 
 		hash1, err1 := fp1.Hash()

@@ -126,6 +126,24 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 	}
 }
 
+func TestBookToEntry_SeriesRangeInSummary(t *testing.T) {
+	t.Parallel()
+
+	start, end := 1.0, 3.0
+	book := &models.Book{
+		ID:    1,
+		Title: "Collected Stories",
+		BookSeries: []*models.BookSeries{{
+			Series:          &models.Series{Name: "Saga"},
+			SeriesNumber:    &start,
+			SeriesNumberEnd: &end,
+		}},
+	}
+
+	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+	assert.Equal(t, "Saga #1-3", entry.Summary)
+}
+
 // TestBookToEntry_CoverLinkUsesOPDSPath verifies that the cover image link
 // in an OPDS entry stays inside the /opds/v1 path. The cover endpoint must
 // live under the OPDS group so it can authenticate via Basic Auth and so

@@ -2659,6 +2659,65 @@ func TestScanFileCore_SidecarReading_BookTitle(t *testing.T) {
 	assert.Equal(t, models.DataSourceSidecar, result.Book.TitleSource)
 }
 
+func TestScanFileCore_SidecarSeriesRangeOverridesSameNamedFileMetadata(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Test Book")
+	book := &models.Book{
+		LibraryID:    1,
+		Filepath:     bookDir,
+		Title:        "Test Book",
+		TitleSource:  models.DataSourceCBZMetadata,
+		SortTitle:    "Test Book",
+		AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+	file := &models.File{
+		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(bookDir, "test.cbz"),
+		FileType: models.FileTypeCBZ, FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+	series := &models.Series{
+		LibraryID: 1, Name: "Saga", NameSource: models.DataSourceCBZMetadata,
+		SortName: "Saga", SortNameSource: models.DataSourceCBZMetadata,
+	}
+	_, err := tc.db.NewInsert().Model(series).Exec(tc.ctx)
+	require.NoError(t, err)
+	unit := models.SeriesNumberUnitVolume
+	membership := &models.BookSeries{
+		BookID: book.ID, SeriesID: series.ID, Series: series,
+		SeriesNumber: seriesFloatPtr(1), SeriesNumberEnd: seriesFloatPtr(3),
+		SeriesNumberUnit: &unit, SortOrder: 1,
+	}
+	_, err = tc.db.NewInsert().Model(membership).Exec(tc.ctx)
+	require.NoError(t, err)
+	book.BookSeries = []*models.BookSeries{membership}
+
+	require.NoError(t, sidecar.WriteBookSidecar(bookDir, &sidecar.BookSidecar{
+		Series: []sidecar.SeriesMetadata{{
+			Name: "Saga", Number: seriesFloatPtr(1), NumberEnd: seriesFloatPtr(3), Unit: &unit, SortOrder: 1,
+		}},
+	}))
+
+	metadata := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(1), DataSource: models.DataSourceCBZMetadata,
+	}
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+
+	var got models.BookSeries
+	require.NoError(t, tc.db.NewSelect().Model(&got).Where("book_id = ?", book.ID).Scan(tc.ctx))
+	require.NotNil(t, got.SeriesNumber)
+	assert.InDelta(t, 1.0, *got.SeriesNumber, 0.001)
+	require.NotNil(t, got.SeriesNumberEnd)
+	assert.InDelta(t, 3.0, *got.SeriesNumberEnd, 0.001)
+	require.NotNil(t, got.SeriesNumberUnit)
+	assert.Equal(t, unit, *got.SeriesNumberUnit)
+}
+
 // TestScanFileCore_SidecarPriority_OverridesFileMetadata verifies that sidecar
 // files DO override data from file metadata sources (sidecar has higher priority).
 func TestScanFileCore_SidecarPriority_OverridesFileMetadata(t *testing.T) {
@@ -4751,6 +4810,21 @@ func TestApplyFilepathFallbacks_PopulatesSeriesFromTitle(t *testing.T) {
 	applyFilepathFallbacks(metadata, "/library/My Series v3.cbz", "/library/My Series v3", "cbz", true)
 
 	assert.NotEmpty(t, metadata.Series)
+}
+
+func TestApplyFilepathFallbacks_DoesNotMixUnitIntoPluginSeriesGroup(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{
+		Series:       "Plugin Series",
+		SeriesNumber: seriesFloatPtr(1),
+		DataSource:   models.DataSourcePlugin,
+	}
+
+	applyFilepathFallbacks(metadata, "/library/My Series v3.cbz", "/library/My Series v3", "cbz", true)
+
+	assert.Nil(t, metadata.SeriesNumberUnit)
+	assert.Equal(t, models.DataSourcePlugin, metadata.SourceForField("series"))
 }
 
 // =============================================================================

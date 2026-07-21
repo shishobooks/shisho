@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -193,8 +194,27 @@ func TestMoveFilesToBook_CreateNewBook(t *testing.T) {
 	_, err := db.NewInsert().Model(lp).Exec(ctx)
 	require.NoError(t, err)
 
-	// Create source book with a file
+	// Create source book with a file and a complete omnibus number group.
 	sourceBook, sourceFile1 := setupTestBookWithFile(t, db, library, "Source Book")
+	series := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Saga",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Saga",
+		SortNameSource: models.DataSourceManual,
+	}
+	_, err = db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+	unit := models.SeriesNumberUnitVolume
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID:           sourceBook.ID,
+		SeriesID:         series.ID,
+		SeriesNumber:     pointerutil.Float64(1),
+		SeriesNumberEnd:  pointerutil.Float64(3),
+		SeriesNumberUnit: &unit,
+		SortOrder:        1,
+	}).Exec(ctx)
+	require.NoError(t, err)
 
 	// Create a second file in a DIFFERENT subdirectory
 	// This simulates a scenario where we're splitting a file that's in its own subdirectory
@@ -247,6 +267,15 @@ func TestMoveFilesToBook_CreateNewBook(t *testing.T) {
 	assert.Equal(t, library.ID, result.TargetBook.LibraryID)
 	assert.Equal(t, newFileDir, result.TargetBook.Filepath)
 	assert.Equal(t, "New Book", result.TargetBook.Title)
+
+	var copiedSeries models.BookSeries
+	require.NoError(t, db.NewSelect().Model(&copiedSeries).Where("book_id = ?", result.TargetBook.ID).Scan(ctx))
+	require.NotNil(t, copiedSeries.SeriesNumber)
+	assert.InDelta(t, 1.0, *copiedSeries.SeriesNumber, 0.001)
+	require.NotNil(t, copiedSeries.SeriesNumberEnd)
+	assert.InDelta(t, 3.0, *copiedSeries.SeriesNumberEnd, 0.001)
+	require.NotNil(t, copiedSeries.SeriesNumberUnit)
+	assert.Equal(t, unit, *copiedSeries.SeriesNumberUnit)
 
 	// Verify source book still exists with the remaining file
 	var remainingFiles []models.File

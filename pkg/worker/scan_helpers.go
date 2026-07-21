@@ -154,6 +154,98 @@ func shouldApplySidecarRelationship(newItems, existingItems []string, existingSo
 	return sidecarPriority < existingPriority
 }
 
+func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*models.BookSeries, existingSource string, forceRefresh bool) bool {
+	if incoming == nil || incoming.Series == "" {
+		return false
+	}
+	newSource := incoming.SourceForField("series")
+	if len(existing) != 1 || existing[0].Series == nil || existing[0].Series.Name != incoming.Series {
+		existingNames := make([]string, 0, len(existing))
+		for _, membership := range existing {
+			if membership.Series != nil {
+				existingNames = append(existingNames, membership.Series.Name)
+			}
+		}
+		return shouldUpdateRelationship([]string{incoming.Series}, existingNames, newSource, existingSource, forceRefresh)
+	}
+
+	// A partially present or invalid external group must never mutate storage.
+	groupPresent := incoming.SeriesNumber != nil || incoming.SeriesNumberEnd != nil || incoming.SeriesNumberUnit != nil
+	if groupPresent && !validSeriesNumberGroup(incoming.SeriesNumber, incoming.SeriesNumberEnd, incoming.SeriesNumberUnit) {
+		return false
+	}
+	current := existing[0]
+	groupMatches := equalFloatPointers(incoming.SeriesNumber, current.SeriesNumber) &&
+		equalFloatPointers(incoming.SeriesNumberEnd, current.SeriesNumberEnd) &&
+		equalStringPointers(incoming.SeriesNumberUnit, current.SeriesNumberUnit)
+	if groupMatches {
+		return forceRefresh && newSource != existingSource
+	}
+	if !groupPresent {
+		return forceRefresh
+	}
+	if forceRefresh {
+		return true
+	}
+	if existingSource == "" {
+		existingSource = models.DataSourceFilepath
+	}
+	return models.GetDataSourcePriority(newSource) <= models.GetDataSourcePriority(existingSource)
+}
+
+func shouldApplySeriesSidecar(incoming []sidecar.SeriesMetadata, existing []*models.BookSeries, existingSource string, forceRefresh bool) bool {
+	if forceRefresh || len(incoming) == 0 {
+		return false
+	}
+	for _, membership := range incoming {
+		groupPresent := membership.Number != nil || membership.NumberEnd != nil || membership.Unit != nil
+		if groupPresent && !validSeriesNumberGroup(membership.Number, membership.NumberEnd, membership.Unit) {
+			return false
+		}
+	}
+	if seriesSidecarMatches(incoming, existing) {
+		return false
+	}
+	if existingSource == "" {
+		existingSource = models.DataSourceFilepath
+	}
+	return models.GetDataSourcePriority(models.DataSourceSidecar) < models.GetDataSourcePriority(existingSource)
+}
+
+func seriesSidecarMatches(incoming []sidecar.SeriesMetadata, existing []*models.BookSeries) bool {
+	if len(incoming) != len(existing) {
+		return false
+	}
+	for i := range incoming {
+		if existing[i].Series == nil || incoming[i].Name != existing[i].Series.Name ||
+			!equalFloatPointers(incoming[i].Number, existing[i].SeriesNumber) ||
+			!equalFloatPointers(incoming[i].NumberEnd, existing[i].SeriesNumberEnd) ||
+			!equalStringPointers(incoming[i].Unit, existing[i].SeriesNumberUnit) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalFloatPointers(a, b *float64) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func equalStringPointers(a, b *string) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func applySeriesNumberUnit(metadata *mediafile.ParsedMetadata, unit, source string) {
+	if metadata == nil || unit == "" || metadata.SeriesNumber == nil || metadata.SeriesNumberUnit != nil {
+		return
+	}
+	if metadata.SourceForField("series") != source {
+		return
+	}
+	u := unit
+	metadata.SeriesNumberUnit = &u
+}
+
 // fileIdentifierKeys returns canonical comparison keys for a set of stored
 // file identifiers. Centralizing this in one helper (rather than inlining the
 // key construction at each diff site) ensures that both sides of a scan diff

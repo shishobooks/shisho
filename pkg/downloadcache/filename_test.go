@@ -93,6 +93,28 @@ func TestFormatDownloadFilename(t *testing.T) {
 			expected: "[Author] Series #1.5 - Interlude.epub",
 		},
 		{
+			name: "omnibus series range",
+			book: &models.Book{
+				Title: "Collected Stories",
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), SeriesNumberEnd: pointerutil.Float64(3), Series: &models.Series{Name: "Series"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Series #1-3 - Collected Stories.epub",
+		},
+		{
+			name: "omnibus range remains visible when title has a volume marker",
+			book: &models.Book{
+				Title: "Series v1",
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), SeriesNumberEnd: pointerutil.Float64(3), Series: &models.Series{Name: "Series"}},
+				},
+			},
+			file:     &models.File{FileType: "epub"},
+			expected: "Series #1-3 - Series v001.epub",
+		},
+		{
 			name: "multiple authors - picks first by sort order",
 			book: &models.Book{
 				Title: "Collaboration",
@@ -595,6 +617,20 @@ func TestFormatKepubDownloadFilename(t *testing.T) {
 			},
 			file:     &models.File{FileType: "cbz"},
 			expected: "Author - My Manga v001.kepub.epub",
+		},
+		{
+			name: "omnibus range remains visible when title has a volume marker",
+			book: &models.Book{
+				Title: "My Manga v1",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+				BookSeries: []*models.BookSeries{
+					{SortOrder: 0, SeriesNumber: pointerutil.Float64(1), SeriesNumberEnd: pointerutil.Float64(3), Series: &models.Series{Name: "My Manga"}},
+				},
+			},
+			file:     &models.File{FileType: "cbz"},
+			expected: "Author - My Manga 1-3 - My Manga v001.kepub.epub",
 		},
 		{
 			name: "real world case that was breaking",

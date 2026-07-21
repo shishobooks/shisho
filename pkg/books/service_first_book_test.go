@@ -90,6 +90,100 @@ func TestGetFirstBookInSeriesByID_PrefersWholeNumberOverPrequel(t *testing.T) {
 	assert.Equal(t, books[1].ID, first.ID, "should pick Book One (1) over Prequel (0.5)")
 }
 
+func TestGetFirstBookInSeriesByID_PrefersSingleNumberOverOmnibus(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, _ := setupTestLibraryAndBook(t, db)
+	series := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Omnibus Series",
+		NameSource:     string(models.DataSourceFilepath),
+		SortName:       "Omnibus Series",
+		SortNameSource: string(models.DataSourceFilepath),
+	}
+	_, err := db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+
+	books := seedSeriesBooks(t, db, library, series.ID, []struct {
+		Title        string
+		SeriesNumber *float64
+	}{
+		{Title: "Omnibus One to Three", SeriesNumber: ptrFloat64(1)},
+		{Title: "Book Two", SeriesNumber: ptrFloat64(2)},
+	})
+	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[0].ID).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
+	require.NoError(t, err)
+	assert.Equal(t, books[1].ID, first.ID)
+}
+
+func TestGetFirstBooksFilesForSeries_PrefersSingleNumberOverOmnibus(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, _ := setupTestLibraryAndBook(t, db)
+	series := &models.Series{
+		LibraryID: library.ID, Name: "Bulk Omnibus Series", NameSource: models.DataSourceFilepath,
+		SortName: "Bulk Omnibus Series", SortNameSource: models.DataSourceFilepath,
+	}
+	_, err := db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+
+	books := seedSeriesBooks(t, db, library, series.ID, []struct {
+		Title        string
+		SeriesNumber *float64
+	}{
+		{Title: "Omnibus One to Three", SeriesNumber: ptrFloat64(1)},
+		{Title: "Book Two", SeriesNumber: ptrFloat64(2)},
+	})
+	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[0].ID).Exec(ctx)
+	require.NoError(t, err)
+
+	filesBySeries, err := NewService(db).GetFirstBooksFilesForSeries(ctx, []int{series.ID})
+	require.NoError(t, err)
+	require.Len(t, filesBySeries[series.ID], 1)
+	assert.Equal(t, "/fake/Book Two.epub", filesBySeries[series.ID][0].Filepath)
+}
+
+func TestGetFirstBookInSeriesByID_UsesRangeEndpointTieBreaker(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, _ := setupTestLibraryAndBook(t, db)
+	series := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Omnibus Only",
+		NameSource:     string(models.DataSourceFilepath),
+		SortName:       "Omnibus Only",
+		SortNameSource: string(models.DataSourceFilepath),
+	}
+	_, err := db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+
+	books := seedSeriesBooks(t, db, library, series.ID, []struct {
+		Title        string
+		SeriesNumber *float64
+	}{
+		{Title: "A Longer Omnibus", SeriesNumber: ptrFloat64(1)},
+		{Title: "Z Shorter Omnibus", SeriesNumber: ptrFloat64(1)},
+	})
+	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 4").Where("book_id = ?", books[0].ID).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[1].ID).Exec(ctx)
+	require.NoError(t, err)
+
+	first, err := NewService(db).GetFirstBookInSeriesByID(ctx, series.ID)
+	require.NoError(t, err)
+	assert.Equal(t, books[1].ID, first.ID)
+}
+
 func TestGetFirstBookInSeriesByID_FallsBackToFractionalWhenNoWholeNumbers(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

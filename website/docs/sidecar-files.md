@@ -56,7 +56,8 @@ There are two types of sidecar files, corresponding to the two levels of [metada
   "series": [
     {
       "name": "Classic American Literature",
-      "number": 5,
+      "number": 1,
+      "number_end": 3,
       "unit": "volume",
       "sort_order": 0
     }
@@ -65,6 +66,8 @@ There are two types of sidecar files, corresponding to the two levels of [metada
   "tags": ["american-literature", "1920s"]
 }
 ```
+
+The optional `number_end` field records the end of a contiguous omnibus range. It requires `number`, must be greater than `number`, and moves with `number` and `unit` as one group. Omit `number_end` for a normal single-numbered book. Malformed number groups are ignored together rather than partially applied.
 
 The `unit` field on series entries is optional and applies to CBZ files only. Valid values are `"volume"` and `"chapter"`. When omitted, CBZ files default to volume rendering. Non-CBZ files always ignore this field (it is stored as `null`).
 

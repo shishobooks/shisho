@@ -124,6 +124,60 @@ func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	assert.Equal(t, "Book 01", resp.Items[0].Title, "books must be ordered by series number")
 }
 
+func TestSeriesBooks_OmnibusOrderingMatrix(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	ctx := context.Background()
+	titles := []string{
+		"Single One Beta", "Omnibus Long", "Single Two", "Omnibus Short",
+		"Fractional Prequel", "Unnumbered", "Single One Alpha",
+	}
+	seriesID := seedSeriesWithBooks(t, db, titles)
+
+	updates := []struct {
+		title string
+		start *float64
+		end   *float64
+	}{
+		{title: "Single One Beta", start: float64Pointer(1)},
+		{title: "Omnibus Long", start: float64Pointer(1), end: float64Pointer(4)},
+		{title: "Single Two", start: float64Pointer(2)},
+		{title: "Omnibus Short", start: float64Pointer(1), end: float64Pointer(3)},
+		{title: "Fractional Prequel", start: float64Pointer(0.5)},
+		{title: "Unnumbered"},
+		{title: "Single One Alpha", start: float64Pointer(1)},
+	}
+	for _, update := range updates {
+		_, err := db.NewUpdate().
+			Table("book_series").
+			Set("series_number = ?", update.start).
+			Set("series_number_end = ?", update.end).
+			Where("book_id = (SELECT id FROM books WHERE title = ?)", update.title).
+			Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	h := newSeriesHandler(db)
+	rec := getSeriesBooks(t, h, seriesID, "")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []models.Book `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, len(titles))
+	got := make([]string, len(resp.Items))
+	for i := range resp.Items {
+		got[i] = resp.Items[i].Title
+	}
+	assert.Equal(t, []string{
+		"Unnumbered", "Fractional Prequel", "Single One Alpha", "Single One Beta",
+		"Single Two", "Omnibus Short", "Omnibus Long",
+	}, got)
+}
+
+func float64Pointer(value float64) *float64 { return &value }
+
 func TestSeriesBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
 	db := setupSeriesTestDB(t)

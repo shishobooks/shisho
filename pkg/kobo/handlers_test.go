@@ -191,6 +191,7 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 	personName := "Test Author"
 	description := "A test description"
 	seriesNumber := 3.0
+	seriesNumberEnd := 5.0
 
 	book := &models.Book{
 		ID:          1,
@@ -201,8 +202,9 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 		},
 		BookSeries: []*models.BookSeries{
 			{
-				Series:       &models.Series{Name: "Test Series"},
-				SeriesNumber: &seriesNumber,
+				Series:          &models.Series{Name: "Test Series"},
+				SeriesNumber:    &seriesNumber,
+				SeriesNumberEnd: &seriesNumberEnd,
 			},
 		},
 	}
@@ -218,5 +220,6 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 	assert.Equal(t, personName, metadata.ContributorRoles[0].Name)
 	assert.NotNil(t, metadata.Series)
 	assert.Equal(t, "Test Series", metadata.Series.Name)
-	assert.InDelta(t, 3.0, metadata.Series.Number, 0.001)
+	assert.InDelta(t, 3.0, metadata.Series.Number, 0.001, "Kobo numeric metadata uses the range start only")
+	assert.InDelta(t, 3.0, metadata.Series.NumberFloat, 0.001, "Kobo floating-point metadata uses the range start only")
 }

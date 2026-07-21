@@ -2312,6 +2312,61 @@ func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
 	assert.False(t, f.IsPreferredCover, "preferred should be cleared")
 }
 
+func TestUpdateBook_SeriesNumberRange_PersistsAndReturnsEnd(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"Saga","number":1,"number_end":3,"series_number_unit":"volume"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var response models.Book
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	require.Len(t, response.BookSeries, 1)
+	require.NotNil(t, response.BookSeries[0].SeriesNumberEnd)
+	assert.InDelta(t, 3.0, *response.BookSeries[0].SeriesNumberEnd, 0.001)
+
+	var wireResponse struct {
+		BookSeries []map[string]json.RawMessage `json:"book_series"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wireResponse))
+	require.Len(t, wireResponse.BookSeries, 1)
+	assert.Contains(t, wireResponse.BookSeries[0], "series_number_end")
+	assert.NotContains(t, wireResponse.BookSeries[0], "seriesNumberEnd")
+
+	var bs models.BookSeries
+	require.NoError(t, db.NewSelect().Model(&bs).Where("book_id = ?", book.ID).Scan(ctx))
+	require.NotNil(t, bs.SeriesNumberEnd)
+	assert.InDelta(t, 3.0, *bs.SeriesNumberEnd, 0.001)
+}
+
+func TestUpdateBook_SeriesNumberRange_RejectsInvalidRangeBeforePersistence(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"Saga","number":3,"number_end":2}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusBadRequest, rr.Code, "response body: %s", rr.Body.String())
+
+	count, err := db.NewSelect().Model((*models.BookSeries)(nil)).Where("book_id = ?", book.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+}
+
 func TestUpdateBook_SeriesNumberUnit_StoresChapterUnit(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)

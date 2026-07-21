@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -860,10 +861,7 @@ func (w *Worker) scanFileCore(
 		if models.GetDataSourcePriority(titleSource) >= models.DataSourceFileMetadataPriority {
 			if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, file.FileType); hasNumber {
 				title = normalizedTitle
-				if unit != "" && metadata.SeriesNumberUnit == nil {
-					u := unit
-					metadata.SeriesNumberUnit = &u
-				}
+				applySeriesNumberUnit(metadata, unit, titleSource)
 			}
 		}
 		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
@@ -1086,21 +1084,15 @@ func (w *Worker) scanFileCore(
 
 		// Update series relationship (from metadata)
 		if metadata.Series != "" {
-			newSeriesNames := []string{metadata.Series}
-			existingSeriesNames := make([]string, 0, len(book.BookSeries))
 			existingSeriesSource := ""
 			for _, bs := range book.BookSeries {
-				if bs.Series != nil {
-					existingSeriesNames = append(existingSeriesNames, bs.Series.Name)
-					// Use the first series's name source for comparison
-					if existingSeriesSource == "" {
-						existingSeriesSource = bs.Series.NameSource
-					}
+				if bs.Series != nil && existingSeriesSource == "" {
+					existingSeriesSource = bs.Series.NameSource
 				}
 			}
 
 			seriesSource := metadata.SourceForField("series")
-			if shouldUpdateRelationship(newSeriesNames, existingSeriesNames, seriesSource, existingSeriesSource, forceRefresh) {
+			if shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces immediate delete + create)
@@ -1116,11 +1108,16 @@ func (w *Worker) scanFileCore(
 				if err != nil {
 					logWarn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
 				} else {
+					seriesNumber, seriesNumberEnd, seriesNumberUnit := externalSeriesNumberGroup(
+						metadata.SeriesNumber, metadata.SeriesNumberEnd, metadata.SeriesNumberUnit,
+					)
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:           book.ID,
 						SeriesID:         seriesRecord.ID,
-						SeriesNumber:     metadata.SeriesNumber,
-						SeriesNumberUnit: metadata.SeriesNumberUnit,
+						Series:           seriesRecord,
+						SeriesNumber:     seriesNumber,
+						SeriesNumberEnd:  seriesNumberEnd,
+						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        1,
 					})
 				}
@@ -1134,18 +1131,22 @@ func (w *Worker) scanFileCore(
 					sidecarSeriesNames = append(sidecarSeriesNames, s.Name)
 				}
 			}
-			existingSeriesNames := make([]string, 0, len(book.BookSeries))
+			existingSeries := book.BookSeries
 			existingSeriesSource := ""
-			for _, bs := range book.BookSeries {
-				if bs.Series != nil {
-					existingSeriesNames = append(existingSeriesNames, bs.Series.Name)
-					if existingSeriesSource == "" {
-						existingSeriesSource = bs.Series.NameSource
-					}
+			for _, bs := range existingSeries {
+				if bs.Series != nil && existingSeriesSource == "" {
+					existingSeriesSource = bs.Series.NameSource
 				}
 			}
+			// Compare the sidecar against any metadata replacement staged above,
+			// not only the stale stored relations. This lets the higher-priority
+			// sidecar cancel a lower-priority replacement in the same scan.
+			if relUpdates.DeleteSeries {
+				existingSeries = relUpdates.BookSeries
+				existingSeriesSource = metadata.SourceForField("series")
+			}
 
-			if len(sidecarSeriesNames) > 0 && shouldApplySidecarRelationship(sidecarSeriesNames, existingSeriesNames, existingSeriesSource, forceRefresh) {
+			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces any metadata collection)
@@ -1166,11 +1167,16 @@ func (w *Worker) scanFileCore(
 						logWarn("failed to find/create series", logger.Data{"name": sidecarSeries.Name, "error": err.Error()})
 						continue
 					}
+					seriesNumber, seriesNumberEnd, seriesNumberUnit := externalSeriesNumberGroup(
+						sidecarSeries.Number, sidecarSeries.NumberEnd, sidecarSeries.Unit,
+					)
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:           book.ID,
 						SeriesID:         seriesRecord.ID,
-						SeriesNumber:     sidecarSeries.Number,
-						SeriesNumberUnit: sidecarSeries.Unit,
+						Series:           seriesRecord,
+						SeriesNumber:     seriesNumber,
+						SeriesNumberEnd:  seriesNumberEnd,
+						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        i + 1,
 					})
 				}
@@ -2315,7 +2321,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		// For root-level files, compute the expected organized folder path so that
 		// multiple root-level files with the same title/author will share a book.
 		// This ensures "Wind and Truth.epub" and "Wind and Truth.m4b" become one book.
-		title, _ := deriveInitialTitle(path, isRootLevelFile, metadata)
+		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		var authorNames []string
 		for _, author := range metadata.Authors {
 			authorNames = append(authorNames, author.Name)
@@ -2354,7 +2360,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		book = existingBook
 	} else {
 		// Derive initial title from filepath or metadata
-		title, _ := deriveInitialTitle(path, isRootLevelFile, metadata)
+		title := deriveInitialTitle(path, isRootLevelFile, metadata)
 		titleSource := models.DataSourceFilepath
 		if metadata != nil && strings.TrimSpace(metadata.Title) != "" {
 			titleSource = metadata.SourceForField("title")
@@ -2644,18 +2650,17 @@ func (w *Worker) discoverAndCreateSupplements(
 // For CBZ files, series number indicators like "#007" are normalized to "v007"
 // and chapter indicators like "Ch.5" are normalized to "c005"; parenthesized
 // metadata like "(2020) (Digital) (group)" is removed.
-// Returns the derived title and the parsed series number unit ("volume", "chapter", or "").
-func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) (string, string) {
+func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) string {
 	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 
 	// If metadata has a title, use it
 	if metadata != nil {
 		if trimmedTitle := strings.TrimSpace(metadata.Title); trimmedTitle != "" {
 			// Normalize series number indicators in metadata title
-			if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(trimmedTitle, fileType); hasNumber {
-				return normalizedTitle, unit
+			if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(trimmedTitle, fileType); hasNumber {
+				return normalizedTitle
 			}
-			return trimmedTitle, ""
+			return trimmedTitle
 		}
 	}
 
@@ -2685,11 +2690,11 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	}
 
 	// Normalize series number indicators in filepath-based title
-	if normalizedTitle, unit, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, fileType); hasNumber {
-		return normalizedTitle, unit
+	if normalizedTitle, _, hasNumber := fileutils.NormalizeSeriesNumberInTitle(title, fileType); hasNumber {
+		return normalizedTitle
 	}
 
-	return title, ""
+	return title
 }
 
 // removeFileSidecar deletes the file sidecar at filePath. ENOENT is silent;
@@ -2767,14 +2772,9 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 	// Title fallback
 	if strings.TrimSpace(metadata.Title) == "" {
 		// Pass nil metadata so deriveInitialTitle uses filepath only (we already confirmed Title is empty)
-		derivedTitle, derivedUnit := deriveInitialTitle(filePath, isRootLevelFile, nil)
+		derivedTitle := deriveInitialTitle(filePath, isRootLevelFile, nil)
 		metadata.Title = derivedTitle
 		setSource("title")
-		if derivedUnit != "" && metadata.SeriesNumberUnit == nil {
-			u := derivedUnit
-			metadata.SeriesNumberUnit = &u
-			setSource("series")
-		}
 	}
 
 	// Authors fallback
@@ -3372,6 +3372,23 @@ func mergeFileParserFallback(target, fileParsed *mediafile.ParsedMetadata, fileT
 	}
 }
 
+func externalSeriesNumberGroup(start, end *float64, unit *string) (*float64, *float64, *string) {
+	if !validSeriesNumberGroup(start, end, unit) {
+		return nil, nil, nil
+	}
+	return start, end, unit
+}
+
+func validSeriesNumberGroup(start, end *float64, unit *string) bool {
+	if start == nil || math.IsNaN(*start) || math.IsInf(*start, 0) {
+		return false
+	}
+	if end != nil && (math.IsNaN(*end) || math.IsInf(*end, 0) || *end <= *start) {
+		return false
+	}
+	return unit == nil || *unit == models.SeriesNumberUnitVolume || *unit == models.SeriesNumberUnitChapter
+}
+
 // mergeEnrichedMetadata applies fields from enrichment result to the target
 // only if the target field is currently empty/zero. Tracks which source
 // provided each field in target.FieldDataSources.
@@ -3399,13 +3416,17 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.Series = enrichment.Series
 		target.FieldDataSources["series"] = source
 	}
-	if target.SeriesNumber == nil && enrichment.SeriesNumber != nil {
-		target.SeriesNumber = enrichment.SeriesNumber
-		target.FieldDataSources["series"] = source
-	}
-	if target.SeriesNumberUnit == nil && enrichment.SeriesNumberUnit != nil {
-		target.SeriesNumberUnit = enrichment.SeriesNumberUnit
-		target.FieldDataSources["series"] = source
+	if target.SeriesNumber == nil {
+		// The start, end, and unit are one atomic group. Fill the complete
+		// group from one source only, and discard malformed external groups.
+		target.SeriesNumberEnd = nil
+		target.SeriesNumberUnit = nil
+		if validSeriesNumberGroup(enrichment.SeriesNumber, enrichment.SeriesNumberEnd, enrichment.SeriesNumberUnit) {
+			target.SeriesNumber = enrichment.SeriesNumber
+			target.SeriesNumberEnd = enrichment.SeriesNumberEnd
+			target.SeriesNumberUnit = enrichment.SeriesNumberUnit
+			target.FieldDataSources["series"] = source
+		}
 	}
 	if len(target.Genres) == 0 && len(enrichment.Genres) > 0 {
 		target.Genres = enrichment.Genres
@@ -3472,7 +3493,7 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 // Undeclared fields (returned but not in manifest) are zeroed with a log warning.
 // Disabled fields (declared but user disabled) are zeroed silently.
 // Field groupings:
-//   - "series" or "seriesNumber" controls both series name and seriesNumber.
+//   - "series" or "seriesNumber" controls the series name and complete number group.
 //   - "cover" controls coverData, coverMimeType, and coverPage.
 func filterMetadataFields(
 	md *mediafile.ParsedMetadata,
@@ -3535,6 +3556,12 @@ func filterMetadataFields(
 				"field":  "seriesNumber",
 			})
 		}
+		if result.SeriesNumberEnd != nil {
+			logWarn("enricher returned undeclared field", logger.Data{
+				"plugin": pluginID,
+				"field":  "seriesNumberEnd",
+			})
+		}
 		if result.SeriesNumberUnit != nil {
 			logWarn("enricher returned undeclared field", logger.Data{
 				"plugin": pluginID,
@@ -3545,6 +3572,7 @@ func filterMetadataFields(
 	if !seriesAllowed {
 		result.Series = ""
 		result.SeriesNumber = nil
+		result.SeriesNumberEnd = nil
 		result.SeriesNumberUnit = nil
 	}
 
