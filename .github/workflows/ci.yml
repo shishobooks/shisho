@@ -98,7 +98,7 @@ jobs:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Prune stale junit files
