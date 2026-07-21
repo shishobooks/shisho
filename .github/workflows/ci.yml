@@ -42,7 +42,7 @@ jobs:
         # consolidate-test-timings job below. If we used actions/cache here,
         # all shards would race to save, and only one shard's JUnit data
         # would survive — defeating timing-aware bin-packing.
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .gotest-timings
           key: gotest-timings-${{ github.ref }}-${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
       - name: Restore previous test timing cache
         # Preserves shard history when a shard fails before writing junit
         # or upload-artifact fails — fresh artifacts overlay on top.
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .gotest-timings
           key: gotest-timings-${{ github.ref }}-${{ github.sha }}
@@ -110,7 +110,7 @@ jobs:
           echo "junit files: $(find .gotest-timings -name 'junit-*.xml' | wc -l)"
           du -sh .gotest-timings || true
       - name: Save consolidated cache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: .gotest-timings
           key: gotest-timings-${{ github.ref }}-${{ github.sha }}
@@ -153,7 +153,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
