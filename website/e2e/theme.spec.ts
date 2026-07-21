@@ -75,8 +75,14 @@ test("keeps Aurora controls readable", async ({ page }) => {
   expect(badgeColors.background).not.toBe("none");
 });
 
-test("keeps the mobile docs navigation opaque", async ({ page }) => {
+test("keeps the mobile layout readable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const featureColumns = await page
+    .locator(".docs-home__features")
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+  expect(featureColumns.trim().split(/\s+/)).toHaveLength(1);
+
   await page.goto("/docs/getting-started");
   await page.locator(".navbar__toggle").click();
 
