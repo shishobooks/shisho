@@ -1114,6 +1114,7 @@ func (w *Worker) scanFileCore(
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:           book.ID,
 						SeriesID:         seriesRecord.ID,
+						Series:           seriesRecord,
 						SeriesNumber:     seriesNumber,
 						SeriesNumberEnd:  seriesNumberEnd,
 						SeriesNumberUnit: seriesNumberUnit,
@@ -1130,14 +1131,22 @@ func (w *Worker) scanFileCore(
 					sidecarSeriesNames = append(sidecarSeriesNames, s.Name)
 				}
 			}
+			existingSeries := book.BookSeries
 			existingSeriesSource := ""
-			for _, bs := range book.BookSeries {
+			for _, bs := range existingSeries {
 				if bs.Series != nil && existingSeriesSource == "" {
 					existingSeriesSource = bs.Series.NameSource
 				}
 			}
+			// Compare the sidecar against any metadata replacement staged above,
+			// not only the stale stored relations. This lets the higher-priority
+			// sidecar cancel a lower-priority replacement in the same scan.
+			if relUpdates.DeleteSeries {
+				existingSeries = relUpdates.BookSeries
+				existingSeriesSource = metadata.SourceForField("series")
+			}
 
-			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, book.BookSeries, existingSeriesSource, forceRefresh) {
+			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces any metadata collection)
@@ -1164,6 +1173,7 @@ func (w *Worker) scanFileCore(
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
 						BookID:           book.ID,
 						SeriesID:         seriesRecord.ID,
+						Series:           seriesRecord,
 						SeriesNumber:     seriesNumber,
 						SeriesNumberEnd:  seriesNumberEnd,
 						SeriesNumberUnit: seriesNumberUnit,

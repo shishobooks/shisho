@@ -2670,25 +2670,27 @@ func TestScanFileCore_SidecarSeriesRangeOverridesSameNamedFileMetadata(t *testin
 		LibraryID:    1,
 		Filepath:     bookDir,
 		Title:        "Test Book",
-		TitleSource:  models.DataSourceEPUBMetadata,
+		TitleSource:  models.DataSourceCBZMetadata,
 		SortTitle:    "Test Book",
 		AuthorSource: models.DataSourceFilepath,
 	}
 	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
 	file := &models.File{
-		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(bookDir, "test.epub"),
-		FileType: models.FileTypeEPUB, FilesizeBytes: 1000,
+		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(bookDir, "test.cbz"),
+		FileType: models.FileTypeCBZ, FilesizeBytes: 1000,
 	}
 	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
 	series := &models.Series{
-		LibraryID: 1, Name: "Saga", NameSource: models.DataSourceEPUBMetadata,
-		SortName: "Saga", SortNameSource: models.DataSourceEPUBMetadata,
+		LibraryID: 1, Name: "Saga", NameSource: models.DataSourceCBZMetadata,
+		SortName: "Saga", SortNameSource: models.DataSourceCBZMetadata,
 	}
 	_, err := tc.db.NewInsert().Model(series).Exec(tc.ctx)
 	require.NoError(t, err)
+	unit := models.SeriesNumberUnitVolume
 	membership := &models.BookSeries{
 		BookID: book.ID, SeriesID: series.ID, Series: series,
-		SeriesNumber: seriesFloatPtr(1), SortOrder: 1,
+		SeriesNumber: seriesFloatPtr(1), SeriesNumberEnd: seriesFloatPtr(3),
+		SeriesNumberUnit: &unit, SortOrder: 1,
 	}
 	_, err = tc.db.NewInsert().Model(membership).Exec(tc.ctx)
 	require.NoError(t, err)
@@ -2696,11 +2698,14 @@ func TestScanFileCore_SidecarSeriesRangeOverridesSameNamedFileMetadata(t *testin
 
 	require.NoError(t, sidecar.WriteBookSidecar(bookDir, &sidecar.BookSidecar{
 		Series: []sidecar.SeriesMetadata{{
-			Name: "Saga", Number: seriesFloatPtr(1), NumberEnd: seriesFloatPtr(3), SortOrder: 1,
+			Name: "Saga", Number: seriesFloatPtr(1), NumberEnd: seriesFloatPtr(3), Unit: &unit, SortOrder: 1,
 		}},
 	}))
 
-	_, err = tc.worker.scanFileCore(tc.ctx, file, book, &mediafile.ParsedMetadata{DataSource: models.DataSourceEPUBMetadata}, false, true, nil, nil)
+	metadata := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(1), DataSource: models.DataSourceCBZMetadata,
+	}
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
 	require.NoError(t, err)
 
 	var got models.BookSeries
@@ -2709,6 +2714,8 @@ func TestScanFileCore_SidecarSeriesRangeOverridesSameNamedFileMetadata(t *testin
 	assert.InDelta(t, 1.0, *got.SeriesNumber, 0.001)
 	require.NotNil(t, got.SeriesNumberEnd)
 	assert.InDelta(t, 3.0, *got.SeriesNumberEnd, 0.001)
+	require.NotNil(t, got.SeriesNumberUnit)
+	assert.Equal(t, unit, *got.SeriesNumberUnit)
 }
 
 // TestScanFileCore_SidecarPriority_OverridesFileMetadata verifies that sidecar

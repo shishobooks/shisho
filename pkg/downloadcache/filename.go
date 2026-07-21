@@ -59,9 +59,10 @@ func FormatDownloadFilename(book *models.Book, file *models.File) string {
 		parts = append(parts, fmt.Sprintf("[%s]", sanitizeFilename(author)))
 	}
 
-	// Add series and number if available, unless title already has a volume number
+	// A title volume marker suppresses a redundant single position, but an
+	// omnibus still needs its complete range represented in the filename.
 	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && !titleHasVolume {
+	if series != "" && (!titleHasVolume || numberEnd != nil) {
 		seriesPart := sanitizeFilename(series)
 		if number != nil {
 			seriesPart += " #" + seriesnum.FormatRange(*number, numberEnd)
@@ -223,10 +224,11 @@ func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
 		parts = append(parts, "-")
 	}
 
-	// Add series and number if available, unless title already has a volume number
-	// Use plain number format instead of # (Kobo doesn't like #)
+	// A title volume marker suppresses a redundant single position, but an
+	// omnibus still needs its complete range represented in the filename.
+	// Use plain number format instead of # (Kobo doesn't like #).
 	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && !titleHasVolume {
+	if series != "" && (!titleHasVolume || numberEnd != nil) {
 		seriesPart := sanitizeKoboFilename(series)
 		if number != nil {
 			seriesPart += " " + seriesnum.FormatRange(*number, numberEnd)
