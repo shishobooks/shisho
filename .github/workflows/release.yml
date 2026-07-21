@@ -148,7 +148,7 @@ jobs:
         run: echo "version=$(mise current node)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.node.outputs.version }}
           cache: "pnpm"
