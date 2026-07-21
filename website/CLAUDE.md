@@ -115,7 +115,7 @@ The docs site is integrated into the main project's tooling:
 | `mise e2e:docs` | Builds the docs and checks theme contrast and responsive chrome in Chromium |
 | ESLint | `website/src/**/*.{ts,tsx}` included in React config |
 | Prettier | `website/build/` and `website/.docusaurus/` ignored |
-| CI | `.github/workflows/ci.yml` installs website deps for type checking |
+| CI | `.github/workflows/ci.yml` builds the docs and runs the theme E2E checks |
 
 ## Deployment
 

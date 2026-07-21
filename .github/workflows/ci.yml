@@ -169,6 +169,8 @@ jobs:
       - run: go mod download
       - run: mise tygo
       - run: pnpm test:unit
+      - name: Run docs E2E
+        run: pnpm e2e:docs
       - run: mise build
       - name: Run Chromium E2E
         uses: nick-fields/retry@v4
