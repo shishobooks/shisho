@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/robinjoseph08/golib/pointerutil"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,36 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "New Title", comicInfo.Title)
 		assert.Equal(t, "New Series", comicInfo.Series)
 		assert.Equal(t, "5", comicInfo.Number)
+	})
+
+	t.Run("writes and round-trips an omnibus series range", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		srcPath := filepath.Join(tmpDir, "source.cbz")
+		createTestCBZ(t, srcPath, testCBZOptions{title: "Collected Stories", series: "Saga", number: "1"})
+		destPath := filepath.Join(tmpDir, "dest.cbz")
+
+		book := &models.Book{
+			Title: "Collected Stories",
+			BookSeries: []*models.BookSeries{{
+				SortOrder:       0,
+				SeriesNumber:    pointerutil.Float64(1),
+				SeriesNumberEnd: pointerutil.Float64(3),
+				Series:          &models.Series{Name: "Saga"},
+			}},
+		}
+		file := &models.File{FileType: models.FileTypeCBZ}
+
+		gen := &CBZGenerator{}
+		require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
+		assert.Equal(t, "1-3", readComicInfoFromCBZ(t, destPath).Number)
+
+		parsed, err := cbz.Parse(destPath)
+		require.NoError(t, err)
+		require.NotNil(t, parsed.SeriesNumber)
+		require.NotNil(t, parsed.SeriesNumberEnd)
+		assert.InDelta(t, 1, *parsed.SeriesNumber, 0.001)
+		assert.InDelta(t, 3, *parsed.SeriesNumberEnd, 0.001)
 	})
 
 	t.Run("generates correct author roles", func(t *testing.T) {

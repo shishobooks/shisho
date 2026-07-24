@@ -4812,6 +4812,22 @@ func TestApplyFilepathFallbacks_PopulatesSeriesFromTitle(t *testing.T) {
 	assert.NotEmpty(t, metadata.Series)
 }
 
+func TestApplyFilepathFallbacks_PopulatesAtomicSeriesRangeFromTitle(t *testing.T) {
+	t.Parallel()
+
+	metadata := &mediafile.ParsedMetadata{DataSource: models.DataSourceCBZMetadata}
+	applyFilepathFallbacks(metadata, "/library/My Series c005-008.cbz", "/library/My Series c005-008", "cbz", true)
+
+	assert.Equal(t, "My Series", metadata.Series)
+	require.NotNil(t, metadata.SeriesNumber)
+	require.NotNil(t, metadata.SeriesNumberEnd)
+	require.NotNil(t, metadata.SeriesNumberUnit)
+	assert.InDelta(t, 5, *metadata.SeriesNumber, 0.001)
+	assert.InDelta(t, 8, *metadata.SeriesNumberEnd, 0.001)
+	assert.Equal(t, models.SeriesNumberUnitChapter, *metadata.SeriesNumberUnit)
+	assert.Equal(t, models.DataSourceFilepath, metadata.SourceForField("series"))
+}
+
 func TestApplyFilepathFallbacks_DoesNotMixUnitIntoPluginSeriesGroup(t *testing.T) {
 	t.Parallel()
 

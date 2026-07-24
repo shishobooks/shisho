@@ -90,6 +90,32 @@ type pluginManager interface {
 	RegisteredFileExtensions() map[string]struct{}
 }
 
+func seriesNumberGroupChangedForOrganization(oldMembership *models.BookSeries, newMembership *SeriesInput) bool {
+	var oldStart, oldEnd *float64
+	var oldUnit *string
+	if oldMembership != nil {
+		oldStart = oldMembership.SeriesNumber
+		oldEnd = oldMembership.SeriesNumberEnd
+		oldUnit = oldMembership.SeriesNumberUnit
+	}
+	var newStart, newEnd *float64
+	var newUnit *string
+	if newMembership != nil {
+		newStart = newMembership.Number
+		newEnd = newMembership.NumberEnd
+		newUnit = newMembership.SeriesNumberUnit
+	}
+	return !equalOptionalFloat(oldStart, newStart) || !equalOptionalFloat(oldEnd, newEnd) || !equalOptionalString(oldUnit, newUnit)
+}
+
+func equalOptionalFloat(a, b *float64) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func equalOptionalString(a, b *string) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := strconv.Atoi(c.Param("id"))
@@ -390,33 +416,15 @@ func (h *handler) update(c echo.Context) error {
 			}
 		}
 		if hasCBZFiles {
-			// Compare old and new series numbers
-			oldSeriesNum := float64(0)
-			if len(book.BookSeries) > 0 && book.BookSeries[0].SeriesNumber != nil {
-				oldSeriesNum = *book.BookSeries[0].SeriesNumber
-			}
-			newSeriesNum := float64(0)
-			if len(params.Series) > 0 && params.Series[0].Number != nil {
-				newSeriesNum = *params.Series[0].Number
-			}
-			if oldSeriesNum != newSeriesNum {
-				shouldOrganizeFiles = true
-			}
-
-			// Compare old and new series number units
-			var oldUnit *string
+			var oldMembership *models.BookSeries
 			if len(book.BookSeries) > 0 {
-				oldUnit = book.BookSeries[0].SeriesNumberUnit
+				oldMembership = book.BookSeries[0]
 			}
-			var newUnit *string
+			var newMembership *SeriesInput
 			if len(params.Series) > 0 {
-				newUnit = params.Series[0].SeriesNumberUnit
+				newMembership = &params.Series[0]
 			}
-			if (oldUnit == nil) != (newUnit == nil) {
-				shouldOrganizeFiles = true
-			} else if oldUnit != nil && newUnit != nil && *oldUnit != *newUnit {
-				shouldOrganizeFiles = true
-			}
+			shouldOrganizeFiles = shouldOrganizeFiles || seriesNumberGroupChangedForOrganization(oldMembership, newMembership)
 		}
 
 		// Delete existing series associations

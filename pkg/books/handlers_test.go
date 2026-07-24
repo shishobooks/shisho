@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
@@ -2310,6 +2311,23 @@ func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
 	var f models.File
 	require.NoError(t, db.NewSelect().Model(&f).Where("id = ?", file.ID).Scan(ctx))
 	assert.False(t, f.IsPreferredCover, "preferred should be cleared")
+}
+
+func TestSeriesNumberGroupChangedForOrganization_EndOnly(t *testing.T) {
+	t.Parallel()
+
+	oldMembership := &models.BookSeries{
+		SeriesNumber:     pointerutil.Float64(1),
+		SeriesNumberEnd:  pointerutil.Float64(3),
+		SeriesNumberUnit: pointerutil.String(models.SeriesNumberUnitVolume),
+	}
+	newMembership := SeriesInput{
+		Number:           pointerutil.Float64(1),
+		NumberEnd:        pointerutil.Float64(4),
+		SeriesNumberUnit: pointerutil.String(models.SeriesNumberUnitVolume),
+	}
+
+	assert.True(t, seriesNumberGroupChangedForOrganization(oldMembership, &newMembership))
 }
 
 func TestUpdateBook_SeriesNumberRange_PersistsAndReturnsEnd(t *testing.T) {
