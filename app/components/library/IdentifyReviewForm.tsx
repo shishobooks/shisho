@@ -154,7 +154,7 @@ const PLUGIN_FIELD_ALIASES: Record<FieldKey, string[]> = {
   title: ["title"],
   subtitle: ["subtitle"],
   authors: ["authors"],
-  series: ["series"],
+  series: ["series", "seriesNumber"],
   genres: ["genres"],
   tags: ["tags"],
   description: ["description"],
@@ -278,6 +278,24 @@ function resolveAuthors(
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
+}
+
+function validateSeriesEntries(entries: SeriesEntry[]): string | undefined {
+  for (const entry of entries) {
+    if (!entry.name.trim()) continue;
+    const hasStart = entry.number !== "";
+    const hasEnd = entry.numberEnd !== "";
+    if (hasEnd && !hasStart) return "Series range end requires a start.";
+    if (entry.unit !== "" && !hasStart)
+      return "Series number unit requires a start.";
+    if (hasStart && !Number.isFinite(Number(entry.number)))
+      return "Series numbers must be finite.";
+    if (hasEnd && !Number.isFinite(Number(entry.numberEnd)))
+      return "Series numbers must be finite.";
+    if (hasEnd && Number(entry.numberEnd) <= Number(entry.number))
+      return "Series range end must be greater than its start.";
+  }
+  return undefined;
 }
 
 function resolveSeries(
@@ -883,6 +901,9 @@ export function IdentifyReviewForm({
 
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
+  const seriesValidationError = decisions.series
+    ? validateSeriesEntries(seriesEntries)
+    : undefined;
 
   // The cover image dimensions load asynchronously, so `hasCoverChoice` and
   // therefore `fieldStatus.cover` can flip from "unchanged" to "new"/"changed"
@@ -1094,6 +1115,10 @@ export function IdentifyReviewForm({
 
   // ---- Submit ----
   const handleSubmit = async () => {
+    if (seriesValidationError) {
+      toast.error(seriesValidationError);
+      return;
+    }
     const fields: Record<string, unknown> = {};
     if (decisions.title) fields.title = title;
     if (decisions.subtitle) fields.subtitle = subtitle;
@@ -1553,6 +1578,11 @@ export function IdentifyReviewForm({
                       </div>
                     )}
                   />
+                  {seriesValidationError && (
+                    <p className="text-sm text-destructive" role="alert">
+                      {seriesValidationError}
+                    </p>
+                  )}
                 </FieldRow>
 
                 {/* Genres */}
@@ -2087,7 +2117,11 @@ export function IdentifyReviewForm({
             Cancel
           </Button>
           <Button
-            disabled={applyMutation.isPending || totalSelected === 0}
+            disabled={
+              applyMutation.isPending ||
+              totalSelected === 0 ||
+              seriesValidationError !== undefined
+            }
             onClick={handleSubmit}
             size="sm"
             type="button"

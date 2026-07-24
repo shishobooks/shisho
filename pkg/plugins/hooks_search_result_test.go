@@ -131,8 +131,17 @@ func TestParseSearchResponse_DiscardsMalformedSeriesNumberGroupsAtomically(t *te
 		`{seriesNumber:3,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
 		`{seriesNumber:3,seriesNumberEnd:1,seriesNumberUnit:"volume"}`,
 		`{seriesNumber:NaN,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:Infinity,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:-Infinity,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:NaN,seriesNumberUnit:"volume"}`,
 		`{seriesNumber:1,seriesNumberEnd:Infinity,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:-Infinity,seriesNumberUnit:"volume"}`,
 		`{seriesNumber:1,seriesNumberEnd:3,seriesNumberUnit:"invalid"}`,
+		`{seriesNumber:true,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:[1],seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:"3",seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:[3],seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:3,seriesNumberUnit:["volume"]}`,
 	}
 	for _, item := range cases {
 		vm := goja.New()

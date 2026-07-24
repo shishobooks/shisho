@@ -17,7 +17,7 @@
     "testing/"
   ],
   "scripts": {
-    "build": "cd testing && npx tsc -p tsconfig.json"
+    "build": "cd testing && npx tsc -p tsconfig.json && npx tsc -p type-contract.tsconfig.json"
   },
   "license": "MIT",
   "repository": {

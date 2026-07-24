@@ -113,15 +113,29 @@ func TestConvertFieldsToMetadata_SeriesNumberRangeUsesSnakeCase(t *testing.T) {
 func TestConvertFieldsToMetadata_DiscardsMalformedSeriesNumberGroupsAtomically(t *testing.T) {
 	t.Parallel()
 
-	fields := map[string]any{
-		"series_number":      float64(3),
-		"series_number_end":  float64(1),
-		"series_number_unit": "volume",
+	cases := []map[string]any{
+		{
+			"series_number":      float64(3),
+			"series_number_end":  float64(1),
+			"series_number_unit": "volume",
+		},
+		{
+			"series_number":      float64(1),
+			"series_number_end":  "3",
+			"series_number_unit": "volume",
+		},
+		{
+			"series_number":      float64(1),
+			"series_number_end":  float64(3),
+			"series_number_unit": float64(1),
+		},
 	}
-	md := convertFieldsToMetadata(fields)
-	assert.Nil(t, md.SeriesNumber)
-	assert.Nil(t, md.SeriesNumberEnd)
-	assert.Nil(t, md.SeriesNumberUnit)
+	for _, fields := range cases {
+		md := convertFieldsToMetadata(fields)
+		assert.Nil(t, md.SeriesNumber, fields)
+		assert.Nil(t, md.SeriesNumberEnd, fields)
+		assert.Nil(t, md.SeriesNumberUnit, fields)
+	}
 }
 
 func TestExtractSeriesEntries_RangeUsesSnakeCaseAndIsAtomic(t *testing.T) {

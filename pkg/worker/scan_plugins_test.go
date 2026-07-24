@@ -1513,10 +1513,14 @@ func TestFilterMetadataFields_SeriesNumberAliasForSeries(t *testing.T) {
 	t.Parallel()
 
 	seriesNum := float64(3)
+	seriesNumEnd := float64(5)
+	unit := models.SeriesNumberUnitChapter
 	md := &mediafile.ParsedMetadata{
-		Title:        "Test Title",
-		Series:       "Epic Series",
-		SeriesNumber: &seriesNum,
+		Title:            "Test Title",
+		Series:           "Epic Series",
+		SeriesNumber:     &seriesNum,
+		SeriesNumberEnd:  &seriesNumEnd,
+		SeriesNumberUnit: &unit,
 	}
 
 	// Declare only seriesNumber (alias for series) - should control both
@@ -1531,8 +1535,12 @@ func TestFilterMetadataFields_SeriesNumberAliasForSeries(t *testing.T) {
 
 	assert.Equal(t, "Test Title", filtered.Title)
 	assert.Equal(t, "Epic Series", filtered.Series)
-	assert.NotNil(t, filtered.SeriesNumber)
+	require.NotNil(t, filtered.SeriesNumber)
+	require.NotNil(t, filtered.SeriesNumberEnd)
+	require.NotNil(t, filtered.SeriesNumberUnit)
 	assert.InDelta(t, float64(3), *filtered.SeriesNumber, 0.01)
+	assert.InDelta(t, float64(5), *filtered.SeriesNumberEnd, 0.01)
+	assert.Equal(t, models.SeriesNumberUnitChapter, *filtered.SeriesNumberUnit)
 }
 
 // TestFilterMetadataFields_CoverGrouping verifies that the "cover" field declaration
