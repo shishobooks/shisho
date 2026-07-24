@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/mediafile"
-	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // convertFieldsToMetadata converts an untyped fields map (from the apply payload) to *mediafile.ParsedMetadata.
@@ -34,17 +33,7 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		md.CoverURL = v
 	}
 
-	// Series number
-	if v, ok := fields["series_number"].(float64); ok {
-		md.SeriesNumber = &v
-	}
-
-	// Series number unit
-	if v, ok := fields["series_number_unit"].(string); ok {
-		if v == models.SeriesNumberUnitVolume || v == models.SeriesNumberUnitChapter {
-			md.SeriesNumberUnit = &v
-		}
-	}
+	md.SeriesNumber, md.SeriesNumberEnd, md.SeriesNumberUnit = seriesNumberGroupFromFields(fields)
 
 	// Cover page (0-indexed page number for CBZ/PDF). Only accept finite
 	// non-negative integers; reject negative, NaN, and Infinity so they
@@ -178,14 +167,12 @@ func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
 			continue
 		}
 		entry := SeriesEntry{Name: name}
-		if num, ok := m["number"].(float64); ok {
-			entry.Number = &num
+		groupFields := map[string]any{
+			"series_number":      m["number"],
+			"series_number_end":  m["series_number_end"],
+			"series_number_unit": m["series_number_unit"],
 		}
-		if unit, ok := m["series_number_unit"].(string); ok {
-			if unit == models.SeriesNumberUnitVolume || unit == models.SeriesNumberUnitChapter {
-				entry.SeriesNumberUnit = &unit
-			}
-		}
+		entry.Number, entry.NumberEnd, entry.SeriesNumberUnit = seriesNumberGroupFromFields(groupFields)
 		entries = append(entries, entry)
 	}
 	return &entries

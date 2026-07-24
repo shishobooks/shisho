@@ -43,7 +43,7 @@ func installShapeEnricher(t *testing.T, service *Service) *Manager {
     "metadataEnricher": {
       "description": "Enriches metadata",
       "fileTypes": ["epub"],
-      "fields": ["title", "description", "genres", "cover"]
+      "fields": ["title", "description", "genres", "cover", "series"]
     }
   },
   "configSchema": {
@@ -59,6 +59,10 @@ func installShapeEnricher(t *testing.T, service *Service) *Manager {
             title: "Found: " + ctx.query,
             description: "A description",
             genres: ["Fantasy"],
+            series: "Saga",
+            seriesNumber: 1,
+            seriesNumberEnd: 3,
+            seriesNumberUnit: "volume",
             coverUrl: "https://example.com/cover.jpg",
             confidence: 0.9
           }]
@@ -157,6 +161,9 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 		"plugin_scope",
 		"publisher",
 		"series",
+		"series_number",
+		"series_number_end",
+		"series_number_unit",
 		"subtitle",
 		"tags",
 		"title",
@@ -164,11 +171,12 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 	}, sortedJSONKeys(t, results[0]))
 
 	var result struct {
-		Title       string   `json:"title"`
-		Genres      []string `json:"genres"`
-		PluginScope string   `json:"plugin_scope"`
-		PluginID    string   `json:"plugin_id"`
-		Confidence  float64  `json:"confidence"`
+		Title           string   `json:"title"`
+		Genres          []string `json:"genres"`
+		PluginScope     string   `json:"plugin_scope"`
+		PluginID        string   `json:"plugin_id"`
+		Confidence      float64  `json:"confidence"`
+		SeriesNumberEnd float64  `json:"series_number_end"`
 	}
 	require.NoError(t, json.Unmarshal(results[0], &result))
 	assert.Equal(t, "Found: dune", result.Title)
@@ -176,6 +184,7 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 	assert.Equal(t, "test", result.PluginScope)
 	assert.Equal(t, "shape-enricher", result.PluginID)
 	assert.InDelta(t, 0.9, result.Confidence, 0.0001)
+	assert.InDelta(t, 3, result.SeriesNumberEnd, 0.0001)
 }
 
 // TestGetConfig_ResponseWireShape pins the exact wire shape of
@@ -213,7 +222,7 @@ func TestGetConfig_ResponseWireShape(t *testing.T) {
 		DeclaredFields []string                   `json:"declaredFields"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	assert.Equal(t, []string{"title", "description", "genres", "cover"}, body.DeclaredFields)
+	assert.Equal(t, []string{"title", "description", "genres", "cover", "series"}, body.DeclaredFields)
 	require.Contains(t, body.Schema, "apiKey")
 
 	// ConfigField wire keys are camelCase-free but include every field of the

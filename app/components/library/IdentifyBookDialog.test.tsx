@@ -133,7 +133,10 @@ function makeBook(overrides: Partial<Book> = {}): Book {
 
 // PluginSearchResult extends the generated ParsedMetadata, whose non-pointer
 // Go fields are always present on the wire; fill them with zero values here.
-function response(title: string): PluginSearchResponse {
+function response(
+  title: string,
+  overrides: Partial<PluginSearchResponse["results"][number]> = {},
+): PluginSearchResponse {
   return {
     results: [
       {
@@ -155,6 +158,7 @@ function response(title: string): PluginSearchResponse {
         chapters: [],
         plugin_scope: "shisho",
         plugin_id: "test",
+        ...overrides,
       },
     ],
     total_plugins: 1,
@@ -253,6 +257,21 @@ describe("IdentifyBookDialog search sequencing", () => {
       expect(screen.getByText("Result B")).toBeInTheDocument();
     });
     expect(screen.queryByText("Result A")).not.toBeInTheDocument();
+  });
+
+  it("renders an omnibus range in a plugin search result", async () => {
+    renderDialog(makeBook({ title: "Query A" }));
+
+    await waitFor(() => expect(requestMock).toHaveBeenCalled());
+    deferredFor("Query A").resolve(
+      response("Ranged result", {
+        series: "Epic Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    );
+
+    expect(await screen.findByText("Epic Series 1-3")).toBeInTheDocument();
   });
 
   it("aborts the superseded request when a newer search is submitted", async () => {

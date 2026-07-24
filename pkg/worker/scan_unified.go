@@ -3540,8 +3540,8 @@ func filterMetadataFields(
 	// Create a copy to avoid mutating the original
 	result := *md
 
-	// Handle "series" grouping - "series", "seriesNumber", and "seriesNumberUnit"
-	// are all part of the same logical field group.
+	// Handle "series" grouping. The series name plus seriesNumber,
+	// seriesNumberEnd, and seriesNumberUnit are one logical field group.
 	seriesAllowed := isFieldAllowed("series") || isFieldAllowed("seriesNumber")
 	seriesDeclared := declared["series"] || declared["seriesNumber"]
 	if !seriesDeclared {

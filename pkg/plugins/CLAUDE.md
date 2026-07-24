@@ -150,7 +150,7 @@ shisho/goodreads-metadata/
 
 **Logical field groupings:**
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
-- `series` → controls `series` (name), `seriesNumber`, AND `seriesNumberUnit`
+- `series` → controls `series` (name), `seriesNumber`, `seriesNumberEnd`, AND `seriesNumberUnit`. The three number fields are atomic: a finite start is required, an optional finite end must be greater than the start, and malformed groups are discarded completely.
 
 **`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
 
@@ -207,7 +207,8 @@ fileParser: {
       authors: [{ name: "Author", role: "writer" }],
       narrators: ["Narrator"],
       series: "Series Name",
-      seriesNumber: 2.5,
+      seriesNumber: 1,
+      seriesNumberEnd: 3,                       // optional inclusive omnibus range end
       seriesNumberUnit: "volume",               // "volume" | "chapter"; CBZ only
       genres: ["Fiction"],
       tags: ["epic"],
@@ -720,8 +721,9 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 
 1. Update the Go struct in `pkg/mediafile/mediafile.go`
 2. Update parsing in `pkg/plugins/hooks.go` (`parseParsedMetadata` and related functions)
-3. **Update `packages/plugin-sdk/metadata.d.ts`** to match
-4. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
+3. **Update `packages/plugin-sdk/metadata.d.ts`** to match. `seriesNumberEnd` is the optional camelCase SDK field for omnibus range ends; snake_case `series_number_end` is only for Go JSON and HTTP/apply payloads.
+4. Update `packages/plugin-sdk/hooks.d.ts` when the metadata is also exposed in hook context types.
+5. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
 
 ### Writing a test plugin
 

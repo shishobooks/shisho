@@ -35,7 +35,14 @@ export interface ParsedMetadata {
   authors?: ParsedAuthor[];
   narrators?: string[];
   series?: string;
+  /**
+   * Series position. Must be finite. An optional seriesNumberEnd must also be
+   * finite and greater than this value. If the start, end, or unit is invalid,
+   * Shisho discards the complete series-number group.
+   */
   seriesNumber?: number;
+  /** Optional inclusive end for an omnibus series range. Requires seriesNumber. */
+  seriesNumberEnd?: number;
   /** Whether the series number refers to a volume or a chapter. CBZ only. */
   seriesNumberUnit?: "volume" | "chapter";
   genres?: string[];

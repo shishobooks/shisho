@@ -102,6 +102,7 @@ interface AuthorEntry {
 interface SeriesEntry {
   name: string;
   number: string;
+  numberEnd: string;
   unit: "" | "volume" | "chapter";
 }
 
@@ -153,7 +154,7 @@ const PLUGIN_FIELD_ALIASES: Record<FieldKey, string[]> = {
   title: ["title"],
   subtitle: ["subtitle"],
   authors: ["authors"],
-  series: ["series"],
+  series: ["series", "seriesNumber"],
   genres: ["genres"],
   tags: ["tags"],
   description: ["description"],
@@ -279,6 +280,24 @@ function resolveAuthors(
   return { value: incoming, status: "changed" };
 }
 
+function validateSeriesEntries(entries: SeriesEntry[]): string | undefined {
+  for (const entry of entries) {
+    if (!entry.name.trim()) continue;
+    const hasStart = entry.number !== "";
+    const hasEnd = entry.numberEnd !== "";
+    if (hasEnd && !hasStart) return "Series range end requires a start.";
+    if (entry.unit !== "" && !hasStart)
+      return "Series number unit requires a start.";
+    if (hasStart && !Number.isFinite(Number(entry.number)))
+      return "Series numbers must be finite.";
+    if (hasEnd && !Number.isFinite(Number(entry.numberEnd)))
+      return "Series numbers must be finite.";
+    if (hasEnd && Number(entry.numberEnd) <= Number(entry.number))
+      return "Series range end must be greater than its start.";
+  }
+  return undefined;
+}
+
 function resolveSeries(
   current: SeriesEntry[],
   incoming: SeriesEntry[],
@@ -287,7 +306,8 @@ function resolveSeries(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  const key = (s: SeriesEntry) => `${s.name}|${s.number}|${s.unit}`;
+  const key = (s: SeriesEntry) =>
+    `${s.name}|${s.number}|${s.numberEnd}|${s.unit}`;
   const curKeys = current.map(key).sort();
   const incKeys = incoming.map(key).sort();
   if (
@@ -493,6 +513,7 @@ export function IdentifyReviewForm({
       (book.book_series ?? []).map((bs) => ({
         name: bs.series?.name ?? "",
         number: bs.series_number?.toString() ?? "",
+        numberEnd: bs.series_number_end?.toString() ?? "",
         unit: (bs.series_number_unit ?? "") as SeriesEntry["unit"],
       })),
     [book.book_series],
@@ -532,6 +553,7 @@ export function IdentifyReviewForm({
           {
             name: result.series,
             number: result.series_number?.toString() ?? "",
+            numberEnd: result.series_number_end?.toString() ?? "",
             unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
           },
         ]
@@ -580,8 +602,8 @@ export function IdentifyReviewForm({
     () => narrators.map((name) => ({ name })),
     [narrators],
   );
-  const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
-    defaults.series.value,
+  const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(() =>
+    defaults.series.value.map((entry) => ({ ...entry })),
   );
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
@@ -744,7 +766,7 @@ export function IdentifyReviewForm({
     };
 
     const seriesKey = (s: SeriesEntry) =>
-      `${s.name.trim()}|${s.number.trim()}|${s.unit}`;
+      `${s.name.trim()}|${s.number.trim()}|${s.numberEnd.trim()}|${s.unit}`;
     const seriesSavedKeys = currentSeriesEntries.map(seriesKey).sort();
     const seriesCurrentKeys = seriesEntries.map(seriesKey).sort();
     const seriesMatch =
@@ -879,6 +901,9 @@ export function IdentifyReviewForm({
 
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
+  const seriesValidationError = decisions.series
+    ? validateSeriesEntries(seriesEntries)
+    : undefined;
 
   // The cover image dimensions load asynchronously, so `hasCoverChoice` and
   // therefore `fieldStatus.cover` can flip from "unchanged" to "new"/"changed"
@@ -1024,7 +1049,7 @@ export function IdentifyReviewForm({
     setDescription(defaults.description.value);
     setAuthors(defaults.authors.value);
     setNarrators(defaults.narrators.value);
-    setSeriesEntries(defaults.series.value);
+    setSeriesEntries(defaults.series.value.map((entry) => ({ ...entry })));
     setGenres(defaults.genres.value);
     setTags(defaults.tags.value);
     setPublisher(defaults.publisher.value);
@@ -1090,6 +1115,10 @@ export function IdentifyReviewForm({
 
   // ---- Submit ----
   const handleSubmit = async () => {
+    if (seriesValidationError) {
+      toast.error(seriesValidationError);
+      return;
+    }
     const fields: Record<string, unknown> = {};
     if (decisions.title) fields.title = title;
     if (decisions.subtitle) fields.subtitle = subtitle;
@@ -1104,6 +1133,8 @@ export function IdentifyReviewForm({
         .map((s) => ({
           name: s.name,
           number: s.number !== "" ? parseFloat(s.number) : undefined,
+          series_number_end:
+            s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
           series_number_unit: s.unit !== "" ? s.unit : undefined,
         }));
     }
@@ -1437,7 +1468,7 @@ export function IdentifyReviewForm({
                             (s) =>
                               `${s.name}${
                                 s.number
-                                  ? ` ${formatSeriesNumber(parseFloat(s.number), null, s.unit || null, anyCBZ ? "cbz" : null)}`
+                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.numberEnd ? parseFloat(s.numberEnd) : null, s.unit || null, anyCBZ ? "cbz" : null)}`
                                   : ""
                               }`,
                           )
@@ -1483,7 +1514,7 @@ export function IdentifyReviewForm({
                       if (seriesEntries.some((s) => s.name === name)) return;
                       setSeriesEntries([
                         ...seriesEntries,
-                        { name, number: "", unit: "" },
+                        { name, number: "", numberEnd: "", unit: "" },
                       ]);
                     }}
                     onRemove={(index) => {
@@ -1493,17 +1524,30 @@ export function IdentifyReviewForm({
                     }}
                     onReorder={setSeriesEntries}
                     renderExtras={(entry, idx) => (
-                      <>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Input
-                          className="w-24"
+                          aria-label="Series start"
+                          className="w-20"
                           onChange={(e) => {
                             const updated = [...seriesEntries];
                             updated[idx].number = e.target.value;
                             setSeriesEntries(updated);
                           }}
-                          placeholder="#"
+                          placeholder="Start"
                           type="number"
                           value={entry.number}
+                        />
+                        <Input
+                          aria-label="Series end"
+                          className="w-20"
+                          onChange={(e) => {
+                            const updated = [...seriesEntries];
+                            updated[idx].numberEnd = e.target.value;
+                            setSeriesEntries(updated);
+                          }}
+                          placeholder="End"
+                          type="number"
+                          value={entry.numberEnd}
                         />
                         <div className="w-32">
                           <Select
@@ -1531,9 +1575,14 @@ export function IdentifyReviewForm({
                             </SelectContent>
                           </Select>
                         </div>
-                      </>
+                      </div>
                     )}
                   />
+                  {seriesValidationError && (
+                    <p className="text-sm text-destructive" role="alert">
+                      {seriesValidationError}
+                    </p>
+                  )}
                 </FieldRow>
 
                 {/* Genres */}
@@ -2068,7 +2117,11 @@ export function IdentifyReviewForm({
             Cancel
           </Button>
           <Button
-            disabled={applyMutation.isPending || totalSelected === 0}
+            disabled={
+              applyMutation.isPending ||
+              totalSelected === 0 ||
+              seriesValidationError !== undefined
+            }
             onClick={handleSubmit}
             size="sm"
             type="button"

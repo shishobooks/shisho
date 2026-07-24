@@ -85,6 +85,100 @@ func TestParseSearchResponse_AllFields(t *testing.T) {
 	assert.True(t, *md.Abridged)
 }
 
+func TestParseSearchResponse_SeriesNumberRange(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({results:[{
+		series: "Epic Series",
+		seriesNumber: 1,
+		seriesNumberEnd: 3,
+		seriesNumberUnit: "volume"
+	}]})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+	md := resp.Results[0]
+	require.NotNil(t, md.SeriesNumber)
+	require.NotNil(t, md.SeriesNumberEnd)
+	require.NotNil(t, md.SeriesNumberUnit)
+	assert.InDelta(t, 1, *md.SeriesNumber, 0.001)
+	assert.InDelta(t, 3, *md.SeriesNumberEnd, 0.001)
+	assert.Equal(t, "volume", *md.SeriesNumberUnit)
+}
+
+func TestParseSearchResponse_SingleSeriesNumberRemainsSupported(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	val, err := vm.RunString(`({results:[{seriesNumber:2.5}]})`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "s", "p")
+	require.Len(t, resp.Results, 1)
+	require.NotNil(t, resp.Results[0].SeriesNumber)
+	assert.InDelta(t, 2.5, *resp.Results[0].SeriesNumber, 0.001)
+	assert.Nil(t, resp.Results[0].SeriesNumberEnd)
+	assert.Nil(t, resp.Results[0].SeriesNumberUnit)
+}
+
+func TestParseSearchResponse_DiscardsMalformedSeriesNumberGroupsAtomically(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`{seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:3,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:3,seriesNumberEnd:1,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:NaN,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:Infinity,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:-Infinity,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:NaN,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:Infinity,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:-Infinity,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:3,seriesNumberUnit:"invalid"}`,
+		`{seriesNumber:true,seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:[1],seriesNumberEnd:3,seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:"3",seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:[3],seriesNumberUnit:"volume"}`,
+		`{seriesNumber:1,seriesNumberEnd:3,seriesNumberUnit:["volume"]}`,
+	}
+	for _, item := range cases {
+		vm := goja.New()
+		val, err := vm.RunString(`({results:[` + item + `]})`)
+		require.NoError(t, err)
+		resp := parseSearchResponse(vm, val, "s", "p")
+		require.Len(t, resp.Results, 1)
+		assert.Nil(t, resp.Results[0].SeriesNumber, item)
+		assert.Nil(t, resp.Results[0].SeriesNumberEnd, item)
+		assert.Nil(t, resp.Results[0].SeriesNumberUnit, item)
+	}
+}
+
+func TestParseParsedMetadata_SeriesNumberRangeAndAtomicValidation(t *testing.T) {
+	t.Parallel()
+
+	vm := goja.New()
+	valid, err := vm.RunString(`({seriesNumber:4,seriesNumberEnd:6,seriesNumberUnit:"chapter"})`)
+	require.NoError(t, err)
+	md, err := parseParsedMetadata(vm, valid)
+	require.NoError(t, err)
+	require.NotNil(t, md.SeriesNumber)
+	require.NotNil(t, md.SeriesNumberEnd)
+	require.NotNil(t, md.SeriesNumberUnit)
+	assert.InDelta(t, 4, *md.SeriesNumber, 0.001)
+	assert.InDelta(t, 6, *md.SeriesNumberEnd, 0.001)
+	assert.Equal(t, "chapter", *md.SeriesNumberUnit)
+
+	invalid, err := vm.RunString(`({seriesNumber:4,seriesNumberEnd:Infinity,seriesNumberUnit:"chapter"})`)
+	require.NoError(t, err)
+	md, err = parseParsedMetadata(vm, invalid)
+	require.NoError(t, err)
+	assert.Nil(t, md.SeriesNumber)
+	assert.Nil(t, md.SeriesNumberEnd)
+	assert.Nil(t, md.SeriesNumberUnit)
+}
+
 func TestParseSearchResponse_LanguageNormalized(t *testing.T) {
 	t.Parallel()
 

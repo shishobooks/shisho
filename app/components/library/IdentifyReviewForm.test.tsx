@@ -182,6 +182,7 @@ function renderForm(
     book?: Book;
     result?: PluginSearchResult;
     fileId?: number;
+    onHasChangesChange?: (hasChanges: boolean) => void;
   } = {},
 ) {
   const queryClient = new QueryClient({
@@ -200,6 +201,7 @@ function renderForm(
           fileId={opts.fileId}
           onBack={onBack}
           onClose={onClose}
+          onHasChangesChange={opts.onHasChangesChange}
           result={opts.result ?? makeResult()}
         />
       </Dialog>
@@ -239,6 +241,155 @@ describe("IdentifyReviewForm component", () => {
     });
 
     expect(screen.getByText("Narrators")).toBeInTheDocument();
+  });
+
+  it("surfaces an incoming omnibus series range", () => {
+    renderForm({
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    expect(
+      screen.getByRole("spinbutton", { name: "Series start" }),
+    ).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "Series end" })).toHaveValue(
+      3,
+    );
+  });
+
+  it("submits an incoming omnibus range as one series number group", async () => {
+    const user = createUser();
+    renderForm({
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+        series_number_unit: "volume",
+      }),
+    });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    expect(applyMock.mock.calls[0][0].fields.series).toEqual([
+      {
+        name: "Some Series",
+        number: 1,
+        series_number_end: 3,
+        series_number_unit: "volume",
+      },
+    ]);
+  });
+
+  it("rejects incomplete and reversed series ranges", async () => {
+    const user = createUser();
+    renderForm({
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    const start = screen.getByRole("spinbutton", { name: "Series start" });
+    const apply = getApplyButton();
+
+    await user.clear(start);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Series range end requires a start",
+    );
+    expect(apply).toBeDisabled();
+
+    await user.type(start, "3");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Series range end must be greater than its start",
+    );
+    expect(apply).toBeDisabled();
+
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
+  it("treats the seriesNumber disabled-field alias as the complete series group", () => {
+    renderForm({
+      result: makeResult({
+        disabled_fields: ["seriesNumber"],
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    expect(
+      screen.queryByRole("checkbox", { name: "Apply Series" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("spinbutton", { name: "Series start" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tracks series end edits and restores the suggested range", async () => {
+    const user = createUser();
+    const onHasChangesChange = vi.fn();
+    renderForm({
+      onHasChangesChange,
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    const end = screen.getByRole("spinbutton", { name: "Series end" });
+    await user.clear(end);
+    await user.type(end, "4");
+    await waitFor(() =>
+      expect(onHasChangesChange).toHaveBeenLastCalledWith(true),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Restore suggestions" }),
+    );
+    expect(screen.getByRole("spinbutton", { name: "Series end" })).toHaveValue(
+      3,
+    );
+  });
+
+  it("accepting a single series number replaces an existing range group", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        book_series: [
+          {
+            book_id: 1,
+            series_id: 10,
+            series_number: 1,
+            series_number_end: 3,
+            series_number_unit: "volume",
+            series: { id: 10, library_id: 1, name: "Some Series" },
+          } as never,
+        ],
+      }),
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_unit: "volume",
+      }),
+    });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    expect(applyMock.mock.calls[0][0].fields.series).toEqual([
+      {
+        name: "Some Series",
+        number: 1,
+        series_number_end: undefined,
+        series_number_unit: "volume",
+      },
+    ]);
   });
 
   it("clears series when the Remove button is pressed on the series row", async () => {
