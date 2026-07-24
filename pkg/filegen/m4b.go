@@ -219,6 +219,7 @@ func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *
 		if series[0].Series != nil {
 			meta.Series = series[0].Series.Name
 			meta.SeriesNumber = series[0].SeriesNumber
+			meta.SeriesNumberEnd = series[0].SeriesNumberEnd
 		}
 	}
 

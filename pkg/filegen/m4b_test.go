@@ -2,6 +2,7 @@ package filegen
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,11 +10,28 @@ import (
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
+
+func newM4BGeneratorTestDB(t *testing.T) *bun.DB {
+	t.Helper()
+	sqldb, err := sql.Open(sqliteshim.ShimName, filepath.Join(t.TempDir(), "test.sqlite"))
+	require.NoError(t, err)
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+	_, err = migrations.BringUpToDate(context.Background(), db)
+	require.NoError(t, err)
+	return db
+}
 
 func TestM4BGenerator_SupportedType(t *testing.T) {
 	t.Parallel()
@@ -171,6 +189,83 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		require.NotNil(t, meta.Freeform)
 		assert.Equal(t, "Test Series", meta.Freeform["com.apple.iTunes:SERIES"])
 		assert.Equal(t, "3", meta.Freeform["com.apple.iTunes:SERIES-PART"])
+	})
+
+	t.Run("writes omnibus series range", func(t *testing.T) {
+		t.Parallel()
+		testgen.SkipIfNoFFmpeg(t)
+		dir := testgen.TempDir(t, "m4b-gen-*")
+
+		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
+			Title:    "Collected Stories",
+			Duration: 1.0,
+		})
+		destPath := filepath.Join(dir, "dest.m4b")
+		db := newM4BGeneratorTestDB(t)
+		ctx := context.Background()
+		library := &models.Library{Name: "Test", CoverAspectRatio: models.CoverAspectRatioBook}
+		_, err := db.NewInsert().Model(library).Exec(ctx)
+		require.NoError(t, err)
+		book := &models.Book{
+			LibraryID:       library.ID,
+			Filepath:        dir,
+			Title:           "Collected Stories",
+			TitleSource:     models.DataSourceManual,
+			SortTitle:       "Collected Stories",
+			SortTitleSource: models.DataSourceManual,
+			AuthorSource:    models.DataSourceManual,
+		}
+		_, err = db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
+		series := &models.Series{
+			LibraryID:      library.ID,
+			Name:           "Saga",
+			NameSource:     models.DataSourceManual,
+			SortName:       "Saga",
+			SortNameSource: models.DataSourceManual,
+		}
+		_, err = db.NewInsert().Model(series).Exec(ctx)
+		require.NoError(t, err)
+		membership := &models.BookSeries{
+			BookID:          book.ID,
+			SeriesID:        series.ID,
+			SortOrder:       1,
+			SeriesNumber:    pointerutil.Float64(1),
+			SeriesNumberEnd: pointerutil.Float64(3),
+		}
+		_, err = db.NewInsert().Model(membership).Exec(ctx)
+		require.NoError(t, err)
+		file := &models.File{
+			LibraryID:     library.ID,
+			BookID:        book.ID,
+			Filepath:      srcPath,
+			FileType:      models.FileTypeM4B,
+			FileRole:      models.FileRoleMain,
+			FilesizeBytes: 1,
+		}
+		_, err = db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+		loadedBook := &models.Book{}
+		require.NoError(t, db.NewSelect().Model(loadedBook).
+			Relation("BookSeries", func(q *bun.SelectQuery) *bun.SelectQuery { return q.Order("bs.sort_order ASC") }).
+			Relation("BookSeries.Series").
+			Relation("Files").
+			Where("b.id = ?", book.ID).
+			Scan(ctx))
+		require.Len(t, loadedBook.Files, 1)
+
+		book = loadedBook
+
+		gen := &M4BGenerator{}
+		require.NoError(t, gen.Generate(ctx, srcPath, destPath, book, book.Files[0]))
+
+		parsed, err := mp4.Parse(destPath)
+		require.NoError(t, err)
+		require.NotNil(t, parsed.SeriesNumber)
+		require.NotNil(t, parsed.SeriesNumberEnd)
+		assert.InDelta(t, 1, *parsed.SeriesNumber, 0.001)
+		assert.InDelta(t, 3, *parsed.SeriesNumberEnd, 0.001)
+		assert.Nil(t, parsed.SeriesNumberUnit)
 	})
 
 	t.Run("handles decimal series number", func(t *testing.T) {

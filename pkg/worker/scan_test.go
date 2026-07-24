@@ -234,6 +234,37 @@ func TestProcessScanJob_M4BBasic(t *testing.T) {
 	assert.Equal(t, models.FileTypeM4B, files[0].FileType)
 }
 
+func TestProcessScanJob_M4BSeriesRangeIsAtomic(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+
+	tc := newTestContext(t)
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Collected Stories")
+	path := testgen.GenerateM4B(t, bookDir, "omnibus.m4b", testgen.M4BOptions{
+		Title:    "Collected Stories",
+		Duration: 1,
+	})
+	metadata, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	metadata.Series = "Saga"
+	metadata.SeriesNumber = pointerutil.Float64(1)
+	metadata.SeriesNumberEnd = pointerutil.Float64(3)
+	require.NoError(t, mp4.Write(path, metadata, mp4.WriteOptions{}))
+
+	require.NoError(t, tc.runScan())
+	books := tc.listBooks()
+	require.Len(t, books, 1)
+	require.Len(t, books[0].BookSeries, 1)
+	membership := books[0].BookSeries[0]
+	require.NotNil(t, membership.SeriesNumber)
+	require.NotNil(t, membership.SeriesNumberEnd)
+	assert.InDelta(t, 1, *membership.SeriesNumber, 0.001)
+	assert.InDelta(t, 3, *membership.SeriesNumberEnd, 0.001)
+	assert.Nil(t, membership.SeriesNumberUnit)
+}
+
 func TestProcessScanJob_M4BDurationAndBitrate(t *testing.T) {
 	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)

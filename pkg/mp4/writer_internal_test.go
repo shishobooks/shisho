@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFormatSeriesGrouping_Range(t *testing.T) {
+	t.Parallel()
+	start, end := 1.0, 3.0
+	assert.Equal(t, "Saga #1-3", formatSeriesGrouping("Saga", &start, &end))
+}
+
 // These tests exercise the chunk-offset shift helpers directly. The integration
 // tests in writer_chunkoffset_test.go can only produce small files that always
 // use 32-bit stco, so the co64 path and the overflow guard are unreachable from

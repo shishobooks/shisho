@@ -5,11 +5,11 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // WriteOptions configures the write operation.
@@ -522,11 +522,11 @@ func buildIlst(metadata *Metadata) []byte {
 	// round-tripped through Metadata (no Grouping field) — series data is
 	// expected to live in the DB, not in file tags.
 	if metadata.Series != "" {
-		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber)
+		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber, metadata.SeriesNumberEnd)
 		content.Write(buildItunesTextAtom(AtomGrouping, grouping))
 		content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES", metadata.Series))
 		if metadata.SeriesNumber != nil {
-			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", formatSeriesNumber(*metadata.SeriesNumber)))
+			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", seriesnum.FormatRange(*metadata.SeriesNumber, metadata.SeriesNumberEnd)))
 		}
 	}
 
@@ -731,22 +731,14 @@ func splitFreeformKey(key string) (namespace, name string, ok bool) {
 }
 
 // formatSeriesGrouping formats series info as a grouping string: "Series Name #N".
-func formatSeriesGrouping(series string, number *float64) string {
+func formatSeriesGrouping(series string, number, numberEnd *float64) string {
 	if series == "" {
 		return ""
 	}
 	if number == nil {
 		return series
 	}
-	return series + " #" + formatSeriesNumber(*number)
-}
-
-// formatSeriesNumber formats a series number as integer when whole, decimal otherwise.
-func formatSeriesNumber(num float64) string {
-	if num == float64(int(num)) {
-		return strconv.Itoa(int(num))
-	}
-	return strconv.FormatFloat(num, 'f', -1, 64)
+	return series + " #" + seriesnum.FormatRange(*number, numberEnd)
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.

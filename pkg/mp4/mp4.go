@@ -20,28 +20,29 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 
 	// Convert to the mediafile.ParsedMetadata format
 	return &mediafile.ParsedMetadata{
-		Title:         meta.Title,
-		Subtitle:      meta.Subtitle,
-		Authors:       meta.Authors,
-		Narrators:     meta.Narrators,
-		Series:        meta.Series,
-		SeriesNumber:  meta.SeriesNumber,
-		Genres:        meta.Genres,
-		Tags:          meta.Tags,
-		Description:   meta.Description,
-		Publisher:     meta.Publisher,
-		URL:           meta.URL,
-		ReleaseDate:   meta.ReleaseDate,
-		CoverMimeType: meta.CoverMimeType,
-		CoverData:     meta.CoverData,
-		DataSource:    models.DataSourceM4BMetadata,
-		Duration:      meta.Duration,
-		BitrateBps:    meta.Bitrate, // from esds, already in bps
-		Codec:         meta.Codec,   // from esds AudioSpecificConfig
-		Identifiers:   meta.Identifiers,
-		Chapters:      convertChaptersToParsed(meta.Chapters),
-		Language:      meta.Language,
-		Abridged:      meta.Abridged,
+		Title:           meta.Title,
+		Subtitle:        meta.Subtitle,
+		Authors:         meta.Authors,
+		Narrators:       meta.Narrators,
+		Series:          meta.Series,
+		SeriesNumber:    meta.SeriesNumber,
+		SeriesNumberEnd: meta.SeriesNumberEnd,
+		Genres:          meta.Genres,
+		Tags:            meta.Tags,
+		Description:     meta.Description,
+		Publisher:       meta.Publisher,
+		URL:             meta.URL,
+		ReleaseDate:     meta.ReleaseDate,
+		CoverMimeType:   meta.CoverMimeType,
+		CoverData:       meta.CoverData,
+		DataSource:      models.DataSourceM4BMetadata,
+		Duration:        meta.Duration,
+		BitrateBps:      meta.Bitrate, // from esds, already in bps
+		Codec:           meta.Codec,   // from esds AudioSpecificConfig
+		Identifiers:     meta.Identifiers,
+		Chapters:        convertChaptersToParsed(meta.Chapters),
+		Language:        meta.Language,
+		Abridged:        meta.Abridged,
 	}, nil
 }
 
