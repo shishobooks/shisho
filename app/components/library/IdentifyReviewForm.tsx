@@ -1437,7 +1437,7 @@ export function IdentifyReviewForm({
                             (s) =>
                               `${s.name}${
                                 s.number
-                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.unit || null, anyCBZ ? "cbz" : null)}`
+                                  ? ` ${formatSeriesNumber(parseFloat(s.number), null, s.unit || null, anyCBZ ? "cbz" : null)}`
                                   : ""
                               }`,
                           )

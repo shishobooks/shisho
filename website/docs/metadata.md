@@ -45,7 +45,7 @@ A book can belong to multiple series, each with an optional series number. Serie
 
 In series listings, individually numbered books appear before omnibuses. Omnibuses are then ordered by their range start and end. Download filenames and OPDS descriptions display the complete range. Kobo sync and EPUB metadata use the range start because their numeric series fields cannot represent an end.
 
-The API and [book sidecars](./sidecar-files#book-sidecar-format) can set and preserve ranges. The current web book editor only exposes a single series number. An ordinary scan preserves a sidecar-backed range. Refresh and reset intentionally discard cached sidecars, so a format that only supplies the start can reduce the range to a single number.
+The API, [book sidecars](./sidecar-files#book-sidecar-format), and web book editor can set and preserve ranges. In the book editor, the start stays inline while the advanced settings button on each series row opens the optional end field. The end must be greater than or equal to the start. An ordinary scan preserves a sidecar-backed range. Refresh and reset intentionally discard cached sidecars, so a format that only supplies the start can reduce the range to a single number.
 
 ### Genres and Tags
 
@@ -302,7 +302,7 @@ CBZ books have an additional field — **series number unit** — that records w
 
 Ambiguous indicators (`#001`, bare trailing numbers) default to **volume** to preserve historical behavior.
 
-**Other sources:** Plugin metadata and [sidecar files](./sidecar-files) can also supply the unit via a `unit` field on the series entry. Manual edits via the book edit dialog let you change the unit using the unit dropdown next to the series number field.
+**Other sources:** Plugin metadata and [sidecar files](./sidecar-files) can also supply the unit via a `unit` field on the series entry. For books with a CBZ file, the advanced settings button on each series row in the book edit dialog includes the unit dropdown. Books without a CBZ file do not show this control.
 
 **CBZ books with no unit set** render as volumes for backward compatibility — the unit field being `null` is treated the same as `volume` in the reader and in file organization.
 

@@ -1,14 +1,16 @@
 import equal from "fast-deep-equal";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import { SortNameInput } from "@/components/common/SortNameInput";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { ReviewPanel } from "@/components/library/ReviewPanel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -19,6 +21,11 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -52,6 +59,7 @@ import {
   type SeriesInput,
 } from "@/types";
 import { AUTHOR_ROLES } from "@/utils/authorRoles";
+import { formatSeriesNumber } from "@/utils/seriesNumber";
 import { forTitle } from "@/utils/sortname";
 
 interface BookEditDialogProps {
@@ -63,7 +71,28 @@ interface BookEditDialogProps {
 interface SeriesEntry {
   name: string;
   number: string;
+  numberEnd: string;
   unit: "" | "volume" | "chapter"; // "" means unspecified
+}
+
+function getSeriesRangeError(entry: SeriesEntry): string | null {
+  if (entry.number === "") {
+    if (entry.numberEnd !== "" || entry.unit !== "") {
+      return "Enter a start number before setting an end or unit.";
+    }
+    return null;
+  }
+
+  const start = Number(entry.number);
+  const end = Number(entry.numberEnd);
+  if (!Number.isFinite(start)) return "Start must be a valid number.";
+  if (entry.numberEnd !== "" && !Number.isFinite(end)) {
+    return "End must be a valid number.";
+  }
+  if (entry.numberEnd !== "" && end < start) {
+    return "End must be greater than or equal to the start.";
+  }
+  return null;
 }
 
 export function BookEditDialog({
@@ -86,6 +115,7 @@ export function BookEditDialog({
       (bs): SeriesEntry => ({
         name: bs.series?.name || "",
         number: bs.series_number?.toString() || "",
+        numberEnd: bs.series_number_end?.toString() || "",
         unit: bs.series_number_unit ?? "",
       }),
     ) || [],
@@ -153,6 +183,7 @@ export function BookEditDialog({
       book.book_series?.map((bs) => ({
         name: bs.series?.name || "",
         number: bs.series_number?.toString() || "",
+        numberEnd: bs.series_number_end?.toString() || "",
         unit: bs.series_number_unit ?? "",
       })) || [];
     const initialGenres =
@@ -194,7 +225,7 @@ export function BookEditDialog({
       subtitle: initialSubtitle,
       description: initialDescription,
       authors: initialAuthors,
-      series: initialSeries,
+      series: initialSeries.map((entry) => ({ ...entry })),
       genres: [...initialGenres].sort(),
       tags: [...initialTags].sort(),
       reviewOverride: initialReviewOverride,
@@ -257,7 +288,10 @@ export function BookEditDialog({
     const name = "__create" in next ? next.__create : next.name;
     if (!name.trim()) return;
     if (seriesEntries.some((s) => s.name === name)) return;
-    setSeriesEntries([...seriesEntries, { name, number: "", unit: "" }]);
+    setSeriesEntries([
+      ...seriesEntries,
+      { name, number: "", numberEnd: "", unit: "" },
+    ]);
   };
 
   const handleRemoveSeries = (index: number) => {
@@ -270,6 +304,12 @@ export function BookEditDialog({
     setSeriesEntries(updated);
   };
 
+  const handleSeriesNumberEndChange = (index: number, value: string) => {
+    const updated = [...seriesEntries];
+    updated[index].numberEnd = value;
+    setSeriesEntries(updated);
+  };
+
   const handleSeriesUnitChange = (
     index: number,
     unit: "" | "volume" | "chapter",
@@ -279,7 +319,13 @@ export function BookEditDialog({
     setSeriesEntries(updated);
   };
 
+  const hasInvalidSeriesRange = seriesEntries.some(
+    (entry) => getSeriesRangeError(entry) !== null,
+  );
+
   const handleSubmit = async () => {
+    if (hasInvalidSeriesRange) return;
+
     const payload: {
       title?: string;
       sort_title?: string;
@@ -325,6 +371,7 @@ export function BookEditDialog({
         (bs): SeriesEntry => ({
           name: bs.series?.name || "",
           number: bs.series_number?.toString() || "",
+          numberEnd: bs.series_number_end?.toString() || "",
           unit: bs.series_number_unit ?? "",
         }),
       ) || [];
@@ -334,6 +381,7 @@ export function BookEditDialog({
         .map((s) => ({
           name: s.name,
           number: s.number !== "" ? parseFloat(s.number) : undefined,
+          number_end: s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
           series_number_unit: s.unit !== "" ? s.unit : undefined,
         }));
     }
@@ -390,7 +438,7 @@ export function BookEditDialog({
       subtitle,
       description,
       authors: [...authors],
-      series: [...seriesEntries],
+      series: seriesEntries.map((entry) => ({ ...entry })),
       genres: [...genres].sort(),
       tags: [...tags].sort(),
       reviewOverride: draftReviewOverride,
@@ -578,41 +626,147 @@ export function BookEditDialog({
               onAppend={handleAppendSeries}
               onRemove={handleRemoveSeries}
               onReorder={setSeriesEntries}
-              renderExtras={(entry, idx) => (
-                <>
-                  <Input
-                    className="w-24"
-                    onChange={(e) =>
-                      handleSeriesNumberChange(idx, e.target.value)
-                    }
-                    placeholder="#"
-                    type="number"
-                    value={entry.number}
-                  />
-                  <div className="w-32">
-                    <Select
-                      onValueChange={(value) =>
-                        handleSeriesUnitChange(
-                          idx,
-                          value === "unspecified"
-                            ? ""
-                            : (value as "volume" | "chapter"),
-                        )
+              renderExtras={(entry, idx) => {
+                const showSummary =
+                  entry.number !== "" &&
+                  (entry.numberEnd !== "" ||
+                    (hasCBZFiles && entry.unit !== ""));
+                const parsedNumber = parseFloat(entry.number);
+                const parsedEnd =
+                  entry.numberEnd === ""
+                    ? undefined
+                    : parseFloat(entry.numberEnd);
+                const rangeError = getSeriesRangeError(entry);
+                const summary = Number.isFinite(parsedNumber)
+                  ? formatSeriesNumber(
+                      parsedNumber,
+                      Number.isFinite(parsedEnd) ? parsedEnd : undefined,
+                      entry.unit || null,
+                      hasCBZFiles ? "cbz" : null,
+                    )
+                  : "";
+
+                return (
+                  <>
+                    <Input
+                      aria-label={`Series number for ${entry.name}`}
+                      className="w-16 sm:w-24"
+                      onChange={(e) =>
+                        handleSeriesNumberChange(idx, e.target.value)
                       }
-                      value={entry.unit === "" ? "unspecified" : entry.unit}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unspecified">Unspecified</SelectItem>
-                        <SelectItem value="volume">Volume</SelectItem>
-                        <SelectItem value="chapter">Chapter</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
+                      placeholder="#"
+                      step="any"
+                      type="number"
+                      value={entry.number}
+                    />
+                    {showSummary && summary && (
+                      <Badge
+                        className="max-w-20 sm:max-w-28"
+                        variant="secondary"
+                      >
+                        <span className="truncate" title={summary}>
+                          {summary}
+                        </span>
+                      </Badge>
+                    )}
+                    <Popover modal>
+                      <PopoverTrigger asChild>
+                        <Button
+                          aria-label={`Advanced settings for ${entry.name}`}
+                          size="icon"
+                          title="Advanced series settings"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Settings2 className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-64 space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor={`series-number-end-${idx}`}>
+                            End
+                          </Label>
+                          <Input
+                            aria-describedby={
+                              rangeError
+                                ? `series-number-error-${idx}`
+                                : undefined
+                            }
+                            aria-invalid={rangeError ? true : undefined}
+                            id={`series-number-end-${idx}`}
+                            onChange={(e) =>
+                              handleSeriesNumberEndChange(idx, e.target.value)
+                            }
+                            placeholder="#"
+                            step="any"
+                            type="number"
+                            value={entry.numberEnd}
+                          />
+                          {rangeError && (
+                            <p
+                              className="text-xs text-destructive"
+                              id={`series-number-error-${idx}`}
+                              role="alert"
+                            >
+                              {rangeError}
+                            </p>
+                          )}
+                        </div>
+                        {hasCBZFiles && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`series-number-unit-${idx}`}>
+                              Unit
+                            </Label>
+                            <Select
+                              onValueChange={(value) =>
+                                handleSeriesUnitChange(
+                                  idx,
+                                  value === "unspecified"
+                                    ? ""
+                                    : (value as "volume" | "chapter"),
+                                )
+                              }
+                              value={
+                                entry.unit === "" ? "unspecified" : entry.unit
+                              }
+                            >
+                              <SelectTrigger
+                                className="cursor-pointer"
+                                disabled={
+                                  entry.number === "" && entry.unit === ""
+                                }
+                                id={`series-number-unit-${idx}`}
+                              >
+                                <SelectValue placeholder="Unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem
+                                  className="cursor-pointer"
+                                  value="unspecified"
+                                >
+                                  Unspecified
+                                </SelectItem>
+                                <SelectItem
+                                  className="cursor-pointer"
+                                  value="volume"
+                                >
+                                  Volume
+                                </SelectItem>
+                                <SelectItem
+                                  className="cursor-pointer"
+                                  value="chapter"
+                                >
+                                  Chapter
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                );
+              }}
             />
           </div>
 
@@ -677,15 +831,13 @@ export function BookEditDialog({
         </DialogBody>
 
         <DialogFooter>
+          <DialogClose asChild>
+            <Button size="sm" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button
-            onClick={() => onOpenChange(false)}
-            size="sm"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={updateBookMutation.isPending}
+            disabled={updateBookMutation.isPending || hasInvalidSeriesRange}
             onClick={handleSubmit}
             size="sm"
           >

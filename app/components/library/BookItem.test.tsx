@@ -92,6 +92,30 @@ describe("BookItem — Series number badge", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
+  it("shows the complete range in the badge", () => {
+    const book = makeBook({
+      book_series: [
+        {
+          id: 1,
+          book_id: 1,
+          series_id: seriesId,
+          series_number: 1,
+          series_number_end: 3,
+        } as never,
+      ],
+      files: [
+        {
+          id: 10,
+          file_role: FileRoleMain,
+          file_type: "epub",
+          reviewed: true,
+        } as never,
+      ],
+    });
+    render(wrap(<BookItem book={book} libraryId="1" seriesId={seriesId} />));
+    expect(screen.getByText("1-3", { selector: "span" })).toBeInTheDocument();
+  });
+
   it("hides badge when series_number is null", () => {
     const book = makeBook({
       book_series: [
