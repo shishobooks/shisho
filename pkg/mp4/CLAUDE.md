@@ -419,6 +419,7 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 - Range start, end, and unit are an atomic scanner group; M4B leaves unit nil
 - Whitespace trimmed from extracted names
 - A blank freeform `SERIES` value does not mask a valid grouping fallback
+- Grouping keywords require token boundaries so unrelated labels such as `Booker Prize` and `Volunteer Work` are not interpreted as series metadata
 - Malformed numeric ranges are discarded as a whole while preserving the series name
 
 **Atomic Write Pattern:**

@@ -235,9 +235,11 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 func parseSeriesFromGrouping(grouping string) seriesInfo {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`^(.+?)\s*#\s*(.*)$`),
-		regexp.MustCompile(`^(.+?),\s*[Bb]ook\s*(.*)$`),
-		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s*(.*)$`),
-		regexp.MustCompile(`^(.+?)\s*\((?:[Bb]ook\s+)?(.*)\)$`),
+		regexp.MustCompile(`^(.+?),\s*[Bb]ook\s+(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s+(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?([+-]?(?:\d|\.).*)$`),
+		regexp.MustCompile(`^(.+?)\s*\([Bb]ook\s+(.*)\)$`),
+		regexp.MustCompile(`^(.+?)\s*\(([+-]?(?:\d|\.).*)\)$`),
 	}
 	grouping = strings.TrimSpace(grouping)
 	for _, pattern := range patterns {

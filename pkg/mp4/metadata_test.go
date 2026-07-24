@@ -331,6 +331,20 @@ func TestConvertRawMetadata_SeriesFromGrouping(t *testing.T) {
 			assert.Nil(t, meta.SeriesNumberEnd)
 		})
 	}
+
+	for _, grouping := range []string{
+		"Awards, Booker Prize",
+		"Audiobook (Unabridged)",
+		"Bonus - Volunteer Work",
+	} {
+		t.Run("unrelated grouping "+grouping, func(t *testing.T) {
+			t.Parallel()
+			meta := convertRawMetadata(&rawMetadata{grouping: grouping})
+			assert.Empty(t, meta.Series)
+			assert.Nil(t, meta.SeriesNumber)
+			assert.Nil(t, meta.SeriesNumberEnd)
+		})
+	}
 }
 
 // TestConvertRawMetadata_AlbumIsNotSeriesSource verifies that series is NOT
