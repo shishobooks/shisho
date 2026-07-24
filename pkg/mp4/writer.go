@@ -522,11 +522,15 @@ func buildIlst(metadata *Metadata) []byte {
 	// round-tripped through Metadata (no Grouping field) — series data is
 	// expected to live in the DB, not in file tags.
 	if metadata.Series != "" {
-		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber, metadata.SeriesNumberEnd)
+		seriesPart, hasSeriesPart := formatSeriesRange(metadata.SeriesNumber, metadata.SeriesNumberEnd)
+		grouping := metadata.Series
+		if hasSeriesPart {
+			grouping += " #" + seriesPart
+		}
 		content.Write(buildItunesTextAtom(AtomGrouping, grouping))
 		content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES", metadata.Series))
-		if metadata.SeriesNumber != nil {
-			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", seriesnum.FormatRange(*metadata.SeriesNumber, metadata.SeriesNumberEnd)))
+		if hasSeriesPart {
+			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", seriesPart))
 		}
 	}
 
@@ -730,15 +734,14 @@ func splitFreeformKey(key string) (namespace, name string, ok bool) {
 	return key[:idx], key[idx+1:], true
 }
 
-// formatSeriesGrouping formats series info as a grouping string: "Series Name #N".
-func formatSeriesGrouping(series string, number, numberEnd *float64) string {
-	if series == "" {
-		return ""
-	}
+// formatSeriesRange formats a valid series number group for embedded metadata.
+func formatSeriesRange(number, numberEnd *float64) (string, bool) {
 	if number == nil {
-		return series
+		return "", false
 	}
-	return series + " #" + seriesnum.FormatRange(*number, numberEnd)
+	formatted := seriesnum.FormatRange(*number, numberEnd)
+	_, _, ok := seriesnum.ParseRange(formatted)
+	return formatted, ok
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.

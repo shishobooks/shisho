@@ -288,6 +288,15 @@ func TestConvertRawMetadata_SeriesFromGrouping(t *testing.T) {
 		assert.InDelta(t, 1, *meta.SeriesNumber, 0.001)
 		assert.InDelta(t, 3, *meta.SeriesNumberEnd, 0.001)
 	})
+
+	t.Run("malformed grouping range preserves series name", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{grouping: "Mistborn #3-1"}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Mistborn", meta.Series)
+		assert.Nil(t, meta.SeriesNumber)
+		assert.Nil(t, meta.SeriesNumberEnd)
+	})
 }
 
 // TestConvertRawMetadata_AlbumIsNotSeriesSource verifies that series is NOT

@@ -265,6 +265,7 @@ chapters don't show up in the downloaded audiobook" bug.
 - With range: `"Series Name #1-3"` or `"Series Name #1.5-3.5"`
 - Without number: `"Series Name"`
 - `SERIES-PART` uses the same numeric core without the series-name prefix
+- Invalid numeric groups are omitted from both atoms while the series name is preserved
 
 ### Key Types
 
@@ -417,7 +418,7 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 - Decimal numbers and ranges handled through `seriesnum.ParseRange`
 - Range start, end, and unit are an atomic scanner group; M4B leaves unit nil
 - Whitespace trimmed from extracted names
-- Malformed ranges are discarded as a whole
+- Malformed numeric ranges are discarded as a whole while preserving the series name
 
 **Atomic Write Pattern:**
 ```

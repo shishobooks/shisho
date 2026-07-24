@@ -244,11 +244,12 @@ func parseSeriesFromGrouping(grouping string) seriesInfo {
 		if len(matches) != 3 {
 			continue
 		}
+		seriesName := strings.TrimSpace(matches[1])
 		start, end, ok := seriesnum.ParseRange(matches[2])
 		if !ok {
-			return seriesInfo{}
+			return seriesInfo{series: seriesName}
 		}
-		return seriesInfo{series: strings.TrimSpace(matches[1]), number: &start, numberEnd: end}
+		return seriesInfo{series: seriesName, number: &start, numberEnd: end}
 	}
 
 	return seriesInfo{}

@@ -245,7 +245,7 @@ Extracted from iTunes-style MP4 atoms:
 
 - **Standard atoms**: title, artists/authors, genre, publisher, description, year
 - **Narrators**: from the `©nrt` atom, falling back to `©cmp` (composer) then `©wrt` (writer)
-- **Series**: parsed from the Audible-style `com.apple.iTunes:SERIES` and `com.apple.iTunes:SERIES-PART` freeform atoms (preferred), falling back to the `©grp` grouping atom (patterns like "Series Name #1" or "Series Name, Book 1"). Album (`©alb`) is not a series source — it holds the book title.
+- **Series**: parsed from the Audible-style `com.apple.iTunes:SERIES` and `com.apple.iTunes:SERIES-PART` freeform atoms (preferred), falling back to the `©grp` grouping atom (patterns like "Series Name #1" or "Series Name, Book 1"). Integer and decimal omnibus ranges such as `1-3` round-trip through both `SERIES-PART` and grouping values such as `Series Name #1-3`. Album (`©alb`) is not a series source; it holds the book title.
 - **Identifiers**: ASIN from freeform iTunes atoms
 - **Language**: from freeform iTunes atoms
 - **Abridged**: from the Tone freeform atom `com.pilabor.tone:ABRIDGED` (`true`/`false`, or `1`/`0`)
